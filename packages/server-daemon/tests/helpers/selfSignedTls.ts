@@ -10,8 +10,10 @@ export async function selfSigned(name: string, opts: { expired?: boolean } = {})
   const cert = await X509CertificateGenerator.createSelfSigned({
     serialNumber: "01",
     name: `CN=${name}`,
-    notBefore: new Date(Date.now() - (opts.expired ? 90 * 86_400_000 : 60_000)),
-    notAfter: new Date(Date.now() + (opts.expired ? -86_400_000 : 3_600_000)),
+    // A day either side: @peculiar/x509 builds the dates through local time, so in the hour a DST change repeats an
+    // hour-long certificate came out ending at its start (2026-11-01, America/Chicago).
+    notBefore: new Date(Date.now() - (opts.expired ? 90 * 86_400_000 : 86_400_000)),
+    notAfter: new Date(Date.now() + (opts.expired ? -86_400_000 : 86_400_000)),
     signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
     keys,
     extensions: [new SubjectAlternativeNameExtension([{ type: "dns", value: name }])],

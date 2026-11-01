@@ -100,19 +100,13 @@ describe("publishTxtChallenge — pod namespace", () => {
     };
   }
 
-  it("accepts a valid daemon signature on the pod apex", async () => {
+  // Retired (plan H1): even a valid daemon signature writes no challenge record; `.com`'s issuance service does.
+  it("refuses a valid daemon signature on the pod apex: challenge records are the issuance service's", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
     const r = await verifyRpc(makeBody(), makeEnv(state));
-    expect(r.ok).toBe(true);
-    expect(state.callsResolvePod).toEqual([serverId]);
-    if (r.ok) {
-      expect(r.effect).toEqual({
-        kind: "createTxt",
-        recordName,
-        recordValue,
-      });
-    }
+    expect(r).toMatchObject({ ok: false, reason: "challenge records are written by the issuance service" });
+    expect(state.callsResolvePod).toEqual([]);
   });
 
   it("rejects when the daemon pubkey is not registered", async () => {
@@ -260,12 +254,11 @@ describe("publishTxtChallenge — user-zone IRK authority", () => {
     };
   }
 
-  it("accepts a valid IRK signature on a user-zone ACME label", async () => {
+  it("refuses a valid IRK signature on a user-zone ACME label (retired)", async () => {
     const state = freshState();
     state.irks[username] = irkKey.publicKey;
     const r = await verifyRpc(makeBody(), makeEnv(state));
-    expect(r.ok).toBe(true);
-    expect(state.callsResolveIrk).toEqual([username]);
+    expect(r).toMatchObject({ ok: false, reason: "challenge records are written by the issuance service" });
   });
 
   it("rejects when the user's IRK is not registered", async () => {
@@ -336,14 +329,14 @@ describe("publishTxtChallenge — user-zone ServiceGrant authority", () => {
     };
   }
 
-  it("accepts a grant that covers *.<user>.flagship.services", async () => {
+  it("refuses even a grant that covers *.<user>.flagship.services (retired)", async () => {
     const state = freshState();
     state.irks[username] = irkKey.publicKey;
     const body = makeGrantBody([
       { url: `https://*.${username}.${APEX}`, scope: "canonical" },
     ]);
     const r = await verifyRpc(body, makeEnv(state));
-    expect(r.ok).toBe(true);
+    expect(r).toMatchObject({ ok: false, reason: "challenge records are written by the issuance service" });
   });
 
   it("rejects a grant whose routes don't cover the user zone", async () => {
@@ -624,9 +617,9 @@ describe("server-wildcard: the account-name challenge under the admin's once-per
     } as unknown as PublishTxtChallengeBody;
   };
 
-  it("publishes with the pod's signature and the admin's grant, and deletes only that name", async () => {
+  it("no longer publishes the account-name challenge, even with the grant; deletes only that name", async () => {
     const g = await grant();
-    expect(await verifyRpc(await publish(g), env())).toMatchObject({ ok: true, effect: { kind: "createTxt", recordName: NAME } });
+    expect(await verifyRpc(await publish(g), env())).toMatchObject({ ok: false, reason: "challenge records are written by the issuance service" });
     const del: DeleteRecordBody = {
       kind: "deleteRecord",
       recordId: "r1",

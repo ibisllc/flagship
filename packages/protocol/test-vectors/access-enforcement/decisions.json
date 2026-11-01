@@ -1,0 +1,3051 @@
+{
+ "about": "Access decisions at the effect boundary (the app proxy): which request reaches an app's container, as whom and with which rank. Each case names a fixture (the box's access state file text, null when absent, the account people it knows and the owner's account id), the app the ROUTER selected (never the Host header), and the request: method, raw path, upgrade, the origin headers, the session cookie's record (live = present, unexpired, not closed), the API key check's result and whether external access is fresh (N07). outcome: forward | deny | api-invalid (401) | api-scope (403) | api-rate-limited (429). For forward: visitor member|api|anonymous, role (null when anonymous), identity (the key the app id is derived from: the owner's account id for every account device; null when anonymous), external (the visitor is outside the owner's own devices). TypeScript: packages/server-daemon/tests/accessEnforcementVectors.test.ts; Rust: rust/crates/flagship-access/tests/decision_vectors.rs.",
+ "fixtures": {
+  "box": {
+   "ownerAid": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "principals": [
+    {
+     "kind": "device",
+     "pub": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "tier": "admin"
+    },
+    {
+     "kind": "device",
+     "pub": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "tier": "member"
+    },
+    {
+     "kind": "device",
+     "pub": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "tier": "member"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "shareId": "51515151515151515151515151515151",
+     "level": "manage"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+     "shareId": "52525252525252525252525252525252",
+     "level": "view"
+    }
+   ],
+   "stateText": "{\"alice--club\":{\"mode\":\"restricted\",\"allow\":[\"f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1\",\"f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2\",\"f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3\",\"f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4\",\"f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5\",\"f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6\",\"f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7\"],\"groups\":{\"inv-admin\":[\"f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1\",\"f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3\"],\"inv-mem\":[\"f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2\",\"f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3\",\"f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6\"],\"inv-old\":[\"f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5\"],\"inv-boss\":[\"f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4\"],\"inv-chief\":[\"f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7\"]},\"roles\":{\"aids\":{\"f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4\":\"master\"},\"invites\":{\"inv-chief\":\"master\"},\"grants\":{\"inv-mem/f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6\":\"manager\"},\"seq\":{},\"tiers\":{\"inv-admin\":\"admin\",\"inv-mem\":\"member\",\"inv-boss\":\"member\",\"inv-chief\":\"admin\"},\"creators\":{},\"ranks\":{},\"evidence\":{},\"withdrawn\":{},\"coManagers\":{}}},\"alice--blog\":{\"mode\":\"open\",\"allow\":[],\"groups\":{},\"roles\":{\"aids\":{},\"invites\":{},\"grants\":{},\"seq\":{},\"tiers\":{},\"creators\":{},\"ranks\":{},\"evidence\":{},\"withdrawn\":{},\"coManagers\":{}}},\"alice--quiet\":{\"mode\":\"restricted\",\"allow\":[],\"groups\":{},\"roles\":{\"aids\":{},\"invites\":{},\"grants\":{},\"seq\":{},\"tiers\":{},\"creators\":{},\"ranks\":{\"device:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\":\"refused\",\"share:51515151515151515151515151515151\":\"member\",\"device:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2\":\"master\"},\"evidence\":{},\"withdrawn\":{},\"coManagers\":{}}},\"alice--odd\":{\"mode\":\"sideways\",\"allow\":[\"f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1\"],\"groups\":{},\"roles\":{\"aids\":{},\"invites\":{},\"grants\":{},\"seq\":{},\"tiers\":{},\"creators\":{},\"ranks\":{},\"evidence\":{},\"withdrawn\":{},\"coManagers\":{}}}}"
+  },
+  "no-state-file": {
+   "ownerAid": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "principals": [
+    {
+     "kind": "device",
+     "pub": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "tier": "admin"
+    },
+    {
+     "kind": "device",
+     "pub": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "tier": "member"
+    },
+    {
+     "kind": "device",
+     "pub": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "tier": "member"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "shareId": "51515151515151515151515151515151",
+     "level": "manage"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+     "shareId": "52525252525252525252525252525252",
+     "level": "view"
+    }
+   ],
+   "stateText": null
+  },
+  "after-a-lost-file": {
+   "ownerAid": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "principals": [
+    {
+     "kind": "device",
+     "pub": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "tier": "admin"
+    },
+    {
+     "kind": "device",
+     "pub": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "tier": "member"
+    },
+    {
+     "kind": "device",
+     "pub": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "tier": "member"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "shareId": "51515151515151515151515151515151",
+     "level": "manage"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+     "shareId": "52525252525252525252525252525252",
+     "level": "view"
+    }
+   ],
+   "stateText": "{\"*\":{\"mode\":\"restricted\",\"allow\":[],\"groups\":{}},\"alice--blog\":{\"mode\":\"open\",\"allow\":[],\"groups\":{},\"roles\":{\"aids\":{},\"invites\":{},\"grants\":{},\"seq\":{},\"tiers\":{},\"creators\":{},\"ranks\":{},\"evidence\":{},\"withdrawn\":{},\"coManagers\":{}}}}"
+  },
+  "corrupt-state-file": {
+   "ownerAid": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "principals": [
+    {
+     "kind": "device",
+     "pub": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "tier": "admin"
+    },
+    {
+     "kind": "device",
+     "pub": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "tier": "member"
+    },
+    {
+     "kind": "device",
+     "pub": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "tier": "member"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "shareId": "51515151515151515151515151515151",
+     "level": "manage"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+     "shareId": "52525252525252525252525252525252",
+     "level": "view"
+    }
+   ],
+   "stateText": "{ not json"
+  },
+  "state-file-not-an-object": {
+   "ownerAid": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "principals": [
+    {
+     "kind": "device",
+     "pub": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "tier": "admin"
+    },
+    {
+     "kind": "device",
+     "pub": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "tier": "member"
+    },
+    {
+     "kind": "device",
+     "pub": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "tier": "member"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "shareId": "51515151515151515151515151515151",
+     "level": "manage"
+    },
+    {
+     "kind": "co-manager",
+     "pub": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+     "shareId": "52525252525252525252525252525252",
+     "level": "view"
+    }
+   ],
+   "stateText": "[]"
+  }
+ },
+ "cases": [
+  {
+   "name": "anonymous on a members-only app is denied",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "anonymous on an open app is forwarded anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/anything",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "anonymous WebSocket on an open app is forwarded",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/ws",
+    "upgrade": true,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "anonymous WebSocket on a members-only app is denied",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/ws",
+    "upgrade": true,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an app with no row is open when the state file is absent",
+   "fixture": "no-state-file",
+   "app": {
+    "serviceRef": "alice--new",
+    "host": "new.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "an app with no row is open on a readable file without a default row",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--new",
+    "host": "new.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "an app with no row is members-only after a lost file",
+   "fixture": "after-a-lost-file",
+   "app": {
+    "serviceRef": "alice--new",
+    "host": "new.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an app with its own open row stays open after a lost file",
+   "fixture": "after-a-lost-file",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "every app is members-only when the state file is corrupt",
+   "fixture": "corrupt-state-file",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "every app is members-only when the state file is not an object",
+   "fixture": "state-file-not-an-object",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a row with an unknown mode falls back to the default (open)",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--odd",
+    "host": "odd.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a row with an unknown mode keeps no members",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--odd",
+    "host": "odd.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--odd",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a public route on a members-only app is forwarded anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/hooks/stripe",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a public route matches with a trailing slash",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hooks/stripe/",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a public route ignores the query",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hooks/stripe?x=1",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "the root public route covers only the root",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/?q=1",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "the root public route does not cover a page",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a prefix covers its bare path",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a prefix covers paths under it",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public/feed/1",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a prefix is segment-aware",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/publicity",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "public routes are case-sensitive",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/Hooks/stripe",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a dot-dot segment out of a prefix is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public/../secret",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an encoded dot-dot is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public/%2e%2e/secret",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a dot-dot with a matrix parameter is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public/..;x/secret",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an encoded slash is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public%2fx",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a double-encoded percent is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hooks/stripe%25",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a backslash is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public\\x",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a control character is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hooks/stripe%0a",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a malformed escape is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hooks/stripe%zz",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "collapsed slashes still match",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "//hooks//stripe",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a whole-app public route opens every path",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/*"
+    ],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/deep/page",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a whole-app public route still refuses a dot segment",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/*"
+    ],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/a/./b",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a path that does not start with a slash is never public",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/*"
+    ],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "*",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a public route is decided the same for a WebSocket",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/api/public/live",
+    "upgrade": true,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "an admin device is master and shows as the owner",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "a non-admin device is manager and shows as the owner",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "the legacy account id on an admin-pinned box is a non-admin device",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "a co-manager is manager and external",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    "external": true
+   }
+  },
+  {
+   "name": "a view-level co-manager is still manager in an app",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+    "external": true
+   }
+  },
+  {
+   "name": "an admin's refusal shuts out an admin device",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--quiet",
+    "host": "quiet.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--quiet",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an admin's order demotes a co-manager to member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--quiet",
+    "host": "quiet.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--quiet",
+     "aid": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "member",
+    "identity": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    "external": true
+   }
+  },
+  {
+   "name": "an admin's order raises a non-admin device to master",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--quiet",
+    "host": "quiet.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--quiet",
+     "aid": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "an account device needs no allow-list entry",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--quiet",
+    "host": "quiet.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--quiet",
+     "aid": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "an admin device on an open app is master",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--blog",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "a refused admin device reaches only public routes",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--quiet",
+    "host": "quiet.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hook"
+    ],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hook",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--quiet",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a join through an admin's invite takes the app's default rank",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a join through a non-admin's invite is member whatever the default",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "member",
+    "identity": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+    "external": true
+   }
+  },
+  {
+   "name": "two joins give the higher rank",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3",
+    "external": true
+   }
+  },
+  {
+   "name": "an admin order on the person replaces their grants",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4",
+    "external": true
+   }
+  },
+  {
+   "name": "an invite bound before tiers were recorded gives member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "member",
+    "identity": "f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5",
+    "external": true
+   }
+  },
+  {
+   "name": "an admin order on one join raises a member invite's join",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+    "external": true
+   }
+  },
+  {
+   "name": "an admin's order on an invite sets its rank",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7",
+    "external": true
+   }
+  },
+  {
+   "name": "the manifest's default never raises a non-admin's invite",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "master"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "member",
+    "identity": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+    "external": true
+   }
+  },
+  {
+   "name": "an admin's invite takes a master default",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "master"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "an unknown default role reads as member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "superuser"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "member",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a legacy default role name maps onto the ladder",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "editor"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a stranger's session is anonymous and denied",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a stranger's session on an open app is anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--blog",
+     "aid": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a member of one app is anonymous on another open app",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--blog",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a session issued for another app is anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a closed or expired session is anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": false
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a session whose key is not lower-case hex is anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an invited person needs a fresh checkpoint",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": false
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a co-manager needs a fresh checkpoint",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": false
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an account device never needs a checkpoint",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": false
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   }
+  },
+  {
+   "name": "while catching up an invited person is held",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   },
+   "catchingUp": [
+    "alice--club"
+   ]
+  },
+  {
+   "name": "while catching up a co-manager is held",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   },
+   "catchingUp": [
+    "alice--club"
+   ]
+  },
+  {
+   "name": "while catching up an account device still gets in",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "master",
+    "identity": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "external": false
+   },
+   "catchingUp": [
+    "alice--club"
+   ]
+  },
+  {
+   "name": "catching up on another app holds nobody here",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   },
+   "catchingUp": [
+    "alice--blog"
+   ]
+  },
+  {
+   "name": "a held person is anonymous on a public route",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/hooks/stripe",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   },
+   "catchingUp": [
+    "alice--club"
+   ]
+  },
+  {
+   "name": "a cross-origin POST drops the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://evil.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a cross-origin POST on an open app is anonymous",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://evil.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--blog",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "anonymous",
+    "role": null,
+    "identity": null,
+    "external": false
+   }
+  },
+  {
+   "name": "a cross-origin GET keeps the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://evil.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a cross-origin WebSocket drops the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": true,
+    "headers": {
+     "origin": "https://evil.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a same-origin POST keeps the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://club.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a same-origin POST matches the host case-insensitively",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://CLUB.HOME.ALICE.FLAGSHIP.SERVICES"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "an origin on another port is another origin",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://club.home.alice.flagship.services:8443"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "an http origin is another origin",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "http://club.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a null origin is another origin",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "null"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "cross-site fetch metadata drops the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "DELETE",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "sec-fetch-site": "same-site"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "same-origin fetch metadata keeps the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "PUT",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "sec-fetch-site": "same-origin"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a user-initiated navigation keeps the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "sec-fetch-site": "none"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "the origin header wins over fetch metadata",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://evil.home.alice.flagship.services",
+     "sec-fetch-site": "same-origin"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a cross-origin referer drops the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "referer": "https://evil.example/x"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a same-origin referer keeps the member",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "referer": "https://club.home.alice.flagship.services/page"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "no origin signal at all counts as same-origin",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "member",
+    "role": "manager",
+    "identity": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "external": true
+   }
+  },
+  {
+   "name": "a forged host does not make a sibling's origin the app's own",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {
+     "origin": "https://evil.home.alice.flagship.services"
+    },
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true,
+    "host": "evil.home.alice.flagship.services"
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a valid API key reaches a members-only page",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": {
+     "keyId": "k1",
+     "scope": "write"
+    },
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "api",
+    "role": "api",
+    "identity": "apikey:k1",
+    "external": false
+   }
+  },
+  {
+   "name": "an API key wins over a member session",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--club",
+     "aid": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+     "live": true
+    },
+    "apiKey": {
+     "keyId": "k2",
+     "scope": "read"
+    },
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "forward",
+    "visitor": "api",
+    "role": "api",
+    "identity": "apikey:k2",
+    "external": false
+   }
+  },
+  {
+   "name": "a wrong or revoked API key is refused",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "invalid",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "api-invalid"
+   }
+  },
+  {
+   "name": "a wrong API key is refused even on an open app",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--blog",
+    "host": "blog.home.alice.flagship.services",
+    "publicRoutes": [],
+    "defaultRole": "member"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "invalid",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "api-invalid"
+   }
+  },
+  {
+   "name": "a read key on a write method is refused",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "POST",
+    "path": "/",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "scope",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "api-scope"
+   }
+  },
+  {
+   "name": "an API key over its rate is refused",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "rate-limited",
+    "externalFresh": true
+   },
+   "expect": {
+    "outcome": "api-rate-limited"
+   }
+  },
+  {
+   "name": "a Host naming another app does not pick that app's mode",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": null,
+    "apiKey": "none",
+    "externalFresh": true,
+    "host": "blog.home.alice.flagship.services"
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  },
+  {
+   "name": "a session for the Host's app is not one for the routed app",
+   "fixture": "box",
+   "app": {
+    "serviceRef": "alice--club",
+    "host": "club.home.alice.flagship.services",
+    "publicRoutes": [
+     "/hooks/stripe",
+     "/api/public/*",
+     "/"
+    ],
+    "defaultRole": "manager"
+   },
+   "request": {
+    "method": "GET",
+    "path": "/members",
+    "upgrade": false,
+    "headers": {},
+    "session": {
+     "serviceRef": "alice--blog",
+     "aid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "live": true
+    },
+    "apiKey": "none",
+    "externalFresh": true,
+    "host": "blog.home.alice.flagship.services"
+   },
+   "expect": {
+    "outcome": "deny"
+   }
+  }
+ ]
+}

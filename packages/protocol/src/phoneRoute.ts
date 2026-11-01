@@ -1,0 +1,311 @@
+/**
+ * The phone's bare `<account>.<apex>` route (plan H2/H3; decisions in docs/architecture-v2/issuance-and-lease-records.md
+ * §4 "Phone routing", wire protocol in phone-route.md). Pure rules shared by `.com` (the ledger), the relay (claim
+ * checks, routing) and the phones (vectors): who may claim, the relay-issued generation and its compare-and-set
+ * ledger, the claim freshness and nonce rules, the phone certificate's CSR, and the phone endpoint's request policy.
+ */
+import { sha256 } from "@noble/hashes/sha256";
+import { requireMasterAdmin, type AdminGrantView } from "./adminAuthority.js";
+import { hex } from "./canonicalBase.js";
+import { canonicalRouteClaim, verifyServingRecord, type RouteClaim } from "./servingAuthority.js";
+import type { Bytes } from "./types.js";
+
+/** The ledger's routing lease. */
+export const PHONE_ROUTE_LEASE_MS = 60_000;
+/** How often the holding relay renews it. */
+export const PHONE_ROUTE_RENEW_MS = 15_000;
+/** A relay stops routing new connections when its last confirmed acquire/renew is older than this. */
+export const PHONE_ROUTE_CONFIRMED_MS = 30_000;
+/** A claim's `issuedAt` may differ from the relay's clock by at most this. */
+export const PHONE_ROUTE_CLAIM_SKEW_MS = 60_000;
+/** A session nonce is good for one claim within this. */
+export const PHONE_ROUTE_CHALLENGE_TTL_MS = 30_000;
+/** The relay pings the phone this often… */
+export const PHONE_TUNNEL_PING_MS = 15_000;
+/** …and ends the tunnel after this long without hearing from it. */
+export const PHONE_TUNNEL_SILENCE_MS = 45_000;
+/** Streams already open to a phone that lost the route are closed this long after. */
+export const PHONE_ROUTE_HANDOVER_STREAM_MS = 10 * 60_000;
+/** While it holds a route the relay re-reads eligibility this often (the bound when a push is lost). */
+export const PHONE_ROUTE_ELIGIBILITY_RECHECK_MS = 30_000;
+/** On revocation, open streams to the phone are closed within this. */
+export const PHONE_ROUTE_REVOKE_CLOSE_MS = 5_000;
+/** A held phone certificate is reordered this long before it expires. */
+export const PHONE_CERT_RENEW_BEFORE_MS = 30 * 86_400_000;
+/** After a failed order, the next one waits at least this long. */
+export const PHONE_CERT_RETRY_AFTER_MS = 6 * 3_600_000;
+
+const ACCOUNT = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const HEX64 = /^[0-9a-f]{64}$/;
+const HEX32 = /^[0-9a-f]{32}$/;
+
+/** The phone's name: exactly `<account>.<apex>`. */
+export function phoneHostname(account: string, apex: string): string {
+  const a = account.toLowerCase();
+  if (!ACCOUNT.test(a)) throw new Error("account must be a lowercase account name");
+  return `${a}.${apex.toLowerCase()}`;
+}
+
+/** The account when `sni` is exactly a bare `<account>.<apex>` name, else null. */
+export function barePhoneAccount(sni: string, apex: string): string | null {
+  const lower = sni.toLowerCase();
+  const suffix = `.${apex.toLowerCase()}`;
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, -suffix.length);
+  return ACCOUNT.test(head) ? head : null;
+}
+
+// ── eligibility ───────────────────────────────────────────────────────────
+
+/**
+ * May `phoneRoutePub` claim the account's bare name? Only an admin-root-granted `admin` device (`requireMasterAdmin`
+ * on the account's active grants); the bare admin root signs orders, not route claims, and the IRK and box keys never
+ * qualify. Returns the grant's expiry so the relay can re-check then.
+ */
+export function phoneRouteEligibility(
+  phoneRoutePub: string,
+  account: string,
+  adminRootPubHex: string | null | undefined,
+  grants: readonly AdminGrantView[],
+  now: number,
+): { ok: true; expiresAt: number } | { ok: false; reason: string } {
+  const pub = phoneRoutePub.toLowerCase();
+  if (!HEX64.test(pub)) return { ok: false, reason: "bad key" };
+  if (!adminRootPubHex) return { ok: false, reason: "no admin root" };
+  if (pub === adminRootPubHex.toLowerCase()) return { ok: false, reason: "the admin root is not a phone key" };
+  const view = grants.find((g) => hex(g.grant.devicePubKey).toLowerCase() === pub && g.revokedAt == null);
+  if (!view) return { ok: false, reason: "no active admin grant" };
+  const d = requireMasterAdmin(pub, account, adminRootPubHex, grants, now);
+  return d.ok ? { ok: true, expiresAt: view.grant.expiresAt } : { ok: false, reason: d.reason };
+}
+
+// ── the claim ─────────────────────────────────────────────────────────────
+
+export type RouteClaimRefusal =
+  | "malformed"
+  | "wrong-account"
+  | "wrong-hostname"
+  | "wrong-session"
+  | "wrong-generation"
+  | "stale"
+  | "bad-signature";
+
+/**
+ * Check a claim against the session that offered it: the hostname is exactly the account's bare name under `apex`,
+ * the nonce and generation are the ones this session offered, `issuedAt` is within the skew, and the signature
+ * verifies under `phoneRoutePub`. Eligibility and the ledger's compare-and-set are separate steps.
+ */
+export function checkRouteClaim(o: {
+  claim: RouteClaim;
+  signature: string;
+  apex: string;
+  account: string;
+  sessionNonce: string;
+  generation: number;
+  now: number;
+}): { ok: true } | { ok: false; code: RouteClaimRefusal } {
+  const c = o.claim;
+  try {
+    canonicalRouteClaim(c);
+  } catch {
+    return { ok: false, code: "malformed" };
+  }
+  if (c.account !== o.account) return { ok: false, code: "wrong-account" };
+  if (c.hostname !== phoneHostname(o.account, o.apex)) return { ok: false, code: "wrong-hostname" };
+  if (!HEX32.test(o.sessionNonce) || c.sessionNonce !== o.sessionNonce) return { ok: false, code: "wrong-session" };
+  if (c.generation !== o.generation) return { ok: false, code: "wrong-generation" };
+  if (Math.abs(c.issuedAt - o.now) > PHONE_ROUTE_CLAIM_SKEW_MS) return { ok: false, code: "stale" };
+  if (!verifyServingRecord("route-claim", c, o.signature, c.phoneRoutePub)) return { ok: false, code: "bad-signature" };
+  return { ok: true };
+}
+
+// ── the ledger (`.com`'s single source of truth, one entry per bare hostname) ─
+
+export interface PhoneRouteHolder {
+  relayId: string;
+  /** The relay's id for the phone's tunnel session. */
+  sessionId: string;
+  phoneRoutePub: string;
+}
+
+export interface PhoneRouteEntry {
+  /** The last generation committed; 0 before any. Never goes down, never reused. */
+  generation: number;
+  holder: PhoneRouteHolder | null;
+  /** The holder's routing lease; past it the entry has no holder. */
+  leaseUntil: number;
+}
+
+export type LedgerResult =
+  | { ok: true; entry: PhoneRouteEntry; superseded: PhoneRouteHolder | null }
+  | { ok: false; code: "stale-generation" | "not-holder" | "expired" | "malformed"; entry: PhoneRouteEntry };
+
+export function emptyPhoneRouteEntry(): PhoneRouteEntry {
+  return { generation: 0, holder: null, leaseUntil: 0 };
+}
+
+/** The entry as seen at `now`: a lapsed lease has no holder. */
+export function liveEntry(e: PhoneRouteEntry, now: number): PhoneRouteEntry {
+  return e.holder && e.leaseUntil > now ? e : { generation: e.generation, holder: null, leaseUntil: 0 };
+}
+
+function validHolder(h: PhoneRouteHolder): boolean {
+  return (
+    typeof h?.relayId === "string" && h.relayId.length > 0 && h.relayId.length <= 64 &&
+    typeof h.sessionId === "string" && h.sessionId.length > 0 && h.sessionId.length <= 64 &&
+    typeof h.phoneRoutePub === "string" && HEX64.test(h.phoneRoutePub)
+  );
+}
+
+/** Commit `generation` for `holder` only when it is exactly the next one; the previous holder (if live) is superseded. */
+export function ledgerAcquire(e: PhoneRouteEntry, generation: number, holder: PhoneRouteHolder, now: number): LedgerResult {
+  if (!Number.isSafeInteger(generation) || generation < 1 || !validHolder(holder)) return { ok: false, code: "malformed", entry: e };
+  if (generation !== e.generation + 1) return { ok: false, code: "stale-generation", entry: e };
+  const prev = liveEntry(e, now).holder;
+  return { ok: true, entry: { generation, holder: { ...holder }, leaseUntil: now + PHONE_ROUTE_LEASE_MS }, superseded: prev };
+}
+
+/** Extend the lease only for the current generation's own session, and only while it has not lapsed. */
+export function ledgerRenew(e: PhoneRouteEntry, generation: number, sessionId: string, now: number): LedgerResult {
+  if (generation !== e.generation) return { ok: false, code: "stale-generation", entry: e };
+  if (!e.holder || e.holder.sessionId !== sessionId) return { ok: false, code: "not-holder", entry: e };
+  if (e.leaseUntil <= now) return { ok: false, code: "expired", entry: e };
+  return { ok: true, entry: { ...e, leaseUntil: now + PHONE_ROUTE_LEASE_MS }, superseded: null };
+}
+
+/** Give the route up (disconnect, revocation). The generation stays. */
+export function ledgerRelease(e: PhoneRouteEntry, generation: number, sessionId: string): LedgerResult {
+  if (generation !== e.generation) return { ok: false, code: "stale-generation", entry: e };
+  if (!e.holder || e.holder.sessionId !== sessionId) return { ok: false, code: "not-holder", entry: e };
+  return { ok: true, entry: { generation: e.generation, holder: null, leaseUntil: 0 }, superseded: null };
+}
+
+// ── the phone certificate's CSR (PKCS #10, ECDSA P-256, exactly one name) ─
+
+function derLen(n: number): number[] {
+  if (n < 0x80) return [n];
+  const out: number[] = [];
+  for (let v = n; v > 0; v >>= 8) out.unshift(v & 0xff);
+  return [0x80 | out.length, ...out];
+}
+function tlv(tag: number, body: Bytes): Bytes {
+  const len = derLen(body.length);
+  const out = new Uint8Array(1 + len.length + body.length);
+  out[0] = tag;
+  out.set(len, 1);
+  out.set(body, 1 + len.length);
+  return out;
+}
+function cat(...parts: Bytes[]): Bytes {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+function oid(dotted: string): Bytes {
+  const parts = dotted.split(".").map(Number);
+  const out = [40 * parts[0]! + parts[1]!];
+  for (const p of parts.slice(2)) {
+    const bytes: number[] = [];
+    let v = p;
+    do {
+      bytes.unshift(v & 0x7f);
+      v = Math.floor(v / 128);
+    } while (v > 0);
+    for (let i = 0; i < bytes.length - 1; i++) bytes[i]! |= 0x80;
+    out.push(...bytes);
+  }
+  return tlv(0x06, new Uint8Array(out));
+}
+const ascii = (s: string) => new TextEncoder().encode(s);
+const SEQ = 0x30;
+const SET = 0x31;
+
+/**
+ * The CertificationRequestInfo for the phone's key and name: version 0, subject CN=`hostname` (UTF8String), the
+ * P-256 SubjectPublicKeyInfo, and one extensionRequest with a subjectAltName of exactly one dNSName. Deterministic,
+ * so TS, Swift and Kotlin must produce the same bytes (vectors in test-vectors/phone-route/).
+ *
+ * @param publicKey the uncompressed SEC1 point (65 bytes, 0x04…)
+ */
+export function phoneCsrInfo(publicKey: Bytes, hostname: string): Bytes {
+  if (publicKey.length !== 65 || publicKey[0] !== 0x04) throw new Error("publicKey must be an uncompressed P-256 point");
+  if (!/^[a-z0-9.-]{1,253}$/.test(hostname) || hostname.includes("*")) throw new Error("hostname must be one lowercase DNS name");
+  const name = tlv(SEQ, tlv(SET, tlv(SEQ, cat(oid("2.5.4.3"), tlv(0x0c, ascii(hostname))))));
+  const spki = tlv(SEQ, cat(tlv(SEQ, cat(oid("1.2.840.10045.2.1"), oid("1.2.840.10045.3.1.7"))), tlv(0x03, cat(new Uint8Array([0]), publicKey))));
+  const san = tlv(SEQ, cat(oid("2.5.29.17"), tlv(0x04, tlv(SEQ, tlv(0x82, ascii(hostname))))));
+  const attr = tlv(SEQ, cat(oid("1.2.840.113549.1.9.14"), tlv(SET, tlv(SEQ, san))));
+  return tlv(SEQ, cat(tlv(0x02, new Uint8Array([0])), name, spki, tlv(0xa0, attr)));
+}
+
+/** The full CSR from its info and a DER ECDSA-SHA256 signature over the info. */
+export function phoneCsr(info: Bytes, signatureDer: Bytes): Bytes {
+  return tlv(SEQ, cat(info, tlv(SEQ, oid("1.2.840.10045.4.3.2")), tlv(0x03, cat(new Uint8Array([0]), signatureDer))));
+}
+
+export function csrSha256Hex(csr: Bytes): string {
+  return hex(sha256(csr));
+}
+
+/** Should the phone order a certificate now? Reuse a held one until 30 days before its end; back off after a failure. */
+export function phoneCertNeedsOrder(o: { notAfter: number | null; lastFailureAt: number | null; now: number }): boolean {
+  if (o.lastFailureAt !== null && o.now - o.lastFailureAt < PHONE_CERT_RETRY_AFTER_MS) return false;
+  if (o.notAfter === null) return true;
+  return o.notAfter - o.now <= PHONE_CERT_RENEW_BEFORE_MS;
+}
+
+// ── the phone endpoint's request policy (Appendix H, scenario 11) ─────────
+
+export const PHONE_SESSION_COOKIE = "__Host-flagship-phone";
+export const PHONE_CSRF_HEADER = "x-flagship-csrf";
+
+export interface PhoneEndpointRequest {
+  method: string;
+  /** The Host header (no port: the relay only forwards :443). */
+  host: string;
+  /** The Origin header, or null when the request had none. */
+  origin: string | null;
+  /** The value of PHONE_SESSION_COOKIE, or null. A sibling's `Domain=` cookie of the same name is never `__Host-`. */
+  sessionCookie: string | null;
+  /** The value of PHONE_CSRF_HEADER, or null. */
+  csrf: string | null;
+  /** WebSocket upgrade. */
+  upgrade: boolean;
+  /** Opening a session (POST with the one-time code the phone shows): needs the exact Origin, not a session yet. */
+  establish?: boolean;
+}
+
+export type PhoneEndpointVerdict = "allow" | "wrong-host" | "cross-origin" | "no-session" | "csrf";
+
+/**
+ * May the phone endpoint act on this request? The Host must be exactly the phone's name. A safe read (GET/HEAD, not
+ * an upgrade) needs nothing more. Anything that changes state or opens a WebSocket needs an Origin of exactly
+ * `https://<host>` (a sibling app is same-site, not same-origin), the host-only session cookie, and the CSRF header
+ * equal to the session's token; opening a session needs the exact Origin and the one-time code the phone shows
+ * (checked by the endpoint). The endpoint sends no CORS headers at all.
+ */
+export function phoneEndpointCheck(r: PhoneEndpointRequest, o: { hostname: string; sessionToken: string | null; csrfToken: string | null }): PhoneEndpointVerdict {
+  if (r.host.toLowerCase() !== o.hostname.toLowerCase()) return "wrong-host";
+  const method = r.method.toUpperCase();
+  if ((method === "GET" || method === "HEAD") && !r.upgrade) return "allow";
+  if (r.origin !== `https://${o.hostname.toLowerCase()}`) return "cross-origin";
+  if (r.establish === true && method === "POST" && !r.upgrade) return "allow";
+  if (!o.sessionToken || !r.sessionCookie || !constantTimeEqual(r.sessionCookie, o.sessionToken)) return "no-session";
+  if (!o.csrfToken || !r.csrf || !constantTimeEqual(r.csrf, o.csrfToken)) return "csrf";
+  return "allow";
+}
+
+/** The Set-Cookie line for the session: host-only (`__Host-`, no Domain), Secure, HttpOnly, SameSite=Strict, Path=/. */
+export function phoneSessionCookie(token: string): string {
+  return `${PHONE_SESSION_COOKIE}=${token}; Path=/; Secure; HttpOnly; SameSite=Strict`;
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}

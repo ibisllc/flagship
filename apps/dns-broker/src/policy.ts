@@ -350,7 +350,9 @@ export async function verifyRpc(body: unknown, env: PolicyEnv): Promise<VerifyOu
   if (!isObj(body) || typeof body.kind !== "string") return deny("malformed");
   switch (body.kind) {
     case "publishTxtChallenge":
-      return verifyPublishTxt(body as unknown as PublishTxtChallengeBody, env);
+      // Retired (plan H1): `.com`'s issuance service publishes only the records of the ACME orders it created. A box
+      // that may write `_acme-challenge.<user>` can get a certificate for the bare `<user>` name, the admin phone's.
+      return deny("challenge records are written by the issuance service");
     case "publishARecord":
       return verifyPublishA(body as unknown as PublishARecordBody, env);
     case "deleteRecord":

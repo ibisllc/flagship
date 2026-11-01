@@ -1,0 +1,94 @@
+{
+  "about": "The app proxy's HTTP rules, run by the TS proxy (appConnection.ts, serviceProxy.ts) and the Rust ingress proxy (flagship-ingress http.rs). A raw head is latin1: one char per byte. expect null = the proxy does not parse it (the TS path answers 400; the Rust proxy hands it to the daemon).",
+  "heads": [
+    { "name": "simple GET", "raw": "GET / HTTP/1.1\r\nHost: a.example", "expect": { "method": "GET", "target": "/", "version": "1.1", "headers": { "host": "a.example" } } },
+    { "name": "HTTP/1.0, query kept", "raw": "POST /a/b?x=1&y=%20 HTTP/1.0\r\nContent-Length: 3", "expect": { "method": "POST", "target": "/a/b?x=1&y=%20", "version": "1.0", "headers": { "content-length": "3" } } },
+    { "name": "names lowercased, values trimmed, repeats joined", "raw": "GET / HTTP/1.1\r\nX-A:  one \r\nx-a:two\r\nCOOKIE: a=1\r\ncookie: b=2", "expect": { "method": "GET", "target": "/", "version": "1.1", "headers": { "x-a": "one, two", "cookie": "a=1; b=2" } } },
+    { "name": "empty value", "raw": "GET / HTTP/1.1\r\nX-Empty:", "expect": { "method": "GET", "target": "/", "version": "1.1", "headers": { "x-empty": "" } } },
+    { "name": "latin1 bytes in a value", "raw": "GET / HTTP/1.1\r\nX-L: café ÿ", "expect": { "method": "GET", "target": "/", "version": "1.1", "headers": { "x-l": "café ÿ" } } },
+    { "name": "tab inside a value", "raw": "GET / HTTP/1.1\r\nX-T: a\tb", "expect": { "method": "GET", "target": "/", "version": "1.1", "headers": { "x-t": "a\tb" } } },
+    { "name": "byte 0x85 is not whitespace in a JS regex", "raw": "GET /a\u0085b HTTP/1.1", "expect": { "method": "GET", "target": "/a\u0085b", "version": "1.1", "headers": {} } },
+    { "name": "underscore identity spelling parses (stripped later)", "raw": "GET / HTTP/1.1\r\nX_Flagship_User: x", "expect": { "method": "GET", "target": "/", "version": "1.1", "headers": { "x_flagship_user": "x" } } },
+    { "name": "two spaces after the method", "raw": "GET  / HTTP/1.1", "expect": null },
+    { "name": "absolute-form target", "raw": "GET http://a/ HTTP/1.1", "expect": null },
+    { "name": "asterisk target", "raw": "OPTIONS * HTTP/1.1", "expect": null },
+    { "name": "HTTP/2.0", "raw": "GET / HTTP/2.0", "expect": null },
+    { "name": "lowercase protocol", "raw": "GET / http/1.1", "expect": null },
+    { "name": "non-breaking space in the target", "raw": "GET /a b HTTP/1.1", "expect": null },
+    { "name": "non-token method", "raw": "GÉT / HTTP/1.1", "expect": null },
+    { "name": "obs-fold continuation", "raw": "GET / HTTP/1.1\r\nA: b\r\n c", "expect": null },
+    { "name": "empty header name", "raw": "GET / HTTP/1.1\r\n: x", "expect": null },
+    { "name": "no colon", "raw": "GET / HTTP/1.1\r\nnocolon", "expect": null },
+    { "name": "space before the colon", "raw": "GET / HTTP/1.1\r\nHost : a", "expect": null },
+    { "name": "control byte in a value", "raw": "GET / HTTP/1.1\r\nA: b\u0001c", "expect": null },
+    { "name": "bare CR in a value", "raw": "GET / HTTP/1.1\r\nA: b\rc", "expect": null },
+    { "name": "bare LF in a value", "raw": "GET / HTTP/1.1\r\nA: b\nc", "expect": null },
+    { "name": "DEL in a value", "raw": "GET / HTTP/1.1\r\nA: b\u007fc", "expect": null },
+    { "name": "leading empty line", "raw": "\r\nGET / HTTP/1.1", "expect": null }
+  ],
+  "bodies": [
+    { "name": "no body", "headers": {}, "expect": "none" },
+    { "name": "zero length", "headers": { "content-length": "0" }, "expect": "none" },
+    { "name": "length", "headers": { "content-length": "1048577" }, "expect": "length" },
+    { "name": "chunked any case", "headers": { "transfer-encoding": "ChUnKeD" }, "expect": "chunked" },
+    { "name": "both framings", "headers": { "transfer-encoding": "chunked", "content-length": "5" }, "expect": 400 },
+    { "name": "another coding", "headers": { "transfer-encoding": "gzip, chunked" }, "expect": 501 },
+    { "name": "list length", "headers": { "content-length": "5, 5" }, "expect": 400 },
+    { "name": "negative length", "headers": { "content-length": "-1" }, "expect": 400 },
+    { "name": "sixteen digits", "headers": { "content-length": "1234567890123456" }, "expect": 400 },
+    { "name": "upgrade with a body", "headers": { "upgrade": "websocket", "connection": "keep-alive, Upgrade", "content-length": "4" }, "expect": 400 }
+  ],
+  "upgrades": [
+    { "name": "websocket", "headers": { "upgrade": "WebSocket", "connection": "keep-alive, Upgrade" }, "expect": true },
+    { "name": "h2c is not", "headers": { "upgrade": "h2c", "connection": "upgrade" }, "expect": false },
+    { "name": "no connection token", "headers": { "upgrade": "websocket", "connection": "keep-alive" }, "expect": false },
+    { "name": "token inside another word", "headers": { "upgrade": "websocket", "connection": "upgraded" }, "expect": false }
+  ],
+  "forward": [
+    {
+      "name": "every client identity spelling dropped, the daemon's set, hop-by-hop gone",
+      "headers": { "host": "app.example", "x-flagship-user": "forged", "x_flagship_role": "master", "x-flagship_visitor": "member", "x-flagship-signature": "00", "accept": "*/*", "keep-alive": "5", "te": "trailers", "proxy-authorization": "x", "expect": "100-continue", "http2-settings": "x" },
+      "set": { "x-flagship-app-id": "alice--notes", "x-flagship-visitor": "anonymous", "x-flagship-timestamp": "1", "x-flagship-signature": "ab" },
+      "remove": [],
+      "upgrade": false,
+      "body": "none",
+      "expect": { "host": "app.example", "accept": "*/*", "x-flagship-app-id": "alice--notes", "x-flagship-visitor": "anonymous", "x-flagship-timestamp": "1", "x-flagship-signature": "ab", "connection": "close" }
+    },
+    {
+      "name": "an API key the box checked never reaches the app",
+      "headers": { "host": "a", "authorization": "Bearer fsk_k_s" },
+      "set": { "x-flagship-visitor": "api", "x-flagship-user": "apikey:k", "x-flagship-role": "api", "x-flagship-api-scope": "read" },
+      "remove": ["authorization"],
+      "upgrade": false,
+      "body": { "length": 12 },
+      "expect": { "host": "a", "x-flagship-visitor": "api", "x-flagship-user": "apikey:k", "x-flagship-role": "api", "x-flagship-api-scope": "read", "connection": "close", "content-length": "12" }
+    },
+    {
+      "name": "headers the client's Connection named are dropped, identity and websocket ones kept",
+      "headers": { "host": "a", "connection": "keep-alive, X-Secret, x-flagship-visitor, sec-websocket-key", "x-secret": "1", "sec-websocket-key": "k" },
+      "set": { "x-flagship-visitor": "member" },
+      "remove": [],
+      "upgrade": false,
+      "body": "chunked",
+      "expect": { "host": "a", "sec-websocket-key": "k", "x-flagship-visitor": "member", "connection": "close", "transfer-encoding": "chunked" }
+    },
+    {
+      "name": "a websocket upgrade keeps its handshake",
+      "headers": { "host": "a", "connection": "Upgrade", "upgrade": "websocket", "sec-websocket-key": "k", "sec-websocket-version": "13", "origin": "https://a" },
+      "set": { "x-flagship-visitor": "member", "x-flagship-user": "u" },
+      "remove": [],
+      "upgrade": true,
+      "body": "none",
+      "expect": { "host": "a", "sec-websocket-key": "k", "sec-websocket-version": "13", "origin": "https://a", "x-flagship-visitor": "member", "x-flagship-user": "u", "connection": "Upgrade", "upgrade": "websocket" }
+    },
+    {
+      "name": "a client content-length and transfer-encoding never pass as sent",
+      "headers": { "host": "a", "content-length": "999", "transfer-encoding": "chunked", "trailer": "x" },
+      "set": {},
+      "remove": [],
+      "upgrade": false,
+      "body": { "length": 3 },
+      "expect": { "host": "a", "connection": "close", "content-length": "3" }
+    }
+  ]
+}

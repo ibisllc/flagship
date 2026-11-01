@@ -9,10 +9,13 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { PRIVD_DAEMON_DROPIN_PATH, PRIVD_HELPER, PRIVD_UNIT_PATH, daemonPrivdDropIn, privdSetupScript, privdUnit } from "@flagship/privd/unit";
 import { writeFileDurable } from "../durableFile.js";
+import { syncRustIngress } from "./ingress.js";
 import type { ArchV2Config } from "../engine/engine.js";
 import {
   BROKER_UNIT_PATH,
   CORE_UNIT_PATH,
+  ACCESS_UNIT_PATH,
+  accessServiceUnit,
   KEYD_RUST_DROPIN_PATH,
   RUST_COMPONENTS,
   RUST_EXEC_PATH,
@@ -79,9 +82,9 @@ export function parseRustStatus(text: string | null): RustComponentStatus | null
   if (!text) return null;
   try {
     const v = JSON.parse(text) as Partial<RustComponentStatus>;
-    if ((v.component !== "keyd" && v.component !== "broker" && v.component !== "core") || (v.choice !== "rust" && v.choice !== "ts")) return null;
+    if (!(RUST_COMPONENTS as readonly unknown[]).includes(v.component) || (v.choice !== "rust" && v.choice !== "ts")) return null;
     return {
-      component: v.component,
+      component: v.component as RustComponent,
       choice: v.choice,
       reason: String(v.reason ?? ""),
       sha256: String(v.sha256 ?? ""),
@@ -151,9 +154,22 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
   const hasSystemd = deps.hasSystemd ?? (() => existsSync("/run/systemd/system"));
   if (!hasSystemd()) return { action: "skipped", reason: "no systemd" };
   const keydEntry = join(deps.repoPath, "packages/keyd/dist/main.js");
+  // The owner's proxy setting: the Rust ingress in place of flagship-tlsd, or not (ingress.ts).
+  await syncRustIngress({
+    repoPath: deps.repoPath,
+    config: deps.config,
+    run: deps.run,
+    onLog: log,
+    fileExists: f.exists,
+    read: f.read,
+    write: f.write,
+    remove: f.remove,
+    ...(deps.runDir ? { runDir: deps.runDir } : {}),
+    ...(deps.stateDir ? { stateDir: deps.stateDir } : {}),
+  });
   try {
     if (deps.config.rust !== "on") {
-      const had = (await f.read(KEYD_RUST_DROPIN_PATH)) !== null || f.exists(BROKER_UNIT_PATH) || f.exists(CORE_UNIT_PATH);
+      const had = (await f.read(KEYD_RUST_DROPIN_PATH)) !== null || f.exists(BROKER_UNIT_PATH) || f.exists(CORE_UNIT_PATH) || f.exists(ACCESS_UNIT_PATH);
       if (!had) return { action: "unchanged", restarted: [] };
       // A daemon that gave up root with the broker as its helper gets flagship-privd back first, so
       // it is never without one. Run through that helper (the rust-stack step is the broker's own
@@ -167,7 +183,8 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
         log("[rust-path] the daemon's privileged helper is flagship-privd again");
       }
       await deps.run("systemctl", ["disable", ...(handBack ? [] : ["--now"]), "flagship-core.service", "flagship-broker.service"]).catch(() => {});
-      for (const p of [KEYD_RUST_DROPIN_PATH, BROKER_UNIT_PATH, CORE_UNIT_PATH]) await f.remove(p);
+      if (f.exists(ACCESS_UNIT_PATH)) await deps.run("systemctl", ["disable", "--now", "flagship-access.service"]).catch(() => {});
+      for (const p of [KEYD_RUST_DROPIN_PATH, BROKER_UNIT_PATH, CORE_UNIT_PATH, ACCESS_UNIT_PATH]) await f.remove(p);
       await deps.run("systemctl", ["daemon-reload"]);
       log("[rust-path] switched off: keyd back on TypeScript, broker and core removed");
       await deps.run("systemctl", ["restart", "--no-block", "flagship-keyd.service"]).catch(() => {});
@@ -190,6 +207,7 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
       [RUST_EXEC_PATH, rustExecScript(deps.repoPath), 0o755],
       [BROKER_UNIT_PATH, brokerServiceUnit({ privdEntry: join(deps.repoPath, "packages/privd/dist/main.js") }), 0o644],
       [CORE_UNIT_PATH, coreServiceUnit(), 0o644],
+      [ACCESS_UNIT_PATH, accessServiceUnit(), 0o644],
     ];
     const keydThere = f.exists("/etc/systemd/system/flagship-keyd.service");
     if (keydThere) files.push([KEYD_RUST_DROPIN_PATH, keydRustDropIn({ keydEntry }), 0o644]);
@@ -203,6 +221,7 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
     if (changed.length > 0) {
       await deps.run("systemctl", ["daemon-reload"]);
       await deps.run("systemctl", ["enable", "flagship-broker.service", "flagship-core.service"]);
+      await deps.run("systemctl", ["enable", "flagship-access.service"]);
     }
     // A component running a binary that is not this release's (an update or a rollback swapped
     // the tree under it) is restarted so it selects again. keyd's restart restarts the daemon too.
@@ -222,6 +241,7 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
     // The broker goes last: run as root by the daemon's privileged helper (the rust-stack step),
     // this step is the broker's own child, and the broker's restart ends it.
     if (restart.includes("core")) await deps.run("systemctl", ["restart", "--no-block", "flagship-core.service"]);
+    if (restart.includes("access")) await deps.run("systemctl", ["restart", "--no-block", "flagship-access.service"]);
     if (restart.includes("keyd")) {
       log("[rust-path] restarting keyd on this release's binary (the daemon restarts with it)");
       await deps.run("systemctl", ["restart", "--no-block", "flagship-keyd.service"]);

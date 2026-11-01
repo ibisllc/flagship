@@ -103,6 +103,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0119",
   // The serving authority: servers.reg_gen, policies, delegations, leases, the revocation log and relay acks.
   "0120",
+  // The certificate issuance service: orders, the service's ACME account URL, the CA back-off, CA revocations.
+  "0121",
 ];
 
 export interface SchemaStatusDeps {

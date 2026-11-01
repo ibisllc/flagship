@@ -19,6 +19,9 @@ bytes the owner's decisions of 2026-10-30 (journal, Appendices H and I); each li
 The box's exact control name needs a registration that is not revoked (checked when its tunnel is admitted and kept
 current by the pushed revocation log) and the box's own signature, and NO serving lease. App routes and app certificates need a lease whose `notAfter` has not passed.
 
+The issuance service that checks `certificate-order/v1` (routes, JSON, error codes, renewal limits) is built:
+`issuance-service.md`.
+
 ## 2. The records
 
 All times are epoch milliseconds from the verifier's own authenticated clock, never the box's. `<box>` is the box's
@@ -90,6 +93,58 @@ flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|
 - Name lists: canonical, sorted, lowercase, one per line, each tagged `control`, `apps` or `phone`; the route
   allocator reserves every control name so no app alias can take one; shared vectors in TS, Swift, Kotlin and Rust
   and a collision test.
+
+### Phone routing (H3): RECOMMENDED (agent recommendation, owner to confirm), 2026-11-01
+
+Appendix H asks for these before implementation. The TS relay (`apps/web/src/tunnel/phoneRoute.ts`,
+`phoneTunnel.ts`), `.com`'s ledger (`apps/com/src/phoneRoute.ts`) and the phones implement them; the numbers are
+constants in `packages/protocol/src/phoneRoute.ts`. Wire protocol: `phone-route.md` beside this file.
+
+- **Who may claim.** Only a key `requireMasterAdmin` accepts as an admin-root-granted `admin` DEVICE of the account
+  (not the bare admin root, not the IRK, never a box key): the phone signs `route-claim/v1` with its account device
+  key, the key its admin grant names. Eligibility comes from `.com` (`GET /api/internal/phone-route/:u/eligibility`:
+  the admin root and the account's active grants) and is re-verified on the relay with `requireMasterAdmin`. An
+  account with no admin root has no phone route. The bare `<user>.<apex>` name resolves ONLY from the phone route
+  table, before and instead of every box lookup, so a box with any certificate, grant or claim cannot receive it.
+- **Generation (relay-issued, monotonic per hostname).** `.com` keeps one ledger entry per bare hostname:
+  `{generation, holder?, leaseUntil}`. The relay offers `generation = current + 1` with a fresh session nonce; the
+  phone signs a claim for exactly that generation; the ledger commits it only by compare-and-set
+  (`current == generation - 1`). Generations are never reused, also after a release.
+- **Replay protection.** `sessionNonce` is issued by the relay to one tunnel session, single use, valid 30 s;
+  `issuedAt` within ±60 s of the relay's clock; `hostname` exactly `<account>.<apex>`; generation exactly the
+  offered one. A replay fails the nonce (other session, other relay, or used) and anything older also the CAS.
+- **Simultaneous acquisition.** The ledger serialises (one Durable Object). Of two claims for the same generation the
+  first to commit wins; the second is refused `stale-generation`, and that phone may begin again only on an explicit
+  foreground acquisition, which then supersedes. Net rule: the latest explicit foreground acquisition wins. A phone
+  never re-acquires automatically after losing the route (no ping-pong between two open phones).
+- **Routing lease.** 60 s in the ledger, renewed every 15 s by the holding relay while the phone's tunnel is live
+  (WebSocket ping every 15 s; nothing heard for 45 s ends the tunnel). Renewal is compare-and-renew on
+  `(generation, session)`: once a newer generation exists it fails, so a stale renewal never takes the route back.
+  An expired lease is a release; coming back needs a new signed claim.
+- **Cross-relay exclusivity.** The ledger is the one source of truth. A relay routes the bare name to a phone only
+  while (a) it holds that phone's tunnel, (b) that session holds the ledger's current generation, (c) its last
+  confirmed acquire/renew is under 30 s old, and (d) the phone is still eligible. A new acquisition is pushed at once
+  to every relay over the serving feed (`{type:"phone-route", hostname, generation}`) and the old holder stops taking
+  new connections on receipt; if the push is lost, its next renewal (≤ 15 s) fails and it stops. A relay that cannot
+  reach `.com` stops routing within 30 s. A visitor landing on an instance that does not hold the phone's tunnel is
+  closed, not forwarded: exclusivity holds; reachability across instances needs forwarding (open, for G7).
+- **Fail closed.** No holder, a lapsed lease, lost contact, a disconnected or suspended phone, a refused claim: the
+  bare name is closed like a name nobody registered. It never falls back to a box and is never parked.
+- **Connection deadlines.** Streams already open to a phone stay with it after a handover or expiry, until they close,
+  at most 10 min after its session lost the route. Revocation is stricter (below).
+- **Revocation propagation.** A removed device or a revoked or expired admin grant ends eligibility. `.com` pushes
+  `{type:"phone-eligibility", username}` over the serving feed; the relay re-reads eligibility at once, at the grant's
+  expiry, and every 30 s while it holds a route (the bound without the push: 30 s). On loss it releases the ledger,
+  closes every stream to that phone within 5 s, and closes its tunnel.
+- **Foreground only.** The phone opens the tunnel when the app comes to the foreground on an admin device that holds
+  a phone certificate and closes it when the app leaves the foreground. Foreground is honest-client behaviour; the
+  boundary is eligibility.
+- **Phone certificate (H2, H7).** One P-256 key per phone, made on the phone (Android Keystore: StrongBox when
+  present, else TEE; iOS: Secure Enclave when the TLS stack accepts it, else a `ThisDeviceOnly` Keychain key), never
+  uploaded. CSR for exactly `<account>.<apex>` (CN and one dNSName SAN). Ordered with `certificate-order/v1`
+  (`class: phone`, `device` = the account device key, `regGen` 0) signed by the device key. The chain is reused
+  until 30 days before it expires (a 90-day certificate renews about every 60 days), never ordered per handover; after
+  a failed order the next try waits at least 6 h.
 
 ## 5. One setting: the dead-man (owner, 2026-10-31)
 

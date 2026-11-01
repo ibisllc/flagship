@@ -402,3 +402,19 @@ describe("AppUserAllocator — snapshotForPod", () => {
     expect(slugs).toContain("shittygame");
   });
 });
+
+describe("control names are reserved (plan H9)", () => {
+  it("no app slot takes a box's own name, connected or only registered", () => {
+    const a = new AppUserAllocator();
+    a.addPod({ podCanonical: KITCHEN, canonicals: [] });
+    a.addPod({ podCanonical: WOODSHED, canonicals: [] });
+    // A sibling box claims the other box's control name as an app short name.
+    expect(a.requestTransfer({ podCanonical: KITCHEN, fqdn: WOODSHED })).toEqual({ ok: false, reason: "control name reserved" });
+    a.reserveControlNames(["garage.john.flagship.services"]);
+    expect(a.requestTransfer({ podCanonical: KITCHEN, fqdn: "garage.john.flagship.services" })).toEqual({ ok: false, reason: "control name reserved" });
+    expect(a.isControlName("GARAGE.john.flagship.services")).toBe(true);
+    // An ordinary app short name in the box's own zone still works.
+    expect(a.requestTransfer({ podCanonical: KITCHEN, fqdn: "notes.john.flagship.services" }).ok).toBe(true);
+    expect(a.findHolderByFqdn("garage.john.flagship.services")).toBeUndefined();
+  });
+});

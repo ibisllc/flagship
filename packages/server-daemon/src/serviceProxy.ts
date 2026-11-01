@@ -40,6 +40,8 @@ import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 import { endpoints } from "./endpoints.js";
 import type { UpdateServer } from "./updateServer.js";
 import type { ApiKeyAuthenticator } from "./appApiKeys.js";
+import { readSessionCookie } from "./serviceAccess.js";
+import { sameVerdict, type AccessAuthorityHook, type AccessFacts, type AccessVerdict } from "./accessAuthority.js";
 
 /** Why keyd would not sign master, once a minute per app: the app then sees manager, and without this nobody learns why. */
 const masterRefusedAt = new Map<string, number>();
@@ -112,6 +114,11 @@ export interface AppProxyDeps {
    * phone. Null (an API call, an asset) ⇒ the "is private" page.
    */
   deniedPage?: (serviceRef: string, req: HttpRequest) => HttpResponse | null;
+  /**
+   * The Rust access decision (accessAuthority.ts): in `shadow` it is asked and compared, in `rust` its
+   * answer is the one used. Consulted only when the router's host is known.
+   */
+  authority?: AccessAuthorityHook;
 }
 
 const STRIP_PREFIX = "x-flagship-";
@@ -177,7 +184,14 @@ export async function prepareAppRequest(
   app: InstalledService,
   req: HttpRequest,
   deps: AppProxyDeps,
-  opts: { upgrade?: boolean } = {},
+  opts: {
+    upgrade?: boolean;
+    /**
+     * The host the router selected the app by (the TLS SNI). The app's own origin is this one, never the
+     * request's Host header, which a client writes (docs/app-apis.md §4; release plan H5).
+     */
+    routedHost?: string;
+  } = {},
 ): Promise<PreparedAppRequest> {
   const apiAuth = deps.apiKeys ? deps.apiKeys.authenticate(app.serviceId, req.method, req.headers) : { kind: "none" as const };
   if (apiAuth.kind === "invalid") {
@@ -192,11 +206,17 @@ export async function prepareAppRequest(
   const apiKey = apiAuth.kind === "ok" ? { keyId: apiAuth.keyId, scope: apiAuth.scope } : null;
 
   let session = !apiKey && deps.resolveSession ? deps.resolveSession(req, app) : null;
-  if (session && isCrossOriginUnsafe(req, opts.upgrade === true)) session = null;
+  if (session && isCrossOriginUnsafe(req, opts.upgrade === true, opts.routedHost)) session = null;
   if (session?.external && deps.externalFresh && !deps.externalFresh(app)) session = null;
 
   const mode = deps.accessMode?.(app.serviceId) ?? null;
-  if (decideAccess(app, req, session, apiKey, mode) === "deny") {
+  let allowed = decideAccess(app, req, session, apiKey, mode) === "allow";
+  if (deps.authority && opts.routedHost) {
+    const r = await consultAuthority(deps.authority, app, req, opts.upgrade === true, opts.routedHost, apiKey, session, allowed, deps);
+    allowed = r.allowed;
+    session = r.session;
+  }
+  if (!allowed) {
     const page = opts.upgrade ? null : deps.deniedPage?.(app.serviceId, req);
     if (page) return { kind: "respond", response: page };
     return {
@@ -239,8 +259,15 @@ export async function prepareAppRequest(
 
   // Strip incoming X-Flagship-* (and the API key, which is the box's to
   // check, never the app's to see) and inject signed identity headers.
-  const forwardHeaders = stripIdentityHeaders(req.headers);
+  const forwardHeaders = stripForwardingHeaders(stripIdentityHeaders(req.headers));
   if (apiKey) delete forwardHeaders["authorization"];
+  // The app sees the name it was routed by: a client-written Host or X-Forwarded-Host never names
+  // another app to it (H5). The box is the only hop, so it states the scheme and host itself.
+  if (opts.routedHost) {
+    forwardHeaders["host"] = opts.routedHost;
+    forwardHeaders["x-forwarded-host"] = opts.routedHost;
+    forwardHeaders["x-forwarded-proto"] = "https";
+  }
   const ts = String((deps.now ?? Date.now)());
   const visitor: VisitorKind = apiKey ? "api" : session ? "member" : "anonymous";
   // An anonymous visitor has no id and no rank: the signature's user and role
@@ -297,6 +324,72 @@ export async function prepareAppRequest(
   forwardHeaders["x-flagship-timestamp"] = ts;
   forwardHeaders["x-flagship-signature"] = bytesToHex(sig);
   return { kind: "forward", headers: forwardHeaders };
+}
+
+/**
+ * Ask the Rust decision about a request the proxy has decided. Shadow: compare in the background, keep
+ * TypeScript's answer. Rust: its answer is used, but a member or key it names must be the very session or
+ * key the proxy resolved (it cannot conjure an identity), and no answer refuses the request.
+ */
+async function consultAuthority(
+  authority: AccessAuthorityHook,
+  app: InstalledService,
+  req: HttpRequest,
+  upgrade: boolean,
+  routedHost: string,
+  apiKey: { keyId: string } | null,
+  session: SessionInfo | null,
+  allowed: boolean,
+  deps: Pick<AppProxyDeps, "externalFresh">,
+): Promise<{ allowed: boolean; session: SessionInfo | null }> {
+  const pick = (k: string) => (typeof req.headers[k] === "string" ? { [k]: req.headers[k]! } : {});
+  const facts: AccessFacts = {
+    serviceRef: app.serviceId,
+    routedHost,
+    publicRoutes: [...(app.manifest.access.public_routes ?? [])],
+    defaultRole: app.manifest.access.default_role ?? "member",
+    method: req.method,
+    path: req.path,
+    upgrade,
+    headers: { ...pick("origin"), ...pick("sec-fetch-site"), ...pick("referer") },
+    sessionToken: readSessionCookie(req.headers.cookie),
+    apiKey: apiKey ? { keyId: apiKey.keyId } : "none",
+    externalFresh: deps.externalFresh ? deps.externalFresh(app) : true,
+  };
+  const ts: AccessVerdict = !allowed
+    ? { outcome: "deny" }
+    : apiKey
+      ? { outcome: "forward", visitor: "api", role: "api", identity: `apikey:${apiKey.keyId}`, external: false }
+      : session
+        ? { outcome: "forward", visitor: "member", role: session.role, identity: bytesToHex(session.memberPub), external: session.external === true }
+        : { outcome: "forward", visitor: "anonymous", role: null, identity: null, external: false };
+  if (authority.mode === "shadow") {
+    void authority
+      .decide(facts)
+      .then((r) => {
+        if (!sameVerdict(ts, r)) authority.onDisagree?.(app.serviceId, ts, r);
+      })
+      .catch(() => authority.onDisagree?.(app.serviceId, ts, null));
+    return { allowed, session };
+  }
+  let r: AccessVerdict;
+  try {
+    r = await authority.decide(facts);
+  } catch {
+    authority.onDisagree?.(app.serviceId, ts, null);
+    return { allowed: false, session: null };
+  }
+  if (sameVerdict(ts, r)) return { allowed, session };
+  authority.onDisagree?.(app.serviceId, ts, r);
+  if (r.outcome !== "forward") return { allowed: false, session: null };
+  if (r.visitor === "anonymous") return { allowed: true, session: null };
+  if (r.visitor === "api") return { allowed: apiKey !== null && r.identity === `apikey:${apiKey.keyId}`, session: null };
+  if (r.visitor === "member" && session && r.identity === bytesToHex(session.memberPub) && typeof r.role === "string") {
+    const narrowed: SessionInfo = { ...session, role: r.role, ...(r.external ? { external: true } : {}) };
+    if (r.role !== "master") delete narrowed.masterEvidence;
+    return { allowed: true, session: narrowed };
+  }
+  return { allowed: false, session: null };
 }
 
 /**
@@ -423,9 +516,9 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * another origin is treated as anonymous for Flagship identity. No header at
  * all (curl, scripts, old browsers) counts as same-origin.
  */
-export function isCrossOriginUnsafe(req: HttpRequest, upgrade: boolean): boolean {
+export function isCrossOriginUnsafe(req: HttpRequest, upgrade: boolean, routedHost?: string): boolean {
   if (!upgrade && SAFE_METHODS.has(req.method.toUpperCase())) return false;
-  const own = ownOrigin(req.headers.host);
+  const own = ownOrigin(routedHost ?? req.headers.host);
   const origin = req.headers.origin;
   if (typeof origin === "string" && origin.length > 0) {
     return own === null || normalizeOrigin(origin) !== own;
@@ -467,6 +560,22 @@ export function stripIdentityHeaders(headers: Record<string, string>): Record<st
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
     if (!k.toLowerCase().replace(/_/g, "-").startsWith(STRIP_PREFIX)) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Drop the proxy-chain headers a client wrote (`Forwarded`, `X-Forwarded-*`, `X-Real-IP`, `X-Original-*`,
+ * also with underscores): the box is the app's only hop, so nothing in them is true, and an app that trusts
+ * them (for its own URLs, redirects or a client address) would believe the caller.
+ */
+export function stripForwardingHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    const n = k.toLowerCase().replace(/_/g, "-");
+    if (n === "forwarded" || n === "x-real-ip" || n === "x-client-ip" || n === "true-client-ip") continue;
+    if (n.startsWith("x-forwarded-") || n.startsWith("x-original-")) continue;
+    out[k] = v;
   }
   return out;
 }

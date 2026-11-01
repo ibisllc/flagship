@@ -168,7 +168,7 @@ describe("dns-broker Worker entry", () => {
     expect(calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/"))).toHaveLength(0);
   });
 
-  it("accepts a valid publishTxtChallenge, calls CF with the token, and returns recordId — never the token", async () => {
+  it("refuses even a valid publishTxtChallenge (retired, plan H1): no Cloudflare call, nothing leaks", async () => {
     const podKey = kp(42);
     const serverId = `home.harry.${APEX}`;
     serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
@@ -204,16 +204,11 @@ describe("dns-broker Worker entry", () => {
       new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
       makeEnv(),
     );
-    expect(r.status).toBe(200);
-    const resp = (await r.json()) as { ok: boolean; recordId?: string };
-    expect(resp.ok).toBe(true);
-    expect(resp.recordId).toBe("cf-rec-AAA");
-    // Response body must not contain the token.
-    const cfCalls = calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/"));
-    expect(cfCalls.length).toBe(1);
-    expect(cfCalls[0]!.authHeader).toBe(`Bearer ${SECRET_TOKEN}`);
-    // None of the response surfaces should carry the token.
-    expect(JSON.stringify(resp)).not.toContain(SECRET_TOKEN);
+    expect(r.status).toBe(403);
+    const resp = await r.text();
+    expect(calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/"))).toHaveLength(0);
+    expect(resp).not.toContain(SECRET_TOKEN);
+    cfNextResponse.length = 0;
   });
 
   it("publishARecord is refused for a registered pod with the allowlisted IP: no Cloudflare call", async () => {

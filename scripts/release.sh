@@ -1445,7 +1445,7 @@ run_kickoff() {
   say "  amd64 takes about an hour, arm64 (TCG) up to three. Step 14 collects them."
 }
 
-KNOWN_SECRETS=(SERVING_REVOCATION_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY)
+KNOWN_SECRETS=(SERVING_REVOCATION_SEED ISSUANCE_ACME_ACCOUNT_KEY ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY)
 run_secrets() {
   ensure_wt
   local prod gym
@@ -2244,6 +2244,9 @@ summary() {
    - Windows signing is not set up (preview); Windows and Linux Studio have no real-hardware run beyond the recorded one
    - never tear down the review account playstore-test-0725 while a store review is open
    - take any DNS leftovers of that review account by hand when its review ends
+   - certificate issuance: ISSUANCE_ACME_ACCOUNT_KEY on prod and gym; after boxes renew through the service, the
+     account-pinned apex CAA (accounturi=<GET /api/certificates/account>; validationmethods=dns-01) and
+     node scripts/issuance-inventory.mjs --before <switch day> [--revoke] (docs/runbooks/issuance-migration.md)
    - AGENTS.md "Current status": record this release
 EOF
 }

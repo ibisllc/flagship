@@ -68,7 +68,8 @@ export type TransferRejection =
   | { ok: false; reason: "fqdn not derivable from any of pod's canonicals" }
   | { ok: false; reason: "pod not registered" }
   | { ok: false; reason: "fqdn not parseable" }
-  | { ok: false; reason: "apps stopped" };
+  | { ok: false; reason: "apps stopped" }
+  | { ok: false; reason: "control name reserved" };
 
 export interface RemovePodResult {
   /** Sets touched by the removal — need a fresh snapshot broadcast. */
@@ -129,6 +130,8 @@ export class AppUserAllocator {
    * own canonical but hold no app slot and are never an heir; they stay in candidate queues so they can come back.
    */
   private readonly appsStopped = new Set<string>();
+  /** Box control names registered at `.com` that no app slot may take (plan H9), beyond the connected pods' own. */
+  private readonly reservedControl = new Set<string>();
   private readonly now: () => number;
   /**
    * The data-plane apex these FQDNs live under — `flagship.services` in
@@ -141,6 +144,16 @@ export class AppUserAllocator {
   constructor(opts: { now?: () => number; apex?: string } = {}) {
     this.now = opts.now ?? (() => Date.now());
     this.apex = opts.apex ?? DEFAULT_APEX;
+  }
+
+  reserveControlNames(names: Iterable<string>): void {
+    for (const n of names) this.reservedControl.add(n.toLowerCase());
+  }
+
+  /** A box's own name (`<server>.<user>.<apex>`): never an app slot, whoever asks. */
+  isControlName(fqdn: string): boolean {
+    const f = fqdn.toLowerCase();
+    return this.pods.has(f) || this.reservedControl.has(f);
   }
 
   /**
@@ -238,6 +251,7 @@ export class AppUserAllocator {
         appsAllowed &&
         canonical !== podCanonical &&
         isShortServiceCanonical(canonical, this.apex) &&
+        !this.isControlName(canonical) &&
         !set.slotHolders.has(canonical)
       ) {
         set.slotHolders.set(canonical, podCanonical);
@@ -275,7 +289,7 @@ export class AppUserAllocator {
       // new pod joining never preempts the head — it goes to the tail
       // and waits.
       enqueueCandidate(set, shortened, podCanonical);
-      if (appsAllowed && !set.slotHolders.has(shortened)) {
+      if (appsAllowed && !this.isControlName(shortened) && !set.slotHolders.has(shortened)) {
         set.slotHolders.set(shortened, podCanonical);
         shortenedsHeld.push(shortened);
       }
@@ -316,6 +330,7 @@ export class AppUserAllocator {
     if (this.appsStopped.has(podCanonical)) return { ok: false, reason: "apps stopped" };
     const key = parseSetKey(fqdn, this.apex);
     if (!key) return { ok: false, reason: "fqdn not parseable" };
+    if (fqdn !== podCanonical && this.isControlName(fqdn)) return { ok: false, reason: "control name reserved" };
     // A box under the per-box wildcard has no per-app canonicals, so its apps' short names are not
     // derivable from anything it registered: a box may claim `<label>.<user>` in its OWN user zone
     // (the entitlement that admitted the pod names that user; a sibling account's box never matches).

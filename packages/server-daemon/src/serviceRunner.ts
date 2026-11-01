@@ -9,6 +9,7 @@ import { AddressPool, EndpointReconciler, type ExpectedContainer, LABEL_GENERATI
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
 import type { BuildDiskWatch } from "./appQuota/buildGuard.js";
+import { coreOwnership, memoryBytes, specDigest, type CoreOwnership, type OwnedWorkload } from "./rustStack/coreOwnership.js";
 
 export interface AppSpec {
   serviceId: string;
@@ -268,6 +269,11 @@ export const DEFAULT_CONTAINER_LIMITS: ContainerLimits = {
 
 export interface AppRunnerOptions {
   limits?: Partial<ContainerLimits>;
+  /**
+   * False for a runner whose containers core must never own (an app group's members are started
+   * and removed together by the group runner). Default true; only the live app network is owned.
+   */
+  coreOwnable?: boolean;
 }
 
 function resolveLimits(limits: Partial<ContainerLimits> | undefined): ContainerLimits {
@@ -773,12 +779,73 @@ export function stopEndpoint(serviceId: string, env: EndpointEnv, component?: st
 
 export class AppRunner {
   private readonly limits: ContainerLimits;
+  private readonly coreOwnable: boolean;
 
   constructor(
     private readonly cmd: CommandRunner = realCommandRunner,
     opts: AppRunnerOptions = {},
   ) {
     this.limits = resolveLimits(opts.limits);
+    this.coreOwnable = opts.coreOwnable !== false;
+  }
+
+  /** The Rust reconciler when it may own this app's container (rustStack/coreOwnership.ts). */
+  private coreFor(spec: Pick<AppSpec, "serviceId" | "component" | "containerName" | "wasi" | "group">): CoreOwnership | null {
+    const core = coreOwnership();
+    if (!core || !this.coreOwnable || this.limits.network !== DEFAULT_CONTAINER_LIMITS.network) return null;
+    if (spec.wasi || (spec.group && spec.group.members.length > 0) || (spec.component && spec.component !== "main") || spec.containerName) return null;
+    return core;
+  }
+
+  private ownedWorkload(spec: AppSpec, running: boolean): OwnedWorkload {
+    const limits = { ...this.limits, ...(spec.limits ?? {}) };
+    return {
+      installation: spec.serviceId,
+      component: "main",
+      kind: "app",
+      network: this.limits.network,
+      specDigest: specDigest({ spec, limits }),
+      running,
+      epoch: 0,
+      resources: { memoryBytes: memoryBytes(limits.memory), cpuMillis: Math.round(Number(limits.cpus) * 1000) || 0 },
+      wantsAddress: dialsContainersDirectly() && !!spec.port,
+    };
+  }
+
+  /**
+   * After a daemon restart: bring the app back. Under the Rust reconciler a container that still
+   * runs this exact spec is adopted as it is; otherwise (and on the TS path) it is restarted.
+   */
+  async resume(spec: AppSpec): Promise<void> {
+    if (this.coreFor(spec)?.live()) {
+      await this.deploy(spec);
+      return;
+    }
+    await this.restart(spec);
+  }
+
+  /**
+   * Core's remove effect: stop and delete exactly this generation of the app's container (a
+   * container of another generation is never touched; one already gone is done).
+   */
+  async removeOwned(o: { installation: string; component: string; generation: number }): Promise<void> {
+    const name = o.component === "main" ? this.containerName(o.installation) : `${this.containerName(o.installation)}.${o.component}`;
+    let gen: number | null = null;
+    try {
+      const out = await this.cmd.capture?.("docker", ["inspect", "-f", `{{index .Config.Labels "${LABEL_GENERATION}"}}`, name]);
+      gen = out ? Number(out.stdout.trim()) : null;
+    } catch {
+      return; // no such container
+    }
+    if (gen !== o.generation) return;
+    stopEndpoint(o.installation, this.limits.network === "flagship-staging" ? "staging" : "live", o.component);
+    try {
+      await this.cmd.run("docker", ["stop", name]).catch(() => {});
+      await this.cmd.run("docker", ["rm", "-f", name]);
+    } finally {
+      await acceleratorHook?.afterStop(o.installation).catch(() => {});
+      await notifyContainersChanged();
+    }
   }
 
   /** The address a Podman app has for as long as the service exists; the pool is the only source of one. */
@@ -788,6 +855,12 @@ export class AppRunner {
 
   /** The service is being deleted: its address goes back to the pool (after the quarantine). */
   async releaseAddress(serviceId: string, component?: string): Promise<void> {
+    const core = this.coreFor({ serviceId, component: component ?? "main" });
+    if (core) {
+      // Core keeps the address and the desired state: it forgets both (shadow: the record only).
+      await core.forget(serviceId, "main");
+      if (core.live()) return;
+    }
     // No component: the service and every component of it (an app group's members).
     const pool = await addressPools.get(this.limits.network)?.catch(() => null);
     if (component === undefined) pool?.releasePrefix(`${serviceId}/`);
@@ -795,6 +868,27 @@ export class AppRunner {
   }
 
   async deploy(spec: AppSpec): Promise<string[]> {
+    const core = this.coreFor(spec);
+    if (!core) return this.deployDirect(spec);
+    const w = this.ownedWorkload(spec, true);
+    if (!core.live()) {
+      core.note(w);
+      return this.deployDirect(spec);
+    }
+    let args: string[] = [];
+    await core.ensure(w, {
+      deploy: async (o) => {
+        args = await this.deployDirect(spec, o);
+      },
+    });
+    return args;
+  }
+
+  /**
+   * Create and start the container. `owned` is core's effect (the generation and address core
+   * chose); without it the daemon picks them itself (the TS path).
+   */
+  private async deployDirect(spec: AppSpec, owned?: { generation: number; address: string | null }): Promise<string[]> {
     for (const [name, ip] of Object.entries(spec.addHosts ?? {})) {
       if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name) || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) throw new Error(`refusing host entry ${JSON.stringify(`${name}:${ip}`)}`);
     }
@@ -809,8 +903,8 @@ export class AppRunner {
     // Podman: no published port (unmanaged bridges forward nothing). The container gets the address its service
     // owns and the daemon dials it through the endpoint table. Docker keeps its loopback publish.
     const direct = dialsContainersDirectly() && !!spec.port;
-    let address = direct ? await this.addressFor(spec) : null;
-    const generation = nextGeneration();
+    let address = direct ? (owned ? owned.address : await this.addressFor(spec)) : null;
+    const generation = owned ? owned.generation : nextGeneration();
     const key = endpointKeyFor(spec, this.limits.network);
     const args = [
       "run",
@@ -845,7 +939,8 @@ export class AppRunner {
           break;
         } catch (e) {
           // A container the pool did not place (a migration sandbox, a one-off) holds the address: the engine says which.
-          const taken = address && attempt < 4 ? /requested ip address (\d{1,3}(?:\.\d{1,3}){3}) is already allocated/.exec(String((e as Error).message)) : null;
+          // Under core the address is core's to change: the failure goes back to it with the address named.
+          const taken = address && attempt < 4 && !owned ? /requested ip address (\d{1,3}(?:\.\d{1,3}){3}) is already allocated/.exec(String((e as Error).message)) : null;
           if (!taken) throw e;
           await this.cmd.run("docker", ["rm", "-f", spec.containerName ?? this.containerName(spec.serviceId)]).catch(() => {});
           address = await reassignAddress(this.cmd, this.limits.network, deployedKeyId(spec), taken[1]!);
@@ -886,6 +981,12 @@ export class AppRunner {
   }
 
   async stop(serviceId: string): Promise<void> {
+    const core = this.coreFor({ serviceId });
+    if (core?.live()) {
+      await core.stop(serviceId, "main");
+      return;
+    }
+    core?.noteStopped(serviceId, "main");
     const env = this.limits.network === "flagship-staging" ? "staging" : "live";
     stopEndpoint(serviceId, env, "main");
     try {

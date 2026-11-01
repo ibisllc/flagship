@@ -1,4 +1,5 @@
 import type { Frame } from "@flagship/tunnel-protocol";
+import { barePhoneAccount } from "@flagship/protocol";
 import {
   AppUserAllocator,
   type AppUserSetKey,
@@ -35,6 +36,11 @@ export interface RegisteredTunnel {
    * while `control`, every other name only while `apps` too. Absent: no serving authority wired (dev, tests).
    */
   serving?(): ServingView;
+}
+
+/** Who holds each account's bare `<account>.<apex>` name (phoneRoute.ts). */
+export interface PhoneRouteResolver {
+  tunnelFor(hostname: string): RegisteredTunnel | undefined;
 }
 
 export interface ServingView {
@@ -83,6 +89,7 @@ export class TunnelRegistry {
    */
   private readonly knownBoxCanonicals = new Set<string>();
   private readonly allocator: AppUserAllocator;
+  private phoneRoutes: PhoneRouteResolver | null = null;
   /**
    * The data-plane apex these pod canonicals live under — `flagship.services`
    * in prod, `gym.flagship.services` in the test env. Held here (not only in
@@ -161,12 +168,20 @@ export class TunnelRegistry {
    */
   findBySni(sni: string): RegisteredTunnel | undefined {
     const lower = sni.toLowerCase();
+    // An account's bare name is its admin phones' (plan H3): it resolves from the phone routes only, never from a
+    // box, whatever the box claimed or holds.
+    if (barePhoneAccount(lower, this.apex) !== null) return this.phoneRoutes?.tunnelFor(lower);
     const t = this.resolveSni(lower);
     if (!t?.serving) return t;
     // A refused name resolves to nothing, so the router closes it exactly like a name nobody registered.
     const v = t.serving();
     if (!v.control) return undefined;
     return v.apps || lower === t.podCanonical.toLowerCase() ? t : undefined;
+  }
+
+  /** Route each account's bare name to the phone that holds it (unset: the bare name never routes). */
+  setPhoneRoutes(r: PhoneRouteResolver | null): void {
+    this.phoneRoutes = r;
   }
 
   /**

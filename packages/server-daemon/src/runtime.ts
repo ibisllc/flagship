@@ -14,6 +14,7 @@ import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from
 import { AliasReconciler } from "./aliasReconciler.js";
 import { BoxReadToken } from "./boxReadToken.js";
 import { prepareAppRequest, type AppAccessMode, type SessionResolver } from "./serviceProxy.js";
+import type { AccessAuthorityHook } from "./accessAuthority.js";
 import { AppConnectionLimiter, handleAppConnection, type AppConnectionOptions } from "./appConnection.js";
 import {
   AppApiKeyStore,
@@ -38,7 +39,7 @@ import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import { listenForFrontend } from "./tlsUpstream.js";
-import { buildOpaqueIssuer, type OpaqueTlsKeyd } from "./acme/opaqueIssuer.js";
+import type { OpaqueTlsKeyd } from "./acme/opaqueIssuer.js";
 import {
   DataProvisioner,
   DataStack,
@@ -47,14 +48,10 @@ import {
   type DataProvisionerOptions,
   type FilesAdmin,
 } from "./dataLayer/index.js";
-import {
-  LetsEncryptIssuer,
-  type AcmeIssuancePhase,
-  type LeEnvironment,
-} from "./acme/letsEncryptIssuer.js";
-import { PersistentAcmeStore, shouldReuseCert, shouldServeStaleCert } from "./acme/persistentStore.js";
-import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
-import { buildServiceCertHandlers, rehydrateServiceCerts } from "./serviceCertHttp.js";
+import type { AcmeIssuancePhase, LeEnvironment } from "./acme/letsEncryptIssuer.js";
+import { PersistentAcmeStore, shouldServeStaleCert } from "./acme/persistentStore.js";
+import { keydCsrSource, localCsrSource, ServiceIssuer } from "./acme/serviceIssuer.js";
+import { BoxCertificates } from "./acme/boxCertificates.js";
 import {
   superviseTunnelClient,
   type SupervisedTunnelClient,
@@ -84,9 +81,19 @@ export interface OpaqueTlsOptions {
   keyd: OpaqueTlsKeyd;
   /** Unix group allowed to open the upstream socket (the frontend's). */
   socketGroup?: string;
+  /**
+   * The Rust ingress's decision socket (rustProxyDecide.ts): the ingress asks here whether an app
+   * request may reach its container. `enabled` is the owner's proxy setting.
+   */
+  decide?: { socket: string; enabled: () => boolean };
 }
 
 export interface DaemonRuntimeOptions {
+  /**
+   * The Rust controller on an arch-v2 box (rustStack/coreOwnership.ts): app containers on the live
+   * network and the model server are reconciled by core. `mode` is the owner's reconciler setting.
+   */
+  rustCore?: { mode: () => "shadow" | "rust" };
   /** The `.com` doorbell (doorbell.ts): lets the alias poll skip a minute that
    *  would come back unchanged. Absent ⇒ it polls every minute as before. */
   doorbell?: import("./doorbell.js").Doorbell;
@@ -167,6 +174,8 @@ export interface DaemonRuntimeOptions {
    * daemon can miss several checks and still renew with weeks to spare.
    */
   renewalCheckIntervalMs?: number;
+  /** The registration generation `.com` last reported for this box (servingStore.ts); certificate orders carry it. */
+  regGen?: () => number;
   /** Test seam — replace with mock store. */
   persistentStore?: PersistentAcmeStore;
   /**
@@ -484,6 +493,8 @@ export interface AppIdentity {
   accessMode?: (serviceId: string) => AppAccessMode | null;
   /** N07 — may guests of this app be honoured now (a current freshness checkpoint)? Absent ⇒ not checked. */
   externalFresh?: (app: InstalledService) => boolean;
+  /** The Rust access decision, in shadow or authoritative (accessAuthority.ts). */
+  authority?: AccessAuthorityHook;
 }
 
 /**
@@ -500,6 +511,8 @@ export function appConnectionOptions(
     apiKeys: ApiKeyAuthenticator | null;
     identity: AppIdentity | null;
     limiter: AppConnectionLimiter;
+    /** The SNI the app was selected by: the app's own origin for the sibling-app guard (never the Host header). */
+    routedHost?: string;
   },
 ): AppConnectionOptions {
   return {
@@ -518,8 +531,9 @@ export function appConnectionOptions(
           ...(deps.identity?.deniedPage ? { deniedPage: deps.identity.deniedPage } : {}),
           ...(deps.identity?.accessMode ? { accessMode: deps.identity.accessMode } : {}),
           ...(deps.identity?.externalFresh ? { externalFresh: deps.identity.externalFresh } : {}),
+          ...(deps.identity?.authority ? { authority: deps.identity.authority } : {}),
         },
-        info,
+        { ...info, ...(deps.routedHost ? { routedHost: deps.routedHost } : {}) },
       ),
     upstream: { endpoint: { serviceId: app.serviceId, env: "live", component: "main", role: "http" } },
     limiter: deps.limiter,
@@ -1042,6 +1056,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           apiKeys: appApiKeysRef.current,
           identity: appIdentityRef.current,
           limiter: appConnLimiter,
+          routedHost: sni,
         }),
       );
       return;
@@ -1108,7 +1123,40 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   if (opts.opaqueTls) {
     // flagship-tlsd terminates TLS; we take its decrypted connections here.
     const upstream = await listenForFrontend(opts.opaqueTls.upstreamSocket, onSecureConnection, opts.opaqueTls.socketGroup);
-    tls.close = () => upstream.close();
+    let decisions: { close(): unknown } | null = null;
+    if (opts.opaqueTls.decide) {
+      // The Rust ingress's app proxy asks here; the decision is the one onSecureConnection makes.
+      const { listenForDecisions } = await import("./rustProxyDecide.js");
+      const decide = opts.opaqueTls.decide;
+      decisions = await listenForDecisions(
+        decide.socket,
+        {
+          enabled: decide.enabled,
+          appForSni: (sni) => {
+            const label = leftmostLabel(sni, opts.serverFqdn) ?? tier2ServiceLabel(sni, opts.serverFqdn);
+            return label && servicePlatformRef.current ? servicePlatformRef.current.byLabel(label) : undefined;
+          },
+          options: (app) =>
+            appConnectionOptions(app, {
+              gates: appGates,
+              injector: opts.custodian,
+              ...(opts.updateServer ? { updateServer: opts.updateServer } : {}),
+              apiKeys: appApiKeysRef.current,
+              identity: appIdentityRef.current,
+              limiter: appConnLimiter,
+            }),
+        },
+        opts.opaqueTls.socketGroup,
+        (m) => console.warn(m),
+      ).catch((e: Error) => {
+        console.warn(`[rust-proxy] the decision socket is not available: ${e.message}`);
+        return null;
+      });
+    }
+    tls.close = () => {
+      decisions?.close();
+      return upstream.close();
+    };
     tlsPort = opts.opaqueTls.frontendPort;
   } else {
     const real = tls as unknown as TlsServer;
@@ -1262,187 +1310,66 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     );
   }
 
-  // Persistent ACME state. If a `dataDir` (or test-injected store) is
-  // configured, account key and issued certs are loaded on startup and
-  // persisted on issuance. With no store, behavior matches the in-memory
-  // demo: a fresh LE account on every restart and no renewal continuity.
-  // With the TLS key in keyd nothing secret is persisted here: keyd keeps the key and the chain.
+  // The box's certificates come from `.com`'s issuance service (plan H1/H9; acme/serviceIssuer.ts): a control
+  // certificate for exactly its own name and an app certificate for its app wildcards, each key made here (or in
+  // keyd) and never sent anywhere. The box holds no ACME account and writes no DNS record.
+  // With the TLS key in keyd nothing secret is persisted here: keyd keeps the keys and the chains.
   const store: PersistentAcmeStore | null = opts.opaqueTls
     ? null
     : opts.persistentStore ?? (opts.dataDir ? new PersistentAcmeStore(opts.dataDir) : null);
-  // Every box self-renews its own per-box A′ cert on one system-wide policy:
-  // LE issues 90-day certs; we renew when ≤30 days remain (cert ~60 days old),
-  // so ~one issuance per 60 days. A pure system constant — no per-box autonomy
-  // selection, no account-wide validity setting. The renewal itself is jittered
-  // (see renewIfNeeded) so the fleet desyncs and never bursts against LE.
-  const renewalWindowMs = opts.renewalWindowMs ?? DEFAULT_RENEWAL_WINDOW_MS;
-  const renewalCheckIntervalMs = opts.renewalCheckIntervalMs ?? 6 * 60 * 60 * 1000;
-  // Per-cert renewal backoff state, owned by the periodic loop so a failed
-  // renewal backs off (with jitter) across 6-hour ticks instead of re-hammering
-  // LE every tick. Reset to a clean slate on each successful renewal.
-  const renewalBackoff: RenewalBackoffState = { failures: 0, nextAttemptAt: 0 };
-
-  // Resolve the ACME account key for THIS box's own per-box A′ cert
-  // (`[<server>.<user>, *.<server>.<user>]`): env-supplied → on-disk → fresh.
-  // Under cert model A′ every box self-renews on its OWN, disk-persisted,
-  // self-generated account key — the per-box cert path NEVER depends on a
-  // delivered/sealed grant. (The #28 granted-account-key machinery —
-  // `fetchGrantedAccountKeyPem` + `resolveAccountKey`'s `resolveGrantedPem`
-  // seam — is retained for the tier-2 shared-service cert + recovery callers,
-  // which mint under the user's ONE shared account; it just no longer gates a
-  // box's own cert.) Resolved up front since both initial issuance AND periodic
-  // renewal need it.
-  const accountKeyPem = opts.opaqueTls
-    ? ""
-    : await resolveAccountKey({
-        explicitPem: opts.accountKeyPem,
-        store,
-        createPrivateKey: () => acme.crypto.createPrivateKey().then((b) => b.toString()),
-        onGenerated: opts.onAccountKeyGenerated,
-      });
-
-  const dns = new RemoteDnsChallengeWriter({
+  const keydTls = opts.opaqueTls?.keyd;
+  const serviceIssuer = new ServiceIssuer({
     controlPlaneBaseUrl: opts.controlPlaneBaseUrl,
-    serverId: opts.serverFqdn,
-    stk: identity,
-    ...(opts.serverWildcardGrant ? { serverWildcardGrant: opts.serverWildcardGrant } : {}),
+    serverFqdn: opts.serverFqdn,
+    boxPubHex: Buffer.from(opts.custodian.boxPublicKey()).toString("hex"),
+    signAsBox: (m) => opts.custodian.signAsBox(m),
+    regGen: () => opts.regGen?.() ?? 1,
+    wildcardGrant: () => opts.serverWildcardGrant,
+    csr:
+      keydTls?.csr
+        ? keydCsrSource({ tlsCreateKey: (n) => keydTls.acme.tlsCreateKey(n), tlsCsr: (h) => keydTls.csr!(h) })
+        : localCsrSource(),
   });
-  const issuer = opts.opaqueTls
-    ? buildOpaqueIssuer({
-        keyd: opts.opaqueTls.keyd,
-        environment: opts.acmeEnvironment,
-        email: opts.acmeEmail,
-        dns,
-        ...(opts.onAcmePhase ? { onPhase: opts.onAcmePhase } : {}),
-      })
-    : new LetsEncryptIssuer({
-        email: opts.acmeEmail,
-        environment: opts.acmeEnvironment,
-        accountKeyPem,
-        alpn: certManager,
-        dns,
-        ...(opts.onAcmePhase ? { onPhase: opts.onAcmePhase } : {}),
-      });
+  const boxCerts = new BoxCertificates({
+    issuer: serviceIssuer,
+    serverFqdn: opts.serverFqdn,
+    certManager,
+    store,
+    ...(keydTls?.list
+      ? {
+          keyd: {
+            install: (h: string, chain: string) => keydTls.acme.tlsInstall(h, chain),
+            activate: (h: string) => keydTls.activate(h),
+            list: () => keydTls.list!(),
+            active: () => keydTls.active(),
+          },
+        }
+      : {}),
+    // The heartbeat reports the control certificate (the box's own name), or the app one until it exists.
+    onInstalled: (cls, cert, notAfter, names) => {
+      if (cls === "control" || !boxCerts.has("control")) opts.onCertIssued?.(cert, notAfter, names);
+    },
+    onAttemptFailed: (cls, attempt, error) => opts.onCertAttemptFailed?.(attempt, `${cls}: ${error}`),
+  });
 
-  // Initial cert acquisition. CRITICAL: this must NOT block startup nor
-  // kill the process on failure. ACME needs the daemon to STAY UP — the
-  // tunnel + local TLS server have to be live for Let's Encrypt to reach
-  // the box for TLS-ALPN-01, and a single transient ACME hiccup must not
-  // tear everything down (a process exit + systemd restart guarantees the
-  // box is DOWN exactly when LE retries validation, an unwinnable loop).
-  // So: if there's a reusable on-disk cert we install it synchronously
-  // (fast, offline); otherwise we kick the issuance into an in-process
-  // retry loop with backoff and return immediately. The daemon serves
-  // its API + tunnel throughout; the cert installs into CertManager
-  // whenever an attempt finally succeeds.
-  const existing = opts.opaqueTls
-    ? await opts.opaqueTls.keyd.active().then((a) => (a ? { certPem: a.chainPem, privateKeyPem: "", names: a.names, notAfter: a.notAfter, issuedAt: 0, legacy: a.legacy } : null))
+  // What an older release left: one combined certificate under the box's own ACME account. It keeps serving until
+  // the two new ones are in; it is never renewed (docs/runbooks/issuance-migration.md).
+  const existing = keydTls
+    ? await keydTls.active().then((a) => (a ? { certPem: a.chainPem, privateKeyPem: "", names: a.names, notAfter: a.notAfter, issuedAt: 0, legacy: a.legacy } : null))
     : store
       ? await store.loadCert(opts.serverFqdn)
       : null;
-  let certRetryLoop: { stop: () => void } | null = null;
-  const legacyKey = !!(existing as { legacy?: boolean } | null)?.legacy;
-  if (existing && !legacyKey && shouldReuseCert(existing, sans, renewalWindowMs)) {
-    certManager.install(
-      { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
-      existing.notAfter,
-    );
-    console.log(
-      `[runtime] reusing on-disk cert for ${opts.serverFqdn}; not after ${new Date(existing.notAfter).toISOString()}`,
-    );
-    // Fire onCertIssued so the daemon-status heartbeat starts immediately on
-    // restart — without this, the callback only triggers on new issuance, so
-    // a rebooted box with a valid cert never reports lastReported to .com.
-    opts.onCertIssued?.(
-      { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
-      existing.notAfter,
-      sans,
-    );
-  } else {
-    // Inside the renewal window or past the end, with no way to get a new
-    // one yet: keep serving the one on disk. A phone that knows this box by
-    // its key (not by the certificate authority) still reaches it, and the
-    // retry loop below replaces it the moment an issuance works.
-    // A key taken over from the old process keeps serving until keyd's own replacement is in.
-    if (existing && (legacyKey ? shouldReuseCert(existing, sans, 0) : shouldServeStaleCert(existing, sans))) {
-      certManager.install(
-        { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
-        existing.notAfter,
-      );
-      console.warn(
-        `[runtime] serving the on-disk cert for ${opts.serverFqdn} (not after ${new Date(existing.notAfter).toISOString()}) while a new one is requested`,
-      );
-      opts.onCertFallback?.({ certPem: existing.certPem, privateKeyPem: existing.privateKeyPem }, existing.notAfter, sans);
-    }
-    certRetryLoop = startCertRetryLoop({
-      issuer,
-      certManager,
-      store,
-      serverFqdn: opts.serverFqdn,
-      sans,
-      onCertIssued: opts.onCertIssued,
-      onCertAttemptFailed: opts.onCertAttemptFailed,
-      backoffMs: opts.certRetryBackoffMs ?? DEFAULT_CERT_RETRY_BACKOFF_MS,
-      setTimeoutImpl: opts.setTimeoutImpl ?? ((cb, ms) => setTimeout(cb, ms)),
-    });
+  if (existing && !keydTls && shouldServeStaleCert(existing, sans)) {
+    certManager.install({ certPem: existing.certPem, privateKeyPem: existing.privateKeyPem }, existing.notAfter);
+    opts.onCertFallback?.({ certPem: existing.certPem, privateKeyPem: existing.privateKeyPem }, existing.notAfter, sans);
+  } else if (existing && keydTls && existing.notAfter > Date.now()) {
+    opts.onCertFallback?.({ certPem: existing.certPem, privateKeyPem: "" }, existing.notAfter, existing.names);
   }
-
-  // Periodic renewal. With the default 30-day window + 6-hour cadence,
-  // a daemon that's online any reasonable fraction of the time renews
-  // with weeks to spare. setInterval timers don't keep Node alive on
-  // their own once `unref`'d, so the tunnel and TLS server are still
-  // what holds the event loop.
-  let renewalTimer: NodeJS.Timeout | null = null;
-  if (renewalCheckIntervalMs > 0) {
-    renewalTimer = setInterval(() => {
-      void renewIfNeeded({
-        issuer,
-        certManager,
-        store,
-        serverFqdn: opts.serverFqdn,
-        sans,
-        renewalWindowMs,
-        backoff: renewalBackoff,
-        onCertIssued: opts.onCertIssued,
-      });
-    }, renewalCheckIntervalMs);
-    renewalTimer.unref?.();
-  }
-
-  // Tier-2 shared service certs (cert model A′ Phase 5). Rehydrate any
-  // persisted `<service>.<user>` cert into the custom-SNI tier so the
-  // leader-routed name serves straight after a restart; mount the
-  // phone→box mint/export/install surface when we know the host user's
-  // IRK (the verification authority for all three envelopes). The mint
-  // path reuses THIS issuer but swaps in a DNS-01 writer that forwards
-  // the phone's grant, so the per-box flow above is untouched.
-  if (store) {
-    const rehydrated = await rehydrateServiceCerts({
-      store,
-      certManager,
-      serverFqdn: opts.serverFqdn,
-      ...(apexFromBoxFqdn(opts.serverFqdn) ? { apex: apexFromBoxFqdn(opts.serverFqdn)! } : {}),
-    });
-    for (const fqdn of rehydrated) {
-      console.log(`[runtime] rehydrated tier-2 service cert for ${fqdn}`);
-    }
-  }
-  if (opts.opaqueTls && opts.servicePlatform?.hostUsername) {
-    console.log("[runtime] tier-2 service certificates are not issued while the TLS key is held by flagship-keyd");
-  } else if (opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub) {
-    extras.push(
-      buildServiceCertHandlers({
-        serverFqdn: opts.serverFqdn,
-        username: opts.servicePlatform.hostUsername,
-        irkPub: opts.servicePlatform.hostIrkPub,
-        issuer,
-        certManager,
-        store,
-        dnsWriterWithAuthority: (grant) => dns.withServiceCertAuthority(grant),
-        ...(apexFromBoxFqdn(opts.serverFqdn) ? { apex: apexFromBoxFqdn(opts.serverFqdn)! } : {}),
-      }),
-    );
-    console.log(`[runtime] mounted /api/service-certs/* handlers`);
+  await boxCerts.load();
+  if (!wantWildcard) boxCerts.onlyControl();
+  boxCerts.start(opts.renewalCheckIntervalMs ?? 10 * 60_000);
+  if (opts.servicePlatform?.hostUsername) {
+    console.log("[runtime] per-service certificates are retired: app names are served by the box's app certificate");
   }
 
   // App-platform construction. AppRunner is unconditional (apps that
@@ -1451,6 +1378,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // ServicePlatform is wired only when host IRK + SWK are supplied.
   // One runner for container apps, app groups and WASI apps (appRuntimes.ts, P04/P05).
   const appRunner = new RuntimeRouter(realCommandRunner, {}, { onLog: (m) => console.warn(m) });
+  if (opts.rustCore) {
+    const { createBoxCoreOwnership } = await import("./rustStack/coreOwnershipBox.js");
+    const { setCoreOwnership } = await import("./rustStack/coreOwnership.js");
+    setCoreOwnership(createBoxCoreOwnership({ cmd: realCommandRunner, runner: appRunner, mode: opts.rustCore.mode, log: (m) => console.warn(m) }));
+  }
   startEndpointReconciler(realCommandRunner, (e) => console.warn(`[endpoints] ${e instanceof Error ? e.message : String(e)}`));
   const serviceActivity = new ServiceActivity();
   if (runsUnprivileged()) await runSetupStep("container-links").catch((e: Error) => console.warn(`[runtime] container links: ${e.message}`));
@@ -1901,10 +1833,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   return {
     ready: () => Promise.resolve(),
     close: async () => {
-      certRetryLoop?.stop();
+      boxCerts.stop();
       appQuota.stop();
       relayLockdown.stop();
-      if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
       stopEndpointReconciler();
       await tunnel.close();
@@ -1953,7 +1884,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     addUpgradeHandler(h) {
       extraUpgrades.push(h);
     },
-    revokeCurrentCert: (reason = 1) => revokeCurrentCert({ issuer, certManager, reason }),
+    // The service ordered the box's certificates, so the service revokes them when the owner removes the box.
+    revokeCurrentCert: async () => {
+      throw new Error("[runtime] this box's certificates are revoked by Flagship when the server is removed");
+    },
     certStore: store,
   };
 }

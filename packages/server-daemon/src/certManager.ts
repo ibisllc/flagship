@@ -37,11 +37,18 @@ export class CertManager implements AlpnChallengeServer {
    * run or by a sibling-sync replicated bundle — never peerBackup.
    */
   private customReal = new Map<string, { cert: CertMaterial; notAfterMs: number }>();
+  /** The box's control certificate (exactly its own name, plan H9); `real` is then its app certificate. */
+  private control: { name: string; cert: CertMaterial; notAfterMs: number } | null = null;
 
   /** Install (or replace) the live cert. */
   install(cert: CertMaterial, notAfterMs: number): void {
     this.real = cert;
     this.notAfterMs = notAfterMs;
+  }
+
+  /** Install (or replace) the certificate served for exactly `name`, the box's control name. */
+  installControl(name: string, cert: CertMaterial, notAfterMs: number): void {
+    this.control = { name: name.toLowerCase(), cert, notAfterMs };
   }
 
   /** Install (or replace) the live cert for a specific custom FQDN. */
@@ -84,6 +91,9 @@ export class CertManager implements AlpnChallengeServer {
     if (slot) {
       return createSecureContext({ cert: slot.certPem, key: slot.privateKeyPem });
     }
+    if (this.control && this.control.name === key) {
+      return createSecureContext({ cert: this.control.cert.certPem, key: this.control.cert.privateKeyPem });
+    }
     // A custom FQDN is served by its own cert (not the wildcard).
     const custom = this.customReal.get(key);
     if (custom) {
@@ -97,7 +107,7 @@ export class CertManager implements AlpnChallengeServer {
   }
 
   hasReal(): boolean {
-    return this.real !== null;
+    return this.real !== null || this.control !== null;
   }
 
   /**
@@ -106,7 +116,7 @@ export class CertManager implements AlpnChallengeServer {
    * ACME revocation (RFC 8555 §7.6).
    */
   currentCertPem(): string | null {
-    return this.real?.certPem ?? null;
+    return this.real?.certPem ?? this.control?.cert.certPem ?? null;
   }
 
   /** Time until the live cert expires, in ms. Returns 0 if no cert is loaded. */

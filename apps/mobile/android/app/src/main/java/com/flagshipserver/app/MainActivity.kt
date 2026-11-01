@@ -415,6 +415,11 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(effectiveMailbox, servingUser) {
                 com.flagshipserver.app.keystore.ServingRenewal.install(applicationContext, appState, effectiveMailbox, podClients)
                 com.flagshipserver.app.keystore.ServingRenewal.appOpened()
+                // The phone's bare name (docs/architecture-v2/phone-route.md): foreground only, live clients only.
+                if (mocks == null) {
+                    com.flagshipserver.app.phoneroute.PhoneRouteController.install(applicationContext, appState, okHttp)
+                    if (foreground.value) com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
+                }
             }
 
             // Maintainer-trust check on launch (live only — the Mock control
@@ -885,6 +890,7 @@ class MainActivity : FragmentActivity() {
         foreground.value = true
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
         com.flagshipserver.app.keystore.ServingRenewal.appOpened()
+        com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
         // The visible activity owns the biometric prompt (another instance's
         // onDestroy must never leave key use without one).
         if (::biometric.isInitialized) BiometricAuthority.set(biometric)
@@ -893,6 +899,7 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         foreground.value = false
+        com.flagshipserver.app.phoneroute.PhoneRouteController.appBackground()
         if (::appState.isInitialized) {
             appState.relockForBackground()
         }

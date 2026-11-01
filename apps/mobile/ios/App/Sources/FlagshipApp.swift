@@ -820,6 +820,15 @@ struct FlagshipApp: App {
                     // Renewal on use: opening the app on an admin device keeps its servers serving.
                     ServingRenewal.install(app: appState, mailbox: activeMailbox, clients: activePodClients)
                     await ServingRenewal.appOpened()
+                    // The phone's bare name (docs/architecture-v2/phone-route.md): foreground only, live clients only.
+                    var phoneRouteLive = true
+                    #if DEBUG
+                    phoneRouteLive = !GymLaunch.usesMocks
+                    #endif
+                    if phoneRouteLive {
+                        PhoneRouteController.install(app: appState)
+                        if scenePhase == .active { PhoneRouteController.appForeground() }
+                    }
                 }
                 .task { startNotices() }
                 .task {
@@ -834,10 +843,14 @@ struct FlagshipApp: App {
                         noticesForeground()
                         RelayAddressRegistry.shared.startIfDue()
                         Task { await ServingRenewal.appOpened() }
+                        PhoneRouteController.appForeground()
                     }
                     // The relay forwarder is a listener on this phone's loopback: close it (and the
                     // session that remembers its port) before suspension; the next need starts a new one.
-                    if phase == .background { RelayRoute.shared.suspend() }
+                    if phase == .background {
+                        RelayRoute.shared.suspend()
+                        PhoneRouteController.appBackground()
+                    }
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }

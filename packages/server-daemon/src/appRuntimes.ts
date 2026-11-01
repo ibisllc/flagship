@@ -34,7 +34,8 @@ export class RuntimeRouter extends AppRunner {
       link: (p, t, o) => this.groupLinks?.link(p, t, o) ?? Promise.resolve(false),
       unlink: (p) => this.groupLinks?.unlink(p) ?? Promise.resolve(),
     };
-    this.groups = new GroupRunner(new AppRunner(runnerCmd, opts), runnerCmd, links, groupOpts);
+    // A group's processes start and stop together under the group runner: core never owns one of them alone.
+    this.groups = new GroupRunner(new AppRunner(runnerCmd, { ...opts, coreOwnable: false }), runnerCmd, links, groupOpts);
   }
 
   setWasiRunner(w: WasiRunner | null): void {
@@ -103,6 +104,13 @@ export class RuntimeRouter extends AppRunner {
       await this.groups.stopComponents(serviceId);
       if (kind === undefined) await this.wasi?.stop(serviceId);
     }
+  }
+
+  /** After a daemon restart: a plain container app may be adopted as it runs; the rest restart. */
+  override async resume(spec: AppSpec): Promise<void> {
+    if (runtimeKindOf(spec) !== "oci") return this.restart(spec);
+    await super.resume(spec);
+    this.kinds.set(spec.serviceId, "oci");
   }
 
   /** Every member of the previous version stops before any of the next one starts. */

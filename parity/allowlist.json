@@ -395,6 +395,21 @@
       "check": "test-vectors",
       "key": "web:adapter-attestation",
       "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:phone-route",
+      "reason": "The bare account name is served by admin phones only (plan H2/H3): a browser cannot hold the relay's raw tunnel or end TLS, so the webapp never builds a route claim, a phone CSR or a phone certificate order."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/route-claim/v1",
+      "reason": "Route claims are signed by an admin phone's account device key over the relay's /phone-tunnel (plan H3); the webapp has no phone tunnel."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/certificate-order/v1",
+      "reason": "The webapp orders no certificate: boxes order control and app certificates, admin phones their bare-name certificate (plan H1/H2)."
     }
   ]
 }

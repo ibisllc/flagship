@@ -86,6 +86,7 @@ async fn run(a: args::Args) -> ExitCode {
         upstream: a.upstream,
         limits: a.limits,
         kx: a.kx,
+        proxy: a.proxy,
     });
     let shutdown = async move {
         tokio::select! {

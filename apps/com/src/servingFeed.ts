@@ -14,6 +14,7 @@
  */
 import type { D1Database } from "@flagship/storage";
 import { revocationsSince, signPendingRevocations } from "./servingAuthority.js";
+import { handlePhoneRouteLedger } from "./phoneRoute.js";
 
 /** Relays treat 60 s without a frame as lost contact, so the beat comes well inside that. */
 export const BEAT_MS = 30_000;
@@ -91,6 +92,12 @@ export class ServingFeed {
       await this.accept(pair[1], relay);
       return new Response(null, { status: 101, webSocket: pair[0] } as unknown as ResponseInit);
     }
+    // The phone route ledger (phoneRoute.ts) lives here so a committed acquisition reaches every relay at once.
+    if (url.pathname === "/phone-route" && (request.method === "GET" || request.method === "POST")) {
+      const r = await handlePhoneRouteLedger(this.state.storage, request, this.now());
+      if (r.push) this.broadcast(r.push);
+      return r.response;
+    }
     if (request.method === "POST" && url.pathname === "/notify") {
       let msg: unknown;
       try {
@@ -100,6 +107,10 @@ export class ServingFeed {
       }
       const m = msg as { type?: unknown; username?: unknown; boxPub?: unknown } | null;
       if (m?.type === "flush") return Response.json({ sequence: await this.flush() });
+      if (m?.type === "phone-eligibility" && typeof m.username === "string") {
+        this.broadcast({ type: "phone-eligibility", username: m.username });
+        return Response.json({ ok: true });
+      }
       if (m?.type === "changed" && typeof m.username === "string" && typeof m.boxPub === "string") {
         this.broadcast({ type: "changed", username: m.username, boxPub: m.boxPub });
         return Response.json({ ok: true });

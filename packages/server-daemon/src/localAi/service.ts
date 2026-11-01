@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { assignAddress, dialsContainersDirectly, publishAndWatch, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
 import { endpoints, nextGeneration, type EndpointKey } from "../endpoints.js";
+import { coreOwnership, specDigest } from "../rustStack/coreOwnership.js";
 import type { AcceleratorBroker } from "../gpu/broker.js";
 import { localModel, memoryNeededMiB, serverImageFor, type LocalModel } from "./catalog.js";
 import { LOCAL_AI_SERVICE_ID, SERVER_PORT, checkLocalAiRunArgs, serviceRunArgs } from "./containers.js";
@@ -251,8 +252,11 @@ export class LocalInferenceService {
       throw new LocalAiUnavailable(this.reason, "sandbox");
     }
     const cpus = Math.max(1, Math.min(hw.cpus, 8));
+    // Under the Rust reconciler core picks the generation and the address and starts the server.
+    const core = coreOwnership();
+    const owned = core?.live() === true ? core : null;
     try {
-      if (direct) address = await assignAddress(this.d.cmd, AI_NETWORK, `${AI_KEY.serviceId}/${AI_KEY.component}`);
+      if (direct && !owned) address = await assignAddress(this.d.cmd, AI_NETWORK, `${AI_KEY.serviceId}/${AI_KEY.component}`);
     } catch (e) {
       await this.releasePlacement(placement);
       this.stateValue = "failed";
@@ -261,34 +265,61 @@ export class LocalInferenceService {
       this.log(`[local-ai] ${model.id}: ${(e as Error).message}`);
       throw new LocalAiUnavailable(this.reason, "start-failed");
     }
-    const args = serviceRunArgs({
-      name: container,
-      image: serverImageFor(placement.kind === "gpu" ? placement.backend : null),
-      modelSha256: model.sha256,
-      hostPort: port,
-      generation,
-      contextTokens: model.serveContextTokens,
-      threads: cpus,
-      memoryMiB: placement.kind === "gpu" ? Math.max(1024, Math.min(need, hw.memoryMiB)) : need,
-      cpus: String(cpus),
-      apiKey,
-      ...(address ? { address } : {}),
-      gpuArgs: placement.kind === "gpu" ? placement.gpuArgs : [],
-      sandboxArgs,
-      networkArgs: this.d.networkArgs(),
-    });
-    try {
+    const image = serverImageFor(placement.kind === "gpu" ? placement.backend : null);
+    const memoryMiB = placement.kind === "gpu" ? Math.max(1024, Math.min(need, hw.memoryMiB)) : need;
+    const runArgs = (g: number, a: string | undefined) =>
+      serviceRunArgs({
+        name: container,
+        image,
+        modelSha256: model.sha256,
+        hostPort: port,
+        generation: g,
+        contextTokens: model.serveContextTokens,
+        threads: cpus,
+        memoryMiB,
+        cpus: String(cpus),
+        apiKey,
+        ...(a ? { address: a } : {}),
+        gpuArgs: placement.kind === "gpu" ? placement.gpuArgs : [],
+        sandboxArgs,
+        networkArgs: this.d.networkArgs(),
+      });
+    const runServer = async (g: number, a: string | undefined) => {
+      const args = runArgs(g, a);
       checkLocalAiRunArgs(args);
-      await this.d.ensureNetwork();
       stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
       await this.d.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
       await this.d.cmd.run("docker", args);
-      await publishAndWatch(this.d.cmd, AI_KEY, { serviceId: AI_KEY.serviceId, container, network: AI_NETWORK, address: address ?? null, port, generation });
+      await publishAndWatch(this.d.cmd, AI_KEY, { serviceId: AI_KEY.serviceId, container, network: AI_NETWORK, address: a ?? null, port, generation: g });
+    };
+    try {
+      checkLocalAiRunArgs(runArgs(generation, address));
+      await this.d.ensureNetwork();
+      if (owned) {
+        await owned.ensure(
+          {
+            installation: AI_KEY.serviceId,
+            component: AI_KEY.component,
+            kind: "local-ai",
+            network: AI_NETWORK,
+            // The key is part of the spec: a new start never adopts a server holding an old one.
+            specDigest: specDigest({ model: model.sha256, image, apiKey, memoryMiB, cpus, gpu: placement.kind === "gpu" ? placement.gpuArgs : [] }),
+            running: true,
+            epoch: 0,
+            resources: { memoryBytes: memoryMiB * 1024 * 1024, cpuMillis: cpus * 1000 },
+            wantsAddress: direct,
+          },
+          { deploy: ({ generation: g, address: a }) => runServer(g, a ?? undefined) },
+        );
+      } else {
+        await runServer(generation, address);
+      }
       if (placement.kind === "gpu") await this.d.broker?.started(placement.allocationId).catch(() => {});
       await this.waitHealthy(apiKey);
     } catch (e) {
       stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
-      await this.d.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
+      if (owned) await owned.stop(AI_KEY.serviceId, AI_KEY.component).catch(() => {});
+      else await this.d.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
       await this.releasePlacement(placement);
       this.stateValue = "failed";
       this.pendingJob = null;
@@ -354,7 +385,9 @@ export class LocalInferenceService {
     this.stateValue = "stopping";
     this.running = null;
     stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
-    await this.d.cmd.run("docker", ["rm", "-f", r.container]).catch(() => {});
+    const core = coreOwnership();
+    if (core?.live()) await core.stop(AI_KEY.serviceId, AI_KEY.component).catch((e: Error) => this.log(`[local-ai] ${e.message}`));
+    else await this.d.cmd.run("docker", ["rm", "-f", r.container]).catch(() => {});
     await this.releasePlacement(r.placement);
     this.stateValue = "stopped";
     this.reason = why === "idle" ? null : why;

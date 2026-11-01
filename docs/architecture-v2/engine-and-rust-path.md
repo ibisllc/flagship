@@ -85,7 +85,8 @@ signature covers them). Reproducibility across two clean builders is not yet sho
 
 - Engine: R03 scorecard (both arches, two weeks), arm64 run, rootless, Podman's own CVE cadence.
 - Broker: v1 `docker` op still on; most host ops still in the daemon; no capability issuer.
-- Core: shadow only; the checkpoint lists the TS desired set, not image or generation.
+- Core: shadow by default; the owner's signed `rust-ownership` order moves app reconciling to core and app
+  traffic to the Rust ingress (broker-runtime-core.md §11). The checkpoint still lists the TS desired set only.
 - Appliances/ISOs with Podman not built or published; no gym run (the gym was not used).
 - The owner's stack switch (§7) has run only in unit tests with fakes: no real box, no gym, and no
   app sends the order yet.

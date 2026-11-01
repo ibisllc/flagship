@@ -69,6 +69,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/security-notice/v1": "vectors securityNoticeVectors.test.ts, securityNoticePqVectors.test.ts (PQ half once pinned)",
   "flagship/trust-exception/v1": "vectors trustException.test.ts (allowed device keys, multi-signature)",
   "flagship/arch-v2-switch/v1": "vectors archV2Switch.test.ts, archV2SwitchVectors.test.ts (owner-signed stack switch)",
+  "flagship/rust-ownership/v1": "vectors rustOwnership.test.ts (owner-signed move of app reconciling and proxying between the TS daemon and the Rust core/ingress)",
   "flagship/runtime-manifest/v1": "vectors runtimeManifest.test.ts + test-vectors/runtime-manifest (19 cases TS and Rust: tampered fields, wrong signer, stale, revoked)",
   "flagship/runtime-manifest/v2": "vectors runtimeManifest.test.ts (the PQ companion over the v1 bytes; same cases)",
   // ---- serving authority (plan H; servingAuthority.test.ts + test-vectors/serving-authority, not wired to a verifier yet)
@@ -77,7 +78,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/serving-lease/v1": "vectors servingAuthority.test.ts (undelegated key, longer than the grace, older policy generation, other box/account/generation, future-dated)",
   "flagship/revocation-entry/v1": "vectors servingAuthority.test.ts (gap, duplicate, forged signature)",
   "flagship/certificate-order/v1": "vectors servingAuthority.test.ts (shape; the issuance service verifier is H1)",
-  "flagship/route-claim/v1": "vectors servingAuthority.test.ts (shape: only the account's bare name; the relay verifier is H3)",
+  "flagship/route-claim/v1": "phoneRoute.test.ts in packages/protocol (another session's nonce, another generation, stale clock, other apex, other account, bad signature) and apps/web/tests/phoneRoute.test.ts (replay across relays, used nonce, non-admin keys)",
   "flagship/gpu-approval/v1": "vectors gpuApprovalVectors.test.ts, server-daemon gpuApprovals.test.ts (owner-signed, per-GPU)",
   "flagship/gpu-approval-withdraw/v1": "vectors gpuApprovalVectors.test.ts, server-daemon gpuApprovals.test.ts",
   "flagship/offline-control/v1": "vectors rescue/offline-control.json + pq-vectors.json; AT-RSC-01/02 (rescue.test.ts); server-daemon rescue.test.ts end to end",

@@ -1,0 +1,681 @@
+{
+  "about": "Phone route (plan H2/H3, docs/architecture-v2/issuance-and-lease-records.md §4 'Phone routing', phone-route.md): written by tools/phone-route-vectors.ts from packages/protocol/src/phoneRoute.ts. Claims and orders are Ed25519 under signerSeed (deterministic); the CSR signature is RFC 6979 low-S DER (Swift and Kotlin sign randomly, so they must reproduce infoHex exactly and csrHex from the given signature).",
+  "signerSeed": "0606060606060606060606060606060606060606060606060606060606060606",
+  "signerPub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+  "bare": [
+    {
+      "sni": "alice.flagship.services",
+      "apex": "flagship.services",
+      "account": "alice"
+    },
+    {
+      "sni": "ALICE.flagship.services",
+      "apex": "flagship.services",
+      "account": "alice"
+    },
+    {
+      "sni": "home.alice.flagship.services",
+      "apex": "flagship.services",
+      "account": null
+    },
+    {
+      "sni": "notes.alice.flagship.services",
+      "apex": "flagship.services",
+      "account": null
+    },
+    {
+      "sni": "flagship.services",
+      "apex": "flagship.services",
+      "account": null
+    },
+    {
+      "sni": "alice.gym.flagship.services",
+      "apex": "gym.flagship.services",
+      "account": "alice"
+    },
+    {
+      "sni": "alice.flagship.services.evil.com",
+      "apex": "flagship.services",
+      "account": null
+    },
+    {
+      "sni": "-alice.flagship.services",
+      "apex": "flagship.services",
+      "account": null
+    }
+  ],
+  "claim": {
+    "record": {
+      "account": "alice",
+      "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+      "hostname": "alice.flagship.services",
+      "generation": 4,
+      "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "issuedAt": 1800000000000
+    },
+    "canonical": "flagship/route-claim/v1|alice|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|alice.flagship.services|4|5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a|1800000000000",
+    "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+    "cases": [
+      {
+        "name": "accepted",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.flagship.services",
+          "generation": 4,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "alice",
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "generation": 4,
+          "now": 1800000001000
+        },
+        "expected": "ok"
+      },
+      {
+        "name": "another session's nonce",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.flagship.services",
+          "generation": 4,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "alice",
+          "sessionNonce": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+          "generation": 4,
+          "now": 1800000001000
+        },
+        "expected": "wrong-session"
+      },
+      {
+        "name": "generation not the offered one",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.flagship.services",
+          "generation": 4,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "alice",
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "generation": 5,
+          "now": 1800000001000
+        },
+        "expected": "wrong-generation"
+      },
+      {
+        "name": "more than 60 s old",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.flagship.services",
+          "generation": 4,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "alice",
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "generation": 4,
+          "now": 1800000060001
+        },
+        "expected": "stale"
+      },
+      {
+        "name": "a name under another apex",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.gym.flagship.services",
+          "generation": 4,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "alice",
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "generation": 4,
+          "now": 1800000001000
+        },
+        "expected": "wrong-hostname"
+      },
+      {
+        "name": "another account",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.flagship.services",
+          "generation": 4,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "bob",
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "generation": 4,
+          "now": 1800000001000
+        },
+        "expected": "wrong-account"
+      },
+      {
+        "name": "signature over another generation",
+        "claim": {
+          "account": "alice",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+          "hostname": "alice.flagship.services",
+          "generation": 5,
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "issuedAt": 1800000000000
+        },
+        "signature": "0f98cee6640165d32ec5f79d8ddbc4b2b61b46c6d0747c773aa0653f610c615a24b1756e2ad99e30507acd0e0303215582aa2f1519c0310ab6b5a0401f32c50e",
+        "session": {
+          "apex": "flagship.services",
+          "account": "alice",
+          "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "generation": 5,
+          "now": 1800000001000
+        },
+        "expected": "bad-signature"
+      }
+    ]
+  },
+  "certificateOrder": {
+    "record": {
+      "class": "phone",
+      "device": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+      "regGen": 0,
+      "csrSha256": "32c21884543e213de2a508dacae9213b51699df642d34f266f68c32c29d0c0cd",
+      "requestId": "6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c",
+      "issuedAt": 1800000000000
+    },
+    "canonical": "flagship/certificate-order/v1|phone|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|0|32c21884543e213de2a508dacae9213b51699df642d34f266f68c32c29d0c0cd|6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c|1800000000000",
+    "signature": "5bf0747445a9d2b64785b3236118b512f4d658967cb1858662fe29064342f96a0d1c167f45003d1cf21738c623a4f78f2b1468942b3b9cfb11702261416a8f05"
+  },
+  "csr": {
+    "privateKey": "0707070707070707070707070707070707070707070707070707070707070707",
+    "publicKeyUncompressed": "041e18532fd4754c02f3041d9c75ceb33b83ffd81ac7ce4fe882ccb1c98bc5896ea46c311c4e2ff40dd96a3653e6e45445d32dfe486eced75c7a90c6a18881c0a3",
+    "hostname": "alice.flagship.services",
+    "infoHex": "3081b902010030223120301e06035504030c17616c6963652e666c6167736869702e73657276696365733059301306072a8648ce3d020106082a8648ce3d030107034200041e18532fd4754c02f3041d9c75ceb33b83ffd81ac7ce4fe882ccb1c98bc5896ea46c311c4e2ff40dd96a3653e6e45445d32dfe486eced75c7a90c6a18881c0a3a035303306092a864886f70d01090e3126302430220603551d11041b30198217616c6963652e666c6167736869702e7365727669636573",
+    "signatureDerHex": "304402200086fae3cbf2d36bf53ef483e83222a9354a82f2cbf559e4c28ff4ae71f5025002205ed0dd66386ff9d5ed2ae579fb171a0b20d15f529675e454ef0f770de4a36fab",
+    "csrHex": "308201113081b902010030223120301e06035504030c17616c6963652e666c6167736869702e73657276696365733059301306072a8648ce3d020106082a8648ce3d030107034200041e18532fd4754c02f3041d9c75ceb33b83ffd81ac7ce4fe882ccb1c98bc5896ea46c311c4e2ff40dd96a3653e6e45445d32dfe486eced75c7a90c6a18881c0a3a035303306092a864886f70d01090e3126302430220603551d11041b30198217616c6963652e666c6167736869702e7365727669636573300a06082a8648ce3d040302034700304402200086fae3cbf2d36bf53ef483e83222a9354a82f2cbf559e4c28ff4ae71f5025002205ed0dd66386ff9d5ed2ae579fb171a0b20d15f529675e454ef0f770de4a36fab",
+    "csrSha256": "32c21884543e213de2a508dacae9213b51699df642d34f266f68c32c29d0c0cd"
+  },
+  "ledger": [
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 1,
+        "relayId": "relay-a",
+        "sessionId": "s1",
+        "now": 1800000000000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 1,
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s1",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000060000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 1,
+        "relayId": "relay-b",
+        "sessionId": "s2",
+        "now": 1800000000001
+      },
+      "result": "stale-generation",
+      "entry": {
+        "generation": 1,
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s1",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000060000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "renew",
+        "generation": 1,
+        "sessionId": "s1",
+        "now": 1800000015000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 1,
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s1",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000075000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 2,
+        "relayId": "relay-b",
+        "sessionId": "s2",
+        "now": 1800000020000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 2,
+        "holder": {
+          "relayId": "relay-b",
+          "sessionId": "s2",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000080000
+      },
+      "superseded": {
+        "relayId": "relay-a",
+        "sessionId": "s1",
+        "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+      }
+    },
+    {
+      "step": {
+        "op": "renew",
+        "generation": 1,
+        "sessionId": "s1",
+        "now": 1800000030000
+      },
+      "result": "stale-generation",
+      "entry": {
+        "generation": 2,
+        "holder": {
+          "relayId": "relay-b",
+          "sessionId": "s2",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000080000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "renew",
+        "generation": 2,
+        "sessionId": "s1",
+        "now": 1800000030001
+      },
+      "result": "not-holder",
+      "entry": {
+        "generation": 2,
+        "holder": {
+          "relayId": "relay-b",
+          "sessionId": "s2",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000080000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "renew",
+        "generation": 2,
+        "sessionId": "s2",
+        "now": 1800000090000
+      },
+      "result": "expired",
+      "entry": {
+        "generation": 2,
+        "holder": {
+          "relayId": "relay-b",
+          "sessionId": "s2",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000080000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 3,
+        "relayId": "relay-a",
+        "sessionId": "s3",
+        "now": 1800000091000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 3,
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s3",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000151000
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "release",
+        "generation": 3,
+        "sessionId": "s3",
+        "now": 1800000092000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 3,
+        "holder": null,
+        "leaseUntil": 0
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 3,
+        "relayId": "relay-a",
+        "sessionId": "s4",
+        "now": 1800000093000
+      },
+      "result": "stale-generation",
+      "entry": {
+        "generation": 3,
+        "holder": null,
+        "leaseUntil": 0
+      },
+      "superseded": null
+    },
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 4,
+        "relayId": "relay-a",
+        "sessionId": "s4",
+        "now": 1800000094000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 4,
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s4",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000154000
+      },
+      "superseded": null
+    }
+  ],
+  "certReuse": [
+    {
+      "notAfter": null,
+      "lastFailureAt": null,
+      "now": 1800000000000,
+      "order": true
+    },
+    {
+      "notAfter": 1805184000000,
+      "lastFailureAt": null,
+      "now": 1800000000000,
+      "order": false
+    },
+    {
+      "notAfter": 1802592000000,
+      "lastFailureAt": null,
+      "now": 1800000000000,
+      "order": true
+    },
+    {
+      "notAfter": 1802678400000,
+      "lastFailureAt": null,
+      "now": 1800000000000,
+      "order": false
+    },
+    {
+      "notAfter": null,
+      "lastFailureAt": 1799996400000,
+      "now": 1800000000000,
+      "order": false
+    },
+    {
+      "notAfter": null,
+      "lastFailureAt": 1799978400000,
+      "now": 1800000000000,
+      "order": true
+    }
+  ],
+  "endpoint": [
+    {
+      "name": "same-origin POST with session and token",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "https://alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": false
+      },
+      "verdict": "allow",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "GET needs nothing",
+      "request": {
+        "method": "GET",
+        "host": "alice.flagship.services",
+        "origin": null,
+        "sessionCookie": null,
+        "csrf": null,
+        "upgrade": false
+      },
+      "verdict": "allow",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "Host of a sibling app",
+      "request": {
+        "method": "POST",
+        "host": "notes.alice.flagship.services",
+        "origin": "https://alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": false
+      },
+      "verdict": "wrong-host",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "sibling app's origin (same-site)",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "https://notes.alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": false
+      },
+      "verdict": "cross-origin",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "no Origin on a POST",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": null,
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": false
+      },
+      "verdict": "cross-origin",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "http origin",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "http://alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": false
+      },
+      "verdict": "cross-origin",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "cookie injected by a sibling (not the session)",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "https://alice.flagship.services",
+        "sessionCookie": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": false
+      },
+      "verdict": "no-session",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "no CSRF header (form post)",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "https://alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": null,
+        "upgrade": false
+      },
+      "verdict": "csrf",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "WebSocket from a sibling origin",
+      "request": {
+        "method": "GET",
+        "host": "alice.flagship.services",
+        "origin": "https://notes.alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": true
+      },
+      "verdict": "cross-origin",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "WebSocket same-origin with session and token",
+      "request": {
+        "method": "GET",
+        "host": "alice.flagship.services",
+        "origin": "https://alice.flagship.services",
+        "sessionCookie": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrf": "ccccccccccccccccccccccccccccccccccccccccccc",
+        "upgrade": true
+      },
+      "verdict": "allow",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "opening a session from the phone's own origin",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "https://alice.flagship.services",
+        "sessionCookie": null,
+        "csrf": null,
+        "upgrade": false,
+        "establish": true
+      },
+      "verdict": "allow",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "opening a session from a sibling",
+      "request": {
+        "method": "POST",
+        "host": "alice.flagship.services",
+        "origin": "https://notes.alice.flagship.services",
+        "sessionCookie": null,
+        "csrf": null,
+        "upgrade": false,
+        "establish": true
+      },
+      "verdict": "cross-origin",
+      "context": {
+        "hostname": "alice.flagship.services",
+        "sessionToken": "ttttttttttttttttttttttttttttttttttttttttttt",
+        "csrfToken": "ccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  ]
+}

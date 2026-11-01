@@ -20,8 +20,6 @@ import {
   type RelayAddress,
   caKeypairFromEnv,
   CloudflareDnsClient,
-  proxyDns01DeleteToBroker,
-  proxyDns01PublishToBroker,
   handleAuthCodeIssue,
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
@@ -121,8 +119,6 @@ import {
   pushRedirection,
   bearer,
   handleVoiciShorten,
-  handleDns01Delete,
-  handleDns01Publish,
   handleGetInstallEvents,
   handleIsoManifest,
   handleGetSealedLuksKey,
@@ -270,6 +266,8 @@ import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
 import { loadInferenceSettings } from "./inferenceModelRoutes.js";
 import { protectedAccountsFrom } from "./prodReap.js";
 import { SERVING_ACCOUNT_ROUTES, servingForBox, tryServingRoute, type ServingEnv } from "./servingAuthority.js";
+import { PHONE_ROUTE_PREFIX, tryPhoneRouteRoute } from "./phoneRoute.js";
+import { tryIssuanceRoute } from "./certificateIssuance.js";
 
 export interface ControlPlaneEnv {
   /**
@@ -300,6 +298,11 @@ export interface ControlPlaneEnv {
   SERVICES_CONTROL_SECRET?: string;
   /** Worker secret, 64 hex: the Ed25519 seed that signs the serving revocation log (servingAuthority.ts). */
   SERVING_REVOCATION_SEED?: string;
+  /** Worker secret: the issuance service's ACME account key, PKCS#8 PEM ECDSA P-256 (certificateIssuance.ts). */
+  ISSUANCE_ACME_ACCOUNT_KEY?: string;
+  /** The issuance service's ACME directory; unset = Let's Encrypt production. */
+  ISSUANCE_ACME_DIRECTORY?: string;
+  ISSUANCE_ACME_CONTACT?: string;
   /** Base URL of the `.services` control channel (the :8443 TLS-term
    *  host). Needed to push the replace-time DELETE(old fqdn). */
   SERVICES_BASE_URL?: string;
@@ -1088,6 +1091,16 @@ export async function tryControlPlane(
     }
   }
 
+  // The phone's bare-name route (phoneRoute.ts): eligibility and the ledger, for the relays.
+  if (path.startsWith(PHONE_ROUTE_PREFIX)) {
+    const phone = await tryPhoneRouteRoute(request, env as ControlPlaneEnv & ServingEnv, {
+      usernames: storage.usernames,
+      grants: storage.deviceCapabilityGrants,
+      identities: storage.deviceIdentities,
+    });
+    if (phone) return phone;
+  }
+
   // The serving authority (docs/architecture-v2/serving-wiring.md §1).
   if (path.startsWith("/api/accounts/") || path.startsWith("/api/internal/serving") || path === "/api/serving/revocation-key") {
     // The feed binding is not a string, so it stays off ControlPlaneEnv (some helpers read it as a string map).
@@ -1097,6 +1110,16 @@ export async function tryControlPlane(
       ...(options.waitUntil ? { waitUntil: options.waitUntil } : {}),
     });
     if (serving) return serving;
+  }
+
+  // The certificate issuance service (docs/architecture-v2/issuance-service.md).
+  if (path.startsWith("/api/certificates/")) {
+    const issued = await tryIssuanceRoute(request, env, {
+      usernames: storage.usernames,
+      grants: storage.deviceCapabilityGrants,
+      ...(options.waitUntil ? { waitUntil: options.waitUntil } : {}),
+    });
+    if (issued) return issued;
   }
 
   // Usage metering (feat/metering) — the relay reports per-account egress
@@ -1738,44 +1761,12 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && (ROUTE_RE.DNS01_PUBLISH.test(path) || ROUTE_RE.DNS01_DELETE.test(path))) {
-    // Broker-first: the main Worker no longer holds the CF DNS API
-    // token in production. The daemon-signed envelope arrives here,
-    // gets translated into a typed broker RPC, and the broker
-    // independently re-verifies before talking to Cloudflare.
-    if (env.DNS_BROKER_URL) {
-      const body = await readJson(request);
-      const res = ROUTE_RE.DNS01_PUBLISH.test(path)
-        ? await proxyDns01PublishToBroker({ brokerUrl: env.DNS_BROKER_URL, body })
-        : await proxyDns01DeleteToBroker({ brokerUrl: env.DNS_BROKER_URL, body });
-      return finishPlain(res);
-    }
-    // Legacy dev/test fallback — direct CF API token. Production must
-    // configure `DNS_BROKER_URL` and drop this secret.
-    if (
-      !env.CLOUDFLARE_DNS_API_TOKEN ||
-      !env.CLOUDFLARE_SERVICES_ZONE_ID
-    ) {
-      return jsonResponse({ error: "DNS-01 not configured on this control plane" }, 503);
-    }
-    const dns = new CloudflareDnsClient({
-      apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
-      zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
-    });
-    const handler = ROUTE_RE.DNS01_PUBLISH.test(path) ? handleDns01Publish : handleDns01Delete;
-    const res = await handler(
-      // `usernames` is required for the tier-2 service-cert DNS-01 path
-      // (resolving the user IRK to verify a phone-issued ServiceCertAuthority).
-      // Without it, a `<svc>.<user>` challenge 403s "service-cert authority not
-      // supported here". The gym uses this legacy direct-CF path (no broker).
-      {
-        servers: storage.servers,
-        usernames: storage.usernames,
-        dns,
-        apex: env.SERVICES_APEX,
-      },
-      await readJson(request),
+    // No device writes a challenge record any more: the issuance service publishes only the records of the orders it
+    // created (plan H1). A box that may write `_acme-challenge.<user>` could get the bare `<user>` name, the phone's.
+    return jsonResponse(
+      { error: "Certificates are issued by Flagship now. Update this server.", code: "dns01-retired" },
+      410,
     );
-    return finishPlain(res);
   }
 
   if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_SEALED))) {

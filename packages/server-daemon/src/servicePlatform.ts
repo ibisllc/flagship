@@ -1025,7 +1025,9 @@ export class ServicePlatform {
       const next: typeof todo = [];
       for (const t of todo) {
         try {
-          await this.deps.appRunner.restart(t.spec);
+          // Under the Rust reconciler a container still running this spec is adopted, not restarted.
+          const runner = this.deps.appRunner;
+          await (typeof runner.resume === "function" ? runner.resume(t.spec) : runner.restart(t.spec));
           restored.push(t.app.serviceId);
         } catch (e) {
           if (attempt === retries) {
@@ -1221,6 +1223,11 @@ export class ServicePlatform {
     if (app.urlLabel.toLowerCase() === lower) {
       return { ok: true, unchanged: true };
     }
+    // The box keeps `.com`'s reserved names off its apps itself: an alias map from a compromised `.com`
+    // (the reconciler applies it unsigned) must not park an app on a control or mail name.
+    if (RESERVED_ALIAS_LABELS.has(lower)) {
+      return { ok: false, reason: `'${lower}' is a reserved name` };
+    }
     // Collision check — another installed app already owns this
     // label on this box.
     const existing = this.byUrlLabel.get(lower);
@@ -1243,6 +1250,13 @@ export class ServicePlatform {
     return { ok: true, oldLabel, newLabel: lower };
   }
 }
+
+/** control-plane serviceRename.ts RESERVED_LABELS: names no app may be renamed to. */
+const RESERVED_ALIAS_LABELS = new Set([
+  "www", "api", "admin", "root", "mail", "smtp", "imap", "pop", "ftp",
+  "ns", "ns1", "ns2", "dns", "host", "localhost", "test", "staging",
+  "dev", "prod", "voi", "voici",
+]);
 
 export type SetAliasResult =
   | { ok: true; unchanged?: boolean; oldLabel?: string; newLabel?: string }

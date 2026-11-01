@@ -193,7 +193,11 @@ export type RateLimitEndpoint =
   // is opened, one call for all the account's servers; the policy and delegation writes are rare and
   // admin-signed. Per source and per account (the path names it); each verify is one or two signatures.
   | "serving-lease"
-  | "serving-signed";
+  | "serving-signed"
+  // Certificate orders (certificateIssuance.ts): the service keeps its own CA budgets in D1; these only bound
+  // the requests themselves. A device orders about twice in 60 days and polls every 5 s while one runs.
+  | "issuance-order"
+  | "issuance-poll";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -424,6 +428,8 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "subject", limit: 60, windowSec: 3600 },
   ],
+  "issuance-order": [{ axis: "ip", limit: 30, windowSec: 3600 }],
+  "issuance-poll": [{ axis: "ip", limit: 240, windowSec: 60 }],
 };
 
 export interface RateLimitInput {
@@ -633,6 +639,8 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/serving-leases$/.test(pathname)) return "serving-lease";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/(?:serving-policy|renewal-delegations)$/.test(pathname)) return "serving-signed";
+  if (m === "POST" && pathname === "/api/certificates/orders") return "issuance-order";
+  if (m === "GET" && /^\/api\/certificates\/orders\/[0-9a-f]{32}$/.test(pathname)) return "issuance-poll";
   if (m === "POST" && pathname === "/api/time") return "signed-time";
   if (m === "POST" && pathname === "/api/update-receipts") return "update-receipt";
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";

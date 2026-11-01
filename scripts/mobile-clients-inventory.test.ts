@@ -50,6 +50,8 @@ const ALLOWED: Record<string, string> = {
   "apps/mobile/shared/Sources/FlagshipCore/SecurityNoticeCenter.swift": "anonymous GET to the control apex for signed notices",
   "apps/mobile/ios/Sources/FlagshipUI/ViewModels/TrustOverrideViewModel.swift": "posts to the control apex",
   "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift": "reads one record from the control apex",
+  "apps/mobile/ios/Sources/Flagship/PhoneEndpoint.swift": "the phone-route tunnel to the relay (wss only): visitors' TLS ends on the phone's own key and the claim is signed over a relay nonce, so the relay is never trusted with content",
+  "apps/mobile/ios/Sources/FlagshipUI/ViewModels/PhoneRouteController.swift": "anonymous GET of the relay's endpoints from the control apex; the route tunnel itself checks the relay's pinned key",
 };
 
 describe("mobile HTTP clients", () => {

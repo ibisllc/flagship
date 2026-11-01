@@ -288,6 +288,7 @@ async fn start_ingress(
         upstream: up.path.clone(),
         limits,
         kx,
+        proxy: None,
     });
     tokio::spawn(server::serve(listener, cfg, tls, std::future::pending()));
     Ingress { addr, source }

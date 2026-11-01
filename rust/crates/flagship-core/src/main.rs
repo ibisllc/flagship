@@ -3,11 +3,16 @@
 //! what the engine runs (`ListWorkloads`, read-only, no capability), journals each change of
 //! verdict and writes a status file the daemon's update gate reads. It never asks for an effect.
 //!
+//! `flagship-core serve`: the same, plus core's socket for the daemon (`ipc.rs`): the app
+//! reconciler (`apps.rs`) in shadow or rust mode as the daemon's owner setting says.
+//!
 //! Environment: `FLAGSHIP_CORE_DIR` (`/var/lib/flagship-core`), `FLAGSHIP_CORE_BROKER`
 //! (`/run/flagship-broker/broker.sock`), `FLAGSHIP_CORE_CHECKPOINT`
 //! (`<dir>/ts-checkpoint.json`), `FLAGSHIP_CORE_STATUS` (`/run/flagship-core/status.json`),
-//! `FLAGSHIP_CORE_INTERVAL_SECS` (60).
+//! `FLAGSHIP_CORE_INTERVAL_SECS` (60), and for `serve` `FLAGSHIP_CORE_SOCKET`
+//! (`/run/flagship-core/core.sock`) and `FLAGSHIP_CORE_ALLOW_UIDS` (who may connect; root always).
 
+use flagship_core::apps::AppController;
 use flagship_core::handover::TsCheckpoint;
 use flagship_core::journal::Journal;
 use flagship_core::lock::ControllerLock;
@@ -18,6 +23,7 @@ use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn env_path(name: &str, default: &Path) -> PathBuf {
@@ -113,9 +119,9 @@ fn run() -> Result<(), String> {
         );
         return Ok(());
     }
-    if cmd != "shadow" {
+    if cmd != "shadow" && cmd != "serve" {
         return Err(format!(
-            "unknown command {cmd} (only shadow is available: handover needs the capability issuer)"
+            "unknown command {cmd} (shadow or serve; the broker handover needs the capability issuer)"
         ));
     }
     let dir = env_path("FLAGSHIP_CORE_DIR", Path::new("/var/lib/flagship-core"));
@@ -136,13 +142,42 @@ fn run() -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let _lock = ControllerLock::acquire(&dir.join("controller.lock"))
         .map_err(|e| format!("controller lock: {e}"))?;
-    let mut journal = Journal::open(&dir.join("journal.db")).map_err(|e| e.to_string())?;
+    let journal = Journal::open(&dir.join("journal.db")).map_err(|e| e.to_string())?;
+    let term = journal.term();
+    let ctrl = Arc::new(Mutex::new(AppController::new(journal)));
+    if cmd == "serve" {
+        let socket = env_path(
+            "FLAGSHIP_CORE_SOCKET",
+            Path::new("/run/flagship-core/core.sock"),
+        );
+        let mut allow: std::collections::BTreeSet<u32> = std::env::var("FLAGSHIP_CORE_ALLOW_UIDS")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|x| x.trim().parse().ok())
+            .collect();
+        allow.insert(0);
+        if let Some(parent) = socket.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::remove_file(&socket);
+        let listener = std::os::unix::net::UnixListener::bind(&socket)
+            .map_err(|e| format!("{}: {e}", socket.display()))?;
+        // Who may use it is checked per connection from the kernel's peer credentials.
+        std::fs::set_permissions(&socket, std::os::unix::fs::PermissionsExt::from_mode(0o666))
+            .map_err(|e| format!("{}: {e}", socket.display()))?;
+        let served = Arc::clone(&ctrl);
+        // Tests on a host without SO_PEERCRED (macOS) only; compiled out of release builds.
+        let check = !(cfg!(debug_assertions)
+            && std::env::var("FLAGSHIP_CORE_TEST_NO_PEER_CHECK").as_deref() == Ok("1"));
+        std::thread::spawn(move || {
+            let _ = flagship_core::ipc::serve(&listener, &served, check.then_some(&allow));
+        });
+    }
     let mut last: BTreeMap<String, String> = BTreeMap::new();
     let mut n: u64 = 0;
     let _ = writeln!(
         std::io::stdout(),
-        "flagship-core shadow: term {}, every {interval}s",
-        journal.term()
+        "flagship-core {cmd}: term {term}, every {interval}s"
     );
     loop {
         n = n.saturating_add(1);
@@ -159,11 +194,12 @@ fn run() -> Result<(), String> {
                 serde_json::from_str(&text).map_err(|e| format!("checkpoint: {e}"))?;
             let seen = seen_from(&call(&broker, "ListWorkloads", n)?);
             let verdicts = compare(&cp, &seen);
+            let mut c = ctrl.lock().unwrap_or_else(PoisonError::into_inner);
             for (inst, verdict) in &verdicts {
                 if last.get(inst) != Some(verdict)
                     && let Ok(id) = InstallationId::parse(inst)
                 {
-                    journal
+                    c.journal()
                         .record_shadow(&id, verdict, tick)
                         .map_err(|e| e.to_string())?;
                 }
@@ -173,14 +209,19 @@ fn run() -> Result<(), String> {
             last = verdicts;
             Ok((total, d))
         })();
+        let apps = ctrl
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .summary()
+            .unwrap_or(Value::Null);
         let status = match outcome {
             Ok((total, d)) => json!({
-                "component": "core", "mode": "shadow", "ok": true, "at": tick,
-                "term": journal.term(), "installations": total, "divergent": d,
+                "component": "core", "mode": cmd, "ok": true, "at": tick,
+                "term": term, "installations": total, "divergent": d, "apps": apps,
             }),
             Err(e) => json!({
-                "component": "core", "mode": "shadow", "ok": false, "at": tick,
-                "term": journal.term(), "error": e,
+                "component": "core", "mode": cmd, "ok": false, "at": tick,
+                "term": term, "error": e, "apps": apps,
             }),
         };
         write_status(&status_path, &status);

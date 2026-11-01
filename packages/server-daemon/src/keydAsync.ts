@@ -38,6 +38,19 @@ export function keydTlsKeyd(client: KeydClient): OpaqueTlsKeyd {
     async activate(handle) {
       await client.call("tls.activate", { handle });
     },
+    async csr(handle) {
+      const r = await client.call("tls.csr", { handle });
+      return new Uint8Array(Buffer.from(String(r.csr), "hex"));
+    },
+    async list() {
+      return ((await client.call("tls.list")).keys as Array<{ handle: string; names: string[]; notAfter: number | null; active: boolean; legacy: boolean }>).map((k) => ({
+        handle: k.handle,
+        names: k.names ?? [],
+        notAfter: k.notAfter ?? null,
+        active: k.active === true,
+        legacy: k.legacy === true,
+      }));
+    },
     async pruneLegacy() {
       const keys = (await client.call("tls.list")).keys as Array<{ handle: string; legacy: boolean; active: boolean }>;
       for (const k of keys) if (k.legacy && !k.active) await client.call("tls.remove", { handle: k.handle });

@@ -177,7 +177,7 @@ describe("installRustStack for the switch-over", () => {
     expect(account).toBeGreaterThanOrEqual(0);
     expect(account).toBeLessThan(enable);
     const restarts = w.runs.filter((r) => r.startsWith("systemctl restart"));
-    expect(restarts).toEqual(["systemctl restart --no-block flagship-core.service", "systemctl restart --no-block flagship-keyd.service", "systemctl restart --no-block flagship-broker.service"]);
+    expect(restarts).toEqual(["systemctl restart --no-block flagship-core.service", "systemctl restart --no-block flagship-access.service", "systemctl restart --no-block flagship-keyd.service", "systemctl restart --no-block flagship-broker.service"]);
     expect(w.files.get(BROKER_UNIT_PATH)).toBe(brokerServiceUnit({ privdEntry: "/opt/flagship/packages/privd/dist/main.js" }));
   });
 

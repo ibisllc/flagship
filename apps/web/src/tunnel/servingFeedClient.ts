@@ -29,6 +29,12 @@ export interface ServingFeedClientOptions {
   maxBackoffMs?: number;
   /** WebSocket ping cadence; a pong is contact too. Default 20 s. */
   pingMs?: number;
+  /** The phone routes (phoneRoute.ts): `phone-route` and `phone-eligibility` frames, and a resync on reconnect. */
+  phone?: {
+    pushed(hostname: string, generation: number): void;
+    eligibilityChanged(username: string): Promise<void>;
+    resync(): Promise<void>;
+  };
 }
 
 export interface ServingFeedStats {
@@ -138,7 +144,10 @@ export class ServingFeedClient {
       this.sawFrameThisConnection = true;
       this.backoff = this.opts.initialBackoffMs ?? 1_000;
       // `changed` frames sent while the feed was down were missed.
-      if (this.everConnected) void gate.refreshAll();
+      if (this.everConnected) {
+        void gate.refreshAll();
+        void this.opts.phone?.resync();
+      }
       this.everConnected = true;
     }
     if (f.type === "revocation") {
@@ -150,6 +159,16 @@ export class ServingFeedClient {
       if (typeof f.sequence !== "number" || !Number.isSafeInteger(f.sequence)) return;
       gate.noteLatestSequence(f.sequence);
       if (f.sequence > gate.revocations.sequence) void this.catchUp();
+      return;
+    }
+    if (f.type === "phone-route") {
+      if (typeof f.hostname === "string" && typeof f.generation === "number" && Number.isSafeInteger(f.generation)) {
+        this.opts.phone?.pushed(f.hostname, f.generation);
+      }
+      return;
+    }
+    if (f.type === "phone-eligibility") {
+      if (typeof f.username === "string") void this.opts.phone?.eligibilityChanged(f.username);
       return;
     }
     if (f.type === "changed") {

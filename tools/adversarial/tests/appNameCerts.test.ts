@@ -6,7 +6,8 @@
  * run here side by side on the same hostile inputs: any case where one accepts and the other refuses is
  * a finding, and every case must be refused by both unless it is the one legitimate shape.
  *
- *   AT-CRT-01  differential: .com and the broker agree on every hostile grant/record combination
+ *   AT-CRT-01  differential: .com's (now unrouted) grant check accepts only the legitimate shape, and the broker
+ *              refuses every challenge record (plan H1: `.com`'s issuance service writes them; /api/dns-01/* answers 410)
  *   AT-CRT-02  a revoked server's grant is dead at .com
  *   AT-CRT-03  the grant cannot even be built for a server outside the named account
  *   AT-CRT-04  the box keeps only a grant the account's sensitive key signed for THIS server and key
@@ -139,13 +140,13 @@ const CASES: Case[] = [
 ];
 
 describe("app-name certificate grant", () => {
-  it("AT-CRT-01 .com and the DNS broker agree on every hostile grant and record, and accept only the legitimate shape (catches: one gate looser than the other, or a grant usable for another name, server, key or account)", async () => {
+  it("AT-CRT-01 .com's grant check accepts only the legitimate shape and the DNS broker writes no challenge record at all (catches: a grant usable for another name, server, key or account; a box writing the account challenge through the broker)", async () => {
     const out: string[] = [];
     for (const c of CASES) {
       const [com, broker] = [await viaCom(c), await viaBroker(c)];
       out.push(`${c.name}: com=${com} broker=${broker}`);
       expect(com, `.com: ${c.name}`).toBe(c.expect);
-      expect(broker, `broker: ${c.name}`).toBe(c.expect);
+      expect(broker, `broker: ${c.name}`).toBe(false);
     }
     expect(out).toHaveLength(CASES.length);
   });

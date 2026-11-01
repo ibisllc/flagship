@@ -157,7 +157,7 @@ function fakeFs(initial: Record<string, string> = {}) {
 }
 
 const PIN = "a".repeat(64);
-const pins = JSON.stringify({ binaries: { "flagship-keyd": PIN, "flagship-broker": PIN, "flagship-core": PIN } });
+const pins = JSON.stringify({ binaries: { "flagship-keyd": PIN, "flagship-broker": PIN, "flagship-core": PIN, "flagship-access": PIN } });
 
 describe("installRustStack", () => {
   it("writes the units and the keyd drop-in, enables broker and core, restarts what chose under other pins", async () => {
@@ -180,6 +180,7 @@ describe("installRustStack", () => {
       "/run/flagship-rust/keyd.status": status("keyd", "ts", "hash-mismatch"),
       "/run/flagship-rust/broker.status": status("broker", "ts", "failed-to-start"),
       "/run/flagship-rust/core.status": status("core", "rust", "running"),
+      "/run/flagship-rust/access.status": status("access", "rust", "running"),
     });
     const cfg = { version: 1 as const, rust: "on" as const, engine: "podman" as const };
     await installRustStack({ ...w.deps, repoPath: "/opt/flagship", config: cfg });

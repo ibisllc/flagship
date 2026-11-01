@@ -379,3 +379,50 @@ verification and tree swap stay in `applyEndorsedUpdate`.
 - **Env values in argv**, as today (section 8).
 - **`docker` passthrough on v1 for compatibility.** It is no safer than privd and must be retired
   (9.5).
+
+## 11. Apps owned by Rust on an arch-v2 box (plan G3/G4, 2026-11-01)
+
+Two owner settings decide who owns apps, kept in `/var/flagship/rust-ownership.json`
+(`packages/server-daemon/src/rustStack/ownership.ts`). They change only by an admin-signed
+`flagship/rust-ownership/v1|<serverDomain>|<reconciler>|<proxy>|<nonce>|<issuedAt>` order
+(`POST /api/stack/rust-ownership`, used once, 5 minutes), after which the daemon restarts so every
+component starts under the new setting. `GET` (owner sessions) shows the setting, what runs, core's
+last answer, the proxy's decision counts and what blocks each move.
+
+| Setting | Default | Other value |
+|---|---|---|
+| `reconciler` | `shadow`: the daemon deploys, stops and restarts app containers; core keeps the desired state, compares it with the engine every sync and journals each change of verdict, and acts on nothing | `rust`: core (`apps.rs`) decides every container effect for plain apps on the live network and for the local-AI model server; the daemon performs only what core hands it |
+| `proxy` | `ts`: flagship-tlsd (Go) pipes bytes; the daemon's TS proxy carries app traffic | `rust`: flagship-ingress replaces flagship-tlsd (drop-in, Go as its fallback after three failed runs) and carries app traffic after the daemon's decision |
+
+**Cut-over rule** (`cutoverBlockers`). Moving to Rust is refused unless the box runs arch-v2
+(Podman, the Rust units on) and, for the reconciler, core runs this release's pinned binary in
+`serve` mode and its shadow comparison agreed with the engine on the last 3 passes; for the proxy,
+the release pins `flagship-ingress` and the app network's subnet is known. Going back is never
+refused. Both defaults stay `shadow`/`ts` until the release gym's `rust-core` group is green on
+arch-v2; then a release may change the defaults for new boxes.
+
+**One writer.** Core is the only decider in `rust` mode: it journals each effect as intent
+(SQLite WAL, `synchronous=FULL`, fenced by its term) before handing it to the daemon's executor
+(`rustStack/coreOwnership.ts`), which performs it with its existing engine code and settles it. The
+daemon never decides an effect itself while core owns them; if core does not answer, installs wait
+and then fail, and no TS fallback acts. At boot the daemon runs `shadow` when core's socket is
+absent. Core's socket admits root and the daemon's uid (SO_PEERCRED).
+
+**What core owns** (`apps.rs`): the desired state (persisted, survives restarts of either side),
+generations, the address pool per network (persisted; quarantine is in memory only), admission
+(`schedule.rs`: memory limits up to twice the box's memory, nothing running is evicted), backoff
+after a definite failure, adoption of running containers on the first sync in `rust` mode and after
+any restart (same spec digest and epoch: no restart), replacement of a container that stopped, the
+uninstall (remove by exact generation, then forget). Crash rules: an intent handed to an executor
+that is gone, or left by an earlier core, is settled from what the engine shows; deploy and remove
+name one generation and container names are unique, so a redo never makes a second copy or removes
+another generation. Tests: `crates/flagship-core/tests/apps.rs` (16), and
+`packages/server-daemon/tests/rustCoreOwnership.test.ts`, which runs the TS executor against the real
+`flagship-core serve` binary.
+
+**Still with the daemon** (next steps, G6-G10): app groups' extra components, WASI apps, staging and
+build containers, the data services; the egress gateway, gVisor setup and files volumes (performed
+inside the daemon's deploy effect); effects through the broker's typed socket (needs the capability
+issuer of §9, R4); the endpoint table the TS proxy dials (core keeps its own records and the
+addresses). The proxy's authority stays in the daemon's decision; when the R4 access library is
+authoritative it plugs into that one decision point (`rustProxyDecide.ts` `decide`).

@@ -17,6 +17,8 @@ pub struct Args {
     pub keyd_timeout: Duration,
     pub kx: KxPolicy,
     pub limits: Limits,
+    /// `--proxy-decide`: the app proxy is on and asks this socket (G4).
+    pub proxy: Option<crate::proxy::ProxyConfig>,
 }
 
 impl Default for Args {
@@ -29,6 +31,7 @@ impl Default for Args {
             keyd_timeout: Duration::from_secs(5),
             kx: KxPolicy::PreferHybrid,
             limits: Limits::default(),
+            proxy: None,
         }
     }
 }
@@ -49,6 +52,7 @@ pub const USAGE: &str =
   [--handshake-timeout D] [--refresh D] [--head-timeout D] [--max-header-line N]
   [--max-header-bytes N] [--idle-timeout D] [--drain-timeout D] [--keyd-timeout D]
   [--kx prefer-hybrid|require-hybrid]
+  [--proxy-decide SOCK --proxy-allow CIDR[,CIDR] [--proxy-decide-timeout D]]
 Durations are Go-style (10s, 500ms, 15m, 1m30s); 0 disables the head guard or the idle timeout.";
 
 pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Result<Args, ArgError> {
@@ -86,6 +90,22 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Result<Args, ArgError> 
             "idle-timeout" => l.idle_timeout = duration(&name, &value)?,
             "drain-timeout" => l.drain_timeout = duration(&name, &value)?,
             "keyd-timeout" => a.keyd_timeout = positive(&name, &value)?,
+            "proxy-decide" => a.proxy.get_or_insert_with(Default::default).decide = value.into(),
+            "proxy-allow" => {
+                let p = a.proxy.get_or_insert_with(Default::default);
+                for item in value.split(',').map(str::trim).filter(|x| !x.is_empty()) {
+                    let c = crate::proxy::Cidr::parse(item)
+                        .filter(crate::proxy::Cidr::is_app_network)
+                        .ok_or_else(|| {
+                            ArgError(format!("-proxy-allow: {item} is not a private app network"))
+                        })?;
+                    p.allow.push(c);
+                }
+            }
+            "proxy-decide-timeout" => {
+                a.proxy.get_or_insert_with(Default::default).decide_timeout =
+                    positive(&name, &value)?;
+            }
             "kx" => {
                 a.kx = match value.as_str() {
                     "prefer-hybrid" => KxPolicy::PreferHybrid,
@@ -102,6 +122,22 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Result<Args, ArgError> 
                     "flag provided but not defined: -{name}\n{USAGE}"
                 )));
             }
+        }
+    }
+    if let Some(p) = a.proxy.as_mut() {
+        if p.allow.is_empty() {
+            return Err(ArgError(
+                "-proxy-decide needs -proxy-allow (the app networks)".into(),
+            ));
+        }
+        if a.limits.head_timeout.is_zero() {
+            return Err(ArgError(
+                "the app proxy needs the head guard (-head-timeout above zero)".into(),
+            ));
+        }
+        p.connect_timeout = a.limits.upstream_connect_timeout;
+        if !a.limits.idle_timeout.is_zero() {
+            p.idle_timeout = a.limits.idle_timeout;
         }
     }
     Ok(a)
@@ -200,6 +236,25 @@ mod tests {
         assert!(parse(argv("--max-conns 0")).is_err());
         assert!(parse(argv("--handshake-timeout 0")).is_err());
         assert!(parse(argv("--listen")).is_err());
+    }
+
+    #[test]
+    fn proxy_flags() {
+        let a = parse(argv("--proxy-decide /run/flagship-tls/decide.sock --proxy-allow 10.89.0.0/24,10.90.0.0/24 --idle-timeout 5m")).unwrap();
+        let p = a.proxy.unwrap();
+        assert_eq!(p.decide, PathBuf::from("/run/flagship-tls/decide.sock"));
+        assert_eq!(p.allow.len(), 2);
+        assert_eq!(p.idle_timeout, Duration::from_secs(300));
+        assert!(parse(argv("--proxy-decide /x")).is_err());
+        assert!(parse(argv("--proxy-decide /x --proxy-allow 127.0.0.0/8")).is_err());
+        assert!(parse(argv("--proxy-decide /x --proxy-allow 0.0.0.0/0")).is_err());
+        assert!(
+            parse(argv(
+                "--proxy-decide /x --proxy-allow 10.0.0.0/24 --head-timeout 0"
+            ))
+            .is_err()
+        );
+        assert!(parse(argv("")).unwrap().proxy.is_none());
     }
 
     #[test]

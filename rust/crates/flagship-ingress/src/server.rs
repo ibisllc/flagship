@@ -66,6 +66,8 @@ pub struct IngressConfig {
     pub upstream: PathBuf,
     pub limits: Limits,
     pub kx: KxPolicy,
+    /// The app proxy (G4): absent, every connection goes to the daemon as a byte pipe.
+    pub proxy: Option<crate::proxy::ProxyConfig>,
 }
 
 /// One TLS configuration for clients that offer the hybrid group (hybrid only, so the server
@@ -225,6 +227,16 @@ async fn handle(stream: TcpStream, cfg: &IngressConfig, tls: &TlsConfigs) {
         }
     }
 
+    if let Some(p) = cfg.proxy.as_ref().filter(|_| !first.is_empty()) {
+        match crate::proxy::route(&first, &sni, p).await {
+            crate::proxy::Route::Proxy(session) => {
+                crate::proxy::run(tls_stream, *session, p).await;
+                return;
+            }
+            crate::proxy::Route::Daemon => {}
+        }
+    }
+
     let Ok(Ok(mut up)) = tokio::time::timeout(
         lim.upstream_connect_timeout,
         UnixStream::connect(&cfg.upstream),
@@ -255,40 +267,64 @@ where
     A: AsyncRead + AsyncWrite + Unpin,
     B: AsyncRead + AsyncWrite + Unpin,
 {
-    let epoch = Instant::now();
-    let last = Arc::new(AtomicU64::new(0));
-    let mut a = Tracked {
-        inner: a,
-        last: Arc::clone(&last),
-        epoch,
-    };
-    let mut b = Tracked {
-        inner: b,
-        last: Arc::clone(&last),
-        epoch,
-    };
+    let activity = Activity::new();
+    let mut a = activity.track(a);
+    let mut b = activity.track(b);
     let copy = tokio::io::copy_bidirectional(&mut a, &mut b);
-    if idle.is_zero() {
-        let _ = copy.await;
-        return;
+    tokio::select! {
+        _ = copy => {}
+        () = activity.idle(idle) => {}
     }
-    let watch = async {
+}
+
+/// When a byte last moved on any stream it tracks.
+#[derive(Debug, Clone)]
+pub struct Activity {
+    last: Arc<AtomicU64>,
+    epoch: Instant,
+}
+
+impl Default for Activity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Activity {
+    pub fn new() -> Self {
+        Self {
+            last: Arc::new(AtomicU64::new(0)),
+            epoch: Instant::now(),
+        }
+    }
+
+    pub fn track<S>(&self, inner: S) -> Tracked<S> {
+        Tracked {
+            inner,
+            last: Arc::clone(&self.last),
+            epoch: self.epoch,
+        }
+    }
+
+    /// Resolves once nothing moved for `idle`; never when `idle` is zero.
+    pub async fn idle(&self, idle: Duration) {
+        if idle.is_zero() {
+            std::future::pending::<()>().await;
+        }
         loop {
-            let since = Duration::from_millis(last.load(Ordering::Relaxed));
-            let quiet = epoch.elapsed().saturating_sub(since);
+            let since = Duration::from_millis(self.last.load(Ordering::Relaxed));
+            let quiet = self.epoch.elapsed().saturating_sub(since);
             if quiet >= idle {
                 return;
             }
             tokio::time::sleep(idle.saturating_sub(quiet)).await;
         }
-    };
-    tokio::select! {
-        _ = copy => {}
-        () = watch => {}
     }
 }
 
-struct Tracked<S> {
+/// A stream whose reads and writes count as activity.
+#[derive(Debug)]
+pub struct Tracked<S> {
     inner: S,
     last: Arc<AtomicU64>,
     epoch: Instant,

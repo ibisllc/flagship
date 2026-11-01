@@ -88,6 +88,8 @@ import {
 import { registerGossipFanout } from "./routes/gossipFanout.js";
 import { comServingFetcher, ServingGate } from "./tunnel/servingGate.js";
 import { ServingFeedClient } from "./tunnel/servingFeedClient.js";
+import { comPhoneEligibility, comPhoneRouteLedger, PhoneRoutes } from "./tunnel/phoneRoute.js";
+import { startPhoneTunnel, type PhoneTunnelHandle } from "./tunnel/phoneTunnel.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -449,6 +451,7 @@ export async function start(opts: {
   // revocation public key. It then fails closed: no new tunnels after 60 s without a frame from `.com`'s feed, and
   // every tunnel closed after 10 min.
   let serving: { gate: ServingGate; feed: ServingFeedClient } | undefined;
+  let phoneRoutes: PhoneRoutes | undefined;
   const revocationPub = process.env.FLAGSHIP_SERVING_REVOCATION_PUB?.trim().toLowerCase();
   if (revocationPub && (surface === "services" || surface === "both")) {
     if (!servicesControlSecret) {
@@ -463,17 +466,31 @@ export async function start(opts: {
       },
       log: (m) => console.log(m),
     });
+    const relayId = process.env.FLAGSHIP_RELAY_ID ?? process.env.FLY_MACHINE_ID ?? hostname();
+    // The phone's bare name (plan H3, docs/architecture-v2/phone-route.md) needs `.com`'s ledger and eligibility, so
+    // it rides on the serving authority; FLAGSHIP_PHONE_ROUTE=off leaves the bare name closed.
+    if (process.env.FLAGSHIP_PHONE_ROUTE !== "off") {
+      phoneRoutes = new PhoneRoutes({
+        relayId,
+        apex: servicesApex,
+        ledger: comPhoneRouteLedger({ comBaseUrl, secret: servicesControlSecret }),
+        eligibility: comPhoneEligibility({ comBaseUrl, secret: servicesControlSecret }),
+        log: (m) => console.log(m),
+      });
+      registry.setPhoneRoutes(phoneRoutes);
+    }
     const feed = new ServingFeedClient({
       comBaseUrl,
       secret: servicesControlSecret,
-      relayId: process.env.FLAGSHIP_RELAY_ID ?? process.env.FLY_MACHINE_ID ?? hostname(),
+      relayId,
       revocationKey: revocationPub,
       gate,
+      ...(phoneRoutes ? { phone: phoneRoutes } : {}),
     });
     gate.start();
     feed.start();
     serving = { gate, feed };
-    servingStats = () => ({ ...gate.stats(), feedConnection: feed.stats() });
+    servingStats = () => ({ ...gate.stats(), feedConnection: feed.stats(), ...(phoneRoutes ? { phoneRoutes: phoneRoutes.stats() } : {}) });
     console.log(`serving authority ON (feed ${comBaseUrl}/api/internal/serving-feed)`);
   }
   // Per-user revoked-entitlement-cert set, pulled from .com's
@@ -548,6 +565,8 @@ export async function start(opts: {
     ...(serving ? { serving: serving.gate } : {}),
   });
 
+  const stopPhoneTunnel: PhoneTunnelHandle | null = phoneRoutes ? startPhoneTunnel(app.server, phoneRoutes) : null;
+
   // Public-egress metering. OFF unless USAGE_REPORT_SECRET is set — so
   // deploying this code is a no-op until the secret is provisioned. The meter
   // counts bytes per account in the SNI splice and enforces the budget leases
@@ -595,6 +614,7 @@ export async function start(opts: {
       blessingProvider?.stop();
       serving?.feed.stop();
       serving?.gate.stop();
+      await stopPhoneTunnel?.();
       if (router) await router.close();
       if (echo) await echo.close();
       await stopHub();

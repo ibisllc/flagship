@@ -97,14 +97,14 @@ const HOP_RESPONSE = new Set(["connection", "keep-alive", "proxy-connection", "t
 const CRLF = Buffer.from("\r\n");
 const TOKEN_RE = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-interface ParsedHead {
+export interface ParsedHead {
   method: string;
   path: string;
   version: "1.0" | "1.1";
   headers: Record<string, string>;
 }
 
-function parseHead(block: string): ParsedHead | null {
+export function parseHead(block: string): ParsedHead | null {
   const lines = block.split("\r\n");
   const m = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+) (\/\S*) HTTP\/1\.([01])$/.exec(lines[0] ?? "");
   if (!m) return null;
@@ -124,7 +124,7 @@ function parseHead(block: string): ParsedHead | null {
   return { method: m[1]!, path: m[2]!, version: m[3] === "0" ? "1.0" : "1.1", headers };
 }
 
-function isWebSocketUpgrade(h: Record<string, string>): boolean {
+export function isWebSocketUpgrade(h: Record<string, string>): boolean {
   const upgrade = (h["upgrade"] ?? "").toLowerCase();
   const connection = (h["connection"] ?? "").toLowerCase();
   return upgrade === "websocket" && connection.split(",").some((t) => t.trim() === "upgrade");
@@ -201,6 +201,27 @@ class ChunkedDecoder {
   }
 }
 
+/** How a request body is framed, or why it is refused (shared with the Rust proxy: test-vectors/app-proxy.json). */
+export function requestBodyFraming(
+  h: Record<string, string>,
+  upgrade: boolean,
+): { kind: "none" } | { kind: "chunked" } | { kind: "length"; length: number } | { status: number; text: string } {
+  const te = h["transfer-encoding"];
+  const cl = h["content-length"];
+  if (te !== undefined && cl !== undefined) return { status: 400, text: "both Transfer-Encoding and Content-Length" };
+  let plan: { kind: "none" } | { kind: "chunked" } | { kind: "length"; length: number } = { kind: "none" };
+  if (te !== undefined) {
+    if (te.toLowerCase() !== "chunked") return { status: 501, text: "unsupported transfer-encoding" };
+    plan = { kind: "chunked" };
+  } else if (cl !== undefined) {
+    if (!/^\d{1,15}$/.test(cl)) return { status: 400, text: "bad content-length" };
+    const length = Number(cl);
+    if (length > 0) plan = { kind: "length", length };
+  }
+  if (upgrade && plan.kind !== "none") return { status: 400, text: "an upgrade request has no body" };
+  return plan;
+}
+
 type BodyPlan =
   | { kind: "none" }
   | { kind: "buffered"; body: Buffer }
@@ -270,19 +291,10 @@ export function handleAppConnection(socket: Duplex, opts: AppConnectionOptions):
   async function serve(head: ParsedHead, rest: Buffer): Promise<void> {
     const h = head.headers;
     const upgrade = isWebSocketUpgrade(h);
-    const te = h["transfer-encoding"];
-    const cl = h["content-length"];
-    if (te !== undefined && cl !== undefined) return fail(400, "both Transfer-Encoding and Content-Length", head.method);
-    let plan: BodyPlan = { kind: "none" };
-    if (te !== undefined) {
-      if (te.toLowerCase() !== "chunked") return fail(501, "unsupported transfer-encoding", head.method);
-      plan = { kind: "chunked", initial: rest };
-    } else if (cl !== undefined) {
-      if (!/^\d{1,15}$/.test(cl)) return fail(400, "bad content-length", head.method);
-      const length = Number(cl);
-      if (length > 0) plan = { kind: "length", length, initial: rest };
-    }
-    if (upgrade && plan.kind !== "none") return fail(400, "an upgrade request has no body", head.method);
+    const framing = requestBodyFraming(h, upgrade);
+    if ("status" in framing) return fail(framing.status, framing.text, head.method);
+    let plan: BodyPlan =
+      framing.kind === "chunked" ? { kind: "chunked", initial: rest } : framing.kind === "length" ? { kind: "length", length: framing.length, initial: rest } : { kind: "none" };
     if (plan.kind !== "none" && (h["expect"] ?? "").toLowerCase() === "100-continue") {
       socket.write("HTTP/1.1 100 Continue\r\n\r\n");
     }
@@ -550,7 +562,7 @@ export function handleAppConnection(socket: Duplex, opts: AppConnectionOptions):
  * client's Connection header named), `Connection: close`, and for an upgrade
  * the `Upgrade: websocket` handshake kept.
  */
-function forwardRequestHeaders(prepared: Record<string, string>, upgrade: boolean): Record<string, string> {
+export function forwardRequestHeaders(prepared: Record<string, string>, upgrade: boolean): Record<string, string> {
   const named = new Set(
     (prepared["connection"] ?? "")
       .toLowerCase()

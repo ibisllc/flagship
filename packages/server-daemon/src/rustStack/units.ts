@@ -29,16 +29,20 @@ export const RUST_PINS_REL = "installer/rust/PINS.json";
 
 export const BROKER_UNIT_PATH = "/etc/systemd/system/flagship-broker.service";
 export const CORE_UNIT_PATH = "/etc/systemd/system/flagship-core.service";
+export const ACCESS_UNIT_PATH = "/etc/systemd/system/flagship-access.service";
+export const ACCESS_SOCKET_PATH = "/run/flagship-access/access.sock";
 export const KEYD_RUST_DROPIN_PATH = "/etc/systemd/system/flagship-keyd.service.d/30-rust.conf";
 export const BROKER_V1_SOCKET = "/run/flagship-broker/privd.sock";
 export const BROKER_TYPED_SOCKET = "/run/flagship-broker/broker.sock";
 export const CORE_DIR = "/var/lib/flagship-core";
 export const CORE_CHECKPOINT = "/var/lib/flagship-core/ts-checkpoint.json";
 export const CORE_STATUS = "/run/flagship-core/status.json";
+/** Core's socket for the daemon (flagship-core ipc.rs; rustStack/coreOwnership.ts). */
+export const CORE_SOCKET_PATH = "/run/flagship-core/core.sock";
 export const CORE_USER = "flagship-core";
 
-export type RustComponent = "keyd" | "broker" | "core";
-export const RUST_COMPONENTS: readonly RustComponent[] = ["keyd", "broker", "core"];
+export type RustComponent = "keyd" | "broker" | "core" | "access";
+export const RUST_COMPONENTS: readonly RustComponent[] = ["keyd", "broker", "core", "access"];
 
 /** Failed runs in a row before a component falls back, and how long a run must last to reset them. */
 export const RUST_MAX_ATTEMPTS = 3;
@@ -69,7 +73,7 @@ export function rustSelectScript(opts: RustScriptPaths = {}): string {
 # Flagship Rust path selector (installed by the daemon; rustStack/units.ts). Never prints a key.
 set -u
 cmd="\${1:-}"; comp="\${2:-}"
-case "$comp" in keyd|broker|core) ;; *) echo "flagship-rust-select: unknown component" >&2; exit 2 ;; esac
+case "$comp" in keyd|broker|core|access) ;; *) echo "flagship-rust-select: unknown component" >&2; exit 2 ;; esac
 state='${stateDir}'
 run='${runDir}'
 release='${release}'
@@ -141,6 +145,10 @@ select)
                 getent group ${DAEMON_ACCOUNT} >/dev/null && echo "FLAGSHIP_BROKER_V1_GROUP=${DAEMON_ACCOUNT}"
                 [ -n "$core_uid" ] && echo "FLAGSHIP_BROKER_TYPED_UIDS=$core_uid"
             } > "$run/$comp.env" ;;
+        access)
+            echo "FLAGSHIP_ACCESS_ALLOW_UIDS=0\${daemon_uid:+,$daemon_uid}" > "$run/$comp.env" ;;
+        core)
+            echo "FLAGSHIP_CORE_ALLOW_UIDS=0\${daemon_uid:+,$daemon_uid}" > "$run/$comp.env" ;;
         esac
     fi
     chmod 0644 "$run/$comp.env"
@@ -196,7 +204,7 @@ export function rustExecScript(releasePath = "/opt/flagship", runDir = RUST_RUN_
 # Flagship Rust path launcher (installed by the daemon; rustStack/units.ts).
 set -u
 comp="\${1:-}"; shift || true
-case "$comp" in keyd|broker|core) ;; *) echo "flagship-rust-exec: unknown component" >&2; exit 2 ;; esac
+case "$comp" in keyd|broker|core|access) ;; *) echo "flagship-rust-exec: unknown component" >&2; exit 2 ;; esac
 rust_args=()
 while [ $# -gt 0 ] && [ "$1" != "--" ]; do rust_args+=("$1"); shift; done
 [ $# -gt 0 ] && shift
@@ -272,7 +280,7 @@ WantedBy=multi-user.target
 
 export function coreServiceUnit(): string {
   return `[Unit]
-Description=Flagship controller, shadow mode (architecture v2)
+Description=Flagship controller: app reconciliation, shadow by default (architecture v2)
 After=flagship-broker.service
 Wants=flagship-broker.service
 StartLimitIntervalSec=0
@@ -282,8 +290,8 @@ Type=simple
 User=${CORE_USER}
 Group=${CORE_USER}
 ExecStartPre=+${RUST_SELECT_PATH} select core
-ExecStart=${RUST_EXEC_PATH} core shadow --
-ExecStartPost=+${RUST_SELECT_PATH} confirm core ${CORE_DIR}/controller.lock
+ExecStart=${RUST_EXEC_PATH} core serve --
+ExecStartPost=+${RUST_SELECT_PATH} confirm core ${CORE_SOCKET_PATH}
 ExecStopPost=+${RUST_SELECT_PATH} stopped core
 Restart=always
 RestartSec=5
@@ -294,6 +302,7 @@ RuntimeDirectoryMode=0755
 Environment=FLAGSHIP_CORE_DIR=${CORE_DIR}
 Environment=FLAGSHIP_CORE_BROKER=${BROKER_TYPED_SOCKET}
 Environment=FLAGSHIP_CORE_STATUS=${CORE_STATUS}
+Environment=FLAGSHIP_CORE_SOCKET=${CORE_SOCKET_PATH}
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -312,6 +321,60 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @debug @module @raw-io @reboot @swap @obsolete
+LimitCORE=0
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
+/**
+ * The access decision socket (rust/crates/flagship-access, release plan R4). Root only to read the daemon's
+ * access state and session files (mode 0600); otherwise it can do nothing: no capabilities but reading past
+ * file modes, no network, a read-only system. Its fallback idles: no socket, and the daemon decides alone.
+ */
+export function accessServiceUnit(): string {
+  return `[Unit]
+Description=Flagship access decisions (architecture v2)
+Before=flagship-daemon.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Group=${DAEMON_ACCOUNT}
+ExecStartPre=+${RUST_SELECT_PATH} select access
+ExecStart=${RUST_EXEC_PATH} access serve --
+ExecStartPost=+${RUST_SELECT_PATH} confirm access ${ACCESS_SOCKET_PATH}
+ExecStopPost=+${RUST_SELECT_PATH} stopped access
+Restart=always
+RestartSec=5
+RuntimeDirectory=flagship-access
+RuntimeDirectoryMode=0750
+Environment=FLAGSHIP_ACCESS_SOCKET=${ACCESS_SOCKET_PATH}
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
 AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX
 SystemCallArchitectures=native

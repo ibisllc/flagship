@@ -5,7 +5,9 @@ Box-local TLS ingress in Rust (architecture v2 work package **I01**, `docs/archi
 box, the certificate's private key stays in `flagship-keyd`, and every handshake signature is one keyd
 `tls.sign` request. Decrypted connections go to the daemon's Unix socket behind the same one-line JSON header.
 
-Nothing in the box uses it yet: the unit, the daemon and the Go frontend are unchanged.
+On an arch-v2 box whose owner turned the proxy setting to `rust` (`docs/architecture-v2/broker-runtime-core.md`
+§11), it replaces flagship-tlsd through a drop-in (`packages/server-daemon/src/rustStack/ingress.ts`) and carries
+app traffic itself (the app proxy below); everywhere else the Go frontend is unchanged.
 
 ## Layout
 
@@ -76,13 +78,37 @@ forwarding headers to be discarded. Today:
 
 - **Authenticated metadata** is the header line: the ingress writes it before any client byte, on a socket only
   its group may open, so a client cannot forge it (a client sending its own JSON line just sends HTTP noise).
-- **Stripping** stays in the daemon, as with flagship-tlsd: its app proxy removes every client `X-Flagship-*`
-  header (`identityInjector.ts`, `docs/app-apis.md` §5). The ingress does not rewrite HTTP, because a second HTTP
-  interpretation in front of Node's is exactly what §6.2 forbids. It moves here only when the ingress *becomes*
-  the HTTP façade (one parser, hyper, re-serialised to the daemon), which changes what the daemon receives and is
-  out of scope for a drop-in.
+- **Stripping** stays in the daemon on the byte-pipe path, as with flagship-tlsd: its app proxy removes every
+  client `X-Flagship-*` header (`docs/app-apis.md` §5). On the app proxy path (below) the ingress is the one
+  HTTP interpretation of a proxied request (the daemon sees only the parsed head, never a second copy of the
+  bytes) and strips them itself.
 - The negotiated key-exchange group is not in the header line (the field set is identical to Go's); adding a
   `kx` field is a façade/compatibility-policy decision.
+
+## The app proxy (G4/R3, `--proxy-decide`)
+
+With `--proxy-decide SOCK --proxy-allow CIDR[,CIDR]`, the first request on a connection is parsed (`http.rs`,
+a twin of the TS proxy's parser: `packages/server-daemon/test-vectors/app-proxy.json` runs through both) and the
+daemon is asked on `SOCK` (`rustProxyDecide.ts`) whether it may reach an app. The daemon decides exactly as its TS
+proxy does (gates, sessions, API keys, keyd-signed identity, the per-app connection cap, an endpoint-table lease)
+and answers `proxy` with the target and the identity headers, or `daemon`. Then `proxy.rs`:
+
+- forwards with every client `X-Flagship-*` header dropped whatever the daemon said (also `_` spellings), only
+  `x-flagship-` headers accepted from the daemon, hop-by-hop and `Connection`-named headers dropped,
+  `Connection: close`;
+- dials only inside `--proxy-allow` (private app networks; loopback and `0.0.0.0/0` are refused at startup);
+- streams request bodies (length or chunked, re-chunked) and responses (length, chunked or close-delimited,
+  re-chunked for 1.1 clients, flushed per read so SSE arrives event by event), with one 64 KiB buffer per
+  direction (backpressure is the slower side's), 100-continue, and 1xx interim answers dropped as Node does;
+- passes a WebSocket upgrade through after the app's `101`;
+- closes the connection when nothing moves for `--idle-timeout` or when the daemon closes the decision socket
+  (the endpoint was invalidated: a new deploy, a stop, an uninstall).
+
+Anything else (a head the TS parser would read differently, a `daemon` answer, a decision socket that does not
+answer within `--proxy-decide-timeout`) goes to the daemon's upstream socket with the client's bytes unchanged, so
+the TS proxy stays the fallback for every request and authority never moves into the ingress. Tests:
+`tests/proxy.rs` (SSE, WebSocket echo, 24 MiB uploads both framings, backpressure, deadlines, cancellation,
+fallbacks), `tests/app_proxy_vectors.rs`, and property tests of the parser and chunked framing in `http.rs`.
 
 ## HTTP/2
 

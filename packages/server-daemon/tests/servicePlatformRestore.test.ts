@@ -142,6 +142,14 @@ describe("installed services across a daemon restart", () => {
     await after.platform.restore({ retryDelayMs: 0 });
     expect(after.platform.byLabel("jottings")?.serviceId).toBe("alice--notes");
   });
+
+  it("never parks an app on a reserved name, whatever the alias map says (H5)", async () => {
+    const w = world(new InMemoryInstalledServicesStore(), crypto.getRandomValues(new Uint8Array(32)));
+    await install(w);
+    for (const name of ["admin", "API", "www", "mail"]) expect(w.platform.setAlias("alice--notes", name).ok).toBe(false);
+    expect(w.platform.byLabel("admin")).toBeUndefined();
+    expect(w.platform.byLabel("notes")?.serviceId).toBe("alice--notes");
+  });
 });
 
 describe("SealedInstalledServicesStore", () => {

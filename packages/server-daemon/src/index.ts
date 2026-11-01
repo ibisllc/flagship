@@ -132,6 +132,10 @@ import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
+import { buildOwnershipHttp, loadOwnership, readCutoverFacts, saveOwnership } from "./rustStack/ownership.js";
+import { CORE_SOCKET, coreOwnership } from "./rustStack/coreOwnership.js";
+import { decisionStats } from "./rustProxyDecide.js";
+import { inspectNetwork } from "./egress/networks.js";
 import { refreshBootChainAsRoot, type BootChainOutcome } from "./bootChainRefresh.js";
 import {
   ArchV2Switcher,
@@ -375,6 +379,7 @@ import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
+import { accessAuthorityMode, buildAccessAuthority } from "./accessAuthority.js";
 import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
 import { setPqAuthority } from "./pqAuthority.js";
 import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard, siblingChainRefusal } from "./pqChannel.js";
@@ -877,6 +882,15 @@ async function main(): Promise<void> {
     console.warn("[daemon] running as root: flagship-privd is not in yet (weaker isolation).");
   }
 
+  // Who owns apps on an arch-v2 box (rustStack/ownership.ts): read once; a change restarts the daemon.
+  const rustOwnership = loadOwnership();
+  const rustOnBox = archV2.config.rust === "on" && archV2.engine === "podman";
+  // Rust owns the effects only while core answers; otherwise core (if it comes up) only compares.
+  // core starts beside the daemon: give its socket a moment to appear before falling back to shadow.
+  if (rustOnBox && rustOwnership.reconciler === "rust") for (let i = 0; i < 60 && !existsSync(CORE_SOCKET); i++) await new Promise((r) => setTimeout(r, 500));
+  const reconcilerMode: "shadow" | "rust" = rustOnBox && rustOwnership.reconciler === "rust" && existsSync(CORE_SOCKET) ? "rust" : "shadow";
+  if (rustOnBox) console.log(`[rust-ownership] apps: reconciler ${reconcilerMode}${reconcilerMode !== rustOwnership.reconciler ? " (the Rust controller is not answering)" : ""}, proxy ${rustOwnership.proxy}`);
+
   // TLS terminated by flagship-tlsd with the certificate key in keyd, when that frontend is installed.
   let opaqueTls: OpaqueTlsOptions | undefined;
   const tlsUpstream = process.env.FLAGSHIP_TLS_UPSTREAM;
@@ -888,6 +902,8 @@ async function main(): Promise<void> {
       frontendPort: Number(process.env.FLAGSHIP_TLS_FRONTEND_PORT ?? "18443"),
       keyd: keydTlsKeyd(tlsClient),
       socketGroup: process.env.FLAGSHIP_TLS_SOCKET_GROUP ?? "flagship-keyd-clients",
+      // The Rust ingress's app proxy (the owner's proxy setting); on arch-v2 only.
+      ...(rustOnBox ? { decide: { socket: process.env.FLAGSHIP_TLS_DECIDE ?? "/run/flagship-tls/decide.sock", enabled: () => rustOwnership.proxy === "rust" } } : {}),
     };
     console.log("[daemon] TLS is terminated by flagship-tlsd; the certificate key is held by flagship-keyd");
     // The PEM files an older process wrote are not needed any more: keyd took the certificate
@@ -2018,7 +2034,9 @@ async function main(): Promise<void> {
       custodian,
       ...(crossOwnerChat ? { crossOwnerChat } : {}),
       ...(wildcardGrant ? { serverWildcardGrant: wildcardGrant } : {}),
+      ...(servingStore ? { regGen: () => servingStore.view().regGen } : {}),
       ...(opaqueTls ? { opaqueTls } : {}),
+      ...(rustOnBox ? { rustCore: { mode: () => reconcilerMode } } : {}),
       ...(doorbellRef.current ? { doorbell: doorbellRef.current } : {}),
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
       ...(servingStore ? { servingHello: { fields: () => servingStore.helloFields(), rehelloRef: servingRehelloRef } } : {}),
@@ -2385,6 +2403,48 @@ async function main(): Promise<void> {
         engine: () => activeEngine(),
         requestRestart: () => {
           console.log("[arch-v2-switch] restarting to move this server");
+          process.exit(0);
+        },
+      }),
+    );
+  }
+  if (cfg && env.serverFqdn) {
+    runtime.addHandler(
+      buildOwnershipHttp({
+        serverId: env.serverFqdn,
+        ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
+        activeGrants: () => accessPrincipals.book?.adminGrants() ?? [],
+        gate: ownerOnlyGate(pairedSessions, pairedSessions),
+        current: () => rustOwnership,
+        facts: async () => {
+          const apps = await inspectNetwork(realCommandRunnerStatic, "flagship-apps").catch(() => null);
+          return readCutoverFacts({
+            repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+            stack: loadArchV2Config().rust === "on" ? "arch-v2" : "classic",
+            engine: activeEngine(),
+            appNetworks: apps?.subnets ?? [],
+          });
+        },
+        save: (o) => saveOwnership(o),
+        running: () => {
+          const last = coreOwnership()?.lastResponse() ?? null;
+          let ingress: unknown = null;
+          try {
+            ingress = JSON.parse(readFileSync("/run/flagship-rust/ingress.status", "utf8"));
+          } catch {
+            ingress = null;
+          }
+          return {
+            reconciler: reconcilerMode,
+            core: last ? { mode: last.mode, live: last.live, agreePasses: last.agreePasses, divergent: last.divergent, workloads: last.workloads, term: last.term } : null,
+            proxyDecisions: { ...decisionStats },
+            ingress,
+          };
+        },
+        requestRestart: () => {
+          console.log("[rust-ownership] restarting so every component starts under the new setting");
           process.exit(0);
         },
       }),
@@ -5580,7 +5640,32 @@ async function wireOwnerHandlers(deps: {
   // Member sessions on the app path (docs/app-apis.md §5): the session cookie
   // the knock flow issued names the owner or an invited person to the app,
   // and a denied browser navigation gets the knock page to sign in.
+  // The Rust access decision (release plan R4): shadow by default once its socket is up, authoritative
+  // with FLAGSHIP_ACCESS_AUTHORITY=rust, off with =ts (accessAuthority.ts).
+  const authorityMode = accessAuthorityMode();
+  const authority =
+    authorityMode === "ts"
+      ? null
+      : buildAccessAuthority({
+          mode: authorityMode,
+          context: (ref) => {
+            const ownerAid = deps.accessPrincipals.ownerAidHex();
+            // The account's legacy id signs in as a device too (an admin one only on a box with no admin root).
+            const legacy = ownerAid ? deps.accessPrincipals.classify(ownerAid) : null;
+            return {
+              principals: [
+                ...deps.accessPrincipals.devices().map((d) => ({ kind: "device", pub: d.pub, tier: d.tier })),
+                ...(legacy?.kind === "device" && legacy.legacy ? [{ kind: "device", pub: legacy.pub, tier: legacy.tier }] : []),
+                ...deps.accessPrincipals.coManagers().map((c) => ({ kind: "co-manager", pub: c.pub, shareId: c.shareId })),
+              ],
+              ownerAid,
+              catchingUp: accessStore.isCatchingUp(ref),
+            };
+          },
+        });
+  if (authority) console.log(`[daemon] access decisions: ${authorityMode === "rust" ? "Rust decides" : "Rust in shadow"}`);
   runtime.setAppIdentity({
+    ...(authority ? { authority } : {}),
     resolveSession: buildAppSessionResolver({ sessions: sessionStore, access: accessStore }),
     ...(externalFresh ? { externalFresh } : {}),
     deniedPage: accessWeb.maybeServeKnock,

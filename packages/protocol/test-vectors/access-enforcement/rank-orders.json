@@ -1,0 +1,419 @@
+{
+ "about": "flagship/app-rank/v1 orders handed to a box (a journal `rank` entry): ok when well formed, for this app, installed here and signed by a key this box trusts for admin orders. trust.adminRoot null = a box that pins no admin root (the owner IRK signs); otherwise only the admin root or a device holding an unrevoked, unexpired admin-root-signed `admin` grant for this account. TypeScript: packages/server-daemon/tests/accessRankVectors.test.ts; Rust: rust/crates/flagship-access/tests/rank_vectors.rs.",
+ "trusts": {
+  "pinned": {
+   "ownerIrk": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+   "adminRoot": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+   "username": "alice",
+   "now": 1800000000000,
+   "grants": [
+    {
+     "grantId": "a1",
+     "username": "alice",
+     "deviceId": "a1000000000000000000000000000000",
+     "devicePubHex": "2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6",
+     "scopes": [
+      "admin",
+      "browse"
+     ],
+     "issuedAt": 1799999999000,
+     "expiresAt": 1801000000000,
+     "signatureHex": "c1f1ac3fe190c5ce8ae1433c06b7616be33787fe432fdb4d79b932569c9c910c1f86e13b680864707be6e1f4fa51684d50b0212278eb6f40e5ef47b491d42b0b",
+     "signerRoot": "admin-root",
+     "revoked": false
+    },
+    {
+     "grantId": "a2",
+     "username": "alice",
+     "deviceId": "a2000000000000000000000000000000",
+     "devicePubHex": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
+     "scopes": [
+      "browse",
+      "admin"
+     ],
+     "issuedAt": 1799999999000,
+     "expiresAt": 1801000000000,
+     "signatureHex": "14dda629fd95dbf24771c3fbcddc979019e25a32810d053abb600eec8ede988f04d1965b60e8b7fe5eebbd4fe45fd029b832c8fa607c32fa26cb79a7db00320f",
+     "signerRoot": "membership",
+     "revoked": false
+    },
+    {
+     "grantId": "a3",
+     "username": "alice",
+     "deviceId": "a3000000000000000000000000000000",
+     "devicePubHex": "2bc2800b3316e009209ffd757dab19ccf0ae84bc7ae90654e1e81712d270f653",
+     "scopes": [
+      "browse",
+      "admin"
+     ],
+     "issuedAt": 1799999999000,
+     "expiresAt": 1799999999999,
+     "signatureHex": "fc8254c13e2eaf96c0ccdbc80a04c4b76b446d1644098386b0a3fdee003f5070d0cd875d3a3e0bdb43d5a21efa0af73bf0a5852243d0799775f59219b632ed0a",
+     "signerRoot": "admin-root",
+     "revoked": false
+    },
+    {
+     "grantId": "a4",
+     "username": "alice",
+     "deviceId": "a4000000000000000000000000000000",
+     "devicePubHex": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8",
+     "scopes": [
+      "browse"
+     ],
+     "issuedAt": 1799999999000,
+     "expiresAt": 1801000000000,
+     "signatureHex": "bcb63f24c5753b5a37ca034d2a4ebaed05575ef4a3efb64388c3249d702a43f5870215793e1815db58108557fc9c8408bac2e902689f186cc9a76c7c79c6aa00",
+     "signerRoot": "admin-root",
+     "revoked": false
+    },
+    {
+     "grantId": "a5",
+     "username": "alice",
+     "deviceId": "a5000000000000000000000000000000",
+     "devicePubHex": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746",
+     "scopes": [
+      "browse",
+      "admin"
+     ],
+     "issuedAt": 1799999999000,
+     "expiresAt": 1801000000000,
+     "signatureHex": "70a3be13342c5768a92e11cc11de575b7ac3eab9a778f65424db168f5a58fe162a7bdf7b7c0b412fcbe36f55784073686f18b639ad29b064dced633efe907e01",
+     "signerRoot": "admin-root",
+     "revoked": true
+    },
+    {
+     "grantId": "a6",
+     "username": "bob",
+     "deviceId": "a6000000000000000000000000000000",
+     "devicePubHex": "12a41592c8b7c17d4059e7b29b61e8ff96c7415f2f803348f2f017e05b9ea1da",
+     "scopes": [
+      "browse",
+      "admin"
+     ],
+     "issuedAt": 1799999999000,
+     "expiresAt": 1801000000000,
+     "signatureHex": "89e0cbbea05bd2cc818b5e8dcca750951b5e05dee382f0dc71faaecd1b73f1f47e19aa01de8a2367a52500e55db51c60f9b459122da7900f6c703a30e86e8b06",
+     "signerRoot": "admin-root",
+     "revoked": false
+    }
+   ]
+  },
+  "unpinned": {
+   "ownerIrk": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+   "adminRoot": null,
+   "username": "alice",
+   "now": 1800000000000,
+   "grants": []
+  }
+ },
+ "cases": [
+  {
+   "name": "pinned: the admin root signs",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "8cbae75e988c119c4c8f2fdf70a6a863d8fd75e8778c469382d55f7483810d13c2ec3fb47fbaf0f037251033bffcfdbd11d2055ff1e51d054a694a5ecb04620b",
+   "expect": "ok"
+  },
+  {
+   "name": "pinned: the owner IRK is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "241eb88f7e1ecbd70398895309638ac6ba5d9578d89fb473b0dd4e68264f7011fba9a94276ca1423eda190a036b5743db62fe9beced9ae9c18cb28225d0f7e03",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: a device with an admin-root admin grant signs",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "master",
+    "issuedAt": 1799999999995
+   },
+   "signature": "bc26306d36e3f9927f012f8383021a8ca1a4f212798f934a65b0e2babb404cdc06e04e5b1e323896312c42a38bdf3cb4a456424296e1578968b44452db370d0a",
+   "expect": "ok"
+  },
+  {
+   "name": "pinned: a device whose admin grant the IRK signed is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "25d4183fe8581bf21973def86350e0994968f0d94f32c75f8af04c31f94729a9ca3221b444dbd49b1127bda09c3aaa4f43a47861ea58276c809830c732f5a600",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: a device whose admin grant expired is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "fcf536e4ea9d8f5bafde1f4029292fb8e6ff157dacace56e08eeee89cae526dd2a92515441754d4d1e017604a9199b2ce154e1a65972a7dfa269386fa8f85d00",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: a device without the admin scope is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "dfae7bb84b01b78d2426e2141c7091cdaddd308691c6a2edcbc794fe2ad4050cb1e2dc7161a2f39a266a090212d291e8efc3b145b56515cd5aa9852a5987b20c",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: a revoked admin device is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "34abf6d368f7b1c5694292b533ea397d1f89096ea0b9c23c3e7664c570007a770e385e94a5bf2ac68a521a449a7f1450d0a0146a49da367cdc9ccd4352470309",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: another account's admin grant is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "55ec61557503b705197e7ef1f2cff21f0cc0614edf2e83486d1d43d7a9c8eb5d3d4c95796f9e541c37289bdd0457b7381ea9f5fcf981ccf6d7f49bd4a6b08e0e",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: a stranger is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "bf2cfda8a9753bed894f7153a786a1415ca19dee964a2c0a1452c0e413ee94383957fc164ed0ac344cbb5e4ec16a97c7648e02ef22a3a025c2f33f33ca6afe03",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: an order changed after signing is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "master",
+    "issuedAt": 1799999999995
+   },
+   "signature": "8cbae75e988c119c4c8f2fdf70a6a863d8fd75e8778c469382d55f7483810d13c2ec3fb47fbaf0f037251033bffcfdbd11d2055ff1e51d054a694a5ecb04620b",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: an order for another app is refused here",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--blog",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "762414bc0e59c8d352e4b5600ab729f9039d9561fd0c3ce76c0197ebd6bf0c0c991c066ae9c2a5f8a1a067f5cc9958a2a6a3f59238ca8889948b2be7829c1308",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: an order for an app not installed here is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": false,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "8cbae75e988c119c4c8f2fdf70a6a863d8fd75e8778c469382d55f7483810d13c2ec3fb47fbaf0f037251033bffcfdbd11d2055ff1e51d054a694a5ecb04620b",
+   "expect": "refused"
+  },
+  {
+   "name": "pinned: refusing a device is an order",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "device:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+    "rank": "refused",
+    "issuedAt": 1799999999995
+   },
+   "signature": "508ba85ee39fdc73ebce5475e2be3f2bfe45a05cae5a78d7bebb3dbdeb988a80919041e70b44ce6fdde1cc8e12d84c1e42777a3e30f2174996baca9e0432d901",
+   "expect": "ok"
+  },
+  {
+   "name": "pinned: a co-manager's rank is an order",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "share:51515151515151515151515151515151",
+    "rank": "member",
+    "issuedAt": 1799999999995
+   },
+   "signature": "45ffb739bb15b80c19f851a7ba1ec06a7bc8df5b39d60af029c70887e9ff095d1979dabe405685cdb7da2f0bb4d1aba896b73f88745640fca51665f99a048a0e",
+   "expect": "ok"
+  },
+  {
+   "name": "unpinned: the owner IRK signs",
+   "trust": "unpinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "241eb88f7e1ecbd70398895309638ac6ba5d9578d89fb473b0dd4e68264f7011fba9a94276ca1423eda190a036b5743db62fe9beced9ae9c18cb28225d0f7e03",
+   "expect": "ok"
+  },
+  {
+   "name": "unpinned: an unknown admin root is a stranger",
+   "trust": "unpinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "8cbae75e988c119c4c8f2fdf70a6a863d8fd75e8778c469382d55f7483810d13c2ec3fb47fbaf0f037251033bffcfdbd11d2055ff1e51d054a694a5ecb04620b",
+   "expect": "refused"
+  },
+  {
+   "name": "unpinned: an admin device grant counts for nothing",
+   "trust": "unpinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "e3e58180cd2a9d5fe6149d54a584c32ec6c87e5b8443bbd46f94adf0bc3a719196ac21d43ffb0ea89cfc779b9414bc82b70a00a68342cd7263993cca48adc20e",
+   "expect": "refused"
+  },
+  {
+   "name": "an invited person cannot be refused (only removed)",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "refused",
+    "issuedAt": 1799999999995
+   },
+   "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "expect": "refused"
+  },
+  {
+   "name": "an unknown rank is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "owner",
+    "issuedAt": 1799999999995
+   },
+   "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "expect": "refused"
+  },
+  {
+   "name": "an upper-case target is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
+    "rank": "manager",
+    "issuedAt": 1799999999995
+   },
+   "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "expect": "refused"
+  },
+  {
+   "name": "a fractional time is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": 1.5
+   },
+   "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "expect": "refused"
+  },
+  {
+   "name": "a string time is refused",
+   "trust": "pinned",
+   "serviceRef": "alice--club",
+   "installed": true,
+   "order": {
+    "serviceRef": "alice--club",
+    "target": "aid:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+    "rank": "manager",
+    "issuedAt": "1"
+   },
+   "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "expect": "refused"
+  }
+ ]
+}

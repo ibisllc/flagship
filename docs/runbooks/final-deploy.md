@@ -74,6 +74,8 @@ The script stops and asks at each of these; nothing else needs you.
 | every release | accept or refuse gym skips (exit 3); the DNS canary | 6 |
 | once | the adapter attestation key, complaint salt and review key on `.com`; the key's public half in `release/adapter-vetting-keys.json` | 5 |
 | once | the Public Suffix List request for `flagship.services` (`docs/psl-submission-flagship-services.md`) | (outside the script) |
+| once | the issuance service's ACME account key `ISSUANCE_ACME_ACCOUNT_KEY` on prod and (a separate one) on the gym Worker | 5 |
+| once, after boxes renew through the service | the account-pinned apex CAA (`accounturi=…; validationmethods=dns-01`), then the CT inventory and revocation | 6b |
 | every release | read `i18n/REVIEW.md` lines (native readers); the voi.ci canonical switch after the gym's named-links group | 11c |
 | every release | App Store Connect and Play Console submissions (iOS, Android, Wear) | 11 |
 | after 0.3 is live | publish the held hall of fame entry (`hof-jay`) | 11b |
@@ -456,6 +458,11 @@ recent work: `ACCOUNT_READ_TOKEN_SECRET` (`docs/account-read-token.md`),
 Flagship Inference `FLAGSHIP_INFERENCE_TOKEN_SECRET` + `FLAGSHIP_INFERENCE_ENDPOINT`
 (`infra/inference/README.md`; also the shim's own `UPSTREAM_*` secrets, which the
 owner still has to choose).
+Release 0.3, certificate issuance (`docs/architecture-v2/issuance-service.md`): `ISSUANCE_ACME_ACCOUNT_KEY`, the
+service's ACME account key (PKCS#8 PEM, ECDSA P-256; `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
+npx wrangler secret put ISSUANCE_ACME_ACCOUNT_KEY`; a different key with `--config wrangler.gym.toml`; keep offline
+copies). Without it `/api/certificates/*` answers 503 and boxes on the 0.3 code get no new certificates (they keep
+serving the old one). D1 migration `0121_certificate_issuance.sql` goes before the `.com` deploy.
 Release 0.3: `FLAGSHIP_RECOVERY_PROOF_SECRET` (keys the one-use passkey recovery challenges,
 `openssl rand -hex 32 | wrangler secret put FLAGSHIP_RECOVERY_PROOF_SECRET`; without it the passkey
 check is off and recovery takes the passphrase-only path) and `FLAGSHIP_TOTP_KEK` if the optional TOTP
@@ -661,6 +668,24 @@ to the prod zone):**
    steady state of 4 per account after each issuance: no `_acme-challenge` TXT
    older than an hour (the stale sweep removes them hourly).
 
+## 6b. Certificate issuance: the account-pinned apex CAA (owner DNS step, after the switch)
+
+From 0.3 every certificate under the apex is ordered by `.com`'s issuance service (plan H1/H9); boxes no longer
+write `_acme-challenge` records (`/api/dns-01/*` answers 410, the broker refuses them). The old boxes' own ACME
+accounts may still hold reusable authorizations, which only an account-pinned CAA closes. Follow
+`docs/runbooks/issuance-migration.md` section 2: after renewals through the service are seen on the gym and on a
+prod box, read the account URI (`curl -s https://flagshipserver.com/api/certificates/account`) and replace the apex
+CAA pair by
+
+```text
+CAA 0 issue     "letsencrypt.org; accounturi=<prod account URI>; validationmethods=dns-01"
+CAA 0 issuewild "letsencrypt.org; accounturi=<prod account URI>; validationmethods=dns-01"
+```
+
+plus the same pair with the gym account's URI while the gym shares the zone. No unpinned `letsencrypt.org` record may
+stay. Then `npm run zone-health`, and `node scripts/issuance-inventory.mjs --before <switch day>` (`--revoke` with the
+admin secret for any bare-account certificate it lists). Rollback: put the plain pair back before rolling code back.
+
 ## 7. Deploy `.com` (two Workers)
 
 `.com` is now two Workers: `flagship-com` (the API, the marketing site, recovery., boot.,
@@ -732,6 +757,10 @@ cd apps/dns-broker && npx wrangler deployments list && npm run deploy && npx wra
 
 Rollback: `npx wrangler rollback` in `apps/dns-broker` (the old broker refuses the account-wide record,
 so new servers fall back to their own names only).
+
+From 0.3 the broker refuses every `publishTxtChallenge` (challenge records are the issuance service's): redeploy it
+with the release, or delete it (`npx wrangler delete`) if nothing else calls it. Rolling it back reopens a box's way
+to the bare account name.
 
 ## 8. Deploy `.services` (Fly): needed, one image
 

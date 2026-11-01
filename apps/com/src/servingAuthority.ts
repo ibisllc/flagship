@@ -464,7 +464,7 @@ function feedStub(env: ServingEnv): { fetch(request: Request): Promise<Response>
 /** Tell the feed something changed. Never throws: the relays also re-read on their own. */
 export async function pokeServingFeed(
   env: ServingEnv,
-  message: { type: "flush" } | { type: "changed"; username: string; boxPub: string },
+  message: { type: "flush" } | { type: "changed"; username: string; boxPub: string } | { type: "phone-eligibility"; username: string },
 ): Promise<void> {
   const stub = feedStub(env);
   if (!stub) return;

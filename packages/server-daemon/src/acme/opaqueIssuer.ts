@@ -14,6 +14,9 @@ export interface OpaqueTlsKeyd {
   activate(handle: string): Promise<void>;
   /** Remove keys that came from the old process's PEM files and are no longer in service. */
   pruneLegacy?(): Promise<void>;
+  /** PKCS#10 (DER) for a key keyd made, for exactly the names it was made for (the issuance service's request). */
+  csr?(handle: string): Promise<Uint8Array>;
+  list?(): Promise<Array<{ handle: string; names: string[]; notAfter: number | null; active: boolean; legacy: boolean }>>;
 }
 
 /**

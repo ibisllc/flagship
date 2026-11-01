@@ -1,6 +1,7 @@
 // The live groups for what 0.3 added. Registered in groups/index.ts as `...RELEASE_03_GROUPS`.
 import type { Group } from "../types.js";
 import { adversarial } from "./adversarial.js";
+import { appIsolation } from "./appIsolation.js";
 import { aiConsent } from "./aiConsent.js";
 import { browserGrants } from "./browserGrants.js";
 import { appNames } from "./appNames.js";
@@ -18,7 +19,10 @@ import { gpuReal } from "./gpuReal.js";
 import { gpuSim } from "./gpuSim.js";
 import { localAi, localAiCpu } from "./localAi.js";
 import { serving } from "./serving.js";
+import { issuance } from "./issuance.js";
+import { phoneRoute } from "./phoneRoute.js";
 import { stackSwitch } from "./stackSwitch.js";
+import { rustCore } from "./rustCore.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
   firstContact,
@@ -33,6 +37,7 @@ export const RELEASE_03_GROUPS: Group[] = [
   appNames,
   chatCrossOwner,
   adversarial,
+  appIsolation,
   wasiApps,
   appGroupsDb,
   gpuSim,
@@ -40,5 +45,8 @@ export const RELEASE_03_GROUPS: Group[] = [
   localAiCpu,
   localAi,
   stackSwitch,
+  rustCore,
   serving,
+  issuance,
+  phoneRoute,
 ];

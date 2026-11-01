@@ -19,7 +19,7 @@ pub enum JournalError {
     Corrupt(String),
 }
 
-fn store(e: rusqlite::Error) -> JournalError {
+pub(crate) fn store(e: rusqlite::Error) -> JournalError {
     JournalError::Store(e.to_string())
 }
 
@@ -154,6 +154,46 @@ CREATE TABLE IF NOT EXISTS shadow (
   decision TEXT NOT NULL
 ) STRICT;
 INSERT OR IGNORE INTO meta (key, value) VALUES ('term', '0'), ('effects_enabled', '0');
+CREATE TABLE IF NOT EXISTS app_desired (
+  key TEXT PRIMARY KEY,
+  body TEXT NOT NULL,
+  forgotten INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS app_deployed (
+  key TEXT PRIMARY KEY,
+  generation INTEGER NOT NULL,
+  spec_digest TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  network TEXT NOT NULL,
+  address TEXT,
+  adopted INTEGER NOT NULL DEFAULT 0
+) STRICT;
+CREATE TABLE IF NOT EXISTS app_ops (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('deploy','remove')),
+  generation INTEGER NOT NULL,
+  spec_digest TEXT,
+  epoch INTEGER NOT NULL,
+  network TEXT NOT NULL,
+  address TEXT,
+  executor TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('intent','done','failed','abandoned')),
+  detail TEXT,
+  term INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS app_ops_open ON app_ops (state) WHERE state = 'intent';
+CREATE INDEX IF NOT EXISTS app_ops_key ON app_ops (key, id);
+CREATE TABLE IF NOT EXISTS app_addresses (
+  network TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  ip TEXT NOT NULL,
+  PRIMARY KEY (network, owner)
+) STRICT;
+INSERT OR IGNORE INTO meta (key, value) VALUES ('apps_live', '0'), ('apps_last_generation', '0'), ('apps_agree_passes', '0');
 ";
 
 #[derive(Debug)]
@@ -218,8 +258,29 @@ impl Journal {
         self.term
     }
 
+    pub(crate) fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
+    pub(crate) fn meta(&self, key: &str) -> Result<Option<String>, JournalError> {
+        self.conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .map_err(store)
+    }
+
+    pub(crate) fn set_meta(&mut self, key: &str, value: &str) -> Result<(), JournalError> {
+        let tx = self.write()?;
+        tx.execute(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            [key, value],
+        )
+        .map_err(store)?;
+        tx.commit().map_err(store)
+    }
+
     /// A write transaction that refuses to run if another controller took a later term.
-    fn write(&mut self) -> Result<Transaction<'_>, JournalError> {
+    pub(crate) fn write(&mut self) -> Result<Transaction<'_>, JournalError> {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)

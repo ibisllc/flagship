@@ -29,6 +29,7 @@ import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
 import { mayCommitRevocation, pokeServingFeed, type ServingFeedNamespace } from "./servingAuthority.js";
+import { phoneEligibilityAccount } from "./phoneRoute.js";
 import {
   handleAdapterIndex,
   isAdapterIndexPath,
@@ -955,6 +956,13 @@ async function routeImpl(
         const kick = pokeServingFeed(env, { type: "flush" });
         if (ctx) ctx.waitUntil(kick);
         else await kick;
+        // A removed device or revoked grant may end an admin phone's bare-name route (phoneRoute.ts).
+        const phoneAccount = phoneEligibilityAccount(request.method, url.pathname);
+        if (phoneAccount) {
+          const poke = pokeServingFeed(env, { type: "phone-eligibility", username: phoneAccount });
+          if (ctx) ctx.waitUntil(poke);
+          else await poke;
+        }
       }
       // An account-not-found answer costs the caller what an account/resolve
       // lookup does (docs/account-gone.md).

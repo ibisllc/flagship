@@ -1,0 +1,20 @@
+[package]
+name = "flagship-access"
+description = "Who reaches an app, as whom and with which rank: the access decision at the effect boundary (release plan R4)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+flagship-crypto = { path = "../flagship-crypto" }
+rustix = { version = "=1.1.4", features = ["fs", "net"] }
+serde_json = "=1.0.151"
+
+[[bin]]
+name = "flagship-access"
+path = "src/main.rs"
