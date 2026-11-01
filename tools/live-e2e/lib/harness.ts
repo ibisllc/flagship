@@ -30,7 +30,8 @@ export interface HttpInit {
 
 /**
  * One request. A connection that fails before any response (the hub tunnel
- * blipping, a box busy building) is retried twice, 5 s apart; the final error
+ * blipping, a box busy building, Fly's edge dropping its backhaul for a minute or two: gyms 13-18, 26) is retried
+ * five times over about 95 s; the final error
  * names the cause. A request that got a response is never retried, and neither is a write that may have
  * reached the box (a timeout or a reset after the request left): the box may have done it, and doing it twice
  * ("You already have a service called …") fails a run for the harness's own doing.
@@ -45,13 +46,14 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000)
       const method = String(init.method ?? "GET").toUpperCase();
       const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT", NEVER_SENT].includes(String(cause?.code ?? ""));
       const retryable = method === "GET" || method === "HEAD" || neverSent || init.idempotent === true;
-      if (attempt >= 3 || !retryable) throw new Error(`fetch failed (${why}) after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${url}`);
-      await sleep(5000);
+      if (attempt >= RETRY_DELAYS_MS.length + 1 || !retryable) throw new Error(`fetch failed (${why}) after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${url}`);
+      await sleep(RETRY_DELAYS_MS[attempt - 1]!);
     }
   }
 }
 
 const NEVER_SENT = "FLAGSHIP_BEFORE_HANDSHAKE";
+const RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 30_000, 30_000];
 
 /**
  * A write on a connection of its own. fetch keeps connections open and reuses them; a server may close one after an
