@@ -234,10 +234,10 @@ export function writeJson(dir: string, file: string, data: unknown): void {
 }
 
 /** issuer / subject / SANs of a live host's served cert. */
-export function certInfo(fqdn: string): { issuer: string; subject: string; sans: string[] } {
+export function certInfo(fqdn: string, sni = fqdn): { issuer: string; subject: string; sans: string[] } {
   const out = spawnSync(
     "bash",
-    ["-c", `echo | openssl s_client -connect ${fqdn}:443 -servername ${fqdn} 2>/dev/null | openssl x509 -noout -issuer -subject -text 2>/dev/null`],
+    ["-c", `echo | openssl s_client -connect ${fqdn}:443 -servername ${sni} 2>/dev/null | openssl x509 -noout -issuer -subject -text 2>/dev/null`],
     { encoding: "utf8", timeout: 25_000 },
   );
   const t = out.stdout || "";

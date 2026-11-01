@@ -78,6 +78,8 @@ export interface IssuanceDeps {
   now?: () => number;
   /** Wait between publishing the TXT records and answering the challenges (Let's Encrypt caches NXDOMAIN). */
   propagationMs?: number;
+  /** Quiet spell after an order sharing a challenge name ends (CHALLENGE_QUIET_MS). */
+  challengeQuietMs?: number;
   waitUntil?(p: Promise<unknown>): void;
 }
 
@@ -91,6 +93,8 @@ export function isIssuancePath(path: string): boolean {
 
 const POLL_MS = 5_000;
 const DEFAULT_PROPAGATION_MS = 10_000;
+/** After an order sharing a challenge name ends: past the records' 60 s TTL, so no resolver still holds its value. */
+const CHALLENGE_QUIET_MS = 90_000;
 const LOCK_MS = 30_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
@@ -664,6 +668,10 @@ async function stepNew(s: Service, row: OrderRow, st: AcmeState, client: AcmeCli
   // A retried first step: what the interrupted attempt published goes first.
   if (st.authz.length > 0) await cleanup(s, st, client, true);
   const names = row.names.split("\n");
+  if (await challengeNameBusy(s, row, names)) {
+    await save(s, row, {});
+    return;
+  }
   const order = await client.newOrder(names);
   await save(s, row, { acme_order_url: order.url, acme_ordered_at: s.now }, true);
   const next: AcmeState = { finalize: order.finalize, authz: [], grant: st.grant ?? null };
@@ -689,6 +697,30 @@ async function stepNew(s: Service, row: OrderRow, st: AcmeState, client: AcmeCli
   }
   await save(s, row, { step: "published", published_at: s.now, acme_json: JSON.stringify(next) });
 }
+
+/**
+ * One order at a time per _acme-challenge name, and a quiet spell after the last one ended. Two orders sharing a name
+ * (a box's control and apps certificates, sibling boxes' `*.<user>`) put records there at different times, and a CA
+ * vantage point that cached the name's records a moment earlier sees only the other order's value (gym 20: "Incorrect
+ * TXT record found ... during secondary validation").
+ */
+async function challengeNameBusy(s: Service, row: OrderRow, names: string[]): Promise<boolean> {
+  const hosts = new Set(names.map(challengeHost));
+  const others = await s.db
+    .prepare(
+      "SELECT order_id, names, status, step, updated_at, created_at FROM certificate_orders WHERE zone = ? AND order_id != ? AND (status = 'pending' OR updated_at > ?)",
+    )
+    .bind(row.zone, row.order_id, s.now - (s.deps.challengeQuietMs ?? CHALLENGE_QUIET_MS))
+    .all<{ order_id: string; names: string; status: string; step: string; updated_at: number; created_at: number }>();
+  return (others.results ?? []).some((o) => {
+    if (!o.names.split("\n").some((n) => hosts.has(challengeHost(n)))) return false;
+    // A pending order still at "new" has published nothing: the older of two such orders goes first.
+    if (o.status === "pending" && o.step === "new") return o.created_at < row.created_at || (o.created_at === row.created_at && o.order_id < row.order_id);
+    return true;
+  });
+}
+
+const challengeHost = (name: string): string => name.replace(/^\*\./, "").toLowerCase();
 
 async function stepAnswer(s: Service, row: OrderRow, st: AcmeState, client: AcmeClient): Promise<void> {
   if (s.now < (row.published_at ?? 0) + (s.deps.propagationMs ?? DEFAULT_PROPAGATION_MS)) {

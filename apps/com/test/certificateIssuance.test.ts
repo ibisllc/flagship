@@ -82,6 +82,7 @@ async function setup() {
     fetchImpl: ca.fetch as typeof fetch,
     now: () => clock.t,
     propagationMs: 0,
+    challengeQuietMs: 0,
   };
   return { sqlite, db, storage, dns, ca, clock, env, deps, close: () => sqlite.close() };
 }
@@ -190,6 +191,32 @@ describe("issuance: names come from .com's records", () => {
       expect((await ask(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`] })).json.code).toBe("issuance-csr-names");
       const forged = await ask(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`], grant: { issuedAt: 1, signature: "00".repeat(64) } });
       expect(forged.json.code).toBe("issuance-wildcard-grant");
+    } finally {
+      w.close();
+    }
+  });
+
+  it("orders sharing a challenge name take turns, so neither sees the other's record (gym 20)", async () => {
+    const w = await setup();
+    try {
+      const control = await ask(w, { cls: "control", names: [SERVER] });
+      const apps = await ask(w, { cls: "apps", names: [`*.${SERVER}`] });
+      const [c, a] = [String(control.json.orderId), String(apps.json.orderId)];
+      const seen: string[] = [];
+      let vc = await poll(w, c);
+      let va = await poll(w, a);
+      for (let i = 0; i < 24 && (vc.status === "pending" || va.status === "pending"); i++) {
+        // While one holds _acme-challenge.<server>, the other has published nothing.
+        expect(w.dns.records.size).toBeLessThanOrEqual(1);
+        seen.push(`${vc.step}/${va.step}`);
+        w.clock.t += 1000;
+        if (vc.status === "pending") vc = await poll(w, c);
+        if (va.status === "pending") va = await poll(w, a);
+      }
+      expect(vc).toMatchObject({ status: "issued" });
+      expect(va).toMatchObject({ status: "issued" });
+      // Whichever went first, the other stayed at "new" while it published and validated.
+      expect(seen).toEqual(expect.arrayContaining([expect.stringMatching(/^(published\/new|new\/published)$/)]));
     } finally {
       w.close();
     }

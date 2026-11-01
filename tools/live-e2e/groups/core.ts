@@ -21,7 +21,7 @@ import {
 } from "@flagship/protocol";
 import { pair, sweep } from "../lib/fleet.js";
 import { accountRecordSurprises } from "../lib/dnsBudget.js";
-import { CONTROL, SERVICES, assert, certInfo, http, sanCovers, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
+import { CONTROL, SERVICES, assert, certInfo, http, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
 import type { Group } from "./types.js";
 
 export function whoamiManifest(slug: string, extra: Record<string, unknown> = {}): string {
@@ -72,11 +72,14 @@ export const core: Group = {
       assert(r.status === 200 && /Flagship/i.test(r.text), `got ${r.status}`);
       return `${r.text.length}B html`;
     });
-    await rec.check("box presents a Let's Encrypt cert for its FQDN + per-box wildcard", () => {
+    // Plan H9: the control name has a certificate of its own (exactly that name); app names get the apps certificate.
+    await rec.check("box presents a Let's Encrypt control cert for exactly its FQDN, and the apps cert (*.<fqdn>) for an app name", () => {
       const c = certInfo(fqdn);
       assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
-      assert(sanCovers(c.sans, fqdn) && c.sans.includes(`*.${fqdn}`), `sans=${c.sans.join(",")}`);
-      return c.sans.join(", ");
+      assert(c.sans.length === 1 && c.sans[0] === fqdn, `control sans=${c.sans.join(",")}`);
+      const app = certInfo(fqdn, `gym-cert-probe.${fqdn}`);
+      assert(/Let's Encrypt/i.test(app.issuer) && app.sans.includes(`*.${fqdn}`) && !app.sans.includes(fqdn), `app-name sans=${app.sans.join(",") || "<none>"}`);
+      return `control ${c.sans.join(", ")}; apps ${app.sans.join(", ")}`;
     });
     // Root wildcard (docs/wildcard-dns.md): the zone holds `*.<apex>` and the apex
     // CAA and NOTHING at the account or its boxes, and every name under the
