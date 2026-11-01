@@ -98,12 +98,11 @@ export async function routePrivileged(cmd: string, args: readonly string[], o: R
       const script = a[0] ?? "";
       if (script.endsWith("/installer/install-box-artifact.sh")) {
         const at = (flag: string) => a[a.indexOf(flag) + 1] ?? "";
-        await privd().release("install", at("--expect-commit"), at("--expect-sha256"));
-        return { stdout: "", stderr: "" };
+        // Its stdout names the installer ("installed: … (flagship-updater)" from the Rust updater): pass it on.
+        return done((await privd().release("install", at("--expect-commit"), at("--expect-sha256"))) as { stdout?: string; stderr?: string });
       }
       if (script.endsWith("/installer/rollback-box-artifact.sh")) {
-        await privd().release("restore", a[1] ?? "");
-        return { stdout: "", stderr: "" };
+        return done((await privd().release("restore", a[1] ?? "")) as { stdout?: string; stderr?: string });
       }
       throw new Error("bash is not available to the unprivileged daemon");
     }
