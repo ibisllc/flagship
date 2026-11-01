@@ -95,6 +95,8 @@ const POLL_MS = 5_000;
 const DEFAULT_PROPAGATION_MS = 10_000;
 /** After an order sharing a challenge name ends: past the records' 60 s TTL, so no resolver still holds its value. */
 const CHALLENGE_QUIET_MS = 90_000;
+/** A pending order no poll has touched for this long is not in flight (its device polls every few seconds). */
+const ABANDONED_ORDER_MS = 120_000;
 const LOCK_MS = 30_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
@@ -714,8 +716,12 @@ async function challengeNameBusy(s: Service, row: OrderRow, names: string[]): Pr
     .all<{ order_id: string; names: string; status: string; step: string; updated_at: number; created_at: number }>();
   return (others.results ?? []).some((o) => {
     if (!o.names.split("\n").some((n) => hosts.has(challengeHost(n)))) return false;
+    if (o.status !== "pending") return true;
+    // An order its device stopped polling holds nothing up past a quiet spell (gym 22: an apps order the harness
+    // abandoned at "new" kept the box's control order waiting until the order timeout).
+    if (o.updated_at <= s.now - ABANDONED_ORDER_MS) return false;
     // A pending order still at "new" has published nothing: the older of two such orders goes first.
-    if (o.status === "pending" && o.step === "new") return o.created_at < row.created_at || (o.created_at === row.created_at && o.order_id < row.order_id);
+    if (o.step === "new") return o.created_at < row.created_at || (o.created_at === row.created_at && o.order_id < row.order_id);
     return true;
   });
 }

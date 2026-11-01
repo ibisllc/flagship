@@ -222,6 +222,19 @@ describe("issuance: names come from .com's records", () => {
     }
   });
 
+  it("an order its device stopped polling does not hold up another on the same challenge name (gym 22)", async () => {
+    const w = await setup();
+    try {
+      const abandoned = await ask(w, { cls: "apps", names: [`*.${SERVER}`] });
+      expect(abandoned.res.status).toBe(202);
+      w.clock.t += 121_000;
+      const { done } = await issue(w, { cls: "control", names: [SERVER] });
+      expect(done).toMatchObject({ status: "issued" });
+    } finally {
+      w.close();
+    }
+  });
+
   it("waits out the DNS propagation spell without a failed step (gym 21: an empty update was invalid SQL)", async () => {
     const w = await setup();
     const warn = vi.spyOn(console, "warn");
