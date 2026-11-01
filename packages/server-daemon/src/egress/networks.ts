@@ -160,6 +160,9 @@ export async function ensureSandboxNetwork(
     if (!info) throw new Error(`docker network ${spec.network} could not be created${why ? `: ${why.replace(/\s+/g, " ").slice(0, 400)}` : ""}`);
   }
   if (podman) await ensureHostBridge(cmd, info);
+  // Docker's bridges are IPv4-only too, but the kernel still gives them a fe80:: address a container could reach
+  // the host on; the IPv6 rules reject it, and with no IPv6 on the bridge there is nothing to reject.
+  else if (/^[a-zA-Z0-9_.-]{1,15}$/.test(info.bridge)) await cmd.run("sysctl", ["-q", "-w", `net.ipv6.conf.${info.bridge}.disable_ipv6=1`]).catch(() => {});
   return info;
 }
 

@@ -20,6 +20,7 @@
  */
 import net from "node:net";
 import os from "node:os";
+import { existsSync, readdirSync } from "node:fs";
 import { X509Certificate } from "node:crypto";
 import {
   isLanAddress,
@@ -38,12 +39,30 @@ export function hostAddresses(ifaces: NodeJS.Dict<os.NetworkInterfaceInfo[]> = o
   return Object.values(ifaces).flatMap((infos) => (infos ?? []).map((i) => i.address));
 }
 
+/**
+ * A Linux bridge that carries only containers: it has no ports, or every port is a veth. A user's own LAN bridge
+ * (`br0` over `eth0`) has a real NIC as a port and is kept. Catches a container bridge whatever its name (Podman
+ * numbers its own `podmanN`, a netavark/CNI plugin may pick anything), so the listener never binds an address an
+ * app container can reach as its gateway.
+ */
+export function isContainerBridge(name: string, sysNet = "/sys/class/net"): boolean {
+  if (!/^[a-zA-Z0-9_.-]{1,15}$/.test(name)) return false;
+  try {
+    if (!existsSync(`${sysNet}/${name}/bridge`)) return false;
+    const ports = readdirSync(`${sysNet}/${name}/brif`);
+    return ports.every((p) => /^veth/i.test(p));
+  } catch {
+    return false;
+  }
+}
+
 export function lanAddressesFromInterfaces(
   ifaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>,
+  containerBridge: (name: string) => boolean = isContainerBridge,
 ): string[] {
   const out: string[] = [];
   for (const [name, infos] of Object.entries(ifaces)) {
-    if (!infos || VIRTUAL_IFACE.test(name)) continue;
+    if (!infos || VIRTUAL_IFACE.test(name) || containerBridge(name)) continue;
     for (const i of infos) {
       if (i.internal) continue;
       if (isLanAddress(i.address) && !out.includes(i.address)) out.push(i.address);

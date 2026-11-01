@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import net from "node:net";
 import type os from "node:os";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildSignedLanHint,
+  isContainerBridge,
   lanAddressesFromInterfaces,
   lanPortFromEnv,
   leafCertSha256,
@@ -37,6 +41,44 @@ describe("lanAddressesFromInterfaces", () => {
   });
   it("returns nothing for a VPS with only a public address", () => {
     expect(lanAddressesFromInterfaces({ eth0: [iface("203.0.113.5")], lo: [iface("127.0.0.1", true)] })).toEqual([]);
+  });
+});
+
+describe("container bridges (H5-4)", () => {
+  const sys = mkdtempSync(join(tmpdir(), "sysnet-"));
+  const bridge = (name: string, ports: string[]) => {
+    mkdirSync(join(sys, name, "bridge"), { recursive: true });
+    mkdirSync(join(sys, name, "brif"), { recursive: true });
+    for (const p of ports) mkdirSync(join(sys, name, "brif", p));
+  };
+  bridge("fs-apps", ["veth0", "veth3"]);
+  bridge("podman7", []);
+  bridge("mynet", ["veth1"]);
+  bridge("br0", ["eth0"]);
+  mkdirSync(join(sys, "eth1"), { recursive: true });
+
+  it("treats a bridge with only veth ports (or none) as a container bridge, whatever its name", () => {
+    expect(isContainerBridge("fs-apps", sys)).toBe(true);
+    expect(isContainerBridge("podman7", sys)).toBe(true);
+    expect(isContainerBridge("mynet", sys)).toBe(true);
+    expect(isContainerBridge("br0", sys)).toBe(false);
+    expect(isContainerBridge("eth1", sys)).toBe(false);
+    expect(isContainerBridge("missing", sys)).toBe(false);
+    expect(isContainerBridge("../etc", sys)).toBe(false);
+  });
+
+  it("never offers the apps bridge gateway (10.89.2.1) or any container bridge, keeps the LAN NIC and a LAN bridge", () => {
+    const got = lanAddressesFromInterfaces(
+      {
+        eth1: [iface("10.9.7.69")],
+        "fs-apps": [iface("10.89.2.1")],
+        podman2: [iface("10.89.3.1")],
+        mynet: [iface("10.89.4.1")],
+        br0: [iface("192.168.1.20")],
+      },
+      (n) => isContainerBridge(n, sys),
+    );
+    expect(got.sort()).toEqual(["10.9.7.69", "192.168.1.20"]);
   });
 });
 

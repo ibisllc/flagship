@@ -3,8 +3,11 @@
  * DOCKER-USER (forwarded traffic), INPUT (traffic to the host) and nat
  * PREROUTING (the redirects), so docker's rules are never edited:
  *
- *   nat  FLAGSHIP-EGRESS-NAT   -i <bridge> tcp/80, tcp/443, udp+tcp/53 → the gateway's ports
+ *   nat  FLAGSHIP-EGRESS-NAT   -i <bridge> tcp/80, tcp/443, udp+tcp/53 → the gateway's ports, except
+ *                              to link-local/metadata addresses and to the host's own addresses on
+ *                              80/443 (left un-redirected, so the filter chains below reject them)
  *   filter FLAGSHIP-EGRESS-FWD -i <bridge>: only replies, and docker-published data ports; reject the rest
+ *                              (link-local/metadata first, whatever the state)
  *   filter FLAGSHIP-EGRESS-IN  -i <bridge>: replies, the gateway's ports, the data-service ports
  *                              (apps + staging only); reject the rest
  *   ip6 filter FLAGSHIP-EGRESS6 -i <bridge>: reject (the bridges are IPv4-only)
@@ -96,6 +99,14 @@ export function renderIccTable(bridges: readonly FirewallBridge[]): string {
 
 const IFACE = /^[a-zA-Z0-9_.-]{1,15}$/;
 
+/**
+ * Never reachable from a sandbox bridge: link-local (cloud metadata at 169.254.169.254 serves a box's user-data,
+ * i.e. its install recipe) and Alibaba's metadata address. Without the nat exemption a :80/:443 probe to them
+ * completed its handshake on the gateway's transparent proxy (gym H5-4); the proxy never dialled them, but nothing
+ * on the box should even accept such a connection.
+ */
+export const NEVER_REACHABLE_V4 = ["169.254.0.0/16", "100.100.100.200/32"] as const;
+
 /** The iptables-restore payloads (IPv4 and IPv6). Pure, for tests. */
 export function renderFirewall(plan: FirewallPlan): { v4: string; v6: string } {
   for (const b of plan.bridges) {
@@ -109,12 +120,18 @@ export function renderFirewall(plan: FirewallPlan): { v4: string; v6: string } {
   const v6: string[] = [];
   for (const { bridge: b, kind } of plan.bridges) {
     const reachesData = kind !== "build" && plan.dataPorts.length > 0;
+    for (const d of NEVER_REACHABLE_V4) nat.push(`-A ${CHAIN_NAT} -i ${b} -d ${d} -j RETURN`);
+    // The host's own addresses (the bridge gateway, LAN, public): only DNS is redirected there. A :80/:443 to the
+    // box itself stays un-redirected and lands on the IN chain's reject, so no host listener on 443/80 (LAN-direct,
+    // tlsd) is ever one hop from an app, and the probe is refused rather than answered by the proxy.
+    nat.push(`-A ${CHAIN_NAT} -i ${b} -p tcp -m multiport --dports 80,443 -m addrtype --dst-type LOCAL -j RETURN`);
     nat.push(
       `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 443 -j REDIRECT --to-ports ${tls}`,
       `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 80 -j REDIRECT --to-ports ${http}`,
       `-A ${CHAIN_NAT} -i ${b} -p udp --dport 53 -j REDIRECT --to-ports ${dns}`,
       `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 53 -j REDIRECT --to-ports ${dns}`,
     );
+    for (const d of NEVER_REACHABLE_V4) fwd.push(`-A ${CHAIN_FWD} -i ${b} -d ${d} -j REJECT --reject-with icmp-admin-prohibited`);
     fwd.push(`-A ${CHAIN_FWD} -i ${b} -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN`);
     if (reachesData) {
       fwd.push(`-A ${CHAIN_FWD} -i ${b} -p tcp -m multiport --dports ${data} -m conntrack --ctstate DNAT -j RETURN`);

@@ -123,8 +123,11 @@ path's Deploy runs the same staged loop with the chat's files.
   recreated at boot after its containers are disconnected; the daemon recreates
   every app container on boot anyway.
 - **Firewall**: chains `FLAGSHIP-EGRESS-NAT` (nat PREROUTING: 443/80/53 from a
-  bridge → the gateway's ports 15443/15080/15053), `FLAGSHIP-EGRESS-FWD`
-  (from DOCKER-USER: reject anything forwarded from a bridge) and
+  bridge → the gateway's ports 15443/15080/15053; never for link-local
+  169.254/16 or 100.100.100.200 (cloud metadata), nor 80/443 to any of the
+  host's own addresses, which then hit the rejects below), `FLAGSHIP-EGRESS-FWD`
+  (from DOCKER-USER, or FORWARD under Podman: reject anything forwarded from a
+  bridge, link-local first) and
   `FLAGSHIP-EGRESS-IN` (INPUT: a bridge may reach only the gateway ports, and
   apps/staging the data port 5432), plus `FLAGSHIP-EGRESS6` in
   ip6tables. Written atomically with `iptables-restore --noflush` at every boot;

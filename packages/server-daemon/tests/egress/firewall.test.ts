@@ -65,6 +65,38 @@ describe("firewall rules", () => {
     expect(v6).toContain("-A FLAGSHIP-EGRESS6 -i fs-apps -j REJECT");
   });
 
+  it("never redirects link-local/metadata or the host's own :80/:443, and rejects link-local before anything (H5-4)", () => {
+    const { v4 } = renderFirewall(PLAN);
+    const lines = v4.split("\n");
+    for (const b of ["fs-build", "fs-staging", "fs-apps"]) {
+      const redirect443 = lines.indexOf(`-A FLAGSHIP-EGRESS-NAT -i ${b} -p tcp --dport 443 -j REDIRECT --to-ports 15443`);
+      const redirect53 = lines.indexOf(`-A FLAGSHIP-EGRESS-NAT -i ${b} -p udp --dport 53 -j REDIRECT --to-ports 15053`);
+      const meta = lines.indexOf(`-A FLAGSHIP-EGRESS-NAT -i ${b} -d 169.254.0.0/16 -j RETURN`);
+      const ali = lines.indexOf(`-A FLAGSHIP-EGRESS-NAT -i ${b} -d 100.100.100.200/32 -j RETURN`);
+      const local = lines.indexOf(`-A FLAGSHIP-EGRESS-NAT -i ${b} -p tcp -m multiport --dports 80,443 -m addrtype --dst-type LOCAL -j RETURN`);
+      for (const i of [meta, ali, local]) {
+        expect(i).toBeGreaterThan(-1);
+        expect(i).toBeLessThan(redirect443);
+      }
+      // DNS to the gateway stays redirected to the filtering resolver: only 80/443 to the host are exempt.
+      expect(meta).toBeLessThan(redirect53);
+      const fwdReject = lines.indexOf(`-A FLAGSHIP-EGRESS-FWD -i ${b} -d 169.254.0.0/16 -j REJECT --reject-with icmp-admin-prohibited`);
+      const fwdReplies = lines.indexOf(`-A FLAGSHIP-EGRESS-FWD -i ${b} -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN`);
+      expect(fwdReject).toBeGreaterThan(-1);
+      expect(fwdReject).toBeLessThan(fwdReplies);
+      // The host input chain admits only the gateway's own ports (+ data and owned ports): 443/80 are not among them.
+      const accepts = lines.filter((l) => l.startsWith(`-A FLAGSHIP-EGRESS-IN -i ${b} `) && l.endsWith("-j ACCEPT") && !l.includes("conntrack"));
+      for (const l of accepts) expect(l).not.toMatch(/--dports? (?:[^ ]*,)?(?:443|80)(?:,| |$)/);
+    }
+  });
+
+  it("the payloads pass the privd broker's iptables-restore policy", async () => {
+    const { iptablesRestoreExec } = await import("../../../privd/src/policy.js");
+    const { v4, v6 } = renderFirewall({ ...PLAN, ownedPorts: { from: 15400, to: 15999 } });
+    expect(() => iptablesRestoreExec({ family: 4, rules: v4 })).not.toThrow();
+    expect(() => iptablesRestoreExec({ family: 6, rules: v6 })).not.toThrow();
+  });
+
   it("refuses an interface name iptables would misread", () => {
     expect(() => renderFirewall({ ...PLAN, bridges: [{ kind: "apps", bridge: "fs apps -j ACCEPT" }] })).toThrow();
   });

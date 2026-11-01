@@ -6,10 +6,13 @@
  * THAT host by name from the host network and splices the two sockets. TLS
  * stays end to end; the gateway never terminates it. The original destination
  * IP is ignored on purpose: an allowed name can't be pointed at another
- * server, and the name must resolve to a public address.
+ * server, and the name must resolve to a public address that is not one of
+ * the box's own (a name pointed at the box's public IP must not reach its
+ * own listeners from inside a sandbox).
  */
 import { lookup } from "node:dns/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { networkInterfaces } from "node:os";
 import { parseClientHelloSni } from "@flagship/tunnel-protocol";
 import { isPublicAddress } from "./policy.js";
 
@@ -21,8 +24,10 @@ export interface ProxyDeps {
   resolve?: (host: string) => Promise<string[]>;
   /** Connect upstream. Default: net.connect. Tests point it at a local server. */
   dial?: (address: string, port: number) => Socket;
-  /** Refuse non-public upstream addresses (default true). */
+  /** Refuse non-public upstream addresses and the host's own (default true). */
   publicOnly?: boolean;
+  /** The host's own addresses. Default: every interface's, read per connection. */
+  ownAddresses?: () => Iterable<string>;
   onDenied?: (srcIp: string, host: string | null, kind: ProxyKind) => void;
   /** Idle timeout per connection (default 10 min). */
   idleMs?: number;
@@ -50,6 +55,11 @@ export function parseHttpHost(head: string): string | null {
   if (!v) return null;
   if (v[2] && v[2] !== "80") return null;
   return v[1]!;
+}
+
+/** Every address on this host's interfaces, lower-cased, without a zone. */
+export function hostOwnAddresses(): string[] {
+  return Object.values(networkInterfaces()).flatMap((infos) => (infos ?? []).map((i) => i.address.toLowerCase().replace(/%.*$/, "")));
 }
 
 export async function defaultResolve(host: string): Promise<string[]> {
@@ -121,7 +131,10 @@ async function splice(deps: ProxyDeps, kind: ProxyKind, client: Socket, host: st
     client.destroy();
     return;
   }
-  if (deps.publicOnly !== false) addrs = addrs.filter(isPublicAddress);
+  if (deps.publicOnly !== false) {
+    const own = new Set([...(deps.ownAddresses ?? hostOwnAddresses)()].map((a) => a.toLowerCase().replace(/^::ffff:/, "")));
+    addrs = addrs.filter((a) => isPublicAddress(a) && !own.has(a.toLowerCase().replace(/^::ffff:/, "")));
+  }
   const v4 = addrs.filter((a) => !a.includes(":"));
   const addr = v4[0] ?? addrs[0];
   if (!addr) {

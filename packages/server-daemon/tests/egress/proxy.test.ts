@@ -140,6 +140,42 @@ describe("TLS proxy (SNI)", () => {
   });
 });
 
+describe("upstream address checks", () => {
+  it("refuses an allowed name that resolves to the box's own public address", async () => {
+    let dialed = 0;
+    const denied: Array<string | null> = [];
+    const port = await proxy("tls", {
+      allow: () => true,
+      resolve: async () => ["85.9.193.66"],
+      ownAddresses: () => ["127.0.0.1", "85.9.193.66", "10.89.2.1"],
+      dial: () => {
+        dialed++;
+        return connect({ host: "127.0.0.1", port: 9 });
+      },
+      onDenied: (_s, h) => denied.push(h),
+    });
+    await tlsHello(port, "points-at-the-box.example.com");
+    expect(dialed).toBe(0);
+    expect(denied).toEqual(["points-at-the-box.example.com"]);
+  });
+
+  it("refuses a name that resolves to cloud metadata, IPv4 or IPv6", async () => {
+    let dialed = 0;
+    const port = await proxy("http", {
+      allow: () => true,
+      resolve: async () => ["169.254.169.254", "fd00:ec2::254", "fe80::1"],
+      ownAddresses: () => [],
+      dial: () => {
+        dialed++;
+        return connect({ host: "127.0.0.1", port: 9 });
+      },
+    });
+    await rawExchange(port, "GET /latest/user-data HTTP/1.1\r\nHost: metadata.example.com\r\n\r\n");
+    expect(dialed).toBe(0);
+  });
+
+});
+
 describe("HTTP proxy (Host)", () => {
   it("forwards an allowed request head unchanged to the Host, port 80", async () => {
     const up = await upstream();

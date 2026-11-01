@@ -44,7 +44,9 @@ whole hint.
 192.168/16) and IPv6 unique-local (fc00::/7). Refused: public, loopback,
 link-local (169.254/16, fe80::/10), CGNAT (100.64/10), multicast, unspecified,
 IPv4-mapped IPv6. The daemon also skips container/VM/VPN interfaces (`docker*`,
-`br-*`, `veth*`, `virbr*`, `tailscale*`, `wg*`, `tun*`, `zt*`, …). A VPS with only
+`br-*`, `fs-*`, `podman*`, `veth*`, `virbr*`, `tailscale*`, `wg*`, `tun*`, `zt*`, …)
+and any Linux bridge whose ports are all veths (or that has none), whatever its
+name, so an app container's gateway address is never a LAN-direct endpoint. A VPS with only
 a public address therefore binds nothing.
 
 **One listener, two framings** (`packages/server-daemon/src/lanDirect.ts`). The
