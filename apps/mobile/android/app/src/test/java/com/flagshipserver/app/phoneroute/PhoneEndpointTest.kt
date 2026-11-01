@@ -199,12 +199,14 @@ class PhoneEndpointTest {
         val ok = hello(now)
         assertEquals(200, status(ok))
         assertTrue(body(ok).contains("\"recorded\":true"))
-        assertEquals(now, ep.lastSeen()[device])
+        assertEquals(now, ep.lastSeen(setOf(device))[device])
+        // A validly signed hello from a key outside the account's device book is never listed.
+        assertTrue(ep.lastSeen(emptySet()).isEmpty())
         // Stale, signed by another key, or for another name: answered (a holder exists) but not recorded.
         now += 1_000
         assertTrue(body(hello(now - 61_000)).contains("\"recorded\":false"))
         assertTrue(body(hello(now, key = ByteArray(32) { 8 })).contains("\"recorded\":false"))
-        assertEquals(now - 1_000, ep.lastSeen()[device])
+        assertEquals(now - 1_000, ep.lastSeen(setOf(device))[device])
         // A plain GET / is a 2xx too: it only says the name has a holder.
         assertEquals(200, status(ep.respond(req("GET", "/").first, ByteArray(0))))
     }

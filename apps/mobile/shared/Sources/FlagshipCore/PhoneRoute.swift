@@ -290,7 +290,8 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
     private var seen: [String: Int64] = [:]
 
     /// Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms).
-    public func lastSeen() -> [String: Int64] { lock.withLock { seen } }
+    /// A hello proves only that its own key signed it, so only keys in the account's device book are returned.
+    public func lastSeen(accountDevices: Set<String>) -> [String: Int64] { lock.withLock { seen.filter { accountDevices.contains($0.key) } } }
 
     /// Record a signed hello (`GET /` with the presence headers): this account's bare name, fresh, signed by the key.
     private func hello(_ head: HttpHead) -> Bool {

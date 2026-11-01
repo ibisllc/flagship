@@ -190,8 +190,9 @@ class PhoneEndpoint(
     private val sessions = ConcurrentHashMap<String, Session>()
     private val seen = ConcurrentHashMap<String, Long>()
 
-    /** Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms). */
-    fun lastSeen(): Map<String, Long> = HashMap(seen)
+    /** Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms).
+     *  A hello proves only that its own key signed it, so only keys in the account's device book are returned. */
+    fun lastSeen(accountDevices: Set<String>): Map<String, Long> = seen.filterKeys { it in accountDevices }
 
     /** Record a signed hello (`GET /` with the presence headers): this account's bare name, fresh, signed by the key. */
     private fun hello(head: HttpHead): Boolean {

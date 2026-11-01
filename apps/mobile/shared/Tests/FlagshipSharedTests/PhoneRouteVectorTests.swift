@@ -155,7 +155,9 @@ final class PhoneEndpointResponderTests: XCTestCase {
             return body(ep.respond(head("GET", "/", ["x-flagship-presence-device": device, "x-flagship-presence-at": String(at), "x-flagship-presence-sig": sig]), body: Data()))
         }
         XCTAssertTrue(try hello(t, signer: key).contains(#""recorded":true"#))
-        XCTAssertEqual(ep.lastSeen()[device], t)
+        XCTAssertEqual(ep.lastSeen(accountDevices: [device])[device], t)
+        // A validly signed hello from a key outside the account's device book is never listed.
+        XCTAssertTrue(ep.lastSeen(accountDevices: []).isEmpty)
         t += 1_000
         XCTAssertTrue(try hello(t - 61_000, signer: key).contains(#""recorded":false"#))
         XCTAssertTrue(try hello(t, signer: Curve25519.Signing.PrivateKey()).contains(#""recorded":false"#))
