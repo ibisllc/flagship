@@ -237,18 +237,17 @@
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
         "leaseUntil": 1800000060000
-      },
-      "superseded": null
+      }
     },
     {
       "step": {
         "op": "acquire",
-        "generation": 1,
+        "generation": 2,
         "relayId": "relay-b",
         "sessionId": "s2",
         "now": 1800000000001
       },
-      "result": "stale-generation",
+      "result": "route-held",
       "entry": {
         "generation": 1,
         "holder": {
@@ -257,8 +256,7 @@
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
         "leaseUntil": 1800000060000
-      },
-      "superseded": null
+      }
     },
     {
       "step": {
@@ -276,8 +274,54 @@
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
         "leaseUntil": 1800000075000
+      }
+    },
+    {
+      "step": {
+        "op": "release",
+        "generation": 1,
+        "sessionId": "s2",
+        "now": 1800000016000
       },
-      "superseded": null
+      "result": "not-holder",
+      "entry": {
+        "generation": 1,
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s1",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000075000
+      }
+    },
+    {
+      "step": {
+        "op": "release",
+        "generation": 1,
+        "sessionId": "s1",
+        "now": 1800000020000
+      },
+      "result": "ok",
+      "entry": {
+        "generation": 1,
+        "holder": null,
+        "leaseUntil": 0
+      }
+    },
+    {
+      "step": {
+        "op": "acquire",
+        "generation": 1,
+        "relayId": "relay-b",
+        "sessionId": "s2",
+        "now": 1800000020001
+      },
+      "result": "stale-generation",
+      "entry": {
+        "generation": 1,
+        "holder": null,
+        "leaseUntil": 0
+      }
     },
     {
       "step": {
@@ -285,7 +329,7 @@
         "generation": 2,
         "relayId": "relay-b",
         "sessionId": "s2",
-        "now": 1800000020000
+        "now": 1800000020002
       },
       "result": "ok",
       "entry": {
@@ -295,51 +339,8 @@
           "sessionId": "s2",
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
-        "leaseUntil": 1800000080000
-      },
-      "superseded": {
-        "relayId": "relay-a",
-        "sessionId": "s1",
-        "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        "leaseUntil": 1800000080002
       }
-    },
-    {
-      "step": {
-        "op": "renew",
-        "generation": 1,
-        "sessionId": "s1",
-        "now": 1800000030000
-      },
-      "result": "stale-generation",
-      "entry": {
-        "generation": 2,
-        "holder": {
-          "relayId": "relay-b",
-          "sessionId": "s2",
-          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
-        },
-        "leaseUntil": 1800000080000
-      },
-      "superseded": null
-    },
-    {
-      "step": {
-        "op": "renew",
-        "generation": 2,
-        "sessionId": "s1",
-        "now": 1800000030001
-      },
-      "result": "not-holder",
-      "entry": {
-        "generation": 2,
-        "holder": {
-          "relayId": "relay-b",
-          "sessionId": "s2",
-          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
-        },
-        "leaseUntil": 1800000080000
-      },
-      "superseded": null
     },
     {
       "step": {
@@ -356,9 +357,8 @@
           "sessionId": "s2",
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
-        "leaseUntil": 1800000080000
-      },
-      "superseded": null
+        "leaseUntil": 1800000080002
+      }
     },
     {
       "step": {
@@ -377,61 +377,75 @@
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
         "leaseUntil": 1800000151000
-      },
-      "superseded": null
+      }
     },
     {
       "step": {
-        "op": "release",
-        "generation": 3,
-        "sessionId": "s3",
+        "op": "renew",
+        "generation": 2,
+        "sessionId": "s2",
         "now": 1800000092000
-      },
-      "result": "ok",
-      "entry": {
-        "generation": 3,
-        "holder": null,
-        "leaseUntil": 0
-      },
-      "superseded": null
-    },
-    {
-      "step": {
-        "op": "acquire",
-        "generation": 3,
-        "relayId": "relay-a",
-        "sessionId": "s4",
-        "now": 1800000093000
       },
       "result": "stale-generation",
       "entry": {
         "generation": 3,
-        "holder": null,
-        "leaseUntil": 0
-      },
-      "superseded": null
+        "holder": {
+          "relayId": "relay-a",
+          "sessionId": "s3",
+          "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+        },
+        "leaseUntil": 1800000151000
+      }
     },
     {
       "step": {
         "op": "acquire",
         "generation": 4,
-        "relayId": "relay-a",
-        "sessionId": "s4",
-        "now": 1800000094000
+        "relayId": "relay-b",
+        "sessionId": "s2",
+        "now": 1800000093000
       },
-      "result": "ok",
+      "result": "route-held",
       "entry": {
-        "generation": 4,
+        "generation": 3,
         "holder": {
           "relayId": "relay-a",
-          "sessionId": "s4",
+          "sessionId": "s3",
           "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
         },
-        "leaseUntil": 1800000154000
-      },
-      "superseded": null
+        "leaseUntil": 1800000151000
+      }
     }
   ],
+  "release": {
+    "record": {
+      "account": "alice",
+      "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+      "hostname": "alice.flagship.services",
+      "generation": 4,
+      "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "issuedAt": 1800000000000
+    },
+    "canonical": "flagship/route-release/v1|alice|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|alice.flagship.services|4|5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a|1800000000000",
+    "signature": "abb34205af25e16117c50cce4aabc280c8ce2d0030fdd8e03ea318cef38a60669ce0d5387c1de3be9884d43ca1e4dd5e68fae065a9cf0c5dc50ad70f4873f60f",
+    "held": {
+      "account": "alice",
+      "hostname": "alice.flagship.services",
+      "generation": 4,
+      "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+      "sessionNonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+    }
+  },
+  "presence": {
+    "record": {
+      "account": "alice",
+      "devicePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+      "hostname": "alice.flagship.services",
+      "issuedAt": 1800000000000
+    },
+    "canonical": "flagship/phone-presence/v1|alice|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|alice.flagship.services|1800000000000",
+    "signature": "c29371b7a92c69ade36e88b7d9af372802a7e91c494948866b5bf5f329eab537cd3ea96084109a7b8bc8e758ee2404aad4cd2596f9d68a48cd8da787c13af80a"
+  },
   "certReuse": [
     {
       "notAfter": null,

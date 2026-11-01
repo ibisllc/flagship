@@ -7,7 +7,8 @@
  *   POST /api/internal/phone-route/ledger            (services control secret) acquire | renew | release
  *
  * The ledger lives in the ServingFeed Durable Object (one instance, already connected to every relay), so a
- * committed acquisition is pushed to every relay at once as `{type:"phone-route", hostname, generation}`. Removing a
+ * committed acquisition or release is pushed to every relay at once as `{type:"phone-route", hostname, generation,
+ * vacant}`. A claim is committed only while the route is vacant (owner, 2026-11-01: no preemption). Removing a
  * device or revoking a grant pushes `{type:"phone-eligibility", username}`.
  */
 import {
@@ -146,7 +147,7 @@ export async function handlePhoneRouteLedger(
   storage: LedgerStorage,
   request: Request,
   now: number,
-): Promise<{ response: Response; push?: { type: "phone-route"; hostname: string; generation: number } }> {
+): Promise<{ response: Response; push?: { type: "phone-route"; hostname: string; generation: number; vacant: boolean } }> {
   const url = new URL(request.url);
   if (request.method === "GET") {
     const hostname = (url.searchParams.get("hostname") ?? "").toLowerCase();
@@ -179,8 +180,11 @@ export async function handlePhoneRouteLedger(
     return { response: refuse(400, "phone-route-malformed") };
   }
   if (r.ok) await storage.put(keyOf(hostname), r.entry);
-  const response = r.ok ? json({ ok: true, entry: r.entry, superseded: r.superseded }) : json({ ok: false, code: r.code, entry: liveEntry(r.entry, now) });
-  return r.ok && body.op === "acquire" ? { response, push: { type: "phone-route", hostname, generation } } : { response };
+  const response = r.ok ? json({ ok: true, entry: r.entry }) : json({ ok: false, code: r.code, entry: liveEntry(r.entry, now) });
+  // Every relay learns of a new holder (its stale holder, if any, stops) and of a vacancy (it wakes its standbys).
+  if (r.ok && body.op === "acquire") return { response, push: { type: "phone-route", hostname, generation, vacant: false } };
+  if (r.ok && body.op === "release") return { response, push: { type: "phone-route", hostname, generation, vacant: true } };
+  return { response };
 }
 
 /** The account whose admin phones may have lost eligibility after this write (device removal, grant revocation). */

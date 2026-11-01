@@ -5,8 +5,12 @@ import { p256 } from "@noble/curves/nist.js";
 import {
   barePhoneAccount,
   canonicalCertificateOrder,
+  canonicalPhonePresence,
   canonicalRouteClaim,
+  canonicalRouteRelease,
+  checkPhonePresence,
   checkRouteClaim,
+  checkRouteRelease,
   csrSha256Hex,
   emptyPhoneRouteEntry,
   ledgerAcquire,
@@ -76,6 +80,17 @@ describe("phone-route vectors (drift guard: the file is what Swift and Kotlin re
     }
   });
 
+  it("the holder's release and the presence hello", () => {
+    expect(dec.decode(canonicalRouteRelease(V.release.record))).toBe(V.release.canonical);
+    expect(checkRouteRelease({ release: V.release.record, signature: V.release.signature, held: V.release.held, now: V.release.record.issuedAt })).toEqual({ ok: true });
+    expect(checkRouteRelease({ release: V.release.record, signature: V.release.signature, held: { ...V.release.held, generation: 5 }, now: V.release.record.issuedAt }).ok).toBe(false);
+    expect(checkRouteRelease({ release: V.release.record, signature: V.claim.signature, held: V.release.held, now: V.release.record.issuedAt }).ok).toBe(false);
+    expect(dec.decode(canonicalPhonePresence(V.presence.record))).toBe(V.presence.canonical);
+    expect(checkPhonePresence(V.presence.record, V.presence.signature, V.presence.record.hostname, V.presence.record.issuedAt)).toBe(true);
+    expect(checkPhonePresence(V.presence.record, V.presence.signature, "bob.flagship.services", V.presence.record.issuedAt)).toBe(false);
+    expect(checkPhonePresence(V.presence.record, V.presence.signature, V.presence.record.hostname, V.presence.record.issuedAt + 61_000)).toBe(false);
+  });
+
   it("certificate reuse and the endpoint policy", () => {
     for (const c of V.certReuse) expect(phoneCertNeedsOrder(c)).toBe(c.order);
     for (const c of V.endpoint) expect(phoneEndpointCheck(c.request, c.context), c.name).toBe(c.verdict);
@@ -94,10 +109,14 @@ describe("ledger", () => {
     expect(ledgerAcquire(a.entry, 1, h("s1"), PHONE_ROUTE_LEASE_MS + 1).ok).toBe(false);
   });
 
-  it("supersede reports the previous live holder", () => {
+  it("no preemption: a live holder keeps the route; once its lease lapses the next generation may claim", () => {
     const a = ledgerAcquire(emptyPhoneRouteEntry(), 1, h("s1"), 0);
-    const b = ledgerAcquire(a.entry, 2, h("s2"), 10);
-    expect(b.ok && b.superseded?.sessionId).toBe("s1");
+    expect(ledgerAcquire(a.entry, 2, h("s2"), 10)).toMatchObject({ ok: false, code: "route-held" });
+    const b = ledgerAcquire(a.entry, 2, h("s2"), PHONE_ROUTE_LEASE_MS);
+    expect(b.ok).toBe(true);
+    // The lapsed holder cannot renew or retake.
+    expect(ledgerRenew(b.entry, 1, "s1", PHONE_ROUTE_LEASE_MS + 1).ok).toBe(false);
+    expect(ledgerAcquire(b.entry, 3, h("s1"), PHONE_ROUTE_LEASE_MS + 1)).toMatchObject({ ok: false, code: "route-held" });
   });
 });
 

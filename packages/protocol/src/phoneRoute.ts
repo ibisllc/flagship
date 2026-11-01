@@ -7,6 +7,7 @@
 import { sha256 } from "@noble/hashes/sha256";
 import { requireMasterAdmin, type AdminGrantView } from "./adminAuthority.js";
 import { hex } from "./canonicalBase.js";
+import { ed } from "./edSync.js";
 import { canonicalRouteClaim, verifyServingRecord, type RouteClaim } from "./servingAuthority.js";
 import type { Bytes } from "./types.js";
 
@@ -24,8 +25,8 @@ export const PHONE_ROUTE_CHALLENGE_TTL_MS = 30_000;
 export const PHONE_TUNNEL_PING_MS = 15_000;
 /** …and ends the tunnel after this long without hearing from it. */
 export const PHONE_TUNNEL_SILENCE_MS = 45_000;
-/** Streams already open to a phone that lost the route are closed this long after. */
-export const PHONE_ROUTE_HANDOVER_STREAM_MS = 10 * 60_000;
+/** A relay holding standbys re-reads the ledger this often (the bound when a vacancy push is lost). */
+export const PHONE_ROUTE_STANDBY_POLL_MS = 15_000;
 /** While it holds a route the relay re-reads eligibility this often (the bound when a push is lost). */
 export const PHONE_ROUTE_ELIGIBILITY_RECHECK_MS = 30_000;
 /** On revocation, open streams to the phone are closed within this. */
@@ -137,8 +138,8 @@ export interface PhoneRouteEntry {
 }
 
 export type LedgerResult =
-  | { ok: true; entry: PhoneRouteEntry; superseded: PhoneRouteHolder | null }
-  | { ok: false; code: "stale-generation" | "not-holder" | "expired" | "malformed"; entry: PhoneRouteEntry };
+  | { ok: true; entry: PhoneRouteEntry }
+  | { ok: false; code: "route-held" | "stale-generation" | "not-holder" | "expired" | "malformed"; entry: PhoneRouteEntry };
 
 export function emptyPhoneRouteEntry(): PhoneRouteEntry {
   return { generation: 0, holder: null, leaseUntil: 0 };
@@ -157,12 +158,15 @@ function validHolder(h: PhoneRouteHolder): boolean {
   );
 }
 
-/** Commit `generation` for `holder` only when it is exactly the next one; the previous holder (if live) is superseded. */
+/**
+ * Commit `generation` for `holder` only while the route is vacant (no holder, or its lease lapsed: the ledger decides,
+ * never the claimant) and only for exactly the next generation (owner, 2026-11-01: no preemption).
+ */
 export function ledgerAcquire(e: PhoneRouteEntry, generation: number, holder: PhoneRouteHolder, now: number): LedgerResult {
   if (!Number.isSafeInteger(generation) || generation < 1 || !validHolder(holder)) return { ok: false, code: "malformed", entry: e };
+  if (liveEntry(e, now).holder) return { ok: false, code: "route-held", entry: e };
   if (generation !== e.generation + 1) return { ok: false, code: "stale-generation", entry: e };
-  const prev = liveEntry(e, now).holder;
-  return { ok: true, entry: { generation, holder: { ...holder }, leaseUntil: now + PHONE_ROUTE_LEASE_MS }, superseded: prev };
+  return { ok: true, entry: { generation, holder: { ...holder }, leaseUntil: now + PHONE_ROUTE_LEASE_MS } };
 }
 
 /** Extend the lease only for the current generation's own session, and only while it has not lapsed. */
@@ -170,14 +174,101 @@ export function ledgerRenew(e: PhoneRouteEntry, generation: number, sessionId: s
   if (generation !== e.generation) return { ok: false, code: "stale-generation", entry: e };
   if (!e.holder || e.holder.sessionId !== sessionId) return { ok: false, code: "not-holder", entry: e };
   if (e.leaseUntil <= now) return { ok: false, code: "expired", entry: e };
-  return { ok: true, entry: { ...e, leaseUntil: now + PHONE_ROUTE_LEASE_MS }, superseded: null };
+  return { ok: true, entry: { ...e, leaseUntil: now + PHONE_ROUTE_LEASE_MS } };
 }
 
-/** Give the route up (disconnect, revocation). The generation stays. */
+/** Give the route up (tunnel gone, voluntary release, revocation). The generation stays. */
 export function ledgerRelease(e: PhoneRouteEntry, generation: number, sessionId: string): LedgerResult {
   if (generation !== e.generation) return { ok: false, code: "stale-generation", entry: e };
   if (!e.holder || e.holder.sessionId !== sessionId) return { ok: false, code: "not-holder", entry: e };
-  return { ok: true, entry: { generation: e.generation, holder: null, leaseUntil: 0 }, superseded: null };
+  return { ok: true, entry: { generation: e.generation, holder: null, leaseUntil: 0 } };
+}
+
+// ── the holder's voluntary release and the presence hello ─────────────────
+
+export const TAG_ROUTE_RELEASE = "flagship/route-release/v1";
+export const TAG_PHONE_PRESENCE = "flagship/phone-presence/v1";
+
+/** The holder gives the route up: bound to the claim it holds (its generation and session nonce). */
+export interface RouteRelease {
+  account: string;
+  phoneRoutePub: string;
+  hostname: string;
+  generation: number;
+  sessionNonce: string;
+  issuedAt: number;
+}
+
+export function canonicalRouteRelease(r: RouteRelease): Bytes {
+  // Same fields and rules as the claim it ends, under its own tag.
+  const claimBytes = canonicalRouteClaim(r);
+  const text = new TextDecoder().decode(claimBytes);
+  return new TextEncoder().encode(TAG_ROUTE_RELEASE + text.slice("flagship/route-claim/v1".length));
+}
+
+/** "I'm here": an account device says hello to the phone holding the bare name (it records who and when). */
+export interface PhonePresence {
+  account: string;
+  devicePub: string;
+  hostname: string;
+  issuedAt: number;
+}
+
+export function canonicalPhonePresence(p: PhonePresence): Bytes {
+  if (!ACCOUNT.test(p.account)) throw new Error("account must be a lowercase account name");
+  if (!HEX64.test(p.devicePub)) throw new Error("devicePub must be 64 lowercase hex");
+  if (!p.hostname.startsWith(`${p.account}.`) || p.hostname.split(".").length < 3 || p.hostname !== p.hostname.toLowerCase() || p.hostname.includes("|")) {
+    throw new Error("hostname must be the account's own bare name");
+  }
+  if (!Number.isSafeInteger(p.issuedAt) || p.issuedAt < 0) throw new Error("issuedAt must be a safe integer");
+  return new TextEncoder().encode([TAG_PHONE_PRESENCE, p.account, p.devicePub, p.hostname, p.issuedAt].join("|"));
+}
+
+function unhex(h: string): Bytes {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function edVerifyHex(msg: Bytes, sigHex: string, pubHex: string): boolean {
+  try {
+    if (!/^[0-9a-f]{128}$/.test(sigHex) || !HEX64.test(pubHex)) return false;
+    return ed.verify(unhex(sigHex), msg, unhex(pubHex));
+  } catch {
+    return false;
+  }
+}
+
+/** The relay's check of a release: the held claim's key, generation and nonce, fresh, signed. */
+export function checkRouteRelease(o: {
+  release: RouteRelease;
+  signature: string;
+  held: { account: string; hostname: string; generation: number; phoneRoutePub: string; sessionNonce: string };
+  now: number;
+}): { ok: true } | { ok: false; code: RouteClaimRefusal | "not-holder" } {
+  const r = o.release;
+  let bytes: Bytes;
+  try {
+    bytes = canonicalRouteRelease(r);
+  } catch {
+    return { ok: false, code: "malformed" };
+  }
+  const h = o.held;
+  if (r.account !== h.account || r.hostname !== h.hostname || r.phoneRoutePub !== h.phoneRoutePub) return { ok: false, code: "not-holder" };
+  if (r.generation !== h.generation) return { ok: false, code: "wrong-generation" };
+  if (r.sessionNonce !== h.sessionNonce) return { ok: false, code: "wrong-session" };
+  if (Math.abs(r.issuedAt - o.now) > PHONE_ROUTE_CLAIM_SKEW_MS) return { ok: false, code: "stale" };
+  return edVerifyHex(bytes, o.signature, r.phoneRoutePub) ? { ok: true } : { ok: false, code: "bad-signature" };
+}
+
+/** The holder's check of a presence hello: its own bare name, fresh, signed by the key it names. */
+export function checkPhonePresence(p: PhonePresence, signature: string, hostname: string, now: number): boolean {
+  try {
+    if (p.hostname !== hostname || Math.abs(p.issuedAt - now) > PHONE_ROUTE_CLAIM_SKEW_MS) return false;
+    return edVerifyHex(canonicalPhonePresence(p), signature, p.devicePub);
+  } catch {
+    return false;
+  }
 }
 
 // ── the phone certificate's CSR (PKCS #10, ECDSA P-256, exactly one name) ─

@@ -1,7 +1,8 @@
 /**
  * The phone's bare `<account>.<apex>` route through the relay (plan H3; Appendix H acceptance scenarios 6, 7, 8;
  * docs/architecture-v2/phone-route.md). Two relay instances share one ledger (`.com`'s, in memory here, its
- * acquisitions pushed to both like the serving feed does) and real SNI routers; phones are simulated in node.
+ * acquisitions and vacancies pushed to both like the serving feed does) and real SNI routers; phones are simulated in
+ * node. Handover is vacancy-only (owner, 2026-11-01): a live holder keeps the route; others wait as standbys.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
@@ -29,6 +30,7 @@ const ADMIN_PUB = hex(ed.getPublicKey(ADMIN_ROOT));
 const PHONE_A = seed(2);
 const PHONE_B = seed(3);
 const MEMBER = seed(4);
+const PHONE_C = seed(6);
 const BOX_STK = seed(5);
 
 class Clock {
@@ -95,7 +97,7 @@ interface Relay {
   close(): Promise<void>;
 }
 
-async function startRelay(id: string, ledger: MemoryPhoneRouteLedger, eligibility: () => PhoneEligibilityRecord | null, clock: Clock, handoverStreamMs?: number): Promise<Relay> {
+async function startRelay(id: string, ledger: MemoryPhoneRouteLedger, eligibility: () => PhoneEligibilityRecord | null, clock: Clock): Promise<Relay> {
   const http: Server = createServer();
   await new Promise<void>((r) => http.listen(0, "127.0.0.1", r));
   const registry = new TunnelRegistry();
@@ -107,7 +109,7 @@ async function startRelay(id: string, ledger: MemoryPhoneRouteLedger, eligibilit
     now: clock.now,
     renewMs: 3_600_000,
     recheckMs: 3_600_000,
-    ...(handoverStreamMs ? { handoverStreamMs } : {}),
+    standbyPollMs: 3_600_000,
   });
   registry.setPhoneRoutes(routes);
   // A box of the same account that (somehow) names the bare name among its canonicals: it must never receive it.
@@ -149,20 +151,21 @@ describe("phone route through two relay instances sharing one ledger", () => {
     for (const c of cleanup.splice(0).reverse()) await c();
   });
 
-  async function world(o: { handoverStreamMs?: number } = {}) {
+  async function world() {
     const clock = new Clock();
     const ledger = new MemoryPhoneRouteLedger(clock.now);
     let grants: AdminGrantView[] = [
       grant(PHONE_A, ["admin"], ADMIN_ROOT, "admin-root", clock.t),
       grant(PHONE_B, ["admin"], ADMIN_ROOT, "admin-root", clock.t),
+      grant(PHONE_C, ["admin"], ADMIN_ROOT, "admin-root", clock.t),
       grant(MEMBER, ["browse"], ADMIN_ROOT, "membership", clock.t),
     ];
     const eligibility = () => ({ adminRootPub: ADMIN_PUB, grants });
-    const r1 = await startRelay("relay-1", ledger, eligibility, clock, o.handoverStreamMs);
-    const r2 = await startRelay("relay-2", ledger, eligibility, clock, o.handoverStreamMs);
-    ledger.onAcquired((h, g) => {
-      r1.routes.pushed(h, g);
-      r2.routes.pushed(h, g);
+    const r1 = await startRelay("relay-1", ledger, eligibility, clock);
+    const r2 = await startRelay("relay-2", ledger, eligibility, clock);
+    ledger.onChange((h, g, vacant) => {
+      r1.routes.pushed(h, g, vacant);
+      r2.routes.pushed(h, g, vacant);
     });
     cleanup.push(() => r1.close(), () => r2.close());
     const phone = async (relay: Relay, s: Uint8Array, label: string, tls?: { key: string; cert: string }) => {
@@ -211,41 +214,98 @@ describe("phone route through two relay instances sharing one ledger", () => {
 
   // ── scenario 7: two admin phones hand the route over ───────────────────
 
-  it("7: new connections follow the accepted holder across relays, old ones stay, stale renewals cannot retake it", async () => {
+  it("7: a live holder keeps the route: another admin phone is refused route-held with the holder's generation and waits", async () => {
     const w = await world();
     const a = await w.phone(w.r1, PHONE_A, "A");
     expect(await a.acquire()).toMatchObject({ type: "granted", generation: 1 });
     const v1 = await visit(w.r1, BARE);
     expect(v1.data.startsWith("A:")).toBe(true);
     // The other instance does not hold A's tunnel: it closes, it does not forward to anyone.
-    const off = await visit(w.r2, BARE);
-    expect(off.data).toBe("");
-
+    expect((await visit(w.r2, BARE)).data).toBe("");
     const b = await w.phone(w.r2, PHONE_B, "B");
-    expect(await b.acquire()).toMatchObject({ type: "granted", generation: 2 });
-    expect(await a.next((m) => m.type === "lost")).toMatchObject({ reason: "superseded", generation: 1 });
-    // New connections: B on relay 2; relay 1 (which still has A's tunnel) closes them.
-    expect((await visit(w.r2, BARE)).data.startsWith("B:")).toBe(true);
-    const stale = await visit(w.r1, BARE);
-    expect(stale.data).toBe("");
-    // A's open stream stays with A.
+    expect(await b.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 1 });
+    // Asking again changes nothing: no preemption, whatever the phone believes.
+    expect(await b.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 1 });
+    expect((await visit(w.r1, BARE)).data.startsWith("A:")).toBe(true);
+    expect((await visit(w.r2, BARE)).data).toBe("");
+    // A's open stream is untouched.
     const before = v1.data.length;
     v1.sock.write("still here");
     await waitFor(() => v1.data.length > before);
     expect(v1.data.endsWith("A:still here")).toBe(true);
-    // A stale renewal cannot take it back, on the ledger or on relay 1.
-    expect((await w.ledger.apply({ op: "renew", hostname: BARE, generation: 1, sessionId: "anything" }))?.ok).toBe(false);
-    await w.r1.routes.renewAll();
-    expect((await visit(w.r1, BARE)).data).toBe("");
-    expect((await w.ledger.read(BARE))?.holder?.relayId).toBe("relay-2");
-    // An explicit foreground acquisition by A takes it back (generation 3).
-    expect(await a.acquire()).toMatchObject({ type: "granted", generation: 3 });
-    expect(await b.next((m) => m.type === "lost")).toMatchObject({ reason: "superseded" });
-    expect((await visit(w.r1, BARE)).data.startsWith("A:")).toBe(true);
-    expect((await visit(w.r2, BARE)).data).toBe("");
+    expect(w.r1.routes.stats().holding + w.r2.routes.stats().standby).toBe(2);
   });
 
-  it("7: simultaneous acquisitions: the first commit wins, the second is refused and does not retry on its own", async () => {
+  it("7: the holder's tunnel drops: its streams end with it, every standby on both relays hears route-vacant, the first claim wins", async () => {
+    const w = await world();
+    const a = await w.phone(w.r1, PHONE_A, "A");
+    await a.acquire();
+    const v = await visit(w.r1, BARE);
+    expect(v.data.startsWith("A:")).toBe(true);
+    const b = await w.phone(w.r2, PHONE_B, "B");
+    const c = await w.phone(w.r1, PHONE_C, "C");
+    expect(await b.acquire()).toMatchObject({ code: "route-held" });
+    expect(await c.acquire()).toMatchObject({ code: "route-held" });
+    a.terminate();
+    await waitFor(() => v.closed);
+    expect(await b.next((m) => m.type === "route-vacant")).toMatchObject({ hostname: BARE, generation: 1 });
+    expect(await c.next((m) => m.type === "route-vacant")).toMatchObject({ hostname: BARE, generation: 1 });
+    const [cb, cc] = await Promise.all([b.begin(), c.begin()]);
+    const [rb, rc] = await Promise.all([b.sendClaim(b.sign(cb)), c.sendClaim(c.sign(cc))]);
+    const results = [rb, rc].map((r) => r.type).sort();
+    expect(results).toEqual(["granted", "refused"]);
+    const winner = rb.type === "granted" ? { phone: "B", relay: w.r2, other: w.r1 } : { phone: "C", relay: w.r1, other: w.r2 };
+    expect([rb, rc].find((r) => r.type === "refused")).toMatchObject({ code: "route-held", generation: 2 });
+    expect((await visit(winner.relay, BARE)).data.startsWith(`${winner.phone}:`)).toBe(true);
+    expect((await visit(winner.other, BARE)).data).toBe("");
+  });
+
+  it("7: release then claim: the holder releases (signed), its streams end, the standby is told and claims", async () => {
+    const w = await world();
+    const a = await w.phone(w.r1, PHONE_A, "A");
+    await a.acquire();
+    const v = await visit(w.r1, BARE);
+    const b = await w.phone(w.r2, PHONE_B, "B");
+    expect(await b.acquire()).toMatchObject({ code: "route-held" });
+    // A release signed by another key, or for another generation, is refused.
+    const thief = await w.phone(w.r1, PHONE_B, "thief");
+    expect(await thief.acquire()).toMatchObject({ code: "route-held" });
+    thief.granted = a.granted;
+    expect(await thief.release()).toMatchObject({ type: "refused", code: "not-holder" });
+    expect(await a.release({ generation: 7 })).toMatchObject({ type: "refused" });
+    expect(await a.release()).toMatchObject({ type: "released", generation: 1, confirmed: true });
+    await waitFor(() => v.closed);
+    expect(await b.next((m) => m.type === "route-vacant")).toMatchObject({ generation: 1 });
+    expect(await b.acquire()).toMatchObject({ type: "granted", generation: 2 });
+    expect((await visit(w.r2, BARE)).data.startsWith("B:")).toBe(true);
+    expect((await visit(w.r1, BARE)).data).toBe("");
+    // A, still connected, cannot take it back.
+    expect(await a.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 2 });
+  });
+
+  it("7: a stale holder whose lease lapsed cannot retake the route once someone else claimed it", async () => {
+    const w = await world();
+    const a = await w.phone(w.r1, PHONE_A, "A");
+    const old = await a.begin();
+    const oldClaim = a.sign(old);
+    expect(await a.sendClaim(oldClaim)).toMatchObject({ type: "granted", generation: 1 });
+    // Relay 1 loses `.com` (A suspended, a partition): past the lease the ledger has no holder.
+    w.ledger.reachable = false;
+    w.clock.t += 61_000;
+    await w.r1.routes.renewAll();
+    expect(await a.next((m) => m.type === "lost")).toMatchObject({ reason: "contact" });
+    w.ledger.reachable = true;
+    const b = await w.phone(w.r2, PHONE_B, "B");
+    expect(await b.sendClaim(b.sign(await b.begin(), { issuedAt: w.clock.t }))).toMatchObject({ type: "granted", generation: 2 });
+    // A's old claim, its renewal, and a fresh claim all fail.
+    expect(await a.sendClaim(oldClaim)).toMatchObject({ type: "refused", code: "no-challenge" });
+    expect((await w.ledger.apply({ op: "renew", hostname: BARE, generation: 1, sessionId: "any" }))?.ok).toBe(false);
+    expect(await a.sendClaim(a.sign(await a.begin(), { issuedAt: w.clock.t }))).toMatchObject({ type: "refused", code: "route-held", generation: 2 });
+    expect((await visit(w.r1, BARE)).data).toBe("");
+    expect((await visit(w.r2, BARE)).data.startsWith("B:")).toBe(true);
+  });
+
+  it("7: simultaneous claims on a vacant route: the first commit wins, the other is refused route-held", async () => {
     const w = await world();
     const a = await w.phone(w.r1, PHONE_A, "A");
     const b = await w.phone(w.r2, PHONE_B, "B");
@@ -253,22 +313,27 @@ describe("phone route through two relay instances sharing one ledger", () => {
     expect(ca.generation).toBe(1);
     expect(cb.generation).toBe(1);
     expect(await a.sendClaim(a.sign(ca))).toMatchObject({ type: "granted", generation: 1 });
-    expect(await b.sendClaim(b.sign(cb))).toMatchObject({ type: "refused", code: "stale-generation" });
+    expect(await b.sendClaim(b.sign(cb))).toMatchObject({ type: "refused", code: "route-held", generation: 1 });
     expect((await visit(w.r1, BARE)).data.startsWith("A:")).toBe(true);
   });
 
-  it("7: open streams of the old holder are closed at the handover deadline", async () => {
-    const w = await world({ handoverStreamMs: 150 });
+  it("7: a standby relay notices a vacancy whose push was lost by reading the ledger", async () => {
+    const w = await world();
     const a = await w.phone(w.r1, PHONE_A, "A");
     await a.acquire();
-    const v = await visit(w.r1, BARE);
-    expect(v.data.startsWith("A:")).toBe(true);
     const b = await w.phone(w.r2, PHONE_B, "B");
     await b.acquire();
-    await waitFor(() => v.closed, 2_000);
+    // A's tunnel drops while `.com` is unreachable: relay 1's release and the push are both lost.
+    w.ledger.reachable = false;
+    a.terminate();
+    await a.closed;
+    w.ledger.reachable = true;
+    // Past the lease the ledger has no holder; relay 2's own read finds that.
+    w.clock.t += 61_000;
+    await w.r2.routes.pollStandby(BARE);
+    expect(await b.next((m) => m.type === "route-vacant")).toMatchObject({ generation: 1 });
+    expect(await b.sendClaim(b.sign(await b.begin(), { issuedAt: w.clock.t }))).toMatchObject({ type: "granted", generation: 2 });
   });
-
-  // ── scenario 8: never a box, under disconnection, expiry, replay and revocation ─
 
   it("8: disconnection closes the bare name; nothing is parked or sent to a box", async () => {
     const w = await world();
@@ -386,7 +451,7 @@ describe("the serving feed carries phone-route pushes and eligibility changes", 
       gate: new ServingGate({ fetchRecord: async () => null }),
       initialBackoffMs: 20,
       phone: {
-        pushed: (h, g) => void calls.push(`pushed ${h} ${g}`),
+        pushed: (h, g, vacant) => void calls.push(`pushed ${h} ${g} ${vacant}`),
         eligibilityChanged: async (u) => void calls.push(`eligibility ${u}`),
         resync: async () => void calls.push("resync"),
       },
@@ -394,10 +459,10 @@ describe("the serving feed carries phone-route pushes and eligibility changes", 
     client.start();
     try {
       await waitFor(() => sockets.length === 1);
-      sockets[0]!.send(JSON.stringify({ type: "phone-route", hostname: BARE, generation: 7 }));
+      sockets[0]!.send(JSON.stringify({ type: "phone-route", hostname: BARE, generation: 7, vacant: true }));
       sockets[0]!.send(JSON.stringify({ type: "phone-eligibility", username: "alice" }));
       await waitFor(() => calls.length === 2);
-      expect(calls).toEqual([`pushed ${BARE} 7`, "eligibility alice"]);
+      expect(calls).toEqual([`pushed ${BARE} 7 true`, "eligibility alice"]);
       sockets[0]!.terminate();
       await waitFor(() => sockets.length === 2);
       sockets[1]!.send(JSON.stringify({ type: "beat", sequence: 0 }));

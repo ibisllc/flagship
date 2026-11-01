@@ -31,7 +31,7 @@ export interface ServingFeedClientOptions {
   pingMs?: number;
   /** The phone routes (phoneRoute.ts): `phone-route` and `phone-eligibility` frames, and a resync on reconnect. */
   phone?: {
-    pushed(hostname: string, generation: number): void;
+    pushed(hostname: string, generation: number, vacant: boolean): void;
     eligibilityChanged(username: string): Promise<void>;
     resync(): Promise<void>;
   };
@@ -163,7 +163,7 @@ export class ServingFeedClient {
     }
     if (f.type === "phone-route") {
       if (typeof f.hostname === "string" && typeof f.generation === "number" && Number.isSafeInteger(f.generation)) {
-        this.opts.phone?.pushed(f.hostname, f.generation);
+        this.opts.phone?.pushed(f.hostname, f.generation, f.vacant === true);
       }
       return;
     }

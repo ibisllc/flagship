@@ -34,6 +34,9 @@ data class PhoneCertificateOrder(
 object PhoneRoute {
     const val TAG_ROUTE_CLAIM = "flagship/route-claim/v1"
     const val TAG_CERTIFICATE_ORDER = "flagship/certificate-order/v1"
+    const val TAG_ROUTE_RELEASE = "flagship/route-release/v1"
+    const val TAG_PHONE_PRESENCE = "flagship/phone-presence/v1"
+    const val CLAIM_SKEW_MS = 60_000L
     const val CERT_RENEW_BEFORE_MS = 30L * 86_400_000
     const val CERT_RETRY_AFTER_MS = 6L * 3_600_000
     const val BEAT_MS = 15_000L
@@ -70,6 +73,27 @@ object PhoneRoute {
         return listOf(TAG_ROUTE_CLAIM, c.account, c.phoneRoutePub, c.hostname, c.generation, c.sessionNonce, c.issuedAt)
             .joinToString("|").toByteArray(Charsets.UTF_8)
     }
+
+    /** The holder's release: the fields of the claim it holds, under the release tag. */
+    fun canonicalRelease(held: RouteClaim): ByteArray {
+        val claim = String(canonical(held), Charsets.UTF_8)
+        return (TAG_ROUTE_RELEASE + claim.removePrefix(TAG_ROUTE_CLAIM)).toByteArray(Charsets.UTF_8)
+    }
+
+    /** "I'm here": a device's hello to the phone holding the bare name. */
+    fun canonicalPresence(account: String, devicePub: String, hostname: String, issuedAt: Long): ByteArray {
+        require(ACCOUNT.matches(account)) { "account" }
+        require(HEX64.matches(devicePub)) { "devicePub" }
+        require(hostname == hostname.lowercase() && hostname.startsWith("$account.") && hostname.split(".").size >= 3 && !hostname.contains('|')) { "hostname" }
+        require(issuedAt in 0..MAX_SAFE) { "issuedAt" }
+        return listOf(TAG_PHONE_PRESENCE, account, devicePub, hostname, issuedAt).joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    fun verify(bytes: ByteArray, signatureHex: String, publicKeyHex: String): Boolean = runCatching {
+        if (signatureHex.length != 128 || !HEX64.matches(publicKeyHex)) return false
+        com.google.crypto.tink.subtle.Ed25519Verify(HexUtil.decode(publicKeyHex)!!).verify(HexUtil.decode(signatureHex)!!, bytes)
+        true
+    }.getOrDefault(false)
 
     fun canonical(o: PhoneCertificateOrder): ByteArray {
         require(HEX64.matches(o.device)) { "device" }

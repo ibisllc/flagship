@@ -200,12 +200,13 @@ final class PhoneTlsTerminator: @unchecked Sendable {
 }
 
 public enum PhoneTunnelState: Equatable, Sendable {
-    case connecting, claiming, holding(generation: Int64), lost(String), refused(String), closed
+    case connecting, claiming, holding(generation: Int64), standby(holderGeneration: Int64), released(generation: Int64), lost(String), refused(String), closed
 }
 
 /// The phone's outbound tunnel (`/phone-tunnel`), held only while the app is in the foreground: begin, sign the
-/// relay's offered claim with the account device key, serve relayed streams through `PhoneTlsTerminator`. It never
-/// re-acquires on its own after a loss or a refusal; the next foreground does.
+/// relay's offered claim with the account device key, serve relayed streams through `PhoneTlsTerminator`. The relay
+/// only obeys the ledger (owner, 2026-11-01): a claim wins only while the route is vacant; refused with `route-held`,
+/// the phone stays connected as a standby and claims again when told `route-vacant`.
 public final class PhoneTunnelClient: @unchecked Sendable {
     private let url: URL
     private let account: String
@@ -217,6 +218,8 @@ public final class PhoneTunnelClient: @unchecked Sendable {
     private var task: URLSessionWebSocketTask?
     private var streams: [UInt32: NWConnection] = [:]
     private var beat: DispatchSourceTimer?
+    private var pending: RouteClaim?
+    public private(set) var held: RouteClaim?
     public let responder: PhoneEndpointResponder
 
     public init(url: URL, account: String, apex: String, deviceKey: Curve25519.Signing.PrivateKey, identity: sec_identity_t,
@@ -244,11 +247,10 @@ public final class PhoneTunnelClient: @unchecked Sendable {
         beat = timer
     }
 
-    /// Leaving the foreground: give the route up and close.
+    /// Leaving the foreground: close. The relay makes the route vacant at once and ends its streams.
     public func stop() {
         beat?.cancel()
         beat = nil
-        task?.send(.string(#"{"type":"release"}"#)) { _ in }
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         queue.async {
@@ -289,29 +291,55 @@ public final class PhoneTunnelClient: @unchecked Sendable {
         return (try? c.canonicalBytes()) == nil ? nil : c
     }
 
+    private static func json(_ c: RouteClaim) -> [String: Any] {
+        ["account": c.account, "phoneRoutePub": c.phoneRoutePub, "hostname": c.hostname, "generation": c.generation,
+         "sessionNonce": c.sessionNonce, "issuedAt": c.issuedAt]
+    }
+
+    private func sendJSON(_ o: [String: Any], _ t: URLSessionWebSocketTask?) {
+        guard let t, let msg = try? JSONSerialization.data(withJSONObject: o) else { return }
+        t.send(.string(String(decoding: msg, as: UTF8.self))) { _ in }
+    }
+
+    /// Give the held route up (signed over the claim it holds) so another admin phone can claim it.
+    @discardableResult
+    public func release() -> Bool {
+        guard let h = held else { return false }
+        var r = h
+        r.issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        guard let bytes = try? PhoneRoute.canonicalRelease(r), let sig = try? PhoneRoute.signEd25519(bytes, key: deviceKey) else { return false }
+        sendJSON(["type": "release", "release": Self.json(r), "signature": sig], task)
+        return true
+    }
+
     private func control(_ s: String, _ t: URLSessionWebSocketTask) {
         guard let m = (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] else { return }
+        let generation = (m["generation"] as? NSNumber)?.int64Value ?? 0
         switch m["type"] as? String {
-        case "hello":
+        // The relay's hello, and a vacancy (the holder's tunnel closed or it released): claim; the ledger lets the
+        // first valid claim win.
+        case "hello", "route-vacant":
             onState(.claiming)
-            let msg = try? JSONSerialization.data(withJSONObject: ["type": "begin", "account": account])
-            t.send(.string(String(decoding: msg ?? Data(), as: UTF8.self))) { _ in }
+            sendJSON(["type": "begin", "account": account], t)
         case "challenge":
             guard let c = claim(for: m), let bytes = try? c.canonicalBytes(), let sig = try? PhoneRoute.signEd25519(bytes, key: deviceKey) else {
                 onState(.refused("bad-challenge"))
                 return
             }
-            let body: [String: Any] = [
-                "type": "claim",
-                "claim": ["account": c.account, "phoneRoutePub": c.phoneRoutePub, "hostname": c.hostname, "generation": c.generation,
-                          "sessionNonce": c.sessionNonce, "issuedAt": c.issuedAt],
-                "signature": sig,
-            ]
-            let msg = try? JSONSerialization.data(withJSONObject: body)
-            t.send(.string(String(decoding: msg ?? Data(), as: UTF8.self))) { _ in }
-        case "granted": onState(.holding(generation: (m["generation"] as? NSNumber)?.int64Value ?? 0))
-        case "refused": onState(.refused(m["code"] as? String ?? "refused"))
-        case "lost": onState(.lost(m["reason"] as? String ?? "lost"))
+            pending = c
+            sendJSON(["type": "claim", "claim": Self.json(c), "signature": sig], t)
+        case "granted":
+            held = pending
+            onState(.holding(generation: generation))
+        case "refused":
+            let code = m["code"] as? String ?? "refused"
+            onState(code == "route-held" ? .standby(holderGeneration: generation) : .refused(code))
+        case "released":
+            held = nil
+            onState(.released(generation: generation))
+        case "lost":
+            held = nil
+            onState(.lost(m["reason"] as? String ?? "lost"))
         default: break
         }
     }

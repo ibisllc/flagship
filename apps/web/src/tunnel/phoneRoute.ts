@@ -16,7 +16,8 @@ import {
   PHONE_ROUTE_CHALLENGE_TTL_MS,
   PHONE_ROUTE_CONFIRMED_MS,
   PHONE_ROUTE_ELIGIBILITY_RECHECK_MS,
-  PHONE_ROUTE_HANDOVER_STREAM_MS,
+  PHONE_ROUTE_STANDBY_POLL_MS,
+  checkRouteRelease,
   PHONE_ROUTE_LEASE_MS,
   PHONE_ROUTE_RENEW_MS,
   emptyPhoneRouteEntry,
@@ -29,6 +30,7 @@ import {
   type PhoneRouteEntry,
   type PhoneRouteHolder,
   type RouteClaim,
+  type RouteRelease,
 } from "@flagship/protocol";
 import type { RegisteredTunnel } from "./registry.js";
 
@@ -45,15 +47,15 @@ export interface PhoneRouteLedgerClient {
   apply(op: LedgerOp): Promise<LedgerResult | null>;
 }
 
-/** The ledger kept in memory; `onAcquired` stands in for the feed's push to every relay. */
+/** The ledger kept in memory; `onChange` stands in for the feed's push to every relay (acquired or vacated). */
 export class MemoryPhoneRouteLedger implements PhoneRouteLedgerClient {
   private readonly entries = new Map<string, PhoneRouteEntry>();
-  private readonly listeners: Array<(hostname: string, generation: number) => void> = [];
+  private readonly listeners: Array<(hostname: string, generation: number, vacant: boolean) => void> = [];
   reachable = true;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
-  onAcquired(fn: (hostname: string, generation: number) => void): void {
+  onChange(fn: (hostname: string, generation: number, vacant: boolean) => void): void {
     this.listeners.push(fn);
   }
 
@@ -66,7 +68,7 @@ export class MemoryPhoneRouteLedger implements PhoneRouteLedgerClient {
     if (!this.reachable) return null;
     const r = applyLedgerOp(this.entries.get(op.hostname) ?? emptyPhoneRouteEntry(), op, this.now());
     if (r.ok) this.entries.set(op.hostname, r.entry);
-    if (r.ok && op.op === "acquire") for (const l of this.listeners) l(op.hostname, op.generation);
+    if (r.ok && op.op !== "renew") for (const l of this.listeners) l(op.hostname, op.generation, op.op === "release");
     return r;
   }
 }
@@ -115,9 +117,9 @@ export function comPhoneRouteLedger(opts: { comBaseUrl: string; secret: string; 
       const b = await call({ method: "POST", body: JSON.stringify(op) });
       const entry = b ? parseEntry(b.entry) : null;
       if (!b || !entry) return null;
-      if (b.ok === true) return { ok: true, entry, superseded: (b.superseded as PhoneRouteHolder | null) ?? null };
+      if (b.ok === true) return { ok: true, entry };
       const code = b.code;
-      if (code !== "stale-generation" && code !== "not-holder" && code !== "expired" && code !== "malformed") return null;
+      if (code !== "route-held" && code !== "stale-generation" && code !== "not-holder" && code !== "expired" && code !== "malformed") return null;
       return { ok: false, code, entry };
     },
   };
@@ -200,24 +202,35 @@ export interface PhoneSessionHandle {
 export type PhoneRouteRefusal =
   | "malformed"
   | "busy"
+  | "holding"
   | "no-challenge"
   | "unavailable"
   | "not-eligible"
+  | "route-held"
   | "stale-generation"
   | "not-holder"
   | "expired"
   | import("@flagship/protocol").RouteClaimRefusal;
 
-export type PhoneRouteLoss = "superseded" | "expired" | "revoked" | "contact" | "released";
+export type PhoneRouteLoss = "expired" | "revoked" | "contact" | "released";
 
 const ACCOUNT = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+interface Held {
+  account: string;
+  hostname: string;
+  generation: number;
+  phoneRoutePub: string;
+  sessionNonce: string;
+  confirmedAt: number;
+}
 
 export class PhoneSession {
   readonly id = randomBytes(16).toString("hex");
   offer: { account: string; hostname: string; nonce: string; generation: number; expiresAt: number } | null = null;
-  held: { account: string; hostname: string; generation: number; phoneRoutePub: string; confirmedAt: number } | null = null;
-  /** When it lost the route it held (it may keep finishing its open streams until the handover deadline). */
-  lostAt: number | null = null;
+  held: Held | null = null;
+  /** Refused while another phone held the route: told when it becomes vacant. */
+  standby: string | null = null;
   eligibleUntil = 0;
   closed = false;
   timers: unknown[] = [];
@@ -238,7 +251,7 @@ export interface PhoneRoutesOptions {
   renewMs?: number;
   confirmedMs?: number;
   recheckMs?: number;
-  handoverStreamMs?: number;
+  standbyPollMs?: number;
   /** Visitor streams one phone may have open at once. */
   maxStreams?: number;
   log?: (m: string) => void;
@@ -247,14 +260,20 @@ export interface PhoneRoutesOptions {
 export interface PhoneRoutesStats {
   sessions: number;
   holding: number;
+  standby: number;
   refused: Record<string, number>;
   lost: Record<string, number>;
 }
 
-/** The phone sessions on this relay and which one (if any) the bare name of each account routes to. */
+/**
+ * The phone sessions on this relay and which one (if any) the bare name of each account routes to. The relay only
+ * obeys the ledger (owner, 2026-11-01): a claim succeeds only while the route is vacant; a live holder keeps it while
+ * its tunnel and lease live; refused phones wait as standbys and are told when it becomes vacant.
+ */
 export class PhoneRoutes {
   private readonly sessions = new Set<PhoneSession>();
   private readonly holders = new Map<string, PhoneSession>();
+  private readonly standbys = new Map<string, { sessions: Set<PhoneSession>; poll: unknown; notified: number }>();
   private readonly refused: Record<string, number> = {};
   private readonly lost: Record<string, number> = {};
   private readonly now: () => number;
@@ -293,15 +312,18 @@ export class PhoneRoutes {
     return s;
   }
 
-  /** The phone tunnel closed: give the route up (best effort) and forget the session. */
+  /** The phone tunnel closed (the app left the foreground): the route is vacant at once, its streams went with it. */
   detach(s: PhoneSession): void {
     if (s.closed) return;
     s.closed = true;
     this.clearTimers(s);
     this.sessions.delete(s);
-    if (s.held && this.holders.get(s.held.hostname) === s) {
-      this.holders.delete(s.held.hostname);
-      void this.opts.ledger.apply({ op: "release", hostname: s.held.hostname, generation: s.held.generation, sessionId: s.id });
+    this.leaveStandby(s);
+    const h = s.held;
+    if (h && this.holders.get(h.hostname) === s) {
+      this.holders.delete(h.hostname);
+      void this.opts.ledger.apply({ op: "release", hostname: h.hostname, generation: h.generation, sessionId: s.id });
+      this.notifyVacant(h.hostname, h.generation);
     }
   }
 
@@ -311,7 +333,7 @@ export class PhoneRoutes {
    */
   tunnelFor(hostname: string): RegisteredTunnel | undefined {
     const s = this.holders.get(hostname.toLowerCase());
-    if (!s || s.closed || !s.held || s.lostAt !== null) return undefined;
+    if (!s || s.closed || !s.held) return undefined;
     const now = this.now();
     if (now - s.held.confirmedAt >= (this.opts.confirmedMs ?? PHONE_ROUTE_CONFIRMED_MS)) return undefined;
     if (s.eligibleUntil <= now) return undefined;
@@ -322,6 +344,7 @@ export class PhoneRoutes {
   /** Step 1: the phone names its account; it gets a nonce for this session and the next generation. */
   async begin(s: PhoneSession, account: unknown): Promise<void> {
     if (typeof account !== "string" || !ACCOUNT.test(account)) return this.refuse(s, "malformed");
+    if (s.held && this.holders.get(s.held.hostname) === s) return this.refuse(s, "holding", { generation: s.held.generation });
     const hostname = phoneHostname(account, this.apex);
     const entry = await this.opts.ledger.read(hostname);
     if (s.closed) return;
@@ -337,7 +360,7 @@ export class PhoneRoutes {
     s.handle.send({ type: "challenge", account, hostname, generation: s.offer.generation, sessionNonce: s.offer.nonce, serverTime: now, expiresAt: s.offer.expiresAt });
   }
 
-  /** Step 2: the signed claim. Checked, eligibility verified, then committed in the ledger. */
+  /** Step 2: the signed claim. Checked, eligibility verified, then committed in the ledger only if the route is vacant. */
   async claim(s: PhoneSession, claim: unknown, signature: unknown): Promise<void> {
     const offer = s.offer;
     // Single use, whatever the outcome.
@@ -363,13 +386,14 @@ export class PhoneRoutes {
       return;
     }
     if (!r) return this.refuse(s, "unavailable");
-    if (!r.ok) return this.refuse(s, r.code === "malformed" ? "malformed" : r.code === "stale-generation" ? "stale-generation" : r.code);
-    const prev = this.holders.get(offer.hostname);
-    if (prev && prev !== s) this.lose(prev, "superseded");
-    // A session that already held the route (an earlier generation) holds it again under the new one.
+    if (!r.ok) {
+      // An eligible phone refused because the route is taken (or was just taken) waits as a standby.
+      if (r.code === "route-held" || r.code === "stale-generation") this.enterStandby(s, offer.hostname);
+      return this.refuse(s, r.code === "stale-generation" ? "route-held" : r.code, { generation: r.entry.generation });
+    }
+    this.leaveStandby(s);
     this.clearTimers(s);
-    s.held = { account: offer.account, hostname: offer.hostname, generation: offer.generation, phoneRoutePub: c.phoneRoutePub, confirmedAt: now };
-    s.lostAt = null;
+    s.held = { account: offer.account, hostname: offer.hostname, generation: offer.generation, phoneRoutePub: c.phoneRoutePub, sessionNonce: offer.nonce, confirmedAt: now };
     s.eligibleUntil = elig.expiresAt;
     this.holders.set(offer.hostname, s);
     s.timers.push({ repeat: this.setRepeat(() => void this.renew(s), this.opts.renewMs ?? PHONE_ROUTE_RENEW_MS) });
@@ -379,12 +403,17 @@ export class PhoneRoutes {
     s.handle.send({ type: "granted", hostname: offer.hostname, generation: offer.generation, leaseMs: PHONE_ROUTE_LEASE_MS });
   }
 
-  /** The phone leaves the foreground: it gives the route up; its tunnel closes next. */
-  async release(s: PhoneSession): Promise<void> {
+  /** The holder gives the route up (signed, bound to the claim it holds); its tunnel may stay open as a standby. */
+  async release(s: PhoneSession, release: unknown, signature: unknown): Promise<void> {
     const h = s.held;
-    if (!h || this.holders.get(h.hostname) !== s) return;
+    if (!h || this.holders.get(h.hostname) !== s) return this.refuse(s, "not-holder");
+    if (typeof release !== "object" || release === null || typeof signature !== "string") return this.refuse(s, "malformed");
+    const checked = checkRouteRelease({ release: release as RouteRelease, signature, held: h, now: this.now() });
+    if (!checked.ok) return this.refuse(s, checked.code);
     this.lose(s, "released");
-    await this.opts.ledger.apply({ op: "release", hostname: h.hostname, generation: h.generation, sessionId: s.id });
+    const r = await this.opts.ledger.apply({ op: "release", hostname: h.hostname, generation: h.generation, sessionId: s.id });
+    if (!s.closed) s.handle.send({ type: "released", hostname: h.hostname, generation: h.generation, confirmed: r?.ok === true });
+    this.notifyVacant(h.hostname, h.generation);
   }
 
   /** Renew every held route now (the timer's work; tests call it directly). */
@@ -402,15 +431,18 @@ export class PhoneRoutes {
       h.confirmedAt = now;
       return;
     }
-    if (r) return this.lose(s, r.code === "expired" ? "expired" : "superseded");
+    if (r) return this.lose(s, "expired");
     // `.com` unreachable: routing already stopped at the confirmed window; past the lease the route is gone.
     if (now - h.confirmedAt >= PHONE_ROUTE_LEASE_MS) this.lose(s, "contact");
   }
 
-  /** The feed says the ledger committed `generation` for `hostname` (on any relay). */
-  pushed(hostname: string, generation: number): void {
-    const s = this.holders.get(hostname.toLowerCase());
-    if (s?.held && s.held.generation < generation) this.lose(s, "superseded");
+  /** The feed: the ledger committed `generation` for `hostname` (a new holder) or it became vacant. */
+  pushed(hostname: string, generation: number, vacant: boolean): void {
+    const host = hostname.toLowerCase();
+    if (vacant) return this.notifyVacant(host, generation);
+    // A newer holder elsewhere means this one's lease had lapsed: it is not the holder any more.
+    const s = this.holders.get(host);
+    if (s?.held && s.held.generation < generation) this.lose(s, "expired");
   }
 
   /** The feed says a device or admin grant of `username` changed: re-check every route of the account now. */
@@ -419,10 +451,11 @@ export class PhoneRoutes {
     return Promise.all([...this.holders.values()].filter((s) => s.held?.account === u).map((s) => this.recheck(s))).then(() => undefined);
   }
 
-  /** The feed came back: anything pushed while it was away was missed, so confirm every held route now. */
+  /** The feed came back: anything pushed while it was away was missed, so confirm every held route and standby now. */
   async resync(): Promise<void> {
     await this.renewAll();
     await Promise.all([...this.holders.values()].map((s) => this.recheck(s)));
+    await Promise.all([...this.standbys.keys()].map((h) => this.pollStandby(h)));
   }
 
   async recheck(s: PhoneSession): Promise<void> {
@@ -438,8 +471,50 @@ export class PhoneRoutes {
     this.revoke(s);
   }
 
+  /** A standby relay's own look at the ledger (the bound when a vacancy push is lost). */
+  async pollStandby(hostname: string): Promise<void> {
+    const st = this.standbys.get(hostname);
+    if (!st) return;
+    const e = await this.opts.ledger.read(hostname);
+    if (e && e.holder === null && st.notified < e.generation + 1) this.notifyVacant(hostname, e.generation);
+  }
+
   stats(): PhoneRoutesStats {
-    return { sessions: this.sessions.size, holding: this.holders.size, refused: { ...this.refused }, lost: { ...this.lost } };
+    let standby = 0;
+    for (const st of this.standbys.values()) standby += st.sessions.size;
+    return { sessions: this.sessions.size, holding: this.holders.size, standby, refused: { ...this.refused }, lost: { ...this.lost } };
+  }
+
+  private enterStandby(s: PhoneSession, hostname: string): void {
+    this.leaveStandby(s);
+    s.standby = hostname;
+    let st = this.standbys.get(hostname);
+    if (!st) {
+      st = { sessions: new Set(), poll: this.setRepeat(() => void this.pollStandby(hostname), this.opts.standbyPollMs ?? PHONE_ROUTE_STANDBY_POLL_MS), notified: 0 };
+      this.standbys.set(hostname, st);
+    }
+    st.sessions.add(s);
+  }
+
+  private leaveStandby(s: PhoneSession): void {
+    const host = s.standby;
+    if (!host) return;
+    s.standby = null;
+    const st = this.standbys.get(host);
+    if (!st) return;
+    st.sessions.delete(s);
+    if (st.sessions.size === 0) {
+      this.clearRepeat(st.poll);
+      this.standbys.delete(host);
+    }
+  }
+
+  /** Tell every standby of `hostname` on this relay that it is free: the first valid claim wins in the ledger. */
+  private notifyVacant(hostname: string, generation: number): void {
+    const st = this.standbys.get(hostname);
+    if (!st) return;
+    st.notified = Math.max(st.notified, generation + 1);
+    for (const s of st.sessions) if (!s.closed) s.handle.send({ type: "route-vacant", hostname, generation });
   }
 
   private async eligible(account: string, phoneRoutePub: string): Promise<{ ok: true; expiresAt: number } | { ok: false } | null> {
@@ -452,27 +527,29 @@ export class PhoneRoutes {
   private revoke(s: PhoneSession): void {
     const h = s.held;
     this.lose(s, "revoked");
-    s.handle.closeStreams();
-    if (h) void this.opts.ledger.apply({ op: "release", hostname: h.hostname, generation: h.generation, sessionId: s.id });
+    if (h) {
+      void this.opts.ledger.apply({ op: "release", hostname: h.hostname, generation: h.generation, sessionId: s.id });
+      this.notifyVacant(h.hostname, h.generation);
+    }
     s.handle.close(4403, "not-eligible");
   }
 
+  /** The route is gone from this session: no new visitors, and its streams end with it (no drain). */
   private lose(s: PhoneSession, reason: PhoneRouteLoss): void {
     const h = s.held;
-    if (!h || s.lostAt !== null) return;
-    s.lostAt = this.now();
+    if (!h) return;
+    s.held = null;
     if (this.holders.get(h.hostname) === s) this.holders.delete(h.hostname);
     this.clearTimers(s);
     this.lost[reason] = (this.lost[reason] ?? 0) + 1;
     this.log(`[phone-route] ${h.hostname}: session ${s.id.slice(0, 8)} lost the route (${reason})`);
-    s.handle.send({ type: "lost", hostname: h.hostname, generation: h.generation, reason });
-    // Streams it already has stay until they end, at most the handover deadline.
-    s.timers.push({ once: this.setTimer(() => s.handle.closeStreams(), this.opts.handoverStreamMs ?? PHONE_ROUTE_HANDOVER_STREAM_MS) });
+    s.handle.closeStreams();
+    if (!s.closed) s.handle.send({ type: "lost", hostname: h.hostname, generation: h.generation, reason });
   }
 
-  private refuse(s: PhoneSession, code: PhoneRouteRefusal): void {
+  private refuse(s: PhoneSession, code: PhoneRouteRefusal, extra: Record<string, unknown> = {}): void {
     this.refused[code] = (this.refused[code] ?? 0) + 1;
-    if (!s.closed) s.handle.send({ type: "refused", code });
+    if (!s.closed) s.handle.send({ type: "refused", code, ...extra });
   }
 
   private clearTimers(s: PhoneSession): void {

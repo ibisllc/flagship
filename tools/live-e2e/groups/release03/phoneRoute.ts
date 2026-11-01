@@ -1,10 +1,10 @@
 // The phone's bare `<account>.<apex>` name through the gym relay (plan H3, docs/architecture-v2/phone-route.md;
 // Appendix H scenarios 6, 7, 8). Two simulated admin phones (node, lib/phoneSim.ts) with their own keys, admin grants
-// on the gym .com and self-signed certificates for exactly the bare name: a claim by a non-admin key (what a box or a
-// member device holds) is refused; phone 1 holds the name and a visitor's TLS peer is phone 1; phone 2 takes it over
-// and new visitors reach phone 2, never phone 1; phone 1's old claim cannot take it back; phone 2 disconnecting closes
-// the name, while the account's box keeps answering its own name (no fallback); revoking a phone's grant ends its
-// claim. The relay may run several instances: a visitor that lands on one not holding the phone's tunnel is closed,
+// on the gym .com and self-signed certificates for exactly the bare name. Handover is vacancy-only (owner, 2026-11-01):
+// a claim by a non-admin key (what a box or a member device holds) is refused; phone 1 claims the vacant name and a
+// visitor's TLS peer is phone 1; phone 2's signed hello gets a 2xx and is recorded; phone 2's claim is refused
+// route-held; phone 1 releases, phone 2 hears route-vacant and claims, phone 1 cannot take it back; phone 2
+// disconnecting closes the name (no box fallback) and wakes standby phone 1; revoking a grant ends a claim. The relay may run several instances: a visitor that lands on one not holding the phone's tunnel is closed,
 // so each probe tries a few times and counts what it reached. Skips when the relay has no phone route.
 import { randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
@@ -13,7 +13,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 import { ed, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
 import { mintDeviceGrant } from "../../lib/fleet.js";
 import { CONTROL, SERVICES, SkipError, assert, http, postJson, short, sleep } from "../../lib/harness.js";
-import { SimPhone, selfSignedPhoneCert } from "../../lib/phoneSim.js";
+import { SimPhone, sayHello, selfSignedPhoneCert } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
 
 /** What one visitor reached: the phone's label, or null (closed without an answer). */
@@ -51,7 +51,7 @@ async function visits(ip: string, hostname: string, ca: string[], n = 6): Promis
 
 export const phoneRoute: Group = {
   name: "phone-route",
-  title: "the bare account name routes only to the admin phone holding it (claims, handover across phones, no box fallback, revocation)",
+  title: "the bare account name routes only to the admin phone holding it (vacancy-only claims, presence hello, release and standby, no box fallback, revocation)",
   needs: ["A1"],
   phase: 4,
   async run({ A, rec, box }) {
@@ -113,7 +113,7 @@ export const phoneRoute: Group = {
       });
 
       let p1!: SimPhone;
-      await rec.check("phone 1 claims; a visitor's TLS peer is phone 1's own certificate", async () => {
+      await rec.check("phone 1 claims the vacant name; a visitor's TLS peer is phone 1's own certificate", async () => {
         p1 = await open(seeds.p1, "P1", certs.p1);
         const g = await p1.acquire();
         assert(g.type === "granted", `phone 1: ${JSON.stringify(g)}`);
@@ -123,28 +123,43 @@ export const phoneRoute: Group = {
         return `generation ${String(g.generation)}; ${seen.filter((v) => v === "P1").length}/${seen.length} visitors reached phone 1`;
       });
 
-      let p2!: SimPhone;
-      let oldChallenge: Record<string, unknown> | null = null;
-      await rec.check("scenario 7: phone 2 takes over; new visitors reach phone 2, never phone 1; phone 1's old claim cannot retake it", async () => {
-        oldChallenge = await p1.begin();
-        const stale = p1.sign(oldChallenge as never);
-        p2 = await open(seeds.p2, "P2", certs.p2);
-        const g = await p2.acquire();
-        assert(g.type === "granted", `phone 2: ${JSON.stringify(g)}`);
-        const lost = await p1.next((m) => m.type === "lost", 15_000);
-        assert(lost.reason === "superseded", `phone 1 was told ${JSON.stringify(lost)}`);
-        const seen = await visits(relayIp, bare, ca);
-        assert(seen.includes("P2"), `no visitor reached phone 2: ${JSON.stringify(seen)}`);
-        assert(!seen.includes("P1"), `a new visitor reached phone 1 after the handover: ${JSON.stringify(seen)}`);
-        const retake = await p1.sendClaim(stale);
-        assert(retake.type === "refused", `phone 1's stale claim: ${JSON.stringify(retake)}`);
-        return `generation ${String(g.generation)}; stale claim refused (${String(retake.code)})`;
+      const p2Pub = bytesToHex(ed.getPublicKey(seeds.p2));
+      await rec.check("presence: phone 2's signed hello to https://<account>.<apex>/ gets a 2xx and phone 1 records it", async () => {
+        let answer: string | null = null;
+        for (let i = 0; i < 6 && answer === null; i++) {
+          answer = await sayHello({ ip: relayIp, hostname: bare, account: acct.username, seed: seeds.p2, ca: [certs.p1.cert] });
+        }
+        assert(answer === "P1", `hello answered by ${String(answer)}`);
+        assert(p1.seen.has(p2Pub), "phone 1 did not record phone 2's hello");
       });
 
-      await rec.check("scenario 8: phone 2 disconnects; the bare name closes and never reaches the box", async () => {
+      let p2!: SimPhone;
+      await rec.check("scenario 7: while phone 1 holds the name, phone 2 is refused route-held with phone 1's generation; visitors stay with phone 1", async () => {
+        p2 = await open(seeds.p2, "P2", certs.p2);
+        const r = await p2.acquire();
+        assert(r.type === "refused" && r.code === "route-held", `phone 2: ${JSON.stringify(r)}`);
+        const seen = await visits(relayIp, bare, ca);
+        assert(!seen.includes("P2") && seen.includes("P1"), `visitors: ${JSON.stringify(seen)}`);
+        return `refused route-held at generation ${String(r.generation)}`;
+      });
+
+      await rec.check("scenario 7: phone 1 releases (signed); standby phone 2 hears route-vacant, claims, and new visitors reach phone 2; phone 1 cannot take it back", async () => {
+        const rel = await p1.release();
+        assert(rel.type === "released", `release: ${JSON.stringify(rel)}`);
+        const vacant = await p2.next((m) => m.type === "route-vacant", 20_000);
+        const g = await p2.acquire();
+        assert(g.type === "granted", `phone 2 after route-vacant: ${JSON.stringify(g)}`);
+        const seen = await visits(relayIp, bare, ca);
+        assert(seen.includes("P2") && !seen.includes("P1"), `visitors after the release: ${JSON.stringify(seen)}`);
+        const back = await p1.acquire();
+        assert(back.type === "refused" && back.code === "route-held", `phone 1 retake: ${JSON.stringify(back)}`);
+        return `vacant at generation ${String(vacant.generation)}, phone 2 holds generation ${String(g.generation)}`;
+      });
+
+      await rec.check("scenario 8: phone 2 disconnects; standby phone 1 hears route-vacant; the bare name closes and never reaches the box", async () => {
         p2.terminate();
         await p2.closed;
-        await sleep(2_000);
+        await p1.next((m) => m.type === "route-vacant", 20_000);
         const seen = await visits(relayIp, bare, ca);
         assert(seen.every((v) => v === null), `the bare name still answered: ${JSON.stringify(seen)}`);
         const own = await http(`https://${box("A1").fqdn}/api/front-page`);

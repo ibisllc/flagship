@@ -26,10 +26,13 @@ describe("the phone route ledger in the ServingFeed DO", () => {
     const st = memStorage();
     const a = await handlePhoneRouteLedger(st, post({ op: "acquire", hostname: H, generation: 1, holder: holder("s1") }), 1_000);
     expect(await a.response.json()).toMatchObject({ ok: true, entry: { generation: 1 } });
-    expect(a.push).toEqual({ type: "phone-route", hostname: H, generation: 1 });
-    const dup = await handlePhoneRouteLedger(st, post({ op: "acquire", hostname: H, generation: 1, holder: holder("s2") }), 1_001);
-    expect(await dup.response.json()).toMatchObject({ ok: false, code: "stale-generation" });
-    expect(dup.push).toBeUndefined();
+    expect(a.push).toEqual({ type: "phone-route", hostname: H, generation: 1, vacant: false });
+    // Held: another phone is refused, whatever generation it names.
+    const held = await handlePhoneRouteLedger(st, post({ op: "acquire", hostname: H, generation: 2, holder: holder("s2") }), 1_001);
+    expect(await held.response.json()).toMatchObject({ ok: false, code: "route-held", entry: { generation: 1 } });
+    expect(held.push).toBeUndefined();
+    const rel = await handlePhoneRouteLedger(st, post({ op: "release", hostname: H, generation: 1, sessionId: "s1" }), 1_500);
+    expect(rel.push).toEqual({ type: "phone-route", hostname: H, generation: 1, vacant: true });
     await handlePhoneRouteLedger(st, post({ op: "acquire", hostname: H, generation: 2, holder: holder("s2") }), 2_000);
     const stale = await handlePhoneRouteLedger(st, post({ op: "renew", hostname: H, generation: 1, sessionId: "s1" }), 3_000);
     expect(await stale.response.json()).toMatchObject({ ok: false, code: "stale-generation" });

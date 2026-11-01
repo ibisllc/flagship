@@ -11,7 +11,11 @@ import { p256 } from "@noble/curves/nist.js";
 import {
   barePhoneAccount,
   canonicalCertificateOrder,
+  canonicalPhonePresence,
   canonicalRouteClaim,
+  canonicalRouteRelease,
+  checkPhonePresence,
+  checkRouteRelease,
   checkRouteClaim,
   csrSha256Hex,
   ed,
@@ -88,16 +92,16 @@ const h = (relayId: string, sessionId: string) => ({ relayId, sessionId, phoneRo
 type Step = { op: "acquire" | "renew" | "release"; generation: number; relayId?: string; sessionId: string; now: number };
 const steps: Step[] = [
   { op: "acquire", generation: 1, relayId: "relay-a", sessionId: "s1", now: T0 },
-  { op: "acquire", generation: 1, relayId: "relay-b", sessionId: "s2", now: T0 + 1 },
+  { op: "acquire", generation: 2, relayId: "relay-b", sessionId: "s2", now: T0 + 1 },
   { op: "renew", generation: 1, sessionId: "s1", now: T0 + 15_000 },
-  { op: "acquire", generation: 2, relayId: "relay-b", sessionId: "s2", now: T0 + 20_000 },
-  { op: "renew", generation: 1, sessionId: "s1", now: T0 + 30_000 },
-  { op: "renew", generation: 2, sessionId: "s1", now: T0 + 30_001 },
+  { op: "release", generation: 1, sessionId: "s2", now: T0 + 16_000 },
+  { op: "release", generation: 1, sessionId: "s1", now: T0 + 20_000 },
+  { op: "acquire", generation: 1, relayId: "relay-b", sessionId: "s2", now: T0 + 20_001 },
+  { op: "acquire", generation: 2, relayId: "relay-b", sessionId: "s2", now: T0 + 20_002 },
   { op: "renew", generation: 2, sessionId: "s2", now: T0 + 90_000 },
   { op: "acquire", generation: 3, relayId: "relay-a", sessionId: "s3", now: T0 + 91_000 },
-  { op: "release", generation: 3, sessionId: "s3", now: T0 + 92_000 },
-  { op: "acquire", generation: 3, relayId: "relay-a", sessionId: "s4", now: T0 + 93_000 },
-  { op: "acquire", generation: 4, relayId: "relay-a", sessionId: "s4", now: T0 + 94_000 },
+  { op: "renew", generation: 2, sessionId: "s2", now: T0 + 92_000 },
+  { op: "acquire", generation: 4, relayId: "relay-b", sessionId: "s2", now: T0 + 93_000 },
 ];
 let entry: PhoneRouteEntry = emptyPhoneRouteEntry();
 const ledger = steps.map((s) => {
@@ -108,8 +112,16 @@ const ledger = steps.map((s) => {
         ? ledgerRenew(entry, s.generation, s.sessionId, s.now)
         : ledgerRelease(entry, s.generation, s.sessionId);
   entry = r.entry;
-  return { step: s, result: r.ok ? "ok" : r.code, entry: r.entry, superseded: r.ok ? r.superseded : null };
+  return { step: s, result: r.ok ? "ok" : r.code, entry: r.entry };
 });
+
+const release = { ...claim };
+const releaseSig = hexOf(ed.sign(canonicalRouteRelease(release), seed));
+const held = { account: "alice", hostname: claim.hostname, generation: 4, phoneRoutePub: phonePub, sessionNonce: claim.sessionNonce };
+if (!checkRouteRelease({ release, signature: releaseSig, held, now: T0 }).ok) throw new Error("release");
+const presence = { account: "alice", devicePub: phonePub, hostname: claim.hostname, issuedAt: T0 };
+const presenceSig = hexOf(ed.sign(canonicalPhonePresence(presence), seed));
+if (!checkPhonePresence(presence, presenceSig, claim.hostname, T0 + 1_000)) throw new Error("presence");
 
 const certReuse = [
   { notAfter: null, lastFailureAt: null, now: T0, order: true },
@@ -163,6 +175,8 @@ const out = {
     csrSha256: csrSha256Hex(csr),
   },
   ledger,
+  release: { record: release, canonical: dec.decode(canonicalRouteRelease(release)), signature: releaseSig, held },
+  presence: { record: presence, canonical: dec.decode(canonicalPhonePresence(presence)), signature: presenceSig },
   certReuse,
   endpoint,
 };

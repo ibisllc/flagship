@@ -188,6 +188,23 @@ class PhoneEndpoint(
 
     @Volatile private var code: Code? = null
     private val sessions = ConcurrentHashMap<String, Session>()
+    private val seen = ConcurrentHashMap<String, Long>()
+
+    /** Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms). */
+    fun lastSeen(): Map<String, Long> = HashMap(seen)
+
+    /** Record a signed hello (`GET /` with the presence headers): this account's bare name, fresh, signed by the key. */
+    private fun hello(head: HttpHead): Boolean {
+        val device = head.header("x-flagship-presence-device") ?: return false
+        val at = head.header("x-flagship-presence-at")?.toLongOrNull() ?: return false
+        val sig = head.header("x-flagship-presence-sig") ?: return false
+        if (kotlin.math.abs(at - now()) > PhoneRoute.CLAIM_SKEW_MS) return false
+        val bytes = runCatching { PhoneRoute.canonicalPresence(account, device, hostname, at) }.getOrNull() ?: return false
+        if (!PhoneRoute.verify(bytes, sig, device)) return false
+        if (seen.size >= 32 && !seen.containsKey(device)) seen.entries.minByOrNull { it.value }?.key?.let(seen::remove)
+        seen[device] = now()
+        return true
+    }
 
     /** A fresh one-time code (6 digits, 5 minutes) for the owner to type in the browser that opens a session. */
     fun newCode(): String {
@@ -217,6 +234,7 @@ class PhoneEndpoint(
         )
         if (verdict != "allow") return answer(403, """{"code":"$verdict"}""")
         return when {
+            head.method == "GET" && head.path == "/" -> answer(200, """{"present":true,"recorded":${hello(head)}}""")
             head.method == "GET" && head.path == "/.well-known/flagship-phone" ->
                 answer(200, """{"account":"$account","hostname":"$hostname","phoneRoutePub":"$phoneRoutePub"}""")
             establish -> {

@@ -133,4 +133,17 @@ class PhoneRouteVectorsTest {
         }
         assertTrue(ok)
     }
+
+    @Test fun theReleaseAndThePresenceReproduceTheirBytesAndVerify() {
+        val r = root["release"]!!.jsonObject
+        val bytes = PhoneRoute.canonicalRelease(claimOf(r["record"]!!.jsonObject))
+        assertEquals(r.s("canonical"), String(bytes, Charsets.UTF_8))
+        assertTrue(PhoneRoute.verify(bytes, r.s("signature"), root.s("signerPub")))
+        val p = root["presence"]!!.jsonObject
+        val rec = p["record"]!!.jsonObject
+        val pb = PhoneRoute.canonicalPresence(rec.s("account"), rec.s("devicePub"), rec.s("hostname"), rec.l("issuedAt"))
+        assertEquals(p.s("canonical"), String(pb, Charsets.UTF_8))
+        assertTrue(PhoneRoute.verify(pb, p.s("signature"), rec.s("devicePub")))
+        assertEquals(p.s("signature"), PhoneRoute.sign(pb, Ed25519Sign(HexUtil.decode(root.s("signerSeed"))!!)))
+    }
 }

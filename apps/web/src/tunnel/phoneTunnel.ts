@@ -183,7 +183,7 @@ function attachPhone(ws: WsSocket, routes: PhoneRoutes, opts: PhoneTunnelOptions
       case "claim":
         return routes.claim(session, msg.claim, msg.signature);
       case "release":
-        return routes.release(session);
+        return routes.release(session, msg.release, msg.signature);
       default:
         return;
     }

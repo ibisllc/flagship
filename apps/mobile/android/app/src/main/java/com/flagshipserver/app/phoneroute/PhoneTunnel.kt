@@ -1,8 +1,9 @@
 // The phone's outbound tunnel to the relay (`/phone-tunnel`, docs/architecture-v2/phone-route.md
 // section 2), held only while the app is in the foreground: it begins, signs the route claim the
 // relay offers with the account device key, and serves each relayed visitor stream with TLS
-// terminated here (TlsServerStream) and the minimal endpoint (PhoneEndpoint). It never re-acquires
-// on its own after losing the route or a refusal: the next foreground does.
+// terminated here (TlsServerStream) and the minimal endpoint (PhoneEndpoint). The relay only obeys
+// the ledger (owner, 2026-11-01): a claim succeeds only while the route is vacant; refused with
+// `route-held`, the phone stays connected as a standby and claims when told `route-vacant`.
 
 package com.flagshipserver.app.phoneroute
 
@@ -59,6 +60,9 @@ sealed class PhoneTunnelState {
     data object Connecting : PhoneTunnelState()
     data object Claiming : PhoneTunnelState()
     data class Holding(val generation: Long) : PhoneTunnelState()
+    /** Another admin phone holds the name; the relay says when it is vacant. */
+    data class Standby(val holderGeneration: Long) : PhoneTunnelState()
+    data class Released(val generation: Long) : PhoneTunnelState()
     data class Lost(val reason: String) : PhoneTunnelState()
     data class Refused(val code: String) : PhoneTunnelState()
     data class Closed(val code: Int) : PhoneTunnelState()
@@ -81,6 +85,9 @@ class PhoneTunnelClient(
     private val streams = ConcurrentHashMap<Int, Stream>()
     private val json = Json { ignoreUnknownKeys = true }
     @Volatile private var ws: WebSocket? = null
+    @Volatile private var pending: RouteClaim? = null
+    @Volatile var held: RouteClaim? = null
+        private set
     @Volatile private var beat: Timer? = null
     private val hostname = PhoneRoute.hostname(account, apex)
 
@@ -89,14 +96,11 @@ class PhoneTunnelClient(
         ws = okHttp.newWebSocket(Request.Builder().url(url).build(), listener)
     }
 
-    /** Leaving the foreground: give the route up and close. */
+    /** Leaving the foreground: close. The relay makes the route vacant at once and ends its streams. */
     fun stop() {
         beat?.cancel()
         beat = null
-        ws?.let {
-            it.send("""{"type":"release"}""")
-            it.close(1000, "background")
-        }
+        ws?.close(1000, "background")
         ws = null
         for (s in streams.values) s.tls.close()
         streams.clear()
@@ -133,31 +137,69 @@ class PhoneTunnelClient(
 
     private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.content
 
+    /** Give the held route up (signed over the claim it holds) so another admin phone can claim it. */
+    fun release(): Boolean {
+        val h = held ?: return false
+        val r = h.copy(issuedAt = now())
+        val sig = PhoneRoute.sign(PhoneRoute.canonicalRelease(r), deviceKey)
+        return ws?.send(buildJsonObject {
+            put("type", "release")
+            put("release", claimJson(r))
+            put("signature", sig)
+        }.toString()) == true
+    }
+
+    private fun claimJson(c: RouteClaim) = buildJsonObject {
+        put("account", c.account)
+        put("phoneRoutePub", c.phoneRoutePub)
+        put("hostname", c.hostname)
+        put("generation", c.generation)
+        put("sessionNonce", c.sessionNonce)
+        put("issuedAt", c.issuedAt)
+    }
+
+    private fun begin(socket: WebSocket) {
+        socket.send(buildJsonObject { put("type", "begin"); put("account", account) }.toString())
+    }
+
     internal fun handleControl(socket: WebSocket, m: JsonObject) {
         when (m.str("type")) {
             "hello" -> {
                 onState(PhoneTunnelState.Claiming)
-                socket.send(buildJsonObject { put("type", "begin"); put("account", account) }.toString())
+                begin(socket)
             }
             "challenge" -> {
                 val claim = claimFor(m) ?: return onState(PhoneTunnelState.Refused("bad-challenge"))
+                pending = claim
                 val sig = PhoneRoute.sign(PhoneRoute.canonical(claim), deviceKey)
                 socket.send(buildJsonObject {
                     put("type", "claim")
-                    put("claim", buildJsonObject {
-                        put("account", claim.account)
-                        put("phoneRoutePub", claim.phoneRoutePub)
-                        put("hostname", claim.hostname)
-                        put("generation", claim.generation)
-                        put("sessionNonce", claim.sessionNonce)
-                        put("issuedAt", claim.issuedAt)
-                    })
+                    put("claim", claimJson(claim))
                     put("signature", sig)
                 }.toString())
             }
-            "granted" -> onState(PhoneTunnelState.Holding(m["generation"]?.jsonPrimitive?.longOrNull ?: 0))
-            "refused" -> onState(PhoneTunnelState.Refused(m.str("code") ?: "refused"))
-            "lost" -> onState(PhoneTunnelState.Lost(m.str("reason") ?: "lost"))
+            "granted" -> {
+                held = pending
+                onState(PhoneTunnelState.Holding(m["generation"]?.jsonPrimitive?.longOrNull ?: 0))
+            }
+            "refused" -> {
+                val code = m.str("code") ?: "refused"
+                if (code == "route-held") onState(PhoneTunnelState.Standby(m["generation"]?.jsonPrimitive?.longOrNull ?: 0))
+                else onState(PhoneTunnelState.Refused(code))
+            }
+            // The holder's tunnel closed or it released: claim (the ledger lets the first valid claim win).
+            "route-vacant" -> {
+                onState(PhoneTunnelState.Claiming)
+                begin(socket)
+            }
+            "released" -> {
+                held = null
+                onState(PhoneTunnelState.Released(m["generation"]?.jsonPrimitive?.longOrNull ?: 0))
+            }
+            "lost" -> {
+                held = null
+                onState(PhoneTunnelState.Lost(m.str("reason") ?: "lost"))
+            }
         }
     }
 

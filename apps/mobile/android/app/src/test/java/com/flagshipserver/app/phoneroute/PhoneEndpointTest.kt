@@ -187,6 +187,28 @@ class PhoneEndpointTest {
         assertEquals(403, status(ep.respond(req("GET", "/.well-known/flagship-phone", "host" to "notes.$HOST").first, ByteArray(0))))
     }
 
+    @Test fun aSignedHelloIsRecordedAndAnythingElseIsNot() {
+        var now = 1_800_000_000_000L
+        val ep = PhoneEndpoint("alice", HOST, pub, now = { now })
+        val seed = ByteArray(32) { 9 }
+        val device = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+        fun hello(at: Long, host: String = HOST, key: ByteArray = seed): ByteArray {
+            val sig = PhoneRoute.sign(PhoneRoute.canonicalPresence("alice", device, host, at), Ed25519Sign(key))
+            return ep.respond(req("GET", "/", "x-flagship-presence-device" to device, "x-flagship-presence-at" to at.toString(), "x-flagship-presence-sig" to sig).first, ByteArray(0))
+        }
+        val ok = hello(now)
+        assertEquals(200, status(ok))
+        assertTrue(body(ok).contains("\"recorded\":true"))
+        assertEquals(now, ep.lastSeen()[device])
+        // Stale, signed by another key, or for another name: answered (a holder exists) but not recorded.
+        now += 1_000
+        assertTrue(body(hello(now - 61_000)).contains("\"recorded\":false"))
+        assertTrue(body(hello(now, key = ByteArray(32) { 8 })).contains("\"recorded\":false"))
+        assertEquals(now - 1_000, ep.lastSeen()[device])
+        // A plain GET / is a 2xx too: it only says the name has a holder.
+        assertEquals(200, status(ep.respond(req("GET", "/").first, ByteArray(0))))
+    }
+
     @Test fun framesRoundTrip() {
         val f = TunnelFrames.encode(7, TunnelFrames.DATA, byteArrayOf(1, 2, 3))
         val d = TunnelFrames.decode(f)!!
@@ -295,6 +317,7 @@ class PhoneTunnelClientTest {
     @Test fun beginsSignsTheOfferedClaimAndReportsTheGrant() {
         val server = MockWebServer()
         val claims = LinkedBlockingQueue<String>()
+        val claimCount = java.util.concurrent.atomic.AtomicInteger()
         server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send("""{"type":"hello","relayId":"r","serverTime":1}""")
@@ -308,7 +331,16 @@ class PhoneTunnelClientTest {
                     "begin" -> webSocket.send("""{"type":"challenge","account":"alice","hostname":"$HOST","generation":4,"sessionNonce":"${"5a".repeat(16)}","serverTime":1,"expiresAt":2}""")
                     "claim" -> {
                         claims.add(text)
-                        webSocket.send("""{"type":"granted","hostname":"$HOST","generation":4,"leaseMs":60000}""")
+                        if (claimCount.incrementAndGet() == 1) {
+                            webSocket.send("""{"type":"refused","code":"route-held","generation":3}""")
+                            webSocket.send("""{"type":"route-vacant","hostname":"$HOST","generation":3}""")
+                        } else {
+                            webSocket.send("""{"type":"granted","hostname":"$HOST","generation":4,"leaseMs":60000}""")
+                        }
+                    }
+                    "release" -> {
+                        claims.add(text)
+                        webSocket.send("""{"type":"released","hostname":"$HOST","generation":4,"confirmed":true}""")
                     }
                 }
             }
@@ -331,6 +363,7 @@ class PhoneTunnelClientTest {
         )
         try {
             client.start()
+            assertNotNull(claims.poll(5, TimeUnit.SECONDS))
             val text = claims.poll(5, TimeUnit.SECONDS)
             assertNotNull(text)
             val o = Json.parseToJsonElement(text!!).jsonObject
@@ -338,12 +371,18 @@ class PhoneTunnelClientTest {
             val claim = RouteClaim(c["account"]!!.jsonPrimitive.content, c["phoneRoutePub"]!!.jsonPrimitive.content, c["hostname"]!!.jsonPrimitive.content, c["generation"]!!.jsonPrimitive.long, c["sessionNonce"]!!.jsonPrimitive.content, c["issuedAt"]!!.jsonPrimitive.long)
             assertEquals(RouteClaim("alice", pub, HOST, 4, "5a".repeat(16), 1_800_000_000_000), claim)
             Ed25519Verify(HexUtil.decode(pub)!!).verify(HexUtil.decode(o["signature"]!!.jsonPrimitive.content)!!, PhoneRoute.canonical(claim))
-            var holding = false
-            repeat(20) {
-                val s = states.poll(250, TimeUnit.MILLISECONDS)
-                if (s == PhoneTunnelState.Holding(4)) holding = true
-            }
-            assertTrue(holding)
+            val seen = ArrayList<PhoneTunnelState>()
+            repeat(20) { states.poll(250, TimeUnit.MILLISECONDS)?.let(seen::add) }
+            assertTrue(seen.toString(), PhoneTunnelState.Standby(3) in seen)
+            assertTrue(seen.toString(), PhoneTunnelState.Holding(4) in seen)
+            // A voluntary release is signed over the held claim.
+            assertTrue(client.release())
+            val relText = claims.poll(5, TimeUnit.SECONDS)!!
+            val rel = Json.parseToJsonElement(relText).jsonObject
+            val r = rel["release"]!!.jsonObject
+            val released = RouteClaim(r["account"]!!.jsonPrimitive.content, r["phoneRoutePub"]!!.jsonPrimitive.content, r["hostname"]!!.jsonPrimitive.content, r["generation"]!!.jsonPrimitive.long, r["sessionNonce"]!!.jsonPrimitive.content, r["issuedAt"]!!.jsonPrimitive.long)
+            assertEquals(claim, released)
+            assertTrue(PhoneRoute.verify(PhoneRoute.canonicalRelease(released), rel["signature"]!!.jsonPrimitive.content, pub))
         } finally {
             client.stop()
             runCatching { server.shutdown() }

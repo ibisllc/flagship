@@ -1,8 +1,9 @@
 // The app's wiring of the phone route (docs/architecture-v2/phone-route.md section 4): a
-// foreground-only facility on an admin device. Coming to the foreground: make the TLS key if there
-// is none, order a certificate only when one is due, and, while a valid one is held, open the
-// tunnel and claim the bare name. Leaving the foreground: release and close. A refusal or a lost
-// route is final until the next foreground (no automatic re-acquisition).
+// foreground-only facility. Coming to the foreground, every device says hello to the phone holding
+// the bare name; an admin device then makes the TLS key if there is none, orders a certificate only
+// when one is due, and, while a valid one is held, opens the tunnel and claims (refused while
+// another phone holds it: it waits as a standby). Leaving the foreground closes the tunnel; the
+// relay makes the route vacant at once.
 
 package com.flagshipserver.app.phoneroute
 
@@ -35,6 +36,29 @@ object PhoneRouteController {
         private set
     private val _state = MutableStateFlow<PhoneTunnelState?>(null)
     val state: StateFlow<PhoneTunnelState?> = _state
+    private val _holderPresent = MutableStateFlow<Boolean?>(null)
+    /** Whether a phone answered this device's hello on the last foreground (null: not asked yet). */
+    val holderPresent: StateFlow<Boolean?> = _holderPresent
+
+    /** Give the held route up so another admin phone can claim it (the trigger, an ask through `.com`, is a follow-up). */
+    fun release(): Boolean = client?.release() == true
+
+    /** The signed hello: `GET https://<account>.<apex>/` with the presence headers. True on a 2xx. */
+    fun sayHello(http: OkHttpClient, account: String, apex: String, deviceKey: com.google.crypto.tink.subtle.Ed25519Sign, devicePub: String): Boolean {
+        val host = PhoneRoute.hostname(account, apex)
+        val at = System.currentTimeMillis()
+        val sig = PhoneRoute.sign(PhoneRoute.canonicalPresence(account, devicePub, host, at), deviceKey)
+        val quick = http.newBuilder().callTimeout(5, java.util.concurrent.TimeUnit.SECONDS).build()
+        return runCatching {
+            quick.newCall(
+                Request.Builder().url("https://$host/").get()
+                    .header("x-flagship-presence-device", devicePub)
+                    .header("x-flagship-presence-at", at.toString())
+                    .header("x-flagship-presence-sig", sig)
+                    .build(),
+            ).execute().use { it.isSuccessful }
+        }.getOrDefault(false)
+    }
 
     fun install(context: Context, appState: AppState, okHttp: OkHttpClient) {
         this.appState = appState
@@ -49,14 +73,19 @@ object PhoneRouteController {
         val http = okHttp ?: return
         val store = store ?: return
         val user = app.currentUser.value?.takeIf { it.isNotEmpty() } ?: return
-        if (app.isDemoAccountNow() || !Keystore.hasAdminRoot() || !Keystore.hasUmkSeed()) return
+        if (app.isDemoAccountNow() || !Keystore.hasUmkSeed()) return
         val deviceId = app.activeProfile?.deviceId?.takeIf { it.isNotEmpty() } ?: return
+        val admin = Keystore.hasAdminRoot()
         job = scope.launch {
             val umk = runCatching { Keystore.currentUmkSeed() }.getOrNull() ?: return@launch
             val deviceKey = Keystore.accountDeviceSigner(umk, user, deviceId)
             val devicePub = HexUtil.encode(Keystore.accountDevicePublicKey(umk, user, deviceId))
-            val key = PhoneTlsKey.loadOrCreate(user) ?: return@launch
             val apex = Endpoints.dataApex
+            // "I'm here" to the phone holding the bare name (every device of the account). A 2xx means a holder
+            // exists: an admin phone's claim will then be refused and it waits as a standby; no answer: it claims.
+            _holderPresent.value = sayHello(http, user, apex, deviceKey, devicePub)
+            if (!admin) return@launch
+            val key = PhoneTlsKey.loadOrCreate(user) ?: return@launch
             val certs = PhoneCertManager(store, ComPhoneCertIssuer(http, Endpoints.controlBaseUrl))
             certs.ensure(user, apex, key, deviceKey, devicePub)
             val chain = certs.current(user) ?: return@launch

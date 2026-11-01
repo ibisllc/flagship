@@ -66,6 +66,25 @@ public struct PhoneCertificateOrder: Equatable, Sendable {
 public enum PhoneRoute {
     public static let tagRouteClaim = "flagship/route-claim/v1"
     public static let tagCertificateOrder = "flagship/certificate-order/v1"
+    public static let tagRouteRelease = "flagship/route-release/v1"
+    public static let tagPhonePresence = "flagship/phone-presence/v1"
+    public static let claimSkewMs: Int64 = 60_000
+
+    /// The holder's release: the fields of the claim it holds, under the release tag.
+    public static func canonicalRelease(_ held: RouteClaim) throws -> Data {
+        let claim = String(decoding: try held.canonicalBytes(), as: UTF8.self)
+        return Data((tagRouteRelease + claim.dropFirst(tagRouteClaim.count)).utf8)
+    }
+
+    /// "I'm here": a device's hello to the phone holding the bare name.
+    public static func canonicalPresence(account: String, devicePub: String, hostname: String, issuedAt: Int64) throws -> Data {
+        try ServingAuthority.account(account)
+        try ServingAuthority.hex("devicePub", devicePub, ServingAuthority.isHex64)
+        guard hostname == hostname.lowercased(), hostname.hasPrefix(account + "."), hostname.split(separator: ".").count >= 3,
+              !hostname.contains("|") else { throw ServingRecordError.invalid("hostname must be the account's own bare name") }
+        try ServingAuthority.int("issuedAt", issuedAt, min: 0)
+        return ServingAuthority.join([tagPhonePresence, account, devicePub, hostname, String(issuedAt)])
+    }
     public static let certRenewBeforeMs: Int64 = 30 * 86_400_000
     public static let certRetryAfterMs: Int64 = 6 * 3_600_000
     public static let beatSeconds: Double = 15
@@ -268,6 +287,21 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
     private let lock = NSLock()
     private var code: (value: String, expiresAt: Int64)?
     private var sessions: [String: (csrf: String, expiresAt: Int64)] = [:]
+    private var seen: [String: Int64] = [:]
+
+    /// Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms).
+    public func lastSeen() -> [String: Int64] { lock.withLock { seen } }
+
+    /// Record a signed hello (`GET /` with the presence headers): this account's bare name, fresh, signed by the key.
+    private func hello(_ head: HttpHead) -> Bool {
+        guard let device = head.header("x-flagship-presence-device"), let at = Int64(head.header("x-flagship-presence-at") ?? ""),
+              let sig = head.header("x-flagship-presence-sig"), abs(at - now()) <= PhoneRoute.claimSkewMs,
+              let bytes = try? PhoneRoute.canonicalPresence(account: account, devicePub: device, hostname: hostname, issuedAt: at),
+              ServingAuthority.verifyEd25519(bytes, signatureHex: sig, publicKeyHex: device) else { return false }
+        if seen.count >= 32, seen[device] == nil, let oldest = seen.min(by: { $0.value < $1.value })?.key { seen[oldest] = nil }
+        seen[device] = now()
+        return true
+    }
 
     public init(account: String, hostname: String, phoneRoutePub: String, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.account = account
@@ -301,6 +335,7 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
                                  csrf: head.header(PhoneRoute.csrfHeader), upgrade: head.header("upgrade") != nil, establish: establish),
             hostname: hostname, sessionToken: session == nil ? nil : token, csrfToken: session?.csrf)
         guard verdict == "allow" else { return Self.answer(403, #"{"code":"\#(verdict)"}"#) }
+        if head.method == "GET" && head.path == "/" { return Self.answer(200, #"{"present":true,"recorded":\#(hello(head))}"#) }
         if head.method == "GET" && head.path == "/.well-known/flagship-phone" {
             return Self.answer(200, #"{"account":"\#(account)","hostname":"\#(hostname)","phoneRoutePub":"\#(phoneRoutePub)"}"#)
         }

@@ -403,6 +403,16 @@
     },
     {
       "check": "signed-tags",
+      "key": "web:flagship/route-release/v1",
+      "reason": "Only the phone holding the bare name releases it, over the relay's /phone-tunnel (owner, 2026-11-01); the webapp holds no route."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/phone-presence/v1",
+      "reason": "The presence hello is sent by the native apps when they come to the foreground (owner, 2026-11-01); a browser tab has no foreground lifecycle to report and is not a phone."
+    },
+    {
+      "check": "signed-tags",
       "key": "web:flagship/route-claim/v1",
       "reason": "Route claims are signed by an admin phone's account device key over the relay's /phone-tunnel (plan H3); the webapp has no phone tunnel."
     },

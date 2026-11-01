@@ -84,6 +84,21 @@ final class PhoneRouteVectorTests: XCTestCase {
         }
     }
 
+    func testReleaseAndPresence() throws {
+        let v = try vectors()
+        let r = try XCTUnwrap(v["release"] as? [String: Any]), rec = try XCTUnwrap(r["record"] as? [String: Any])
+        let held = RouteClaim(account: rec["account"] as! String, phoneRoutePub: rec["phoneRoutePub"] as! String, hostname: rec["hostname"] as! String,
+                              generation: i64(rec["generation"])!, sessionNonce: rec["sessionNonce"] as! String, issuedAt: i64(rec["issuedAt"])!)
+        let bytes = try PhoneRoute.canonicalRelease(held)
+        XCTAssertEqual(String(decoding: bytes, as: UTF8.self), r["canonical"] as? String)
+        XCTAssertTrue(ServingAuthority.verifyEd25519(bytes, signatureHex: r["signature"] as! String, publicKeyHex: v["signerPub"] as! String))
+        let p = try XCTUnwrap(v["presence"] as? [String: Any]), pr = try XCTUnwrap(p["record"] as? [String: Any])
+        let pb = try PhoneRoute.canonicalPresence(account: pr["account"] as! String, devicePub: pr["devicePub"] as! String,
+                                                  hostname: pr["hostname"] as! String, issuedAt: i64(pr["issuedAt"])!)
+        XCTAssertEqual(String(decoding: pb, as: UTF8.self), p["canonical"] as? String)
+        XCTAssertTrue(ServingAuthority.verifyEd25519(pb, signatureHex: p["signature"] as! String, publicKeyHex: pr["devicePub"] as! String))
+    }
+
     func testFrames() {
         let f = TunnelFrames.encode(7, TunnelFrames.data, Data([1, 2, 3]))
         XCTAssertEqual(TunnelFrames.decode(f), TunnelFrames.Frame(streamId: 7, type: TunnelFrames.data, payload: Data([1, 2, 3])))
@@ -128,6 +143,23 @@ final class PhoneEndpointResponderTests: XCTestCase {
         XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/ping", origin.merging(["cookie": "__Host-flagship-phone=\(String(repeating: "x", count: 64))", PhoneRoute.csrfHeader: csrf]) { $1 }), body: Data())), 403)
         XCTAssertEqual(status(ep.respond(head("GET", "/ws", ["origin": "https://notes.\(host)", "upgrade": "websocket", "cookie": cookie]), body: Data())), 403)
         XCTAssertEqual(status(ep.respond(head("GET", "/.well-known/flagship-phone", ["host": "notes.\(host)"]), body: Data())), 403)
+    }
+
+    func testASignedHelloIsRecorded() throws {
+        var t: Int64 = 1_800_000_000_000
+        let ep = PhoneEndpointResponder(account: "alice", hostname: host, phoneRoutePub: String(repeating: "ab", count: 32), now: { t })
+        let key = Curve25519.Signing.PrivateKey()
+        let device = HexUtil.encode(key.publicKey.rawRepresentation)
+        func hello(_ at: Int64, signer: Curve25519.Signing.PrivateKey) throws -> String {
+            let sig = try PhoneRoute.signEd25519(try PhoneRoute.canonicalPresence(account: "alice", devicePub: device, hostname: host, issuedAt: at), key: signer)
+            return body(ep.respond(head("GET", "/", ["x-flagship-presence-device": device, "x-flagship-presence-at": String(at), "x-flagship-presence-sig": sig]), body: Data()))
+        }
+        XCTAssertTrue(try hello(t, signer: key).contains(#""recorded":true"#))
+        XCTAssertEqual(ep.lastSeen()[device], t)
+        t += 1_000
+        XCTAssertTrue(try hello(t - 61_000, signer: key).contains(#""recorded":false"#))
+        XCTAssertTrue(try hello(t, signer: Curve25519.Signing.PrivateKey()).contains(#""recorded":false"#))
+        XCTAssertEqual(status(ep.respond(head("GET", "/", [:]), body: Data())), 200)
     }
 
     func testRequestReader() throws {

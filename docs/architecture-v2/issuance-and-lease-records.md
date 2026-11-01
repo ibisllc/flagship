@@ -94,7 +94,9 @@ flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|
   allocator reserves every control name so no app alias can take one; shared vectors in TS, Swift, Kotlin and Rust
   and a collision test.
 
-### Phone routing (H3): RECOMMENDED (agent recommendation, owner to confirm), 2026-11-01
+### Phone routing (H3), 2026-11-01
+
+Marked rules are the owner's (2026-11-01); the rest are the agent's recommendation, owner to confirm.
 
 Appendix H asks for these before implementation. The TS relay (`apps/web/src/tunnel/phoneRoute.ts`,
 `phoneTunnel.ts`), `.com`'s ledger (`apps/com/src/phoneRoute.ts`) and the phones implement them; the numbers are
@@ -113,32 +115,53 @@ constants in `packages/protocol/src/phoneRoute.ts`. Wire protocol: `phone-route.
 - **Replay protection.** `sessionNonce` is issued by the relay to one tunnel session, single use, valid 30 s;
   `issuedAt` within ±60 s of the relay's clock; `hostname` exactly `<account>.<apex>`; generation exactly the
   offered one. A replay fails the nonce (other session, other relay, or used) and anything older also the CAS.
-- **Simultaneous acquisition.** The ledger serialises (one Durable Object). Of two claims for the same generation the
-  first to commit wins; the second is refused `stale-generation`, and that phone may begin again only on an explicit
-  foreground acquisition, which then supersedes. Net rule: the latest explicit foreground acquisition wins. A phone
-  never re-acquires automatically after losing the route (no ping-pong between two open phones).
+- **Vacancy only, no preemption (owner, 2026-11-01).** The relay only obeys the ledger. A claim from an eligible admin
+  phone is committed ONLY while the route is vacant: no holder, the holder's tunnel is gone (its relay released the
+  ledger at once), or its lease lapsed. The ledger decides vacancy itself; a phone's "I couldn't reach it" is never
+  trusted. While a live holder exists the claim is refused `route-held` with the holder's generation. A holder keeps
+  the route as long as its tunnel and lease live; there is no "foreground acquisition supersedes" and no drain.
+- **Standby (owner, 2026-11-01).** An eligible phone refused `route-held` (eligibility is checked before the ledger, so
+  only a signed, eligible claim makes a standby) may keep its tunnel open. When the route becomes vacant the relay sends
+  `{type:"route-vacant", hostname, generation}` to every standby of that account: at once on its own instance, on the
+  others through the ledger's push over the serving feed, and every 15 s from the ledger when a push was lost. Every
+  standby then claims and the first valid claim wins by compare-and-set; the others are refused `route-held` and stay
+  standbys. Phones also claim on each foreground. There is no background wake (iOS background sockets die): with no
+  phone in the foreground nobody claims and the bare name stays closed, which is correct.
+- **Voluntary release (owner, 2026-11-01).** The holder may give the route up with a signed `flagship/route-release/v1`
+  (the fields of the claim it holds: account, key, hostname, generation, session nonce, a fresh `issuedAt`). The relay
+  checks it against the held claim, releases the ledger and ends the holder's streams; the vacancy reaches the
+  standbys. Follow-up: the trigger (another device asking the holder to release through the account's `.com` mailbox).
+- **Presence (owner, 2026-11-01).** Coming to the foreground, every device of the account (admin or not) says a signed
+  hello, `GET https://<account>.<apex>/` with `x-flagship-presence-device|at|sig` over
+  `flagship/phone-presence/v1|<account>|<devicePub>|<hostname>|<issuedAt>`. A 2xx means a phone holds the name; no
+  answer means none does. The holder records the devices that said hello (in memory, last seen, at most 32), exposed in
+  its endpoint state only (the UI is a follow-up). An admin phone then claims either way: a `route-held` refusal is what
+  makes it a standby on the relay.
+- **Simultaneous claims on a vacant route.** The ledger serialises (one Durable Object): the first to commit wins, the
+  other is refused `route-held`.
 - **Routing lease.** 60 s in the ledger, renewed every 15 s by the holding relay while the phone's tunnel is live
   (WebSocket ping every 15 s; nothing heard for 45 s ends the tunnel). Renewal is compare-and-renew on
   `(generation, session)`: once a newer generation exists it fails, so a stale renewal never takes the route back.
-  An expired lease is a release; coming back needs a new signed claim.
+  An expired lease is a vacancy; a holder whose lease lapsed while someone else claimed is refused `route-held`.
 - **Cross-relay exclusivity.** The ledger is the one source of truth. A relay routes the bare name to a phone only
   while (a) it holds that phone's tunnel, (b) that session holds the ledger's current generation, (c) its last
-  confirmed acquire/renew is under 30 s old, and (d) the phone is still eligible. A new acquisition is pushed at once
-  to every relay over the serving feed (`{type:"phone-route", hostname, generation}`) and the old holder stops taking
-  new connections on receipt; if the push is lost, its next renewal (≤ 15 s) fails and it stops. A relay that cannot
+  confirmed acquire/renew is under 30 s old, and (d) the phone is still eligible. Every committed acquisition and release
+  is pushed at once to every relay over the serving feed (`{type:"phone-route", hostname, generation, vacant}`); a relay
+  whose holder lapsed and sees a newer generation stops it; if a push is lost, its next renewal (≤ 15 s) fails. A relay that cannot
   reach `.com` stops routing within 30 s. A visitor landing on an instance that does not hold the phone's tunnel is
   closed, not forwarded: exclusivity holds; reachability across instances needs forwarding (open, for G7).
 - **Fail closed.** No holder, a lapsed lease, lost contact, a disconnected or suspended phone, a refused claim: the
   bare name is closed like a name nobody registered. It never falls back to a box and is never parked.
-- **Connection deadlines.** Streams already open to a phone stay with it after a handover or expiry, until they close,
-  at most 10 min after its session lost the route. Revocation is stricter (below).
+- **Connection deadlines (owner, 2026-11-01).** No drain timer: a holder's streams live exactly as long as its route.
+  When its tunnel drops (the app leaves the foreground), it releases, or its lease lapses, the route is vacant at once
+  and its streams end with it.
 - **Revocation propagation.** A removed device or a revoked or expired admin grant ends eligibility. `.com` pushes
   `{type:"phone-eligibility", username}` over the serving feed; the relay re-reads eligibility at once, at the grant's
   expiry, and every 30 s while it holds a route (the bound without the push: 30 s). On loss it releases the ledger,
   closes every stream to that phone within 5 s, and closes its tunnel.
 - **Foreground only.** The phone opens the tunnel when the app comes to the foreground on an admin device that holds
-  a phone certificate and closes it when the app leaves the foreground. Foreground is honest-client behaviour; the
-  boundary is eligibility.
+  a phone certificate and closes it when the app leaves the foreground (no unsigned release: closing is the release).
+  Foreground is honest-client behaviour; the boundary is eligibility.
 - **Phone certificate (H2, H7).** One P-256 key per phone, made on the phone (Android Keystore: StrongBox when
   present, else TEE; iOS: Secure Enclave when the TLS stack accepts it, else a `ThisDeviceOnly` Keychain key), never
   uploaded. CSR for exactly `<account>.<apex>` (CN and one dNSName SAN). Ordered with `certificate-order/v1`

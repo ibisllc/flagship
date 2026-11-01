@@ -22,7 +22,16 @@ import {
   FRAME_DATA,
   FRAME_OPEN,
 } from "@flagship/tunnel-protocol";
-import { ed, signServingRecord, type RouteClaim } from "@flagship/protocol";
+import { connect as tlsConnect } from "node:tls";
+import {
+  canonicalPhonePresence,
+  canonicalRouteRelease,
+  checkPhonePresence,
+  ed,
+  signServingRecord,
+  type PhonePresence,
+  type RouteClaim,
+} from "@flagship/protocol";
 
 const hexOf = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
@@ -52,6 +61,10 @@ export class SimPhone {
   readonly control: Control[] = [];
   readonly streams = new Map<number, SimStream>();
   closedWith: { code: number; reason: string } | null = null;
+  /** The claim the relay granted (what a release must name). */
+  granted: RouteClaim | null = null;
+  /** Devices that said hello while this phone held the name: key → last seen (ms). */
+  readonly seen = new Map<string, number>();
   private waiters: Array<{ match: (m: Control) => boolean; resolve: (m: Control) => void }> = [];
   private closedResolve!: () => void;
   readonly closed: Promise<void>;
@@ -121,7 +134,21 @@ export class SimPhone {
 
   async sendClaim(c: { claim: RouteClaim; signature: string }): Promise<Control> {
     this.send({ type: "claim", ...c });
-    return this.next((m) => m.type === "granted" || m.type === "refused");
+    const r = await this.next((m) => m.type === "granted" || m.type === "refused");
+    if (r.type === "granted") this.granted = c.claim;
+    return r;
+  }
+
+  /** Give the held route up: a release signed over the granted claim's fields. */
+  async release(over: Partial<RouteClaim> = {}): Promise<Control> {
+    const g = this.granted;
+    if (!g) throw new Error("this phone holds nothing");
+    const release = { ...g, issuedAt: Date.now(), ...over };
+    const signature = hexOf(ed.sign(canonicalRouteRelease(release), this.opts.seed));
+    this.send({ type: "release", release, signature });
+    const r = await this.next((m) => m.type === "released" || m.type === "refused");
+    if (r.type === "released") this.granted = null;
+    return r;
   }
 
   /** Begin, sign, claim: `granted` or `refused`. */
@@ -129,10 +156,6 @@ export class SimPhone {
     const ch = await this.begin();
     if (ch.type !== "challenge") return ch;
     return this.sendClaim(this.sign(ch));
-  }
-
-  release(): void {
-    this.send({ type: "release" });
   }
 
   close(): void {
@@ -219,7 +242,19 @@ export class SimPhone {
     tls.on("data", (d: Buffer) => {
       head += d.toString("latin1");
       if (!head.includes("\r\n\r\n")) return;
-      const body = JSON.stringify({ phone: this.opts.label ?? this.pub.slice(0, 8), account: this.opts.account, sni });
+      const h = (name: string) => new RegExp(`^${name}:\\s*(.+)$`, "im").exec(head)?.[1]?.trim();
+      const device = h("x-flagship-presence-device");
+      const at = Number(h("x-flagship-presence-at"));
+      const sig = h("x-flagship-presence-sig");
+      let recorded = false;
+      if (device && sig && Number.isSafeInteger(at)) {
+        const p: PhonePresence = { account: this.opts.account, devicePub: device, hostname: sni, issuedAt: at };
+        if (checkPhonePresence(p, sig, sni, Date.now())) {
+          this.seen.set(device, Date.now());
+          recorded = true;
+        }
+      }
+      const body = JSON.stringify({ phone: this.opts.label ?? this.pub.slice(0, 8), account: this.opts.account, sni, recorded });
       tls.end(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`);
     });
     tls.on("error", () => s.close());
@@ -240,4 +275,32 @@ export function selfSignedPhoneCert(hostname: string): { key: string; cert: stri
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * "I'm here": a device's signed hello to `https://<account>.<apex>/` through the relay at `ip`. Resolves with the
+ * holder's label (a phone answered) or null (nobody holds the name).
+ */
+export async function sayHello(o: { ip: string; port?: number; hostname: string; account: string; seed: Uint8Array; ca: string[] }): Promise<string | null> {
+  const devicePub = hexOf(ed.getPublicKey(o.seed));
+  const issuedAt = Date.now();
+  const sig = hexOf(ed.sign(canonicalPhonePresence({ account: o.account, devicePub, hostname: o.hostname, issuedAt }), o.seed));
+  return new Promise((resolve) => {
+    let text = "";
+    let done = false;
+    const finish = (v: string | null) => {
+      if (done) return;
+      done = true;
+      s.destroy();
+      resolve(v);
+    };
+    const s = tlsConnect({ host: o.ip, port: o.port ?? 443, servername: o.hostname, ca: o.ca, checkServerIdentity: () => undefined });
+    s.setTimeout(8_000, () => finish(null));
+    s.on("secureConnect", () =>
+      s.write(`GET / HTTP/1.1\r\nhost: ${o.hostname}\r\nx-flagship-presence-device: ${devicePub}\r\nx-flagship-presence-at: ${issuedAt}\r\nx-flagship-presence-sig: ${sig}\r\nconnection: close\r\n\r\n`),
+    );
+    s.on("data", (d) => (text += d.toString()));
+    s.on("end", () => finish(/^HTTP\/1\.1 2\d\d/.test(text) ? (/"phone":"([^"]+)"/.exec(text)?.[1] ?? "?") : null));
+    s.on("error", () => finish(null));
+  });
 }

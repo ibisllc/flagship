@@ -78,6 +78,8 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/serving-lease/v1": "vectors servingAuthority.test.ts (undelegated key, longer than the grace, older policy generation, other box/account/generation, future-dated)",
   "flagship/revocation-entry/v1": "vectors servingAuthority.test.ts (gap, duplicate, forged signature)",
   "flagship/certificate-order/v1": "vectors servingAuthority.test.ts (shape; the issuance service verifier is H1)",
+  "flagship/route-release/v1": "phoneRoute.test.ts in packages/protocol (other generation, other key's signature) and apps/web/tests/phoneRoute.test.ts (another phone's release, wrong generation)",
+  "flagship/phone-presence/v1": "phoneRoute.test.ts in packages/protocol (other hostname, stale clock)",
   "flagship/route-claim/v1": "phoneRoute.test.ts in packages/protocol (another session's nonce, another generation, stale clock, other apex, other account, bad signature) and apps/web/tests/phoneRoute.test.ts (replay across relays, used nonce, non-admin keys)",
   "flagship/gpu-approval/v1": "vectors gpuApprovalVectors.test.ts, server-daemon gpuApprovals.test.ts (owner-signed, per-GPU)",
   "flagship/gpu-approval-withdraw/v1": "vectors gpuApprovalVectors.test.ts, server-daemon gpuApprovals.test.ts",

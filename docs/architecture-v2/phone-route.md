@@ -32,18 +32,26 @@ relay → {type:"hello", relayId, serverTime}
 phone → {type:"begin", account}
 relay → {type:"challenge", account, hostname, generation, sessionNonce, serverTime, expiresAt}
 phone → {type:"claim", claim:{account, phoneRoutePub, hostname, generation, sessionNonce, issuedAt}, signature}
-relay → {type:"granted", hostname, generation, leaseMs}   |   {type:"refused", code}
-relay → {type:"lost", hostname, generation, reason}        superseded | expired | revoked | contact | released
-phone → {type:"release"}                                   leaving the foreground (then it closes the socket)
+relay → {type:"granted", hostname, generation, leaseMs}   |   {type:"refused", code, generation?}
+relay → {type:"route-vacant", hostname, generation}        to standbys: the holder left; claim now (first wins)
+phone → {type:"release", release:{…claim fields, fresh issuedAt}, signature}   the holder gives the route up
+relay → {type:"released", hostname, generation, confirmed}
+relay → {type:"lost", hostname, generation, reason}        expired | revoked | contact | released
 phone → {type:"beat"}                                      every 15 s (also answers WebSocket pings)
 ```
 
+Handover is vacancy-only (owner, 2026-11-01; `issuance-and-lease-records.md` §4): a claim is committed only while the
+route is vacant, decided by the ledger. A live holder keeps it while its tunnel and lease live; another eligible phone
+is refused `route-held` with the holder's generation and, with its tunnel left open, becomes a standby that gets
+`route-vacant` when the holder's tunnel drops, it releases, or its lease lapses. Leaving the foreground is just closing
+the socket: the route is vacant at once and the holder's streams end with it (no drain).
+
 `claim` is `flagship/route-claim/v1` signed (Ed25519) by the phone's account device key, the key its admin grant
-names. Refusal codes: `malformed`, `busy`, `no-challenge` (none offered, expired or already used), `unavailable`
-(`.com` unreachable), `not-eligible`, `stale-generation` (another acquisition committed first), `wrong-session`,
-`wrong-generation`, `wrong-account`, `wrong-hostname`, `stale` (clock off by more than 60 s), `bad-signature`.
-Close code 4403: the phone is no longer eligible. A phone never re-acquires on its own after `lost` or a refusal; it
-begins again only when the app comes to the foreground again (an explicit acquisition).
+names; `release` is `flagship/route-release/v1` over the held claim's fields. Refusal codes: `malformed`, `busy`,
+`holding` (this session already holds it), `no-challenge` (none offered, expired or already used), `unavailable`
+(`.com` unreachable), `not-eligible`, `route-held` (a live holder exists; carries its generation), `not-holder` (a
+release from a session that holds nothing), `wrong-session`, `wrong-generation`, `wrong-account`, `wrong-hostname`,
+`stale` (clock off by more than 60 s), `bad-signature`. Close code 4403: the phone is no longer eligible.
 
 ## 3. `.com`
 
@@ -51,9 +59,11 @@ begins again only when the app comes to the foreground again (an explicit acquis
   devicePubHex, scopes, issuedAt, expiresAt, signatureHex, signerRoot}]}`: active, unexpired grants of devices not
   removed. The relay runs `phoneRouteEligibility` (`requireMasterAdmin`, never the bare admin root).
 - `GET /api/internal/phone-route/ledger?hostname=` → `{entry}`; `POST` the same path with `{op: acquire|renew|release,
-  hostname, generation, holder|sessionId}` → `{ok, entry, superseded}` or `{ok:false, code, entry}`.
+  hostname, generation, holder|sessionId}` → `{ok, entry}` or `{ok:false, code, entry}` (`route-held` while a live
+  holder exists).
 - Both with the services control secret. The ledger is kept in the ServingFeed Durable Object (one instance), which
-  pushes `{type:"phone-route", hostname, generation}` to every relay on a committed acquisition. A device removal or
+  pushes `{type:"phone-route", hostname, generation, vacant}` to every relay on a committed acquisition (`vacant:
+  false`) or release (`vacant: true`); a relay with standbys also re-reads the ledger every 15 s. A device removal or
   grant revocation pushes `{type:"phone-eligibility", username}`.
 
 ## 4. The phone
@@ -67,9 +77,16 @@ begins again only when the app comes to the foreground again (an explicit acquis
   through one small issuance interface (`PhoneCertIssuer`), so the H1 API plugs in without touching the rest.
 - **Reuse.** The chain is stored and reused until 30 days before it expires; a failed order waits 6 h. Never one order
   per handover.
-- **Foreground only.** On an admin device holding a certificate, the app opens the tunnel when it comes to the
-  foreground and releases and closes it when it leaves.
+- **Presence.** Coming to the foreground, every device of the account says a signed hello: `GET
+  https://<account>.<apex>/` with `x-flagship-presence-device`, `-at`, `-sig` over
+  `flagship/phone-presence/v1|<account>|<devicePub>|<hostname>|<issuedAt>`. A 2xx means a phone holds the name.
+- **Foreground only.** On an admin device holding a certificate, the app then opens the tunnel and claims; refused
+  `route-held`, it stays connected as a standby and claims on `route-vacant`. It closes the tunnel when it leaves the
+  foreground. `release()` sends the signed release (its trigger, a request from another device through the account's
+  `.com` mailbox, is a follow-up).
 - **Endpoint.** Every relayed stream is TLS-terminated with the phone's key, then a minimal HTTP/1.1 server answers:
+  - `GET /` → `{present: true, recorded}`: the presence answer; a valid signed hello is recorded (device key → last
+    seen, in memory, at most 32; exposed as the endpoint's `lastSeen`, the UI is a follow-up).
   - `GET /.well-known/flagship-phone` → `{account, hostname, phoneRoutePub}` (proves the TLS peer is this account's
     admin phone; no secrets).
   - `POST /api/phone/session` with `{code}` (the one-time code the app shows): opens a session, sets
@@ -81,6 +98,9 @@ begins again only when the app comes to the foreground again (an explicit acquis
 
 ## 5. Open
 
+- Follow-ups (owner, 2026-11-01): another device asking the holder to release through the account's `.com` mailbox;
+  a UI for the holder's last-seen list. A hello records the device key it names; it is not yet checked against the
+  account's device list.
 - Visitors that land on a relay instance not holding the phone's tunnel are closed (no cross-instance forwarding).
 - The Rust relay (G7) has no phone route yet; it must resolve the bare name from the same ledger and never from a box.
 - Device-level runs: SE-backed TLS identity on iOS and Keystore-backed `SSLEngine` on Android are unproven on hardware.
