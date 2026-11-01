@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use flagship_relay::authority::Directory;
 use flagship_relay::authority::DirectoryAuthority;
 use flagship_relay::blessing::{DEFAULT_REFRESH, HubBlessing, load_or_create_key};
 use flagship_relay::com::{ComDirectory, Ttls, UreqGet};
@@ -17,6 +18,8 @@ use flagship_relay::mailbox::MailboxRegistry;
 use flagship_relay::outbound::com_policy::{ComHostPolicy, HttpPost, Ttls as PolicyTtls, UreqPost};
 use flagship_relay::outbound::{HostPolicy, KnownHostsPolicy, Options, OutboundRelay, System};
 use flagship_relay::relay::{self, Collaborators, Listeners, RelayConfig};
+use flagship_relay::serving::{ComServingFetch, GateConfig, ServingGate};
+use flagship_relay::serving_feed::{FeedConfig, ServingFeedClient};
 use flagship_relay::throttle::{Meter, over_quota_bytes_per_sec};
 use flagship_relay::usage::{UsageConfig, UsageMeter};
 use tokio::net::TcpListener;
@@ -76,11 +79,56 @@ fn batch_id() -> String {
 async fn run(s: Settings) -> Result<(), String> {
     let post: Arc<dyn HttpPost> = Arc::new(UreqPost::new(Duration::from_secs(10)));
 
-    let authority = DirectoryAuthority::new(ComDirectory::new(
+    let directory = ComDirectory::new(
         &s.com_base_url,
         UreqGet::new(Duration::from_secs(10)),
         Ttls::default(),
-    ));
+    );
+    let authority = DirectoryAuthority::new(directory.clone());
+
+    // The serving authority (serving-wiring.md §2): on when this relay is given `.com`'s revocation public key. It then
+    // fails closed: no new tunnels after 60 s without a frame from `.com`'s feed, every tunnel closed after 10 min.
+    let mut serving_tasks = Vec::new();
+    let serving = match (&s.serving_revocation_pub, &s.control_secret) {
+        (Some(pubkey), Some(secret)) => {
+            let dir = directory.clone();
+            let fetch = ComServingFetch::new(
+                &s.com_base_url,
+                UreqGet::new(Duration::from_secs(5)).with_bearer(secret),
+                Box::new(move |u: String| {
+                    let dir = dir.clone();
+                    Box::pin(async move {
+                        let k = dir.account(&u).await?;
+                        Some(k.admin_root_pub_hex.unwrap_or(k.irk_pub_hex))
+                    })
+                }),
+            );
+            let gate = ServingGate::new(
+                Arc::new(fetch),
+                GateConfig {
+                    refuse_new_after: s.serving_refuse_new,
+                    close_all_after: s.serving_close_all,
+                    check_every: s.serving_check,
+                    ..GateConfig::default()
+                },
+                Box::new(log),
+            );
+            let feed = ServingFeedClient::new(
+                FeedConfig::new(&s.com_base_url, secret, &s.relay_id, pubkey),
+                gate.clone(),
+                UreqGet::new(Duration::from_secs(10)).with_bearer(secret),
+                Box::new(log),
+            );
+            serving_tasks.push(gate.spawn());
+            serving_tasks.push(feed.spawn());
+            log(&format!(
+                "serving authority ON (feed {}/api/internal/serving-feed)",
+                s.com_base_url
+            ));
+            Some((gate, feed.stats()))
+        }
+        _ => None,
+    };
 
     let key = load_or_create_key(s.hub_key_path.as_deref())
         .map_err(|e| format!("no randomness for the hub key: {e}"))?;
@@ -170,6 +218,8 @@ async fn run(s: Settings) -> Result<(), String> {
         outbound,
         mailboxes: s.pb_mail.then(|| Arc::new(MailboxRegistry::default())),
         stats_secret: s.usage_secret.clone(),
+        serving: serving.as_ref().map(|(g, _)| g.clone()),
+        serving_feed: serving.as_ref().map(|(_, f)| Arc::clone(f)),
     };
     let running = relay::start(cfg, listeners, collab).map_err(|e| e.to_string())?;
     log(&format!(
@@ -204,6 +254,9 @@ async fn run(s: Settings) -> Result<(), String> {
     if let Some(m) = usage {
         let post = Arc::clone(&post);
         let _ = tokio::task::spawn_blocking(move || m.flush_all(post.as_ref())).await;
+    }
+    for t in serving_tasks {
+        t.abort();
     }
     running.shutdown().await;
     Ok(())

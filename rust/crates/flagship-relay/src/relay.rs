@@ -105,6 +105,9 @@ pub struct Collaborators {
     pub mailboxes: Option<Arc<crate::mailbox::MailboxRegistry>>,
     /// `x-usage-secret` for `GET /api/stats`; `None` turns the route off.
     pub stats_secret: Option<String>,
+    /// The serving authority and its feed's counters; `None` leaves it off (every admitted box serves its names).
+    pub serving: Option<crate::serving::ServingGate>,
+    pub serving_feed: Option<Arc<crate::serving_feed::FeedStats>>,
 }
 
 impl std::fmt::Debug for Collaborators {
@@ -132,6 +135,8 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         meter: c.meter.clone(),
         outbound: c.outbound,
         mailboxes: c.mailboxes.clone(),
+        serving: c.serving,
+        serving_feed: c.serving_feed,
         live: Arc::new(Mutex::new(HashMap::new())),
         draining: Arc::new(AtomicBool::new(false)),
     };
@@ -202,14 +207,16 @@ impl RunningRelay {
         self.ctx.live.lock().map_or(0, |l| l.len())
     }
 
-    /// Stop accepting, warn boxes that negotiated `drain-v1`, wait up to `grace` for spliced
-    /// streams to finish, then close every tunnel. Returns how many streams were cut.
+    /// Stop accepting, warn boxes that negotiated `drain-v1`, wait up to `grace` for the tunnels to go and spliced
+    /// streams to finish, then close every tunnel left (1012). Returns how many streams were cut.
     pub async fn drain(&self, grace: Duration) -> usize {
         self.ctx.draining.store(true, Ordering::Release);
         let _ = self.stop_accept.send(true);
         hub::announce_drain(&self.ctx.live, grace);
+        // As the TS hub: keep serving until every tunnel has gone (drain-v1 boxes redial elsewhere and let their old
+        // tunnel close once its streams end) or the grace runs out.
         let _ = tokio::time::timeout(grace, async {
-            while self.router.active_streams() > 0 {
+            while self.tunnel_count() > 0 || self.router.active_streams() > 0 {
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
         })
@@ -222,7 +229,7 @@ impl RunningRelay {
             .map(|l| l.values().cloned().collect())
             .unwrap_or_default();
         for t in tunnels {
-            t.close();
+            t.close_with(1012, "relay restarting");
         }
         cut
     }

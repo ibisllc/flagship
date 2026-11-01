@@ -68,6 +68,8 @@ async fn start_with(c: RelayConfig, meter: Option<Arc<dyn Meter>>) -> RunningRel
             outbound: None,
             mailboxes: None,
             stats_secret: None,
+            serving: None,
+            serving_feed: None,
         },
     )
     .unwrap()
@@ -95,6 +97,8 @@ async fn start_with_outbound(
             outbound: Some(outbound),
             mailboxes: None,
             stats_secret: None,
+            serving: None,
+            serving_feed: None,
         },
     )
     .unwrap()
@@ -447,6 +451,8 @@ async fn production_mode_refuses_an_authority_without_signatures() {
             outbound: None,
             mailboxes: None,
             stats_secret: None,
+            serving: None,
+            serving_feed: None,
         },
     )
     .err();
@@ -936,6 +942,8 @@ mod mailboxes_through_the_hub {
                 outbound: None,
                 mailboxes: Some(reg),
                 stats_secret: None,
+                serving: None,
+                serving_feed: None,
             },
         )
         .unwrap()
@@ -1080,6 +1088,8 @@ mod http_surface {
                 outbound: None,
                 mailboxes: reg,
                 stats_secret: secret.map(str::to_owned),
+                serving: None,
+                serving_feed: None,
             },
         )
         .unwrap()

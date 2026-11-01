@@ -33,6 +33,16 @@ pub struct Settings {
     pub pb_mail: bool,
     pub outbound: bool,
     pub drain_grace: Duration,
+    /// `FLAGSHIP_SERVING_REVOCATION_PUB`: `.com`'s revocation key (64 lowercase hex). Set: the serving authority is on
+    /// and fails closed (needs `SERVICES_CONTROL_SECRET`).
+    pub serving_revocation_pub: Option<String>,
+    /// `FLAGSHIP_RELAY_ID`, else `FLY_MACHINE_ID`, else the host name: names this relay on the serving feed.
+    pub relay_id: String,
+    /// `FLAGSHIP_SERVING_REFUSE_NEW_MS` / `FLAGSHIP_SERVING_CLOSE_ALL_MS` / `FLAGSHIP_SERVING_CHECK_MS`: the lost-contact
+    /// thresholds (60 s / 10 min / 5 s). Tests shorten them; production leaves them unset.
+    pub serving_refuse_new: Duration,
+    pub serving_close_all: Duration,
+    pub serving_check: Duration,
 }
 
 fn port(vars: &HashMap<String, String>, name: &str) -> Result<Option<u16>, String> {
@@ -83,6 +93,30 @@ impl Settings {
             pb_mail: vars.get("FLAGSHIP_PB_MAIL").map(String::as_str) != Some("off"),
             outbound: vars.get("FLAGSHIP_OUTBOUND_RELAY").map(String::as_str) != Some("off"),
             drain_grace: millis(vars, "FLAGSHIP_DRAIN_GRACE_MS").unwrap_or(DEFAULT_DRAIN_GRACE),
+            serving_revocation_pub: match nonempty(vars, "FLAGSHIP_SERVING_REVOCATION_PUB") {
+                None => None,
+                Some(k) => {
+                    let k = k.to_ascii_lowercase();
+                    if k.len() != 64 || !k.bytes().all(|b| b.is_ascii_hexdigit()) {
+                        return Err("FLAGSHIP_SERVING_REVOCATION_PUB must be 64 hex".into());
+                    }
+                    if nonempty(vars, "SERVICES_CONTROL_SECRET").is_none() {
+                        return Err("FLAGSHIP_SERVING_REVOCATION_PUB is set but SERVICES_CONTROL_SECRET is not: the serving feed cannot authenticate".into());
+                    }
+                    Some(k)
+                }
+            },
+            relay_id: nonempty(vars, "FLAGSHIP_RELAY_ID")
+                .or_else(|| nonempty(vars, "FLY_MACHINE_ID"))
+                .or_else(|| nonempty(vars, "HOSTNAME"))
+                .unwrap_or_else(|| "flagship-relay".to_owned()),
+            serving_refuse_new: millis(vars, "FLAGSHIP_SERVING_REFUSE_NEW_MS")
+                .unwrap_or(Duration::from_secs(60)),
+            serving_close_all: millis(vars, "FLAGSHIP_SERVING_CLOSE_ALL_MS")
+                .unwrap_or(Duration::from_secs(600)),
+            serving_check: millis(vars, "FLAGSHIP_SERVING_CHECK_MS")
+                .filter(|d| !d.is_zero())
+                .unwrap_or(Duration::from_secs(5)),
         })
     }
 }

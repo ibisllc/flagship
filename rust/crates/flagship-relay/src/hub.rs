@@ -93,6 +93,8 @@ pub enum OpenError {
 #[derive(Debug)]
 struct StreamEntry {
     down: Arc<DownQueue>,
+    /// The name the visitor asked for: a lapse of the box's app routes ends every stream but its control name's.
+    sni: String,
     recv: Option<RecvWindow>,
     remote_closed: bool,
 }
@@ -121,6 +123,8 @@ pub struct Tunnel {
     cfg: Arc<HubConfig>,
     /// Peer-backup mailbox requests waiting for the holder's reply, by the stream id they went out on.
     mail: Mutex<MailState>,
+    /// The WebSocket close the hub sends when it ends the tunnel (first one wins).
+    close_reason: Mutex<Option<(u16, String)>>,
 }
 
 #[derive(Debug, Default)]
@@ -137,6 +141,9 @@ struct MailWaiter {
 
 /// Mailbox stream ids live high in the hub-opened range, away from the visitor streams that count up from 1.
 const MAIL_STREAM_BASE: u32 = 0x7ff0_0000;
+/// `HELLO_REFUSED_TRY_AGAIN` (`frames.ts`): the hub cannot decide now (its feed from `.com` is quiet); the box retries.
+pub const HELLO_REFUSED_TRY_AGAIN: &str = "try-again";
+
 /// How long a holder has to answer an envelope.
 const MAIL_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -168,6 +175,7 @@ impl Tunnel {
             closed: AtomicBool::new(false),
             closed_tx,
             mail: Mutex::new(MailState::default()),
+            close_reason: Mutex::new(None),
             budget: Budget::new(cfg.tunnel_queue_bytes),
             cfg,
         })
@@ -258,6 +266,7 @@ impl Tunnel {
                 id,
                 StreamEntry {
                     down: down.clone(),
+                    sni: sni.to_ascii_lowercase(),
                     recv: credit.then(RecvWindow::default),
                     remote_closed: false,
                 },
@@ -394,6 +403,53 @@ impl Tunnel {
         }
     }
 
+    /// Remember the close code and reason the hub will send (the first one wins).
+    pub fn set_close_reason(&self, code: u16, why: &str) {
+        if let Ok(mut g) = self.close_reason.lock()
+            && g.is_none()
+        {
+            *g = Some((code, why.to_owned()));
+        }
+    }
+
+    fn close_reason(&self) -> Option<(u16, String)> {
+        self.close_reason.lock().ok().and_then(|c| c.clone())
+    }
+
+    /// End the tunnel with this close (the serving gate's refusals, `serving-feed-lost`).
+    pub fn close_with(&self, code: u16, why: &str) {
+        self.set_close_reason(code, why);
+        self.close();
+    }
+
+    /// The box's app routes stopped: end every visitor stream except those for its control name (the box gets
+    /// `CLOSE`, the visitor its FIN), as `closeAppStreams` does.
+    pub fn close_app_streams(&self, control: &str) {
+        let ended: Vec<(u32, Arc<DownQueue>)> = self
+            .state
+            .lock()
+            .map(|mut s| {
+                let ids: Vec<u32> = s
+                    .streams
+                    .iter()
+                    .filter(|(_, e)| e.sni != control)
+                    .map(|(id, _)| *id)
+                    .collect();
+                ids.into_iter()
+                    .filter_map(|id| {
+                        s.data.remove(id);
+                        s.streams.remove(&id).map(|e| (id, e.down))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (id, down) in ended {
+            self.send_control(Frame::new(id, FRAME_CLOSE, Vec::new()));
+            down.end();
+        }
+        self.up_space.notify_waiters();
+    }
+
     pub fn close(&self) {
         if self.closed.swap(true, Ordering::AcqRel) {
             return;
@@ -455,6 +511,9 @@ pub struct HubContext {
     pub outbound: Option<Arc<crate::outbound::OutboundRelay>>,
     /// Peer-backup mailboxes (`pb-mail-v1`); `None` leaves the capability unadvertised and the frames ignored.
     pub mailboxes: Option<Arc<crate::mailbox::MailboxRegistry>>,
+    /// The serving authority (`serving-wiring.md` §2); `None`: every admitted box serves every name it claims.
+    pub serving: Option<crate::serving::ServingGate>,
+    pub serving_feed: Option<Arc<crate::serving_feed::FeedStats>>,
     /// Every live tunnel, for drain.
     pub live: Arc<Mutex<HashMap<u64, Arc<Tunnel>>>>,
     pub draining: Arc<AtomicBool>,
@@ -483,7 +542,58 @@ fn broadcast_snapshot(reg: &Registry<Arc<Tunnel>>, key: &SetKey) {
 
 enum Step {
     Continue,
-    Close(u16, &'static str),
+    Close(u16, String),
+}
+
+/// The serving gate's hands on one tunnel.
+struct TunnelServing {
+    tunnel: Arc<Tunnel>,
+    registry: SharedRegistry,
+}
+
+impl crate::serving::ServingHandle for TunnelServing {
+    fn close_tunnel(&self, code: u16, reason: &str) {
+        self.tunnel.close_with(code, reason);
+    }
+
+    fn close_app_streams(&self) {
+        if let Some(pc) = self.tunnel.pod_canonical() {
+            self.tunnel.close_app_streams(&pc);
+        }
+    }
+
+    fn on_apps_changed(&self, apps: bool) {
+        let Some(pc) = self.tunnel.pod_canonical() else {
+            return;
+        };
+        let Ok(mut reg) = self.registry.lock() else {
+            return;
+        };
+        let id = self.tunnel.id;
+        if !reg.is_current(&pc, |t| t.id == id) {
+            return;
+        }
+        let view = crate::registry::ServingView {
+            control: true,
+            apps,
+        };
+        for k in reg.set_serving(&pc, view) {
+            broadcast_snapshot(&reg, &k);
+        }
+    }
+}
+
+fn serving_hello(h: &ParsedHello) -> crate::serving::ServingHello {
+    crate::serving::ServingHello {
+        username: h.root_entitlement.username.to_lowercase(),
+        box_pub: h.root_entitlement.pod_pub_key_hex.clone(),
+        pod_canonical: h.root_entitlement.pod_canonical.clone(),
+        admin_key: h.serving_admin_key.clone(),
+        policy: h
+            .serving_policy
+            .as_ref()
+            .and_then(crate::serving::parse_signed_policy),
+    }
 }
 
 /// The tunnel as the outbound relay's frame sink: results, data and credit join the control queue (bounded by the stream
@@ -555,6 +665,7 @@ impl crate::mailbox::MailDeliver for TunnelMail {
 struct Session {
     ctx: HubContext,
     tunnel: Arc<Tunnel>,
+    serving: Option<Arc<crate::serving::ServingBox>>,
     outbound: Option<crate::outbound::OutboundSession>,
     registered: Option<String>,
     last_issued_at: f64,
@@ -563,6 +674,9 @@ struct Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        if let Some(b) = &self.serving {
+            b.detach();
+        }
         if let Some(reg) = &self.ctx.mailboxes {
             reg.drop_owner(self.tunnel.id);
         }
@@ -716,22 +830,59 @@ impl Session {
     async fn on_first_frame(&mut self, f: Frame) -> Step {
         if f.frame_type != FRAME_HELLO {
             self.ack(false, Some("expected HELLO as first frame"), None, &[]);
-            return Step::Close(1002, "no HELLO");
+            return Step::Close(1002, "no HELLO".into());
         }
         let h = match hello::parse_hello(&f.payload) {
             Ok(h) => h,
             Err(r) => {
                 self.ack(false, Some(r), None, &[]);
-                return Step::Close(1002, "bad HELLO");
+                return Step::Close(1002, "bad HELLO".into());
             }
         };
         let canonicals = match self.admit(&h).await {
             Ok(c) => c,
             Err(e) => {
                 self.ack(false, Some(&e.reason), None, &[]);
-                return Step::Close(e.close_code, "auth failed");
+                return Step::Close(e.close_code, "auth failed".into());
             }
         };
+        let pc_lower = h.root_entitlement.pod_canonical.clone();
+        if let Some(gate) = self.ctx.serving.clone() {
+            if !gate.accepting_new_tunnels() {
+                let r = HELLO_REFUSED_TRY_AGAIN;
+                self.ack(false, Some(r), None, &[]);
+                return Step::Close(1013, r.into());
+            }
+            if let Ok(mut s) = self.tunnel.state.lock() {
+                s.pod_canonical = Some(pc_lower.clone());
+            }
+            let handle = Arc::new(TunnelServing {
+                tunnel: self.tunnel.clone(),
+                registry: self.ctx.registry.clone(),
+            });
+            let b = gate.attach(serving_hello(&h), handle).await;
+            if self.tunnel.is_closed() {
+                b.detach();
+                return Step::Close(1000, "closed".into());
+            }
+            let d = b.decision();
+            if !d.control() {
+                b.detach();
+                let reason = d.reason().to_owned();
+                self.ack(false, Some(&reason), None, &[]);
+                return Step::Close(1008, reason);
+            }
+            if let Ok(mut reg) = self.ctx.registry.lock() {
+                let _ = reg.set_serving(
+                    &pc_lower,
+                    crate::registry::ServingView {
+                        control: true,
+                        apps: d.apps(),
+                    },
+                );
+            }
+            self.serving = Some(b);
+        }
         let pc = h.root_entitlement.pod_canonical.clone();
         let (caps, negotiated) = self.capabilities(&h.capabilities);
         if let Ok(mut s) = self.tunnel.state.lock() {
@@ -769,7 +920,7 @@ impl Session {
         };
         if h.root_entitlement.pod_canonical != pc {
             self.ack(false, Some("HELLO podCanonical changed mid-WS"), None, &[]);
-            return Step::Close(1008, "podCanonical changed");
+            return Step::Close(1008, "podCanonical changed".into());
         }
         if h.issued_at <= self.last_issued_at {
             self.ack(
@@ -784,13 +935,36 @@ impl Session {
             Ok(c) => c,
             Err(e) if e.reason == "replaced" => {
                 self.ack(false, Some("replaced"), None, &[]);
-                return Step::Close(1008, "replaced");
+                return Step::Close(1008, "replaced".into());
             }
             Err(e) => {
                 self.ack(false, Some(&e.reason), None, &[]);
                 return Step::Continue;
             }
         };
+        let id = self.tunnel.id;
+        let current = self
+            .ctx
+            .registry
+            .lock()
+            .is_ok_and(|r| r.is_current(pc, |t| t.id == id));
+        if !current {
+            // A newer tunnel of this box holds the name; a refresh here must not take it back.
+            self.ack(
+                false,
+                Some("tunnel superseded by a newer connection"),
+                None,
+                &[],
+            );
+            return Step::Continue;
+        }
+        if let Some(b) = self.serving.clone() {
+            let d = b.update(serving_hello(&h)).await;
+            // A denied decision has already closed the tunnel.
+            if self.tunnel.is_closed() || !d.control() {
+                return Step::Continue;
+            }
+        }
         self.last_issued_at = h.issued_at;
         let negotiated = self.tunnel.negotiated();
         let mut caps = Vec::new();
@@ -883,12 +1057,10 @@ where
     }
     let (mut sink, mut stream) = ws.split();
     let flush = Arc::new(Notify::new());
-    let close_frame: Arc<Mutex<Option<(u16, &'static str)>>> = Arc::new(Mutex::new(None));
 
     let writer = {
         let tunnel = tunnel.clone();
         let flush = flush.clone();
-        let close_frame = close_frame.clone();
         let max = ctx.cfg.max_ws_message.min(WRITE_BATCH_BYTES);
         tokio::spawn(async move {
             loop {
@@ -913,7 +1085,7 @@ where
                     }
                 }
             }
-            let frame = close_frame.lock().ok().and_then(|c| *c);
+            let frame = tunnel.close_reason();
             let msg = frame.map(|(code, reason)| CloseFrame {
                 code: CloseCode::from(code),
                 reason: reason.into(),
@@ -927,6 +1099,7 @@ where
         ctx: ctx.clone(),
         tunnel: tunnel.clone(),
         outbound: None,
+        serving: None,
         registered: None,
         last_issued_at: 0.0,
         decoder: FrameDecoder::new(TypeSet::V1, ctx.cfg.max_ws_message),
@@ -949,21 +1122,21 @@ where
         };
         if session.decoder.push(&bytes).is_err() {
             session.ack(false, Some("frame decode error"), None, &[]);
-            set_close(&close_frame, 1002, "frame decode error");
+            tunnel.set_close_reason(1002, "frame decode error");
             break;
         }
         loop {
             match session.decoder.next_frame() {
                 Ok(Some(f)) => {
                     if let Step::Close(code, why) = session.on_frame(f).await {
-                        set_close(&close_frame, code, why);
+                        tunnel.set_close_reason(code, &why);
                         break 'read;
                     }
                 }
                 Ok(None) => break,
                 Err(e) => {
                     session.ack(false, Some(&e.0), None, &[]);
-                    set_close(&close_frame, 1002, "frame decode error");
+                    tunnel.set_close_reason(1002, "frame decode error");
                     break 'read;
                 }
             }
@@ -972,7 +1145,7 @@ where
 
     // When the hub refused the box, let the queued ack reach it before the socket goes; when
     // the box went away, close at once so nothing is routed to a dead tunnel meanwhile.
-    let refused = close_frame.lock().is_ok_and(|c| c.is_some());
+    let refused = tunnel.close_reason().is_some();
     if refused {
         if let Ok(mut s) = tunnel.state.lock() {
             s.data = FairQueue::new(DEFAULT_QUANTUM);
@@ -1001,14 +1174,6 @@ where
         live.remove(&tunnel.id);
     }
     let _ = tokio::time::timeout(Duration::from_secs(5), writer).await;
-}
-
-fn set_close(c: &Mutex<Option<(u16, &'static str)>>, code: u16, why: &'static str) {
-    if let Ok(mut g) = c.lock()
-        && g.is_none()
-    {
-        *g = Some((code, why));
-    }
 }
 
 /// Send `DRAIN_NOTICE {graceMs}` to every tunnel that negotiated `drain-v1`; a v1 box would

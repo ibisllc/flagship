@@ -6,9 +6,19 @@ use std::collections::{HashMap, HashSet};
 
 use crate::allocator::{AddPodResult, Allocator, RemovePodResult, SetKey, Snapshot, TransferError};
 
+/// A box's serving decision as routing sees it (`serving-wiring.md` §2): its exact control name routes while `control`,
+/// every other name only while `apps` too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServingView {
+    pub control: bool,
+    pub apps: bool,
+}
+
 #[derive(Debug)]
 pub struct Registry<T> {
     tunnels: HashMap<String, T>,
+    /// Per pod, set by the serving gate; absent = no serving authority wired (every name routes).
+    serving: HashMap<String, ServingView>,
     redirections: HashMap<String, String>,
     known_box_canonicals: HashSet<String>,
     allocator: Allocator,
@@ -24,6 +34,20 @@ fn user_label_ok(u: &str) -> bool {
         }
         None => false,
     }
+}
+
+/// `<account>.<apex>` with an account label (`barePhoneAccount`).
+pub fn bare_account(lower: &str, apex: &str) -> bool {
+    let Some(head) = lower.strip_suffix(apex).and_then(|h| h.strip_suffix('.')) else {
+        return false;
+    };
+    let b = head.as_bytes();
+    let alnum = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
+    !b.is_empty()
+        && b.len() <= 63
+        && b.first().is_some_and(alnum)
+        && b.last().is_some_and(alnum)
+        && b.iter().all(|c| alnum(c) || *c == b'-')
 }
 
 /// The user-zone label: the last label of `<...>.<user>.<apex>` with at least two labels.
@@ -49,6 +73,7 @@ impl<T: Clone> Registry<T> {
         let apex = apex.to_lowercase();
         Self {
             tunnels: HashMap::new(),
+            serving: HashMap::new(),
             redirections: HashMap::new(),
             known_box_canonicals: HashSet::new(),
             allocator: Allocator::new(&apex),
@@ -70,7 +95,33 @@ impl<T: Clone> Registry<T> {
         let pc = pod_canonical.to_lowercase();
         self.tunnels.insert(pc.clone(), tunnel);
         self.known_box_canonicals.insert(pc.clone());
-        self.allocator.add_pod(&pc, canonicals, now_ms)
+        let apps = self.serving.get(&pc).is_none_or(|v| v.apps);
+        self.allocator
+            .add_pod_serving(&pc, canonicals, now_ms, apps)
+    }
+
+    /// The serving gate decided for this pod: remember it for routing, and hand its app slots on (or take free ones
+    /// back). Returns the sets whose snapshot changed.
+    pub fn set_serving(&mut self, pod_canonical: &str, view: ServingView) -> Vec<SetKey> {
+        let pc = pod_canonical.to_lowercase();
+        self.serving.insert(pc.clone(), view);
+        if !self.tunnels.contains_key(&pc) {
+            return Vec::new();
+        }
+        self.allocator
+            .set_apps_allowed(&pc, view.apps)
+            .affected_sets
+    }
+
+    pub fn serving_of(&self, pod_canonical: &str) -> Option<ServingView> {
+        self.serving.get(&pod_canonical.to_lowercase()).copied()
+    }
+
+    /// Is `pc`'s registered tunnel the one `is_current` names?
+    pub fn is_current(&self, pod_canonical: &str, is_current: impl Fn(&T) -> bool) -> bool {
+        self.tunnels
+            .get(&pod_canonical.to_lowercase())
+            .is_some_and(is_current)
     }
 
     pub fn request_transfer(
@@ -93,34 +144,54 @@ impl<T: Clone> Registry<T> {
             return None;
         }
         self.tunnels.remove(&pc);
+        self.serving.remove(&pc);
         Some(self.allocator.remove_pod(&pc))
     }
 
     pub fn unregister(&mut self, pod_canonical: &str) -> RemovePodResult {
         let pc = pod_canonical.to_lowercase();
         self.tunnels.remove(&pc);
+        self.serving.remove(&pc);
         self.allocator.remove_pod(&pc)
     }
 
     /// Exact (canonical or held slot), then one leftmost-label strip, then the pod's own
     /// canonical, then custom-domain redirections, in that order (`findBySni`).
+    ///
+    /// An account's bare `<account>.<apex>` name is its admin phones' (plan H3) and never resolves to a box; this relay
+    /// has no phone route yet, so it resolves to nothing. A box whose serving decision refuses a name resolves to
+    /// nothing for it, so the router closes it exactly like a name nobody registered.
     pub fn find_by_sni(&self, sni: &str) -> Option<T> {
         let lower = sni.to_lowercase();
+        if bare_account(&lower, &self.apex) {
+            return None;
+        }
+        let pc = self.resolve(&lower)?;
+        match self.serving.get(&pc) {
+            None => self.tunnels.get(&pc).cloned(),
+            Some(v) if !v.control => None,
+            Some(v) if v.apps || lower == pc => self.tunnels.get(&pc).cloned(),
+            Some(_) => None,
+        }
+    }
+
+    /// The pod canonical a name resolves to (`resolveSni`).
+    fn resolve(&self, lower: &str) -> Option<String> {
         if lower.contains('*') {
             return None;
         }
-        if let Some(h) = self.allocator.find_holder(&lower) {
-            return self.tunnels.get(&h).cloned();
+        if let Some(h) = self.allocator.find_holder(lower) {
+            return self.tunnels.contains_key(&h).then_some(h);
         }
         let (_, parent) = lower.split_once('.')?;
         if let Some(h) = self.allocator.find_holder(parent) {
-            return self.tunnels.get(&h).cloned();
+            return self.tunnels.contains_key(&h).then_some(h);
         }
-        if let Some(t) = self.tunnels.get(parent) {
-            return Some(t.clone());
+        if self.tunnels.contains_key(parent) {
+            return Some(parent.to_owned());
         }
-        let pod = self.redirections.get(&lower)?;
-        self.tunnels.get(pod).cloned()
+        let pod = self.redirections.get(lower)?;
+        self.tunnels.contains_key(pod).then(|| pod.clone())
     }
 
     pub fn add_redirection(&mut self, fqdn: &str, pod: &str) {

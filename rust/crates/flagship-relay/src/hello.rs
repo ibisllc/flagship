@@ -58,6 +58,10 @@ pub struct ParsedHello {
     /// Extension capabilities the box offers (`stream-credit-v1`, `drain-v1`). Not covered
     /// by the STK signature: only ever used to enable features both ends implement.
     pub capabilities: Vec<String>,
+    /// `servingAdminKey`: the admin key the box pinned (64 lowercase hex), `None` when absent or malformed.
+    pub serving_admin_key: Option<String>,
+    /// `servingPolicy`: the box's stored signed policy, `{record|policy, signature}` as sent; checked by the gate.
+    pub serving_policy: Option<Value>,
     /// The raw JSON, for an authority that re-derives canonical bytes itself.
     pub raw: Value,
 }
@@ -274,6 +278,8 @@ pub fn parse_hello(payload: &[u8]) -> Result<ParsedHello, &'static str> {
         signature_hex: signature,
         app_grants,
         capabilities,
+        serving_admin_key: hex_ok(o.get("servingAdminKey"), 64),
+        serving_policy: o.get("servingPolicy").filter(|p| p.is_object()).cloned(),
         raw: v.clone(),
     })
 }

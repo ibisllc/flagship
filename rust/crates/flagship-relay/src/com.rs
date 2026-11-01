@@ -25,6 +25,8 @@ pub trait HttpGet: Send + Sync + 'static {
 #[derive(Debug)]
 pub struct UreqGet {
     agent: ureq::Agent,
+    /// Sent as `authorization: Bearer <secret>` (the services control secret on `.com`'s internal routes).
+    bearer: Option<String>,
 }
 
 const MAX_BODY: u64 = 1 << 20;
@@ -42,13 +44,24 @@ impl UreqGet {
             .build();
         Self {
             agent: ureq::Agent::new_with_config(config),
+            bearer: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_bearer(mut self, secret: &str) -> Self {
+        self.bearer = Some(secret.to_owned());
+        self
     }
 }
 
 impl HttpGet for UreqGet {
     fn get_json(&self, url: &str) -> Result<(u16, Value), String> {
-        let mut resp = self.agent.get(url).call().map_err(|e| e.to_string())?;
+        let mut req = self.agent.get(url);
+        if let Some(b) = &self.bearer {
+            req = req.header("authorization", &format!("Bearer {b}"));
+        }
+        let mut resp = req.call().map_err(|e| e.to_string())?;
         let status = resp.status().as_u16();
         let text = resp
             .body_mut()
@@ -61,7 +74,7 @@ impl HttpGet for UreqGet {
 }
 
 /// Percent-encodes one path segment (RFC 3986 unreserved characters pass).
-fn segment(s: &str) -> String {
+pub fn segment(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
@@ -110,9 +123,16 @@ struct Inner<H> {
     retired: Cache<HashSet<String>>,
 }
 
-#[derive(Clone)]
 pub struct ComDirectory<H: HttpGet> {
     inner: Arc<Inner<H>>,
+}
+
+impl<H: HttpGet> Clone for ComDirectory<H> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 impl<H: HttpGet> std::fmt::Debug for ComDirectory<H> {

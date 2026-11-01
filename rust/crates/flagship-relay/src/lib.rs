@@ -24,6 +24,8 @@ pub mod pipe;
 pub mod registry;
 pub mod relay;
 pub mod router;
+pub mod serving;
+pub mod serving_feed;
 pub mod sni;
 pub mod throttle;
 pub mod usage;

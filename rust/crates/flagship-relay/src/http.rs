@@ -175,6 +175,13 @@ fn stats(app: &HttpApp, req: &Request<Incoming>) -> Resp {
                 "holdTimeouts": n(&s.hold_timeouts), "noBoxRegistered": n(&s.no_box_registered), "noUser": n(&s.no_user),
                 "refusedBusy": n(&s.refused_busy), "peekTimeouts": n(&s.peek_timeouts), "activeStreams": app.router.active_streams(),
             },
+            "serving": app.hub.serving.as_ref().map(|g| {
+                let mut v = g.stats().to_json();
+                if let (Some(o), Some(f)) = (v.as_object_mut(), &app.hub.serving_feed) {
+                    o.insert("feedConnection".into(), f.to_json());
+                }
+                v
+            }),
             "now": now_iso(),
         }),
     )

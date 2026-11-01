@@ -45,6 +45,10 @@ pub enum TransferError {
     NotDerivable,
     PodNotRegistered,
     NotParseable,
+    /// The pod's serving decision stops its apps (`serving-wiring.md` §2).
+    AppsStopped,
+    /// Another box's control name: never an app slot (plan H9).
+    ControlNameReserved,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +119,9 @@ struct SetEntry {
 pub struct Allocator {
     pods: HashMap<String, PodEntry>,
     sets: HashMap<String, SetEntry>,
+    /// Pods whose serving decision says `apps: false`: they keep their own canonical but hold no app slot and are never
+    /// an heir; they stay in candidate queues so they can come back (`allocator.ts` `appsStopped`).
+    apps_stopped: HashSet<String>,
     apex: String,
 }
 
@@ -222,6 +229,7 @@ impl Allocator {
         Self {
             pods: HashMap::new(),
             sets: HashMap::new(),
+            apps_stopped: HashSet::new(),
             apex: apex.to_lowercase(),
         }
     }
@@ -239,13 +247,40 @@ impl Allocator {
         })
     }
 
+    /// A box's own name (`<server>.<user>.<apex>`): never an app slot, whoever asks (plan H9).
+    pub fn is_control_name(&self, fqdn: &str) -> bool {
+        self.pods.contains_key(&fqdn.to_lowercase())
+    }
+
     pub fn add_pod(
         &mut self,
         pod_canonical: &str,
         canonicals: &[String],
         now_ms: u64,
     ) -> AddPodResult {
+        self.add_pod_serving(pod_canonical, canonicals, now_ms, true)
+    }
+
+    /// `addPod` with the pod's serving decision: `apps_allowed == false` claims no slot.
+    pub fn add_pod_serving(
+        &mut self,
+        pod_canonical: &str,
+        canonicals: &[String],
+        now_ms: u64,
+        apps_allowed: bool,
+    ) -> AddPodResult {
         let pc = pod_canonical.to_lowercase();
+        if apps_allowed {
+            self.apps_stopped.remove(&pc);
+        } else {
+            self.apps_stopped.insert(pc.clone());
+        }
+        let control: HashSet<String> = self
+            .pods
+            .keys()
+            .cloned()
+            .chain(std::iter::once(pc.clone()))
+            .collect();
         let mut ordered: Vec<String> = Vec::new();
         for c in canonicals {
             let l = c.to_lowercase();
@@ -284,8 +319,10 @@ impl Allocator {
                 set.members.set(&pc, canonical);
             }
             enqueue(set, canonical, &pc);
-            if canonical != &pc
+            if apps_allowed
+                && canonical != &pc
                 && is_short_service_canonical(canonical, &apex)
+                && !control.contains(canonical)
                 && !set.slot_holders.contains(canonical)
             {
                 set.slot_holders.set(canonical, &pc);
@@ -304,7 +341,7 @@ impl Allocator {
                 set.members.set(&pc, sh);
             }
             enqueue(set, sh, &pc);
-            if !set.slot_holders.contains(sh) {
+            if apps_allowed && !control.contains(sh) && !set.slot_holders.contains(sh) {
                 set.slot_holders.set(sh, &pc);
                 held.push(sh.clone());
             }
@@ -347,7 +384,13 @@ impl Allocator {
         let pc = pod_canonical.to_lowercase();
         let fq = fqdn.to_lowercase();
         let pod = self.pods.get(&pc).ok_or(TransferError::PodNotRegistered)?;
+        if self.apps_stopped.contains(&pc) {
+            return Err(TransferError::AppsStopped);
+        }
         let key = parse_set_key(&fq, &self.apex).ok_or(TransferError::NotParseable)?;
+        if fq != pc && self.pods.contains_key(&fq) {
+            return Err(TransferError::ControlNameReserved);
+        }
         let derivable = pod.derivable.contains(&fq) || pod.canonicals.contains(&fq);
         let own_zone = !derivable && self.in_own_user_zone(&pc, &fq);
         if !derivable && !own_zone {
@@ -402,7 +445,7 @@ impl Allocator {
                 .map(|(s, _)| s.clone())
                 .collect();
             for slot in held {
-                let heir = pick_heir(&self.pods, &pc, set, &slot);
+                let heir = pick_heir(&self.pods, &self.apps_stopped, &pc, set, &slot);
                 match heir {
                     Some(h) => {
                         set.slot_holders.set(&slot, &h);
@@ -427,11 +470,86 @@ impl Allocator {
             }
         }
         self.pods.remove(&pc);
+        self.apps_stopped.remove(&pc);
         out.affected_sets = affected
             .iter()
             .filter_map(|k| self.sets.get(k).map(|s| s.key.clone()))
             .collect();
         out
+    }
+
+    /// The pod's serving decision changed (`setAppsAllowed`). Stopping hands every slot it holds to the next live, serving
+    /// candidate (or frees it); resuming claims the free slots it is queued for, never one another pod holds.
+    pub fn set_apps_allowed(&mut self, pod_canonical: &str, allowed: bool) -> RemovePodResult {
+        let pc = pod_canonical.to_lowercase();
+        let Some(pod) = self.pods.get(&pc) else {
+            return RemovePodResult::default();
+        };
+        if allowed != self.apps_stopped.contains(&pc) {
+            return RemovePodResult::default();
+        }
+        if allowed {
+            self.apps_stopped.remove(&pc);
+        } else {
+            self.apps_stopped.insert(pc.clone());
+        }
+        let keys = pod.set_keys.clone();
+        let derivable = pod.derivable.clone();
+        let apex = self.apex.clone();
+        let mut out = RemovePodResult::default();
+        let mut affected = Vec::new();
+        for ks in keys {
+            let Some(set) = self.sets.get_mut(&ks) else {
+                continue;
+            };
+            if allowed {
+                let free: Vec<String> = set
+                    .candidate_queue
+                    .iter()
+                    .filter(|(slot, q)| {
+                        **slot != pc
+                            && !set.slot_holders.contains(slot)
+                            && q.contains(&pc)
+                            && (derivable.contains(*slot)
+                                || is_short_service_canonical(slot, &apex))
+                    })
+                    .map(|(slot, _)| slot.clone())
+                    .collect();
+                for slot in free {
+                    set.slot_holders.set(&slot, &pc);
+                    push_unique(&mut affected, &ks);
+                }
+            } else {
+                let held: Vec<String> = set
+                    .slot_holders
+                    .iter()
+                    .filter(|(_, h)| **h == pc)
+                    .map(|(s, _)| s.clone())
+                    .collect();
+                for slot in held {
+                    let heir = pick_heir(&self.pods, &self.apps_stopped, &pc, set, &slot);
+                    match &heir {
+                        Some(h) => set.slot_holders.set(&slot, h),
+                        None => set.slot_holders.delete(&slot),
+                    }
+                    out.redistributed.push(Redistributed {
+                        fqdn: slot,
+                        from: pc.clone(),
+                        to: heir,
+                    });
+                    push_unique(&mut affected, &ks);
+                }
+            }
+        }
+        out.affected_sets = affected
+            .iter()
+            .filter_map(|k| self.sets.get(k).map(|s| s.key.clone()))
+            .collect();
+        out
+    }
+
+    pub fn apps_allowed(&self, pod_canonical: &str) -> bool {
+        !self.apps_stopped.contains(&pod_canonical.to_lowercase())
     }
 
     pub fn find_holder(&self, fqdn: &str) -> Option<String> {
@@ -519,6 +637,7 @@ fn enqueue(set: &mut SetEntry, slot: &str, pod: &str) {
 /// excluded explicitly through `members`, from which it was already deleted.
 fn pick_heir(
     pods: &HashMap<String, PodEntry>,
+    stopped: &HashSet<String>,
     _leaving: &str,
     set: &SetEntry,
     slot: &str,
@@ -526,12 +645,15 @@ fn pick_heir(
     if let Some(q) = set.candidate_queue.get(slot)
         && let Some(c) = q
             .iter()
-            .find(|c| pods.contains_key(*c) && set.members.contains(c))
+            .find(|c| pods.contains_key(*c) && set.members.contains(c) && !stopped.contains(*c))
     {
         return Some(c.clone());
     }
     let mut best: Option<(&String, u64)> = None;
     for (m, _) in set.members.iter() {
+        if stopped.contains(m) {
+            continue;
+        }
         let Some(p) = pods.get(m) else {
             continue;
         };
