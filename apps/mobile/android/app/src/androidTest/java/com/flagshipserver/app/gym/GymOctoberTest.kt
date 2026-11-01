@@ -554,7 +554,8 @@ class GymOctoberTest : GymBase() {
         composeRule.waitUntil(10_000) { count("access-alert-title") == 0 && count("access-alert-done") == 0 }
         composeRule.onNodeWithTag("home-add-server").performScrollTo().assertIsDisplayed()
         gymShot("access-alert-answered")
-        assertEquals(listOf("app-access:admin", "app-access:admin"), signedChecks())
+        // Opening the app on an admin device also signs a renewal delegation (the dead-man's renewal key).
+        assertEquals(listOf("app-access:admin", "app-access:admin"), signedChecks().filter { it.startsWith("app-access:") })
     }
 
     /** "Not now" closes the dialog and leaves the request on the box. */
