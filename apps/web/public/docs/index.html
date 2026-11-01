@@ -139,7 +139,7 @@
     <section class="doc-section" id="install">
       <h2>Install &amp; first boot</h2>
       <p>The first-boot bootstrap is public in our open-source repo and pinned by hash inside the signed recipe. It installs the server software from one release package that Flagship's maintainers signed, checking the signature first. It formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com. The server software runs as an ordinary user; its keys are held by a separate key service.</p>
-      <p>Every subsequent boot, the phone has to approve the LUKS unlock, unless you turned on Auto-unlock for that server. A stolen box without your phone is a brick.</p>
+      <p>Every subsequent boot, the phone has to approve the LUKS unlock, unless you turned on Auto-unlock for that server. Without Auto-unlock, a stolen box without your phone is a brick. With it, revoke the server in the app: it gets no unlock key at its next start.</p>
       <a class="next" href="/help">Stuck on install? →</a>
     </section>
 
@@ -214,8 +214,10 @@
 
     <section class="doc-section" id="pair">
       <h2>Phone pairing</h2>
-      <p>To use the web console you scan a QR code from the phone. The phone shows a 32-byte session token, signs an <code>add-paired-session</code> order, and the daemon stores the token. The browser holds it as a cookie; every admin call carries it.</p>
-      <p>Pairings are listed in <em>Settings → Paired devices</em>. Revoke any time.</p>
+      <p>Your keys live on your phone and your other devices. Everything else pairs to them with a QR code, and both screens show the same short code, so you can check you are pairing the screen in front of you. Every QR code is an ordinary <code>https://flagshipserver.com/…</code> link: scanned with the phone's camera it opens the Flagship app, and without the app it offers the store pages.</p>
+      <p><strong>A browser on any computer (Remote).</strong> Open <code>remote.flagshipserver.com</code>; it shows a QR code at once. Scan it with the Flagship app, check the codes match, pick a server and approve with Face ID or your fingerprint. The phone mints a one-use ticket on that server and seals it so only that browser can read it; the browser redeems it on your server. The browser holds no keys: anything that needs your signature goes back to your phone to approve. Browser sessions are listed under <em>Settings → Browser sessions</em>; end one any time.</p>
+      <p><strong>Another device on your account.</strong> On an admin device (one that holds your account's admin key), open <em>Settings → Trusted devices → Add device</em>. On the new phone, tablet or browser, choose Connect to an existing account and scan the code. The two meet through a relay on <code>flagshipserver.com</code> that passes sealed bytes along and can't read them; when the codes match, the key moves over. Only an admin device can add devices; on any other device the button is greyed out. Remove a device under <em>Settings → Trusted devices</em>.</p>
+      <p><strong>Flagship Studio.</strong> Studio shows a QR code and a short code; the phone pairs with it the same way and sends it a signed recipe (see <a href="#how-it-works">How Flagship works</a>).</p>
     </section>
 
     <section class="doc-section" id="apps">

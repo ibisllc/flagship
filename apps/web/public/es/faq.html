@@ -114,7 +114,7 @@
       <details class="q">
         <summary>¿Qué hardware necesito realmente?</summary>
         <div class="answer">
-          <p>Cualquier máquina x86_64 con al menos 2 GB de RAM, 32 GB de disco y un puerto Ethernet que funcione. Un portátil viejo, un NUC, un Optiplex de 2014: todo vale. (También puedes alojar un servidor en un ordenador que ya uses, desde Flagship Studio.) El creador se encarga del sistema operativo, así que no necesitas saber ni preocuparte de qué ejecuta.</p>
+          <p>Cualquier máquina x86_64 con al menos 2 GB de RAM, 32 GB de disco y un puerto Ethernet que funcione. Un portátil viejo, un NUC, un Optiplex de 2014: todo vale. (También puedes alojar un servidor en un ordenador que ya uses, incluidos los Mac con Apple silicon, desde Flagship Studio.) El creador se encarga del sistema operativo, así que no necesitas saber ni preocuparte de qué ejecuta.</p>
         </div>
       </details>
       <details class="q">
@@ -145,7 +145,7 @@
       <details class="q">
         <summary>¿Necesito una IP estática o reenvío de puertos en casa?</summary>
         <div class="answer">
-          <p>No. Tu caja abre un WebSocket saliente hacia <code>flagship.services</code>; ese es el túnel. Sin reenvío de puertos, sin DNS dinámico, sin configurar el router. CGNAT no es problema. El único requisito es que funcione el TCP/443 saliente, algo que ocurre con cualquier proveedor doméstico.</p>
+          <p>No. Tu equipo abre un WebSocket saliente hacia <code>flagship.services</code>; ese es el túnel. Sin reenvío de puertos, sin DNS dinámico, sin configurar el router. CGNAT no es problema. El único requisito es que funcione el TCP/443 saliente, algo que ocurre con cualquier proveedor doméstico.</p>
         </div>
       </details>
       <details class="q">
@@ -163,7 +163,7 @@
       <details class="q">
         <summary>¿Puedo ejecutarlo en una Raspberry Pi?</summary>
         <div class="answer">
-          <p>Todavía no. Hoy el creador apunta a máquinas x86_64; no distribuimos de serie una compilación ARM del sistema base. El daemon es TypeScript puro, así que una Pi 4 con SSD es técnicamente capaz; si lo consigues a mano, cuéntanos qué tal fue.</p>
+          <p>Todavía no. El instalador USB es para PC x86-64, y no damos soporte a Raspberry Pi ni a otras placas ARM. Flagship sí funciona en arm64 de una manera: Flagship Studio en un Mac con Apple silicon aloja tu servidor en una máquina virtual arm64.</p>
         </div>
       </details>
     </div>
@@ -171,18 +171,18 @@
 
   <section class="faq-section" id="privacy" aria-label="Privacidad y seguridad">
     <h2>Privacidad y seguridad</h2>
-    <p class="section-lede">La respuesta estructural a «¿pueden leer mis datos?» es no: los bytes nunca salen de tu caja descifrados. Esto es lo que significa en la práctica.</p>
+    <p class="section-lede">La respuesta estructural a «¿pueden leer mis datos?» es no: los bytes nunca salen de tu equipo descifrados. Esto es lo que significa en la práctica.</p>
     <div class="qlist">
       <details class="q">
         <summary>¿Puede Flagship leer mis datos?</summary>
         <div class="answer">
-          <p>No el contenido de tus datos: archivos, mensajes, datos de apps y prompts de IA nunca nos llegan en forma legible. El TLS termina en tu propia caja, con un certificado de Let's Encrypt cuya clave privada solo tiene tu caja, así que <code>flagship.services</code> solo ve pasar bytes cifrados por una tubería TCP. Lo que <em>sí</em> podemos ver son metadatos: que tu cuenta existe, qué servidores tiene y cuándo están en línea, más o menos cuánto tráfico mueven y los demás elementos que se listan abajo en «¿Qué almacena realmente la empresa Flagship?». Como gestionamos la zona DNS de <code>flagship.services</code>, también podríamos obtener un certificado para el nombre de una caja; las apps fijan el certificado firmado de tu propia caja y lo rechazarían, y cualquier certificado así sería visible en los registros públicos de Certificate Transparency, pero un navegador web normal no lo notaría. La lista completa de quién ve qué está en nuestra <a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">página de metadatos</a>.</p>
+          <p>No el contenido de tus datos: archivos, mensajes, datos de apps y prompts de IA nunca nos llegan en forma legible. El TLS termina en tu propio equipo, con un certificado de Let's Encrypt cuya clave privada solo tiene tu equipo, así que <code>flagship.services</code> solo ve pasar bytes cifrados por una tubería TCP. Lo que <em>sí</em> podemos ver son metadatos: que tu cuenta existe, qué servidores tiene y cuándo están en línea, más o menos cuánto tráfico mueven y los demás elementos que se listan abajo en «¿Qué almacena realmente la empresa Flagship?». Como gestionamos la zona DNS de <code>flagship.services</code>, también podríamos obtener un certificado para el nombre de un equipo; las apps fijan el certificado firmado de tu propio equipo y lo rechazarían, y cualquier certificado así sería visible en los registros públicos de Certificate Transparency, pero un navegador web normal no lo notaría. La lista completa de quién ve qué está en nuestra <a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">página de metadatos</a>.</p>
         </div>
       </details>
       <details class="q">
         <summary>¿Qué almacena realmente la empresa Flagship?</summary>
         <div class="answer">
-          <p>Tu nombre de usuario y las claves públicas de tus dispositivos; de cada servidor, su nombre, sus claves públicas, la dirección desde la que llega su latido, las horas de última conexión, los informes de estado y las órdenes que se le envían (actualizaciones, política de copias, traslados); un blob sellado de desbloqueo LUKS (cifrado para tu teléfono); tokens de notificaciones push; los eventos de auditoría que publican tus dispositivos; y recuentos por cuenta de tráfico y uso de IA. También guardamos una lista única de los hosts de IA externos a los que han llegado las cajas, con totales y sin cuenta ni caja. Ningún contenido de archivos, ni prompts, ni chats, ni tráfico de servicios. El inventario completo está en <a href="/privacy">/privacy</a>.</p>
+          <p>Tu nombre de usuario y las claves públicas de tus dispositivos; de cada servidor, su nombre, sus claves públicas, la dirección desde la que llega su latido, las horas de última conexión, los informes de estado y las órdenes que se le envían (actualizaciones, política de copias, traslados); un blob sellado de desbloqueo LUKS (cifrado para tu teléfono); tokens de notificaciones push; los eventos de auditoría que publican tus dispositivos; y recuentos por cuenta de tráfico y uso de IA. También guardamos una lista única de los hosts de IA externos a los que han llegado los equipos, con totales y sin cuenta ni equipo. Ningún contenido de archivos, ni prompts, ni chats, ni tráfico de servicios. El inventario completo está en <a href="/privacy">/privacy</a>.</p>
         </div>
       </details>
       <details class="q">
@@ -194,7 +194,7 @@
       <details class="q">
         <summary>¿Qué cifrado usan?</summary>
         <div class="answer">
-          <p>Solo primitivas estándar: firmas Ed25519, X25519 + AES-256-GCM para blobs sellados, HKDF-SHA-256 para derivar claves, LUKS2/argon2id para el disco. Certificados reales de Let's Encrypt, solicitados por tu propia caja, para el transporte. Desde la 0.3, los servidores y los teléfonos también tienen claves ML-DSA-65 junto a sus claves Ed25519, y está construido un canal híbrido poscuántico (ML-KEM-768 con X25519), con un ajuste opcional que puedes activar en iPhone y Android; ese trabajo está pendiente de revisión externa. Si alguna vez inventamos nuestra propia criptografía, repórtalo como un error.</p>
+          <p>Solo primitivas estándar: firmas Ed25519, X25519 + AES-256-GCM para blobs sellados, HKDF-SHA-256 para derivar claves, LUKS2/argon2id para el disco. Certificados reales de Let's Encrypt, solicitados por tu propio equipo, para el transporte. Desde la 0.3, los servidores y los teléfonos también tienen claves ML-DSA-65 junto a sus claves Ed25519, y está construido un canal híbrido poscuántico (ML-KEM-768 con X25519), con un ajuste opcional que puedes activar en iPhone y Android; ese trabajo está pendiente de revisión externa. Si alguna vez inventamos nuestra propia criptografía, repórtalo como un error.</p>
         </div>
       </details>
       <details class="q">
@@ -212,7 +212,7 @@
       <details class="q">
         <summary>¿Qué registran?</summary>
         <div class="answer">
-          <p>Cloudflare recibe registros normales de peticiones (IP, ruta, estado) de <code>flagshipserver.com</code> con una ventana de 30 días; no la ampliamos. Nuestro relé en <code>flagship.services</code> no escribe registros por conexión: guarda contadores en memoria (totales cada 15 minutos) y solo muestra una línea de error cuando la conexión de una caja queda aparcada demasiado tiempo. Su plataforma de alojamiento (Fly) puede conservar metadatos de conexión según su propia política. Tu daemon registra en local, en tu caja, y nunca envía esos registros a ningún sitio. No usamos analítica, píxeles publicitarios ni repetición de sesiones en el sitio de marketing ni en el panel.</p>
+          <p>Cloudflare recibe registros normales de peticiones (IP, ruta, estado) de <code>flagshipserver.com</code> con una ventana de 30 días; no la ampliamos. Nuestro relé en <code>flagship.services</code> no escribe registros por conexión: guarda contadores en memoria (totales cada 15 minutos) y solo muestra una línea de error cuando la conexión de un equipo queda aparcada demasiado tiempo. Su plataforma de alojamiento (Fly) puede conservar metadatos de conexión según su propia política. Tu daemon registra en local, en tu equipo, y nunca envía esos registros a ningún sitio. No usamos analítica, píxeles publicitarios ni repetición de sesiones en el sitio de marketing ni en el panel.</p>
         </div>
       </details>
     </div>
@@ -220,7 +220,7 @@
 
   <section class="faq-section" id="apps" aria-label="Servicios">
     <h2>Servicios</h2>
-    <p class="section-lede">Los servicios son contenedores que se ejecutan en tu caja, separados por espacios de nombres de usuario.</p>
+    <p class="section-lede">Los servicios son contenedores que se ejecutan en tu equipo, separados por espacios de nombres de usuario.</p>
     <div class="qlist">
       <details class="q">
         <summary>¿Qué es hacer «vibe coding» de un servicio?</summary>
@@ -243,7 +243,7 @@
       <details class="q">
         <summary>¿Qué proveedores de IA pueden usar los servicios?</summary>
         <div class="answer">
-          <p>Los que hayas configurado: trae tu propia clave de Anthropic, OpenAI, Google, OpenRouter o cualquier API compatible con OpenAI. Las claves viven en tu daemon, cifradas en reposo. Por defecto tu caja llega al proveedor a través de la dirección de nuestro relé, que transporta la conexión cifrada y ve el nombre de host del proveedor y la cantidad de datos, no los prompts; puedes desactivarlo por clave. Sin clave, crear una app usa Flagship Inference, nuestra IA integrada: pasa las peticiones a un proveedor de modelos externo sin conservarlas (ver <a href="/privacy#flagship-inference">/privacy</a>).</p>
+          <p>Los que hayas configurado: trae tu propia clave de Anthropic, OpenAI, Google, OpenRouter o cualquier API compatible con OpenAI. Las claves viven en tu daemon, cifradas en reposo. Por defecto tu equipo llega al proveedor a través de la dirección de nuestro relé, que transporta la conexión cifrada y ve el nombre de host del proveedor y la cantidad de datos, no los prompts; puedes desactivarlo por clave. Sin clave, crear una app usa Flagship Inference, nuestra IA integrada: pasa las peticiones a un proveedor de modelos externo sin conservarlas (ver <a href="/privacy#flagship-inference">/privacy</a>).</p>
         </div>
       </details>
       <details class="q">

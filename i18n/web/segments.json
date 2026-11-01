@@ -142,8 +142,8 @@
       "index.html"
     ]
   },
-  "se919c9a6e2": {
-    "en": "<1>Live</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>since 2026-05-05</5> <6>·</6> <7>1,489 tests, all green</7> <8>·</8> <9>Patent Pending</9>",
+  "s4deaf22e1f": {
+    "en": "<1>Live</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>since 2026-05-05</5> <6>·</6> <7>3,000+ tests, all green</7> <8>·</8> <9>Patent Pending</9>",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -169,24 +169,24 @@
       "index.html"
     ]
   },
-  "scb03957d28": {
-    "en": "<1> <2/> <3>iOS soon</3> </1> <4> <5/> <6>Android soon</6> </4> <7> <8>Use web app</8> </7>",
+  "s7479616896": {
+    "en": "<1> <2/> <3>App Store</3> </1> <4> <5/> <6>Google Play</6> </4> <7> <8>Use web app</8> </7>",
     "kind": "text",
     "ctx": "div",
     "pages": [
       "index.html"
     ]
   },
-  "scac3ed322c": {
-    "en": "The iOS app is not ready yet",
+  "s928105529c": {
+    "en": "Flagship on the App Store",
     "kind": "attr",
     "ctx": "span[title]",
     "pages": [
       "index.html"
     ]
   },
-  "s3b30d62e24": {
-    "en": "The Android app is not ready yet",
+  "s49e0122870": {
+    "en": "Flagship on Google Play",
     "kind": "attr",
     "ctx": "span[title]",
     "pages": [
@@ -531,8 +531,8 @@
       "index.html"
     ]
   },
-  "sd673e903b8": {
-    "en": "Current image is x86_64. NUCs, mini-PCs, old laptops work. ARM64 is on the list; Pi support tracks the same image.",
+  "s3cc0924101": {
+    "en": "Not yet. The USB installer is for x86-64 PCs: NUCs, mini-PCs, old laptops. On arm64, Flagship Studio on an Apple-silicon Mac hosts your server in an arm64 virtual machine.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -1012,8 +1012,8 @@
       "faq.html"
     ]
   },
-  "s4ff018fd28": {
-    "en": "Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014. All fine. (You can also host a server on a computer you already use, from Flagship Studio.) The builder handles the OS for you, so you don't need to know or care what it runs.",
+  "sd3e56479df": {
+    "en": "Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014. All fine. (You can also host a server on a computer you already use, Apple-silicon Macs included, from Flagship Studio.) The builder handles the OS for you, so you don't need to know or care what it runs.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -1146,8 +1146,8 @@
       "faq.html"
     ]
   },
-  "s6a953087b5": {
-    "en": "Not yet. Today the builder targets x86_64 machines; we don't ship an ARM build of the base OS as a default. The daemon itself is plain TypeScript, so a Pi 4 with an SSD is technically capable; if you get there by hand, please tell us how it went.",
+  "s35204eb0d2": {
+    "en": "Not yet. The USB installer is for x86-64 PCs, and we don't support Raspberry Pi or other ARM boards. Flagship does run on arm64 in one way: Flagship Studio on an Apple-silicon Mac hosts your server in an arm64 virtual machine.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -2261,8 +2261,8 @@
       "security.html"
     ]
   },
-  "sa4b3981430": {
-    "en": "Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.",
+  "sc8c8d32c79": {
+    "en": "By default a server's encrypted disk opens only after your phone approves, over the network, at every boot, so a stolen server stays locked. Auto-unlock is an option you turn on per server: with it, the server starts by itself after a power cut, and so would a stolen one. If that happens, revoke the server in the app: it gets no unlock key at its next start and the relay stops serving its apps. You can also set a time limit, so a server stops its apps, or locks itself, when no admin has opened Flagship for 7 or 30 days.",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -3432,8 +3432,8 @@
       "docs/index.html"
     ]
   },
-  "s3f204144fa": {
-    "en": "Every subsequent boot, the phone has to approve the LUKS unlock, unless you turned on Auto-unlock for that server. A stolen box without your phone is a brick.",
+  "s569d8ac67b": {
+    "en": "Every subsequent boot, the phone has to approve the LUKS unlock, unless you turned on Auto-unlock for that server. Without Auto-unlock, a stolen box without your phone is a brick. With it, revoke the server in the app: it gets no unlock key at its next start.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -3696,19 +3696,41 @@
       "docs/index.html"
     ]
   },
-  "s3b1aed9ffd": {
-    "en": "To use the web console you scan a QR code from the phone. The phone shows a 32-byte session token, signs an <1>add-paired-session</1> order, and the daemon stores the token. The browser holds it as a cookie; every admin call carries it.",
+  "s67ca6849cd": {
+    "en": "Your keys live on your phone and your other devices. Everything else pairs to them with a QR code, and both screens show the same short code, so you can check you are pairing the screen in front of you. Every QR code is an ordinary <1>https://flagshipserver.com/…</1> link: scanned with the phone's camera it opens the Flagship app, and without the app it offers the store pages.",
     "kind": "text",
     "ctx": "p",
     "verbatim": [
-      "add-paired-session"
+      "https://flagshipserver.com/…"
     ],
     "pages": [
       "docs/index.html"
     ]
   },
-  "s2709b265fd": {
-    "en": "Pairings are listed in <1>Settings → Paired devices</1>. Revoke any time.",
+  "secfcf2c0fb": {
+    "en": "<1>A browser on any computer (Remote).</1> Open <2>remote.flagshipserver.com</2>; it shows a QR code at once. Scan it with the Flagship app, check the codes match, pick a server and approve with Face ID or your fingerprint. The phone mints a one-use ticket on that server and seals it so only that browser can read it; the browser redeems it on your server. The browser holds no keys: anything that needs your signature goes back to your phone to approve. Browser sessions are listed under <3>Settings → Browser sessions</3>; end one any time.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "remote.flagshipserver.com"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sdfc7b85ff3": {
+    "en": "<1>Another device on your account.</1> On an admin device (one that holds your account's admin key), open <2>Settings → Trusted devices → Add device</2>. On the new phone, tablet or browser, choose Connect to an existing account and scan the code. The two meet through a relay on <3>flagshipserver.com</3> that passes sealed bytes along and can't read them; when the codes match, the key moves over. Only an admin device can add devices; on any other device the button is greyed out. Remove a device under <4>Settings → Trusted devices</4>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s4cb1a9f8d7": {
+    "en": "<1>Flagship Studio.</1> Studio shows a QR code and a short code; the phone pairs with it the same way and sends it a signed recipe (see <2>How Flagship works</2>).",
     "kind": "text",
     "ctx": "p",
     "pages": [

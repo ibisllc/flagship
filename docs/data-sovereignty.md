@@ -1,18 +1,26 @@
 # Data sovereignty: the user keeps their data if we cannot serve them
 
-> **Parked, not needed at launch, decisions approved 2026-10-18.** This
-> feature lives only on the branch `feat/data-sovereignty`; `main` does not
-> carry it. The launch promise is smaller: if we are legally forced to cut
-> an account off, its owner can move their data to another account through
-> the existing backup options (see `docs/server-backup-and-clone.md`, "If we
-> are ever forced to cut you off"). There is no self-hosting path: the owner
-> wants everyone on `.com`, so D1 is closed as "no".
-
-> **Status: phase 1 (2026-10-18), owner decisions of the same day applied.** The threat model, an honest inventory,
-> the "Rescue my data" design, and the box/protocol slice of it are on
-> `main` (section 5). The phone screens, the webapp, gym scenarios and the
-> live-gym lane are phase 2 (section 7). Nothing here is deployed: boxes need
-> an endorsed release.
+> **In 0.3 (landed on `release/0.3` as plan items A3 and A4, 2026-10-25).**
+> The box half (the rescue session in `packages/server-daemon/src/rescue/`,
+> opaque mDNS discovery in `lanDiscovery.ts`, key-bound TLS, owner-signed
+> offline-control orders with the hybrid post-quantum signature) and the
+> phone half on iOS and Android: "Rescue my data" (a backup made and
+> downloaded over the home network, with progress and resume) and basic
+> offline control when `.com` and the relay can't be reached (server status,
+> the apps list, start, stop or restart an app, restart or shut down the
+> server, make and download a backup). Every action is an owner-signed order
+> the box verifies itself; the Settings entry is always present and the
+> account-gone screen has a rescue button. The webapp carries only the
+> vector ports: a browser cannot reach a box on the LAN without DNS.
+>
+> **Not in 0.3** (still design, section 7): offline boot unlock (D2; a box
+> that reboots while cut off from `.com` stays locked), a LAN fallback for
+> boot unlock, anything offline that changes the account (devices,
+> recovery, transfer), and a self-hosted control plane (D1, closed as "no":
+> the owner wants everyone on `.com`). The launch promise for a forced
+> cut-off is unchanged: the owner moves their data to another account
+> through the backup options (`docs/server-backup-and-clone.md`, "If we are
+> ever forced to cut you off"), and now can do it over the LAN as well.
 
 Owner promise (2026-10-18): **users can keep their data even if we fall to
 censorship.** If `.com` is ordered to kill an account, the user's phone must

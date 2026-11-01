@@ -889,17 +889,17 @@
       <div class="hero-grid">
 
         <div>
-          <p class="hero-meta"><span class="live">已上线</span> <span class="sep">·</span> <span>v0.3 测试版</span> <span class="sep">·</span> <span>自 2026-05-05 起</span> <span class="sep">·</span> <span>1,489 项测试全部通过</span> <span class="sep">·</span> <span>专利申请中</span></p>
+          <p class="hero-meta"><span class="live">已上线</span> <span class="sep">·</span> <span>v0.3 测试版</span> <span class="sep">·</span> <span>自 2026-05-05 起</span> <span class="sep">·</span> <span>3,000 多项测试全部通过</span> <span class="sep">·</span> <span>专利申请中</span></p>
 
           <h1><span class="accent-bar" aria-hidden="true"></span>你的东西，在<span class="teal">你的硬件</span>上，带着真正的绿色小锁。</h1>
 
-          <p class="lede">在家接上一台小盒子，用设备上的手机应用完成配对，即可在 <code>yours.flagship.services</code> 上私密地构建和分享服务，证书由只有你的硬件持有的密钥签名。连我们也无法窥探。</p>
+          <p class="lede">在家接上一台小主机，用设备上的手机应用完成配对，即可在 <code>yours.flagship.services</code> 上私密地构建和分享服务，证书由只有你的硬件持有的密钥签名。连我们也无法窥探。</p>
 
-          <div class="hero-ctas" id="install"><span class="btn btn--app btn--solid btn--pending" data-app-store="ios" aria-disabled="true" title="The iOS app is not ready yet"> <span class="glyph" aria-hidden="true">
+          <div class="hero-ctas" id="install"><span class="btn btn--app btn--solid btn--pending" data-app-store="ios" aria-disabled="true" title="Flagship on the App Store"> <span class="glyph" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 13.27c-.02-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.85.85-3.59.85-.74 0-1.89-.83-3.11-.81-1.6.02-3.08.93-3.9 2.36-1.67 2.89-.43 7.16 1.2 9.51.8 1.15 1.74 2.45 2.97 2.4 1.2-.05 1.65-.78 3.1-.78s1.85.78 3.11.75c1.28-.02 2.09-1.17 2.87-2.33.91-1.33 1.29-2.63 1.31-2.7-.03-.01-2.52-.97-2.55-3.85zM14.66 5.66c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.92 1.06.08 2.14-.54 2.8-1.33z"></path></svg>
-              </span> <span data-app-store-label="">iOS 即将推出</span> </span> <span class="btn btn--app btn--solid btn--pending" data-app-store="android" aria-disabled="true" title="The Android app is not ready yet"> <span class="glyph" aria-hidden="true">
+              </span> <span data-app-store-label="">App Store</span> </span> <span class="btn btn--app btn--solid btn--pending" data-app-store="android" aria-disabled="true" title="Flagship on Google Play"> <span class="glyph" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.69-.4l-1.87 3.22a11.34 11.34 0 0 0-9.76 0L5.25 5.9a.4.4 0 0 0-.69.4L6.4 9.48A10.83 10.83 0 0 0 1 18h22a10.83 10.83 0 0 0-5.4-8.52zM7 15.25a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96zm10 0a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96z"></path></svg>
-              </span> <span data-app-store-label="">Android 即将推出</span> </span> <a href="https://webapp.flagshipserver.com/" target="_blank" rel="noopener" class="btn btn--app btn--ghost" aria-label="Use the Flagship web app"> <span>使用网页版</span> </a></div>
+              </span> <span data-app-store-label="">Google Play</span> </span> <a href="https://webapp.flagshipserver.com/" target="_blank" rel="noopener" class="btn btn--app btn--ghost" aria-label="Use the Flagship web app"> <span>使用网页版</span> </a></div>
 
           <div class="studio-promo" data-studio-downloads="" aria-label="下载 Flagship Studio">
             <a class="studio-promo__label" href="/studio">Flagship Studio</a>
@@ -1028,7 +1028,7 @@
         </details>
         <details class="q">
           <summary>可以在树莓派上运行吗？</summary>
-          <div class="answer"><p>目前的镜像是 x86_64，NUC、迷你主机、旧笔记本都可以用。ARM64 已在计划中，对树莓派的支持将跟随同一镜像。</p></div>
+          <div class="answer"><p>暂时不行。USB 安装程序面向 x86-64 电脑：NUC、迷你电脑、旧笔记本。在 arm64 上，Apple 芯片 Mac 上的 Flagship Studio 会在 arm64 虚拟机中托管你的服务器。</p></div>
         </details>
         <details class="q">
           <summary>它是开源的吗？</summary>
@@ -1036,7 +1036,7 @@
         </details>
         <details class="q">
           <summary>如果 Flagship 公司消失了呢？</summary>
-          <div class="answer"><p>你的盒子会继续运行；只要 Let's Encrypt 还在，证书就会持续续期。我们无法把你锁住，因为从结构上我们就做不到。</p></div>
+          <div class="answer"><p>你的主机会继续运行；只要 Let's Encrypt 还在，证书就会持续续期。我们无法把你锁住，因为从结构上我们就做不到。</p></div>
         </details>
         <details class="q">
           <summary>没有中心化账户系统，分享是怎么实现的？</summary>
@@ -1053,11 +1053,11 @@
       <div class="finale-cta">
         <h2 id="finale-h2">花十分钟。<br>把其余的数据也拿回来。</h2>
         <p>一个 U 盘、一台旧电脑、一台移动设备，再加一点感觉。我们已在生产环境运行了六个月。轮到你了。</p>
-        <div class="actions center"><span class="btn btn--app btn--solid btn--pending" data-app-store="ios" aria-disabled="true" title="The iOS app is not ready yet"> <span class="glyph" aria-hidden="true">
+        <div class="actions center"><span class="btn btn--app btn--solid btn--pending" data-app-store="ios" aria-disabled="true" title="Flagship on the App Store"> <span class="glyph" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 13.27c-.02-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.85.85-3.59.85-.74 0-1.89-.83-3.11-.81-1.6.02-3.08.93-3.9 2.36-1.67 2.89-.43 7.16 1.2 9.51.8 1.15 1.74 2.45 2.97 2.4 1.2-.05 1.65-.78 3.1-.78s1.85.78 3.11.75c1.28-.02 2.09-1.17 2.87-2.33.91-1.33 1.29-2.63 1.31-2.7-.03-.01-2.52-.97-2.55-3.85zM14.66 5.66c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.92 1.06.08 2.14-.54 2.8-1.33z"></path></svg>
-            </span> <span data-app-store-label="">iOS 即将推出</span> </span> <span class="btn btn--app btn--solid btn--pending" data-app-store="android" aria-disabled="true" title="The Android app is not ready yet"> <span class="glyph" aria-hidden="true">
+            </span> <span data-app-store-label="">App Store</span> </span> <span class="btn btn--app btn--solid btn--pending" data-app-store="android" aria-disabled="true" title="Flagship on Google Play"> <span class="glyph" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.69-.4l-1.87 3.22a11.34 11.34 0 0 0-9.76 0L5.25 5.9a.4.4 0 0 0-.69.4L6.4 9.48A10.83 10.83 0 0 0 1 18h22a10.83 10.83 0 0 0-5.4-8.52zM7 15.25a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96zm10 0a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96z"></path></svg>
-            </span> <span data-app-store-label="">Android 即将推出</span> </span> <a href="https://webapp.flagshipserver.com/" target="_blank" rel="noopener" class="btn btn--app btn--ghost"> <span>使用网页版</span> </a></div>
+            </span> <span data-app-store-label="">Google Play</span> </span> <a href="https://webapp.flagshipserver.com/" target="_blank" rel="noopener" class="btn btn--app btn--ghost"> <span>使用网页版</span> </a></div>
         <div class="studio-promo studio-promo--center" data-studio-downloads="" aria-label="下载 Flagship Studio">
           <a class="studio-promo__label" href="/studio">Flagship Studio</a>
           <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a><a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows <span class="studio-tag">实验性</span></a></div>

@@ -114,7 +114,7 @@
       <details class="q">
         <summary>我究竟需要什么硬件？</summary>
         <div class="answer">
-          <p>任何至少有 2 GB 内存、32 GB 磁盘和可用以太网口的 x86_64 机器都行：旧笔记本、NUC、2014 年的 Optiplex，都没问题。（你也可以通过 Flagship Studio，把服务器架在自己已经在用的电脑上。）操作系统由构建器处理，你无需了解，也不用关心它运行的是什么。</p>
+          <p>任何至少有 2 GB 内存、32 GB 磁盘和可用以太网口的 x86_64 机器都行：旧笔记本、NUC、2014 年的 Optiplex，都没问题。（你也可以通过 Flagship Studio，把服务器架在自己已经在用的电脑上，包括 Apple 芯片的 Mac。）操作系统由构建器处理，你无需了解，也不用关心它运行的是什么。</p>
         </div>
       </details>
       <details class="q">
@@ -145,7 +145,7 @@
       <details class="q">
         <summary>家里需要固定 IP 或端口转发吗？</summary>
         <div class="answer">
-          <p>不需要。你的盒子会向 <code>flagship.services</code> 建立一条出站 WebSocket，这就是隧道。无需端口转发、动态 DNS 或路由器配置，CGNAT 也没问题。唯一的要求是出站 TCP/443 可用，所有家用宽带都满足。</p>
+          <p>不需要。你的主机会向 <code>flagship.services</code> 建立一条出站 WebSocket，这就是隧道。无需端口转发、动态 DNS 或路由器配置，CGNAT 也没问题。唯一的要求是出站 TCP/443 可用，所有家用宽带都满足。</p>
         </div>
       </details>
       <details class="q">
@@ -163,7 +163,7 @@
       <details class="q">
         <summary>可以在树莓派上运行吗？</summary>
         <div class="answer">
-          <p>暂时不行。目前构建器面向 x86_64 机器，我们没有默认提供基础系统的 ARM 构建。守护进程本身是纯 TypeScript，所以搭配 SSD 的 Pi 4 在技术上是可行的；如果你手动做到了，请告诉我们过程如何。</p>
+          <p>暂时不行。USB 安装程序面向 x86-64 电脑，我们不支持树莓派或其他 ARM 开发板。Flagship 在 arm64 上只有一种运行方式：Apple 芯片 Mac 上的 Flagship Studio 在 arm64 虚拟机中托管你的服务器。</p>
         </div>
       </details>
     </div>
@@ -171,18 +171,18 @@
 
   <section class="faq-section" id="privacy" aria-label="隐私与安全">
     <h2>隐私与安全</h2>
-    <p class="section-lede">对于“你们能读到我的数据吗？”，结构上的答案是不能：字节绝不会以解密状态离开你的盒子。下面说明这在实际中意味着什么。</p>
+    <p class="section-lede">对于“你们能读到我的数据吗？”，结构上的答案是不能：字节绝不会以解密状态离开你的主机。下面说明这在实际中意味着什么。</p>
     <div class="qlist">
       <details class="q">
         <summary>Flagship 能读取我的数据吗？</summary>
         <div class="answer">
-          <p>读不到数据内容：文件、消息、应用数据和 AI 提示词绝不会以可读形式到达我们这里。TLS 在你自己的盒子上终止，所用的 Let's Encrypt 证书私钥只有你的盒子持有，所以 <code>flagship.services</code> 只能看到加密字节从 TCP 管道中经过。我们<em>能</em>看到的是元数据：你的账户存在、它有哪些服务器、何时在线、大致的流量规模，以及下文“Flagship 公司究竟存储什么？”中列出的其他项目。由于 <code>flagship.services</code> 的 DNS 区域由我们运营，我们理论上也可以为某个盒子的域名申请证书；应用会固定（pin）你自己盒子签发的证书，并拒绝这类证书，而且这样的证书会出现在公开的证书透明度日志中，但普通网页浏览器是察觉不到的。关于谁能看到什么的完整清单，请见我们的<a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">元数据页面</a>。</p>
+          <p>读不到数据内容：文件、消息、应用数据和 AI 提示词绝不会以可读形式到达我们这里。TLS 在你自己的主机上终止，所用的 Let's Encrypt 证书私钥只有你的主机持有，所以 <code>flagship.services</code> 只能看到加密字节从 TCP 管道中经过。我们<em>能</em>看到的是元数据：你的账户存在、它有哪些服务器、何时在线、大致的流量规模，以及下文“Flagship 公司究竟存储什么？”中列出的其他项目。由于 <code>flagship.services</code> 的 DNS 区域由我们运营，我们理论上也可以为某个主机的域名申请证书；应用会固定（pin）你自己主机签发的证书，并拒绝这类证书，而且这样的证书会出现在公开的证书透明度日志中，但普通网页浏览器是察觉不到的。关于谁能看到什么的完整清单，请见我们的<a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">元数据页面</a>。</p>
         </div>
       </details>
       <details class="q">
         <summary>Flagship 公司究竟存储什么？</summary>
         <div class="answer">
-          <p>你的用户名和各设备的公钥；每台服务器的名称、公钥、心跳来源地址、最后在线时间、健康报告以及发给它的指令（更新、备份策略、迁移）；一个密封的 LUKS 解锁数据块（已为你的手机加密）；推送通知令牌；你的设备提交的审计事件；以及按账户统计的流量和 AI 用量。我们还保留一份盒子访问过的外部 AI 主机的总清单，只有合计数字，不关联任何账户或盒子。不存储文件内容、提示词、聊天记录或服务流量。完整清单见 <a href="/privacy">/privacy</a>。</p>
+          <p>你的用户名和各设备的公钥；每台服务器的名称、公钥、心跳来源地址、最后在线时间、健康报告以及发给它的指令（更新、备份策略、迁移）；一个密封的 LUKS 解锁数据块（已为你的手机加密）；推送通知令牌；你的设备提交的审计事件；以及按账户统计的流量和 AI 用量。我们还保留一份主机访问过的外部 AI 主机的总清单，只有合计数字，不关联任何账户或主机。不存储文件内容、提示词、聊天记录或服务流量。完整清单见 <a href="/privacy">/privacy</a>。</p>
         </div>
       </details>
       <details class="q">
@@ -212,7 +212,7 @@
       <details class="q">
         <summary>你们记录哪些日志？</summary>
         <div class="answer">
-          <p>Cloudflare 会为 <code>flagshipserver.com</code> 保留常规请求日志（IP、路径、状态），窗口为 30 天，我们不会延长。我们在 <code>flagship.services</code> 上的中继不记录每条连接的日志：它只在内存中保留计数器（每 15 分钟统计一次总数），仅在某个盒子的连接被搁置过久时才输出一行错误。其托管平台（Fly）可能按自身政策保留连接元数据。你的守护进程只在盒子本地记录日志，绝不会把日志发往别处。营销网站和控制台上不使用分析、广告像素或会话回放。</p>
+          <p>Cloudflare 会为 <code>flagshipserver.com</code> 保留常规请求日志（IP、路径、状态），窗口为 30 天，我们不会延长。我们在 <code>flagship.services</code> 上的中继不记录每条连接的日志：它只在内存中保留计数器（每 15 分钟统计一次总数），仅在某个主机的连接被搁置过久时才输出一行错误。其托管平台（Fly）可能按自身政策保留连接元数据。你的守护进程只在主机本地记录日志，绝不会把日志发往别处。营销网站和控制台上不使用分析、广告像素或会话回放。</p>
         </div>
       </details>
     </div>
@@ -220,7 +220,7 @@
 
   <section class="faq-section" id="apps" aria-label="服务">
     <h2>服务</h2>
-    <p class="section-lede">服务是在你的盒子上运行的容器，并按用户命名空间隔离。</p>
+    <p class="section-lede">服务是在你的主机上运行的容器，并按用户命名空间隔离。</p>
     <div class="qlist">
       <details class="q">
         <summary>“vibe coding”一个服务是什么意思？</summary>
@@ -243,7 +243,7 @@
       <details class="q">
         <summary>服务可以使用哪些 AI 提供商？</summary>
         <div class="answer">
-          <p>你配置了哪些就能用哪些：可自带 Anthropic、OpenAI、Google、OpenRouter 或任何兼容 OpenAI 的 API 的密钥。密钥存放在你的守护进程上，静态加密。默认情况下，你的盒子通过我们的中继地址访问提供商，中继承载加密连接，只能看到提供商的主机名和数据量，看不到提示词；你可以按密钥关闭这一行为。没有密钥时，构建应用会使用我们内置的 AI Flagship Inference：它把请求转发给第三方模型提供商，且不留存（见 <a href="/privacy#flagship-inference">/privacy</a>）。</p>
+          <p>你配置了哪些就能用哪些：可自带 Anthropic、OpenAI、Google、OpenRouter 或任何兼容 OpenAI 的 API 的密钥。密钥存放在你的守护进程上，静态加密。默认情况下，你的主机通过我们的中继地址访问提供商，中继承载加密连接，只能看到提供商的主机名和数据量，看不到提示词；你可以按密钥关闭这一行为。没有密钥时，构建应用会使用我们内置的 AI Flagship Inference：它把请求转发给第三方模型提供商，且不留存（见 <a href="/privacy#flagship-inference">/privacy</a>）。</p>
         </div>
       </details>
       <details class="q">

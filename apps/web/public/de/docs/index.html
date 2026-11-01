@@ -115,7 +115,7 @@
     <section class="doc-section" id="install">
       <h2>Installation &amp; erster Start</h2>
       <p>Das Bootstrap-Skript für den ersten Start ist öffentlich in unserem Open-Source-Repository und per Hash im signierten Rezept gepinnt. Es installiert die Serversoftware aus einem einzigen Release-Paket, das die Maintainer von Flagship signiert haben, und prüft zuerst die Signatur. Es formatiert die Platte mit LUKS, erzeugt eine Server-Identität, fordert über DNS-01 ein Zertifikat von Let's Encrypt an und registriert sich bei .com. Die Serversoftware läuft als gewöhnlicher Benutzer; ihre Schlüssel hält ein separater Schlüsseldienst.</p>
-      <p>Bei jedem weiteren Start muss das Telefon die LUKS-Entsperrung freigeben, außer du hast für diesen Server die „Automatische Entsperrung“ eingeschaltet. Eine gestohlene Box ohne dein Telefon ist ein Ziegelstein.</p><a class="next" href="/de/help">Bei der Installation festgefahren? →</a></section>
+      <p>Bei jedem weiteren Start muss das Telefon die LUKS-Entsperrung genehmigen, außer du hast für diesen Server die „Automatische Entsperrung“ eingeschaltet. Ohne sie ist eine gestohlene Box ohne dein Telefon ein Ziegelstein. Mit ihr widerrufst du den Server in der App: Beim nächsten Start bekommt er keinen Entsperrschlüssel.</p><a class="next" href="/de/help">Bei der Installation festgefahren? →</a></section>
 
     <section class="doc-section" id="burn">
       <h2>Deinen Server zusammenstellen</h2>
@@ -186,8 +186,10 @@
 
     <section class="doc-section" id="pair">
       <h2>Telefon koppeln</h2>
-      <p>Um die Web-Konsole zu nutzen, scannst du am Telefon einen QR-Code. Das Telefon zeigt ein 32-Byte-Sitzungstoken, signiert eine <code>add-paired-session</code>-Anweisung, und der Daemon speichert das Token. Der Browser hält es als Cookie; jeder Admin-Aufruf trägt es.</p>
-      <p>Kopplungen stehen unter <em>Einstellungen → Gekoppelte Geräte</em>. Widerrufen kannst du sie jederzeit.</p>
+      <p>Deine Schlüssel liegen auf deinem Telefon und deinen anderen Geräten. Alles andere koppelst du per QR-Code mit ihnen, und beide Bildschirme zeigen denselben kurzen Code, damit du prüfen kannst, dass du den Bildschirm vor dir koppelst. Jeder QR-Code ist ein gewöhnlicher <code>https://flagshipserver.com/…</code>-Link: Mit der Kamera des Telefons gescannt, öffnet er die Flagship-App; ohne die App bietet er ihre Seiten im App Store und bei Google Play an.</p>
+      <p><strong>Ein Browser auf einem beliebigen Computer (Remote).</strong> Öffne <code>remote.flagshipserver.com</code>; dort erscheint sofort ein QR-Code. Scanne ihn mit der Flagship-App, prüfe, ob die Codes übereinstimmen, wähle einen Server und genehmige mit Face ID oder deinem Fingerabdruck. Das Telefon stellt auf diesem Server ein Einmal-Ticket aus und versiegelt es so, dass nur dieser Browser es lesen kann; der Browser löst es auf deinem Server ein. Der Browser hält keine Schlüssel: Alles, was deine Signatur braucht, geht zur Genehmigung an dein Telefon zurück. Browser-Sitzungen stehen unter <em>Einstellungen → Browser-Sitzungen</em>; beende jede davon, wann du willst.</p>
+      <p><strong>Ein weiteres Gerät deines Kontos.</strong> Öffne auf einem Administrator-Gerät (einem, das den Administrator-Schlüssel deines Kontos hält) <em>Einstellungen → Vertrauenswürdige Geräte → Gerät hinzufügen</em>. Wähle auf dem neuen Telefon, Tablet oder Browser „Mit einem bestehenden Konto verbinden“ und scanne den Code. Die beiden treffen sich über ein Relay auf <code>flagshipserver.com</code>, das versiegelte Bytes weiterreicht und sie nicht lesen kann; wenn die Codes übereinstimmen, wandert der Schlüssel hinüber. Nur ein Administrator-Gerät kann Geräte hinzufügen; auf jedem anderen ist die Schaltfläche ausgegraut. Ein Gerät entfernst du unter <em>Einstellungen → Vertrauenswürdige Geräte</em>.</p>
+      <p><strong>Flagship Studio.</strong> Studio zeigt einen QR-Code und einen kurzen Code; das Telefon koppelt sich auf dieselbe Weise damit und schickt ihm ein signiertes Rezept (siehe <a href="#how-it-works">So funktioniert Flagship</a>).</p>
     </section>
 
     <section class="doc-section" id="apps">

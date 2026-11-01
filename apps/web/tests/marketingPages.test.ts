@@ -101,8 +101,10 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain("hardware");
     expect(r.body).toContain("real green padlock");
     expect(r.body).toContain("Use web app");
-    expect(r.body).toContain("iOS soon");
-    expect(r.body).toContain("Android soon");
+    expect(r.body).toContain(">App Store<");
+    expect(r.body).toContain(">Google Play<");
+    expect(r.body).not.toContain("iOS soon");
+    expect(r.body).not.toContain("Android soon");
     expect(r.body).toContain('aria-disabled="true"');
     expect(r.body).toContain('data-studio-platform="mac"');
     expect(r.body).toContain('href="/download/mac"');
@@ -117,8 +119,9 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode).toBe(200);
       expect(r.body).toContain('href="https://webapp.flagshipserver.com/"');
-      expect(r.body).toContain("iOS soon");
-      expect(r.body).toContain("Android soon");
+      expect(r.body).toContain(">App Store<");
+      expect(r.body).toContain(">Google Play<");
+      expect(r.body).not.toContain("soon<");
       expect(r.body).not.toMatch(/href="#install-(ios|android)"/);
     }
     const home = await app.inject({ method: "GET", url: "/" });

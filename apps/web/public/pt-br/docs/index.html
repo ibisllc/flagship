@@ -115,7 +115,7 @@
     <section class="doc-section" id="install">
       <h2>Instalação e primeiro boot</h2>
       <p>O script de primeiro boot é público no nosso repositório de código aberto e fixado por hash dentro da receita assinada. Ele instala o software do servidor a partir de um único pacote de versão assinado pelos mantenedores do Flagship, verificando a assinatura primeiro. Ele formata o disco com LUKS, gera uma identidade de servidor, solicita um certificado do Let's Encrypt por DNS-01 e se registra em .com. O software do servidor roda como um usuário comum; as chaves dele ficam em um serviço de chaves separado.</p>
-      <p>A cada boot seguinte, o celular precisa aprovar o desbloqueio LUKS, a menos que você tenha ativado o desbloqueio automático para esse servidor. Uma caixa roubada sem o seu celular é um tijolo.</p><a class="next" href="/pt-br/help">Travado na instalação? →</a></section>
+      <p>A cada boot seguinte, o celular precisa aprovar o desbloqueio LUKS, a menos que você tenha ativado o desbloqueio automático para esse servidor. Sem o desbloqueio automático, uma caixa roubada sem o seu celular é um tijolo. Com ele, revogue o servidor no app: no próximo boot ele não recebe nenhuma chave de desbloqueio.</p><a class="next" href="/pt-br/help">Travado na instalação? →</a></section>
 
     <section class="doc-section" id="burn">
       <h2>Monte seu servidor</h2>
@@ -186,8 +186,10 @@
 
     <section class="doc-section" id="pair">
       <h2>Pareamento do celular</h2>
-      <p>Para usar o console web, você lê um QR no celular. O celular mostra um token de sessão de 32 bytes, assina uma ordem <code>add-paired-session</code> e o daemon guarda o token. O navegador o mantém como cookie; toda chamada de administração o leva.</p>
-      <p>Os pareamentos ficam em <em>Ajustes → Dispositivos pareados</em>. Revogue quando quiser.</p>
+      <p>Suas chaves ficam no seu celular e nos seus outros dispositivos. Todo o resto é pareado com eles por um código QR, e as duas telas mostram o mesmo código curto, para você conferir que está pareando a tela à sua frente. Todo código QR é um link comum <code>https://flagshipserver.com/…</code>: lido com a câmera do celular, ele abre o app Flagship; sem o app, ele oferece as páginas do app na App Store e no Google Play.</p>
+      <p><strong>Um navegador em qualquer computador (Remoto).</strong> Abra <code>remote.flagshipserver.com</code>; ele mostra um código QR na hora. Leia com o app Flagship, confira se os códigos batem, escolha um servidor e aprove com Face ID ou sua digital. O celular emite um ticket de uso único nesse servidor e o sela para que só aquele navegador consiga lê-lo; o navegador o resgata no seu servidor. O navegador não guarda nenhuma chave: tudo o que precisa da sua assinatura volta para o seu celular aprovar. As sessões do navegador ficam em <em>Ajustes → Sessões do navegador</em>; encerre qualquer uma quando quiser.</p>
+      <p><strong>Outro dispositivo da sua conta.</strong> Em um dispositivo administrador (um que guarda a chave de administrador da sua conta), abra <em>Ajustes → Dispositivos confiáveis → Adicionar um dispositivo</em>. No celular, tablet ou navegador novo, escolha Conectar a uma conta existente e leia o código. Os dois se encontram por um relay em <code>flagshipserver.com</code> que repassa bytes selados e não consegue lê-los; quando os códigos batem, a chave passa para o novo. Só um dispositivo administrador pode adicionar dispositivos; em qualquer outro, o botão fica desativado. Remova um dispositivo em <em>Ajustes → Dispositivos confiáveis</em>.</p>
+      <p><strong>Flagship Studio.</strong> O Studio mostra um código QR e um código curto; o celular é pareado com ele do mesmo jeito e envia uma receita assinada (veja <a href="#how-it-works">Como o Flagship funciona</a>).</p>
     </section>
 
     <section class="doc-section" id="apps">

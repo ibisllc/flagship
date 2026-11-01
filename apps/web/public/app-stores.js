@@ -1,7 +1,7 @@
 // The App Store and Google Play listings live here and nowhere else: the
 // homepage and the open-in-app page (/open/) both render their store buttons
 // from this file, so the two can never disagree. A null url leaves the
-// button's "soon" placeholder in place.
+// button as an inert placeholder showing the store name.
 (function () {
   "use strict";
   const STORES = {

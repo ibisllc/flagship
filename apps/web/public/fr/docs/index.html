@@ -115,7 +115,7 @@
     <section class="doc-section" id="install">
       <h2>Installation et premier démarrage</h2>
       <p>Le script d’amorçage du premier démarrage est public dans notre dépôt open source et épinglé par hachage dans la recette signée. Il installe le logiciel du serveur à partir d’un seul paquet de version signé par les mainteneurs de Flagship, en vérifiant d’abord la signature. Il formate le disque avec LUKS, génère une identité de serveur, demande un certificat Let's Encrypt via DNS-01 et s’enregistre auprès de .com. Le logiciel du serveur tourne sous un utilisateur ordinaire ; ses clés sont détenues par un service de clés séparé.</p>
-      <p>À chaque démarrage suivant, le téléphone doit approuver le déverrouillage LUKS, sauf si vous avez activé le « Déverrouillage automatique » pour ce serveur. Un boîtier volé sans votre téléphone n’est qu’une brique.</p><a class="next" href="/fr/help">Bloqué à l’installation ? →</a></section>
+      <p>À chaque démarrage suivant, le téléphone doit approuver le déverrouillage LUKS, sauf si vous avez activé le « Déverrouillage automatique » pour ce serveur. Sans lui, un boîtier volé sans votre téléphone n’est qu’une brique. Avec lui, révoquez le serveur dans l’app : à son prochain démarrage, il ne reçoit aucune clé de déverrouillage.</p><a class="next" href="/fr/help">Bloqué à l’installation ? →</a></section>
 
     <section class="doc-section" id="burn">
       <h2>Assembler votre serveur</h2>
@@ -186,8 +186,10 @@
 
     <section class="doc-section" id="pair">
       <h2>Association du téléphone</h2>
-      <p>Pour utiliser la console web, vous scannez un QR code depuis le téléphone. Le téléphone affiche un jeton de session de 32 octets, signe un ordre <code>add-paired-session</code>, et le démon stocke le jeton. Le navigateur le conserve sous forme de cookie ; chaque appel d’administration le transporte.</p>
-      <p>Les associations sont listées dans <em>Réglages → Appareils associés</em>. Révoquez-les à tout moment.</p>
+      <p>Vos clés vivent sur votre téléphone et vos autres appareils. Tout le reste s’y associe avec un QR code, et les deux écrans affichent le même code court : vous vérifiez ainsi que vous associez bien l’écran qui est devant vous. Chaque QR code est un lien ordinaire <code>https://flagshipserver.com/…</code> : scanné avec l’appareil photo du téléphone, il ouvre l’app Flagship ; sans l’app, il propose ses pages sur l’App Store et Google Play.</p>
+      <p><strong>Un navigateur sur n’importe quel ordinateur (À distance).</strong> Ouvrez <code>remote.flagshipserver.com</code> : un QR code s’affiche aussitôt. Scannez-le avec l’app Flagship, vérifiez que les codes correspondent, choisissez un serveur et approuvez avec Face ID ou votre empreinte. Le téléphone émet sur ce serveur un ticket à usage unique et le scelle pour que seul ce navigateur puisse le lire ; le navigateur l’échange ensuite sur votre serveur. Le navigateur ne détient aucune clé : tout ce qui demande votre signature revient sur votre téléphone pour approbation. Les sessions de navigateur sont listées dans <em>Réglages → Sessions de navigateur</em> ; mettez fin à l’une d’elles quand vous voulez.</p>
+      <p><strong>Un autre appareil de votre compte.</strong> Sur un appareil administrateur (un appareil qui détient la clé d’administration de votre compte), ouvrez <em>Réglages → Appareils de confiance → Ajouter un appareil</em>. Sur le nouveau téléphone, la tablette ou le navigateur, choisissez Se connecter à un compte existant et scannez le code. Les deux se retrouvent via un relais sur <code>flagshipserver.com</code> qui transmet des octets scellés sans pouvoir les lire ; quand les codes correspondent, la clé passe sur le nouvel appareil. Seul un appareil administrateur peut ajouter des appareils ; sur les autres, le bouton est grisé. Retirez un appareil dans <em>Réglages → Appareils de confiance</em>.</p>
+      <p><strong>Flagship Studio.</strong> Studio affiche un QR code et un code court ; le téléphone s’y associe de la même façon et lui envoie une recette signée (voir <a href="#how-it-works">Comment fonctionne Flagship</a>).</p>
     </section>
 
     <section class="doc-section" id="apps">

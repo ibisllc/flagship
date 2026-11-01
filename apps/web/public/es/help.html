@@ -140,7 +140,7 @@
       <ol>
         <li>Si configuraste la recuperación en la nube, inicia sesión en el teléfono nuevo con el nombre de tu cuenta. Te pide tu llave de acceso (guardada en el Llavero de iCloud o en el Administrador de contraseñas de Google) y tu frase de contraseña de recuperación.</li>
         <li>¿Sin recuperación en la nube? Usa otro dispositivo que siga con la sesión iniciada, o el archivo de clave de tu cuenta que guardaste. Sin ninguno de ellos, tu cuenta no se puede recuperar; es así por diseño (no tenemos puerta trasera) e intentamos dejarlo claro durante la configuración.</li>
-        <li>El hardware en sí está bien. Crear una cuenta nueva con la misma caja equivale a una reinstalación limpia.</li>
+        <li>El hardware en sí está bien. Crear una cuenta nueva con el mismo equipo equivale a una reinstalación limpia.</li>
       </ol>
       <p class="next">Flujo de recuperación completo: <a href="/es/docs">/docs/recovery</a>.</p>
     </article>
@@ -161,19 +161,19 @@
 
     <div class="symptom">
       <h3>Mi instalación se queda en «instalado»</h3>
-      <p>La instalación terminó y la caja se apagó para que pudieras quitar la memoria USB y volver a encenderla, pero después nunca arranca. Casi siempre significa que la caja no llega a la red al principio del arranque, así que no puede obtener la clave que desbloquea su disco cifrado. Es el síntoma habitual en una caja <strong>solo con Wi-Fi</strong> (el desbloqueo del disco se ejecuta antes de que haya Wi-Fi). Dos soluciones:</p>
+      <p>La instalación terminó y el equipo se apagó para que pudieras quitar la memoria USB y volver a encenderlo, pero después nunca arranca. Casi siempre significa que el equipo no llega a la red al principio del arranque, así que no puede obtener la clave que desbloquea su disco cifrado. Es el síntoma habitual en un equipo <strong>solo con Wi-Fi</strong> (el desbloqueo del disco se ejecuta antes de que haya Wi-Fi). Dos soluciones:</p>
       <ol>
-        <li><strong>Conecta un cable Ethernet.</strong> Una conexión por cable está activa lo bastante pronto para que la caja obtenga su clave de desbloqueo y termine de arrancar. Es la solución más sencilla y mantiene el disco cifrado.</li>
-        <li><strong>O crea un servidor nuevo con el cifrado de disco desactivado.</strong> En la pantalla «Crear un servidor» de la app (o de la app web), desmarca <strong>Cifrar disco</strong> y vuelve a grabar. Una caja con el disco sin cifrar arranca sin necesitar la red para desbloquearse, así que funciona con configuraciones solo con Wi-Fi. La contrapartida: tus datos ya no están cifrados en reposo, lo que es menos seguro si roban la caja. Elige esta opción solo cuando una conexión por cable no sea posible.</li>
+        <li><strong>Conecta un cable Ethernet.</strong> Una conexión por cable está activa lo bastante pronto para que el equipo obtenga su clave de desbloqueo y termine de arrancar. Es la solución más sencilla y mantiene el disco cifrado.</li>
+        <li><strong>O crea un servidor nuevo con el cifrado de disco desactivado.</strong> En la pantalla «Crear un servidor» de la app (o de la app web), desmarca <strong>Cifrar disco</strong> y vuelve a grabar. Un equipo con el disco sin cifrar arranca sin necesitar la red para desbloquearse, así que funciona con configuraciones solo con Wi-Fi. La contrapartida: tus datos ya no están cifrados en reposo, lo que es menos seguro si roban el equipo. Elige esta opción solo cuando una conexión por cable no sea posible.</li>
       </ol>
     </div>
 
     <div class="symptom">
       <h3>El panel dice «Sin conexión»</h3>
-      <p>El túnel de tu caja a <code>flagship.services</code> está caído. Comprueba, en orden:</p>
+      <p>El túnel de tu equipo a <code>flagship.services</code> está caído. Comprueba, en orden:</p>
       <ol>
-        <li><strong>Alimentación y red</strong>. ¿Está encendida la caja? ¿Está conectado el cable? ¿Llega a internet (<code>ping 1.1.1.1</code>)?</li>
-        <li><strong>Se alcanza el 443 saliente</strong>. Algunas redes restrictivas bloquean WebSockets de larga duración. <code>curl https://flagship.services/api/health</code> desde la caja debería devolver JSON.</li>
+        <li><strong>Alimentación y red</strong>. ¿Está encendido el equipo? ¿Está conectado el cable? ¿Llega a internet (<code>ping 1.1.1.1</code>)?</li>
+        <li><strong>Se alcanza el 443 saliente</strong>. Algunas redes restrictivas bloquean WebSockets de larga duración. <code>curl https://flagship.services/api/health</code> desde el equipo debería devolver JSON.</li>
         <li><strong>Estado del daemon</strong>. Reinicia el servidor desde su página en la app. Si activaste el acceso de depuración (una clave SSH que añades desde la página del servidor, por un tiempo limitado), puedes entrar por SSH y ejecutar <code>systemctl status flagship</code>; los registros recientes están en <code>journalctl -u flagship -n 200</code>.</li>
       </ol>
     </div>
@@ -197,7 +197,7 @@
       <p>Tu certificado TLS vive en el daemon y se renueva automáticamente 30 días antes de caducar. Si ves una advertencia de certificado:</p>
       <ol>
         <li><strong>Espera 90 segundos.</strong> Las renovaciones se reemiten y se recargan en silencio. El panel muestra un indicador «Renovando» mientras ocurre.</li>
-        <li><strong>Revisa la sección de certificados del panel.</strong> Si dice «Error», la causa está en el registro del daemon. El motivo más habitual: la caja estuvo sin conexión durante la ventana de renovación. Lanzar una renovación manual desde el panel lo soluciona.</li>
+        <li><strong>Revisa la sección de certificados del panel.</strong> Si dice «Error», la causa está en el registro del daemon. El motivo más habitual: el equipo estuvo sin conexión durante la ventana de renovación. Lanzar una renovación manual desde el panel lo soluciona.</li>
         <li><strong>Instalación nueva sin ningún certificado</strong>: la primera emisión ocurre en el arranque y tarda de 30 a 60 segundos. Actualiza la página.</li>
       </ol>
     </div>
