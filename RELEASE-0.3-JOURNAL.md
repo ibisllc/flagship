@@ -213,10 +213,10 @@ agreed on 2026-10-30 that per-service certificates are retired (apps are served 
       URL, size, SHA-256, executable digest), signed runtime manifest on flagshipserver.com bound into the endorsed release,
       official-upstream download with the signed SHASUMS256 check, safe extraction, activation through G1, owner-facing
       verification view, the adversarial tests listed in Appendix G section 3.
-- [ ] G3 (R2) App reconciliation and runtime ownership in Rust core (reconciler, endpoint table, address pool, scheduling,
+- [~] G3 (R2) (`894c41eea`: flagship-core serve owns app reconciling behind admin-signed rust-ownership/v1, reconciler shadow|rust default shadow; live gym group rust-core; not yet run live) App reconciliation and runtime ownership in Rust core (reconciler, endpoint table, address pool, scheduling,
       container and local-AI lifecycle; desired state persisted; adopt on restart; one writer; shadow mode performs no effects).
-- [ ] G4 (R3) Reverse proxy and streaming transport in the Rust ingress (bounded, backpressure, SSE/WebSocket/uploads, pins/SNI/ALPN).
-- [ ] G5 (R4) Authoritative access enforcement and journal at the effect boundary in Rust (shared conformance vectors first).
+- [~] G4 (R3) (`894c41eea`: flagship-ingress carries HTTP/1, SSE, WebSocket, uploads behind proxy ts|rust default ts; TS↔Rust app-proxy vectors; not yet run live) Reverse proxy and streaming transport in the Rust ingress (bounded, backpressure, SSE/WebSocket/uploads, pins/SNI/ALPN).
+- [~] G5 (R4) (`894c41eea`: flagship-access crate + 95/22 shared vectors, FLAGSHIP_ACCESS_AUTHORITY ts|shadow|rust, shadow on arch-v2; writes and account-people classification still TS) Authoritative access enforcement and journal at the effect boundary in Rust (shared conformance vectors first).
 - [ ] G6 (R6) Constrained backup/restore/migration effects behind keyd/broker (scoped paths, safe extraction).
 - [ ] G7 (R7; 2026-10-30 read: `flagship-relay` is a library plus the wiring, 5.4k lines, NOT a running service; the doc `relay-transport.md` section 3 lists what is lacking before it can replace the TS hub: the real `HelloAuthority` (cert ids, RootEntitlement under admin root or IRK, ServiceEntitlement, STK lookup and binding, HELLO signature, ServiceGrants, revocation: needs the entitlement canonical forms in Rust plus `.com` lookups), the outbound relay (AI provider calls go through it: disabled today), eviction, blessing, peer-backup mailboxes, custom-domain pull, the gossip HTTP surface, `/api/health`+stats, the Fly image and a gym canary with mixed-version boxes. The allocator now carries the same own-zone claim fix as the TS hub) Qualify and activate the existing Rust relay (replacement rollout, mixed-version compatibility, rollback).
 - [ ] G8 (R8) Consolidate the existing Rust boundaries on amd64 and arm64; remove obsolete TS/Go/shell alternatives only after
@@ -232,18 +232,18 @@ It is a PROPOSED design: nothing is implemented, deployed or security-validated.
 and H5 pass their adversarial scenarios through the real harness, issuance service and relay. Verified against the current code
 2026-10-30 (cert finding): a box cert today carries SANs `<server>.<user>`, `*.<server>.<user>`, `*.<user>` with the box's own key,
 which matches the spec's box row; the bare `<user>` name is not issued to anyone yet. Per-service certificates stay retired (G).
-- [ ] H1 Trusted issuance service on `.com`: authenticate the device and its current grant, derive the exact order identifiers from
+- [~] H1 (`894c41eea`: certificateIssuance.ts + migration 0121, /api/dns-01 retired 410; fake-CA tested; gym key set 2026-11-01; live gym group issuance not yet run) Trusted issuance service on `.com`: authenticate the device and its current grant, derive the exact order identifiers from
       authorization, verify the CSR and names, own the ACME order lifecycle with service-held credentials (boxes lose arbitrary
       access to the shared account-zone DNS-01 writer), publish only that order's challenge, verify the certificate before delivery,
       refuse every box request for the bare user name (also mixed orders). Inventory existing certificates and prior ACME
       authorizations first and decide how residual authority is closed (Appendix H, "Issuance boundary").
-- [ ] H2 Phone certificate for the bare `<user>.flagship.services` (one private key per phone, never uploaded) and the box wildcard
+- [~] H2 (`894c41eea`: phone key + CSR + TLS on iOS/Android, unit-tested; never on a device) Phone certificate for the bare `<user>.flagship.services` (one private key per phone, never uploaded) and the box wildcard
       row; phone-side TLS termination; keep the bare name (NOT `admin.<user>`, which every box wildcard covers).
-- [ ] H3 Phone routing through the relay (TS hub and the Rust relay, G7): signed claim bound to account, phone identity, hostname,
+- [~] H3 (`894c41eea`; owner 2026-11-01 redesign in progress: vacancy-only claims, standby, voluntary release, presence hello; no preemption, no drain timer) Phone routing through the relay (TS hub and the Rust relay, G7): signed claim bound to account, phone identity, hostname,
       session, freshness and a short lease; only an authorized admin phone; one holder at a time with relay-issued generations;
       handover on explicit foreground acquisition; old connections stay; fail closed, never fall back to a box; exclusivity across
       relay instances. Decide lease durations, replay protection, acquisition ordering, deadlines and revocation propagation first.
-- [ ] H4 Box offline grace (Appendix I): the owner chooses 7 days, 30 days or indefinitely at server creation; the phone re-signs about
+- [x] H4 (`2809f8fde`..`b698640f1`, gym 16-17 serving group green on both stacks) Box offline grace (Appendix I): the owner chooses 7 days, 30 days or indefinitely at server creation; the phone re-signs about
       daily a permission/app-serving lease (account, box identity and registration generation, policy generation, route and
       certificate scope, times, unique id; indefinite is an explicit representation) via a narrowly delegated renewal key that
       cannot add boxes, widen scope, extend past the grace, alter policy or undo revocation, and never bypasses the admin-root
@@ -251,22 +251,22 @@ which matches the spec's box row; the bare `<user>` name is not issued to anyone
       exact control name stays routable and certifiable (recovery) until explicit revocation. Boxes renew their own certificates
       only near expiry; the issuance service refuses early orders and orders without a valid permission. Show the real next expiry
       and warn before it.
-- [ ] H8 Pushed revocation (owner 2026-10-31; replaces the per-box status assertion of Appendix I sections 3-4):
+- [x] H8 (`2809f8fde`, `8044f66da`: ServingFeed DO + relay feed client, proven in gym 16-17) Pushed revocation (owner 2026-10-31; replaces the per-box status assertion of Appendix I sections 3-4):
       tunnels are admitted only for registered, unrevoked boxes; `.com` keeps an append-only signed revocation log
       with a monotonic sequence and pushes each entry to every relay instance (one long-lived connection per relay);
       the relay ends that box's tunnel at once; gap or reconnect = fetch "since N" before admitting; one heartbeat per
       relay a minute; the admin sees "confirmed by every relay"; no contact for ~1 min = no new tunnels, established
       ones dropped after a 10 min grace. Formats: docs/architecture-v2/issuance-and-lease-records.md.
-- [ ] H9 Separate control and app certificates (Appendix I section 2, 5-6): control cert exactly the control name, app cert an
+- [~] H9 (`894c41eea`: control/apps/phone classes; CAA pin + inventory are owner steps in final-deploy.md; arch-v2 ingress serves one cert until G4 picks per name) Separate control and app certificates (Appendix I section 2, 5-6): control cert exactly the control name, app cert an
       approved subset of the wildcards, phone cert exactly the bare name; service-owned ACME account, DNS-01 performed centrally,
       apex CAA `issue`/`issuewild` pinned to the service account with `validationmethods=dns-01` (zero per-account CAA), reserve
       control names in the route allocator, migrate existing combined certificates and reusable ACME authorizations first.
-- [ ] H5 Malicious-app namespace isolation: app identity and hostnames bound to the trusted installation record, caller derived from
+- [~] H5 (`894c41eea`: routed-name origin check, forwarding headers stripped, reserved aliases; gym group app-isolation not yet run) Malicious-app namespace isolation: app identity and hostnames bound to the trusted installation record, caller derived from
       the harness boundary (not headers or the manifest), no app access to keyd, issuance or relay-claim credentials; host-only
       `__Host-` cookies, exact origin checks, CSRF protection and no sibling CORS for phone-endpoint operations. Pairs with G3/G5.
 - [ ] H6 The eleven acceptance scenarios of Appendix H and the ten recovery/revocation scenarios and malicious-app tests of Appendix I as gym groups (negative isolation, relay multi-instance, lease expiry with a
       still-valid certificate, renewal policy, sibling-app web attacks), run through the real harness, issuance service and relay.
-- [ ] H7 CA limits: reuse each phone's valid certificate (no issuance per handover); schedule renewals within the issuance limits.
+- [~] H7 (`894c41eea`: renewal in the last third, own limits under LE's; flagship.services is NOT on the PSL: 50 certs/week shared by gym+prod, owner to submit PSL or ask LE) CA limits: reuse each phone's valid certificate (no issuance per handover); schedule renewals within the issuance limits.
 
 ### Appendix G. Rust migration and verifiable runtime distribution: requirements (folded in from docs/rust-migration-todo.md, 2026-10-30)
 
@@ -1320,3 +1320,4 @@ all Flagship relay access within the documented deadline.
 - 2026-11-01 **GYM 16 FULLY GREEN ON BOTH STACKS** (`release-20261101T004753Z-*`, boxes in us-nyc1, tip before `4f13d2209`): arch-v2 **507 passed / 0 failed / 4 skipped (47 groups)**, classic **116 / 0 / 0 (9 groups)**. Skips are the accepted ones (gpu-real: owner hardware; 3 quota DB checks that don't apply to a dedicated database on arch-v2). Green incl. the live dead-man on both stacks, a real update (2.2 min) on both, the stack switch, the hostile app filling its database (box stays up, sibling fine), pyapp. No Fly backhaul resets with the boxes beside the relay. This is the FIRST of the two consecutive green runs D3 needs. `4f13d2209` (the release step's output reaches the daemon log, for the G1 installer marker) landed during run 16: run 17 includes it.
 - 2026-11-01 GYM 17: the Rust updater (G1) installed a real update on an arch-v2 box (journal line ends "(flagship-updater)"), proven live for the first time. ai-chat failed once: the real model (GLM-5.3-Flash) stopped on a requestEnvVar the harness never answered → `f20ea4ef0` declines it like an owner without a key. Mock gyms (D1): webapp 353/355 → both remaining failures were the removed dead-man card (`c5abc4701`); the 4 notice specs fixed (`1a05bedbd`); iOS mock gym running.
 - 2026-11-01 GYM 17 result (`release-20261101T031221Z-*`): arch-v2 495 passed / 7 failed / 4 skipped (ai-chat once, fixed `f20ea4ef0`; six adversarial writes reset on a reused keep-alive connection, fixed `5ab6a775a`), classic **116 / 0 / 0** (first pass on the fresh-connection writes; stack switch both ways green). Not green: D3 needs runs 18 and 19 green. Run 18 started on `5ab6a775a`. G3/G4, G5/H5, H1/H9/H7 and H2/H3 are being built in parallel (owner, 2026-11-01: "while the gyms are running, build G and H now").
+- 2026-11-01 G/H wave 1 committed `894c41eea` (tsc clean, Rust all green, vitest 15,409 + the 8 fixed: DST-hour test cert, shell 185 in compatibility.json, iOS Release gym seam, raw-client allowlist + wss-only phone tunnel). iOS mock gym 284/286, both stale tests fixed `af0dbe618`. Gym 18 arch-v2 lost 2 writes to Fly tcp-backhaul EOF (05:46-05:52Z) → retried as idempotent `1fc5747ba`. Owner: H3 handover redesigned (vacancy-only); 'keep going till 0.3 is fully complete and published'. Wave 2 started: G2 rest, G6, G7, G9.
