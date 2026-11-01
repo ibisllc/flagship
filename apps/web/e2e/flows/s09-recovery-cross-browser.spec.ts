@@ -125,7 +125,7 @@ test("S9 — sign in → recover with passkey takes the account over on this bro
   await page.locator(".modal-input").fill(localPassphrase);
   await page.click("[data-modal-ok]");
   const popup = await popupPromise;
-  expect(popup.url()).toBe(`${recoveryOrigin}/#recover`);
+  expect(popup.url()).toBe(`${recoveryOrigin}/#recover&lang=en`);
 
   await expect.poll(() => initiate, { timeout: 10_000 }).not.toBeNull();
   const body = initiate as unknown as InitiateBody;

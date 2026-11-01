@@ -434,7 +434,9 @@
 //  v186: the server page's Runtime section (release plan G2; lib/runtimeVerification.js + views/runtime-verification.js):
 //       the locked Node, its official source, Flagship's signed checksum, the one computed on the server, both
 //       signatures, and a "Check it yourself" sheet.
-const SHELL_VERSION = "v186";
+//  v187: the boot-approval RootEntitlement refuses a separator or control character in its username or server
+//       name before signing (shared vectors `entitlements`).
+const SHELL_VERSION = "v187";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

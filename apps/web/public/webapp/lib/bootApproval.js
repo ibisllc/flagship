@@ -933,6 +933,10 @@ export async function depositCgk(args, deps = {}) {
  * signing KEY changes; the canonical bytes are byte-identical.
  */
 async function buildEntitlementCarrier({ username, podPubKeyHex, podCanonical, issuedAt, signWithIrk, umk }) {
+  // A '|' or a control character would move where the box splits the signed string (shared vectors `entitlements`).
+  for (const [name, value] of [["username", username], ["podCanonical", podCanonical]]) {
+    if (/[|\x00-\x1f\x7f]/.test(value)) throw new Error(`root entitlement: ${name} contains a separator or control character`);
+  }
   const canonical = te(
     ["flagship/root-entitlement/v1", username, podPubKeyHex, podCanonical, issuedAt].join("|"),
   );

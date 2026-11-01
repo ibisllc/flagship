@@ -1079,7 +1079,7 @@
   },
   "Event": {
     "en": "Event",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:195"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:196"
   },
   "Add a device": {
     "en": "Add a device",
@@ -7017,6 +7017,58 @@
     "en": "Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (%@)",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAdminRootViewModel.swift:207"
   },
+  "Runtime": {
+    "en": "Runtime",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:17"
+  },
+  "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.": {
+    "en": "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:20"
+  },
+  "Node.js": {
+    "en": "Node.js",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:24"
+  },
+  "Platform": {
+    "en": "Platform",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:25"
+  },
+  "Flagship signature": {
+    "en": "Flagship signature",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:27"
+  },
+  "Node's signature": {
+    "en": "Node's signature",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:29"
+  },
+  "Check it yourself": {
+    "en": "Check it yourself",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:49"
+  },
+  "Details": {
+    "en": "Details",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:46"
+  },
+  "Expected checksum (flagshipserver.com)": {
+    "en": "Expected checksum (flagshipserver.com)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:62"
+  },
+  "Computed on this server": {
+    "en": "Computed on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:64"
+  },
+  "Expected executable": {
+    "en": "Expected executable",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:66"
+  },
+  "Official source": {
+    "en": "Official source",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:68"
+  },
+  "Run these on any computer to check the same facts without trusting this app.": {
+    "en": "Run these on any computer to check the same facts without trusting this app.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:128"
+  },
   "Scan a code or enter a link": {
     "en": "Scan a code or enter a link",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ScanOrLinkScreen.swift:89"
@@ -7709,319 +7761,319 @@
   },
   "Pairing…": {
     "en": "Pairing…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:371"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:374"
   },
   "Pair this server": {
     "en": "Pair this server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:371"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:374"
   },
   "This server isn't paired with this device yet": {
     "en": "This server isn't paired with this device yet",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:362"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:365"
   },
   "Pair it to manage this server here. Your phone will ask you to unlock once to approve.": {
     "en": "Pair it to manage this server here. Your phone will ask you to unlock once to approve.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:365"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:368"
   },
   "Connecting to your server…": {
     "en": "Connecting to your server…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:392"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:395"
   },
   "Your server is online. We're fetching its details — this can take a moment right after it comes up. Pull down to refresh.": {
     "en": "Your server is online. We're fetching its details — this can take a moment right after it comes up. Pull down to refresh.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:395"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:398"
   },
   "This server never came online": {
     "en": "This server never came online",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:418"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:421"
   },
   "The install reserved this name and registered the server, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.": {
     "en": "The install reserved this name and registered the server, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:421"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:424"
   },
   "This server is revoked": {
     "en": "This server is revoked",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:441"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:444"
   },
   "It can't connect or unlock until you un-revoke it. Its name stays reserved. Un-revoke it below if you got the server back, or delete it to free the name.": {
     "en": "It can't connect or unlock until you un-revoke it. Its name stays reserved. Un-revoke it below if you got the server back, or delete it to free the name.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:444"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:447"
   },
   "This server has gone offline. Pull down to re-check": {
     "en": "This server has gone offline. Pull down to re-check",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:457"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:460"
   },
   "Still coming up…": {
     "en": "Still coming up…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:490"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:493"
   },
   "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install. Pull down to re-check.": {
     "en": "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install. Pull down to re-check.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:493"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:496"
   },
   "Up for %@": {
     "en": "Up for %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:525"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:528"
   },
   "Sessions": {
     "en": "Sessions",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:535"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:538"
   },
   "Daemon": {
     "en": "Daemon",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:536"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:539"
   },
   "Version": {
     "en": "Version",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:540"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:543"
   },
   "%lld minutes": {
     "en": "%lld minutes",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:574"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:577"
   },
   "This server self-unlocks its encrypted disk after a reboot — no phone needed. flagshipserver.com only ever holds a key it can't read.": {
     "en": "This server self-unlocks its encrypted disk after a reboot — no phone needed. flagshipserver.com only ever holds a key it can't read.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:622"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:625"
   },
   "Disabling…": {
     "en": "Disabling…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:626"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:629"
   },
   "Require my phone each boot": {
     "en": "Require my phone each boot",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:626"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:629"
   },
   "After you approve its first boot, this server will self-unlock on future reboots. Nothing to do until then.": {
     "en": "After you approve its first boot, this server will self-unlock on future reboots. Nothing to do until then.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:633"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:636"
   },
   "This server asks your phone for approval on every reboot — the most theft-resistant mode.": {
     "en": "This server asks your phone for approval on every reboot — the most theft-resistant mode.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:641"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:644"
   },
   "Auto-unlock disabled. This server will ask your phone on its next reboot.": {
     "en": "Auto-unlock disabled. This server will ask your phone on its next reboot.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:671"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:674"
   },
   "Couldn't disable auto-unlock: %@": {
     "en": "Couldn't disable auto-unlock: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:673"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:676"
   },
   "Disable auto-unlock for %@": {
     "en": "Disable auto-unlock for %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:663"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:666"
   },
   "Your server is waiting for authorization to serve": {
     "en": "Your server is waiting for authorization to serve",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:715"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:718"
   },
   "Your server is waiting for your approval to unlock": {
     "en": "Your server is waiting for your approval to unlock",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:716"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:719"
   },
   "Authorize this server to serve your account so it can come online. Your phone will ask you to unlock once to approve.": {
     "en": "Authorize this server to serve your account so it can come online. Your phone will ask you to unlock once to approve.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:720"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:723"
   },
   "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve.": {
     "en": "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:721"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:724"
   },
   "Authorize": {
     "en": "Authorize",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:723"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:726"
   },
   "Authorized — your server should come online shortly.": {
     "en": "Authorized — your server should come online shortly.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:725"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:728"
   },
   "Unlock approved — your server should come online shortly.": {
     "en": "Unlock approved — your server should come online shortly.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:726"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:729"
   },
   "Server waiting": {
     "en": "Server waiting",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:801"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:804"
   },
   "Sending approval…": {
     "en": "Sending approval…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:767"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:770"
   },
   "This server's key changed": {
     "en": "This server's key changed",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:787"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:790"
   },
   "Approve your server's boot unlock": {
     "en": "Approve your server's boot unlock",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:891"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:894"
   },
   "Transfer to another account": {
     "en": "Transfer to another account",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:921"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:924"
   },
   "Migrate to a new server": {
     "en": "Migrate to a new server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:964"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:967"
   },
   "Software update": {
     "en": "Software update",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1038"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1041"
   },
   "Update this server": {
     "en": "Update this server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1071"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1074"
   },
   "Update to latest": {
     "en": "Update to latest",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1071"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1074"
   },
   "Waiting for this server to report its current version — it can't be updated in place until it does.": {
     "en": "Waiting for this server to report its current version — it can't be updated in place until it does.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1078"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1081"
   },
   "New release available: %@": {
     "en": "New release available: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1049"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1052"
   },
   "Send again": {
     "en": "Send again",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1177"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1180"
   },
   "Forget it": {
     "en": "Forget it",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1179"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1182"
   },
   "Share update results": {
     "en": "Share update results",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1209"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1212"
   },
   "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.": {
     "en": "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1210"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1213"
   },
   "Couldn't save this setting on the server. Try again.": {
     "en": "Couldn't save this setting on the server. Try again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1246"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1249"
   },
   "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something.": {
     "en": "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1275"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1278"
   },
   "Update %@": {
     "en": "Update %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1293"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1296"
   },
   "The server has picked up the update.": {
     "en": "The server has picked up the update.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1316"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1319"
   },
   "Couldn't check for releases: %@ You can still enter a release under Advanced.": {
     "en": "Couldn't check for releases: %@ You can still enter a release under Advanced.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1366"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1369"
   },
   "The server couldn't reach GitHub, so this list may be out of date.": {
     "en": "The server couldn't reach GitHub, so this list may be out of date.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1370"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1373"
   },
   "Other new releases": {
     "en": "Other new releases",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1379"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1382"
   },
   "Latest release": {
     "en": "Latest release",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1342"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1345"
   },
   "Approve with Face ID. The server rolls back by itself if the new version doesn't start.": {
     "en": "Approve with Face ID. The server rolls back by itself if the new version doesn't start.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1348"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1351"
   },
   "Checking for new releases…": {
     "en": "Checking for new releases…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1355"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1358"
   },
   "This server is on the latest release.": {
     "en": "This server is on the latest release.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1360"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1363"
   },
   "Or enter any release (full commit)": {
     "en": "Or enter any release (full commit)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1396"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1399"
   },
   "Order update": {
     "en": "Order update",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1406"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1409"
   },
   "40-character commit hash": {
     "en": "40-character commit hash",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1397"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1400"
   },
   "Go back": {
     "en": "Go back",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1394"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1397"
   },
   "Advanced": {
     "en": "Advanced",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1416"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1419"
   },
   "Danger zone": {
     "en": "Danger zone",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1502"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1505"
   },
   "Restoring…": {
     "en": "Restoring…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1511"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1514"
   },
   "Un-revoke server": {
     "en": "Un-revoke server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1511"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1514"
   },
   "Revoke server (reversible)": {
     "en": "Revoke server (reversible)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1517"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1520"
   },
   "Delete and wipe this server": {
     "en": "Delete and wipe this server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1523"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1526"
   },
   "Server revoked. It can't connect or unlock until you un-revoke it.": {
     "en": "Server revoked. It can't connect or unlock until you un-revoke it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1547"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1550"
   },
   "Revoke failed: %@": {
     "en": "Revoke failed: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1549"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1552"
   },
   "Revoke this server?": {
     "en": "Revoke this server?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1612"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1615"
   },
   "Locks %@ out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the server is lost or stolen. Other servers on your account keep running.": {
     "en": "Locks %@ out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the server is lost or stolen. Other servers on your account keep running.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1615"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1618"
   },
   "Reason": {
     "en": "Reason",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1619"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1622"
   },
   "Hold to revoke": {
     "en": "Hold to revoke",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1684"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1687"
   },
   "Delete %@?": {
     "en": "Delete %@?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1738"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1741"
   },
   "Deletes %@ for good. If the server is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.": {
     "en": "Deletes %@ for good. If the server is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1741"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1744"
   },
   "Type %@ to confirm": {
     "en": "Type %@ to confirm",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1745"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1748"
   },
   "Delete server": {
     "en": "Delete server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1751"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1754"
   },
   "Server order": {
     "en": "Server order",
@@ -10146,10 +10198,6 @@
     "en": "Public pages",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpstreamSyncScreens.swift:37"
   },
-  "Runtime": {
-    "en": "Runtime",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpstreamSyncScreens.swift:38"
-  },
   "Distribution": {
     "en": "Distribution",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpstreamSyncScreens.swift:39"
@@ -11533,6 +11581,58 @@
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:459",
     "translatable": false
   },
+  "Verified": {
+    "en": "Verified",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:114"
+  },
+  "Not published yet": {
+    "en": "Not published yet",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:115"
+  },
+  "Can't reach flagshipserver.com": {
+    "en": "Can't reach flagshipserver.com",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:116"
+  },
+  "Checked when this release was built": {
+    "en": "Checked when this release was built",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:124"
+  },
+  "Not checked": {
+    "en": "Not checked",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:125"
+  },
+  "Matches": {
+    "en": "Matches",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:133"
+  },
+  "Does not match": {
+    "en": "Does not match",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:134"
+  },
+  "This server runs a Node.js that is not the one its release locks.": {
+    "en": "This server runs a Node.js that is not the one its release locks.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:140"
+  },
+  "Flagship's signed runtime manifest was refused (%@).": {
+    "en": "Flagship's signed runtime manifest was refused (%@).",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:144"
+  },
+  "This release locks a newer Node.js than the published manifest.": {
+    "en": "This release locks a newer Node.js than the published manifest.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:147"
+  },
+  "1. Node's signed checksum list": {
+    "en": "1. Node's signed checksum list",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:160"
+  },
+  "2. Flagship's signed manifest": {
+    "en": "2. Flagship's signed manifest",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:169"
+  },
+  "3. On the server (with debug access on)": {
+    "en": "3. On the server (with debug access on)",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:176"
+  },
   "This device isn't connected to a server yet.": {
     "en": "This device isn't connected to a server yet.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ScreensClient.swift:408"
@@ -11579,83 +11679,83 @@
   },
   "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running": {
     "en": "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:186"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:188"
   },
   "Apps can't start on this server: the sandbox they run in isn't working (%@). The server tries again every 10 minutes.": {
     "en": "Apps can't start on this server: the sandbox they run in isn't working (%@). The server tries again every 10 minutes.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:193"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:195"
   },
   "Setting up the sandbox apps run in. They start once it's ready.": {
     "en": "Setting up the sandbox apps run in. They start once it's ready.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:196"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:198"
   },
   "The update to %@ didn't start cleanly, and the version before it is too old to go back to safely. The server stays on %@ in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": {
     "en": "The update to %@ didn't start cleanly, and the version before it is too old to go back to safely. The server stays on %@ in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:282"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:284"
   },
   "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": {
     "en": "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:284"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:286"
   },
   "The last update to %@ didn't start cleanly, so the server went back to %@ on its own.": {
     "en": "The last update to %@ didn't start cleanly, so the server went back to %@ on its own.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:288"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:290"
   },
   "The last update to %@ didn't start cleanly, so the server went back on its own.": {
     "en": "The last update to %@ didn't start cleanly, so the server went back on its own.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:290"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:292"
   },
   "The last update didn't start cleanly, so the server went back to %@ on its own.": {
     "en": "The last update didn't start cleanly, so the server went back to %@ on its own.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:292"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:294"
   },
   "The last update didn't start cleanly, so the server went back on its own.": {
     "en": "The last update didn't start cleanly, so the server went back on its own.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:294"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:296"
   },
   "The server refused the last update: Flagship's maintainers haven't endorsed that release.": {
     "en": "The server refused the last update: Flagship's maintainers haven't endorsed that release.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:299"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:301"
   },
   "The server refused the last update: the server was no longer on the version the update was made for. Send it again.": {
     "en": "The server refused the last update: the server was no longer on the version the update was made for. Send it again.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:301"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:303"
   },
   "The server refused the last update: it couldn't download or build the new version. Nothing changed.": {
     "en": "The server refused the last update: it couldn't download or build the new version. Nothing changed.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:303"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:305"
   },
   "The server refused the last update: the request wasn't signed by this account's admin key.": {
     "en": "The server refused the last update: the request wasn't signed by this account's admin key.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:305"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:307"
   },
   "The server refused the last update: the request was too old. Send it again.": {
     "en": "The server refused the last update: the request was too old. Send it again.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:307"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:309"
   },
   "The server refused the last update: the request was for a different server.": {
     "en": "The server refused the last update: the request was for a different server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:309"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:311"
   },
   "The server refused the last update.": {
     "en": "The server refused the last update.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:311"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:313"
   },
   "Last update: %@ installed and running.": {
     "en": "Last update: %@ installed and running.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:279"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:281"
   },
   "Last update installed and running.": {
     "en": "Last update installed and running.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:279"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:281"
   },
   "Use letters, digits and _ only, not starting with a digit (like API_KEY).": {
     "en": "Use letters, digits and _ only, not starting with a digit (like API_KEY).",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:1149"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:1151"
   },
   "Names starting with FLAGSHIP_ are set by your server.": {
     "en": "Names starting with FLAGSHIP_ are set by your server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:1151"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:1153"
   },
   "bad boot URL": {
     "en": "bad boot URL",
@@ -12778,105 +12878,5 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
-  },
-  "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.": {
-    "en": "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:20"
-  },
-  "Node.js": {
-    "en": "Node.js",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:24"
-  },
-  "Platform": {
-    "en": "Platform",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:25"
-  },
-  "Flagship signature": {
-    "en": "Flagship signature",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:27"
-  },
-  "Node's signature": {
-    "en": "Node's signature",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:29"
-  },
-  "Check it yourself": {
-    "en": "Check it yourself",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:49"
-  },
-  "Details": {
-    "en": "Details",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:46"
-  },
-  "Expected checksum (flagshipserver.com)": {
-    "en": "Expected checksum (flagshipserver.com)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:62"
-  },
-  "Computed on this server": {
-    "en": "Computed on this server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:64"
-  },
-  "Expected executable": {
-    "en": "Expected executable",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:66"
-  },
-  "Official source": {
-    "en": "Official source",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:68"
-  },
-  "Run these on any computer to check the same facts without trusting this app.": {
-    "en": "Run these on any computer to check the same facts without trusting this app.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:128"
-  },
-  "Verified": {
-    "en": "Verified",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:114"
-  },
-  "Not published yet": {
-    "en": "Not published yet",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:115"
-  },
-  "Can't reach flagshipserver.com": {
-    "en": "Can't reach flagshipserver.com",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:116"
-  },
-  "Checked when this release was built": {
-    "en": "Checked when this release was built",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:124"
-  },
-  "Not checked": {
-    "en": "Not checked",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:125"
-  },
-  "Matches": {
-    "en": "Matches",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:133"
-  },
-  "Does not match": {
-    "en": "Does not match",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:134"
-  },
-  "This server runs a Node.js that is not the one its release locks.": {
-    "en": "This server runs a Node.js that is not the one its release locks.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:140"
-  },
-  "Flagship's signed runtime manifest was refused (%@).": {
-    "en": "Flagship's signed runtime manifest was refused (%@).",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:144"
-  },
-  "This release locks a newer Node.js than the published manifest.": {
-    "en": "This release locks a newer Node.js than the published manifest.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:147"
-  },
-  "1. Node's signed checksum list": {
-    "en": "1. Node's signed checksum list",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:160"
-  },
-  "2. Flagship's signed manifest": {
-    "en": "2. Flagship's signed manifest",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:169"
-  },
-  "3. On the server (with debug access on)": {
-    "en": "3. On the server (with debug access on)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:176"
   }
 }

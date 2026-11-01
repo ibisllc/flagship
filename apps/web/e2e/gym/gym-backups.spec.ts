@@ -183,6 +183,14 @@ function baseServer(m: Mock): void {
   m.get((u) => u.host === HOME && u.pathname === "/api/screens/server-detail", serverDetail(HOME));
 }
 
+/**
+ * The schedule is converted with the browser's offset today, so a test that names CDT has to run on a CDT day:
+ * without this, Chicago's switch to CST in November moved every expected time by an hour.
+ */
+async function inSummerTime(page: Page): Promise<void> {
+  await page.clock.setFixedTime(new Date("2026-10-14T17:00:00Z"));
+}
+
 async function openServer(page: Page): Promise<void> {
   await page.evaluate(async (fqdn) => (await import("/views/server-detail.js")).enterServerDetail(fqdn), HOME);
   await expect(page.locator("#backups-card")).toBeVisible({ timeout: 15_000 });
@@ -196,6 +204,7 @@ test.describe("gym webapp backups", () => {
     const m = await mock(page);
     baseServer(m);
     const box = backupsBox(page, m, keys, { backups: [entry("55".repeat(16), Date.UTC(2026, 9, 15, 8))] });
+    await inSummerTime(page);
     await openServer(page);
 
     // The policy, its limit and the usage against it.
@@ -293,6 +302,7 @@ test.describe("gym webapp backups", () => {
     const m = await mock(page);
     baseServer(m);
     const box = backupsBox(page, m, keys, { keysLeft: 300 });
+    await inSummerTime(page);
     await openServer(page);
     await page.click("#bk-schedule-change");
     await page.selectOption("#bk-frequency", "weekly");

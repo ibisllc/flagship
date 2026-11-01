@@ -172,8 +172,14 @@ object RootEntitlement {
         listOf(CANONICAL_TAG, username, podPubKeyHex, podCanonical, issuedAt.toString())
             .joinToString("|").toByteArray()
 
-    fun sign(irk: Ed25519Sign, username: String, podPubKeyHex: String, podCanonical: String, issuedAt: Long): ByteArray =
-        irk.sign(canonicalBytes(username, podPubKeyHex, podCanonical, issuedAt))
+    /** Refuses a '|' or a control character in a text field, as canonicalRootEntitlement does: such a field
+     *  would change where the box splits the signed string (shared vectors `entitlements`). */
+    fun sign(irk: Ed25519Sign, username: String, podPubKeyHex: String, podCanonical: String, issuedAt: Long): ByteArray {
+        for ((name, value) in listOf("username" to username, "podCanonical" to podCanonical)) {
+            require(value.none { it.code == 0x7c || it.code <= 0x1f || it.code == 0x7f }) { "field $name contains a separator or control character" }
+        }
+        return irk.sign(canonicalBytes(username, podPubKeyHex, podCanonical, issuedAt))
+    }
 
     fun verify(
         signature: ByteArray,

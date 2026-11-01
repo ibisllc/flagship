@@ -213,10 +213,10 @@ describe("HTTP proxy (Host)", () => {
 describe("data-port forwarder", () => {
   it("forwards accepted sources and drops the rest", async () => {
     const up = await upstream("PG");
-    const port = 20000 + Math.floor(Math.random() * 30000);
     let allow = true;
-    const h = await startTcpForwarder("127.0.0.1", port, { host: "127.0.0.1", port: up.port }, () => allow);
+    const h = await startTcpForwarder("127.0.0.1", 0, { host: "127.0.0.1", port: up.port }, () => allow);
     cleanups.push(() => h.close());
+    const port = h.port;
     const ask = () =>
       new Promise<string>((resolve) => {
         const s = connect({ host: "127.0.0.1", port });

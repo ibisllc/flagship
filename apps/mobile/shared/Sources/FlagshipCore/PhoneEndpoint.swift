@@ -245,8 +245,16 @@ public struct RootEntitlement: Equatable, Sendable {
         ].joined(separator: "|").utf8)
     }
 
+    public enum FieldError: Error, Equatable { case separatorOrControl(String) }
+
+    /// Refuses a '|' or a control character in a text field, as `canonicalRootEntitlement` does: such a
+    /// field would change where the box splits the signed string (shared vectors `entitlements`).
     public func sign(with irk: Curve25519.Signing.PrivateKey) throws -> Data {
-        try irk.signature(for: canonicalBytes())
+        for (name, value) in [("username", username), ("podCanonical", podCanonical)]
+        where value.unicodeScalars.contains(where: { $0.value == 0x7c || $0.value <= 0x1f || $0.value == 0x7f }) {
+            throw FieldError.separatorOrControl(name)
+        }
+        return try irk.signature(for: canonicalBytes())
     }
 
     public static func verify(

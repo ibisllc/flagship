@@ -107,7 +107,7 @@ test("S8 — set up cloud recovery + assert the IRK-signed /api/recovery upload"
 
   await expect.poll(() => uploadBody, { timeout: 10_000 }).not.toBeNull();
   await expect(page.locator("#toast")).toContainText(`Cloud recovery on for ${identity.username}`);
-  expect(popup.url()).toBe(`${recoveryOrigin}/#enroll`);
+  expect(popup.url()).toBe(`${recoveryOrigin}/#enroll&lang=en`);
   expect(popupUrls.length).toBeGreaterThan(0);
 
   const parsed = JSON.parse(uploadBody!) as { claim: RecoveryRecordV2; signature: string; wrappedUmk: string };

@@ -27,7 +27,8 @@ export const BRANCHES = [
   { branch: "feat/custom-domains", parent: "feat/marketplace" },
   { branch: "feat/retail", parent: "main" },
   { branch: "feat/browser-extension", parent: "main" },
-  { branch: "feat/phone-usb-burn", parent: "main" },
+  { branch: "feat/outbound-proxy", parent: "feat/marketplace" },
+  { branch: "feat/other-os-installers", parent: "main" },
   { branch: "alpine", parent: "main" },
   { branch: "gym", parent: "main" },
 ];

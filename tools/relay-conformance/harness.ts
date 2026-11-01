@@ -680,8 +680,22 @@ export async function startTs(com: MockCom, o: RelayOptions = {}): Promise<Runni
   };
 }
 
+/**
+ * freePort() closes its probe before the relay binds, so a parallel test file can take the number in between; the
+ * relay then exits with "Address already in use". Ports we picked ourselves are picked again; ports the scenario
+ * named (a restart onto the same addresses) are not.
+ */
 export async function startRust(com: MockCom, o: RelayOptions = {}): Promise<RunningRelayTarget> {
-  const p = await ports(o);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await startRustOn(com, o, await ports(o));
+    } catch (e) {
+      if (o.ports || attempt >= 5 || !/Address already in use/.test(String(e))) throw e;
+    }
+  }
+}
+
+async function startRustOn(com: MockCom, o: RelayOptions, p: { hub: number; sni: number; echo: number }): Promise<RunningRelayTarget> {
   const env = relayEnv(com, o, p);
   const childEnv: Record<string, string> = { PATH: process.env.PATH ?? "", ...env };
   const child: ChildProcess = spawn(RUST_BIN, [], { env: childEnv, stdio: ["ignore", "pipe", "pipe"] });

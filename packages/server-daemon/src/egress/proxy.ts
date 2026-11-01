@@ -199,7 +199,7 @@ export async function startTcpForwarder(
   port: number,
   target: { host: string; port: number } | (() => { host: string; port: number }),
   allowSrc: (srcIp: string) => boolean | Promise<boolean>,
-): Promise<ProxyServerHandle> {
+): Promise<ProxyServerHandle & { port: number }> {
   const server: Server = createServer((client) => {
     client.on("error", () => {});
     const src = (client.remoteAddress ?? "").replace(/^::ffff:/i, "");
@@ -236,5 +236,9 @@ export async function startTcpForwarder(
       resolve();
     });
   });
-  return { close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+  const bound = server.address();
+  return {
+    port: typeof bound === "object" && bound ? bound.port : port,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
 }

@@ -420,6 +420,61 @@
       "check": "signed-tags",
       "key": "web:flagship/certificate-order/v1",
       "reason": "The webapp orders no certificate: boxes order control and app certificates, admin phones their bare-name certificate (plan H1/H2)."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:access-enforcement",
+      "reason": "Access decisions and rank-order admission are the box's app proxy and journal (TS server-daemon and Rust flagship-access read these vectors). Clients only sign flagship/app-rank/v1 orders, whose bytes are pinned by the app-access-orders vectors every client reads."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:access-enforcement",
+      "reason": "Access decisions and rank-order admission are the box's app proxy and journal (TS server-daemon and Rust flagship-access read these vectors). Clients only sign flagship/app-rank/v1 orders, whose bytes are pinned by the app-access-orders vectors every client reads."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:access-enforcement",
+      "reason": "Access decisions and rank-order admission are the box's app proxy and journal (TS server-daemon and Rust flagship-access read these vectors). Clients only sign flagship/app-rank/v1 orders, whose bytes are pinned by the app-access-orders vectors every client reads."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:archive-extraction",
+      "reason": "Archive extraction runs only on the box (Rust flagship-broker check-tar and its TS twin read these vectors); clients move backup files whole and never unpack a tar."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:archive-extraction",
+      "reason": "Archive extraction runs only on the box (Rust flagship-broker check-tar and its TS twin read these vectors); clients move backup files whole and never unpack a tar."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:archive-extraction",
+      "reason": "Archive extraction runs only on the box (Rust flagship-broker check-tar and its TS twin read these vectors); clients move backup files whole and never unpack a tar."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:runtime-manifest",
+      "reason": "The signed runtime manifest is verified on the box (Rust flagship-updater and packages/protocol read these vectors); clients only show the box's report, pinned by the runtime-verification vectors."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:runtime-manifest",
+      "reason": "The signed runtime manifest is verified on the box (Rust flagship-updater and packages/protocol read these vectors); clients only show the box's report, pinned by the runtime-verification vectors."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:runtime-manifest",
+      "reason": "The signed runtime manifest is verified on the box (Rust flagship-updater and packages/protocol read these vectors); clients only show the box's report, pinned by the runtime-verification vectors."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/pq-key-binding/v2",
+      "reason": "Only release keys carry a v2 PQ key binding, checked by the box installer's verify-box-artifact.sh; Android carries the tag only inside the embedded preseed engine it shares with the builder. No phone or browser signs or checks one."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/pq-key-binding/v2",
+      "reason": "Only release keys carry a v2 PQ key binding, checked by the box installer's verify-box-artifact.sh; Android carries the tag only inside the embedded preseed engine it shares with the builder. No phone or browser signs or checks one."
     }
   ]
 }

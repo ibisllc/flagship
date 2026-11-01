@@ -93,6 +93,12 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
   await page.fill("#unlock-passphrase", PASSPHRASE);
   await page.click("#unlock-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  // A lease seals the disk key only for a box key this device pinned at first contact (docs/first-contact.md);
+  // the code-pairing above doesn't pin one, so pin it the way creating the server would have.
+  await page.evaluate(
+    async ([fqdn, stk]) => (await import("/lib/serverPins.js")).pinServerKey(fqdn, stk, "first-sight"),
+    [identity.serverFqdn, bytesToHex(identity.stk.publicKey)] as const,
+  );
 
   await page.locator(`[data-open-fqdn="${identity.serverFqdn}"]`).click();
   await expect(page.locator("#view-server-detail")).toBeVisible();

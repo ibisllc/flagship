@@ -54,6 +54,8 @@ interface MockTunnel extends RegisteredTunnel {
   sent: Frame[];
   streams: Map<number, StreamCallbacks>;
   paused: Set<string>;
+  /** Every pauseInbound call, kept after the matching resume (a cut resumes at once). */
+  pauses: number;
   writable: boolean;
   writableWaiters: Array<() => void>;
 }
@@ -65,13 +67,17 @@ function mockTunnel(pod = BOX): MockTunnel {
     sent: [],
     streams: new Map(),
     paused: new Set(),
+    pauses: 0,
     writable: true,
     writableWaiters: [],
     send: (f) => void t.sent.push(f),
     attachStream: (id, cb) => void t.streams.set(id, cb),
     detachStream: (id) => void t.streams.delete(id),
     nextStreamId: () => next++,
-    pauseInbound: (k) => void t.paused.add(k),
+    pauseInbound: (k) => {
+      t.pauses += 1;
+      t.paused.add(k);
+    },
     resumeInbound: (k) => void t.paused.delete(k),
     whenBoxWritable: (cb) => {
       if (t.writable) return true;
@@ -122,19 +128,20 @@ describe("SNI router flow control", () => {
     await waitFor(() => box.streams.size === 1);
     const [id, cb] = [...box.streams][0]!;
     const chunk = new Uint8Array(256 * 1024);
-    // Push box data until the router asks the tunnel to stop, the way a paused WS would.
+    // Push box data until the router asks the tunnel to stop, the way a paused WS would. Under load one sleep can
+    // outlast the 300 ms grace, so the pause AND the cut may both land inside it: count pauses, don't sample them.
     let pushed = 0;
-    while (box.paused.size === 0 && pushed < 256 * 1024 * 1024) {
+    while (box.pauses === 0 && pushed < 256 * 1024 * 1024) {
       cb.onData(chunk);
       pushed += chunk.length;
       await sleep(1);
     }
-    expect(box.paused.size).toBe(1);
+    expect(box.pauses).toBe(1);
     // The paused test socket never reads the FIN, so watch the router's side of the cut.
-    await waitFor(() => box.streams.size === 0);
+    await waitFor(() => box.streams.size === 0, 15_000);
     expect(box.paused.size).toBe(0);
     sock.resume();
-    await waitFor(() => state.closed);
+    await waitFor(() => state.closed, 15_000);
     expect(box.sent.some((f) => f.type === FRAME_CLOSE && f.streamId === id)).toBe(true);
     expect(box.streams.size).toBe(0);
   });
