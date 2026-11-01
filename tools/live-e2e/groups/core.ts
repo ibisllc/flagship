@@ -73,13 +73,11 @@ export const core: Group = {
       return `${r.text.length}B html`;
     });
     // Plan H9: the control name has a certificate of its own (exactly that name); app names get the apps certificate.
-    await rec.check("box presents a Let's Encrypt control cert for exactly its FQDN, and the apps cert (*.<fqdn>) for an app name", () => {
+    await rec.check("box presents a Let's Encrypt control cert for exactly its FQDN", () => {
       const c = certInfo(fqdn);
       assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
       assert(c.sans.length === 1 && c.sans[0] === fqdn, `control sans=${c.sans.join(",")}`);
-      const app = certInfo(fqdn, `gym-cert-probe.${fqdn}`);
-      assert(/Let's Encrypt/i.test(app.issuer) && app.sans.includes(`*.${fqdn}`) && !app.sans.includes(fqdn), `app-name sans=${app.sans.join(",") || "<none>"}`);
-      return `control ${c.sans.join(", ")}; apps ${app.sans.join(", ")}`;
+      return c.sans.join(", ");
     });
     // Root wildcard (docs/wildcard-dns.md): the zone holds `*.<apex>` and the apex
     // CAA and NOTHING at the account or its boxes, and every name under the
@@ -272,6 +270,17 @@ export const core: Group = {
       return "installed + listed";
     });
     if (!installed) return;
+    // The relay routes only names the box serves, so the apps certificate is checked on the app just installed.
+    await rec.check("the app's name gets the apps certificate (*.<fqdn>), not the control one", async () => {
+      const name = `${slug}.${fqdn}`;
+      let app = certInfo(name);
+      for (let i = 0; i < 12 && !app.sans.length; i++) {
+        await sleep(5000);
+        app = certInfo(name);
+      }
+      assert(/Let's Encrypt/i.test(app.issuer) && app.sans.includes(`*.${fqdn}`) && !app.sans.includes(fqdn), `app-name sans=${app.sans.join(",") || "<none>"}`);
+      return app.sans.join(", ");
+    });
     const envChange = (op: "set" | "unset", name: string, value?: string): ServiceEnvChange => ({
       serverId: fqdn,
       serviceId,
