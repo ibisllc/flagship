@@ -32,7 +32,8 @@ async function refresh(page: Page, pin: string | null, client?: { platform: stri
   return page.evaluate(
     async ({ pin, client }) => {
       const sn = await import("/lib/securityNotice.js");
-      return sn.refreshSecurityNotice({ ...(pin ? { pin } : {}), ...(client ? { client } : {}) });
+      // The test authority signs classically: with its pin, the page must not demand the release key's PQ half.
+      return sn.refreshSecurityNotice({ ...(pin ? { pin, pqKeyIds: [] } : {}), ...(client ? { client } : {}) });
     },
     { pin, client: client ?? null },
   );
@@ -133,22 +134,22 @@ test.describe("gym webapp security notices", () => {
     // The webapp was updated past the minimum: unlocked, the app usable again.
     await page.evaluate(async (pin) => {
       const sn = await import("/lib/securityNotice.js");
-      await sn.evaluateSecurityNotice({ pin, client: { platform: "web", build: 100_000, protocol: 1 } });
+      await sn.evaluateSecurityNotice({ pin, pqKeyIds: [], client: { platform: "web", build: 100_000, protocol: 1 } });
     }, a.pin);
     await expect(lock).toBeHidden();
     await expect(page.locator("header")).not.toHaveAttribute("inert", "");
 
     // Locked again on the real build; then past validUntil it ends by itself.
-    await page.evaluate(async (pin) => (await import("/lib/securityNotice.js")).evaluateSecurityNotice({ pin }), a.pin);
+    await page.evaluate(async (pin) => (await import("/lib/securityNotice.js")).evaluateSecurityNotice({ pin, pqKeyIds: [] }), a.pin);
     await expect(lock).toBeVisible();
     await page.evaluate(async (pin) => {
       const sn = await import("/lib/securityNotice.js");
-      await sn.evaluateSecurityNotice({ pin, now: Date.now() + 11 * 24 * 3600_000 });
+      await sn.evaluateSecurityNotice({ pin, pqKeyIds: [], now: Date.now() + 11 * 24 * 3600_000 });
     }, a.pin);
     await expect(lock).toBeHidden();
 
     // A signed all clear supersedes the lock; replaying the lock afterwards is refused.
-    await page.evaluate(async (pin) => (await import("/lib/securityNotice.js")).evaluateSecurityNotice({ pin }), a.pin);
+    await page.evaluate(async (pin) => (await import("/lib/securityNotice.js")).evaluateSecurityNotice({ pin, pqKeyIds: [] }), a.pin);
     await expect(lock).toBeVisible();
     const clear = a.doc(lockBody({ seq: 8, kind: "none", lockFrom: 0, platforms: {}, advisoryId: "", reason: "", message: "" }));
     m.first("GET", path("/api/notices"), clear);
@@ -203,7 +204,7 @@ test.describe("gym webapp security notices", () => {
     await shot(page, testInfo, "notice-grace-nag");
     await page.evaluate(async (pin) => {
       const sn = await import("/lib/securityNotice.js");
-      await sn.evaluateSecurityNotice({ pin, now: Date.now() + 2 * 24 * 3600_000 + 5000 });
+      await sn.evaluateSecurityNotice({ pin, pqKeyIds: [], now: Date.now() + 2 * 24 * 3600_000 + 5000 });
     }, a.pin);
     await expect(page.locator("#update-lock")).toBeVisible();
     await expect(banner).toBeHidden();
