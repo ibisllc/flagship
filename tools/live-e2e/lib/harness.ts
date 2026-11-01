@@ -43,13 +43,15 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000)
       const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
       const why = cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e));
       const method = String(init.method ?? "GET").toUpperCase();
-      const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(String(cause?.code ?? ""));
+      const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT", NEVER_SENT].includes(String(cause?.code ?? ""));
       const retryable = method === "GET" || method === "HEAD" || neverSent || init.idempotent === true;
       if (attempt >= 3 || !retryable) throw new Error(`fetch failed (${why}) after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${url}`);
       await sleep(5000);
     }
   }
 }
+
+const NEVER_SENT = "FLAGSHIP_BEFORE_HANDSHAKE";
 
 /**
  * A write on a connection of its own. fetch keeps connections open and reuses them; a server may close one after an
@@ -93,8 +95,13 @@ function writeOnce(url: string, init: HttpInit, timeoutMs: number): Promise<Resp
         });
       },
     );
+    // TLS ends on the box, so nothing of the request can have reached it before the handshake finished: a reset
+    // there (gym 18: Fly's dfw→iad backhaul dropping fresh connections) is retried like a refused connection.
+    let handshaken = false;
+    req.on("socket", (s) => s.once("secureConnect", () => (handshaken = true)));
     // The same error shape fetch gives (the caller reads `cause.code`).
-    const fail = (code: string, message: string) => reject(Object.assign(new Error(`fetch failed: ${message}`), { cause: { code, message } }));
+    const fail = (code: string, message: string) =>
+      reject(Object.assign(new Error(`fetch failed: ${message}`), { cause: { code: handshaken ? code : NEVER_SENT, message: handshaken ? message : `${code} before the TLS handshake finished` } }));
     req.on("timeout", () => {
       req.destroy();
       fail("UND_ERR_HEADERS_TIMEOUT", "timed out");
