@@ -23,6 +23,9 @@ import { issuance } from "./issuance.js";
 import { phoneRoute } from "./phoneRoute.js";
 import { stackSwitch } from "./stackSwitch.js";
 import { rustCore } from "./rustCore.js";
+import { relayAuthority } from "./relayAuthority.js";
+import { relayInstances } from "./relayInstances.js";
+import { phoneEndpoint } from "./phoneEndpoint.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
   firstContact,
@@ -49,4 +52,7 @@ export const RELEASE_03_GROUPS: Group[] = [
   serving,
   issuance,
   phoneRoute,
+  phoneEndpoint,
+  relayAuthority,
+  relayInstances,
 ];

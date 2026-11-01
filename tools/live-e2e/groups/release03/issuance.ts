@@ -4,8 +4,12 @@
 // (its key held here, the admin's account wildcard grant in hand: the strongest box there is) then asks for the bare
 // account name every way Appendix H scenario 5 lists; every request is refused before the CA hears of it. The old
 // DNS-01 writer answers 410. Skips when the gym `.com` has no issuance account key.
+// Also Appendix I 9.9 (the same box then asks the relay for the phone route: refused independently of issuance) and
+// 9.10 (the apex CAA pins the service's ACME account to DNS-01; only read here: proving that an unapproved account is
+// refused needs a controlled test zone, see docs/architecture-v2/acceptance-map.md).
 import acme from "acme-client";
 import { createHash, randomBytes } from "node:crypto";
+import { resolveCaa } from "node:dns/promises";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
   ed,
@@ -18,7 +22,8 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import { authCodeWire, issueAuthCode, newAuthCode } from "../../lib/fleet.js";
-import { CONTROL, SERVICES, SkipError, assert, certInfo, postJson, short, tryHttp } from "../../lib/harness.js";
+import { CONTROL, SERVICES, SkipError, assert, certInfo, http, postJson, short, tryHttp } from "../../lib/harness.js";
+import { SimPhone } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
 
 async function csrFor(names: string[]): Promise<string> {
@@ -70,6 +75,39 @@ export const issuance: Group = {
       assert(c.sans.includes(`*.${b.fqdn}`), `no *.${b.fqdn} on ${c.sans.join(", ")}`);
       assert(!c.sans.includes(zone) && !c.sans.includes(b.fqdn), `the app certificate names ${c.sans.join(", ")}`);
       return c.sans.join(", ");
+    });
+
+    const serviceAccountUri = String(account.json?.accountUri ?? "");
+    await rec.check("I-10: the apex CAA pins issuance to the service's ACME account and DNS-01, with no permissive record beside it", async () => {
+      let caa: Array<{ critical: number; issue?: string; issuewild?: string }> = [];
+      for (const name of [SERVICES, SERVICES.split(".").slice(1).join(".")]) {
+        caa = await resolveCaa(name).catch(() => []);
+        if (caa.length) break;
+      }
+      const issue = caa.filter((r) => r.issue !== undefined).map((r) => r.issue!);
+      const wild = caa.filter((r) => r.issuewild !== undefined).map((r) => r.issuewild!);
+      if (!caa.some((r) => /accounturi=/.test(r.issue ?? r.issuewild ?? ""))) {
+        throw new SkipError(`the effective CAA (${short(JSON.stringify(caa), 200)}) is not pinned to an account yet: the owner step in docs/runbooks/final-deploy.md "Certificate issuance"`);
+      }
+      // The gym and production share the apex, each with its own service account: every record must pin SOME account
+      // and DNS-01 (none may be permissive), and this service's account must be among them for both kinds.
+      const pinned = (v: string) => /accounturi=https:\/\//.test(v) && /validationmethods=dns-01(;|$|\s)/.test(v);
+      const ours = (v: string) => v.includes(`accounturi=${serviceAccountUri}`);
+      assert(issue.length > 0 && issue.every(pinned), `an issue record is not pinned to an account and DNS-01: ${issue.join(" | ")}`);
+      assert(wild.length > 0 && wild.every(pinned), `an issuewild record is not pinned to an account and DNS-01: ${wild.join(" | ")}`);
+      assert(issue.some(ours) && wild.some(ours), `this service's account ${serviceAccountUri} is not in the CAA set`);
+      return `${issue.length} issue + ${wild.length} issuewild, every one pinned with dns-01; this service's account listed`;
+    });
+
+    await rec.check("scenario 5: no device can publish or delete an arbitrary DNS-01 value (both writers answer 410)", async () => {
+      const body = {
+        request: { serverId: b.fqdn, recordName: `_acme-challenge.${zone}`, recordValueHash: "00".repeat(32), issuedAt: Date.now() },
+        signature: "00".repeat(64),
+        recordValue: "attacker-chosen-txt",
+      };
+      const del = await postJson(`https://${CONTROL}/api/dns-01/delete`, body);
+      assert(del.status === 410, `dns-01/delete ${del.status}: ${short(del.text)}`);
+      return "delete 410";
     });
 
     await rec.check("the old DNS-01 writer is closed (410)", async () => {
@@ -177,6 +215,23 @@ export const issuance: Group = {
           await refused("no grant", await order("apps", [`*.${fqdn}`, `*.${zone}`]), ["issuance-csr-names"]),
         ];
         return out.join("; ");
+      });
+      await rec.check("I-9: the same box (wildcard grant in hand) then asks the relay for the bare name's phone route: refused not-eligible", async () => {
+        const ep = await http(`https://${CONTROL}/api/services/endpoints`);
+        const hub = typeof ep.json?.tunnelHub === "string" ? (ep.json.tunnelHub as string) : "";
+        let p: SimPhone;
+        try {
+          p = await SimPhone.connect(hub.replace(/\/tunnel$/, "/phone-tunnel"), { account: acct.username, seed: stk.privateKey });
+        } catch (e) {
+          throw new SkipError(`no phone tunnel on the gym relay: ${String(e)}`);
+        }
+        try {
+          const a = await p.acquire();
+          assert(a.type === "refused" && a.code === "not-eligible", `the box key's claim: ${JSON.stringify(a)}`);
+          return `refused ${a.code}`;
+        } finally {
+          p.terminate();
+        }
       });
     } finally {
       if (registered) {

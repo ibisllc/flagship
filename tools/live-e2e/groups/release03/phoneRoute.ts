@@ -113,10 +113,12 @@ export const phoneRoute: Group = {
       });
 
       let p1!: SimPhone;
+      let p1First: SimPhone["lastClaim"] = null;
       await rec.check("phone 1 claims the vacant name; a visitor's TLS peer is phone 1's own certificate", async () => {
         p1 = await open(seeds.p1, "P1", certs.p1);
         const g = await p1.acquire();
         assert(g.type === "granted", `phone 1: ${JSON.stringify(g)}`);
+        p1First = p1.lastClaim;
         const seen = await visits(relayIp, bare, [certs.p1.cert]);
         assert(seen.includes("P1"), `no visitor reached phone 1: ${JSON.stringify(seen)}`);
         assert(seen.every((v) => v === "P1" || v === null), `a visitor reached something else: ${JSON.stringify(seen)}`);
@@ -164,6 +166,19 @@ export const phoneRoute: Group = {
         assert(seen.every((v) => v === null), `the bare name still answered: ${JSON.stringify(seen)}`);
         const own = await http(`https://${box("A1").fqdn}/api/front-page`);
         assert(own.status === 200, `the box's own name: ${own.status}`);
+      });
+
+      await rec.check("scenario 8: replay: phone 1's first granted claim, resent on a new tunnel while the name is vacant, is refused and routes nothing", async () => {
+        assert(p1First, "no claim of phone 1 was kept");
+        const again = await open(seeds.p1, "P1-replay", certs.p1);
+        const ch = await again.begin();
+        assert(ch.type === "challenge", `begin: ${JSON.stringify(ch)}`);
+        const r = await again.sendClaim(p1First);
+        assert(r.type === "refused", `the replayed claim was ${JSON.stringify(r)}`);
+        const seen = await visits(relayIp, bare, ca, 3);
+        assert(seen.every((v) => v === null), `the bare name answered after the replay: ${JSON.stringify(seen)}`);
+        again.terminate();
+        return `refused ${String(r.code)}`;
       });
 
       await rec.check("scenario 8: revoking phone 1's admin grant ends its claim and closes its tunnel", async () => {

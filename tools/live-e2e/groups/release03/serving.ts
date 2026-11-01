@@ -3,7 +3,11 @@
 // answering; a lease (signed by the admin root, or by a P-256 renewal key the admin root delegated) brings them back;
 // its end stops them again. Runs alone (it stops every app on A1 for a while) and leaves A1 on the default, no time
 // limit. Skips when the gym's .com serves no revocation key (the relay then has no serving authority).
+// Appendix H scenario 9 / Appendix I 9.1: the lease's end is measured on a WebSocket held open across it (a long-lived
+// app connection the relay must cut within its deadline) while the app's TLS certificate is still in date.
 import { randomBytes } from "node:crypto";
+import { connect as tlsConnect } from "node:tls";
+import { WebSocket } from "ws";
 import { p256 } from "@noble/curves/nist.js";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
@@ -139,15 +143,22 @@ export const serving: Group = {
         assert(await appUp(), "the app is not served under the delegated lease");
         return `delegated key ${renewalPub.slice(0, 10)}… accepted`;
       });
-      await rec.check("when the last lease ends the app stops within seconds; the control name keeps answering", async () => {
+      await rec.check("when the last lease ends the app stops within seconds, a WebSocket held open across the end is cut, the app's certificate is still in date; the control name keeps answering", async () => {
         const end = lastNotAfter;
-        await sleep(Math.max(0, end - Date.now() - 20_000));
+        await sleep(Math.max(0, end - Date.now() - 30_000));
+        const certEnd = await certNotAfter(`${SLUG}.${b.fqdn}`);
+        const ws = await openEcho(`wss://${SLUG}.${b.fqdn}/echo`);
         const t0 = Date.now();
-        const ms = await until(false, 60);
+        const ms = await until(false, 90);
         const late = t0 + ms - end;
+        await Promise.race([ws.closed, sleep(Math.max(0, end + 15_000 - Date.now()))]);
         assert(await controlUp(), "the control name stopped answering");
         assert(late < 15_000, `stopped ${(late / 1000).toFixed(0)} s after the lease ended (the relay should close within 5 s)`);
-        return `stopped ${(late / 1000).toFixed(1)} s after the lease ended (waited ${(ms / 1000).toFixed(0)} s)`;
+        assert(ws.closedAt !== null, "the WebSocket opened before the lease ended is still open 15 s after it");
+        const wsLate = ws.closedAt - end;
+        assert(wsLate < 10_000, `the WebSocket was cut ${(wsLate / 1000).toFixed(1)} s after the lease ended (deadline 5 s)`);
+        assert(certEnd > end + 86_400_000, `the app certificate ends ${new Date(certEnd).toISOString()}: not "still valid" at the lease's end`);
+        return `new requests stopped ${(late / 1000).toFixed(1)} s, the open WebSocket cut ${(wsLate / 1000).toFixed(1)} s after the lease ended; app certificate valid until ${new Date(certEnd).toISOString().slice(0, 10)}`;
       });
     } finally {
       await rec.check("cleanup: back to no time limit (the default); the app is served again", async () => {
@@ -159,3 +170,46 @@ export const serving: Group = {
     }
   },
 };
+
+/** The served certificate's end (ms), read over TLS without trusting anything. */
+function certNotAfter(host: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = tlsConnect({ host, port: 443, servername: host, rejectUnauthorized: false });
+    s.setTimeout(15_000, () => {
+      s.destroy();
+      reject(new Error(`no TLS answer from ${host}`));
+    });
+    s.on("secureConnect", () => {
+      const t = Date.parse(s.getPeerCertificate()?.valid_to ?? "");
+      s.destroy();
+      if (Number.isFinite(t)) resolve(t);
+      else reject(new Error(`no certificate end from ${host}`));
+    });
+    s.on("error", reject);
+  });
+}
+
+/** A WebSocket to whoami's echo, open and answering; `closedAt` is when it ended. */
+async function openEcho(url: string): Promise<{ closed: Promise<void>; closedAt: number | null }> {
+  const ws = new WebSocket(url, { headers: { origin: new URL(url.replace(/^wss:/, "https:")).origin } });
+  const out: { closed: Promise<void>; closedAt: number | null } = { closed: Promise.resolve(), closedAt: null };
+  out.closed = new Promise((r) =>
+    ws.on("close", () => {
+      out.closedAt = Date.now();
+      r();
+    }),
+  );
+  ws.on("error", () => undefined);
+  await new Promise<void>((res, rej) => {
+    ws.once("open", () => res());
+    ws.once("unexpected-response", (_q, resp) => rej(new Error(`WebSocket upgrade ${resp.statusCode} at ${url}`)));
+    ws.once("error", rej);
+  });
+  const echoed = new Promise<boolean>((r) => {
+    ws.once("message", (d) => r(String(d) === "gym-ping"));
+    setTimeout(() => r(false), 10_000).unref?.();
+  });
+  ws.send("gym-ping");
+  assert(await echoed, `the WebSocket at ${url} did not echo`);
+  return out;
+}

@@ -23,11 +23,16 @@ import {
   FRAME_OPEN,
 } from "@flagship/tunnel-protocol";
 import { connect as tlsConnect } from "node:tls";
+import { randomBytes, randomInt } from "node:crypto";
 import {
   canonicalPhonePresence,
   canonicalRouteRelease,
   checkPhonePresence,
   ed,
+  phoneEndpointCheck,
+  phoneSessionCookie,
+  PHONE_CSRF_HEADER,
+  PHONE_SESSION_COOKIE,
   signServingRecord,
   type PhonePresence,
   type RouteClaim,
@@ -54,6 +59,8 @@ export interface SimPhoneOptions {
   tls?: { key: string; cert: string };
   /** Sent on every relayed HTTP answer, so a visitor can tell phones apart. */
   label?: string;
+  /** Extra headers on the tunnel's WebSocket upgrade (e.g. Fly's `fly-force-instance-id` to pin a relay machine). */
+  headers?: Record<string, string>;
 }
 
 export class SimPhone {
@@ -65,12 +72,22 @@ export class SimPhone {
   granted: RouteClaim | null = null;
   /** Devices that said hello while this phone held the name: key → last seen (ms). */
   readonly seen = new Map<string, number>();
+  /** The last claim this phone sent, signature included (a replay test resends it on another session). */
+  lastClaim: { claim: RouteClaim; signature: string } | null = null;
+  /** The endpoint every relayed stream is answered by in `tls` mode (Appendix H scenario 11). */
+  readonly endpoint: PhoneEndpointSim;
   private waiters: Array<{ match: (m: Control) => boolean; resolve: (m: Control) => void }> = [];
   private closedResolve!: () => void;
   readonly closed: Promise<void>;
 
   private constructor(private readonly ws: WebSocket, readonly opts: SimPhoneOptions) {
     this.pub = hexOf(ed.getPublicKey(opts.seed));
+    this.endpoint = new PhoneEndpointSim({
+      account: opts.account,
+      label: opts.label ?? this.pub.slice(0, 8),
+      phoneRoutePub: this.pub,
+      onHello: (device) => this.seen.set(device, Date.now()),
+    });
     this.closed = new Promise((r) => (this.closedResolve = r));
     ws.on("message", (raw: Buffer, isBinary: boolean) => (isBinary ? this.onFrame(raw) : this.onControl(raw)));
     ws.on("close", (code, reason) => {
@@ -83,7 +100,7 @@ export class SimPhone {
 
   /** `url` is the relay's `ws(s)://host:port/phone-tunnel`. Resolves after the relay's hello. */
   static async connect(url: string, opts: SimPhoneOptions): Promise<SimPhone> {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, { headers: opts.headers ?? {} });
     const phone = new SimPhone(ws, opts);
     await phone.next((m) => m.type === "hello", 10_000);
     return phone;
@@ -133,6 +150,7 @@ export class SimPhone {
   }
 
   async sendClaim(c: { claim: RouteClaim; signature: string }): Promise<Control> {
+    this.lastClaim = c;
     this.send({ type: "claim", ...c });
     const r = await this.next((m) => m.type === "granted" || m.type === "refused");
     if (r.type === "granted") this.granted = c.claim;
@@ -238,24 +256,15 @@ export class SimPhone {
     s.feed = (b) => raw.push(b);
     s.end = () => raw.push(null);
     const tls = new TLSSocket(raw, { isServer: true, key: this.opts.tls.key, cert: this.opts.tls.cert });
-    let head = "";
+    let buf = Buffer.alloc(0);
+    let answered = false;
     tls.on("data", (d: Buffer) => {
-      head += d.toString("latin1");
-      if (!head.includes("\r\n\r\n")) return;
-      const h = (name: string) => new RegExp(`^${name}:\\s*(.+)$`, "im").exec(head)?.[1]?.trim();
-      const device = h("x-flagship-presence-device");
-      const at = Number(h("x-flagship-presence-at"));
-      const sig = h("x-flagship-presence-sig");
-      let recorded = false;
-      if (device && sig && Number.isSafeInteger(at)) {
-        const p: PhonePresence = { account: this.opts.account, devicePub: device, hostname: sni, issuedAt: at };
-        if (checkPhonePresence(p, sig, sni, Date.now())) {
-          this.seen.set(device, Date.now());
-          recorded = true;
-        }
-      }
-      const body = JSON.stringify({ phone: this.opts.label ?? this.pub.slice(0, 8), account: this.opts.account, sni, recorded });
-      tls.end(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`);
+      if (answered) return;
+      buf = Buffer.concat([buf, d]);
+      const req = parseHttpRequest(buf);
+      if (!req) return;
+      answered = true;
+      tls.end(this.endpoint.respond(req, sni));
     });
     tls.on("error", () => s.close());
     return s;
@@ -303,4 +312,186 @@ export async function sayHello(o: { ip: string; port?: number; hostname: string;
     s.on("end", () => finish(/^HTTP\/1\.1 2\d\d/.test(text) ? (/"phone":"([^"]+)"/.exec(text)?.[1] ?? "?") : null));
     s.on("error", () => finish(null));
   });
+}
+
+// ── the phone's endpoint (docs/architecture-v2/phone-route.md §4; Appendix H scenario 11) ─────────────
+
+export interface HttpRequestHead {
+  method: string;
+  path: string;
+  /** Lower-case names; a repeated header keeps its LAST value, as Android's `HttpHead.parse` does. */
+  headers: Record<string, string>;
+  body: string;
+}
+
+/** One whole HTTP/1.1 request (head and Content-Length body) from `buf`, or null while incomplete. */
+export function parseHttpRequest(buf: Buffer): HttpRequestHead | null {
+  const s = buf.toString("latin1");
+  const end = s.indexOf("\r\n\r\n");
+  if (end < 0) return null;
+  const lines = s.slice(0, end).split("\r\n");
+  const [method = "", path = ""] = (lines[0] ?? "").split(" ");
+  const headers: Record<string, string> = {};
+  for (const l of lines.slice(1)) {
+    const i = l.indexOf(":");
+    if (i > 0) headers[l.slice(0, i).trim().toLowerCase()] = l.slice(i + 1).trim();
+  }
+  const len = Number(headers["content-length"] ?? 0) || 0;
+  if (buf.length < end + 4 + len) return null;
+  return { method, path, headers, body: buf.subarray(end + 4, end + 4 + len).toString("utf8") };
+}
+
+/** The exact-name cookie value (case-sensitive name, first match), as Android's `HttpHead.cookie`. */
+export function cookieValue(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const p = part.trim();
+    const i = p.indexOf("=");
+    if (i > 0 && p.slice(0, i) === name) return p.slice(i + 1);
+  }
+  return null;
+}
+
+/**
+ * The phone endpoint, in node: the same routes and the same policy as the apps' endpoint (Android `PhoneEndpoint.kt`,
+ * iOS `PhoneEndpoint*.swift`), with the shared `phoneEndpointCheck` deciding every request. GET / and the well-known
+ * answer also carry `phone` (the sim's label) so a visitor can tell phones apart.
+ */
+export class PhoneEndpointSim {
+  private code: { value: string; expiresAt: number } | null = null;
+  private readonly sessions = new Map<string, { csrf: string; expiresAt: number }>();
+
+  constructor(
+    private readonly o: { account: string; label: string; phoneRoutePub: string; onHello?: (device: string) => void; now?: () => number },
+  ) {}
+
+  private now(): number {
+    return this.o.now?.() ?? Date.now();
+  }
+
+  /** A fresh one-time code (6 digits, 5 minutes), what the phone shows its owner. */
+  newCode(): string {
+    const v = String(randomInt(100_000, 1_000_000));
+    this.code = { value: v, expiresAt: this.now() + 5 * 60_000 };
+    return v;
+  }
+
+  respond(req: HttpRequestHead, hostname: string): string {
+    const host = (req.headers.host ?? "").split(":")[0]!;
+    const establish = req.method === "POST" && req.path === "/api/phone/session";
+    const token = cookieValue(req.headers.cookie, PHONE_SESSION_COOKIE);
+    const session = token ? this.sessions.get(token) : undefined;
+    const live = session && session.expiresAt > this.now() ? session : undefined;
+    const verdict = phoneEndpointCheck(
+      {
+        method: req.method,
+        host,
+        origin: req.headers.origin ?? null,
+        sessionCookie: token,
+        csrf: req.headers[PHONE_CSRF_HEADER] ?? null,
+        upgrade: req.headers.upgrade !== undefined,
+        establish,
+      },
+      { hostname, sessionToken: live ? token : null, csrfToken: live?.csrf ?? null },
+    );
+    if (verdict !== "allow") return answer(403, { code: verdict });
+    if (req.method === "GET" && req.path === "/") {
+      return answer(200, { present: true, recorded: this.hello(req, hostname), phone: this.o.label, account: this.o.account, sni: hostname });
+    }
+    if (req.method === "GET" && req.path === "/.well-known/flagship-phone") {
+      return answer(200, { account: this.o.account, hostname, phoneRoutePub: this.o.phoneRoutePub, phone: this.o.label });
+    }
+    if (establish) {
+      const typed = /"code"\s*:\s*"(\d{6})"/.exec(req.body)?.[1];
+      const c = this.code;
+      if (!typed || !c || c.expiresAt <= this.now() || typed !== c.value) return answer(403, { code: "bad-code" });
+      this.code = null;
+      const t = randomBytes(32).toString("hex");
+      const csrf = randomBytes(32).toString("hex");
+      this.sessions.set(t, { csrf, expiresAt: this.now() + 3_600_000 });
+      return answer(200, { csrf }, `set-cookie: ${phoneSessionCookie(t)}\r\n`);
+    }
+    if (req.method === "POST" && req.path === "/api/phone/ping") return answer(200, { ok: true });
+    return answer(404, { code: "not-found" });
+  }
+
+  private hello(req: HttpRequestHead, hostname: string): boolean {
+    const device = req.headers["x-flagship-presence-device"];
+    const at = Number(req.headers["x-flagship-presence-at"]);
+    const sig = req.headers["x-flagship-presence-sig"];
+    if (!device || !sig || !Number.isSafeInteger(at)) return false;
+    const p: PhonePresence = { account: this.o.account, devicePub: device, hostname, issuedAt: at };
+    if (!checkPhonePresence(p, sig, hostname, this.now())) return false;
+    this.o.onHello?.(device);
+    return true;
+  }
+}
+
+function answer(status: number, body: unknown, extra = ""): string {
+  const json = JSON.stringify(body);
+  const reason = status === 200 ? "OK" : status === 403 ? "Forbidden" : "Not Found";
+  return (
+    `HTTP/1.1 ${status} ${reason}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(json)}\r\n` +
+    "cache-control: no-store\r\nx-content-type-options: nosniff\r\ncontent-security-policy: default-src 'none'; frame-ancestors 'none'\r\n" +
+    `referrer-policy: no-referrer\r\n${extra}connection: close\r\n\r\n${json}`
+  );
+}
+
+export interface PhoneHttpAnswer {
+  status: number;
+  /** Lower-case names; repeated headers joined with "\n". */
+  headers: Record<string, string>;
+  body: string;
+}
+
+/**
+ * One raw HTTPS request to the phone's name through the relay at `ip`, headers exactly as given (a browser's view of
+ * the request a sibling page makes). Null when nothing answered (no holder, or the stream was closed).
+ */
+export async function phoneRequest(o: {
+  ip: string;
+  port?: number;
+  sni: string;
+  ca: string[];
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body?: string;
+}): Promise<PhoneHttpAnswer | null> {
+  return new Promise((resolve) => {
+    let text = "";
+    let done = false;
+    const finish = (v: PhoneHttpAnswer | null) => {
+      if (done) return;
+      done = true;
+      s.destroy();
+      resolve(v);
+    };
+    const s = tlsConnect({ host: o.ip, port: o.port ?? 443, servername: o.sni, ca: o.ca, checkServerIdentity: () => undefined });
+    s.setTimeout(8_000, () => finish(null));
+    s.on("secureConnect", () => {
+      const body = o.body ?? "";
+      const lines = Object.entries(o.headers).map(([k, v]) => `${k}: ${v}\r\n`).join("");
+      const len = body || o.method === "POST" ? `content-length: ${Buffer.byteLength(body)}\r\n` : "";
+      s.write(`${o.method} ${o.path} HTTP/1.1\r\n${lines}${len}connection: close\r\n\r\n${body}`);
+    });
+    s.on("data", (d) => (text += d.toString("latin1")));
+    s.on("end", () => finish(parseHttpAnswer(text)));
+    s.on("error", () => finish(null));
+  });
+}
+
+export function parseHttpAnswer(text: string): PhoneHttpAnswer | null {
+  const end = text.indexOf("\r\n\r\n");
+  const m = /^HTTP\/1\.1 (\d{3})/.exec(text);
+  if (end < 0 || !m) return null;
+  const headers: Record<string, string> = {};
+  for (const l of text.slice(0, end).split("\r\n").slice(1)) {
+    const i = l.indexOf(":");
+    if (i <= 0) continue;
+    const k = l.slice(0, i).trim().toLowerCase();
+    const v = l.slice(i + 1).trim();
+    headers[k] = headers[k] === undefined ? v : `${headers[k]}\n${v}`;
+  }
+  return { status: Number(m[1]), headers, body: text.slice(end + 4) };
 }
