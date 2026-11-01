@@ -84,7 +84,7 @@ final class GymAccountGoneTests: XCTestCase {
         XCTAssertEqual(text(any(app, "account-gone-body")), "This account no longer exists on Flagship. This can happen after a reset.")
         XCTAssertEqual(text(any(app, "account-gone-name")), "Account: smoketest")
         XCTAssertEqual(text(any(app, "account-gone-restore-hint")), "If you saved a backup of your servers, you can restore it into a new account.")
-        XCTAssertFalse(any(app, "account-gone-save").exists, "No rescue button in this build.")
+        XCTAssertTrue(any(app, "account-gone-save").exists, "An admin device can still save its servers' data (GymOfflineControlTests 7).")
         XCTAssertEqual(app.buttons["account-gone-create"].label, "Create a new account")
         XCTAssertEqual(app.buttons["account-gone-remove"].label, "Remove it from this device")
         XCTAssertFalse(app.buttons.matching(identifier: "home-add-new-server").firstMatch.exists, "The open menu was closed.")

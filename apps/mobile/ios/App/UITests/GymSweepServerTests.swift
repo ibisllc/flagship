@@ -806,8 +806,8 @@ final class GymSweepServerTests: GymSweepCase {
         let app = XCUIApplication()
         app.terminate()
         app.launchArguments = ["-smoke-mode", "-smoke-tab", "home", "-smoke-username", "bright-maple", "-smoke-admin-root", "-smoke-backups-ready"]
-        // 03:00 UTC is Saturday evening in Chicago; Sunday evening there is Monday 03:00 UTC.
-        app.launchEnvironment["TZ"] = "America/Chicago"
+        // Bogotá is UTC-5 all year (Chicago's daylight-saving switch moved the minute): Sunday 22:00 there is Monday 03:00 UTC.
+        app.launchEnvironment["TZ"] = "America/Bogota"
         app.launch()
         openBackups(app, "-smoke-backups-ready")
         let change = app.buttons["sd-backups-schedule-change"]
