@@ -103,7 +103,7 @@ export const relayAuthority: Group = {
       throw new Error(`${sni} answered ${String(last)}, not ${String(want)}, for ${seconds} s`);
     };
     const connect = async (s: SimServer, label: string, canonicals: string[] = [], extra: { payload?: Record<string, unknown> } = {}) => {
-      const payload = extra.payload ?? (await simHelloPayload({ username: user, server: s, irk: acct.keys.irk, canonicals, serving: { servingAdminKey: adminPub, servingPolicy: null } }));
+      const payload = extra.payload ?? (await simHelloPayload({ username: user, server: s, irk: acct.keys.irk, rootSigner: acct.keys.adminRoot, canonicals, serving: { servingAdminKey: adminPub, servingPolicy: null } }));
       const b = await SimBox.connect(tunnelUrl, payload, { label });
       sims.push(b);
       return { box: b, payload };

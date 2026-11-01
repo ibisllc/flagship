@@ -70,7 +70,7 @@ export const relayInstances: Group = {
       return r;
     };
     const connectOn = async (s: SimServer, id: string, label: string, canonicals: string[] = []) => {
-      const payload = await simHelloPayload({ username: user, server: s, irk: acct.keys.irk, canonicals, serving: { servingAdminKey: adminPub, servingPolicy: null } });
+      const payload = await simHelloPayload({ username: user, server: s, irk: acct.keys.irk, rootSigner: acct.keys.adminRoot, canonicals, serving: { servingAdminKey: adminPub, servingPolicy: null } });
       try {
         const b = await SimBox.connect(tunnelUrl, payload, { label, headers: pinInstance(id) });
         sims.push(b);

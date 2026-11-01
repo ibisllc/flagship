@@ -16,6 +16,7 @@ import {
   ed,
   mintDevEntitlements,
   rootEntitlementCertId,
+  signRootEntitlement,
   serviceEntitlementCertId,
   signAuthCode,
   signRevocation,
@@ -137,6 +138,8 @@ export async function simHelloPayload(o: {
   username: string;
   server: SimServer;
   irk: Keypair;
+  /** The box-authorizing key: the admin root on an admin-pinned account (the relay verifies the root entitlement under it). */
+  rootSigner?: Keypair;
   canonicals?: string[];
   serving?: Record<string, unknown>;
   issuedAt?: number;
@@ -149,6 +152,8 @@ export async function simHelloPayload(o: {
     podCanonical: o.server.fqdn,
     serviceCanonicals: [o.server.fqdn, ...(o.canonicals ?? [])],
   });
+  // Gym 22: the relay refused an IRK-signed root entitlement on the admin-pinned gym account.
+  if (o.rootSigner) bundle.rootEntitlementSig = signRootEntitlement(bundle.rootEntitlement, o.rootSigner);
   const nonce = new Uint8Array(randomBytes(32));
   const issuedAt = o.issuedAt ?? Date.now();
   const rootId = await rootEntitlementCertId(bundle.rootEntitlement);
