@@ -290,6 +290,7 @@ export const relayAuthority: Group = {
       });
 
       // ── H10: renewal within policy and every way a renewal may not work ──
+      let adminEnd = 0;
       await rec.check("H10: within policy a renewal is accepted (admin root, and a renewal key the admin delegated to a live device)", async () => {
         const l1 = lease(p, 90);
         const r1 = await postLeases(adminLease(l1));
@@ -298,7 +299,6 @@ export const relayAuthority: Group = {
         await waitReach(app, "S", 45);
         return "accepted; the app is served";
       });
-      let adminEnd = 0;
       const device = simKey();
       const devicePub = bytesToHex(device.publicKey);
       const renewalSk = p256.utils.randomSecretKey();
