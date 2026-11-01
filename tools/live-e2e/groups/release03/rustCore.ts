@@ -214,6 +214,19 @@ export const rustCore: Group = {
       assert(r.status === 200 && r.json?.app === "rcore", `probe ${r.status}: ${short(r.text)}`);
       return { host: String(r.json.host) };
     };
+    /** After a daemon restart core adopts on its next pass: probe until it serves (gym 22, 25: one probe at once got 503). */
+    const probeAfterRestart = async (): Promise<{ host: string }> => {
+      let last = "";
+      for (let i = 0; i < 24; i++) {
+        try {
+          return await probe();
+        } catch (e) {
+          last = e instanceof Error ? e.message : String(e);
+          await sleep(5_000);
+        }
+      }
+      throw new Error(`the app was not served within 2 min of the restart (last: ${last})`);
+    };
     const proxied = async () => (await view()).running?.proxyDecisions?.proxy ?? -1;
 
     const onArchV2 = await rec.check("setup: the box is on arch-v2, core serves, and both settings start on their defaults", async () => {
@@ -371,7 +384,7 @@ export const rustCore: Group = {
       await rec.check("another daemon restart (the proxy back on TS) adopts the app again under core", async () => {
         const before = (await probe()).host;
         const how = await setOwnership("rust", "ts");
-        const after = (await probe()).host;
+        const after = (await probeAfterRestart()).host;
         assert(after === before, `the app was restarted (container ${before} → ${after})`);
         return `${how}; container ${after} kept`;
       });
