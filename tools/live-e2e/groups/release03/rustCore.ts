@@ -44,6 +44,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+BOOT = os.urandom(8).hex()
 
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -59,7 +60,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         p = urlparse(self.path).path
         if p == "/":
-            return self.send_json(200, {"app": "rcore", "host": socket.gethostname(), "pid": os.getpid()})
+            return self.send_json(200, {"app": "rcore", "host": socket.gethostname(), "pid": os.getpid(), "boot": BOOT})
         if p == "/headers":
             return self.send_json(200, {"headers": {k.lower(): v for k, v in self.headers.items()}})
         if p == "/sse":
@@ -347,8 +348,12 @@ export const rustCore: Group = {
         return `the app saw ${Object.keys(h).filter((k) => k.startsWith("x-flagship-")).join(", ")}`;
       });
 
-      await rec.check("an app whose process dies is brought back by core (a new container)", async () => {
-        const before = (await probe()).host;
+      // Gym 25: the engine's own restart policy (on-failure) usually brings the process back in the same container
+      // before core's pass; either is the app coming back, which the start id shows.
+      await rec.check("an app whose process dies comes back (the engine restarts it, or core makes a new container)", async () => {
+        const first = await tryHttp(`${appUrl}/`, {}, 15_000);
+        const before = { host: String(first.json?.host ?? ""), boot: String(first.json?.boot ?? "") };
+        assert(before.boot, `the probe app reports no start id: ${short(first.text)}`);
         await tryHttp(`${appUrl}/crash`, {}, 15_000);
         const deadline = Date.now() + 4 * 60_000;
         let last = "";
@@ -356,7 +361,9 @@ export const rustCore: Group = {
           await sleep(10_000);
           const r = await tryHttp(`${appUrl}/`, {}, 15_000);
           last = `${r.status} ${short(r.text, 80)}`;
-          if (r.status === 200 && r.json?.host && r.json.host !== before) return `container ${before} → ${r.json.host}`;
+          if (r.status === 200 && r.json?.boot && r.json.boot !== before.boot) {
+            return r.json.host === before.host ? `restarted in container ${before.host}` : `container ${before.host} → ${r.json.host}`;
+          }
         }
         throw new Error(`not back in 4 min (last: ${last})`);
       });
