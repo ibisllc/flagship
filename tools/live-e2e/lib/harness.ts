@@ -1,6 +1,7 @@
 // Shared plumbing for the live gym drivers: config, HTTP, and a per-group
 // check recorder whose results land in gym-results/<run>/<group>.json.
 import { spawnSync } from "node:child_process";
+import { request as httpsRequest } from "node:https";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -50,7 +51,63 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000)
   }
 }
 
+/**
+ * A write on a connection of its own. fetch keeps connections open and reuses them; a server may close one after an
+ * odd request (the adversarial group sends many), and the next write sent on it fails with ECONNRESET after the bytes
+ * may have left, so it can't be retried (gym 17: six adversarial writes in a row). A fresh connection per write cannot
+ * land on a closed one. Reads stay on fetch, which retries a reused connection that turns out closed.
+ */
+function writeOnce(url: string, init: HttpInit, timeoutMs: number): Promise<Resp> {
+  return new Promise<Resp>((resolve, reject) => {
+    const u = new URL(url);
+    const body = init.body === undefined ? undefined : typeof init.body === "string" ? Buffer.from(init.body) : Buffer.from(init.body);
+    const req = httpsRequest(
+      {
+        method: init.method ?? "POST",
+        host: u.hostname,
+        port: u.port || 443,
+        path: `${u.pathname}${u.search}`,
+        headers: { ...(init.headers ?? {}), ...(body ? { "content-length": String(body.length) } : {}) },
+        agent: false,
+        timeout: timeoutMs,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("error", reject);
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          let json: any = null;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            /* not json */
+          }
+          const headers = new Headers();
+          for (const [k, v] of Object.entries(res.headers)) {
+            if (Array.isArray(v)) for (const x of v) headers.append(k, x);
+            else if (v !== undefined) headers.set(k, String(v));
+          }
+          const sc = res.headers["set-cookie"];
+          resolve({ status: res.statusCode ?? 0, text, json, setCookies: Array.isArray(sc) ? sc : sc ? [sc] : [], headers });
+        });
+      },
+    );
+    // The same error shape fetch gives (the caller reads `cause.code`).
+    const fail = (code: string, message: string) => reject(Object.assign(new Error(`fetch failed: ${message}`), { cause: { code, message } }));
+    req.on("timeout", () => {
+      req.destroy();
+      fail("UND_ERR_HEADERS_TIMEOUT", "timed out");
+    });
+    req.on("error", (e: NodeJS.ErrnoException) => fail(e.code ?? "ERR", e.message));
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 async function httpOnce(url: string, init: HttpInit, timeoutMs: number): Promise<Resp> {
+  const method = String(init.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && url.startsWith("https://")) return writeOnce(url, init, timeoutMs);
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
