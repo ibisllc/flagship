@@ -27,7 +27,7 @@ const ADMIN = new Uint8Array(32).fill(1);
 const BOX_KEY = new Uint8Array(32).fill(9);
 const BOX = hex(ed.getPublicKey(BOX_KEY));
 
-async function world(o: { grant?: boolean } = {}) {
+async function world(o: { grant?: boolean; lose?: (req: { method: string; url: string; status: unknown }) => boolean } = {}) {
   const sqlite = createSqliteD1();
   const db = sqlite as unknown as D1Database;
   const storage = new D1Storage(db);
@@ -40,6 +40,11 @@ async function world(o: { grant?: boolean } = {}) {
   const deps = { usernames: storage.usernames, grants: storage.deviceCapabilityGrants, dns, fetchImpl: ca.fetch as typeof fetch, now: () => clock.t, propagationMs: 0 };
   const comFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const res = await tryIssuanceRoute(new Request(String(input), init), env, deps);
+    if (res && o.lose) {
+      const status = ((await res.clone().json().catch(() => ({}))) as { status?: unknown }).status;
+      // `.com` did the work (the order is committed) but the box never got the answer.
+      if (o.lose({ method: init?.method ?? "GET", url: String(input), status })) throw new TypeError("fetch failed");
+    }
     return res ?? new Response("{}", { status: 404 });
   }) as typeof fetch;
   const grant = o.grant
@@ -63,7 +68,9 @@ async function world(o: { grant?: boolean } = {}) {
         clock.t += ms;
       },
     });
-  return { sqlite, ca, dns, clock, issuer, close: () => sqlite.close() };
+  const orders = async () =>
+    (await db.prepare("SELECT class, status, error_code FROM certificate_orders ORDER BY rowid").all<{ class: string; status: string; error_code: string | null }>()).results ?? [];
+  return { sqlite, ca, dns, clock, issuer, orders, close: () => sqlite.close() };
 }
 
 /** keyd's real TLS key store behind the daemon's interfaces: keys never leave it, certificates are checked on install. */
@@ -200,5 +207,95 @@ describe("box certificates through the issuance service", () => {
     } finally {
       w.close();
     }
+  });
+
+  describe("after a switch from classic to arch-v2 (gym 24)", () => {
+    /** A classic box's two certificates (keys in the daemon), then keyd holding the old certificate as `legacy`, in service. */
+    async function switched(o: Parameters<typeof world>[0] = {}) {
+      let armed = false;
+      const lose = o.lose;
+      const w = await world({ ...o, ...(lose ? { lose: (r: Parameters<typeof lose>[0]) => armed && lose(r) } : {}) });
+      const control = await w.issuer().issue("control");
+      await w.issuer().issue("apps");
+      w.clock.t += 3_600_000;
+      const k = realKeyd();
+      k.tls.importLegacy(control.privateKeyPem, control.chainPem);
+      // index.ts: onCertIssued marks the boot-health heartbeat; runtime.ts reports the app class only without control.
+      const heartbeats: string[] = [];
+      let certs: BoxCertificates | null = null;
+      certs = new BoxCertificates({
+        issuer: w.issuer(k.csr),
+        serverFqdn: SERVER,
+        certManager: new CertManager(),
+        keyd: k.keyd,
+        now: () => w.clock.t,
+        random: () => 0,
+        onInstalled: (cls) => {
+          if (cls === "control" || !certs!.has("control")) heartbeats.push(cls);
+        },
+      });
+      await certs.load();
+      armed = true;
+      return { w, k, certs, heartbeats };
+    }
+
+    it("keeps following an order whose issuing answer was lost, instead of re-keying into .com's not-due refusal", async () => {
+      const lost = new Set<string>();
+      const { w, k, certs, heartbeats } = await switched({
+        lose: ({ method, url, status }) => method === "GET" && status === "issued" && !lost.has(url) && (lost.add(url), true),
+      });
+      try {
+        expect(k.tls.active()?.legacy).toBe(true);
+        await certs.tick();
+        expect(heartbeats).toContain("control");
+        expect(certs.has("control") && certs.has("apps")).toBe(true);
+        expect(k.tls.active()?.legacy).toBe(false);
+        expect(lost.size).toBe(2);
+        // Two classic orders and exactly one more per class: nothing abandoned, nothing refused.
+        expect((await w.orders()).map((r) => `${r.class}:${r.status}`)).toEqual(["control:issued", "apps:issued", "control:issued", "apps:issued"]);
+      } finally {
+        w.close();
+      }
+    });
+
+    it("resumes an unanswered order on the next tick rather than placing a new one", async () => {
+      let down = true;
+      const { w, certs, heartbeats } = await switched({ lose: ({ method }) => down && method === "GET" });
+      try {
+        await certs.tick();
+        expect(heartbeats).toEqual([]);
+        expect(certs.status().control?.notAfter ?? null).toBeNull();
+        down = false;
+        w.clock.t += 61_000;
+        await certs.tick();
+        expect(heartbeats).toContain("control");
+        expect(certs.has("apps")).toBe(true);
+        expect((await w.orders()).filter((r) => r.status !== "issued").map((r) => `${r.class}:${r.status}:${r.error_code}`)).toEqual([]);
+      } finally {
+        w.close();
+      }
+    });
+
+    it("a keyd call that never answers does not hold the renewal lock", async () => {
+      const { w, k, heartbeats } = await switched();
+      try {
+        let hang = true;
+        const keyd: KeydCertSlots = { ...k.keyd, install: (h, c) => (hang ? new Promise(() => {}) : k.keyd.install(h, c)) };
+        const certs = new BoxCertificates({
+          issuer: w.issuer(k.csr), serverFqdn: SERVER, certManager: new CertManager(), keyd, now: () => w.clock.t, random: () => 0, keydTimeoutMs: 50,
+          onInstalled: (cls) => heartbeats.push(cls),
+        });
+        await certs.tick();
+        expect(heartbeats).toEqual([]);
+        hang = false;
+        w.clock.t += 7 * 3_600_000;
+        await certs.tick();
+        expect(heartbeats).toContain("control");
+        // The certificates .com issued the first time are the ones installed: no new order.
+        expect(await w.orders()).toHaveLength(4);
+      } finally {
+        w.close();
+      }
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  fallbackCountsAsHealthy,
   normalizeOrderSerial,
   reportProvisionStatus,
   type ProvisionStatusPhase,
@@ -139,5 +140,21 @@ describe("daemon status reporter (compute + post live once serving)", () => {
     await reportStatus("pairing");
 
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+  });
+});
+
+describe("fallbackCountsAsHealthy (the boot-health gate on a held certificate)", () => {
+  const FQDN = "home.alice.flagship.services";
+  const now = 1_800_000_000_000;
+  const DAY = 86_400_000;
+  it("counts a certificate for the box's own name with a week or more left", () => {
+    expect(fallbackCountsAsHealthy(FQDN, [FQDN], now + 30 * DAY, now)).toBe(true);
+    expect(fallbackCountsAsHealthy(FQDN, ["*.alice.flagship.services", `*.${FQDN}`], now + 8 * DAY, now)).toBe(true);
+  });
+  it("never one close to its end, expired, or not naming the box", () => {
+    expect(fallbackCountsAsHealthy(FQDN, [FQDN], now + 6 * DAY, now)).toBe(false);
+    expect(fallbackCountsAsHealthy(FQDN, [FQDN], now - DAY, now)).toBe(false);
+    expect(fallbackCountsAsHealthy(FQDN, [`*.${FQDN}`], now + 30 * DAY, now)).toBe(false);
+    expect(fallbackCountsAsHealthy(FQDN, ["home2.alice.flagship.services"], now + 30 * DAY, now)).toBe(false);
   });
 });

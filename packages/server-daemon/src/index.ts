@@ -736,6 +736,17 @@ export async function persistSwkHex(path: string, swkHex: string): Promise<void>
   await writeFileDurable(path, swkHex.trim() + "\n");
 }
 
+/** How long a held certificate must still run to count for the boot-health gate (onCertFallback). */
+export const FALLBACK_HEALTHY_MARGIN_MS = 7 * 86_400_000;
+
+/** Whether a certificate the box serves while new ones are ordered meets the boot-health gate: it names the box and has a week left. */
+export function fallbackCountsAsHealthy(serverFqdn: string, names: readonly string[], notAfter: number, now: number): boolean {
+  if (!(notAfter - now >= FALLBACK_HEALTHY_MARGIN_MS)) return false;
+  const fqdn = serverFqdn.toLowerCase();
+  const parent = fqdn.slice(fqdn.indexOf(".") + 1);
+  return names.some((n) => n.toLowerCase() === fqdn || n.toLowerCase() === `*.${parent}`);
+}
+
 /** Snapshot the certificate metadata the synchronous screens BFF needs. */
 export function liveCertInfo(
   certPem: string,
@@ -2094,6 +2105,14 @@ async function main(): Promise<void> {
       onCertFallback: (cert, notAfter, names) => {
         liveCertInfoRef.current = liveCertInfo(cert.certPem, notAfter, names);
         liveCertPemRef.current = cert.certPem;
+        // The boot-health gate asks that the box serve its owner over TLS and send a signed heartbeat. A certificate
+        // it holds and serves (after a stack switch: the one keyd took over) for its own name, well in date, meets
+        // both once the heartbeat carries it; new ones are still ordered and replace it. One close to its end never
+        // counts, so no update or switch is kept on a certificate about to lapse.
+        if (fallbackCountsAsHealthy(env.serverFqdn!, names, notAfter, Date.now())) {
+          statusHeartbeat.update(cert, notAfter, names);
+          selfUpdateHealth.markHeartbeat();
+        }
       },
       // The cert has landed and HTTPS is genuinely serving — the real
       // "your server is live" moment. Report it ONCE on the single canonical

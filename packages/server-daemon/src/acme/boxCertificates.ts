@@ -29,7 +29,7 @@ interface Held {
 }
 
 export interface BoxCertificatesOptions {
-  issuer: Pick<ServiceIssuer, "issue" | "names">;
+  issuer: Pick<ServiceIssuer, "issue" | "names"> & Partial<Pick<ServiceIssuer, "hasPending">>;
   serverFqdn: string;
   certManager: CertManager;
   /** Classic: the PEM store (key + chain in this process). */
@@ -40,12 +40,18 @@ export interface BoxCertificatesOptions {
   onAttemptFailed?(cls: BoxCertClass, attempt: number, error: string): void;
   now?: () => number;
   random?: () => number;
+  /** Bound on each keyd call (default 30 s): no keyd answer may hold the renewal lock. */
+  keydTimeoutMs?: number;
 }
 
 export const RENEWAL_JITTER_MS = 3 * 86_400_000;
 const BACKOFF_BASE_MS = 15 * 60_000;
 const BACKOFF_MAX_MS = 6 * 3_600_000;
 const NO_SERVING_RETRY_MS = 3_600_000;
+/** An order `.com` accepted and the box has no answer for yet: follow it up soon, never place a new one. */
+const RESUME_RETRY_MS = 60_000;
+const KEYD_TIMEOUT_MS = 30_000;
+const UNTAKEN_TRIES = 5;
 const CLASSES: readonly BoxCertClass[] = ["control", "apps"];
 const storeKey = (cls: BoxCertClass, fqdn: string) => `${cls}.${fqdn}`;
 
@@ -55,6 +61,12 @@ export class BoxCertificates {
   private jitter: number;
   private running: Promise<void> | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private retryTimer: NodeJS.Timeout | null = null;
+  private retryTimerAt = 0;
+  /** keyd took a certificate but could not say which one it serves: report it at the next tick. */
+  private unconfirmed = false;
+  /** Issued by `.com` but not yet taken into keyd/the store: installed again before anything new is ordered. */
+  private untaken: Record<BoxCertClass, { cert: IssuedCertificate; tries: number } | null> = { control: null, apps: null };
   private classes: readonly BoxCertClass[] = CLASSES;
 
   constructor(private readonly o: BoxCertificatesOptions) {
@@ -89,7 +101,10 @@ export class BoxCertificates {
   async load(): Promise<void> {
     const now = this.now();
     if (this.o.keyd) {
-      const keys = await this.o.keyd.list().catch(() => []);
+      const keys = await this.keydCall("list", () => this.o.keyd!.list()).catch((e: Error) => {
+        console.warn(`[certs] keyd did not list its certificates: ${e.message}`);
+        return [];
+      });
       for (const cls of CLASSES) {
         const want = this.o.issuer.names(cls);
         const best = keys
@@ -115,6 +130,7 @@ export class BoxCertificates {
   tick(): Promise<void> {
     this.running ??= (async () => {
       try {
+        if (this.unconfirmed && this.o.keyd) await this.activateKeyd().catch((e: Error) => console.warn(`[certs] keyd: ${e.message}`));
         for (const cls of this.classes) await this.maybeRenew(cls);
       } finally {
         this.running = null;
@@ -138,6 +154,33 @@ export class BoxCertificates {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  /** A retry due before the next interval tick gets its own tick (only once started). */
+  private scheduleRetry(at: number): void {
+    if (!this.timer) return;
+    if (this.retryTimer && this.retryTimerAt <= at) return;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimerAt = at;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.tick();
+    }, Math.max(1000, at - this.now()));
+    this.retryTimer.unref?.();
+  }
+
+  private keydCall<T>(what: string, f: () => Promise<T>): Promise<T> {
+    const ms = this.o.keydTimeoutMs ?? KEYD_TIMEOUT_MS;
+    return new Promise<T>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error(`keyd did not answer ${what} in ${Math.round(ms / 1000)} s`)), ms);
+      t.unref?.();
+      f().then(
+        (v) => (clearTimeout(t), resolve(v)),
+        (e: unknown) => (clearTimeout(t), reject(e instanceof Error ? e : new Error(String(e)))),
+      );
+    });
   }
 
   private async maybeRenew(cls: BoxCertClass): Promise<void> {
@@ -145,16 +188,26 @@ export class BoxCertificates {
     if (now < this.dueAt(cls) || now < this.retry[cls].at) return;
     const r = this.retry[cls];
     try {
-      const c = await this.o.issuer.issue(cls);
+      // A certificate .com already issued is never thrown away for a failed install: a new key would be refused
+      // (`issuance-not-due`) until the old one is due.
+      // After a few refused installs (keyd says no, not "no answer") it is given up and a new one is ordered.
+      let kept = this.untaken[cls];
+      if (kept && (kept.tries >= UNTAKEN_TRIES || kept.cert.notAfter <= now || !sameNames(kept.cert.names, this.o.issuer.names(cls)))) kept = this.untaken[cls] = null;
+      const c = kept ? kept.cert : await this.o.issuer.issue(cls);
+      this.untaken[cls] = { cert: c, tries: (kept?.tries ?? 0) + 1 };
       await this.take(c);
+      this.untaken[cls] = null;
       this.retry[cls] = { failures: 0, at: 0 };
     } catch (e) {
       r.failures += 1;
       const msg = e instanceof Error ? e.message : String(e);
-      if (e instanceof IssuanceDeferred) r.at = e.retryAt + Math.floor((this.o.random ?? Math.random)() * 15 * 60_000);
+      if (this.o.issuer.hasPending?.(cls) || this.untaken[cls]) r.at = this.now() + RESUME_RETRY_MS;
+      else if (e instanceof IssuanceDeferred) r.at = e.retryAt + Math.floor((this.o.random ?? Math.random)() * 15 * 60_000);
       else if (e instanceof IssuanceRefused && e.code === "issuance-no-serving") r.at = this.now() + NO_SERVING_RETRY_MS;
       else r.at = this.now() + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (r.failures - 1)) + Math.floor((this.o.random ?? Math.random)() * 60_000);
-      console.warn(`[certs] ${cls} certificate for ${this.o.serverFqdn}: ${msg}; next try ${new Date(r.at).toISOString()}`);
+      const resume = this.untaken[cls] ? " (installing the certificate already issued)" : this.o.issuer.hasPending?.(cls) ? " (the order stands: following it up)" : "";
+      console.warn(`[certs] ${cls} certificate for ${this.o.serverFqdn}: ${msg}; next try ${new Date(r.at).toISOString()}${resume}`);
+      this.scheduleRetry(r.at);
       try {
         this.o.onAttemptFailed?.(cls, r.failures, msg);
       } catch {
@@ -166,7 +219,7 @@ export class BoxCertificates {
   private async take(c: IssuedCertificate): Promise<void> {
     const held: Held = { names: c.names, chainPem: c.chainPem, privateKeyPem: c.privateKeyPem, handle: c.handle, notBefore: c.notBefore, notAfter: c.notAfter };
     if (this.o.keyd && c.handle) {
-      await this.o.keyd.install(c.handle, c.chainPem);
+      await this.keydCall("tls.install", () => this.o.keyd!.install(c.handle!, c.chainPem));
       this.held[c.cls] = held;
       await this.activateKeyd();
     } else {
@@ -206,24 +259,36 @@ export class BoxCertificates {
     const zoneWildcard = `*.${this.o.serverFqdn.toLowerCase().split(".").slice(1).join(".")}`;
     const pick = apps?.handle && apps.notAfter > now && apps.names.includes(zoneWildcard) ? apps : control?.handle && control.notAfter > now ? control : null;
     if (!pick?.handle) return;
-    let active = await keyd.active().catch(() => null);
+    const readActive = () =>
+      this.keydCall("tls.active", () => keyd.active()).catch((e: Error) => {
+        console.warn(`[certs] keyd did not say which certificate it serves: ${e.message}`);
+        return null;
+      });
+    let active = await readActive();
     if (active?.handle !== pick.handle) {
-      await keyd.activate(pick.handle);
-      active = await keyd.active().catch(() => null);
+      await this.keydCall("tls.activate", () => keyd.activate(pick.handle!));
+      active = await readActive();
     }
     const validControl = control?.handle && control.notAfter > now ? control.handle : null;
     const validApps = apps?.handle && apps.notAfter > now ? apps.handle : null;
     if (validControl && validApps && keyd.serving) {
       try {
-        const serving = await keyd.serving();
+        const serving = await this.keydCall("tls.active", () => keyd.serving!());
         if (serving) {
           for (const [slot, handle] of [["control", validControl], ["apps", validApps]] as const) {
-            if (!serving.some((s) => s.slot === slot && s.handle === handle)) await keyd.activate(handle, slot);
+            if (!serving.some((s) => s.slot === slot && s.handle === handle)) await this.keydCall("tls.activate", () => keyd.activate(handle, slot));
           }
         }
       } catch (e) {
         console.warn(`[certs] could not serve the control and apps certificates side by side: ${e instanceof Error ? e.message : String(e)}`);
       }
+    }
+    // Never a silent stop: without keyd's word on what it serves, nothing reports the certificate, so ask again.
+    this.unconfirmed = !active || active.handle !== pick.handle;
+    if (this.unconfirmed) {
+      console.warn(`[certs] keyd does not confirm it serves the new ${pick === apps ? "apps" : "control"} certificate yet; checking again`);
+      this.scheduleRetry(this.now() + RESUME_RETRY_MS);
+      return;
     }
     if (!active) return;
     try {

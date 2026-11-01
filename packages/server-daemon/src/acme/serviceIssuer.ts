@@ -66,6 +66,30 @@ export class IssuanceRefused extends Error {
   }
 }
 
+/** `.com` could not be reached or failed on its side (network, timeout, 5xx): the order may still stand. */
+export class IssuanceUnreachable extends IssuanceRefused {
+  constructor(message: string, status: number) {
+    super("issuance-unreachable", message, status);
+    this.name = "IssuanceUnreachable";
+  }
+}
+
+const CALL_TIMEOUT_MS = 30_000;
+const POST_ATTEMPTS = 3;
+
+interface PendingOrder {
+  orderId: string;
+  names: string[];
+  privateKeyPem: string;
+  handle: string | null;
+  /** The answer the POST gave, followed first. */
+  view: Record<string, unknown> | null;
+}
+
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return [...a].map((n) => n.toLowerCase()).sort().join("\n") === [...b].map((n) => n.toLowerCase()).sort().join("\n");
+}
+
 export interface IssuedCertificate {
   cls: BoxCertClass;
   names: string[];
@@ -104,6 +128,7 @@ export function boxClassNames(serverFqdn: string, cls: BoxCertClass, accountWild
 
 export class ServiceIssuer {
   private readonly f: typeof fetch;
+  private readonly pending = new Map<BoxCertClass, PendingOrder>();
   constructor(private readonly o: ServiceIssuerOptions) {
     this.f = o.fetchImpl ?? fetch;
   }
@@ -112,9 +137,31 @@ export class ServiceIssuer {
     return boxClassNames(this.o.serverFqdn, cls, cls === "apps" && this.o.wildcardGrant() !== undefined);
   }
 
+  /** An order this box placed and has not yet got an answer for (resumed by the next `issue`). */
+  hasPending(cls: BoxCertClass): boolean {
+    return this.pending.has(cls);
+  }
+
+  /**
+   * Orders a certificate and follows the order until `.com` hands back the chain. An order `.com` accepted is never
+   * dropped for a lost answer: a POST is re-sent with the same body (its `requestId` makes it idempotent), a poll that
+   * fails on the way (network, timeout, 5xx, 429) is simply polled again, and an order still unanswered at the deadline
+   * is resumed by the next call instead of a new one being placed. A new key per class is let through once a month, so
+   * an order abandoned after `.com` issued it left the box refused (`issuance-not-due`) for weeks (stack switch, gym 24).
+   */
   async issue(cls: BoxCertClass): Promise<IssuedCertificate> {
-    const now = this.o.now ?? Date.now;
     const names = this.names(cls);
+    let p = this.pending.get(cls);
+    if (p && !sameNames(p.names, names)) {
+      this.pending.delete(cls);
+      p = undefined;
+    }
+    if (!p) p = await this.place(cls, names);
+    return await this.follow(cls, p);
+  }
+
+  private async place(cls: BoxCertClass, names: string[]): Promise<PendingOrder> {
+    const now = this.o.now ?? Date.now;
     const account = this.o.serverFqdn.toLowerCase().split(".")[1]!;
     const { csrDer, privateKeyPem, handle } = await this.o.csr.create(names);
     const order: CertificateOrder = {
@@ -126,48 +173,94 @@ export class ServiceIssuer {
       issuedAt: now(),
     };
     const grant = cls === "apps" ? this.o.wildcardGrant() : undefined;
-    const body = {
+    const body = JSON.stringify({
       account,
       server: this.o.serverFqdn.toLowerCase(),
       order,
       signature: Buffer.from(signServingRecord("certificate-order", order, (m) => this.o.signAsBox(m))).toString("hex"),
       csr: Buffer.from(csrDer).toString("base64url"),
       ...(grant ? { serverWildcardGrant: { issuedAt: grant.issuedAt, signature: grant.signatureHex } } : {}),
-    };
-    const base = this.o.controlPlaneBaseUrl.replace(/\/$/, "");
-    const posted = await this.call(`${base}/api/certificates/orders`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const orderId = String(posted.orderId ?? "");
-    if (!/^[0-9a-f]{32}$/.test(orderId)) throw new IssuanceRefused("issuance-malformed", ".com answered without an order id", 502);
-    const sleep = this.o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-    const deadline = now() + (this.o.timeoutMs ?? 20 * 60_000);
-    let view = posted;
-    while (view.status === "pending") {
-      if (now() > deadline) throw new IssuanceRefused("issuance-timeout", "the certificate order did not finish", 504);
-      await sleep(Math.max(1000, Number(view.pollAfterMs) || this.o.pollIntervalMs || 5000));
-      view = await this.call(`${base}/api/certificates/orders/${orderId}`, {});
+    });
+    let posted: Record<string, unknown> | null = null;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        posted = await this.call(`${this.base()}/api/certificates/orders`, { method: "POST", headers: { "content-type": "application/json" }, body });
+        break;
+      } catch (e) {
+        if (!(e instanceof IssuanceUnreachable) || attempt >= POST_ATTEMPTS) throw e;
+        await this.sleep(this.o.pollIntervalMs ?? 5000);
+      }
     }
+    const orderId = String(posted?.orderId ?? "");
+    if (!/^[0-9a-f]{32}$/.test(orderId)) throw new IssuanceRefused("issuance-malformed", ".com answered without an order id", 502);
+    const p: PendingOrder = { orderId, names, privateKeyPem, handle, view: posted };
+    this.pending.set(cls, p);
+    return p;
+  }
+
+  private async follow(cls: BoxCertClass, p: PendingOrder): Promise<IssuedCertificate> {
+    const now = this.o.now ?? Date.now;
+    const deadline = now() + (this.o.timeoutMs ?? 20 * 60_000);
+    let view = p.view ?? { status: "pending" };
+    p.view = null;
+    let lastError = "";
+    while (view.status === "pending") {
+      if (now() > deadline) {
+        throw new IssuanceRefused("issuance-timeout", `the certificate order did not finish${lastError ? ` (${lastError})` : ""}`, 504);
+      }
+      await this.sleep(Math.max(1000, Number(view.pollAfterMs) || this.o.pollIntervalMs || 5000));
+      try {
+        view = await this.call(`${this.base()}/api/certificates/orders/${p.orderId}`, {});
+      } catch (e) {
+        // A poll that got no answer (or a busy answer) leaves the order where it was: ask again.
+        if (!(e instanceof IssuanceUnreachable) && !(e instanceof IssuanceDeferred)) {
+          this.pending.delete(cls);
+          throw e;
+        }
+        lastError = e.message;
+        view = { status: "pending", pollAfterMs: Math.min(30_000, Math.max(5000, (this.o.pollIntervalMs ?? 5000) * 2)) };
+      }
+    }
+    this.pending.delete(cls);
     if (view.status !== "issued" || typeof view.chainPem !== "string") {
       throw new IssuanceRefused(String(view.code ?? "issuance-acme-failed"), String(view.error ?? "the certificate order failed"), 200);
     }
     const chainPem = view.chainPem;
+    const names = p.names;
     // The box checks the leaf too: its names and its key are the ones it asked for.
     const leaf = new X509Certificate(chainPem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/)?.[0] ?? "");
     const sans = (leaf.subjectAltName ?? "").split(",").map((s) => s.trim().replace(/^DNS:/, "").toLowerCase()).filter(Boolean).sort();
     if (sans.join("\n") !== [...names].sort().join("\n")) throw new IssuanceRefused("issuance-chain-mismatch", "the certificate names other names", 200);
-    if (privateKeyPem && !leaf.checkPrivateKey(createPrivateKey(privateKeyPem))) {
+    if (p.privateKeyPem && !leaf.checkPrivateKey(createPrivateKey(p.privateKeyPem))) {
       throw new IssuanceRefused("issuance-chain-mismatch", "the certificate is not for this key", 200);
     }
-    return { cls, names, chainPem, privateKeyPem, handle, notBefore: Date.parse(leaf.validFrom), notAfter: Date.parse(leaf.validTo) };
+    return { cls, names, chainPem, privateKeyPem: p.privateKeyPem, handle: p.handle, notBefore: Date.parse(leaf.validFrom), notAfter: Date.parse(leaf.validTo) };
+  }
+
+  private base(): string {
+    return this.o.controlPlaneBaseUrl.replace(/\/$/, "");
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return (this.o.sleep ?? ((t: number) => new Promise<void>((r) => setTimeout(r, t))))(ms);
   }
 
   private async call(url: string, init: RequestInit): Promise<Record<string, unknown>> {
-    const res = await this.f(url, { ...init, signal: AbortSignal.timeout(30_000) });
+    let res: Response;
     let body: Record<string, unknown> = {};
+    let parsed = false;
     try {
-      body = (await res.json()) as Record<string, unknown>;
-    } catch {
-      /* non-JSON: handled by status */
+      res = await this.f(url, { ...init, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
+      try {
+        body = (await res.json()) as Record<string, unknown>;
+        parsed = true;
+      } catch {
+        /* non-JSON: handled by status */
+      }
+    } catch (e) {
+      throw new IssuanceUnreachable(`.com did not answer: ${e instanceof Error ? e.message : String(e)}`, 0);
     }
+    if (res.ok && !parsed) throw new IssuanceUnreachable(`.com answered ${res.status} without a body`, res.status);
     if (res.ok) return body;
     const code = String(body.code ?? `http-${res.status}`);
     const msg = String(body.error ?? `.com answered ${res.status}`);
@@ -176,6 +269,7 @@ export class ServiceIssuer {
       const at = typeof body.dueAt === "number" ? body.dueAt : now + (typeof body.retryAfterMs === "number" ? body.retryAfterMs : 3_600_000);
       throw new IssuanceDeferred(code, at, msg);
     }
+    if (res.status >= 500) throw new IssuanceUnreachable(msg, res.status);
     throw new IssuanceRefused(code, msg, res.status);
   }
 }
