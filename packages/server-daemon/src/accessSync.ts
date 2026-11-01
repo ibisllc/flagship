@@ -186,6 +186,9 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       const r = await post("push", to, ref, { entries: entries.slice(i, i + MAX_ENTRIES_PER_PUSH) });
       if (!r || !r.ok) return false;
     }
+    // A box whose changes all start here never receives the leader's fan-out (it skips the sender), so
+    // a server that took our hand-over is remembered here: after a restart this box waits for the list.
+    await opts.journal.notePeers(ref, [to]);
     return true;
   }
 
@@ -316,6 +319,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       return false;
     }
     lastSyncAt.set(ref, now());
+    await opts.journal.notePeers(ref, [peer]);
     if (body.same === true) return true;
     const theirs = Array.isArray(body.entries) ? body.entries : [];
     await take(ref, theirs);

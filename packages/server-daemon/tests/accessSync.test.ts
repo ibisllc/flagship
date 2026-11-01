@@ -236,6 +236,31 @@ describe("one access list per app", () => {
     back.sync.stop();
   });
 
+  it("a box whose every change went out from itself still waits for the list after a restart (gym one-list)", async () => {
+    const f = await fleet(["home", "home2"]);
+    // Everything starts on the follower: the leader's fan-out skips the box an entry came from, so home2
+    // never hears from home; only its own successful hand-overs tell it that home runs the app.
+    expect((await f.mode(f.box("home2"), "restricted")).status).toBe(200);
+    f.tick();
+    const { inviteId } = await f.redeem(f.box("home2"), adminRoot);
+    await f.settle();
+    expect(f.box("home").store.isAllowed(SERVICE, FRIEND)).toBe(true);
+    f.up.delete("home2.alice.flagship.services");
+    f.tick();
+    const revoke = { inviteId, issuedAt: NOW + 2 };
+    expect((await f.post(f.box("home"), "/api/service-access/invite-withdraw", { revoke, signature: hex(signRevokeServiceInvite(revoke, adminRoot)) })).status).toBe(200);
+    await f.settle();
+    const back = await f.make("home2.alice.flagship.services", f.box("home2").dir);
+    f.up.add("home2.alice.flagship.services");
+    back.sync.start();
+    expect(back.store.isCatchingUp(SERVICE)).toBe(true);
+    expect(back.store.isAllowed(SERVICE, FRIEND)).toBe(false);
+    await back.sync.catchUp(SERVICE);
+    expect(back.store.isCatchingUp(SERVICE)).toBe(false);
+    expect(back.store.isAllowed(SERVICE, FRIEND)).toBe(false);
+    back.sync.stop();
+  });
+
   it("a box alone (no other server up) serves its own list after the window", async () => {
     const f = await fleet(["home", "home2"]);
     await f.redeem(f.box("home"), adminRoot);
