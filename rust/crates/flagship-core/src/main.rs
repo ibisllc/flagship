@@ -104,6 +104,10 @@ fn write_status(path: &Path, v: &Value) {
     }
     let tmp = path.with_extension("tmp");
     if std::fs::write(&tmp, format!("{v}\n")).is_ok() {
+        // The daemon (user flagship) reads it; the unit's umask made it 0600 and the cut-over rule saw no controller
+        // (gym 21). It holds counts and modes, nothing secret.
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644));
         let _ = std::fs::rename(&tmp, path);
     }
 }
