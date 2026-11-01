@@ -247,7 +247,18 @@ export const rustCore: Group = {
     try {
       const on = await rec.check("the admin's signed order turns on both; the daemon restarts and core adopts the running app (same container)", async () => {
         const how = await setOwnership("rust", "rust");
-        const p = await probe();
+        // The daemon has just restarted under the new owners: core adopts on its next pass (gym 22: one probe at once got 503).
+        let p: { host: string } | null = null;
+        let last = "";
+        for (let i = 0; i < 24 && !p; i++) {
+          try {
+            p = await probe();
+          } catch (e) {
+            last = e instanceof Error ? e.message : String(e);
+            await sleep(5_000);
+          }
+        }
+        assert(p, `the app was not served under the Rust owners within 2 min (last: ${last})`);
         assert(p.host === host0, `the app was restarted (container ${host0} → ${p.host})`);
         return `${how}; container ${p.host} kept`;
       });
