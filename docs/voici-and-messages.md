@@ -1275,6 +1275,15 @@ site (Playwright, already in the webapp gym). `.com` unit tests ride with B1/B2.
 
 Translations, `REVIEW.md`, terms and privacy sections, abuse.html appeal, store listing notes (UGC), FAQ.
 
+H: as built. iOS strings drafted in the six languages (`i18n/ios`, listed in `i18n/REVIEW.md`). `terms.html` §8 (voi.ci
+pages and Messages: rules, reports, removal, bans, licence to show a page) and §9 (DMCA notice, counter-notice, repeat
+infringers); `privacy.html` §2.11 (what `.com` learns, abuse tag, device checks, no AI) plus retention, sub-processors
+and legal basis; `abuse.html` gains the EU DSA notice-and-action path (`#voici`: report link, app, email with the
+Art. 16 elements; review by a person, 24 h aim; statement of reasons; `#appeal` by email for six months; out-of-court
+bodies; `#authorities`); `faq.html` gains "voi.ci pages & Messages" (translated). The DMCA designated agent is an
+owner placeholder marked `data-ga-placeholder`, and `npm run release-manifest` (check `ga-placeholders`) fails while
+one is left in a shipped page. Store review notes: `docs/runbooks/store-review-notes.md`.
+
 **Estimate**: about 50 agent-days; with 6 agents in parallel after A, roughly 2 to 2.5 weeks to a green `voici` gym
 group, plus owner time for the keys and secrets (§9.3, §9.5), the `voi.ci` zone records, and native review of the
 translations. D3 then restarts.

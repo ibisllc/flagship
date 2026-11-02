@@ -1026,6 +1026,9 @@ xcodebuild archive -project apps/mobile/ios/App/FlagshipApp.xcodeproj -scheme Fl
 # Xcode Organizer -> Distribute App -> App Store Connect (or xcodebuild -exportArchive with an app-store-connect ExportOptions plist)
 ```
 
+Review notes, the user-generated-content answers (voi.ci pages and Messages), the review accounts and the
+privacy and Data safety changes: `docs/runbooks/store-review-notes.md`, for both stores.
+
 Still to confirm in App Store Connect: the export-compliance answer (the app
 does its own X25519 / AES-GCM / Ed25519 sealing) and whether "iPhone and iPad
 apps on Apple Silicon Macs" is on.

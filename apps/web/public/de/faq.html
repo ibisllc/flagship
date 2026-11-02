@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>Fragen, in klaren Worten.</h1>
     <p>Die, die sich Leute wirklich stellen, bevor sie uns ihre Hardware und ihr Telefon anvertrauen. Fehlt deine, schreib an <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
-    <nav class="toc" aria-label="Abschnitte"><a href="#setup">Einrichtung &amp; Installation</a><a href="#privacy">Datenschutz &amp; Sicherheit</a><a href="#apps">Dienste</a><a href="#endgame">Falls Flagship verschwindet</a></nav>
+    <nav class="toc" aria-label="Abschnitte"><a href="#setup">Einrichtung &amp; Installation</a><a href="#privacy">Datenschutz &amp; Sicherheit</a><a href="#apps">Dienste</a><a href="#messages">voi.ci-Seiten &amp; Nachrichten</a><a href="#endgame">Falls Flagship verschwindet</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="Einrichtung und Installation">
@@ -268,6 +268,43 @@
         <summary>Kann ich einen Dienst sauber deinstallieren?</summary>
         <div class="answer">
           <p>Ja. Beim Deinstallieren werden Container, Postgres-Datenbank, Dateiordner und Zugriffsliste entfernt. Du kannst vor dem Deinstallieren einen Snapshot behalten, falls du später auf die Daten zurückkommen möchtest.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="messages" aria-label="voi.ci-Seiten und Nachrichten">
+    <h2>voi.ci-Seiten &amp; Nachrichten</h2>
+    <p class="section-lede">Eine öffentliche Seite auf <code>voi.ci</code> mit deinem Namen und private Nachrichten von Leuten, die sie besuchen.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>Was ist eine voi.ci-Seite?</summary>
+        <div class="answer">
+          <p>Eine einfache öffentliche Seite unter deinem Benutzernamen auf <code>voi.ci</code>: ein Foto, ein Name, eine kurze Bio, Links und Beiträge. Du erstellst sie im Tab Nachrichten der App, und nur ein Admin-Gerät deines Kontos kann sie veröffentlichen. Jeder kann sie sehen, und sie nutzt denselben Benutzernamen wie deine Apps und Server, sodass man sie miteinander verbinden kann.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Wer kann mir schreiben, und sehen sie, wer ich bin?</summary>
+        <div class="answer">
+          <p>Wenn du „Nachrichten annehmen“ aktivierst, kann dir jeder mit einem Flagship-Konto von deiner Seite aus schreiben. Du siehst jede Person unter einem Namen, der für deine Seite erzeugt wird, etwa „Besucher 4F3A“, nie unter ihrem Benutzernamen, und du kannst sie für dich umbenennen. Neue Unterhaltungen warten unter Anfragen, bis du antwortest oder sie annimmst.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Kann Flagship meine Nachrichten lesen?</summary>
+        <div class="answer">
+          <p>Nein. Nachrichten sind Ende-zu-Ende-verschlüsselt, mit Post-Quanten-Verschlüsselung, zu deinen Geräten und denen des Absenders. Wir sehen, dass jemand deiner Seite geschrieben hat, wann und wie viel, aber nicht, was. Jede Nachricht trägt eine versiegelte Markierung mit dem Konto des Absenders, die wir nur öffnen, wenn du diese Nachricht meldest. Die <a href="/privacy#messages">Datenschutzerklärung</a> hat die vollständige Liste.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Wie melde oder blockiere ich jemanden?</summary>
+        <div class="answer">
+          <p>Tippe in einer Unterhaltung auf Melden oder Blockieren. Ein blockierter Besucher wird nicht benachrichtigt, und seine Nachrichten erreichen dich nicht mehr. Jeder kann eine Seite über den Link „Diese Seite melden“ unten auf der Seite oder per E-Mail melden (siehe <a href="/abuse#voici">/abuse</a>). Ein Mensch bei Flagship prüft jede Meldung; wir können eine Seite entfernen und ein Konto am Senden von Nachrichten hindern.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Warum prüft die App mein Telefon bei Apple oder Google?</summary>
+        <div class="answer">
+          <p>Um Spam zu bremsen, ohne nach deiner Telefonnummer zu fragen. Wenn du Nachrichten zum ersten Mal nutzt, lässt die App von Apple oder Google bestätigen, dass sie auf einem echten Gerät läuft. Ein Gerät kann Nachrichten für ein neues Konto pro Monat einrichten. Apple und Google erfahren, dass die App das Gerät geprüft hat, aber nicht, warum. Ohne die Prüfung (zum Beispiel in der Webapp) funktioniert Nachrichten trotzdem, nur langsamer.</p>
         </div>
       </details>
     </div>

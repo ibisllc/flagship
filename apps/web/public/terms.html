@@ -26,6 +26,7 @@
     .legal ul, .legal ol { padding-left: var(--space-6); margin: var(--space-3) 0; }
     .legal li { margin-bottom: var(--space-2); }
 
+    .ga-placeholder { background: var(--surface); outline: 2px dashed currentColor; padding: 0 0.25rem; }
     .tldr-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -59,7 +60,7 @@
   <section class="page-hero">
     <h1>Terms of service.</h1>
     <p class="lede">The deal between you and Flagship. Plain-English where we can, legalese where we have to. There's a one-page summary at <a href="/terms">/terms-summary</a>.</p>
-    <div class="meta">Last updated: 2026-10-14 · Effective: 2026-10-14</div>
+    <div class="meta">Last updated: 2026-11-02 · Effective: 2026-11-02</div>
   </section>
 
   <div class="tldr-card">
@@ -147,52 +148,117 @@
     <section id="yours">
       <h2>7. Your content</h2>
       <p>Anything you store on your Flagship server is yours. We do not claim a license to it, do not back it up centrally, and structurally cannot read it. The flip side: we cannot recover it for you, and we cannot moderate it. That tradeoff is the product.</p>
+      <p>Your <code>voi.ci</code> page is different: you publish it to our servers so anyone can see it, and section 8 covers it.</p>
       <p>The one thing your server shares with us is a <a href="/adapters">repo adaptation</a>: the changes it made so a public open-source repo runs on Flagship, sent without anything that identifies you. You let us publish it, under that repo's own license, so other Flagship servers that import the same repo can use it.</p>
     </section>
 
+    <section id="messages">
+      <h2>8. voi.ci pages and Messages</h2>
+      <p>You can publish a public page at <code>voi.ci/&lt;your username&gt;</code> (a photo, a display name, a short bio, links and posts) and let people with a Flagship account send you messages from it. You can also message other people's pages. This section adds rules for that. The rest of these Terms still apply.</p>
+      <h3>8.1 Your page is public</h3>
+      <p>Anyone can see your page, and it uses the same username as your apps and servers, so people can connect them. Only an admin device of your account can publish it. You can change it at any time, and deleting your account deletes it.</p>
+      <h3>8.2 The rules</h3>
+      <p>Before you first publish a page or send a message, the app asks you to agree to these rules. Your page and your messages must not contain:</p>
+      <ul>
+        <li>illegal content, including child sexual abuse material (which we report to the authorities and act on without warning);</li>
+        <li>harassment, bullying or threats;</li>
+        <li>spam, or messages sent in bulk to people who didn't ask for them;</li>
+        <li>content that pretends to be someone else, or a page made to look like another person's or organization's;</li>
+        <li>content that infringes someone else's copyright, trademark or other rights.</li>
+      </ul>
+      <p>Section 5 (Acceptable use) applies to pages and messages too.</p>
+      <h3>8.3 Reports, blocks, removal and bans</h3>
+      <ul>
+        <li><strong>Anyone can report.</strong> Every page has a "Report this page" link, and the app has Report on every message. You can also write to us (see <a href="/abuse#voici">/abuse</a>).</li>
+        <li><strong>You can block.</strong> A page owner can block a visitor. The visitor isn't told; their new messages don't reach you.</li>
+        <li><strong>We review reports.</strong> A person at Flagship reviews each report. We aim to act on reports about pages and messages within 24 hours.</li>
+        <li><strong>We can remove a page.</strong> If a page breaks these rules or the law, we take it down: it stops showing on voi.ci and can't be published again until we restore it.</li>
+        <li><strong>We can stop an account from sending messages.</strong> If an account sends messages that break these rules, we ban it from Messages. Its servers and apps keep working. A ban also marks the phone it was used from, so a new account on that phone can't use Messages either.</li>
+        <li><strong>We tell you why, and you can appeal.</strong> The app tells you when we remove your page or ban your account, with the reason. You can appeal (<a href="/abuse#appeal">/abuse#appeal</a>).</li>
+        <li><strong>Limits.</strong> To slow spam, new accounts can start only a few new conversations a day, and a visitor can send only a few messages until you reply. These limits may change.</li>
+      </ul>
+      <h3>8.4 What we can and can't see</h3>
+      <p>Messages are end-to-end encrypted: only the sender and the page owner's devices can read them. Visitors appear to a page owner under a name made for that page ("Visitor 4F3A"), never their username. Each message carries a tag that names the sender's account, sealed so that only Flagship can open it with a key we keep offline. We open it only when someone reports that message, to act on the report. The <a href="/privacy#messages">privacy policy</a> lists everything we learn.</p>
+      <h3>8.5 Permission to show your page</h3>
+      <p>Your page stays yours. By publishing it you give us permission to store it, copy it to our servers and show it to anyone who visits <code>voi.ci</code>, only to run the page, until you change it or delete your account.</p>
+    </section>
+
+    <section id="dmca">
+      <h2>9. Copyright complaints (DMCA)</h2>
+      <p>If you think something on a <code>voi.ci</code> page infringes your copyright, send a notice to our designated agent. We respond to notices under the U.S. Digital Millennium Copyright Act (17 U.S.C. § 512).</p>
+      <p><strong>Designated agent:</strong><br>
+      <span class="ga-placeholder" data-ga-placeholder="dmca-agent-name">[OWNER TO FILL BEFORE LAUNCH: the designated agent's name, exactly as registered at copyright.gov]</span><br>
+      <span class="ga-placeholder" data-ga-placeholder="dmca-agent-address">[OWNER TO FILL BEFORE LAUNCH: the agent's postal address, as registered]</span><br>
+      <span class="ga-placeholder" data-ga-placeholder="dmca-agent-phone">[OWNER TO FILL BEFORE LAUNCH: the agent's phone number, as registered]</span><br>
+      Email: <a href="mailto:abuse@flagship.services">abuse@flagship.services</a> (subject "DMCA notice")</p>
+      <h3>9.1 What a notice must include</h3>
+      <ul>
+        <li>your physical or electronic signature;</li>
+        <li>what work you say is infringed;</li>
+        <li>the exact address of the material (for example <code>https://voi.ci/name</code>, and which post or photo);</li>
+        <li>your name, postal address, phone number and email;</li>
+        <li>a statement that you believe in good faith that the use is not authorized by the copyright owner, its agent or the law;</li>
+        <li>a statement, under penalty of perjury, that the notice is accurate and that you are the copyright owner or allowed to act for them.</li>
+      </ul>
+      <p>A notice that knowingly misstates infringement can make you liable for damages (17 U.S.C. § 512(f)).</p>
+      <h3>9.2 What we do</h3>
+      <p>When a notice is complete we remove or disable the material, usually by taking the page down, and tell the page owner, with a copy of the notice (we may remove the sender's personal contact details if the law allows).</p>
+      <h3>9.3 Counter-notice</h3>
+      <p>If your page was taken down and you believe that was a mistake or a misidentification, you can send a counter-notice to the same agent. It must include:</p>
+      <ul>
+        <li>your physical or electronic signature;</li>
+        <li>what was removed and where it was before;</li>
+        <li>a statement, under penalty of perjury, that you believe in good faith it was removed by mistake or misidentification;</li>
+        <li>your name, address and phone number, and a statement that you consent to the jurisdiction of the federal district court for your address (or, if you are outside the United States, any judicial district in which Flagship may be found), and that you will accept service of process from the person who sent the notice or their agent.</li>
+      </ul>
+      <p>We forward the counter-notice to the person who sent the notice. Unless they tell us within 10 business days that they have filed a court action, we restore the page 10 to 14 business days after we received the counter-notice.</p>
+      <h3>9.4 Repeat infringers</h3>
+      <p>We ban from voi.ci pages and Messages any account that repeatedly infringes copyright.</p>
+    </section>
+
     <section id="warranty">
-      <h2>8. Disclaimers</h2>
+      <h2>10. Disclaimers</h2>
       <p>Except for the express hardware warranty in §3.3, the service is provided "as is" and "as available," without warranty of any kind, express or implied. To the fullest extent permitted by law, we disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement.</p>
       <p>We do not warrant that the service will be uninterrupted, error-free, or secure against every conceivable threat. We do warrant, in good faith, the architectural properties described in <a href="/security">/security</a>, and we'll fix breaches of those properties as security issues, on the timeline in our security policy.</p>
     </section>
 
     <section id="liability">
-      <h2>9. Limitation of liability</h2>
+      <h2>11. Limitation of liability</h2>
       <p>To the maximum extent permitted by law, our total aggregate liability arising out of or related to these Terms or the service will not exceed the greater of (a) one hundred US dollars ($100) or (b) the amount you paid us in the twelve months preceding the event giving rise to the claim.</p>
       <p>Neither party will be liable for indirect, incidental, special, consequential, or punitive damages, or for loss of profits, revenue, data, or business opportunities, even if advised of the possibility.</p>
       <p>Some jurisdictions don't allow these limits. If you live in one, the limits above apply only to the extent permitted there.</p>
     </section>
 
     <section id="indemnify">
-      <h2>10. Indemnification</h2>
+      <h2>12. Indemnification</h2>
       <p>You'll defend, indemnify, and hold us harmless from third-party claims arising out of (a) your violation of these Terms, (b) your violation of applicable law, or (c) your content (including services you publish).</p>
     </section>
 
     <section id="term">
-      <h2>11. Termination</h2>
+      <h2>13. Termination</h2>
       <p>You may terminate at any time by deleting your account from the phone app. We may suspend or terminate your account on notice if you breach these Terms; for serious breaches (CSAM, active phishing, ongoing attack) we may act immediately and notify after.</p>
-      <p>On termination: routing entries for your subdomain are revoked, sub-processor data scheduled for deletion within 30 days (subject to billing-record retention in §2.4 of the privacy policy), the hardware you bought remains yours.</p>
+      <p>On termination: routing entries for your subdomain are revoked, your voi.ci page and its messages are deleted, sub-processor data scheduled for deletion within 30 days (subject to billing-record retention in §2.4 of the privacy policy), the hardware you bought remains yours.</p>
     </section>
 
     <section id="law">
-      <h2>12. Governing law</h2>
+      <h2>14. Governing law</h2>
       <p>These Terms are governed by the laws of the State of Delaware, United States, excluding its conflict-of-laws rules. The U.N. Convention on Contracts for the International Sale of Goods does not apply.</p>
     </section>
 
     <section id="dispute">
-      <h2>13. Dispute resolution</h2>
+      <h2>15. Dispute resolution</h2>
       <p>If we have a dispute, both sides agree to first try to resolve it by emailing <a href="mailto:legal@flagship.services">legal@flagship.services</a> with a written description and a proposed resolution. We'll respond within 30 days.</p>
       <p>If that doesn't work, the dispute will be resolved by binding individual arbitration administered by the American Arbitration Association under its Consumer Arbitration Rules, in English, in Delaware (or by phone / video where reasonable). Each side bears its own attorneys' fees except as the arbitrator awards. <strong>You and Flagship each waive the right to a jury trial and to participate in a class action.</strong></p>
       <p>You may opt out of this arbitration clause by mailing <a href="mailto:legal@flagship.services">legal@flagship.services</a> within 30 days of accepting these Terms; opting out doesn't affect any other provision. Nothing here prevents either side from seeking injunctive relief in court for IP infringement or unauthorized access.</p>
     </section>
 
     <section id="changes">
-      <h2>14. Changes to these terms</h2>
+      <h2>16. Changes to these terms</h2>
       <p>We may update these Terms. If a change is material, we'll post a note in the dashboard, update the date at the top, and email account-holders at least 14 days before it takes effect. Continued use after that means acceptance. If you don't accept, terminate your account before the effective date.</p>
     </section>
 
     <section id="misc">
-      <h2>15. Miscellaneous</h2>
+      <h2>17. Miscellaneous</h2>
       <ul>
         <li><strong>Entire agreement.</strong> These Terms (with the privacy policy and any plan-specific terms) are the whole deal between you and us regarding the service.</li>
         <li><strong>Severability.</strong> If a clause is unenforceable, the rest stands.</li>
@@ -203,7 +269,7 @@
     </section>
 
     <section id="contact">
-      <h2>16. Contact</h2>
+      <h2>18. Contact</h2>
       <p>Legal questions: <a href="mailto:legal@flagship.services">legal@flagship.services</a>.<br>
       Billing questions: <a href="mailto:billing@flagship.services">billing@flagship.services</a>.<br>
       Postal: Flagship, address available on request.</p>

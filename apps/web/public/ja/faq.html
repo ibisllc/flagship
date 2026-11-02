@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>質問と答えを、わかりやすい言葉で。</h1>
     <p>ハードウェアとスマートフォンを預ける前に、実際によく聞かれる質問です。ここにない場合は <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> までご連絡ください。</p>
-    <nav class="toc" aria-label="セクション"><a href="#setup">セットアップとインストール</a><a href="#privacy">プライバシーとセキュリティ</a><a href="#apps">サービス</a><a href="#endgame">Flagship がなくなったら</a></nav>
+    <nav class="toc" aria-label="セクション"><a href="#setup">セットアップとインストール</a><a href="#privacy">プライバシーとセキュリティ</a><a href="#apps">サービス</a><a href="#messages">voi.ci のページとメッセージ</a><a href="#endgame">Flagship がなくなったら</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="セットアップとインストール">
@@ -268,6 +268,43 @@
         <summary>サービスをきれいにアンインストールできますか？</summary>
         <div class="answer">
           <p>はい。アンインストールすると、コンテナ、Postgres データベース、ファイルフォルダー、アクセスリストが削除されます。後でデータに戻りたい場合は、アンインストール前にスナップショットを残しておけます。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="messages" aria-label="voi.ci のページとメッセージ">
+    <h2>voi.ci のページとメッセージ</h2>
+    <p class="section-lede">あなたの名前で公開する <code>voi.ci</code> のページと、訪れた人からの非公開メッセージ。</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>voi.ci のページとは何ですか？</summary>
+        <div class="answer">
+          <p><code>voi.ci</code> 上の、あなたのユーザー名のシンプルな公開ページです。写真、名前、短い自己紹介、リンク、投稿を載せられます。アプリの「メッセージ」タブで作成し、公開できるのはアカウントの管理デバイスだけです。誰でも見ることができ、アプリやサーバーと同じユーザー名を使うため、それらが結び付けられる可能性があります。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>誰がメッセージを送れますか？相手に私の正体はわかりますか？</summary>
+        <div class="answer">
+          <p>「メッセージを受け付ける」をオンにすると、Flagship アカウントを持つ人なら誰でもあなたのページからメッセージを送れます。相手はそれぞれ、あなたのページ用に作られた「訪問者 4F3A」のような名前で表示され、ユーザー名は表示されません。自分用に名前を付け直すこともできます。新しい会話は、返信するか承認するまで「リクエスト」で待機します。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Flagship は私のメッセージを読めますか？</summary>
+        <div class="answer">
+          <p>いいえ。メッセージはエンドツーエンドで暗号化され（耐量子暗号を使用）、あなたのデバイスと送信者のデバイスだけが読めます。私たちにわかるのは、誰かがあなたのページにいつ、どれくらいの量を書いたかだけで、内容はわかりません。各メッセージには送信者のアカウントを示す封印されたタグが付いており、あなたがそのメッセージを報告した場合にのみ開きます。詳しくは<a href="/privacy#messages">プライバシーポリシー</a>をご覧ください。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>誰かを報告またはブロックするには？</summary>
+        <div class="answer">
+          <p>会話で「報告」または「ブロック」をタップします。ブロックした訪問者には通知されず、その人のメッセージは届かなくなります。ページは、ページ下部の「このページを報告」リンクから、またはメールで誰でも報告できます（<a href="/abuse#voici">/abuse</a> を参照）。すべての報告を Flagship のスタッフが確認し、ページの削除やアカウントのメッセージ送信停止を行うことがあります。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>アプリが Apple や Google にスマートフォンを確認させるのはなぜですか？</summary>
+        <div class="answer">
+          <p>電話番号を求めずにスパムを抑えるためです。初めてメッセージを使うとき、アプリは Apple または Google に、本物のデバイスで動いていることを確認してもらいます。1 台のデバイスでメッセージを設定できる新しいアカウントは月に 1 つまでです。Apple と Google にわかるのはアプリがデバイスを確認したことだけで、理由はわかりません。確認がなくても（たとえばウェブアプリでは）メッセージは使えますが、制限が厳しくなります。</p>
         </div>
       </details>
     </div>

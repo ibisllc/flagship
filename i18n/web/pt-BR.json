@@ -572,5 +572,19 @@
   "s49e0122870": "Flagship no Google Play",
   "sd3e56479df": "Qualquer máquina x86_64 com pelo menos 2 GB de RAM, 32 GB de disco e uma porta Ethernet funcionando. Um notebook velho, um NUC, um Optiplex de 2014: tudo serve. (Você também pode hospedar um servidor em um computador que já usa, inclusive Macs com Apple Silicon, pelo Flagship Studio.) O builder cuida do sistema operacional, então você não precisa saber nem se preocupar com o que ele roda.",
   "s7479616896": "<1> <2/> <3>App Store</3> </1> <4> <5/> <6>Google Play</6> </4> <7> <8>Usar o app web</8> </7>",
-  "s4deaf22e1f": "<1>No ar</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>desde 2026-05-05</5> <6>·</6> <7>Mais de 3.000 testes, todos verdes</7> <8>·</8> <9>Patente solicitada</9>"
+  "s4deaf22e1f": "<1>No ar</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>desde 2026-05-05</5> <6>·</6> <7>Mais de 3.000 testes, todos verdes</7> <8>·</8> <9>Patente solicitada</9>",
+  "s49ac43cf44": "<1>Páginas do voi.ci e Mensagens</1>",
+  "s9bd81699ee": "Páginas do voi.ci e Mensagens",
+  "s1ab9f54eef": "Páginas do voi.ci e Mensagens",
+  "s91e68614af": "Uma página pública no <1>voi.ci</1> com o seu nome, e mensagens privadas de quem a visita.",
+  "s2c7f1e0a3d": "O que é uma página do voi.ci?",
+  "s687e589ec7": "Quem pode me mandar mensagem, e vê quem eu sou?",
+  "s4dcfca0b87": "Se você ativar Aceitar mensagens, qualquer pessoa com uma conta Flagship pode escrever para você pela sua página. Você vê cada uma com um nome criado para a sua página, como \"Visitante 4F3A\", nunca pelo nome de usuário, e pode renomeá-las só para você. Conversas novas esperam em Solicitações até você responder ou aceitar.",
+  "s5e880dc1e9": "O Flagship consegue ler minhas mensagens?",
+  "sd510f3dfa0": "Não. As mensagens têm criptografia de ponta a ponta, pós-quântica, para os seus dispositivos e os do remetente. Vemos que alguém escreveu para a sua página, quando e quanto, não o que disse. Cada mensagem leva uma etiqueta selada com a conta do remetente, que só abrimos se você denunciar essa mensagem. A <1>política de privacidade</1> tem a lista completa.",
+  "sa7c81d6fc1": "Como denuncio ou bloqueio alguém?",
+  "s9abd9adc96": "Em uma conversa, toque em Denunciar ou Bloquear. O visitante bloqueado não é avisado, e as mensagens dele param de chegar. Qualquer pessoa pode denunciar uma página pelo link Denunciar esta página no fim dela, ou por e-mail (veja <1>/abuse</1>). Uma pessoa do Flagship analisa cada denúncia; podemos remover uma página e impedir uma conta de enviar mensagens.",
+  "sd12ab63a77": "Por que o app verifica meu celular com a Apple ou o Google?",
+  "sbb7d4c59dc": "Para frear o spam sem pedir seu número de telefone. Na primeira vez que você usa Mensagens, o app pede à Apple ou ao Google que confirmem que ele roda em um dispositivo real. Um dispositivo pode configurar Mensagens para uma conta nova por mês. A Apple e o Google sabem que o app verificou o dispositivo, não por quê. Sem a verificação (por exemplo, no webapp), Mensagens continua funcionando, mais devagar.",
+  "sabb967730f": "Uma página pública simples com seu nome de usuário no <1>voi.ci</1>: uma foto, um nome, uma bio curta, links e publicações. Você a cria na aba Mensagens do app, e só um dispositivo de administrador da sua conta pode publicá-la. Qualquer pessoa pode vê-la, e ela usa o mesmo nome de usuário dos seus apps e servidores, então as pessoas podem relacioná-los."
 }

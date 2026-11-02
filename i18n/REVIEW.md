@@ -25,3 +25,21 @@ page at voi.ci/<username> (sign-in sheet, thread, report sheet, error states). K
 webapp; rebuild with `node apps/voici-site/i18n.mjs build` and check with `node apps/voici-site/i18n.mjs check`.
 Review first: "Messages are private. If someone reports your message, Flagship can see which account sent it.", the
 two "You appear …" lines, and the report reasons (legal meaning of "Illegal content", "Pretending to be someone else").
+
+**Messages and voi.ci pages in the iPhone app (`i18n/ios`, 2026-11-02, drafted by an agent, needs native review).**
+129 strings in es, fr, de, pt-BR, ja and zh-Hans: the Messages tab, the page editor, the thread, the sign-in approval
+screen, Settings > Messages, their error lines, and the two pushes (`New message`, the page-drafts alert). 72 reuse the
+webapp's or Android's wording for the same English, 57 are new. Rebuild with `node scripts/i18n-ios.mjs build`.
+Review first: the rules sheet ("Your page and your messages must not contain …", "Anyone can report …", "Messages are
+private …"), the report sheet's line "Flagship gets this message as it was sent, sealed. It can then see which account
+sent it, not what it says.", the publish warning ("Anyone can see this page. It shares your username …"), "This page was
+removed by Flagship. You can appeal from flagshipserver.com/abuse." and the two "Try again %@" lines (the `%@` is a
+relative date like "tomorrow" or "in 3 hours", from the system: check the sentence reads with it, ja and zh-Hans put
+it before the verb). "Visitor " (with the trailing space) is the prefix of a pseudonym like "Visitor 4F3A"; keep the
+space. "Rotate" is the inbox-key rotation (es/pt-BR use "Cambiar"/"Trocar", the Android wording).
+
+**Messages FAQ on the website (`i18n/web`, 2026-11-02, drafted by an agent, needs native review).** 14 segments of the
+new "voi.ci pages & Messages" section of `faq.html` (questions on what a page is, who can write, what Flagship can read,
+report and block, the Apple/Google device check). The legal pages (terms, privacy, abuse) stay English-only on purpose
+(`i18n/web/pages.json`). Review first the answer on what Flagship can read, and keep the in-app names it quotes
+("Accept messages", "Requests", "Report this page") identical to the app's and the voi.ci site's translations.

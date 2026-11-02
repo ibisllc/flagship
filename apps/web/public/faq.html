@@ -115,6 +115,7 @@
       <a href="#setup">Setup &amp; install</a>
       <a href="#privacy">Privacy &amp; security</a>
       <a href="#apps">Services</a>
+      <a href="#messages">voi.ci pages &amp; Messages</a>
       <a href="#endgame">If Flagship goes away</a>
     </nav>
   </section>
@@ -280,6 +281,43 @@
         <summary>Can I uninstall a service cleanly?</summary>
         <div class="answer">
           <p>Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="messages" aria-label="voi.ci pages and Messages">
+    <h2>voi.ci pages &amp; Messages</h2>
+    <p class="section-lede">A public page at <code>voi.ci</code> with your name, and private messages from people who visit it.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What is a voi.ci page?</summary>
+        <div class="answer">
+          <p>A simple public page at your username on <code>voi.ci</code>: a photo, a name, a short bio, links and posts. You make it in the Messages tab of the app, and only an admin device of your account can publish it. Anyone can see it, and it uses the same username as your apps and servers, so people can connect them.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Who can message me, and do they see who I am?</summary>
+        <div class="answer">
+          <p>If you turn on Accept messages, anyone with a Flagship account can write to you from your page. You see each of them under a name made for your page, like "Visitor 4F3A", never their username, and you can rename them for yourself. New conversations wait under Requests until you reply or accept them.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can Flagship read my messages?</summary>
+        <div class="answer">
+          <p>No. Messages are end-to-end encrypted, with post-quantum encryption, to your devices and the sender's. We see that someone wrote to your page, when and how much, not what they said. Each message carries a sealed tag naming the sender's account, which we open only if you report that message. The <a href="/privacy#messages">privacy policy</a> has the full list.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How do I report or block someone?</summary>
+        <div class="answer">
+          <p>In a conversation, tap Report or Block. A blocked visitor isn't told, and their messages stop reaching you. Anyone can report a page with the Report this page link at the bottom of it, or by email (see <a href="/abuse#voici">/abuse</a>). A person at Flagship reviews every report; we can take a page down and stop an account from sending messages.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Why does the app check my phone with Apple or Google?</summary>
+        <div class="answer">
+          <p>To slow spam without asking for your phone number. The first time you use Messages, the app asks Apple or Google to confirm it runs on a real device. One device can set up Messages for one new account a month. Apple and Google learn that the app checked the device, not why. Without the check (for example in the webapp) Messages still works, more slowly.</p>
         </div>
       </details>
     </div>

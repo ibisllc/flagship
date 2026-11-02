@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>Perguntas, em linguagem clara.</h1>
     <p>As que as pessoas realmente fazem antes de nos entregar seu hardware e seu celular. Se a sua não estiver aqui, escreva para <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
-    <nav class="toc" aria-label="Seções"><a href="#setup">Configuração e instalação</a><a href="#privacy">Privacidade e segurança</a><a href="#apps">Serviços</a><a href="#endgame">Se o Flagship deixar de existir</a></nav>
+    <nav class="toc" aria-label="Seções"><a href="#setup">Configuração e instalação</a><a href="#privacy">Privacidade e segurança</a><a href="#apps">Serviços</a><a href="#messages">Páginas do voi.ci e Mensagens</a><a href="#endgame">Se o Flagship deixar de existir</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="Configuração e instalação">
@@ -268,6 +268,43 @@
         <summary>Posso desinstalar um serviço sem deixar rastro?</summary>
         <div class="answer">
           <p>Sim. Desinstalar remove o contêiner, o banco Postgres, a pasta de arquivos e a lista de acesso. Você pode manter um snapshot antes de desinstalar, caso queira voltar aos dados mais tarde.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="messages" aria-label="Páginas do voi.ci e Mensagens">
+    <h2>Páginas do voi.ci e Mensagens</h2>
+    <p class="section-lede">Uma página pública no <code>voi.ci</code> com o seu nome, e mensagens privadas de quem a visita.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>O que é uma página do voi.ci?</summary>
+        <div class="answer">
+          <p>Uma página pública simples com seu nome de usuário no <code>voi.ci</code>: uma foto, um nome, uma bio curta, links e publicações. Você a cria na aba Mensagens do app, e só um dispositivo de administrador da sua conta pode publicá-la. Qualquer pessoa pode vê-la, e ela usa o mesmo nome de usuário dos seus apps e servidores, então as pessoas podem relacioná-los.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Quem pode me mandar mensagem, e vê quem eu sou?</summary>
+        <div class="answer">
+          <p>Se você ativar Aceitar mensagens, qualquer pessoa com uma conta Flagship pode escrever para você pela sua página. Você vê cada uma com um nome criado para a sua página, como "Visitante 4F3A", nunca pelo nome de usuário, e pode renomeá-las só para você. Conversas novas esperam em Solicitações até você responder ou aceitar.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>O Flagship consegue ler minhas mensagens?</summary>
+        <div class="answer">
+          <p>Não. As mensagens têm criptografia de ponta a ponta, pós-quântica, para os seus dispositivos e os do remetente. Vemos que alguém escreveu para a sua página, quando e quanto, não o que disse. Cada mensagem leva uma etiqueta selada com a conta do remetente, que só abrimos se você denunciar essa mensagem. A <a href="/privacy#messages">política de privacidade</a> tem a lista completa.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Como denuncio ou bloqueio alguém?</summary>
+        <div class="answer">
+          <p>Em uma conversa, toque em Denunciar ou Bloquear. O visitante bloqueado não é avisado, e as mensagens dele param de chegar. Qualquer pessoa pode denunciar uma página pelo link Denunciar esta página no fim dela, ou por e-mail (veja <a href="/abuse#voici">/abuse</a>). Uma pessoa do Flagship analisa cada denúncia; podemos remover uma página e impedir uma conta de enviar mensagens.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Por que o app verifica meu celular com a Apple ou o Google?</summary>
+        <div class="answer">
+          <p>Para frear o spam sem pedir seu número de telefone. Na primeira vez que você usa Mensagens, o app pede à Apple ou ao Google que confirmem que ele roda em um dispositivo real. Um dispositivo pode configurar Mensagens para uma conta nova por mês. A Apple e o Google sabem que o app verificou o dispositivo, não por quê. Sem a verificação (por exemplo, no webapp), Mensagens continua funcionando, mais devagar.</p>
         </div>
       </details>
     </div>

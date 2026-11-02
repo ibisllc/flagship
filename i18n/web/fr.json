@@ -572,5 +572,19 @@
   "s49e0122870": "Flagship sur Google Play",
   "sd3e56479df": "Toute machine x86_64 avec au moins 2 Go de RAM, 32 Go de disque et un port Ethernet fonctionnel. Un vieux portable, un NUC, un Optiplex de 2014 : tout convient. (Vous pouvez aussi héberger un serveur sur un ordinateur que vous utilisez déjà, Mac à puce Apple compris, depuis Flagship Studio.) Le builder s’occupe du système d’exploitation, vous n’avez donc pas besoin de savoir ce qui tourne.",
   "s7479616896": "<1> <2/> <3>App Store</3> </1> <4> <5/> <6>Google Play</6> </4> <7> <8>Utiliser l’app web</8> </7>",
-  "s4deaf22e1f": "<1>En ligne</1> <2>·</2> <3>v0.3 bêta</3> <4>·</4> <5>depuis le 2026-05-05</5> <6>·</6> <7>Plus de 3 000 tests, tous au vert</7> <8>·</8> <9>Brevet en instance</9>"
+  "s4deaf22e1f": "<1>En ligne</1> <2>·</2> <3>v0.3 bêta</3> <4>·</4> <5>depuis le 2026-05-05</5> <6>·</6> <7>Plus de 3 000 tests, tous au vert</7> <8>·</8> <9>Brevet en instance</9>",
+  "s49ac43cf44": "<1>Pages voi.ci et Messages</1>",
+  "s9bd81699ee": "Pages voi.ci et Messages",
+  "s1ab9f54eef": "Pages voi.ci et Messages",
+  "s91e68614af": "Une page publique sur <1>voi.ci</1> à votre nom, et des messages privés des personnes qui la visitent.",
+  "s2c7f1e0a3d": "Qu’est-ce qu’une page voi.ci ?",
+  "s687e589ec7": "Qui peut m’écrire, et voient-ils qui je suis ?",
+  "s4dcfca0b87": "Si vous activez Accepter les messages, toute personne ayant un compte Flagship peut vous écrire depuis votre page. Vous voyez chacune sous un nom créé pour votre page, comme « Visiteur 4F3A », jamais sous son nom d’utilisateur, et vous pouvez la renommer pour vous seul. Les nouvelles conversations attendent dans Demandes jusqu’à ce que vous répondiez ou les acceptiez.",
+  "s5e880dc1e9": "Flagship peut-il lire mes messages ?",
+  "sd510f3dfa0": "Non. Les messages sont chiffrés de bout en bout, avec un chiffrement post-quantique, vers vos appareils et ceux de l’expéditeur. Nous voyons que quelqu’un a écrit à votre page, quand et combien, pas ce qu’il a dit. Chaque message porte une étiquette scellée indiquant le compte de l’expéditeur, que nous n’ouvrons que si vous signalez ce message. La <1>politique de confidentialité</1> donne la liste complète.",
+  "sa7c81d6fc1": "Comment signaler ou bloquer quelqu’un ?",
+  "s9abd9adc96": "Dans une conversation, touchez Signaler ou Bloquer. Le visiteur bloqué n’est pas prévenu, et ses messages ne vous parviennent plus. Tout le monde peut signaler une page avec le lien Signaler cette page en bas de celle-ci, ou par e-mail (voir <1>/abuse</1>). Une personne de Flagship examine chaque signalement ; nous pouvons retirer une page et empêcher un compte d’envoyer des messages.",
+  "sd12ab63a77": "Pourquoi l’app vérifie-t-elle mon téléphone auprès d’Apple ou de Google ?",
+  "sbb7d4c59dc": "Pour freiner le spam sans vous demander de numéro de téléphone. La première fois que vous utilisez Messages, l’app demande à Apple ou à Google de confirmer qu’elle tourne sur un vrai appareil. Un appareil peut configurer Messages pour un nouveau compte par mois. Apple et Google savent que l’app a vérifié l’appareil, pas pourquoi. Sans cette vérification (par exemple dans la webapp), Messages fonctionne quand même, plus lentement.",
+  "sabb967730f": "Une page publique simple à votre nom d’utilisateur sur <1>voi.ci</1> : une photo, un nom, une courte bio, des liens et des publications. Vous la créez dans l’onglet Messages de l’app, et seul un appareil administrateur de votre compte peut la publier. Tout le monde peut la voir, et elle utilise le même nom d’utilisateur que vos apps et vos serveurs, donc on peut les relier."
 }

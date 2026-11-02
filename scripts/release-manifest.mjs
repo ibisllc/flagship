@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -109,6 +109,42 @@ function publishedBuilds() {
   return out;
 }
 
+/**
+ * Text the owner must supply before launch is marked in the page itself with `data-ga-placeholder="<what>"` (for
+ * example the DMCA designated agent in terms.html §9). Each one left in a shipped page blocks the release, so a page
+ * can never go out with a "[OWNER TO FILL ...]" line in it. `pages` is [{file, text}].
+ */
+export function gaPlaceholderCheck(pages) {
+  const left = [];
+  for (const { file, text } of pages) {
+    for (const m of text.matchAll(/data-ga-placeholder="([^"]*)"/g)) left.push(`${file} (${m[1]})`);
+  }
+  return {
+    id: "ga-placeholders",
+    ok: left.length === 0,
+    detail: left.length ? `owner text still to fill in: ${left.join(", ")}` : "no owner placeholders left in the shipped pages",
+  };
+}
+
+/** The shipped static pages: the website and the voi.ci site. */
+export const GA_PLACEHOLDER_ROOTS = ["apps/web/public", "apps/voici-site/src"];
+
+function shippedPages() {
+  const out = [];
+  const walk = (rel) => {
+    const abs = join(ROOT, rel);
+    if (!existsSync(abs)) return;
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      const r = `${rel}/${e.name}`;
+      if (e.isDirectory()) {
+        if (e.name !== "node_modules") walk(r);
+      } else if (/\.(html|js)$/.test(e.name)) out.push({ file: r, text: readFileSync(join(ROOT, r), "utf8") });
+    }
+  };
+  for (const r of GA_PLACEHOLDER_ROOTS) walk(r);
+  return out;
+}
+
 export function checks(now = new Date()) {
   const out = [];
   const lease = readJson(".maintainers/ca-endorsements/bundle.json", []);
@@ -133,6 +169,7 @@ export function checks(now = new Date()) {
     }
   };
   out.push(publishedBuildCheck(publishedBuilds(), isAncestor));
+  out.push(gaPlaceholderCheck(shippedPages()));
   return out;
 }
 

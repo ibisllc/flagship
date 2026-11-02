@@ -342,7 +342,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("aren't responsible for how it behaves");
     expect(priv).toContain("We may change provider at any time");
     expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
-    expect(priv).toContain("Last updated: 2026-10-20");
+    expect(priv).toContain("Last updated: 2026-11-02");
   });
 
   it("privacy + terms include real contact addresses", async () => {
@@ -411,6 +411,27 @@ describe("public claims match what the product does (GA review, B7)", () => {
     expect(t).not.toContain("prompts go directly from your daemon");
     expect(t).not.toMatch(/SNI hostname; bytes in\/out/);
   });
+  it("voi.ci pages and Messages: terms, DMCA, privacy and the notice-and-action path are published", () => {
+    const terms = page("terms.html");
+    expect(terms).toContain('<section id="messages">');
+    expect(terms).toContain('<section id="dmca">');
+    expect(terms).toMatch(/counter-notice/i);
+    // The designated agent is filled in by the owner; until then the placeholder is marked so the release
+    // manifest (scripts/release-manifest.mjs, check ga-placeholders) blocks the release.
+    if (!/data-ga-placeholder="dmca-agent-name"/.test(terms)) expect(terms).not.toMatch(/OWNER TO FILL/);
+    const priv = page("privacy.html");
+    expect(priv).toContain('<h3 id="messages">2.11 voi.ci pages and Messages</h3>');
+    expect(priv).toMatch(/App Attest/);
+    expect(priv).toMatch(/Play Integrity/);
+    expect(priv).toMatch(/180 days/);
+    expect(priv).toMatch(/never reach any AI model/);
+    const abuse = page("abuse.html");
+    for (const id of ['id="voici"', 'id="report-page"', 'id="what-happens"', 'id="reasons"', 'id="appeal"', 'id="authorities"']) expect(abuse).toContain(id);
+    expect(abuse).toContain("Report this page");
+    expect(abuse).toContain("mailto:abuse@flagship.services");
+    expect(page("faq.html")).toContain('id="messages"');
+  });
+
   it("the abuse page says what to do about a connection that seems to come from the relay's address", () => {
     const t = page("abuse.html");
     expect(t).toContain("149.248.216.86");

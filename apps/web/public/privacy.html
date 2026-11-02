@@ -88,7 +88,7 @@
   <section class="page-hero">
     <h1>Privacy policy.</h1>
     <p class="lede">Flagship is built so we can't read your data. This page is the formal version of that promise: what we collect, what we don't, why, and how to ask for it back.</p>
-    <div class="meta">Last updated: 2026-10-20 · Effective: 2026-10-20</div>
+    <div class="meta">Last updated: 2026-11-02 · Effective: 2026-11-02</div>
   </section>
 
   <div class="summary-card">
@@ -105,13 +105,14 @@
           <li><span class="yes">Push tokens</span>, if you opt into push</li>
           <li><span class="yes">Billing data</span>, if you pay us</li>
           <li>Anonymous <span class="yes">repo adaptations</span> your server shares, which we publish</li>
+          <li>Your <span class="yes">voi.ci page</span>, if you publish one, and <span class="yes">sealed messages</span> we can't read</li>
         </ul>
       </div>
       <div>
         <h4>What we don't</h4>
         <ul>
           <li><span class="no">App data</span></li>
-          <li><span class="no">Files, photos, messages</span></li>
+          <li><span class="no">Files, photos, the text of your messages</span></li>
           <li><span class="no">Stored LLM prompts or completions</span></li>
           <li><span class="no">Web traffic content</span></li>
           <li><span class="no">Browsing history</span></li>
@@ -189,6 +190,7 @@
       <ul>
         <li>The content of your TLS-encrypted traffic. <code>flagship.services</code> sees only encrypted bytes; the cert lives on your box.</li>
         <li>Files, photos, messages, or any application data stored on your Flagship server.</li>
+        <li>The text of Messages sent through <code>voi.ci</code>. They are end-to-end encrypted (§2.11).</li>
         <li>LLM prompts, completions, or any data you send through the BYOK provider path. Flagship Inference passes prompts through without keeping them (§2.8).</li>
         <li>Browsing history from the pod-resident browser feature.</li>
         <li>Web analytics, ad pixels, session-replay, or browser fingerprints on any of our public pages.</li>
@@ -207,6 +209,19 @@
       <p>We cannot read your content, but we do see who talks to whom, when and how much. <code>flagshipserver.com</code> sees account names, account and device public keys, which devices are admin devices, push tokens, each server's name, public keys, the address its heartbeat arrives from, last-seen times, running software version, health reports and the orders posted for it, per-account traffic and AI-usage counts, and the audit events your devices post. <code>flagship.services</code> sees, for each connection while it is open, the client's address, the name of the box asked for (TLS names are sent in the clear), the time and the bytes each way, and which boxes are online. Each box's certificate names the box, so account and box names are visible in public Certificate Transparency logs. A network between you and a box can see which box you contact. The complete list is in our <a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">metadata page</a>.</p>
       <h3 id="outbound-ai">2.10 AI calls that leave your box through our relay</h3>
       <p>By default, when your server calls an AI provider with your own key, the call leaves your box through our relay address instead of your home address. The connection is encrypted between your box and the provider: the relay cannot read it. It sees the provider's hostname and the amount of data, and it limits how many connections a box may open. We keep a list of provider hostnames boxes have reached, with daily totals; the list has no account, server or address in it. You can switch this off per key. A provider that cannot be reached this way is reported to you as an address that couldn't be reached.</p>
+      <h3 id="messages">2.11 voi.ci pages and Messages</h3>
+      <p>If you publish a page at <code>voi.ci/&lt;your username&gt;</code>, or send or receive messages through one, this is what we handle.</p>
+      <ul>
+        <li><strong>Your page is public.</strong> We store what you publish (photo, display name, bio, links, posts) and show it to anyone. It uses the same username as your apps and servers. A photo is shrunk and re-encoded on your device before upload, which drops its location and camera details.</li>
+        <li><strong>Messages are end-to-end encrypted.</strong> Only the sender and the page owner's devices hold the keys. We store each message sealed, and we can't read it.</li>
+        <li><strong>Visitors use a name made for one page.</strong> A page owner sees a visitor as, for example, "Visitor 4F3A", never their username, and a visitor's name toward one page can't be linked to their name toward another.</li>
+        <li><strong>What our servers see when a message is sent:</strong> that this visitor name wrote to this page, when, how big the message was, and the IP address it came from. When you sign in to message a page, we see that your account asked to message someone, and vouch for you without naming you; we don't keep a record that joins your account to the pages you write to. We could build that record if we chose to log it, and we don't. A later version may remove even that possibility.</li>
+        <li><strong>The abuse tag.</strong> Each message carries a tag naming the sender's account, sealed to a Flagship key kept offline, on hardware keys. We open it only when someone reports that message, to act on the report. Nobody at Flagship can open tags in bulk from our servers.</li>
+        <li><strong>Reports.</strong> A report about a message sends us the message still sealed, the reason and the page: we learn which account sent it, not what it says. A report about a page sends the page, the reason and an optional note. We don't store the reporter's IP address. If you write to us instead, we keep your email to answer you.</li>
+        <li><strong>Device checks.</strong> To limit spam, the app asks Apple (App Attest and DeviceCheck) or Google (Play Integrity) to confirm it is running on a real device, the first time your account uses Messages and when it renews. A device can set up Messages for one new account a month, and a device used by a banned account can't set it up again. We store the platform, the date, a keyed hash of the app's device key (not a device identifier) and the latest check token for 30 days. Apple and Google keep two or three bits about the device (whether it enrolled this month, whether it was banned). They learn that the app checked the device, not why. Without this check (the webapp, or a device that fails it) you can still use Messages, more slowly. We never ask for a phone number.</li>
+        <li><strong>Notifications</strong> about a new message carry no content.</li>
+        <li><strong>No AI.</strong> Pages and messages never reach any AI model, ours or a provider's.</li>
+      </ul>
     </section>
 
     <section id="processors">
@@ -215,12 +230,12 @@
       <table class="t">
         <thead><tr><th>Vendor</th><th>Used for</th><th>Region</th></tr></thead>
         <tbody>
-          <tr><td>Cloudflare</td><td>Worker, D1, R2 (sealed blobs, screenshots, repo adaptations waiting to be published), DNS</td><td>Global edge</td></tr>
+          <tr><td>Cloudflare</td><td>Worker, D1, R2 (sealed blobs, screenshots, repo adaptations waiting to be published, voi.ci pages and sealed messages), DNS</td><td>Global edge</td></tr>
           <tr><td>GitHub</td><td>The public repo of shared repo adaptations (no personal data)</td><td>US</td></tr>
           <tr><td>Fly.io</td><td>Stateless tunnel hub on <code>flagship.services</code></td><td>US/EU regions</td></tr>
           <tr><td>Stripe</td><td>Payments and subscriptions, only if we ever start selling something (§2.4)</td><td>US/EU</td></tr>
-          <tr><td>Apple (APNs)</td><td>iOS push delivery</td><td>US</td></tr>
-          <tr><td>Google (FCM)</td><td>Android push delivery</td><td>US</td></tr>
+          <tr><td>Apple (APNs, App Attest, DeviceCheck)</td><td>iOS push delivery; device checks for Messages (§2.11)</td><td>US</td></tr>
+          <tr><td>Google (FCM, Play Integrity)</td><td>Android push delivery; device checks for Messages (§2.11)</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
           <tr><td>A third-party hosted model provider chosen by us, which may change</td><td>Flagship Inference only: receives anonymized request text (no account, server or IP address) and returns the reply (§2.8)</td><td>Depends on the provider</td></tr>
           <tr><td>Anthropic</td><td>Checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
@@ -239,6 +254,11 @@
         <li><strong>Shipping addresses</strong>: kept until delivered, plus 90 days for return-window handling.</li>
         <li><strong>Logs</strong>: 30 days, then aggregated counters only.</li>
         <li><strong>Repo adaptations</strong>: published, and kept public; our own copy of the file is deleted once it is published, usually within a day. Taken out of the index when the repo's owner asks; git history keeps earlier versions. They carry no personal data.</li>
+        <li><strong>voi.ci page</strong>: kept while it is published. When you change it, pieces no longer used are deleted within 30 days; when you delete your account, it is deleted at once.</li>
+        <li><strong>Messages</strong>: sealed messages are deleted 180 days after they arrive, or when the page owner's account is deleted. Copies on your own devices stay until you delete them.</li>
+        <li><strong>Unpublished page changes</strong> waiting for an admin device: 30 days.</li>
+        <li><strong>Device check tokens</strong>: 30 days. The enrollment record (platform, date, keyed hash) is kept while the account uses Messages.</li>
+        <li><strong>Abuse reports</strong>: kept while open, then one year after they are resolved. Bans and takedowns are kept while the account exists.</li>
         <li><strong>Problem reports on adaptations</strong>: notes deleted within 90 days. For a retired adaptation, its private copy and its reports are deleted 180 days after it was retired.</li>
       </ul>
     </section>
@@ -248,7 +268,7 @@
       <p>If you are in the European Economic Area, the United Kingdom, or Switzerland, we process your personal data on the following bases:</p>
       <ul>
         <li><strong>Contract</strong>: account data, sealed blobs, server provisioning, billing: necessary to provide what you signed up for.</li>
-        <li><strong>Legitimate interest</strong>: 30-day operational logs to keep the service running and abuse-resistant. We've balanced this against your interests; you can object.</li>
+        <li><strong>Legitimate interest</strong>: 30-day operational logs to keep the service running and abuse-resistant; the device checks, limits, reports and bans that keep Messages free of spam and abuse (§2.11). We've balanced this against your interests; you can object.</li>
         <li><strong>Consent</strong>: push notifications, marketing email (if any). Withdrawable from the phone app or by emailing <a href="mailto:privacy@flagship.services">privacy@flagship.services</a>.</li>
         <li><strong>Legal obligation</strong>: tax records on billing data.</li>
       </ul>
@@ -299,7 +319,7 @@
     <section id="contact">
       <h2>11. Contact</h2>
       <p>Privacy questions: <a href="mailto:privacy@flagship.services">privacy@flagship.services</a>.<br>
-      Abuse on a <code>*.flagship.services</code> subdomain: <a href="/abuse">/abuse</a>.<br>
+      Abuse on a <code>*.flagship.services</code> subdomain or a <code>voi.ci</code> page: <a href="/abuse">/abuse</a>.<br>
       Security disclosures: <a href="/security#report">/security#report</a>.<br>
       Postal: Flagship, address available on request to the address above.</p>
       <p>If you're in the EU and you're not satisfied with our response, you have the right to complain to your local supervisory authority.</p>

@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs script
-import { checks, evaluate, globToRegExp, LUKS_FIX_COMMIT, matches, publishedBuildCheck } from "./release-manifest.mjs";
+import { checks, evaluate, gaPlaceholderCheck, globToRegExp, LUKS_FIX_COMMIT, matches, publishedBuildCheck } from "./release-manifest.mjs";
 import map from "../release/freeze-map.json";
 
 describe("release-manifest", () => {
@@ -35,7 +37,7 @@ describe("release-manifest", () => {
 
   it("checks the lease horizon, the schema ledger and the version file from the tree", () => {
     const c = checks(new Date("2026-10-20T00:00:00Z"));
-    expect(c.map((x: { id: string }) => x.id)).toEqual(["ca-lease", "schema-ledger", "versions", "published-builds"]);
+    expect(c.map((x: { id: string }) => x.id)).toEqual(["ca-lease", "schema-ledger", "versions", "published-builds", "ga-placeholders"]);
     expect(c.find((x: { id: string }) => x.id === "schema-ledger").ok).toBe(true);
     expect(checks(new Date("2030-01-01T00:00:00Z")).find((x: { id: string }) => x.id === "ca-lease").ok).toBe(false);
   });
@@ -59,5 +61,23 @@ describe("release-manifest", () => {
     expect(bad.detail).toContain("Mac");
     expect(bad.detail).toContain("arm64 appliance");
     expect(bad.detail).not.toContain("Win,");
+  });
+
+  it("blocks the release while an owner placeholder is left in a shipped page", () => {
+    const bad = gaPlaceholderCheck([
+      { file: "apps/web/public/terms.html", text: '<span data-ga-placeholder="dmca-agent-name">[OWNER TO FILL]</span>' },
+      { file: "apps/web/public/faq.html", text: "<p>nothing here</p>" },
+    ]);
+    expect(bad.ok).toBe(false);
+    expect(bad.detail).toContain("terms.html (dmca-agent-name)");
+    expect(bad.detail).not.toContain("faq.html");
+    expect(gaPlaceholderCheck([{ file: "apps/web/public/terms.html", text: "<p>Agent: A. Person</p>" }]).ok).toBe(true);
+  });
+
+  it("finds the DMCA agent placeholders in the real terms page until the owner fills them in", () => {
+    const c = checks(new Date("2026-10-20T00:00:00Z")).find((x: { id: string }) => x.id === "ga-placeholders");
+    const terms = readFileSync(join(__dirname, "../apps/web/public/terms.html"), "utf8");
+    expect(c.ok).toBe(!terms.includes("data-ga-placeholder"));
+    if (!c.ok) expect(c.detail).toContain("apps/web/public/terms.html (dmca-agent-name)");
   });
 });

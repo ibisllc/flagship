@@ -972,6 +972,14 @@
       "faq.html"
     ]
   },
+  "s49ac43cf44": {
+    "en": "<1>voi.ci pages &amp; Messages</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html"
+    ]
+  },
   "s33390601b0": {
     "en": "<1>If Flagship goes away</1>",
     "kind": "text",
@@ -1447,6 +1455,116 @@
   },
   "sa75e47f852": {
     "en": "Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s9bd81699ee": {
+    "en": "voi.ci pages and Messages",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s1ab9f54eef": {
+    "en": "voi.ci pages &amp; Messages",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s91e68614af": {
+    "en": "A public page at <1>voi.ci</1> with your name, and private messages from people who visit it.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "voi.ci"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s2c7f1e0a3d": {
+    "en": "What is a voi.ci page?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sabb967730f": {
+    "en": "A simple public page at your username on <1>voi.ci</1>: a photo, a name, a short bio, links and posts. You make it in the Messages tab of the app, and only an admin device of your account can publish it. Anyone can see it, and it uses the same username as your apps and servers, so people can connect them.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "voi.ci"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s687e589ec7": {
+    "en": "Who can message me, and do they see who I am?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s4dcfca0b87": {
+    "en": "If you turn on Accept messages, anyone with a Flagship account can write to you from your page. You see each of them under a name made for your page, like \"Visitor 4F3A\", never their username, and you can rename them for yourself. New conversations wait under Requests until you reply or accept them.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s5e880dc1e9": {
+    "en": "Can Flagship read my messages?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sd510f3dfa0": {
+    "en": "No. Messages are end-to-end encrypted, with post-quantum encryption, to your devices and the sender's. We see that someone wrote to your page, when and how much, not what they said. Each message carries a sealed tag naming the sender's account, which we open only if you report that message. The <1>privacy policy</1> has the full list.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sa7c81d6fc1": {
+    "en": "How do I report or block someone?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s9abd9adc96": {
+    "en": "In a conversation, tap Report or Block. A blocked visitor isn't told, and their messages stop reaching you. Anyone can report a page with the Report this page link at the bottom of it, or by email (see <1>/abuse</1>). A person at Flagship reviews every report; we can take a page down and stop an account from sending messages.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sd12ab63a77": {
+    "en": "Why does the app check my phone with Apple or Google?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sbb7d4c59dc": {
+    "en": "To slow spam without asking for your phone number. The first time you use Messages, the app asks Apple or Google to confirm it runs on a real device. One device can set up Messages for one new account a month. Apple and Google learn that the app checked the device, not why. Without the check (for example in the webapp) Messages still works, more slowly.",
     "kind": "text",
     "ctx": "p",
     "pages": [

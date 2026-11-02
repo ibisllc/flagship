@@ -572,5 +572,19 @@
   "s49e0122870": "Flagship bei Google Play",
   "sd3e56479df": "Jede x86_64-Maschine mit mindestens 2 GB RAM, 32 GB Speicher und einem funktionierenden Ethernet-Port. Ein alter Laptop, ein NUC, ein Optiplex von 2014: alles in Ordnung. (Du kannst einen Server auch auf einem Computer betreiben, den du ohnehin nutzt, Macs mit Apple-Chip eingeschlossen, über Flagship Studio.) Der Builder kümmert sich um das Betriebssystem, du musst also nicht wissen oder dich darum kümmern, was darauf läuft.",
   "s7479616896": "<1> <2/> <3>App Store</3> </1> <4> <5/> <6>Google Play</6> </4> <7> <8>Web-App nutzen</8> </7>",
-  "s4deaf22e1f": "<1>Live</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>seit 2026-05-05</5> <6>·</6> <7>Über 3.000 Tests, alle grün</7> <8>·</8> <9>Patent angemeldet</9>"
+  "s4deaf22e1f": "<1>Live</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>seit 2026-05-05</5> <6>·</6> <7>Über 3.000 Tests, alle grün</7> <8>·</8> <9>Patent angemeldet</9>",
+  "s49ac43cf44": "<1>voi.ci-Seiten &amp; Nachrichten</1>",
+  "s9bd81699ee": "voi.ci-Seiten und Nachrichten",
+  "s1ab9f54eef": "voi.ci-Seiten &amp; Nachrichten",
+  "s91e68614af": "Eine öffentliche Seite auf <1>voi.ci</1> mit deinem Namen und private Nachrichten von Leuten, die sie besuchen.",
+  "s2c7f1e0a3d": "Was ist eine voi.ci-Seite?",
+  "s687e589ec7": "Wer kann mir schreiben, und sehen sie, wer ich bin?",
+  "s4dcfca0b87": "Wenn du „Nachrichten annehmen“ aktivierst, kann dir jeder mit einem Flagship-Konto von deiner Seite aus schreiben. Du siehst jede Person unter einem Namen, der für deine Seite erzeugt wird, etwa „Besucher 4F3A“, nie unter ihrem Benutzernamen, und du kannst sie für dich umbenennen. Neue Unterhaltungen warten unter Anfragen, bis du antwortest oder sie annimmst.",
+  "s5e880dc1e9": "Kann Flagship meine Nachrichten lesen?",
+  "sd510f3dfa0": "Nein. Nachrichten sind Ende-zu-Ende-verschlüsselt, mit Post-Quanten-Verschlüsselung, zu deinen Geräten und denen des Absenders. Wir sehen, dass jemand deiner Seite geschrieben hat, wann und wie viel, aber nicht, was. Jede Nachricht trägt eine versiegelte Markierung mit dem Konto des Absenders, die wir nur öffnen, wenn du diese Nachricht meldest. Die <1>Datenschutzerklärung</1> hat die vollständige Liste.",
+  "sa7c81d6fc1": "Wie melde oder blockiere ich jemanden?",
+  "s9abd9adc96": "Tippe in einer Unterhaltung auf Melden oder Blockieren. Ein blockierter Besucher wird nicht benachrichtigt, und seine Nachrichten erreichen dich nicht mehr. Jeder kann eine Seite über den Link „Diese Seite melden“ unten auf der Seite oder per E-Mail melden (siehe <1>/abuse</1>). Ein Mensch bei Flagship prüft jede Meldung; wir können eine Seite entfernen und ein Konto am Senden von Nachrichten hindern.",
+  "sd12ab63a77": "Warum prüft die App mein Telefon bei Apple oder Google?",
+  "sbb7d4c59dc": "Um Spam zu bremsen, ohne nach deiner Telefonnummer zu fragen. Wenn du Nachrichten zum ersten Mal nutzt, lässt die App von Apple oder Google bestätigen, dass sie auf einem echten Gerät läuft. Ein Gerät kann Nachrichten für ein neues Konto pro Monat einrichten. Apple und Google erfahren, dass die App das Gerät geprüft hat, aber nicht, warum. Ohne die Prüfung (zum Beispiel in der Webapp) funktioniert Nachrichten trotzdem, nur langsamer.",
+  "sabb967730f": "Eine einfache öffentliche Seite unter deinem Benutzernamen auf <1>voi.ci</1>: ein Foto, ein Name, eine kurze Bio, Links und Beiträge. Du erstellst sie im Tab Nachrichten der App, und nur ein Admin-Gerät deines Kontos kann sie veröffentlichen. Jeder kann sie sehen, und sie nutzt denselben Benutzernamen wie deine Apps und Server, sodass man sie miteinander verbinden kann."
 }

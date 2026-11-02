@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>问题，用大白话来回答。</h1>
     <p>这些是人们在把硬件和手机交给我们之前真正会问的问题。如果没有你想问的，请发邮件至 <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>。</p>
-    <nav class="toc" aria-label="章节"><a href="#setup">设置与安装</a><a href="#privacy">隐私与安全</a><a href="#apps">服务</a><a href="#endgame">如果 Flagship 消失了</a></nav>
+    <nav class="toc" aria-label="章节"><a href="#setup">设置与安装</a><a href="#privacy">隐私与安全</a><a href="#apps">服务</a><a href="#messages">voi.ci 页面与消息</a><a href="#endgame">如果 Flagship 消失了</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="设置与安装">
@@ -268,6 +268,43 @@
         <summary>可以干净地卸载服务吗？</summary>
         <div class="answer">
           <p>可以。卸载会删除它的容器、Postgres 数据库、文件夹和访问列表。如果以后还想找回数据，可以在卸载前保留一份快照。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="messages" aria-label="voi.ci 页面与消息">
+    <h2>voi.ci 页面与消息</h2>
+    <p class="section-lede">一个在 <code>voi.ci</code> 上以你的名字公开的页面，以及访客发来的私密消息。</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>什么是 voi.ci 页面？</summary>
+        <div class="answer">
+          <p>一个在 <code>voi.ci</code> 上以你的用户名命名的简单公开页面：一张照片、一个名字、一段简短的简介、链接和帖子。你在应用的“消息”标签中创建它，只有你账户的管理设备可以发布它。任何人都能看到它，而且它与你的应用和服务器使用相同的用户名，因此别人可以把它们联系起来。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>谁可以给我发消息？他们能看到我是谁吗？</summary>
+        <div class="answer">
+          <p>如果你打开“接收消息”，任何拥有 Flagship 账户的人都可以从你的页面给你写信。你看到的每个人都使用为你的页面生成的名字，例如“访客 4F3A”，永远不是他们的用户名，你也可以只为自己给他们改名。新对话会在“请求”中等待，直到你回复或接受。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Flagship 能读取我的消息吗？</summary>
+        <div class="answer">
+          <p>不能。消息采用端到端加密（使用后量子加密），只有你的设备和发件人的设备能读取。我们只能看到有人给你的页面写了信、何时以及多大，看不到内容。每条消息都带有一个封存的标签，写明发件人的账户，只有当你举报该消息时我们才会打开它。完整列表见<a href="/privacy#messages">隐私政策</a>。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>如何举报或屏蔽某人？</summary>
+        <div class="answer">
+          <p>在对话中点按“举报”或“屏蔽”。被屏蔽的访客不会收到通知，其消息也不会再送达给你。任何人都可以通过页面底部的“举报此页面”链接或通过电子邮件举报页面（见 <a href="/abuse#voici">/abuse</a>）。Flagship 会有专人审核每一条举报；我们可以移除页面，并禁止某个账户发送消息。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>为什么应用要通过 Apple 或 Google 检查我的手机？</summary>
+        <div class="answer">
+          <p>为了在不要求你提供电话号码的情况下减少垃圾信息。你第一次使用消息时，应用会请 Apple 或 Google 确认它运行在一台真实设备上。一台设备每月只能为一个新账户设置消息。Apple 和 Google 只知道应用检查了设备，不知道原因。没有这项检查（例如在网页应用中）消息仍然可用，只是更慢。</p>
         </div>
       </details>
     </div>

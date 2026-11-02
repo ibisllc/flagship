@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
-    <meta name="description" content="Report abuse on flagship.services subdomains." />
+    <meta name="description" content="Report abuse on flagship.services subdomains and voi.ci pages, and appeal a decision." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/site.css" />
@@ -33,7 +33,7 @@
     <main>
       <h1>Report abuse</h1>
       <p class="lede">
-        If a <code>*.flagship.services</code> subdomain is hosting malware, phishing, copyright infringement, or other abuse, contact us and we will investigate and take action.
+        If a <code>*.flagship.services</code> subdomain is hosting malware, phishing, copyright infringement, or other abuse, contact us and we will investigate and take action. For a <code>voi.ci</code> page or a message, see <a href="#voici">voi.ci pages and Messages</a> below.
       </p>
 
       <h2>Contact</h2>
@@ -63,6 +63,58 @@
       </p>
       <p>
         We cannot read the content of a user's TLS-encrypted traffic, so requests for content monitoring or interception cannot be honored, by design.
+      </p>
+
+      <h2 id="voici">voi.ci pages and Messages</h2>
+      <p>
+        A <code>voi.ci</code> page is a public profile page that a Flagship user publishes on our servers, and Messages are the private messages people send to it. Unlike a server, we host the page, so we can remove it. Messages are end-to-end encrypted: we can't read them unless someone who received one reports it.
+      </p>
+
+      <h3 id="report-page">How to report illegal or abusive content</h3>
+      <ul class="bullets">
+        <li><strong>On the page:</strong> every <code>voi.ci</code> page has a <strong>Report this page</strong> link at the bottom. Pick a reason and add a note. You don't need an account.</li>
+        <li><strong>In the Flagship app:</strong> open the conversation and tap <strong>Report</strong> on the message. You can also block the sender.</li>
+        <li><strong>By email:</strong> write to <a href="mailto:abuse@flagship.services?subject=voi.ci%20report">abuse@flagship.services</a>. Please include:
+          <ul class="bullets">
+            <li>the page's address (for example <code>https://voi.ci/name</code>) and which post, photo or link;</li>
+            <li>why you think it is illegal or breaks our <a href="/terms#messages">rules</a> (if it is illegal, which law, if you know);</li>
+            <li>your name and email, so we can confirm we got it and tell you what we decided (you may leave these out when reporting child sexual abuse material);</li>
+            <li>a statement that you believe in good faith that what you say is accurate and complete.</li>
+          </ul>
+        </li>
+        <li><strong>Copyright:</strong> send a DMCA notice as described in the <a href="/terms#dmca">terms, section 9</a>.</li>
+      </ul>
+
+      <h3 id="what-happens">What happens next</h3>
+      <ul class="bullets">
+        <li>If you gave us an email, we confirm we received your report.</li>
+        <li>A person at Flagship reviews every report. We don't use automated tools to decide on reports. We aim to decide within <strong>24 hours</strong>; child sexual abuse material, threats to someone's life or safety, and active scams go first.</li>
+        <li>If the page breaks the law or our rules, we take it down: <code>voi.ci</code> shows "This page isn't available" and it can't be published again until we restore it.</li>
+        <li>If a message breaks the rules, we open the sealed tag on that one message to learn which account sent it, and we can stop that account from sending messages. Its servers and apps keep working.</li>
+        <li>If you gave us an email, we tell you what we decided and why.</li>
+        <li>We report child sexual abuse material to NCMEC, and we tell the police when we learn of a threat to someone's life or safety.</li>
+        <li>If someone keeps sending reports that are clearly unfounded, we may stop handling their reports for a while, after a warning.</li>
+      </ul>
+
+      <h3 id="reasons">If we act on your page or account</h3>
+      <p>
+        When we take down your page or stop your account from sending messages, the Flagship app tells you, with the reason. If you ask, we send you a full statement of reasons: what we restricted, which of our rules or which law it was under, whether we acted on a report or found it ourselves, the facts we relied on, and how to appeal.
+      </p>
+
+      <h3 id="appeal">Appeal a decision</h3>
+      <p>
+        You can appeal for six months after a decision: a page owner whose page was taken down, an account that was stopped from sending messages, or a person whose report we turned down. A person at Flagship reviews the appeal again, looking at what you sent, and we answer within <strong>14 days</strong>.
+      </p>
+      <p>
+        <strong><a href="mailto:abuse@flagship.services?subject=Appeal&amp;body=Your%20Flagship%20username%20(or%20the%20page%20address)%3A%0A%0AWhat%20we%20decided%3A%0A%0AWhy%20you%20think%20it%20was%20wrong%3A%0A">Write an appeal</a></strong>
+      </p>
+      <p>
+        Send it from any email address and tell us your Flagship username (or the page's address), what we decided and why you think it was wrong. To prove an account is yours, we may ask you to approve a code in the Flagship app. If we got it wrong, we restore the page or lift the ban. If you live in the EU, you can also take the decision to a certified out-of-court dispute settlement body, or to court.
+      </p>
+
+      <h3 id="authorities">For authorities</h3>
+      <p>
+        Authorities and law enforcement can reach us at <a href="mailto:abuse@flagship.services">abuse@flagship.services</a>, in English. What we hold about pages and messages, and what we can't see, is listed in the <a href="/privacy#messages">privacy policy</a>.
       </p>
 
       <h2>Connections that seem to come from our address</h2>
