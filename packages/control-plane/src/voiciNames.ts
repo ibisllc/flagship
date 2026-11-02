@@ -33,6 +33,7 @@ import type {
   VoiciNameRecord,
   VoiciNameReleaseReason,
   VoiciNameStorage,
+  VoiciStorage,
 } from "@flagship/storage";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { recordAuditEvent } from "./auditEvents.js";
@@ -78,6 +79,8 @@ export interface VoiciNamesDeps {
   /** A name is only set for an app a server of the account runs (the same check the upkeep uses),
    *  so names cannot be parked on made-up service ids. Absent in tests that don't care. */
   appRunning?: (username: string, serviceId: string) => Promise<boolean>;
+  /** One namespace with usernames (docs/voici-and-messages.md §4.1): a name whose key is a username's is taken. */
+  voici?: Pick<VoiciStorage, "usernameWithKey">;
   now?: () => number;
 }
 
@@ -147,6 +150,7 @@ export async function checkVoiciName(
   }
   // A random code is a name too: nobody may take one that exists.
   if (/^[a-z0-9]{1,10}$/.test(key) && (await deps.voiciLinks.get(key))) return { status: "taken" };
+  if (deps.voici && (await deps.voici.usernameWithKey(key))) return { status: "taken" };
   const dibs = await dibsBlock(deps, username, name);
   if (dibs) return dibs;
   return { status: "available" };

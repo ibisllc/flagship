@@ -68,6 +68,11 @@ const BUDGETS: Record<string, Budget> = {
   "migration-read": { d1: 2, ratio: DEFAULT_RATIO },
   // the new box's registration, the account's sessions, then the eviction row
   "migration-assignment-live": { d1: 3, ratio: DEFAULT_RATIO },
+  // voi.ci (docs/voici-and-messages.md): the page, block + revocation, duplicate + conversation, the insert. A first
+  // message carries four signatures (three Ed25519, one P-256, checked natively) and a 10 KiB sealed body.
+  "voici-send": { d1: 6, ratio: 0.6 },
+  // user + page, the pieces, the CAS, then the marks and the new chunk's parse
+  "voici-publish": { d1: 4, ratio: DEFAULT_RATIO },
 };
 
 describe("Workers CPU budget (Free plan)", () => {

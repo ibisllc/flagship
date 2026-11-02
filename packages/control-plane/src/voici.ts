@@ -28,6 +28,7 @@ import type {
   UsernameStorage,
   VoiciLinkStorage,
   VoiciNameStorage,
+  VoiciStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import {
@@ -59,6 +60,8 @@ export interface VoiciDeps {
   /** An app-bound link's current target (the box that leads the app now),
    *  so the link follows the app between boxes. Null keeps the stored one. */
   resolveAppUrl?: (username: string, serviceId: string) => Promise<string | null>;
+  /** One namespace with usernames (docs/voici-and-messages.md §4.1): no code is minted equal to a username's key. */
+  voici?: Pick<VoiciStorage, "usernameWithKey">;
 }
 
 /** voi.ci's public-facing hostname (used in the URL returned to
@@ -103,6 +106,7 @@ export async function mintShortLink(
     const code = randomBase36Code(len);
     // A readable name that happens to look like this code keeps it: never hand it out.
     if (deps.voiciNames && (await deps.voiciNames.get(code))) continue;
+    if (deps.voici && (await deps.voici.usernameWithKey(code))) continue;
     const insert = await deps.voiciLinks.insert({
       code,
       username,

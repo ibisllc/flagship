@@ -1,0 +1,342 @@
+{
+  "Language": {
+    "en": "Language",
+    "ctx": "voici-site/app.js:27"
+  },
+  "Reload": {
+    "en": "Reload",
+    "ctx": "voici-site/app.js:40"
+  },
+  "There's no page here.": {
+    "en": "There's no page here.",
+    "ctx": "voici-site/app.js:53"
+  },
+  "voi.ci/{0} hasn't published a page.": {
+    "en": "voi.ci/{0} hasn't published a page.",
+    "ctx": "voici-site/app.js:53"
+  },
+  "This page is out of date.": {
+    "en": "This page is out of date.",
+    "ctx": "voici-site/app.js:54"
+  },
+  "You've seen a newer version of it. Reload to get it.": {
+    "en": "You've seen a newer version of it. Reload to get it.",
+    "ctx": "voici-site/app.js:54"
+  },
+  "Couldn't load this page.": {
+    "en": "Couldn't load this page.",
+    "ctx": "voici-site/app.js:55"
+  },
+  "Check your connection and try again.": {
+    "en": "Check your connection and try again.",
+    "ctx": "voici-site/app.js:55"
+  },
+  "This page couldn't be checked.": {
+    "en": "This page couldn't be checked.",
+    "ctx": "voici-site/app.js:62"
+  },
+  "What arrived doesn't match what its owner signed, so nothing of it is shown.": {
+    "en": "What arrived doesn't match what its owner signed, so nothing of it is shown.",
+    "ctx": "voici-site/app.js:62"
+  },
+  "About voi.ci": {
+    "en": "About voi.ci",
+    "ctx": "voici-site/app.js:128"
+  },
+  "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.": {
+    "en": "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.",
+    "ctx": "voici-site/app.js:133"
+  },
+  "This build": {
+    "en": "This build",
+    "ctx": "voici-site/app.js:138"
+  },
+  "Manifest": {
+    "en": "Manifest",
+    "ctx": "voici-site/app.js:140"
+  },
+  "This copy of the site isn't running on voi.ci.": {
+    "en": "This copy of the site isn't running on voi.ci.",
+    "ctx": "voici-site/app.js:153"
+  },
+  "Check the address and try again.": {
+    "en": "Check the address and try again.",
+    "ctx": "voici-site/app.js:158"
+  },
+  "Visitor {0}": {
+    "en": "Visitor {0}",
+    "ctx": "voici-site/messages.js:18"
+  },
+  "Too many messages. Try again in about {0} minutes.": {
+    "en": "Too many messages. Try again in about {0} minutes.",
+    "ctx": "voici-site/messages.js:47"
+  },
+  "Too many messages. Try again later.": {
+    "en": "Too many messages. Try again later.",
+    "ctx": "voici-site/messages.js:47"
+  },
+  "You can send more once they reply.": {
+    "en": "You can send more once they reply.",
+    "ctx": "voici-site/messages.js:49"
+  },
+  "This page is getting a lot of messages. Try again later.": {
+    "en": "This page is getting a lot of messages. Try again later.",
+    "ctx": "voici-site/messages.js:51"
+  },
+  "They aren't accepting messages right now.": {
+    "en": "They aren't accepting messages right now.",
+    "ctx": "voici-site/messages.js:53"
+  },
+  "Couldn't reach Flagship. Check your connection and try again.": {
+    "en": "Couldn't reach Flagship. Check your connection and try again.",
+    "ctx": "voici-site/messages.js:56"
+  },
+  "That message is too long.": {
+    "en": "That message is too long.",
+    "ctx": "voici-site/messages.js:59"
+  },
+  "Write a message first.": {
+    "en": "Write a message first.",
+    "ctx": "voici-site/messages.js:62"
+  },
+  "This message has characters that can't be sent.": {
+    "en": "This message has characters that can't be sent.",
+    "ctx": "voici-site/messages.js:69"
+  },
+  "Couldn't send. Try again.": {
+    "en": "Couldn't send. Try again.",
+    "ctx": "voici-site/messages.js:71"
+  },
+  "The sign-in timed out. Start again.": {
+    "en": "The sign-in timed out. Start again.",
+    "ctx": "voici-site/messages.js:78"
+  },
+  "Your app's answer couldn't be checked. Try again.": {
+    "en": "Your app's answer couldn't be checked. Try again.",
+    "ctx": "voici-site/messages.js:83"
+  },
+  "Delivered to their phone": {
+    "en": "Delivered to their phone",
+    "ctx": "voici-site/messages.js:88"
+  },
+  "Delivered": {
+    "en": "Delivered",
+    "ctx": "voici-site/messages.js:88"
+  },
+  "Sent": {
+    "en": "Sent",
+    "ctx": "voici-site/messages.js:88"
+  },
+  "Sign in with Flagship": {
+    "en": "Sign in with Flagship",
+    "ctx": "voici-site/messages.js:101"
+  },
+  "Open Flagship": {
+    "en": "Open Flagship",
+    "ctx": "voici-site/messages.js:104"
+  },
+  "Waiting for your app…": {
+    "en": "Waiting for your app…",
+    "ctx": "voici-site/messages.js:106"
+  },
+  "Scan with your phone's camera.": {
+    "en": "Scan with your phone's camera.",
+    "ctx": "voici-site/messages.js:107"
+  },
+  "To message {0}, approve this sign-in in your Flagship app.": {
+    "en": "To message {0}, approve this sign-in in your Flagship app.",
+    "ctx": "voici-site/messages.js:111"
+  },
+  "Show a QR code instead": {
+    "en": "Show a QR code instead",
+    "ctx": "voici-site/messages.js:113"
+  },
+  "On this device?": {
+    "en": "On this device?",
+    "ctx": "voici-site/messages.js:113"
+  },
+  "You appear as a visitor with a name made for this page. They never see your username.": {
+    "en": "You appear as a visitor with a name made for this page. They never see your username.",
+    "ctx": "voici-site/messages.js:120"
+  },
+  "Messages are private. If someone reports your message, Flagship can see which account sent it.": {
+    "en": "Messages are private. If someone reports your message, Flagship can see which account sent it.",
+    "ctx": "voici-site/messages.js:121"
+  },
+  "No Flagship app yet?": {
+    "en": "No Flagship app yet?",
+    "ctx": "voici-site/messages.js:123"
+  },
+  "Get Flagship": {
+    "en": "Get Flagship",
+    "ctx": "voici-site/messages.js:123"
+  },
+  "Check that your app shows this code:": {
+    "en": "Check that your app shows this code:",
+    "ctx": "voici-site/messages.js:141"
+  },
+  "Approve in your app.": {
+    "en": "Approve in your app.",
+    "ctx": "voici-site/messages.js:145"
+  },
+  "Start again": {
+    "en": "Start again",
+    "ctx": "voici-site/messages.js:154"
+  },
+  "Conversation": {
+    "en": "Conversation",
+    "ctx": "voici-site/messages.js:185"
+  },
+  "Some messages haven't arrived yet.": {
+    "en": "Some messages haven't arrived yet.",
+    "ctx": "voici-site/messages.js:186"
+  },
+  "Message": {
+    "en": "Message",
+    "ctx": "voici-site/messages.js:188"
+  },
+  "Write a message": {
+    "en": "Write a message",
+    "ctx": "voici-site/messages.js:188"
+  },
+  "Send": {
+    "en": "Send",
+    "ctx": "voici-site/messages.js:190"
+  },
+  "You appear here as {0}. They never see your username.": {
+    "en": "You appear here as {0}. They never see your username.",
+    "ctx": "voici-site/messages.js:206"
+  },
+  "Sign out of this page": {
+    "en": "Sign out of this page",
+    "ctx": "voici-site/messages.js:208"
+  },
+  "Open {0}?": {
+    "en": "Open {0}?",
+    "ctx": "voici-site/messages.js:229"
+  },
+  "Cancel": {
+    "en": "Cancel",
+    "ctx": "voici-site/messages.js:235"
+  },
+  "Open": {
+    "en": "Open",
+    "ctx": "voici-site/messages.js:249"
+  },
+  "Say hello. {0} will see you as {1}.": {
+    "en": "Say hello. {0} will see you as {1}.",
+    "ctx": "voici-site/messages.js:259"
+  },
+  "Your sign-in for this page has ended. Sign in again.": {
+    "en": "Your sign-in for this page has ended. Sign in again.",
+    "ctx": "voici-site/messages.js:313"
+  },
+  "Links": {
+    "en": "Links",
+    "ctx": "voici-site/page.js:65"
+  },
+  "Send me a message": {
+    "en": "Send me a message",
+    "ctx": "voici-site/page.js:92"
+  },
+  "Private messages, with your Flagship app.": {
+    "en": "Private messages, with your Flagship app.",
+    "ctx": "voici-site/page.js:93"
+  },
+  "Edited": {
+    "en": "Edited",
+    "ctx": "voici-site/page.js:132"
+  },
+  "Not published yet": {
+    "en": "Not published yet",
+    "ctx": "voici-site/page.js:133"
+  },
+  "Posts": {
+    "en": "Posts",
+    "ctx": "voici-site/page.js:145"
+  },
+  "Show older posts": {
+    "en": "Show older posts",
+    "ctx": "voici-site/page.js:149"
+  },
+  "Report this page": {
+    "en": "Report this page",
+    "ctx": "voici-site/page.js:159"
+  },
+  "Made with Flagship": {
+    "en": "Made with Flagship",
+    "ctx": "voici-site/page.js:160"
+  },
+  "Loading": {
+    "en": "Loading",
+    "ctx": "voici-site/page.js:199"
+  },
+  "Spam": {
+    "en": "Spam",
+    "ctx": "voici-site/report.js:11"
+  },
+  "Harassment or bullying": {
+    "en": "Harassment or bullying",
+    "ctx": "voici-site/report.js:12"
+  },
+  "Pretending to be someone else": {
+    "en": "Pretending to be someone else",
+    "ctx": "voici-site/report.js:13"
+  },
+  "Illegal content": {
+    "en": "Illegal content",
+    "ctx": "voici-site/report.js:14"
+  },
+  "Something else": {
+    "en": "Something else",
+    "ctx": "voici-site/report.js:15"
+  },
+  "What's wrong? (optional)": {
+    "en": "What's wrong? (optional)",
+    "ctx": "voici-site/report.js:27"
+  },
+  "Send report": {
+    "en": "Send report",
+    "ctx": "voici-site/report.js:29"
+  },
+  "Why are you reporting it?": {
+    "en": "Why are you reporting it?",
+    "ctx": "voici-site/report.js:34"
+  },
+  "Note": {
+    "en": "Note",
+    "ctx": "voici-site/report.js:35"
+  },
+  "Sent as {0}, the name this page knows you by.": {
+    "en": "Sent as {0}, the name this page knows you by.",
+    "ctx": "voici-site/report.js:38"
+  },
+  "Sent without your name. Flagship reviews every report.": {
+    "en": "Sent without your name. Flagship reviews every report.",
+    "ctx": "voici-site/report.js:38"
+  },
+  "Keep the note under 500 characters.": {
+    "en": "Keep the note under 500 characters.",
+    "ctx": "voici-site/report.js:47"
+  },
+  "The note has characters that can't be sent.": {
+    "en": "The note has characters that can't be sent.",
+    "ctx": "voici-site/report.js:47"
+  },
+  "Too many reports from your network. Try again later.": {
+    "en": "Too many reports from your network. Try again later.",
+    "ctx": "voici-site/report.js:57"
+  },
+  "Couldn't send the report. Try again.": {
+    "en": "Couldn't send the report. Try again.",
+    "ctx": "voici-site/report.js:57"
+  },
+  "Thanks. Flagship will look at this page.": {
+    "en": "Thanks. Flagship will look at this page.",
+    "ctx": "voici-site/report.js:68"
+  },
+  "Close": {
+    "en": "Close",
+    "ctx": "voici-site/report.js:69"
+  }
+}

@@ -251,6 +251,16 @@ class_name = "ServingFeed"
 binding = "RELAY_FEED"
 bucket_name = "flagship-relay-feed"
 
+# voi.ci pages (docs/voici-and-messages.md §2.8; apps/com/src/voiciRoutes.ts): the current signed index of each page
+# (v1/u/<username>.json, max-age 30) and its content-addressed pieces (v1/p/<pageId>/<sha256>, immutable), served on
+# https://files.voi.ci (an R2 custom domain plus a cache rule that ignores query strings). Nothing is written while
+# VOICI_ENABLED is not "on". Provision once:
+#   npx wrangler r2 bucket create flagship-voici
+#   then in the dashboard: R2 > flagship-voici > Settings > Custom domain files.voi.ci
+[[r2_buckets]]
+binding = "VOICI"
+bucket_name = "flagship-voici"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state"
@@ -317,6 +327,9 @@ new_sqlite_classes = ["ServingFeed"]
 # from the 0.3 release (owner, 2026-10-23). Removing both turns dibs off and opens every free name.
 DIBS_WINDOW_START = "2026-10-25T00:00:00Z"
 DIBS_WINDOW_END = "2027-04-25T00:00:00Z"
+# voi.ci pages and Messages (docs/voici-and-messages.md, "Interfaces the chunks share"): "on" only after migration
+# 0123 and the store builds that speak it; off, every voi.ci page and Messages route answers 404.
+VOICI_ENABLED = "off"
 # voi.ci links go to the canonical address (<label>.<user>.flagship.services) once "1".
 # Turn on only after the gym group named-links proves it reaches a running instance.
 # VOICI_CANONICAL = "1"

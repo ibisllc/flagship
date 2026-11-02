@@ -206,6 +206,7 @@ export const MUST_REACH_WORKER: readonly string[] = [
   "/access",
   "/invite",
   "/invite-accept",
+  "/voici-sign-in",
   "/app/account/security",
   "/how-to",
   "/how-to.html",

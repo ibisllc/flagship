@@ -254,6 +254,7 @@ import {
 } from "@flagship/boot-core";
 import { InProcessDirectoryClient, InProcessNotifyPipe } from "./bootInProcess.js";
 import { buildPushUserDevices } from "./pushUserDevices.js";
+import { deleteVoiciAccount } from "./voiciRoutes.js";
 import {
   workerCaTrustChain,
   caEnforceFromEnv,
@@ -1161,6 +1162,8 @@ export async function tryControlPlane(
           provisioning: storage.accountProvisioning,
           usernames: storage.usernames,
           offers: storage.usernameOffers,
+          voiciLinks: storage.voiciLinks,
+          voiciNames: storage.voiciNames,
         },
         await readJson(request),
       ),
@@ -1426,6 +1429,7 @@ export async function tryControlPlane(
           pushTokens: storage.pushTokens,
           serverOrders: storage.serverOrders,
           voici: { voiciLinks: storage.voiciLinks, voiciNames: storage.voiciNames },
+          voiciPages: { deleteAccount: (u: string) => deleteVoiciAccount(env, storage, u) },
           // §5 box-side delivery: deposit the content-wipe order for each owned
           // server so an online box consumes it on its heartbeat and wipes.
           secretMailbox: storage.secretMailbox,
@@ -3099,6 +3103,7 @@ export async function tryControlPlane(
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           voiciNames: storage.voiciNames,
+          voici: storage.voici,
           servers: storage.servers,
           daemonStatus: storage.daemonStatus,
           auditEvents: storage.auditEvents,
@@ -3146,6 +3151,7 @@ export async function tryControlPlane(
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           voiciNames: storage.voiciNames,
+          voici: storage.voici,
           tiers: storage.tiers,
           servers: storage.servers,
           daemonStatus: storage.daemonStatus,
@@ -3921,7 +3927,7 @@ function buildOptionalV12PushFanout(env: ControlPlaneEnv) {
   return forwarder ? wrapForwarderAsV12Fanout(forwarder) : null;
 }
 
-function buildOptionalPushForwarder(env: ControlPlaneEnv) {
+export function buildOptionalPushForwarder(env: ControlPlaneEnv) {
   const apnsConfigured =
     !!env.APNS_KEY_ID &&
     !!env.APNS_TEAM_ID &&
@@ -4047,6 +4053,7 @@ function voiciNamesDeps(storage: D1Storage, env: ControlPlaneEnv) {
     usernames: storage.usernames,
     voiciLinks: storage.voiciLinks,
     voiciNames: storage.voiciNames,
+    voici: storage.voici,
     tiers: storage.tiers,
     grants: storage.deviceCapabilityGrants,
     auditEvents: storage.auditEvents,

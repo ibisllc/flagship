@@ -197,7 +197,24 @@ export type RateLimitEndpoint =
   // Certificate orders (certificateIssuance.ts): the service keeps its own CA budgets in D1; these only bound
   // the requests themselves. A device orders about twice in 60 days and polls every 5 s while one runs.
   | "issuance-order"
-  | "issuance-poll";
+  | "issuance-poll"
+  // voi.ci Messages (docs/voici-and-messages.md §9.4): a device's request for a pseudonym attestation (signed; the
+  // per-account daily allowance of new recipients is counted in D1 by the handler), the unattested-tier enrollments
+  // per address (charged by the handler), and reports (anonymous; the address is counted here, never stored).
+  | "messages-attest"
+  | "messages-enroll-unattested"
+  | "voici-report"
+  // voi.ci pages and the Messages mailbox (voiciRoutes.ts; §9.4). Charged by voiciRoutes itself, not endpointFor:
+  // sends per address (owner replies included); new conversations into one page (subject = pageId); publishes and
+  // piece uploads per address and per account (subject = username; the 50 MiB a day is counted in D1); a browser's
+  // thread fetches; the owner's inbox, blocks, drafts and state; anonymous page reads.
+  | "voici-send"
+  | "voici-new-conversation"
+  | "voici-publish"
+  | "voici-piece"
+  | "voici-thread"
+  | "voici-owner"
+  | "voici-page-read";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -430,6 +447,25 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   ],
   "issuance-order": [{ axis: "ip", limit: 30, windowSec: 3600 }],
   "issuance-poll": [{ axis: "ip", limit: 240, windowSec: 60 }],
+  "messages-attest": [
+    { axis: "ip", limit: 30, windowSec: 3600 },
+    { axis: "usernameHash", limit: 60, windowSec: 3600 },
+  ],
+  "messages-enroll-unattested": [{ axis: "ip", limit: 1, windowSec: 86_400 }],
+  "voici-report": [{ axis: "ip", limit: 10, windowSec: 3600 }],
+  "voici-send": [{ axis: "ip", limit: 60, windowSec: 3600 }],
+  "voici-new-conversation": [{ axis: "subject", limit: 200, windowSec: 86_400 }],
+  "voici-publish": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "subject", limit: 100, windowSec: 86_400 },
+  ],
+  "voici-piece": [
+    { axis: "ip", limit: 600, windowSec: 3600 },
+    { axis: "subject", limit: 1000, windowSec: 86_400 },
+  ],
+  "voici-thread": [{ axis: "ip", limit: 1000, windowSec: 3600 }],
+  "voici-owner": [{ axis: "ip", limit: 1000, windowSec: 3600 }],
+  "voici-page-read": [{ axis: "ip", limit: 300, windowSec: 60 }],
 };
 
 export interface RateLimitInput {
@@ -648,6 +684,8 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && (pathname === "/api/name-dibs/initiate" || pathname === "/api/name-dibs/verify")) return "name-dibs";
   if (m === "GET" && /^\/api\/users\/[^/]+\/voici-name-check$/.test(pathname)) return "voici-name-check";
+  if (m === "POST" && /^\/api\/accounts\/[^/]+\/messages-attestation$/.test(pathname)) return "messages-attest";
+  if (m === "POST" && pathname === "/api/voici/reports") return "voici-report";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:
@@ -892,7 +930,8 @@ export function extractUsernameHash(pathname: string): string | undefined {
     pathname.match(/^\/api\/users\/([^/]+)\/re-pair$/) ??
     pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/) ??
     pathname.match(/^\/api\/accounts\/([^/]+)\/read-token$/) ??
-    pathname.match(/^\/api\/users\/([^/]+)\/share-key-attestation$/);
+    pathname.match(/^\/api\/users\/([^/]+)\/share-key-attestation$/) ??
+    pathname.match(/^\/api\/accounts\/([^/]+)\/messages-attestation$/);
   if (!m) return undefined;
   // One budget per account however the path spells it (case, escapes).
   try {

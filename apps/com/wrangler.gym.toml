@@ -43,6 +43,8 @@ routes = [
   { pattern = "remote.gym.flagshipserver.com",    custom_domain = true },
   { pattern = "recovery.gym.flagshipserver.com",  custom_domain = true },
   { pattern = "boot.gym.flagshipserver.com",      custom_domain = true },
+  # voi.ci pages in the gym (docs/voici-and-messages.md §13 item 8).
+  { pattern = "gym.voi.ci",                       custom_domain = true },
 ]
 
 # Static assets — identical to prod (the same ../web/public tree, same SPA
@@ -110,6 +112,13 @@ class_name = "ServingFeed"
 binding = "RELAY_FEED"
 bucket_name = "flagship-relay-feed-gym"
 
+# voi.ci pages on gym.voi.ci (docs/voici-and-messages.md §2.8): served on https://files.gym.voi.ci. Provision once:
+#   npx wrangler r2 bucket create flagship-voici-gym
+#   then in the dashboard: R2 > flagship-voici-gym > Settings > Custom domain files.gym.voi.ci
+[[r2_buckets]]
+binding = "VOICI"
+bucket_name = "flagship-voici-gym"
+
 # --- D1: the gym's OWN database (never wiped; runs use unique names) ---------------------------
 # PLACEHOLDER database_id — create the real DB once and paste its id here:
 #   cd apps/com && npx wrangler d1 create flagship-state-gym
@@ -165,6 +174,13 @@ new_sqlite_classes = ["ServingFeed"]
 # `<server>.<user>.gym.flagship.services`.
 SERVICES_APEX = "gym.flagship.services"
 CONTROL_APEX = "gym.flagshipserver.com"
+# voi.ci pages and Messages: the gym's site origin (the delegation origin, CORS and the page host) and the switch.
+VOICI_WEB_ORIGIN = "https://gym.voi.ci"
+VOICI_ENABLED = "on"
+# Messages abuse side (voiciAbuse.ts, deviceIntegrity.ts): takedown purges go to the gym's files host; gym iOS builds
+# are development-signed, so App Attest checks the development aaguid.
+VOICI_FILES_HOST = "files.gym.voi.ci"
+APPLE_APP_ATTEST_ENV = "development"
 
 # Worker → Fly wiring: REPOINTED at the gym Fly app (flagship-services-gym) +
 # its own anycast IPs. The :443 listener does SNI passthrough; the Worker proxies

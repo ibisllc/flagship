@@ -96,6 +96,15 @@ describe("checkVoiciName", () => {
     expect(await checkVoiciName(deps, "alice", SVC2, "mynotes")).toEqual({ status: "taken" });
   });
 
+  it("calls a name taken when its key is a username's: voi.ci/<username> is the page (one namespace)", async () => {
+    const { deps, s } = await setup();
+    await s.usernames.put({ username: "plucky-avocet", irkPubHex: "11".repeat(32), claimedAt: 1 });
+    expect(await checkVoiciName(deps, "alice", SVC, "pluckyavocet")).toEqual({ status: "available" });
+    const withPages = { ...deps, voici: s.voici };
+    expect(await checkVoiciName(withPages, "alice", SVC, "pluckyavocet")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(withPages, "alice", SVC, "plucky-avocet")).toEqual({ status: "taken" });
+  });
+
   it("holds a name for its .com owner while dibs is open, and fails closed when the lookup fails", async () => {
     const reg = await setup({ registered: ["nike.com"] });
     expect(await checkVoiciName(reg.deps, "alice", SVC, "nike")).toEqual({ status: "dibs", domain: "nike.com", until: WINDOW.end });

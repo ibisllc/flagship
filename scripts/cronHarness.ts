@@ -121,6 +121,18 @@ export async function buildCronWorld(opts: CronWorldOptions = {}): Promise<CronW
       registeredAt: now - 50_000_000,
     });
   }
+  // A full voi.ci collection run: more unreferenced pieces than one run takes.
+  for (let i = 0; i < 600; i++) {
+    await seed.voici.putPiece({
+      pageId: hex(i % 7, 32),
+      sha256: hex(i, 64),
+      username: `account-${hex(i % 75, 3)}`,
+      size: 1000,
+      jpeg: false,
+      uploadedAt: now - 40 * 86_400_000,
+      unreferencedAt: now - 40 * 86_400_000,
+    });
+  }
   const fetches: string[] = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -150,6 +162,11 @@ export async function buildCronWorld(opts: CronWorldOptions = {}): Promise<CronW
     ADAPTERS_REPO: "ibisllc/flagship-adapters",
     ADAPTERS_BUCKET: { get: async () => null, put: async () => undefined, delete: async () => undefined, list: async () => ({ objects: [], truncated: false }) } as never,
     ISO_TEMP_BUCKET: { list: async () => ({ objects: [], truncated: false }), delete: async () => undefined } as never,
+    VOICI: {
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => void fetches.push("r2:voici-delete"),
+    },
   };
   return {
     env,

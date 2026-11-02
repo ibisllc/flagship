@@ -56,6 +56,8 @@ export interface ServiceRenameDeps {
   voiciLinks: VoiciLinkStorage;
   /** Custom names: a minted code never equals one. Also feeds `link` on the links read. */
   voiciNames?: VoiciNameStorage;
+  /** voi.ci pages: a minted code never equals a username's key (docs/voici-and-messages.md §4.1). */
+  voici?: VoiciDeps["voici"];
   /** With [voiciNames]: the plan that sets how many names the account may hold. */
   tiers?: TierStorage;
   servers: ServerStorage;
@@ -189,6 +191,7 @@ export async function handleServiceRename(
           usernames: deps.usernames,
           voiciLinks: deps.voiciLinks,
           voiciNames: deps.voiciNames,
+          voici: deps.voici,
           now: deps.now,
           shortHost: deps.shortHost,
         } satisfies VoiciDeps,
@@ -319,6 +322,7 @@ export async function handleGetAppLinks(
       {
         usernames: deps.usernames,
         voiciLinks: deps.voiciLinks,
+        voici: deps.voici,
         now: deps.now,
         shortHost: deps.shortHost,
       } satisfies VoiciDeps,

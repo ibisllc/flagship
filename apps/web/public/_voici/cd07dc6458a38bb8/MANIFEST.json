@@ -1,0 +1,33 @@
+{
+ "v": 1,
+ "files": {
+  "app.js": "cbd1e8ab6cabddbfa0e2b18cf920f348d8fa3323540c6d9311479c9ea83011da",
+  "config.js": "80627ed12eff21ebbcfc5bc043da827b95c44f787cd4530cdc549d9854e0960e",
+  "dom.js": "43c9c817d3066563fb5c695a2bac90d6334357a8d2275f763fc27dcadfa30b6c",
+  "favicon.svg": "681d17250cf4c5dd68f3122ec6dc9d8aab8c7d3c83e8318561350ded950d6cf2",
+  "flagship-web/deliver.js": "0fc10bf537e4ebae2b3b76762fc2d271290fa6f22434736269c8b873593a2e57",
+  "flagship-web/envelope.js": "a90463eb195d2eca0366624cd65d42ce730213c29218aece8f9ec5bcdf302cc5",
+  "flagship-web/index.js": "d588b6cc079167163d4f3d5515bda8e6285efe065d6b008b50458920993a018c",
+  "flagship-web/pipeCrypto.js": "8ee6c0ae0029ecadc1d63657b01b606809cab4872b7cfe8d0bb527a55b943f83",
+  "flagship-web/proto/lib/voiciCore.js": "80d0b17280dc8bf79d886e387ebde89dc8cc8f4004c437fa202706a8615f1206",
+  "flagship-web/proto/lib/voiciMessages.js": "d83297c52a30c86baffa27eab7efc0bcde9e454a66935f0d0eaaaf8877fb9a4e",
+  "flagship-web/proto/lib/voiciPage.js": "72c138bb6ae1040a19af196081bee41a94ecb74048d51581087c24e9439ca42c",
+  "flagship-web/proto/lib/voiciProtocol.js": "626cad2dcff41876fe81740a44ab7df11f28800fd2f6a4f04489c1e0a3b9b528",
+  "flagship-web/proto/lib/voiciText.js": "726c60b64c7e32df130772f37841db26d96ab7ed13c4d46084b602f5a21f1fde",
+  "flagship-web/proto/vendor/noble-post-quantum/pq-seal.js": "35bf767792ced7459c9ade5cca7f44bd5eb49b96de8f40b6b4819f10084a4481",
+  "flagship-web/signIn.js": "e4234bcf419638d8dc31043f546814651b977c790bb23a6290d56c62b44a8232",
+  "flagship-web/store.js": "2d43a38d8b079d96099fe934e7c4447d0befc13e0eba567b93bff9d3056373ee",
+  "flagship-web/verify.js": "529a84ca6aa75f50e7476b8d727204fe4eb23d4a0f874a74b60776f288ac4f27",
+  "fonts/Geist-Variable.woff2": "2ffebe993e969069a9789d15164b7715d42491b5835516c5e3b935d5f81b05f1",
+  "fonts/GeistMono-Variable.woff2": "afaacc4c5fbba89d2ebf7a02dc4070208540874592a5504d57175782fe893101",
+  "i18n.js": "662e2b1032556678de84d9f29d02875b90fea59d4a20e83d80e90e8073bdd05c",
+  "icons.js": "24513fa2a0ee4c6fe488576742d2ff6758aafa35a76286b83912764f0e7646b5",
+  "messages.js": "4fde745830e54e906add015dcda51d918781f23b36db3314987b7767a1f86663",
+  "page.js": "8a081778bfaa0dcf435af975e9fbdd2a7c2ddf49df11b88daad444b159b49e44",
+  "qrEncoder.js": "cfae9ffa8ac1734af8c858ccd2c2c16684e8320434cf3fb461388b860ea4dd11",
+  "report.js": "5406c94f1d8c0882cf137c5645dbc57807b16723dabd2134f77786e4ad296ef9",
+  "sheet.js": "a875be200121ce81155d5a6ca3a73c933462aa3f751d1ea7069a235d6fbd5736",
+  "strings.js": "7064cd0dacf996c3e83ab1b607fba53a471012d9f4e2a5887ca9d426dfead424",
+  "style.css": "625c9f03e1bc77834c5e22d36ac933a02432a77b26c045a4daec51fb7219d90b"
+ }
+}

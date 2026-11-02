@@ -16,13 +16,15 @@
  *                                     addresses on public resolvers: no NODATA or NXDOMAIN (needs nothing)
  *   npm run ops -- limits             who is hitting a rate limit (npm run rate-limits)
  *   npm run ops -- outbound           where boxes' AI calls leave (npm run outbound-hosts)
+ *   npm run ops -- voici              voi.ci reports, bans, takedowns, Messages enrollments, the abuse key; warns when
+ *                                     a report is older than 24 h (Apple's expectation) or the abuse key is ending
  *   npm run ops -- mesh               every relay in the directory (docs/runbooks/relay-mesh.md): ready or why
  *                                     not, head age, directory version, bridges, attachments, account moves
  *
  * Env: FLAGSHIP_BASE_URL (default https://flagshipserver.com), FLAGSHIP_SERVICES_URL (default
  * https://flagship.services); USAGE_REPORT_SECRET for `services`; CLOUDFLARE_API_TOKEN (Account
  * Analytics: Read) and CLOUDFLARE_ACCOUNT_ID for `workers`; wrangler login for `slow`;
- * FLAGSHIP_ADMIN_SECRET for `limits` and `outbound`; `mesh` reads the directory from
+ * FLAGSHIP_ADMIN_SECRET for `limits`, `outbound` and `voici`; `mesh` reads the directory from
  * FLAGSHIP_RELAY_FEED_URL (default https://feed.<host of FLAGSHIP_BASE_URL>/v1) and each relay's stats
  * with USAGE_REPORT_SECRET (health alone without it).
  */
@@ -54,7 +56,7 @@ export function parseArgs(argv: string[]): Options {
     else if (a === "-h" || a === "--help") o.command = "help";
     else throw new Error(`unknown argument: ${a}`);
   }
-  if (!["all", "health", "services", "dns", "workers", "slow", "limits", "outbound", "mesh", "help"].includes(o.command)) {
+  if (!["all", "health", "services", "dns", "workers", "slow", "limits", "outbound", "mesh", "voici", "help"].includes(o.command)) {
     throw new Error(`unknown command: ${o.command}`);
   }
   if (!Number.isInteger(o.hours) || o.hours < 1 || o.hours > 72) throw new Error("--hours takes a whole number from 1 to 72");
@@ -456,6 +458,55 @@ async function meshReport(com: string, env: NodeJS.ProcessEnv): Promise<{ lines:
   return formatMesh(reports, source);
 }
 
+/* ----------------------------------------------------------------- voici */
+
+export interface VoiciStats {
+  now: number;
+  enabled: boolean;
+  openReports: number;
+  oldestOpenReportAt: number | null;
+  reportsLast7Days: number;
+  bans: number;
+  bannedPseudonyms: number;
+  takedowns: number;
+  takedownsPurgePending: number;
+  enrollments: Record<string, number>;
+  newRecipientsToday: number;
+  abuseKey: { epoch: number; notAfter: number } | null;
+  purgeConfigured: boolean;
+}
+
+const REPORT_DUE_MS = 24 * 3600_000;
+
+export function formatVoici(s: VoiciStats): { lines: string[]; hints: string[] } {
+  const hours = (ms: number) => Math.floor(ms / 3600_000);
+  const lines = [
+    "voi.ci and Messages:",
+    `  reports    ${s.openReports} open${s.oldestOpenReportAt ? `, oldest ${hours(s.now - s.oldestOpenReportAt)} h` : ""}; ${s.reportsLast7Days} in the last 7 days`,
+    `  bans       ${s.bans} account(s), ${s.bannedPseudonyms} pseudonym(s); takedowns ${s.takedowns}${s.takedownsPurgePending ? ` (${s.takedownsPurgePending} not finished)` : ""}`,
+    `  Messages   enrolled ios ${s.enrollments.ios ?? 0}, android ${s.enrollments.android ?? 0}, web/unattested ${s.enrollments.none ?? 0}; ${s.newRecipientsToday} new conversation(s) today`,
+    `  abuse key  ${s.abuseKey ? `epoch ${s.abuseKey.epoch}, until ${new Date(s.abuseKey.notAfter).toISOString().slice(0, 10)}` : "none in its window"}`,
+  ];
+  const hints: string[] = [];
+  if (s.oldestOpenReportAt && s.now - s.oldestOpenReportAt > REPORT_DUE_MS) {
+    hints.push(`A voi.ci report is ${hours(s.now - s.oldestOpenReportAt)} h old (Apple expects action within 24 h): npm run voici-abuse -- list`);
+  }
+  if (s.enabled && !s.abuseKey) hints.push("Messages is on but no abuse key is in its window: every attestation answers 503 (npm run abuse-key -- status).");
+  if (s.abuseKey && s.abuseKey.notAfter - s.now < 14 * 86_400_000) hints.push(`The abuse key (epoch ${s.abuseKey.epoch}) ends within 14 days: generate and sign the next one.`);
+  if (s.takedownsPurgePending) hints.push("A takedown has not finished deleting its pieces: run npm run voici-abuse -- takedown again.");
+  if (s.takedowns && !s.purgeConfigured) hints.push("files.voi.ci purge is not configured (CLOUDFLARE_PURGE_TOKEN, VOICI_FILES_ZONE_ID): taken-down pieces stay cached.");
+  return { lines, hints };
+}
+
+async function voiciReport(com: string, env: NodeJS.ProcessEnv): Promise<{ lines: string[]; hints: string[] } | string> {
+  if (!env.FLAGSHIP_ADMIN_SECRET) return "voi.ci needs FLAGSHIP_ADMIN_SECRET.";
+  const r = await getJson(`${com}/api/admin/voici/stats`, { "x-admin-secret": env.FLAGSHIP_ADMIN_SECRET });
+  if ("error" in r) return `voi.ci: ${r.error}`;
+  if (r.status === 404) return "voi.ci: off on this .com (VOICI_ENABLED), or not deployed.";
+  if (r.status !== 200) return `voi.ci: HTTP ${r.status}`;
+  return formatVoici(r.body as VoiciStats);
+}
+
 /* ------------------------------------------------------------------ main */
 
 function delegate(script: string, args: string[] = []): void {
@@ -482,7 +533,7 @@ async function main(): Promise<void> {
   const all = o.command === "all";
 
   if (o.command === "help") {
-    console.log("usage: npm run ops -- [health | services | dns | workers [--hours N] [--script NAME] | slow [--seconds N] | limits | outbound | mesh]");
+    console.log("usage: npm run ops -- [health | services | dns | workers [--hours N] [--script NAME] | slow [--seconds N] | limits | outbound | mesh | voici]");
     return;
   }
   if (all || o.command === "health") {
@@ -506,6 +557,7 @@ async function main(): Promise<void> {
   if (all || o.command === "workers") out(await workersReport(o, process.env).catch((e) => `Worker numbers: ${(e as Error).message}`));
   if (o.command === "slow") out(await slowReport(o));
   if (o.command === "mesh") out(await meshReport(com, process.env));
+  if (o.command === "voici") out(await voiciReport(com, process.env));
   if (o.command === "limits") delegate("./rate-limit-report.mjs");
   if (o.command === "outbound") delegate("./outbound-hosts.mjs");
 

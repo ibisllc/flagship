@@ -45,8 +45,10 @@ import { handleRuntimeManifest, isRuntimeManifestPath, isRuntimePagePath, redire
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import { CANARY_REPORT_PATH, UPDATE_RECEIPT_PATH, handleCanaryReport, handleUpdateReceipt } from "./updateReceipts.js";
+import { handleVoiciAbuseRoute, isVoiciAbusePath } from "./voiciAbuseRoutes.js";
 import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
+import { handleVoiciApi, isVoiciApiPath, isVoiciHost, serveVoiciHost, voiciCorsHeaders, type VoiciEnv } from "./voiciRoutes.js";
 import { CloudflareDnsClient } from "@flagship/control-plane";
 import { createUpCloudClient } from "./upcloud.js";
 import {
@@ -73,7 +75,7 @@ const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
 /** Control-apex paths the native apps claim as universal links / App Links. */
 export const APP_LINK_PATHS: ReadonlySet<string> = new Set(
-  ["/join", "/share", "/transfer", "/remote", "/builder", "/access", "/invite", "/invite-accept"]
+  ["/join", "/share", "/transfer", "/remote", "/builder", "/access", "/invite", "/invite-accept", "/voici-sign-in"]
     .flatMap((p) => [p, `${p}/`]),
 );
 
@@ -597,7 +599,8 @@ export async function route(
   // /api/* on the apex trigger a preflight. Answer it directly so the
   // actual request can proceed.
   if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
-    return corsPreflight(request, env);
+    const voici = voiciCorsHeaders(request, url, env as VoiciEnv);
+    return voici ? new Response(null, { status: 204, headers: voici }) : corsPreflight(request, env);
   }
 
   const res = await routeImpl(request, env, url, ctx);
@@ -677,8 +680,8 @@ async function routeImpl(
   // else (POST, longer paths, root, etc.) returns 404 to keep the
   // surface tiny + un-enumerable. The actual mint API lives on the
   // apex (POST /api/voici/shorten + cascades from rename).
-  if (url.hostname === VOICI_HOST || url.hostname === VOICI_WWW_HOST) {
-    return serveVoiciRedirect(request, url, env);
+  if (isVoiciHost(url.hostname, env as VoiciEnv)) {
+    return serveVoiciHost(request, url, env as VoiciEnv, () => serveVoiciRedirect(request, url, env));
   }
 
   // Worker-resident probe: never forwarded upstream as-is. The Worker does
@@ -964,6 +967,14 @@ async function routeImpl(
       ...(subject ? { subject } : {}),
     }, ctx);
     if (rl.limited) return rateLimitedResponse(rl);
+  }
+
+  // voi.ci Messages attestations, reports and the owner's abuse tools (voiciAbuseRoutes.ts; metered above).
+  if (isVoiciAbusePath(url.pathname)) return handleVoiciAbuseRoute(buffered, env, ctx);
+
+  // voi.ci pages and Messages (voiciRoutes.ts): their own budgets, 404 until VOICI_ENABLED is "on".
+  if (isVoiciApiPath(url.pathname)) {
+    return handleVoiciApi(buffered, env as VoiciEnv, ctx);
   }
 
   // A box's content-free update receipt (updateReceipts.ts): metered above, stored as counts only.
@@ -1558,6 +1569,12 @@ function isCorsAllowed(origin: string, env: RouteEnv): boolean {
 
 function applyCors(request: Request, url: URL, res: Response, env: RouteEnv): Response {
   if (!url.pathname.startsWith("/api/")) return res;
+  const voici = voiciCorsHeaders(request, url, env as VoiciEnv);
+  if (voici) {
+    const headers = new Headers(res.headers);
+    for (const [k, v] of voici) headers.set(k, v);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  }
   const origin = originHeader(request);
   if (!origin || !isCorsAllowed(origin, env)) return res;
   // Headers on a Response are immutable when sourced from fetch(); clone
@@ -1577,7 +1594,7 @@ function corsPreflight(request: Request, env: RouteEnv): Response {
   const origin = originHeader(request);
   const headers = new Headers({
     "access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host, x-flagship-device-id, x-flagship-device-pub, x-flagship-request-id, x-flagship-issued-at, x-flagship-signature, x-flagship-share-token",
+    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host, x-flagship-device-id, x-flagship-device-pub, x-flagship-request-id, x-flagship-issued-at, x-flagship-signature, x-flagship-share-token, x-flagship-page-id, x-flagship-sha256, x-flagship-size, x-flagship-signer-pub",
     "access-control-max-age": "600",
     vary: "origin",
   });

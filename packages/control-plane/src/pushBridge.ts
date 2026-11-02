@@ -256,6 +256,9 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   "cert-alert": { title: "Flagship", body: "One of your servers needs your attention." },
   "app-access": { title: "Flagship", body: "One of your apps wants to reach the internet." },
   "invite-created": { title: "Flagship", body: "A device on your account invited someone to one of your apps." },
+  // voi.ci Messages (docs/voici-and-messages.md §8.3): content-free, kinds `message` and `message-request`.
+  messages: { title: "Flagship", body: "New message" },
+  "page-drafts": { title: "Flagship", body: "A device on your account has changes waiting to be published on your page." },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 

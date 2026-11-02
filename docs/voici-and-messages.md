@@ -144,6 +144,9 @@ Signal, WhatsApp, Flagship apps `*.flagship.services`, ...). Icons are monochrom
 apps; matching is by exact host or host suffix, decided on the editing device and stored as `site` in the profile
 piece (the renderer trusts only ids in its own table).
 
+C: the site draws a known site as a monogram of its table label in a ring (mail icon for `email`, the Flagship mark
+for `flagship`, a link icon otherwise); no third-party brand artwork is bundled in 0.3. The apps may do the same.
+
 ### 2.5 Posts and link cards
 
 - Text, at most 2,000 characters after NFC; up to 3 links. Text is shown as text (§12.3).
@@ -153,6 +156,9 @@ piece (the renderer trusts only ids in its own table).
   browser loads nothing from the linked site until the visitor clicks; the click opens it in a new tab
   (`rel="noopener noreferrer nofollow ugc"`, `referrerpolicy="no-referrer"`). No iframes, no players. The owner can
   remove a card and keep the link. Cost: the linked site sees the owner's device fetch it once (D9).
+
+F: the webapp makes no cards: its CSP reaches only Flagship's hosts and a site's page can't be read cross-origin, so
+its posts carry their links with `card: null`. It still removes a card made on a phone.
 
 ### 2.6 Formats
 
@@ -242,6 +248,7 @@ write the sentences.
 | `POST /api/accounts/<u>/voici-drafts` | device headers (as `/profile`) | deposit a sealed draft op (§5.2) |
 | `GET /api/accounts/<u>/voici-drafts` | read token | list draft ops |
 | `POST /api/accounts/<u>/voici-drafts/consume` | sensitive key | delete ops an admin device published |
+| B1: `GET /api/voici/pages/<u>/pieces/<sha256>` | none | a piece the stored index lists (the webapp's read) |
 
 Publish checks, in order: size; strict JSON shape; account exists, not banned from pages, page not taken down;
 `signerPub` is the account's sensitive key now; signature; `seq = stored + 1` (else 409 `seq-conflict` with the
@@ -251,6 +258,17 @@ the profile and chunk pieces parse under §2.6; `inboxPub`/`ownerSignPub` well f
 Refusal codes: `malformed`, `too-large`, `not-sensitive-key`, `bad-signature`, `stale`, `seq-conflict`,
 `missing-piece`, `bad-piece`, `taken-down`, `banned`, `rate-limited` (+`retryAfterSec`), `not-found`.
 A: plus `wrong-page` (the index names another pageId than the stored one: a pageId never changes).
+
+F: the wire the webapp sends is the iOS client's (`apps/mobile/shared/Sources/FlagshipCore/VoiciCom.swift`), so `.com`
+serves one shape: a piece upload carries headers `x-flagship-page-id`, `x-flagship-sha256`, `x-flagship-size`,
+`x-flagship-issued-at`, `x-flagship-signer-pub`, `x-flagship-signature` and the bytes as `application/octet-stream`;
+publish is `{index}`; a draft deposit is `{envelope}` with the device headers; the drafts list is `{drafts:[envelope]}`;
+consume is `{opIds, issuedAt, signerPub, signature}`, signed by the sensitive key over
+`flagship/voici-drafts-consume/v1|<u>|<opIds sorted, joined ,>|<issuedAt>` (iOS, Android and the webapp agree). The
+webapp's shell CSP reaches only the control and services apexes, so it reads pieces from `.com`:
+**`GET /api/voici/pages/<u>/pieces/<sha256>`**, no auth, the same bytes as `files.voi.ci/v1/p/<pageId>/<sha256>`,
+immutable, 404 for a piece the account's stored index doesn't list (B1). (The alternative, `https://files.voi.ci` in
+`shellCsp`'s connect-src, widens the shell's CSP for one read.)
 
 ## 4. The voi.ci site
 
@@ -288,6 +306,20 @@ or altered page; the key comes from a different path (`.com`'s account API). It 
 `.com` that lies about the key, or a malicious deploy of the site itself (§12.2), but it makes storage-side tampering
 visible, costs one Ed25519 verify, and is the same check the apps run.
 
+C: as built. The site is `apps/voici-site/src` (plain modules) plus `packages/flagship-web/src`; `node
+apps/voici-site/build.mjs` writes it to `apps/web/public/_voici/<dir>/` (the `.com` Worker has one assets directory,
+apps/web/public) with `MANIFEST.json` (`{v:1, files:{path: sha256}}`; the build id is SHA-256 of that file, `<dir>` its
+first 16 hex), and writes `apps/com/src/voiciSiteBuild.generated.ts` (build id, the listed files, the shell HTML).
+`--check` (and `apps/voici-site/tests/site.test.ts`) rebuild and compare byte for byte. The shell is served from that
+module for every page and `/_/about` (an ASSETS fetch of `/_voici/index.html` would be a 307 under the default
+html_handling); `/_/<dir>/<file>` serves only listed files of this build, immutable, else 404
+(`apps/com/src/voiciSite.ts`). SRI: every script and stylesheet tag, and a `modulepreload` with `integrity` for every
+module (an import map would need an inline script). Images are fetched, hash-checked, then shown from `blob:` URLs.
+`apps/voici-site/dev/serve.mjs` is a local preview with signed sample pages; `dev/screenshots.mjs` renders it in
+Playwright and fails on any console error or CSP violation (usable by G's headless run). Owner/B1: `files.voi.ci`
+(R2 custom domain) needs a CORS rule allowing GET from exactly `https://voi.ci` (gym `https://gym.voi.ci`), or the
+site cannot read the index and pieces.
+
 ### 4.3 What the site shows a visitor
 
 - The page (§2.1), read-only.
@@ -313,6 +345,9 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 No inline script or style (the shell is static; a source-grep test fails on any). Gym: the gym apex names.
 `.com` answers CORS for `https://voi.ci` (exactly that origin, no credentials) on: `GET /api/username/<u>`,
 `GET /api/voici/pages/<u>`, the `/api/voici/web/*` routes (§8.3) and the `/qr-pipe` upgrade.
+
+C: `img-src 'self' blob:` instead of `img-src 'self' https://files.voi.ci`: the page shows only image bytes it already
+checked against the signed index, so it shows them from `blob:` URLs it minted, never straight from files.voi.ci.
 
 ## 5. Publishing from the apps
 
@@ -348,6 +383,9 @@ pushes the account's admin devices a content-free `page-drafts`. All devices rea
 device shows every pending change grayed. After publishing, the admin device calls `consume` with the opIds.
 Images ride as pieces uploaded by the admin device after it opens the draft (a draft carries the re-encoded image
 bytes, at most 150 KiB each).
+
+F: the webapp always deposits a draft in the lane, also after a direct delivery to the admin phone, so every device of
+the account shows it grayed; the admin device's consume clears it (merging a draft twice changes nothing).
 
 ### 5.3 Conflicts
 
@@ -418,6 +456,21 @@ issuedAt = the attestation's; the plaintext is canonical JSON. `renewOfHash` = H
 - Refused for a banned account (`banned`), a banned device (§9.5), over the limits (`first-contact-limit`
   +`retryAfterSec`), or an account younger than its tier allows.
 
+B2: the route is `POST /api/accounts/<u>/messages-attestation` with the device headers (as `/profile`) and body
+`{request, signature, integrity?, previous?}`: `signature` is the same device key over the request's canonical bytes
+(the headers don't cover the body); `integrity` is required when `deviceCheckRef` is `ios`
+(`{platform:"ios", keyId, attestation | assertion, deviceToken}`, base64, exactly one of attestation/assertion) or
+`android` (`{platform:"android", token}`) and absent for `none`; `previous` is the attestation a renewal names
+(`.com` keeps nothing to look it up by): it must hash to `renewOfHash`, carry the same P, be signed by `.com`'s CA key
+and have `expiresAt` at most 7 days past. Answer `{attestation}`. Codes: `malformed` (400), `too-large` (413),
+`not-found` (404), `stale`, `not-authorized`, `bad-renewal`, `banned`, `device-limit`, `unattested-too-new` (403),
+`first-contact-limit` with `limit` and `retryAfterSec` (429; a day is a UTC calendar day), `rate-limited` with
+`retryAfterSec` (429; the unattested enrollment per address, §9.5), `no-abuse-key` (503: no signed abuse key in its
+window). Evidence that fails, or a platform `.com` has no keys for, is not an error: the request is served on the
+unattested tier. `device-limit` is checked only for an account's first attestation; a device's ban bit refuses
+every request. The rule "nothing stored or logged links P to the account" is in `apps/com/src/messagesAttestation.ts`
+and its test reads every D1 table and the log after a run.
+
 ### 6.4 Web delegation: `flagship/web-delegation/v1` (generic primitive)
 
 ```text
@@ -453,6 +506,28 @@ A: B must reach the app before it can sign D, so after the 6-digit code the brow
 `{kind:"flagship/voici-sign-in/v1", pageId, pseudonymPub, attestation, delegation, delegationSig, threadStmt,
 threadSig, threadSeed}` and the delegation must carry the request's `delegatePub` and `nonce`
 (`checkVoiciSignInAnswer`).
+E: the relay forwards only one phone-role frame per session, so the request rides a second leg whose sid both
+sides derive from the X25519 secret; see "E: delivered (Android)" in §14.
+
+F: the pipe, as the webapp (and any app) runs it: the app joins `/qr-pipe/<sid>?role=phone` and sends
+`{kind:"hello", phonePk}`; both sides derive the code and key exactly as device pairing does (`pairingRelay.js`
+`deriveMaterial`: HKDF salt `flagship/qr/v1`, info `flagship/qr/enc/v1` / `flagship/qr/sas/v1`); the browser then
+sends ONE frame the relay hands to the phone as `{kind:"peer-deliver", ciphertext, nonce}` (the request, AES-GCM under
+that key, base64url); the app answers with one `{kind:"deliver", ciphertext, nonce}` and waits for `delivered`. The
+deployed relay refuses browser-sent frames ("browser sends nothing"), so it must pass this one request through for
+`voici-sign-in` sessions (B1/C).
+
+C: the `/qr-pipe` relay is one-way (the browser only listens; the app sends one sealed frame), so the browser cannot
+send the sign-in request inside the pipe. Its two fields ride in the link instead, in the fragment (it names a
+person): `https://<control apex>/voici-sign-in#s=<sid>&k=<browser X25519, b64url>&p=<pageId>&u=<username>&d=<B,
+SEC1 hex>&n=<nonce hex>`. The app forms the request as `{kind, origin: its configured web origin, pageId: p, username:
+u, delegatePub: d, nonce: n}` and answers it as above (the answer is AES-256-GCM under HKDF(X25519, salt
+"flagship/qr/v1", info "flagship/qr/enc/v1"); both sides show `u32(HKDF(..., "flagship/qr/sas/v1", 4)) mod 10^6`).
+`k` binds `d` and `n` exactly as a pipe frame would: the answer is sealed to `k` and the delegation must name `d`,
+`n`. Reader: `parseSignInLink` in `packages/flagship-web/src/signIn.js` (D, E, F parse the same). The browser checks
+the answer's attestation against its own `signedBy` (no CA-key endpoint exists for browsers); `.com` checks the CA
+chain on every send. A relay session expires after 5 min; the browser opens a new one (new QR, same B and nonce)
+until 10 min.
 
 ## 7. The message envelope
 
@@ -510,6 +585,10 @@ Symmetric. The owner's app signs a `voici-reply` with the owner messages signing
 thread statement of that conversation) and the owner inbox key, and posts it to the mailbox. No attestation: the
 reply's key is in the page's signed index. The visitor's browser checks the reply against the verified index's
 `ownerSignPub` for the stated `pageSeq` or later.
+
+C: the browser verifies a reply against the current index's `ownerSignPub` only (R2 keeps only the current index);
+a reply signed under an older inbox epoch is not shown. A visitor's `seq` is the highest of their own messages in the
+fetched thread plus 1 (so two browsers of the same visitor continue one sequence).
 
 ## 8. Delivery
 
@@ -579,10 +658,26 @@ Send checks, cheapest first (filters on the claimed `from` only ever drop): size
 hash, thread statement, envelope by B; for replies the page's ownerSignPub → `(conv, msgId)` unique, `sentAt` fresh →
 store → push. The body is never opened by `.com`.
 
+F: bodies and answers as the webapp and the iOS client use them: send `{envelope, direct}`; the inbox answers
+`{items:[{envelope, storedAt, fetchedAt?, direct}], cursor, blocks:[Ppub], revoked:[delegatePub]}`; block
+`{block, signature}`; report `{report, signature}`; revoke `{revoke, principalPub, signature}`; the state GET answers
+the blob `{version, nonce, ct}` (404 when none) and PUT sends it with the device headers, a conflict answering 409
+`{code:"version-conflict", state}`; `GET /api/users/<u>/device-grants` (read token) answers `{grants:[{grantId,
+username, deviceId, devicePubHex, scopes, issuedAt, expiresAt, signatureHex, ...}]}`, from which a non-admin device
+takes its own grant for a draft's `cred`.
+
 Retention: 180 days from storage (D6); devices keep their own copies. Push: content-free, category `messages`,
 kind `message` (an accepted conversation) or `message-request` (a new one; at most one push per conversation per
 hour), to every device of the owner with a push token; `page-drafts` to admin devices. The APNs text is fixed and
 localized (`pushBridge.ts` `APNS_ALERTS`: "New message").
+
+C: wire shapes flagship-web uses (B1 to match). `POST /api/voici/web/send`: body = the envelope JSON; any 2xx is
+"Sent"; refusals `{error, code, retryAfterSec?}`. `POST /api/voici/web/thread`: body `{conv, since, issuedAt, sig,
+cred}` (sig = B over `flagship/voici-thread-fetch/v1|conv|since|issuedAt`, cred = the message cred); answer `{items:
+[{envelope, storedAt, fetchedAt|null, direct}], next}` (`direct`: it came through the phone; `fetchedAt`: an owner
+device fetched it); codes `revoked`, `bad-delegation`, `bad-attestation` make the site sign out of that page.
+`POST /api/voici/reports` (page): `{kind:"page", username, seq, reason, note, issuedAt, signer: null | {delegation,
+delegationSig, sig}}`. The phone's `POST /api/phone/deliver` answers `{ack}`.
 
 ### 8.4 What `.com` learns (honest)
 
@@ -617,6 +712,8 @@ blocked pseudonym's sends are dropped before any signature check; the browser se
   signed in). `attached` is base64; its seal has purpose `flagship/voici-report-text/v1`, context [conv, msgId],
   senderKeyId SHA-256(raw ownerSignPub).
 - Stored in D1 `voici_reports`; the reporter's IP is not stored (rate limits count it in Durable Objects only).
+- F: the webapp never attaches the text (sealing to the abuse key is not in client code), so its report sheet has no
+  "Include the message text" box; it sends `{report, signature}` with `attached: null`.
 
 ### 9.3 The abuse key, review and bans
 
@@ -653,6 +750,13 @@ blocked pseudonym's sends are dropped before any signature check; the browser se
 New buckets: `voici-send`, `voici-publish`, `voici-piece`, `voici-report`, `voici-thread`, `messages-attest`.
 The 429 carries `retryAfterSec` as today.
 
+B1: also `voici-new-conversation` (subject = pageId, the 200/day), `voici-owner` (inbox, block, drafts, state,
+revoke: 1,000/hour per IP) and `voici-page-read` (300/min per IP); `voici-thread` is 1,000/hour per IP and
+`voici-piece` 600/hour per IP plus 1,000/day per account (no budget may exceed 1,000 or the gym's
+`RATE_LIMIT_SCALE = 10` pushes it past the counter's 10,000 ceiling). The per-conversation caps (3 before a reply, 30
+an hour, 200 a day) and the 50 MiB of pieces a day are D1 reads, not buckets. A visitor's 4th message before a reply
+is refused `awaiting-reply` (429, no `retryAfterSec`); a page over 200 new conversations a day `page-busy`.
+
 ### 9.5 Per-device caps (App Attest, DeviceCheck, Play Integrity)
 
 At Messages enrollment (an account's first attestation request) and on each later request, the app sends:
@@ -679,9 +783,38 @@ identifier, no phone number. Apple and Google learn that the app checked this de
 be at least 7 days old, 1 new recipient a day, and at most 1 such enrollment per IP per day. The webapp can approve a
 voi.ci sign-in under that tier. This keeps the webapp co-equal for everything except speed.
 
+B2: binding the evidence to the request. App Attest: the install's first request sends the attestation object with
+`clientDataHash` = SHA-256 of the request's canonical bytes (that request is the one-time challenge: it is
+device-signed and fresh within 10 minutes, so there is no separate challenge round trip); later requests send an
+assertion whose clientData is those bytes, and `.com` keeps the attested key's public half and counter (keyed by
+`HMAC(VOICI_DEVICE_SECRET, keyId)`, naming no account; needed to verify assertions). `apple_validation_category_01`,
+when present, must be 2 (TestFlight) or 4 (App Store), plus 3 (development signing) when `APPLE_APP_ATTEST_ENV` is
+`development`. Play Integrity: `requestHash` = SHA-256 hex of the request bytes; the verdict must be
+`PLAY_RECOGNIZED` for the package with one of the signing certificate digests, and `MEETS_DEVICE_INTEGRITY`. Bits:
+DeviceCheck bit0 / recall `bitFirst` = enrolled (this month = `last_update_time` / `yyyymmFirst` is the current UTC
+month), bit1 / `bitSecond` = banned. Device recall is a Google beta and an integrity token can write bits for 14 days
+only (so a ban reaches an Android device by a stored token only within 14 days, else on its next contact).
+
 Owner setup: an Apple DeviceCheck key (`.p8`, secrets `APPLE_DEVICECHECK_KEY_ID`, `APPLE_DEVICECHECK_KEY`,
 `APPLE_TEAM_ID`), the App Attest capability on the iOS app ID, a Google Cloud project linked in Play Console with a
 service account for `decodeIntegrityToken` and device recall (`PLAY_INTEGRITY_SA_JSON`), `VOICI_DEVICE_SECRET`.
+
+B2: the abuse key list is `.maintainers/abuse-keys/list.json` `{version:1, entries:[{epoch, xwingPub, notBefore,
+notAfter, signature}]}`, bundled by `.com`, which uses an entry only if its signature verifies under a key that held
+a ca-track mandate in the pinned chain; the newest epoch in its window seals new tags. Made and signed with
+`npm run abuse-key` (signing previews unless `--sign`). Reports: the message report's wire has no username, `.com`
+finds the page by `pageId` and checks the signature against that page's current `ownerSignPub`; it keeps the
+envelope (its attestation carries the tag), and accepts one report per (page, msgId). `POST /api/voici/reports`
+answers CORS for the voi.ci origin (page reports come from the site; §4.4's list gains it). Admin routes
+(`x-admin-secret`): `GET reports[?status=all]`, `GET reports/<id>`, `POST ban {username, reportId, reason}` (the
+report's pseudonym goes into `voici_banned_pseudonyms` under that report id, the device bit is set with the newest
+stored token), `POST unban {username}` (and its pseudonym, and the device bit), `POST dismiss {reportId}`,
+`POST takedown {username, reason}` (repeat until `done: true`: at most 300 pieces purged then deleted per call),
+`POST restore {username}`, `GET stats` (for `npm run ops -- voici`). A takedown also sets `voici_pages.taken_down_at`
+and `takedown_reason`; restore clears them. Gym/config vars: `VOICI_WEB_ORIGIN`, `VOICI_FILES_HOST`,
+`VOICI_FILES_ZONE_ID`. For chunk B1: `isAccountBanned`, `isPseudonymBanned`, `isTakenDown`,
+`deleteVoiciAbuseAccount` (account deletion) and `pruneVoiciAbuse` (the cron) are exported from
+`apps/com/src/voiciAbuse.ts`.
 
 ### 9.6 Takedown
 
@@ -720,6 +853,10 @@ sides have one; signed-in sites merge by delegatePub (newer `at`); pending ops b
 Recovery keeps the UMK, so everything continues. Wipe & restart makes a new UMK: the app publishes a new index with
 `inboxEpoch + 1`; old messages stay unreadable (as for every UMK-sealed thing). A visitor's sign-ins survive their own
 recovery (same UMK).
+
+F: "Rotate inbox key" (Settings → Messages, admin devices) publishes the page with `inboxEpoch + 1` under the same
+UMK. Every epoch's keys derive from the UMK, so the apps open older messages with the older epoch's key: rotating
+loses nothing on the owner's devices.
 
 ### 10.3 Deletion
 
@@ -766,6 +903,13 @@ A fifth tab between Apps and Activity: iOS `bubble.left` (`AppDestination.messag
 ### 11.3 Settings
 
 Settings → Messages: "Websites you're signed in to" (revoke), "Rotate inbox key", "Page and message rules".
+
+F: the webapp: the Messages tab sits between Services and Activity (`views/messages.js`, `views/thread.js`,
+`views/page-editor.js`, `views/voici-sign-in.js`, shell v190). Settings → Messages also has "Approve a voi.ci
+sign-in" (paste the link), and the webapp opens `/voici-sign-in?…` when the open-in-app page hands it over. The service
+worker shows the content-free `messages` push as "New message" (opens the tab) and `page-drafts` as "Changes to your
+page has changes waiting" text B1 chose (opens the editor); it routes `app/messages`, `app/page` and `app/page-editor`.
+Links in the editor reorder with Up and Down rather than by drag.
 
 ### 11.4 Sign-in approval screen (visitor's app)
 
@@ -893,6 +1037,66 @@ routing + namespace rules (`voici.ts`, `usernameClaim.ts`, `voici-name` set); CO
 push categories `messages`, `page-drafts`; cron GC step (`cronPlan.ts`, `cronBudget.test.ts`); CPU budget tests for
 send and publish; rate-limit buckets.
 
+B1: as built. Storage `packages/storage/src/voici.ts` (`storage.voici`, D1 + in-memory, one contract test over both:
+`packages/storage/tests/voiciStorage.test.ts`); handlers `packages/control-plane/src/voiciPages.ts`,
+`voiciMailbox.ts`; the Worker side `apps/com/src/voiciRoutes.ts`, dispatched from `route.ts` after the generic rate
+limiter and B2's `voiciAbuseRoutes.ts`, before the control plane. Everything answers 404 `not-found` and voi.ci keeps
+today's behaviour until `VOICI_ENABLED = "on"` (prod `"off"` in wrangler.toml; the gym `"on"`, with
+`VOICI_WEB_ORIGIN = "https://gym.voi.ci"` and a `gym.voi.ci` custom domain). Wire, as the other chunks asked for it:
+
+- **Piece upload**: headers `x-flagship-page-id`, `x-flagship-issued-at`, `x-flagship-signature`; `x-flagship-sha256`,
+  `x-flagship-size`, `x-flagship-signer-pub` optional (a mismatch is `bad-piece` / `not-sensitive-key`); body the bytes.
+  `.com` hashes the body and checks the signature over what it computed. Answer `{ok, sha256, size}`; re-uploading a
+  stored piece is a no-op. A piece is stored unreferenced until an index lists it.
+- **Piece read**: `GET /api/voici/pages/<u>/pieces/<sha256>`, no auth, immutable, only pieces the stored index lists
+  (404 otherwise, and for a page taken down); content type `image/jpeg` for avatar and card roles, else JSON.
+- **Publish**: body the index or `{index}`; answer `{ok, pageId, seq}`; `409 seq-conflict` carries `index` (the stored
+  one, or null). A publish parses only the JSON pieces it has not accepted in that role before (D1 remembers each
+  piece's role and the image hashes it names), so a new post costs one chunk parse whatever the page's size.
+- **Drafts**: deposit body the envelope or `{envelope}`, with the device headers (the signing device must be the
+  envelope's `from`, its `cred.grant` a live grant of this account under the admin root or the IRK); at most 200
+  pending per account; `page-drafts` push to admin devices on a new op. List answers `{drafts:[envelope]}`. Consume:
+  `{opIds, issuedAt, signerPub?, signature}` (or `{consume:{username, opIds, issuedAt}, signature}`), the bytes
+  `flagship/voici-drafts-consume/v1|<u>|<opIds sorted, joined ,>|<issuedAt>` (`packages/protocol/src/
+  voiciDraftsConsume.ts`), 1 to 200 ids; answer `{ok, removed}`. Unpublished drafts are dropped after 30 days.
+- **Send**: body the envelope or `{envelope, direct}`. Answer `{ok, status:"accepted", msgId, storedAt?}` (no
+  `storedAt` for a blocked or banned sender, whose message is dropped, and for a repeat of a stored msgId, which is
+  how the phone's forward is deduplicated). `direct` only marks the message (no push for it); it lifts no cap. A reply
+  needs an existing conversation (else `not-found`). `.com` checks signatures natively (Ed25519 and P-256 WebCrypto);
+  the verdicts and their order are `checkVoiciMessage`'s, held to the shared vectors by a test.
+- **Accept** (`.com`'s side of §9.4): an `unblock` order on the block route also marks the conversation accepted,
+  which lifts the awaiting-reply cap (`.com` cannot see the Accept in the sealed state blob). The apps send it when the
+  owner taps Accept.
+- **Thread**: body `{conv, since, issuedAt, sig, cred}` (or `{fetch, signature, cred}`); the attestation must still
+  hold (`bad-attestation`), the delegation too (`bad-delegation`), the browser key not revoked (`revoked`). Answer
+  `{items:[{id, envelope, storedAt, fetchedAt, direct}], next, more}`; `since`/`next` are decimal row ids ("" = start).
+- **Inbox**: answer `{pageId, items:[{id, envelope, storedAt, fetchedAt, direct}], cursor, more, blocks:[Ppub],
+  revoked:[delegatePub]}`, at most 200 a call; what it returns is marked delivered.
+- **Revoke**: `{revoke, signature}` with `{delegation, delegationSig}` or `{principalPub}`. With only `principalPub`
+  the page comes from a stored message of that pseudonym signed with that key (D1 keeps each message's browser key
+  for this); without one the key is refused page-less for 30 days.
+- **State**: GET answers the blob `{version, nonce, ct}` or 404 `not-found`; PUT takes the blob (or `{state}`) with
+  the device headers; 409 `version-conflict` carries `state`.
+- **CORS**: exactly `VOICI_WEB_ORIGIN`, no credentials, on the §4.4 routes and `POST /api/voici/reports`; a preflight
+  may ask only for `content-type`. The webapp origin gains `x-flagship-page-id`, `-sha256`, `-size`, `-signer-pub`.
+- **voi.ci host**: a link name or code first (unchanged), then a published page's shell (410 when taken down), `/@u`
+  → 301; the shell and `/_/…` are C's `voiciSite.ts`. Namespace (D2): a link name whose key is a username's is
+  `taken`; no code is minted equal to a username's key; account creation (`POST /api/accounts`, and the older
+  `username/claim` handler) refuses a name whose key is a voi.ci name's (live or in its wait) or any code's, 409
+  `{code:"taken"}`.
+- **Push**: categories `messages` (kinds `message`, `message-request`; a request pushes at most once an hour per
+  conversation) and `page-drafts` (admin devices only), content-free, app links `/app/messages` and
+  `/app/page-editor`; APNs alerts "New message" and "A device on your account has changes waiting to be published
+  on your page." (iOS catalog keys via `scripts/i18n-server.mjs sync`).
+- **Cron**: `voici-gc` runs hourly with `voici-names` (one D1 batch and one R2 delete): pieces unreferenced 30 days
+  (rows first, then their objects, 1,000 a run), mail past 180 days, drafts past 30 days, expired revocations; B2's
+  `pruneVoiciAbuse` rides with it.
+- **Deletion**: account deletion removes the R2 index and pieces (purge with `CLOUDFLARE_PURGE_TOKEN` and
+  `VOICI_FILES_ZONE_ID`), the page, mailbox, blocks, revocations, drafts and state, and B2's rows
+  (`deleteVoiciAbuseAccount`). `removeVoiciPageObjects` in voiciRoutes.ts is the same removal for a takedown.
+- **CA keys** for attestations: the maintainer chain's at `now`, plus `.com`'s own `FLAGSHIP_CA_PRIV_HEX` public key
+  (only when the secret is set), cached a minute per isolate.
+
 ### B2. `.com` attestation, abuse, devices, admin tools — 5 days
 
 `messagesAttestation.ts` handler + counters; abuse key loading and tag sealing; reports, bans, takedown routes
@@ -914,9 +1118,84 @@ Messages tab, thread, editor, preview, image re-encode, link cards, sign-in appr
 App Attest + DeviceCheck, phone endpoint `deliver`/`live` (retire the session code), drafts, push categories, A's
 vectors in Swift tests, mock-gym scenarios (`GymMessages*`). Build and test on the Mac.
 
+D: as built (iOS), and the decisions the spec left open:
+- Wire, as coded against B1/B2 (`shared/Sources/FlagshipCore/VoiciCom.swift`): drafts deposit body = the envelope;
+  drafts list `{drafts:[{opId, envelope, createdAt}]}`; consume `{consume:{username, opIds, issuedAt}, signature}`;
+  piece upload headers `x-flagship-page-id`, `x-flagship-issued-at`, `x-flagship-signature` (body = the piece); inbox
+  `{messages:[{id, envelope, storedAt, direct}], cursor, more, blocks, revoked}` (read until `more` is false); state
+  GET `{state}` / PUT `{state:{version, nonce, ct}}`; send `{envelope, direct}` (the phone's forward is `direct: true`);
+  block `{block, signature}`; attestation as B2's note (integrity omitted for `none`, exactly one of attestation /
+  assertion, `deviceToken`, `previous` on a renewal); `limit` read from `first-contact-limit`.
+- Revoke (§6.4) needs the delegation (B1's handler): only the device that approved the sign-in keeps it, so on another
+  device "Sign out" only drops the site from the state blob and the browser key runs out with its delegation (≤ 30
+  days). B1 may want a P-signed revoke that names only `delegatePub`.
+- Ack `phoneRoutePub` (§8.2) = the route claim's `phoneRoutePub` (the phone's Ed25519 account device key, as
+  `/.well-known/flagship-phone` serves it), not the TLS leaf key. A native sender checks the ack signature and that
+  the signer holds an admin grant (device-grants); URLSession gives no leaf pin, so none.
+- The phone endpoint answers `live` 404 `not-live` and `deliver` 503 `unavailable` while the app holds no Messages keys
+  (locked, no page); 429 `rate-limited` past 8 concurrent or §8.2's per-minute budgets; a blocked sender gets
+  `200 {accepted:true}` with no ack (no oracle).
+- Reports from the app carry `attached: null` (A's ports have no report-text sealing): no "Include the message text".
+- Accept (§11.1) is local (state blob `accepted`); `.com` cannot see it, so its `awaiting-reply` cap lifts only on a
+  reply. B1 to decide whether Accept needs a signed record.
+- A non-admin device's op is shown grayed until: (lane) it left the lane, or (direct) an index with a higher `seq`
+  than at the ack exists.
+- The sign-in link fragment (C's note) is also accepted as a query and as `flagship://voici-sign-in?…` (the gym).
+
 ### E. Android — 8 days
 
 The same in Compose; Play Integrity; Kotlin vectors; emulator mock-gym scenarios; `i18n/android`.
+
+E: delivered (Android). Where the spec was silent, chunk E decided the following; B1/B2/C/D/F should match or say
+otherwise (the Android client is `apps/mobile/android/.../api/VoiciClient.kt`, `core/voici/VoiciCenter.kt`,
+`VoiciOwner.kt`, `VoiciSignIn.kt`):
+
+- **HTTP bodies** (all JSON, refusals `{error, code, retryAfterSec?}`):
+  - `POST /api/voici/pages/<u>/pieces`: body = the piece bytes (`application/json` or `image/jpeg`); headers
+    `x-flagship-page-id`, `x-flagship-piece-sha256`, `x-flagship-piece-size`, `x-flagship-issued-at`,
+    `x-flagship-signer-pub`, `x-flagship-signature` (the §3 upload bytes, sensitive key).
+  - `POST …/publish` `{index}` → `{index}`; 409 `seq-conflict` carries the stored `index`. `GET /api/voici/pages/<u>`
+    → `{index}` or 404.
+  - Drafts: `POST /api/accounts/<u>/voici-drafts` `{envelope}` (device headers); `GET` → `{drafts:[{envelope, at}]}`;
+    `POST …/consume` `{consume:{opIds, issuedAt}, signerPub, signature}` where the signature is the sensitive key's
+    over **`flagship/voici-drafts-consume/v1|<u>|<opIds sorted, joined ,>|<issuedAt>`** (new tag; not in chunk A).
+  - `GET /api/voici/pages/<u>/inbox?since=` → `{items:[{envelope, storedAt, fetched, direct}], cursor, blocks,
+    revoked}`; items hold both directions (visitor messages and every owner device's replies). `cursor` echoes
+    `since` when nothing is new.
+  - `POST /api/voici/web/send` `{envelope, direct?:true}`; `POST …/block` `{block:{pageId, pseudonymPub, op,
+    issuedAt}, signature}`; `POST /api/voici/web/revoke` `{revoke:{delegatePub, issuedAt}, pageId, pseudonymPub,
+    signature}` (P is named so `.com` can check without a lookup); `POST /api/voici/reports`
+    `{report:{kind, pageId, envelope, reason, attached, issuedAt}, signature}`.
+  - `GET /api/accounts/<u>/messages-state` → `{state:{version, nonce, ct}}` or 404; `PUT` `{state}` (device headers);
+    409 `version-conflict` carries the stored `state`.
+  - **Attestation route** (§6.3 named none): `POST /api/accounts/<u>/messages-attestation` with device headers,
+    body `{request:{username, pseudonymPub, renewOfHash, deviceCheckRef, issuedAt}, signature, integrity:
+    {platform:"android", token} | null}` → `{attestation}`. `deviceCheckRef` is `android` only when a Play
+    Integrity token rides along (its `requestHash` = hex SHA-256 of the request's canonical bytes), else `none`.
+- **Sign-in pipe: two legs** (§6.5 assumed the browser could talk on its leg; the relay forwards one phone-role frame
+  per session). Leg 1 = the QR's `s` (voi.ci = `browser`, app = `phone`, hello with its X25519 key, both show the
+  SAS). Leg 2's sid = base64url(HKDF-SHA256(X25519 shared, salt `flagship/qr/v1`, info
+  `flagship/voici-sign-in/return-sid/v1`, 16 bytes)); the app listens there as `browser` *before* its leg-1 hello,
+  voi.ci joins as `phone` and spends its deliver on the sign-in request sealed under the leg-1 key (the QR kEnc);
+  the app delivers the answer on leg 1. The link's params are read from the query or the fragment.
+- **Sign-in times**: the delegation and thread statement are issued 5 minutes back (clock skew between phone,
+  browser and `.com`); the app judges a fresh attestation at its own `issuedAt` when `.com` is ahead by ≤ 10 min.
+  Recommend `.com` backdate attestation `issuedAt` a few minutes too. The app reuses a stored attestation for the
+  page while it has > 7 days left, else asks again with `renewOfHash` (within the 7-day grace).
+- **Phone ack key**: `phoneRoutePub` is the phone's route-claim key (its account device key), not the TLS key, so a
+  native sender checks the ack signature under `phoneRoutePub` and that this key holds an `admin-root` grant with
+  `admin` scope in `/device-grants` (§8.2's TLS-leaf pin is not applied on Android).
+- **Phone deliver verdicts**: a blocked sender gets `200 {accepted:true}` with no ack (no oracle, as `.com`); a
+  repeated msgId 409 `duplicate`; over the caps 413/429; any failed check 403 `{code}` with no ack.
+- **State blob**: a device writes its copy as is (`version + 1`) when `.com` still holds the version it last read,
+  and merges (§10.1) only when another device wrote in between, so a removal (unblock, sign-out, nickname cleared)
+  sticks; a device with no local change adopts `.com`'s copy.
+- **Reports from the app** carry `attached: null`: apps hold no abuse key (chunk A), so Android has no "Include the
+  message text" option.
+- **Rules sheet**: accepted once per device (kept in the device's sealed local copy), before the first publish and
+  the first sign-in approval. Pushes `messages` / `page-drafts` open `/app/messages` / `/app/page-editor`.
+- **Owner setup (Android)**: the Play Integrity Cloud project number is the Gradle property
+  `flagship.playIntegrityProject` (BuildConfig `PLAY_INTEGRITY_PROJECT`); 0 = unattested tier.
 
 ### F. Webapp — 5 days
 

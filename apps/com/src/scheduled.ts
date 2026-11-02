@@ -49,6 +49,8 @@ import { pruneOutboundDaily } from "./outboundHosts.js";
 import { protectedAccountsFrom } from "./prodReap.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { pruneLateLogs, type LateLogBucket } from "./legacyLateLogs.js";
+import { runVoiciGcCron } from "./voiciRoutes.js";
+import type { VoiciBucket } from "@flagship/control-plane";
 
 export interface ScheduledEnv {
   DB?: D1Database;
@@ -108,6 +110,8 @@ export interface ScheduledEnv {
   ADAPTER_COMPLAINT_SALT?: string;
   /** Holds leftover installer log tails (legacyLateLogs.ts), pruned to their TTL here. */
   ISO_TEMP_BUCKET?: LateLogBucket;
+  /** voi.ci pieces (flagship-voici), collected by the voici-gc step. */
+  VOICI?: VoiciBucket;
 }
 
 /**
@@ -167,6 +171,8 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runAdapterInsights(env, now);
     case "voici-names":
       return runVoiciNamesCron(env, now, plan.voiciWindow ?? { start: 0, count: 10 });
+    case "voici-gc":
+      return runVoiciGcCron(env, now);
     case "relay-directory":
       return runRelayDirectoryCron(env as unknown as RelayDirectoryEnv, now);
   }

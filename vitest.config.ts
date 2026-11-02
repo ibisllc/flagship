@@ -8,6 +8,7 @@ export default defineConfig({
       // billing's own CI (.github/workflows/billing.yml) runs them.
       "billing/packages/{metering,store-d1}/tests/**/*.test.ts",
       "apps/web/tests/**/*.test.ts",
+      "apps/voici-site/tests/**/*.test.ts",
       "apps/com/test/**/*.test.ts",
       "apps/boot/test/**/*.test.ts",
       "apps/dns-broker/test/**/*.test.ts",
@@ -24,7 +25,7 @@ export default defineConfig({
         // runs as it ships, like node_modules. Vite's transform made the
         // pure-JS argon2 in it 2.4x slower: ~5 s of CPU instead of ~2 s for
         // the production-cost KDF in keyfile.test.ts's interop gate.
-        external: [/\/apps\/web\/public\/[^/]+\/vendor\//],
+        external: [/\/apps\/web\/public\/[^/]+\/vendor\//, /\/packages\/flagship-web\/src\/proto\/vendor\//],
       },
     },
     environment: "node",

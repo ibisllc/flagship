@@ -2,6 +2,7 @@ import { InMemoryServerShareStorage } from "./serverShares.js";
 import { InMemoryServerOrderStorage } from "./serverOrders.js";
 import { InMemoryServerBootKeyStorage } from "./serverBootKeys.js";
 import { InMemoryPqTrustStorage } from "./pqTrust.js";
+import { InMemoryVoiciStorage } from "./voici.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import type {
   SchemaVersionRecord,
@@ -2482,6 +2483,7 @@ export class InMemoryStorage implements Storage {
   serverOrders = new InMemoryServerOrderStorage();
   serverBootKeys = new InMemoryServerBootKeyStorage();
   pqTrust = new InMemoryPqTrustStorage();
+  voici = new InMemoryVoiciStorage(this.usernames);
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

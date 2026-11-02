@@ -22,7 +22,7 @@
  * visits each user every (users / CT_USERS_PER_TICK) x 20 minutes (about 6 hours
  * at 75 accounts, as before); the re-pair and quarantine ladders, the
  * suggestion queue refill (two candidate names a time), the eviction GC, the
- * custom voi.ci name upkeep and the stale ACME TXT sweep run every hour instead of every ten (their thresholds are hours or days; the
+ * custom voi.ci name upkeep, the voi.ci pages and mailbox collection and the stale ACME TXT sweep run every hour instead of every ten (their thresholds are hours or days; the
  * TXT sweep only removes records older than an hour).
  */
 
@@ -42,6 +42,7 @@ export type CronJobId =
   | "adapter-publish"
   | "adapter-insights"
   | "voici-names"
+  | "voici-gc"
   | "relay-directory";
 
 export interface CronPlan {
@@ -67,8 +68,9 @@ const TEN_MIN_MS = 10 * 60_000;
 const MINOR_GROUPS: CronJobId[][] = [
   ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep"],
   ["suggestions", "eviction-gc"],
-  // Alone: each name reads its account's servers and their heartbeats.
-  ["voici-names"],
+  // voici-names reads each name's account servers and their heartbeats; voici-gc is one D1 batch and one R2 delete:
+  // pieces no index has listed for 30 days, mail past 180 days, old drafts and revocations (voiciRoutes.ts).
+  ["voici-names", "voici-gc"],
 ];
 
 export function cronPlan(cron: string, scheduledTime: number): CronPlan {

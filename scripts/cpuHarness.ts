@@ -42,11 +42,12 @@ import {
   type DeviceCapabilityGrant,
   type Keypair,
 } from "@flagship/protocol";
-import { handleUserStream } from "@flagship/control-plane";
+import { handleUserStream, handleVoiciPieceUpload, type VoiciBucket } from "@flagship/control-plane";
 import { createSqliteD1 } from "../packages/storage/tests/support/sqliteD1.js";
 import { tryControlPlane, type ControlPlaneEnv } from "../apps/com/src/controlPlaneRoutes.js";
 import { route, type RouteEnv } from "../apps/com/src/route.js";
 import { RateLimitCounter } from "../apps/com/src/rateLimitCounter.js";
+import { adminPub, buildPage, caSeed, fakeBucket, irkPub, post, uploadHeaders, USER as VOICI_USER, visitor } from "../packages/control-plane/tests/support/voiciFixture.js";
 
 export const ORIGIN = "https://flagshipserver.com";
 export const WORKERS_FREE_CPU_LIMIT_MS = 10;
@@ -606,8 +607,80 @@ const migrationScenarios: Scenario[] = [
   },
 ];
 
+/** voi.ci: a page owned by "alice" (a second account), the bucket and the switch, once per world. */
+const voiciReady = new WeakSet<World>();
+async function voiciWorld(w: World): Promise<void> {
+  if (voiciReady.has(w)) return;
+  voiciReady.add(w);
+  const env = w.env as unknown as Record<string, unknown>;
+  env.VOICI_ENABLED = "on";
+  env.VOICI = fakeBucket();
+  env.FLAGSHIP_CA_PRIV_HEX = hex(caSeed);
+  await w.seed.usernames.put({ username: VOICI_USER, irkPubHex: irkPub, adminRootPubHex: adminPub, claimedAt: 1 });
+  await voiciPublish(w, 1, 1);
+}
+
+async function voiciUpload(w: World, bytes: Uint8Array, now: number): Promise<void> {
+  const deps = { voici: w.seed.voici, usernames: w.seed.usernames, bucket: (w.env as unknown as { VOICI: VoiciBucket }).VOICI };
+  const res = await handleVoiciPieceUpload(deps, VOICI_USER, uploadHeaders(bytes, now), bytes);
+  if (res.status !== 200) throw new Error(`harness: voi.ci piece upload ${res.status}`);
+}
+
+let voiciSeq = 0;
+/** Seq `seq` of the page with `posts` posts in one chunk: uploads its pieces and returns the publish request. */
+async function voiciPublishRequest(w: World, seq: number, posts: number): Promise<Request> {
+  const now = Date.now();
+  const page = buildPage({ seq, issuedAt: now, posts: [Array.from({ length: posts }, (_, i) => post(i + 1, i === 0))] });
+  for (const bytes of page.pieces.values()) await voiciUpload(w, bytes, now);
+  return new Request(`${ORIGIN}/api/voici/pages/${VOICI_USER}/publish`, { method: "POST", body: JSON.stringify(page.index) });
+}
+async function voiciPublish(w: World, seq: number, posts: number): Promise<void> {
+  const res = await route(await voiciPublishRequest(w, seq, posts), w.env);
+  if (res.status !== 200) throw new Error(`harness: voi.ci publish ${res.status}`);
+  voiciSeq = seq;
+}
+
+let voiciVisitor = 0;
+const voiciScenarios: Scenario[] = [
+  {
+    id: "voici-send",
+    label: "POST /api/voici/web/send (a visitor's first message: attestation, delegation, thread, P-256)",
+    caller: "visitors on voi.ci, per message",
+    expect: [200],
+    world: { withRateLimits: true },
+    prepare: async (w) => {
+      await voiciWorld(w);
+      const now = Date.now();
+      const env = visitor(now, 1 + (voiciVisitor++ % 200)).message(now);
+      return new Request(`${ORIGIN}/api/voici/web/send`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://voi.ci" },
+        body: JSON.stringify(env),
+      });
+    },
+    run: (w, req) => routeAs(w, withIp(req as Request)),
+  },
+  {
+    id: "voici-publish",
+    label: "POST /api/voici/pages/<u>/publish (a new post: one new chunk, the rest remembered)",
+    caller: "an admin device, per publish",
+    expect: [200],
+    world: { withRateLimits: true },
+    prepare: async (w) => {
+      await voiciWorld(w);
+      return voiciPublishRequest(w, voiciSeq + 1, 2 + (voiciSeq % 15));
+    },
+    run: async (w, req) => {
+      const status = await routeAs(w, withIp(req as Request));
+      if (status === 200) voiciSeq++;
+      return status;
+    },
+  },
+];
+
 export const SCENARIOS: Scenario[] = [
   ...migrationScenarios,
+  ...voiciScenarios,
   http("directory", "GET /api/accounts/<u>/directory (Trusted devices)", "apps, on opening Trusted devices", (w) =>
     directoryRequest(w)),
   http("directory-member", "directory read by a non-admin view-directory device", "apps", (w) =>

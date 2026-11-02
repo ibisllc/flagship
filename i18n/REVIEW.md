@@ -19,3 +19,9 @@ translation, keyed identically. `ctx` says where a string appears (file:line, wh
 and `node scripts/i18n-<surface>.mjs build` (`pwa`, `box`, `android`, `ios`, `web`). Mark a string you are unsure about by adding `"…": "…"` to a `review-notes.md` next to the file rather than guessing.
 
 **Do not** translate: brand and protocol names, code, file names, domains, keyboard shortcuts, the contents of `<1>…</1>` that wrap code.
+
+**voi.ci site (`i18n/voici-site`, 2026-11-02, drafted by an agent, needs native review).** 85 strings of the public
+page at voi.ci/<username> (sign-in sheet, thread, report sheet, error states). Keyed by the English sentence like the
+webapp; rebuild with `node apps/voici-site/i18n.mjs build` and check with `node apps/voici-site/i18n.mjs check`.
+Review first: "Messages are private. If someone reports your message, Flagship can see which account sent it.", the
+two "You appear …" lines, and the report reasons (legal meaning of "Illegal content", "Pretending to be someone else").

@@ -72,17 +72,27 @@ export function hexToBytes(h: string): Bytes {
 }
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64_CODES = Uint8Array.from(B64, (c) => c.charCodeAt(0));
+const ASCII = new TextDecoder();
+/** Char code → 6-bit value; "=" (and anything the regex below refuses) reads as 0. */
+const B64_INDEX = (() => {
+  const t = new Uint8Array(128);
+  for (let i = 0; i < B64.length; i++) t[B64.charCodeAt(i)] = i;
+  return t;
+})();
 
 /** Standard base64 with padding. */
 export function b64Encode(b: Bytes): string {
-  let s = "";
+  const out = new Uint8Array(Math.ceil(b.length / 3) * 4);
+  let o = 0;
   for (let i = 0; i < b.length; i += 3) {
     const n = (b[i]! << 16) | ((b[i + 1] ?? 0) << 8) | (b[i + 2] ?? 0);
-    s += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]!;
-    s += i + 1 < b.length ? B64[(n >> 6) & 63]! : "=";
-    s += i + 2 < b.length ? B64[n & 63]! : "=";
+    out[o++] = B64_CODES[(n >> 18) & 63]!;
+    out[o++] = B64_CODES[(n >> 12) & 63]!;
+    out[o++] = i + 1 < b.length ? B64_CODES[(n >> 6) & 63]! : 61;
+    out[o++] = i + 2 < b.length ? B64_CODES[n & 63]! : 61;
   }
-  return s;
+  return ASCII.decode(out);
 }
 
 /** Strict standard base64: padded, canonical (re-encodes to the same string), else null. */
@@ -92,8 +102,8 @@ export function b64Decode(s: unknown): Bytes | null {
   const out = new Uint8Array((s.length / 4) * 3 - pad);
   let o = 0;
   for (let i = 0; i < s.length; i += 4) {
-    const v = [0, 1, 2, 3].map((k) => (s[i + k] === "=" ? 0 : B64.indexOf(s[i + k]!)));
-    const n = (v[0]! << 18) | (v[1]! << 12) | (v[2]! << 6) | v[3]!;
+    const n =
+      (B64_INDEX[s.charCodeAt(i)]! << 18) | (B64_INDEX[s.charCodeAt(i + 1)]! << 12) | (B64_INDEX[s.charCodeAt(i + 2)]! << 6) | B64_INDEX[s.charCodeAt(i + 3)]!;
     if (o < out.length) out[o++] = (n >> 16) & 0xff;
     if (o < out.length) out[o++] = (n >> 8) & 0xff;
     if (o < out.length) out[o++] = n & 0xff;
@@ -103,7 +113,10 @@ export function b64Decode(s: unknown): Bytes | null {
 
 // ── canonical JSON ─────────────────────────────────────────────────────────
 
+const PLAIN = /^[\x20\x21\x23-\x5b\x5d-\x7e]*$/;
+
 function jsonString(s: string): string {
+  if (PLAIN.test(s)) return `"${s}"`;
   let out = '"';
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);

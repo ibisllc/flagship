@@ -32,6 +32,8 @@ export * from "./wipeRestart.js";
 export * from "./webauthnRecovery.js";
 export * from "./passkeyAssertion.js";
 export * from "./voici.js";
+export * from "./voiciPages.js";
+export * from "./voiciMailbox.js";
 export * from "./serviceRename.js";
 export * from "./customDomain.js";
 export * from "./customDomainEntitlement.js";

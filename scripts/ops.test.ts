@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WorkerTail } from "../tools/live-e2e/lib/workerTail.js";
-import { checkHealth, formatDns, formatMesh, meshView, relaysFromDirectory, formatHealth, formatServices, formatSlow, formatWorkers, parseArgs, probeWildcard, rowsFromAnalytics, type DnsLookup, type ServicesStats } from "./ops.js";
+import { checkHealth, formatDns, formatMesh, meshView, relaysFromDirectory, formatHealth, formatServices, formatSlow, formatVoici, formatWorkers, parseArgs, probeWildcard, rowsFromAnalytics, type DnsLookup, type ServicesStats } from "./ops.js";
 
 describe("ops", () => {
   it("reads its arguments", () => {
@@ -130,5 +130,18 @@ describe("ops", () => {
     expect(h).toMatch(/rejected 3 item\(s\) from iad1/);
     expect(h).toMatch(/different directory versions \(6, 7\)/);
     expect(formatMesh([], "x").hints.join(" ")).toMatch(/lists no relay/);
+  });
+
+  it("flags a voi.ci report older than 24 h and a missing or ending abuse key", () => {
+    const now = Date.UTC(2026, 10, 2);
+    const base = { now, enabled: true, openReports: 1, oldestOpenReportAt: now - 3600_000, reportsLast7Days: 2, bans: 0, bannedPseudonyms: 0, takedowns: 0, takedownsPurgePending: 0, enrollments: { ios: 1, android: 2, none: 3 }, newRecipientsToday: 4, abuseKey: { epoch: 2, notAfter: now + 60 * 86_400_000 }, purgeConfigured: true };
+    expect(parseArgs(["voici"]).command).toBe("voici");
+    const calm = formatVoici(base);
+    expect(calm.hints).toEqual([]);
+    expect(calm.lines.join("\n")).toContain("web/unattested 3");
+    const late = formatVoici({ ...base, oldestOpenReportAt: now - 30 * 3600_000, abuseKey: null });
+    expect(late.hints.join(" ")).toMatch(/30 h old/);
+    expect(late.hints.join(" ")).toMatch(/no abuse key/);
+    expect(formatVoici({ ...base, abuseKey: { epoch: 2, notAfter: now + 86_400_000 } }).hints.join(" ")).toMatch(/ends within 14 days/);
   });
 });

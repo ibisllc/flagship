@@ -332,3 +332,42 @@ export function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   for (let i = 0; i < a.length; i++) d |= a[i]! ^ b[i]!;
   return d === 0;
 }
+
+/** The extnValue contents (inside its OCTET STRING) of the extension `oid` in a certificate, or null when absent. */
+export function certificateExtension(der: Uint8Array, oid: string): Uint8Array | null {
+  const top = readTlv(der, 0);
+  if (top.end !== der.length) throw new DerError("trailing bytes");
+  const [tbs] = children(der, expect(top, 0x30, "certificate"));
+  let found: Uint8Array | null = null;
+  for (const part of children(der, expect(tbs, 0x30, "tbs"))) {
+    if (part.tag !== 0xa3) continue;
+    const exts = readTlv(der, part.valueStart, part.end);
+    for (const e of children(der, expect(exts, 0x30, "extensions"))) {
+      const parts = children(der, expect(e, 0x30, "extension"));
+      if (oidOf(der, parts[0]!) !== oid) continue;
+      if (found) throw new DerError("duplicate extension");
+      const v = expect(parts[parts.length - 1], 0x04, "extension value");
+      found = der.slice(v.valueStart, v.end);
+    }
+  }
+  return found;
+}
+
+/** The first OCTET STRING in a DER value, depth first through constructed values. */
+export function firstOctetString(der: Uint8Array): Uint8Array | null {
+  const walk = (start: number, end: number, depth: number): Uint8Array | null => {
+    if (depth > 8) throw new DerError("too deep");
+    let p = start;
+    while (p < end) {
+      const t = readTlv(der, p, end);
+      if (t.tag === 0x04) return der.slice(t.valueStart, t.end);
+      if (t.tag & 0x20) {
+        const inner = walk(t.valueStart, t.end, depth + 1);
+        if (inner) return inner;
+      }
+      p = t.end;
+    }
+    return null;
+  };
+  return walk(0, der.length, 0);
+}

@@ -84,6 +84,8 @@ export interface AccountDeletionDeps {
   serverOrders?: ServerOrderStorage;
   /** voi.ci: the account's custom names enter their wait and its codes are retired (docs/named-links.md). */
   voici?: Pick<VoiciNamesDeps, "voiciLinks" | "voiciNames">;
+  /** voi.ci pages and Messages (docs/voici-and-messages.md §10.3): the page, its pieces, mailbox, drafts and state go. */
+  voiciPages?: { deleteAccount(username: string): Promise<unknown> };
   /** Mailbox the §5 content-wipe order is DEPOSITED into (one row per owned
    *  server), so an online box consumes it on its heartbeat and wipes. Absent
    *  ⇒ the content-wipe is recorded as an audit row only (no box-side delivery).
@@ -298,6 +300,13 @@ async function commitAccountHardDelete(
       await releaseAccountLinks({ ...deps.voici, now: deps.now }, username);
     } catch {
       /* swallow — the account death has already committed */
+    }
+  }
+  if (deps.voiciPages) {
+    try {
+      await deps.voiciPages.deleteAccount(username);
+    } catch {
+      /* swallow — the cron collects what is left */
     }
   }
 

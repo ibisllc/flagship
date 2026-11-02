@@ -107,6 +107,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0121",
   // The relay mesh: the relay log and its triggers, admitted relays, directories, mesh-key epochs.
   "0122",
+  // voi.ci pages and Messages: pages, pieces, the mailbox, blocks, revoked browser keys, drafts, the state blob.
+  "0123",
+  // voi.ci abuse: attestation counters, Messages enrollments, App Attest keys, reports, bans, takedowns.
+  "0124",
 ];
 
 export interface SchemaStatusDeps {

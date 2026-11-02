@@ -12,6 +12,7 @@ import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from
 import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
+import type { VoiciStorage } from "./voici.js";
 import type { ServerBootKeyStorage } from "./serverBootKeys.js";
 import type { PqTrustStorage } from "./pqTrust.js";
 
@@ -1910,6 +1911,8 @@ export interface Storage {
   serverBootKeys: ServerBootKeyStorage;
   /** Architecture v2: hybrid key bindings and assurance policy (migration 0111). */
   pqTrust: PqTrustStorage;
+  /** voi.ci pages and Messages (migration 0123). */
+  voici: VoiciStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────

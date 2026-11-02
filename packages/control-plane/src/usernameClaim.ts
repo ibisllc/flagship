@@ -1,9 +1,10 @@
 import { verifyClaimUsername, type ClaimUsername } from "@flagship/protocol";
-import type { UsernameStorage, UsernameOfferStorage } from "@flagship/storage";
+import type { UsernameStorage, UsernameOfferStorage, VoiciLinkStorage, VoiciNameStorage } from "@flagship/storage";
 import { HEX128, HEX64, hexToBytes, bytesToHex } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
 import { conflict, forbidden, malformed, notFound, ok } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
+import { usernameCollidesWithVoici } from "./voiciPages.js";
 
 /** How long a suggested name stays claimable (docs/username-suggestion-queue.md).
  *  Generous vs. an actual sign-up (seconds–minutes) so a slow one isn't blocked. */
@@ -23,6 +24,9 @@ export interface UsernameClaimDeps {
   bypassOfferGate?: boolean;
   freshnessMs?: number;
   now?: () => number;
+  /** One namespace on voi.ci (docs/voici-and-messages.md §4.1): a name whose key is a link name's or a code's is taken. */
+  voiciLinks?: Pick<VoiciLinkStorage, "get">;
+  voiciNames?: Pick<VoiciNameStorage, "get">;
 }
 
 export interface UsernameClaimBody {
@@ -83,6 +87,12 @@ export async function handleUsernameClaim(
 
   const v = validateUserLabel(r.username);
   if (!v.ok) return malformed(v.reason);
+  if (await usernameCollidesWithVoici(deps, v.label)) {
+    const existing = await deps.storage.get(v.label);
+    if (!existing || existing.irkPubHex.toLowerCase() !== bytesToHex(irkPub).toLowerCase()) {
+      return { status: 409, body: { error: "that name is taken", code: "taken" } };
+    }
+  }
 
   // Roster gate — a username is claimable ONLY if the server recently SUGGESTED
   // it (so the generator's not-claimed + not-.com vetting is what gates claims).

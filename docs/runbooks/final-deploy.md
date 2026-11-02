@@ -79,6 +79,10 @@ The script stops and asks at each of these; nothing else needs you.
 | every release | read `i18n/REVIEW.md` lines (native readers); the voi.ci canonical switch after the gym's named-links group | 11c |
 | every release | App Store Connect and Play Console submissions (iOS, Android, Wear) | 11 |
 | after 0.3 is live | publish the held hall of fame entry (`hof-jay`) | 11b |
+| once a quarter | the Messages abuse key: generate under both YubiKeys, sign on the ca-track YubiKey, commit (`npm run abuse-key`) | 5 |
+| once | `VOICI_DEVICE_SECRET`; Apple App Attest capability + DeviceCheck key; Google Play Integrity service account + device recall beta; the files.voi.ci purge token | 5 |
+| before the voi.ci deploy | `npm run voici-namespace-report`, decide each collision (D2) | 5 |
+| at least daily once Messages is on | `npm run ops -- voici`; act on reports within 24 h (`npm run voici-abuse`) | (outside the script) |
 
 Two things to know before `--phase A`: step 8 (backup prerequisites, runbook step 1b) must be
 done before the `.com` deploy because that deploy removes the Worker's own D1 backup, and the
@@ -472,6 +476,34 @@ seed, `openssl rand -hex 32`; keep an offline copy), `ADAPTER_COMPLAINT_SALT` (`
 it complaints never withdraw anything) and `ADAPTER_REVIEW_ANTHROPIC_KEY` (without it nothing is vetted). Boxes
 turn adapter lookup on only once the key's public half is in `release/adapter-vetting-keys.json`
 (`{pubHex, notBefore, notAfter}`) in an endorsed box release; D1 migration 0113 goes before the `.com` deploy.
+voi.ci pages + Messages, abuse side (`docs/voici-and-messages.md` §9.3, §9.5, §9.6; chunk B2): D1 migration
+`0124_voici_abuse.sql` after 0123, before the `.com` deploy. Everything stays off (404) until `VOICI_ENABLED = "on"`;
+none of the below blocks the deploy, but Messages cannot be turned on without the first two:
+1. **The abuse key** (once a quarter; owner, offline): `npm run abuse-key -- generate --epoch <N> --recipient
+   <YubiKey A age1yubikey1…> --recipient <YubiKey B age1yubikey1…>`, then `npm run abuse-key -- sign --epoch <N>`
+   (a preview) and again with `--sign` on the cold ca-track YubiKey (PIN + touch). Commit
+   `.maintainers/abuse-keys/` (`<N>.age`, `<N>.pub.json`, `list.json`); `.com` bundles the list at its deploy. Without
+   a signed key in its window every attestation answers 503 `no-abuse-key` (`npm run abuse-key -- status`,
+   `npm run ops -- voici`). Destroy `<N>.age` 120 days after its `notAfter`.
+2. **`VOICI_DEVICE_SECRET`** (`openssl rand -hex 32 | wrangler secret put VOICI_DEVICE_SECRET`; a different one on the
+   gym): keys the App Attest key ids `.com` keeps.
+3. **Apple** (iOS device caps): enable the App Attest capability on the `com.flagshipserver.app` App ID; create a
+   DeviceCheck key in Certificates, Identifiers & Profiles → Keys; set `APPLE_DEVICECHECK_KEY` (the `.p8` file's
+   PEM), `APPLE_DEVICECHECK_KEY_ID` and `APPLE_TEAM_ID` as secrets. Gym and development-signed builds: set the var
+   `APPLE_APP_ATTEST_ENV = "development"` there. Optional var `APPLE_BUNDLE_ID` (default `com.flagshipserver.app`).
+4. **Google** (Android device caps): link a Google Cloud project to the app in Play Console (Play Integrity API),
+   enable the Play Integrity API there, create a service account with access to it and a JSON key:
+   `PLAY_INTEGRITY_SA_JSON` (the whole JSON). Device recall is a beta: request it (form linked from
+   developer.android.com/google/play/integrity/device-recall), then turn it on under Protected with Play → Play
+   Integrity API → Change responses. Without recall the device cap is only "meets device integrity" (no per-device
+   month or ban bit). Optional vars `PLAY_INTEGRITY_PACKAGE` (default `com.flagshipserver.app`) and
+   `PLAY_INTEGRITY_CERT_SHA256` (default the `assetlinks.json` fingerprints; must include Play's app-signing key).
+5. **Takedown purges**: `CLOUDFLARE_PURGE_TOKEN` (an API token with Zone → Cache Purge on the zone of `files.voi.ci`)
+   and the var `VOICI_FILES_ZONE_ID`; gym `VOICI_FILES_HOST = "files.gym.voi.ci"` and `VOICI_WEB_ORIGIN =
+   "https://gym.voi.ci"`. Without them a takedown still deletes from R2 but cached pieces stay up to a year.
+6. Before the deploy that ships the voi.ci routing: `npm run voici-namespace-report` (read-only) and decide each
+   collision it lists (D2).
+Missing Apple or Google setup is not an error: those devices fall to the slow tier (§9.5), like the webapp.
 
 ## 6. Gym refresh and live verification (GATE: nothing deploys to prod until this passes)
 
