@@ -115,121 +115,161 @@
     "en": "Your app's answer couldn't be checked. Try again.",
     "ctx": "voici-site/messages.js:83"
   },
+  "Alerts are blocked for voi.ci in this browser's settings.": {
+    "en": "Alerts are blocked for voi.ci in this browser's settings.",
+    "ctx": "voici-site/messages.js:91"
+  },
+  "Allow notifications when your browser asks, to get alerts.": {
+    "en": "Allow notifications when your browser asks, to get alerts.",
+    "ctx": "voici-site/messages.js:93"
+  },
+  "This browser can't show alerts. On an iPhone or iPad, add voi.ci to your Home Screen first.": {
+    "en": "This browser can't show alerts. On an iPhone or iPad, add voi.ci to your Home Screen first.",
+    "ctx": "voici-site/messages.js:95"
+  },
+  "Couldn't turn off alerts. Try again later.": {
+    "en": "Couldn't turn off alerts. Try again later.",
+    "ctx": "voici-site/messages.js:101"
+  },
+  "Couldn't turn on alerts. Try again later.": {
+    "en": "Couldn't turn on alerts. Try again later.",
+    "ctx": "voici-site/messages.js:101"
+  },
   "Delivered to their phone": {
     "en": "Delivered to their phone",
-    "ctx": "voici-site/messages.js:88"
+    "ctx": "voici-site/messages.js:112"
   },
   "Delivered": {
     "en": "Delivered",
-    "ctx": "voici-site/messages.js:88"
+    "ctx": "voici-site/messages.js:112"
   },
   "Sent": {
     "en": "Sent",
-    "ctx": "voici-site/messages.js:88"
+    "ctx": "voici-site/messages.js:112"
   },
   "Sign in with Flagship": {
     "en": "Sign in with Flagship",
-    "ctx": "voici-site/messages.js:101"
+    "ctx": "voici-site/messages.js:125"
   },
   "Open Flagship": {
     "en": "Open Flagship",
-    "ctx": "voici-site/messages.js:104"
+    "ctx": "voici-site/messages.js:128"
   },
   "Waiting for your app…": {
     "en": "Waiting for your app…",
-    "ctx": "voici-site/messages.js:106"
+    "ctx": "voici-site/messages.js:130"
   },
   "Scan with your phone's camera.": {
     "en": "Scan with your phone's camera.",
-    "ctx": "voici-site/messages.js:107"
+    "ctx": "voici-site/messages.js:131"
   },
   "To message {0}, approve this sign-in in your Flagship app.": {
     "en": "To message {0}, approve this sign-in in your Flagship app.",
-    "ctx": "voici-site/messages.js:111"
+    "ctx": "voici-site/messages.js:135"
   },
   "Show a QR code instead": {
     "en": "Show a QR code instead",
-    "ctx": "voici-site/messages.js:113"
+    "ctx": "voici-site/messages.js:137"
   },
   "On this device?": {
     "en": "On this device?",
-    "ctx": "voici-site/messages.js:113"
+    "ctx": "voici-site/messages.js:137"
   },
   "You appear as a visitor with a name made for this page. They never see your username.": {
     "en": "You appear as a visitor with a name made for this page. They never see your username.",
-    "ctx": "voici-site/messages.js:120"
+    "ctx": "voici-site/messages.js:144"
   },
   "Messages are private. If someone reports your message, Flagship can see which account sent it.": {
     "en": "Messages are private. If someone reports your message, Flagship can see which account sent it.",
-    "ctx": "voici-site/messages.js:121"
+    "ctx": "voici-site/messages.js:145"
   },
   "No Flagship app yet?": {
     "en": "No Flagship app yet?",
-    "ctx": "voici-site/messages.js:123"
+    "ctx": "voici-site/messages.js:147"
   },
   "Get Flagship": {
     "en": "Get Flagship",
-    "ctx": "voici-site/messages.js:123"
+    "ctx": "voici-site/messages.js:147"
   },
   "Check that your app shows this code:": {
     "en": "Check that your app shows this code:",
-    "ctx": "voici-site/messages.js:141"
+    "ctx": "voici-site/messages.js:165"
   },
   "Approve in your app.": {
     "en": "Approve in your app.",
-    "ctx": "voici-site/messages.js:145"
+    "ctx": "voici-site/messages.js:169"
   },
   "Start again": {
     "en": "Start again",
-    "ctx": "voici-site/messages.js:154"
+    "ctx": "voici-site/messages.js:178"
   },
   "Conversation": {
     "en": "Conversation",
-    "ctx": "voici-site/messages.js:185"
+    "ctx": "voici-site/messages.js:209"
   },
   "Some messages haven't arrived yet.": {
     "en": "Some messages haven't arrived yet.",
-    "ctx": "voici-site/messages.js:186"
+    "ctx": "voici-site/messages.js:210"
   },
   "Message": {
     "en": "Message",
-    "ctx": "voici-site/messages.js:188"
+    "ctx": "voici-site/messages.js:212"
   },
   "Write a message": {
     "en": "Write a message",
-    "ctx": "voici-site/messages.js:188"
+    "ctx": "voici-site/messages.js:212"
   },
   "Send": {
     "en": "Send",
-    "ctx": "voici-site/messages.js:190"
+    "ctx": "voici-site/messages.js:214"
   },
   "You appear here as {0}. They never see your username.": {
     "en": "You appear here as {0}. They never see your username.",
-    "ctx": "voici-site/messages.js:206"
+    "ctx": "voici-site/messages.js:232"
   },
   "Sign out of this page": {
     "en": "Sign out of this page",
-    "ctx": "voici-site/messages.js:208"
+    "ctx": "voici-site/messages.js:234"
   },
   "Open {0}?": {
     "en": "Open {0}?",
-    "ctx": "voici-site/messages.js:229"
+    "ctx": "voici-site/messages.js:255"
   },
   "Cancel": {
     "en": "Cancel",
-    "ctx": "voici-site/messages.js:235"
+    "ctx": "voici-site/messages.js:261"
   },
   "Open": {
     "en": "Open",
-    "ctx": "voici-site/messages.js:249"
+    "ctx": "voici-site/messages.js:275"
   },
   "Say hello. {0} will see you as {1}.": {
     "en": "Say hello. {0} will see you as {1}.",
-    "ctx": "voici-site/messages.js:259"
+    "ctx": "voici-site/messages.js:285"
+  },
+  "You have a reply on voi.ci.": {
+    "en": "You have a reply on voi.ci.",
+    "ctx": "voici-site/messages.js:321"
+  },
+  "You'll get an alert when they reply.": {
+    "en": "You'll get an alert when they reply.",
+    "ctx": "voici-site/messages.js:339"
+  },
+  "Turn off alerts": {
+    "en": "Turn off alerts",
+    "ctx": "voici-site/messages.js:340"
+  },
+  "Get an alert when they reply": {
+    "en": "Get an alert when they reply",
+    "ctx": "voici-site/messages.js:346"
+  },
+  "The alert only says that they replied, never what they wrote.": {
+    "en": "The alert only says that they replied, never what they wrote.",
+    "ctx": "voici-site/messages.js:347"
   },
   "Your sign-in for this page has ended. Sign in again.": {
     "en": "Your sign-in for this page has ended. Sign in again.",
-    "ctx": "voici-site/messages.js:313"
+    "ctx": "voici-site/messages.js:363"
   },
   "Links": {
     "en": "Links",

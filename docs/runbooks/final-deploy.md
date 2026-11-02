@@ -477,7 +477,8 @@ it complaints never withdraw anything) and `ADAPTER_REVIEW_ANTHROPIC_KEY` (witho
 turn adapter lookup on only once the key's public half is in `release/adapter-vetting-keys.json`
 (`{pubHex, notBefore, notAfter}`) in an endorsed box release; D1 migration 0113 goes before the `.com` deploy.
 voi.ci pages + Messages, abuse side (`docs/voici-and-messages.md` §9.3, §9.5, §9.6; chunk B2): D1 migration
-`0124_voici_abuse.sql` after 0123, before the `.com` deploy. Everything stays off (404) until `VOICI_ENABLED = "on"`;
+`0124_voici_abuse.sql` after 0123, then `0125_voici_alerts.sql` (visitors' opt-in reply alerts; they reuse the
+webapp's `WEBPUSH_VAPID_*` secrets), before the `.com` deploy. Everything stays off (404) until `VOICI_ENABLED = "on"`;
 none of the below blocks the deploy, but Messages cannot be turned on without the first two:
 1. **The abuse key** (once a quarter; owner, offline): `npm run abuse-key -- generate --epoch <N> --recipient
    <YubiKey A age1yubikey1…> --recipient <YubiKey B age1yubikey1…>`, then `npm run abuse-key -- sign --epoch <N>`

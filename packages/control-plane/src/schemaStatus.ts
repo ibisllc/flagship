@@ -111,6 +111,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0123",
   // voi.ci abuse: attestation counters, Messages enrollments, App Attest keys, reports, bans, takedowns.
   "0124",
+  // voi.ci reply alerts: a visitor's opt-in Web Push subscription, bound to one conversation.
+  "0125",
 ];
 
 export interface SchemaStatusDeps {

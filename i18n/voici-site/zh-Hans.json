@@ -83,5 +83,15 @@
   "Too many reports from your network. Try again later.": "来自你所在网络的举报过多。请稍后重试。",
   "Couldn't send the report. Try again.": "无法提交举报。请重试。",
   "Thanks. Flagship will look at this page.": "谢谢。Flagship 会查看此页面。",
-  "Close": "关闭"
+  "Close": "关闭",
+  "Alerts are blocked for voi.ci in this browser's settings.": "此浏览器的设置已阻止 voi.ci 的提醒。",
+  "Allow notifications when your browser asks, to get alerts.": "要接收提醒，请在浏览器询问时允许通知。",
+  "This browser can't show alerts. On an iPhone or iPad, add voi.ci to your Home Screen first.": "此浏览器无法显示提醒。在 iPhone 或 iPad 上，请先将 voi.ci 添加到主屏幕。",
+  "Couldn't turn off alerts. Try again later.": "无法关闭提醒。请稍后再试。",
+  "Couldn't turn on alerts. Try again later.": "无法开启提醒。请稍后再试。",
+  "You have a reply on voi.ci.": "你在 voi.ci 上收到了回复。",
+  "You'll get an alert when they reply.": "对方回复时，你会收到提醒。",
+  "Turn off alerts": "关闭提醒",
+  "Get an alert when they reply": "对方回复时提醒我",
+  "The alert only says that they replied, never what they wrote.": "提醒只会告诉你对方已回复，不会显示回复内容。"
 }

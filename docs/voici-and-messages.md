@@ -674,6 +674,46 @@ device fetched it); codes `revoked`, `bad-delegation`, `bad-attestation` make th
 `POST /api/voici/reports` (page): `{kind:"page", username, seq, reason, note, issuedAt, signer: null | {delegation,
 delegationSig, sig}}`. The phone's `POST /api/phone/deliver` answers `{ack}`.
 
+Alerts: opt-in browser reply alerts (owner decision 2026-11-02; migration **0125** `voici_alerts`; code
+`packages/control-plane/src/voiciAlerts.ts`, `packages/flagship-web/src/alerts.js`, `apps/voici-site/src/sw.js`).
+- **Offer.** Only in the thread view, only once the visitor has a message of their own there: "Get an alert when they
+  reply". Nothing is asked on page load; the permission prompt follows the tap. "Turn off alerts" and "Sign out of
+  this page" delete the row.
+- **Wire.** `GET /api/voici/web/alert-key` answers `{key}`, the webapp's VAPID public key (`.com`'s
+  `WEBPUSH_VAPID_*` / `WEBPUSH_CONTACT` secrets, reused; 503 `unavailable` without them). `POST /api/voici/web/alerts`
+  body `{conv, op:"on"|"off", endpoint, issuedAt, sig, cred, subscription?}`, sig = B (P-256) over
+  `flagship/voici-alerts/v1|<conv>|<op>|<SHA-256 hex of endpoint>|<issuedAt>`; `subscription` (on) =
+  `{endpoint, keys:{p256dh, auth}}` (65-byte P-256 key, 16-byte secret). Answers `{ok, alerts}`; refusals as the thread
+  fetch's plus `bad-endpoint`, `no-conversation` (409), `not-found`. Rate bucket `voici-thread`. CORS as the other
+  `/api/voici/web/*` routes.
+- **Row.** `(conv, SHA-256(endpoint))` → page id, the subscription JSON, the browser key B, createdAt, expiresAt (the
+  delegation's), lastPushedAt. At most 5 browsers per conversation (oldest dropped).
+- **Push.** When an owner reply is stored (B1's reply path; after the answer, `waitUntil`), one atomic UPDATE claims
+  the conversation's unexpired rows unless any was pushed in the last hour, and each gets an RFC 8291-encrypted push of
+  `{"kind":"voici-reply","u":"<page username>"}`. The service worker shows a fixed text the site stored, localized, at
+  subscribe time ("voi.ci" / "You have a reply on voi.ci.") and on a tap opens `https://voi.ci/<u>` (its own origin;
+  `u` must match the username rule). A 404/410 from the push service deletes the row.
+- **Gone.** Off; 404/410; sign-out of that browser key (`/api/voici/web/revoke`, only when the key is proven the
+  pseudonym's); the delegation's expiry and conversations with no mail left (`voici-gc` hourly); a takedown
+  (`removeVoiciPageObjects`, B2's `takedownStep`); account deletion (`deleteAccount`).
+- **Service worker.** `apps/voici-site/src/sw.js` is in the build and its MANIFEST (not modulepreloaded: a classic
+  script); `.com` serves this build's copy at the fixed `https://voi.ci/_/sw.js` (`cache-control: no-cache`, the
+  voi.ci CSP) so the registration and its subscription survive deploys. Scope `/_/alerts/`, where no page lives: it
+  controls no page and has no fetch handler. No `importScripts`, no network use. Registration takes no SRI (the
+  platform has none); the script is the manifest's bytes, and browsers re-check it for updates.
+- **Threat model.** *Someone else's conversation*: conv = H(pageId, P) and the order must be signed by a B that a
+  delegation by that P names, with an attestation in force, inside 10 minutes; another visitor's key, a replayed cred
+  with a different key, an on/off swap or a different endpoint fail the signature (`wrong-conv`, `bad-signature`;
+  tested). *Removing someone's alerts* needs the same. *Content*: the payload is the page's public username only, and
+  it is encrypted to the browser (the push service sees ciphertext and timing); the shown text is fixed. *Linking*:
+  the row names no account; `.com` already knows P wrote to the page, and now also learns a push endpoint for P, which
+  identifies a browser installation to its push vendor, not to `.com`'s account tables; one browser's alerts on two
+  pages share one endpoint, so `.com` could link those two pseudonyms if it compared rows (stated cost, like §8.4;
+  deleted with the alert). *SSRF*: `.com` only POSTs to endpoints on the known push services (FCM, Mozilla, Apple,
+  WNS), https, no port, no credentials. *Flooding*: one push per conversation an hour; a blocked or banned pseudonym is
+  answered "on" and nothing is stored (no oracle). *A malicious voi.ci deploy* (§12.2) could subscribe on the
+  visitor's behalf, which it could equally do by polling the thread; it learns nothing new.
+
 ### 8.4 What `.com` learns (honest)
 
 | Learns | Does not learn |
@@ -947,7 +987,8 @@ report text need native review). `.com` returns codes only. Pushes carry no text
   at all in 0.3.
 - **Spoofing**: bidi controls and zero-width joiners at the edges are refused; the visitor's name is the generated
   one or the owner's nickname, never text the visitor chose.
-- **Flooding**: §9.4 at `.com`, §8.2 on the phone, push at most once per conversation per hour.
+- **Flooding**: §9.4 at `.com`, §8.2 on the phone, push at most once per conversation per hour (the owner's, and the
+  visitor's opt-in reply alerts: §8.3 "Alerts:").
 - **Replay**: msgId uniqueness and the 10-minute window at `.com` and the phone; `seq` on devices.
 
 ### 12.2 A malicious voi.ci deploy (or XSS in it)

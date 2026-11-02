@@ -8,6 +8,7 @@
 //   deliver.js   direct to the owner's phone when it is live, else the `.com` mailbox; acks; the thread fetch
 //   verify.js    verify the admin-signed page index, its pieces and the thread's envelopes BEFORE parsing further
 //   store.js     IndexedDB key-value store (memory fallback)
+//   alerts.js    opt-in reply alerts: Web Push bound to one conversation by a B-signed order
 //   proto/       the protocol port (byte-identical copy of apps/web/public/webapp/lib/voici*.js and its vendored
 //                noble bundle; scripts/sync-protocol.mjs keeps it in step, tests fail on drift)
 //
@@ -19,4 +20,5 @@ export * from "./envelope.js";
 export * from "./deliver.js";
 export * from "./verify.js";
 export * from "./store.js";
+export * from "./alerts.js";
 export * as protocol from "./proto/lib/voiciProtocol.js";

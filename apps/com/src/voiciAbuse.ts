@@ -408,6 +408,8 @@ async function takedownStep(db: D1Database, env: VoiciAbuseEnv, fetchFn: typeof 
       deleted += keys.length;
     }
     if (listed.truncated) return { done: false, deleted, purged };
+    // The page is gone, so are its visitors' reply alerts (migration 0125).
+    await db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(pageId).run();
   }
   await db.prepare("UPDATE voici_takedowns SET purge_pending = 0 WHERE username = ?1").bind(username).run();
   return { done: true, deleted, purged };

@@ -85,6 +85,22 @@ export interface VoiciDraftRecord {
   createdAt: number;
 }
 
+/** A visitor's opt-in reply alert (migration 0125): one browser's Web Push subscription for one conversation. */
+export interface VoiciAlertRecord {
+  conv: string;
+  /** SHA-256 hex of the endpoint URL. */
+  endpointHash: string;
+  pageId: string;
+  /** `{endpoint, keys:{p256dh, auth}}` JSON, the providerToken shape pushBridge's Web Push sender reads. */
+  subscription: string;
+  /** The browser key that turned it on; signing that key out removes the row. */
+  delegatePub: string;
+  createdAt: number;
+  /** The authorising delegation's expiry: the row is neither used nor kept after it. */
+  expiresAt: number;
+  lastPushedAt: number | null;
+}
+
 export interface MessagesStateRecord {
   username: string;
   version: number;
@@ -122,6 +138,8 @@ export interface VoiciStorage {
     messages: number;
     drafts: number;
     revoked: number;
+    /** Reply alerts past their delegation's expiry, or whose conversation has no mail left. */
+    alerts: number;
   }>;
 
   /** False when (conv, msgId) is already stored. */
@@ -160,9 +178,21 @@ export interface VoiciStorage {
   /** Compare-and-set: `version` must be the stored version + 1 (1 when none). */
   putState(username: string, version: number, blob: string, at: number): Promise<boolean>;
 
+  /** Upserts the alert for (conv, endpointHash) (its push mark kept), then keeps only the conversation's newest
+   *  `maxPerConv` rows. */
+  putAlert(rec: Omit<VoiciAlertRecord, "lastPushedAt">, maxPerConv: number): Promise<void>;
+  /** Claims a push for the conversation: when no row of it was pushed after `notAfter`, marks every unexpired row
+   *  pushed at `now` and returns them; else returns none (at most one push per conversation per interval, also under
+   *  concurrent replies). */
+  claimAlertPush(conv: string, now: number, notAfter: number): Promise<{ endpointHash: string; subscription: string }[]>;
+  listAlerts(conv: string): Promise<VoiciAlertRecord[]>;
+  deleteAlert(conv: string, endpointHash: string): Promise<boolean>;
+  deleteAlertsForPage(pageId: string): Promise<number>;
+  deleteAlertsForDelegate(delegatePub: string): Promise<number>;
+
   /** The username whose hyphen-less key is `key` (one namespace with voi.ci names and codes, §4.1). */
   usernameWithKey(key: string): Promise<string | null>;
-  /** Account deletion (§10.3): the page, its mailbox, blocks, revocations, drafts and the state blob go; its pieces
+  /** Account deletion (§10.3): the page, its mailbox, reply alerts, blocks, revocations, drafts and the state blob go; its pieces
    *  are left for the cron to delete (unreferenced at 0). Returns the page id, if there was a page. */
   deleteAccount(username: string): Promise<string | null>;
 }
@@ -405,7 +435,7 @@ export class D1VoiciStorage implements VoiciStorage {
   }
 
   async collect(o: { piecesBefore: number; messagesBefore: number; draftsBefore: number; now: number; limit: number }) {
-    const [p, m, d, r] = await this.db.batch([
+    const [p, m, d, r, a] = await this.db.batch([
       this.deleteUnreferencedStmt(o.piecesBefore, o.limit),
       this.db
         .prepare("DELETE FROM voici_messages WHERE id IN (SELECT id FROM voici_messages WHERE stored_at < ?1 ORDER BY stored_at LIMIT ?2)")
@@ -416,12 +446,19 @@ export class D1VoiciStorage implements VoiciStorage {
       this.db
         .prepare("DELETE FROM voici_revoked_delegates WHERE delegate_pub IN (SELECT delegate_pub FROM voici_revoked_delegates WHERE expires_at <= ?1 LIMIT ?2)")
         .bind(o.now, o.limit),
+      this.db
+        .prepare(
+          "DELETE FROM voici_alerts WHERE rowid IN (SELECT a.rowid FROM voici_alerts a WHERE a.expires_at <= ?1 " +
+            "OR NOT EXISTS (SELECT 1 FROM voici_messages m WHERE m.conv = a.conv) LIMIT ?2)",
+        )
+        .bind(o.now, o.limit),
     ]);
     return {
       pieces: ((p?.results ?? []) as { page_id: string; sha256: string }[]).map((x) => ({ pageId: x.page_id, sha256: x.sha256 })),
       messages: m?.meta.changes ?? 0,
       drafts: d?.meta.changes ?? 0,
       revoked: r?.meta.changes ?? 0,
+      alerts: a?.meta.changes ?? 0,
     };
   }
 
@@ -642,6 +679,78 @@ export class D1VoiciStorage implements VoiciStorage {
     return (res.meta.changes ?? 0) === 1;
   }
 
+  async putAlert(rec: Omit<VoiciAlertRecord, "lastPushedAt">, maxPerConv: number) {
+    await this.db.batch([
+      this.db
+        .prepare(
+          "INSERT INTO voici_alerts (conv, endpoint_hash, page_id, subscription, delegate_pub, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) " +
+            "ON CONFLICT (conv, endpoint_hash) DO UPDATE SET page_id = excluded.page_id, subscription = excluded.subscription, " +
+            "delegate_pub = excluded.delegate_pub, created_at = excluded.created_at, expires_at = excluded.expires_at",
+        )
+        .bind(rec.conv, rec.endpointHash, rec.pageId, rec.subscription, rec.delegatePub, rec.createdAt, rec.expiresAt),
+      this.db
+        .prepare(
+          "DELETE FROM voici_alerts WHERE conv = ?1 AND rowid NOT IN (SELECT rowid FROM voici_alerts WHERE conv = ?1 ORDER BY created_at DESC, rowid DESC LIMIT ?2)",
+        )
+        .bind(rec.conv, maxPerConv),
+    ]);
+  }
+
+  async claimAlertPush(conv: string, now: number, notAfter: number) {
+    // The scalar subquery is not correlated, so SQLite evaluates it once, before any row of this UPDATE changes.
+    const rs = await this.db
+      .prepare(
+        "UPDATE voici_alerts SET last_pushed_at = ?2 WHERE conv = ?1 AND expires_at > ?2 " +
+          "AND (SELECT COUNT(*) FROM voici_alerts WHERE conv = ?1 AND last_pushed_at > ?3) = 0 RETURNING endpoint_hash, subscription",
+      )
+      .bind(conv, now, notAfter)
+      .all<{ endpoint_hash: string; subscription: string }>();
+    return (rs.results ?? []).map((r) => ({ endpointHash: r.endpoint_hash, subscription: r.subscription }));
+  }
+
+  async listAlerts(conv: string) {
+    const rs = await this.db
+      .prepare(
+        "SELECT conv, endpoint_hash, page_id, subscription, delegate_pub, created_at, expires_at, last_pushed_at FROM voici_alerts WHERE conv = ?1 ORDER BY created_at, rowid",
+      )
+      .bind(conv)
+      .all<{
+        conv: string;
+        endpoint_hash: string;
+        page_id: string;
+        subscription: string;
+        delegate_pub: string;
+        created_at: number;
+        expires_at: number;
+        last_pushed_at: number | null;
+      }>();
+    return (rs.results ?? []).map((r) => ({
+      conv: r.conv,
+      endpointHash: r.endpoint_hash,
+      pageId: r.page_id,
+      subscription: r.subscription,
+      delegatePub: r.delegate_pub,
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+      lastPushedAt: r.last_pushed_at ?? null,
+    }));
+  }
+
+  async deleteAlert(conv: string, endpointHash: string) {
+    const res = await this.db.prepare("DELETE FROM voici_alerts WHERE conv = ?1 AND endpoint_hash = ?2").bind(conv, endpointHash).run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async deleteAlertsForPage(pageId: string) {
+    const res = await this.db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(pageId).run();
+    return res.meta.changes ?? 0;
+  }
+
+  async deleteAlertsForDelegate(delegatePub: string) {
+    const res = await this.db.prepare("DELETE FROM voici_alerts WHERE delegate_pub = ?1").bind(delegatePub).run();
+    return res.meta.changes ?? 0;
+  }
+
   async usernameWithKey(key: string) {
     const r = await this.db
       .prepare("SELECT username FROM usernames WHERE replace(username, '-', '') = ?1 LIMIT 1")
@@ -659,6 +768,7 @@ export class D1VoiciStorage implements VoiciStorage {
     if (page) {
       stmts.push(
         this.db.prepare("DELETE FROM voici_messages WHERE page_id = ?1").bind(page.pageId),
+        this.db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_blocks WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_revoked_delegates WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("UPDATE voici_pieces SET unreferenced_at = 0 WHERE page_id = ?1").bind(page.pageId),
@@ -681,6 +791,7 @@ export class InMemoryVoiciStorage implements VoiciStorage {
   private revoked = new Map<string, VoiciRevokedDelegate>();
   private drafts = new Map<string, VoiciDraftRecord>();
   private states = new Map<string, MessagesStateRecord>();
+  private alerts: VoiciAlertRecord[] = [];
 
   constructor(private readonly usernames?: { list(): Promise<{ username: string }[]> }) {}
 
@@ -789,6 +900,7 @@ export class InMemoryVoiciStorage implements VoiciStorage {
       messages: await this.deleteMessagesBefore(o.messagesBefore, o.limit),
       drafts: await this.deleteDraftsBefore(o.draftsBefore, o.limit),
       revoked: await this.deleteExpiredRevoked(o.now, o.limit),
+      alerts: this.collectAlerts(o.now, o.limit),
     };
   }
 
@@ -957,6 +1069,59 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return true;
   }
 
+  private collectAlerts(now: number, limit: number) {
+    const live = new Set(this.messages.map((m) => m.conv));
+    const doomed = new Set(this.alerts.filter((a) => a.expiresAt <= now || !live.has(a.conv)).slice(0, limit));
+    this.alerts = this.alerts.filter((a) => !doomed.has(a));
+    return doomed.size;
+  }
+
+  async putAlert(rec: Omit<VoiciAlertRecord, "lastPushedAt">, maxPerConv: number) {
+    const cur = this.alerts.find((a) => a.conv === rec.conv && a.endpointHash === rec.endpointHash);
+    if (cur) Object.assign(cur, rec);
+    else this.alerts.push({ ...rec, lastPushedAt: null });
+    const mine = this.alerts
+      .map((a, i) => ({ a, i }))
+      .filter((x) => x.a.conv === rec.conv)
+      .sort((x, y) => y.a.createdAt - x.a.createdAt || y.i - x.i);
+    const drop = new Set(mine.slice(Math.max(0, maxPerConv)).map((x) => x.a));
+    this.alerts = this.alerts.filter((a) => !drop.has(a));
+  }
+
+  async claimAlertPush(conv: string, now: number, notAfter: number) {
+    const rows = this.alerts.filter((a) => a.conv === conv);
+    if (rows.some((a) => a.lastPushedAt !== null && a.lastPushedAt > notAfter)) return [];
+    const live = rows.filter((a) => a.expiresAt > now);
+    for (const a of live) a.lastPushedAt = now;
+    return live.map((a) => ({ endpointHash: a.endpointHash, subscription: a.subscription }));
+  }
+
+  async listAlerts(conv: string) {
+    return this.alerts
+      .map((a, i) => ({ a, i }))
+      .filter((x) => x.a.conv === conv)
+      .sort((x, y) => x.a.createdAt - y.a.createdAt || x.i - y.i)
+      .map((x) => ({ ...x.a }));
+  }
+
+  async deleteAlert(conv: string, endpointHash: string) {
+    const n = this.alerts.length;
+    this.alerts = this.alerts.filter((a) => !(a.conv === conv && a.endpointHash === endpointHash));
+    return this.alerts.length < n;
+  }
+
+  async deleteAlertsForPage(pageId: string) {
+    const n = this.alerts.length;
+    this.alerts = this.alerts.filter((a) => a.pageId !== pageId);
+    return n - this.alerts.length;
+  }
+
+  async deleteAlertsForDelegate(delegatePub: string) {
+    const n = this.alerts.length;
+    this.alerts = this.alerts.filter((a) => a.delegatePub !== delegatePub);
+    return n - this.alerts.length;
+  }
+
   async usernameWithKey(key: string) {
     const all = (await this.usernames?.list()) ?? [];
     return all.map((u) => u.username).find((u) => u.replace(/-/g, "") === key) ?? null;
@@ -968,6 +1133,7 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     const page = this.pages.get(username);
     if (!page) return null;
     this.messages = this.messages.filter((m) => m.pageId !== page.pageId);
+    await this.deleteAlertsForPage(page.pageId);
     for (const [k, b] of this.blocks) if (b.pageId === page.pageId) this.blocks.delete(k);
     for (const [k, r] of this.revoked) if (r.pageId === page.pageId) this.revoked.delete(k);
     await this.unreferenceAllPieces(page.pageId, 0);

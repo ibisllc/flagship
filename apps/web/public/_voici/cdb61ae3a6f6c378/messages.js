@@ -84,6 +84,30 @@ function signInRefusal(code) {
   }
 }
 
+/** The sentence for a reply-alert refusal (codes from the browser or `.com`). */
+export function alertsRefusal(code, o = {}) {
+  switch (code) {
+    case "denied":
+      return t("Alerts are blocked for voi.ci in this browser's settings.");
+    case "dismissed":
+      return t("Allow notifications when your browser asks, to get alerts.");
+    case "unsupported":
+      return t("This browser can't show alerts. On an iPhone or iPad, add voi.ci to your Home Screen first.");
+    case "rate-limited":
+      return sendRefusal(code, o);
+    case "unreachable":
+      return t("Couldn't reach Flagship. Check your connection and try again.");
+    default:
+      return o.off ? t("Couldn't turn off alerts. Try again later.") : t("Couldn't turn on alerts. Try again later.");
+  }
+}
+
+/** The site's icon in this build (the shell links it), for the alert. */
+function faviconPath(doc) {
+  const href = doc.querySelector?.('link[rel="icon"]')?.getAttribute("href") ?? "";
+  return /^\/_\/[0-9a-f]{16}\/favicon\.svg$/.test(href) ? href : undefined;
+}
+
 const STATUS_RANK = { sent: 1, delivered: 2, phone: 3 };
 const statusLabel = (s) => (s === "phone" ? t("Delivered to their phone") : s === "delivered" ? t("Delivered") : t("Sent"));
 
@@ -189,6 +213,7 @@ function showThread(ctx, session) {
   const counter = h(doc, "span", { class: "counter", "aria-live": "polite" });
   const sendBtn = h(doc, "button", { class: "btn btn-primary", type: "submit" }, icon(doc, "send"), h(doc, "span", {}, t("Send")));
   const error = h(doc, "p", { class: "form-error", role: "alert", hidden: true });
+  const alertsBox = h(doc, "div", { class: "alerts-row", hidden: true });
   const form = h(doc, "form", { class: "compose", on: { submit: (e) => (e.preventDefault(), send()) } }, area, h(doc, "div", { class: "compose-row" }, counter, sendBtn));
 
   replace(
@@ -198,6 +223,7 @@ function showThread(ctx, session) {
     confirmBar,
     form,
     error,
+    alertsBox,
     h(
       doc,
       "ul",
@@ -285,6 +311,70 @@ function showThread(ctx, session) {
       return s.length > 0 && s[s.length - 1] - s[0] + 1 !== s.length;
     });
     list.scrollTop = list.scrollHeight;
+    renderAlerts();
+  }
+
+  // Reply alerts (§8.3 "Alerts:"): offered only once the visitor has sent a message, and only on a tap.
+  let alertsOn = null;
+  let alertsBusy = false;
+  let alertsNote = "";
+  const alertNotice = () => ({ title: "voi.ci", body: t("You have a reply on voi.ci."), icon: faviconPath(doc) });
+  lib.replyAlertsOn(ctx.store, page.index.pageId).then((on) => {
+    alertsOn = on;
+    renderAlerts();
+    if (on) ctx.store.put(lib.ALERTS_NOTICE_KEY, alertNotice()).catch(() => undefined);
+  });
+
+  function renderAlerts() {
+    const sent = [...items.values()].some((i) => i.mine);
+    if (alertsOn === null || !sent || !lib.replyAlertsSupported(win)) {
+      alertsBox.hidden = true;
+      return;
+    }
+    alertsBox.hidden = false;
+    const note = alertsNote ? h(doc, "p", { class: "form-error", role: "alert" }, alertsNote) : null;
+    if (alertsOn) {
+      replace(
+        alertsBox,
+        h(doc, "p", { class: "alerts-line" }, icon(doc, "bell", "icon icon-sm"), t("You'll get an alert when they reply.")),
+        h(doc, "button", { class: "btn-ghost", type: "button", disabled: alertsBusy, on: { click: turnAlertsOff } }, t("Turn off alerts")),
+        note,
+      );
+    } else {
+      replace(
+        alertsBox,
+        h(doc, "button", { class: "btn btn-secondary", type: "button", disabled: alertsBusy, on: { click: turnAlertsOn } }, icon(doc, "bell"), h(doc, "span", {}, t("Get an alert when they reply"))),
+        h(doc, "p", { class: "fine" }, t("The alert only says that they replied, never what they wrote.")),
+        note,
+      );
+    }
+  }
+
+  async function turnAlertsOn() {
+    if (alertsBusy) return;
+    alertsBusy = true;
+    alertsNote = "";
+    renderAlerts();
+    const r = await lib.enableReplyAlerts({ session, apiBase: cfg.apiBase, store: ctx.store, notice: alertNotice(), win });
+    alertsBusy = false;
+    if (r.ok) alertsOn = true;
+    else if (r.code === "revoked" || r.code === "bad-delegation" || r.code === "bad-attestation") {
+      await lib.signOut(ctx.store, page.index.pageId);
+      return showSignIn(ctx, t("Your sign-in for this page has ended. Sign in again."));
+    } else alertsNote = alertsRefusal(r.code, r);
+    renderAlerts();
+  }
+
+  async function turnAlertsOff() {
+    if (alertsBusy) return;
+    alertsBusy = true;
+    alertsNote = "";
+    renderAlerts();
+    const r = await lib.disableReplyAlerts({ session, apiBase: cfg.apiBase, store: ctx.store, win });
+    alertsBusy = false;
+    if (r.ok) alertsOn = false;
+    else alertsNote = alertsRefusal(r.code, { ...r, off: true });
+    renderAlerts();
   }
 
   function addVerified(raw, meta) {
@@ -375,6 +465,7 @@ function showThread(ctx, session) {
   }
 
   async function signOutHere() {
+    if (alertsOn) await lib.disableReplyAlerts({ session, apiBase: cfg.apiBase, store: ctx.store, win }).catch(() => undefined);
     await lib.signOut(ctx.store, page.index.pageId);
     closeSheet();
   }

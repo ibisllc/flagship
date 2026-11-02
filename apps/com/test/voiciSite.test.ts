@@ -34,4 +34,17 @@ describe("voi.ci site files", () => {
     }
     expect(seen.length).toBe(n);
   });
+
+  it("serves this build's reply-alert service worker at the fixed /_/sw.js, never cached", async () => {
+    expect(VOICI_SITE_FILES.has("sw.js")).toBe(true);
+    const sw = await voiciSiteFile(req("/_/sw.js"), assets, "sw.js", H);
+    expect([sw.status, sw.headers.get("content-type"), sw.headers.get("cache-control"), sw.headers.get("content-security-policy")]).toEqual([
+      200,
+      "text/javascript; charset=utf-8",
+      "no-cache",
+      "default-src 'none'",
+    ]);
+    expect(seen.at(-1)).toBe(`/_voici/${VOICI_SITE_DIR}/sw.js`);
+    expect(VOICI_SITE_SHELL).not.toContain("sw.js");
+  });
 });

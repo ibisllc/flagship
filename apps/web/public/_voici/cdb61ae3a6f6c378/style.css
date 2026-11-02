@@ -1082,6 +1082,30 @@ body.has-sheet {
 .sign-out {
   align-self: flex-start;
 }
+.alerts-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.alerts-row[hidden] {
+  display: none;
+}
+.alerts-row .fine,
+.alerts-row .form-error {
+  flex-basis: 100%;
+}
+.alerts-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-muted);
+}
+.alerts-line .icon {
+  color: var(--graphic);
+}
 .confirm-bar {
   display: grid;
   gap: 6px;

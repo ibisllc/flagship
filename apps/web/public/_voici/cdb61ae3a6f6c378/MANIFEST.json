@@ -5,9 +5,10 @@
   "config.js": "80627ed12eff21ebbcfc5bc043da827b95c44f787cd4530cdc549d9854e0960e",
   "dom.js": "43c9c817d3066563fb5c695a2bac90d6334357a8d2275f763fc27dcadfa30b6c",
   "favicon.svg": "681d17250cf4c5dd68f3122ec6dc9d8aab8c7d3c83e8318561350ded950d6cf2",
+  "flagship-web/alerts.js": "727c5b49f5b42435d33046c572da45d0b9514414f0487417753792cb518771fa",
   "flagship-web/deliver.js": "0fc10bf537e4ebae2b3b76762fc2d271290fa6f22434736269c8b873593a2e57",
   "flagship-web/envelope.js": "a90463eb195d2eca0366624cd65d42ce730213c29218aece8f9ec5bcdf302cc5",
-  "flagship-web/index.js": "d588b6cc079167163d4f3d5515bda8e6285efe065d6b008b50458920993a018c",
+  "flagship-web/index.js": "34cadabd413b7b22df109a7ec3a51b85e2615d1ff83d5c2af1b47dba4ba8d502",
   "flagship-web/pipeCrypto.js": "8ee6c0ae0029ecadc1d63657b01b606809cab4872b7cfe8d0bb527a55b943f83",
   "flagship-web/proto/lib/voiciCore.js": "80d0b17280dc8bf79d886e387ebde89dc8cc8f4004c437fa202706a8615f1206",
   "flagship-web/proto/lib/voiciMessages.js": "d83297c52a30c86baffa27eab7efc0bcde9e454a66935f0d0eaaaf8877fb9a4e",
@@ -21,13 +22,14 @@
   "fonts/Geist-Variable.woff2": "2ffebe993e969069a9789d15164b7715d42491b5835516c5e3b935d5f81b05f1",
   "fonts/GeistMono-Variable.woff2": "afaacc4c5fbba89d2ebf7a02dc4070208540874592a5504d57175782fe893101",
   "i18n.js": "662e2b1032556678de84d9f29d02875b90fea59d4a20e83d80e90e8073bdd05c",
-  "icons.js": "24513fa2a0ee4c6fe488576742d2ff6758aafa35a76286b83912764f0e7646b5",
-  "messages.js": "4fde745830e54e906add015dcda51d918781f23b36db3314987b7767a1f86663",
+  "icons.js": "4d95bac5c3957bfc76312ce8463ea92203326d9e4502458544cbe11de4fcde71",
+  "messages.js": "5176027e47b27f348120967833383f4ffceb78573e4b154dd6b9b2ca0404a84a",
   "page.js": "8a081778bfaa0dcf435af975e9fbdd2a7c2ddf49df11b88daad444b159b49e44",
   "qrEncoder.js": "cfae9ffa8ac1734af8c858ccd2c2c16684e8320434cf3fb461388b860ea4dd11",
   "report.js": "5406c94f1d8c0882cf137c5645dbc57807b16723dabd2134f77786e4ad296ef9",
   "sheet.js": "a875be200121ce81155d5a6ca3a73c933462aa3f751d1ea7069a235d6fbd5736",
-  "strings.js": "7064cd0dacf996c3e83ab1b607fba53a471012d9f4e2a5887ca9d426dfead424",
-  "style.css": "625c9f03e1bc77834c5e22d36ac933a02432a77b26c045a4daec51fb7219d90b"
+  "strings.js": "7b7e71b71aeca5c186fdfde9ecb68242d3cea50d1b3df6941b70162edecfac25",
+  "style.css": "08531a30d52d458cac8cea9acfed4d41ff88d074f7886378d09bae475dbb5ec7",
+  "sw.js": "f17a68d1a61b61b648b7cdb3c9a09ace5503bdf1628af5060cb9453fc529881e"
  }
 }

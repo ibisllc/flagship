@@ -216,4 +216,54 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
       done();
     }
   });
+
+  it("keeps reply alerts per conversation: upsert, newest few, one push claim an hour, and every way out", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      const A = "a".repeat(64);
+      const B = "b".repeat(64);
+      const alert = (conv: string, n: number, over: Partial<{ createdAt: number; expiresAt: number; delegatePub: string; pageId: string }> = {}) => ({
+        conv,
+        endpointHash: H(n),
+        pageId: over.pageId ?? PAGE,
+        subscription: `{"endpoint":"https://fcm.googleapis.com/fcm/send/${n}"}`,
+        delegatePub: over.delegatePub ?? "04" + "cd".repeat(64),
+        createdAt: over.createdAt ?? n,
+        expiresAt: over.expiresAt ?? 10_000,
+      });
+      for (let n = 1; n <= 4; n++) await s.voici.putAlert(alert(A, n), 3);
+      expect((await s.voici.listAlerts(A)).map((r) => r.endpointHash)).toEqual([H(2), H(3), H(4)]);
+      await s.voici.putAlert(alert(A, 2, { createdAt: 9 }), 3);
+      expect((await s.voici.listAlerts(A)).map((r) => [r.endpointHash, r.createdAt])).toEqual([[H(3), 3], [H(4), 4], [H(2), 9]]);
+      await s.voici.putAlert(alert(A, 5, { expiresAt: 50 }), 4);
+      await s.voici.putAlert(alert(B, 1, { delegatePub: "04" + "ef".repeat(64) }), 3);
+
+      const claimed = await s.voici.claimAlertPush(A, 100, 100 - 3600);
+      expect(claimed.map((c) => c.endpointHash).sort()).toEqual([H(2), H(3), H(4)]);
+      expect(await s.voici.claimAlertPush(A, 200, 200 - 3600)).toEqual([]);
+      expect((await s.voici.claimAlertPush(A, 3800, 3800 - 3600)).length).toBe(3);
+      expect((await s.voici.listAlerts(A)).find((r) => r.endpointHash === H(5))?.lastPushedAt).toBeNull();
+      expect((await s.voici.claimAlertPush(B, 100, 100 - 3600)).length).toBe(1);
+
+      expect(await s.voici.deleteAlert(A, H(3))).toBe(true);
+      expect(await s.voici.deleteAlert(A, H(3))).toBe(false);
+      expect(await s.voici.deleteAlertsForDelegate("04" + "ef".repeat(64))).toBe(1);
+      expect(await s.voici.listAlerts(B)).toEqual([]);
+
+      // collected: past the delegation's expiry, or the conversation has no mail left
+      await s.voici.insertMessage(msg(A, "01".repeat(16)));
+      await s.voici.putAlert(alert(B, 2), 3);
+      const gc = await s.voici.collect({ piecesBefore: 0, messagesBefore: 0, draftsBefore: 0, now: 60, limit: 100 });
+      expect(gc.alerts).toBe(2);
+      expect((await s.voici.listAlerts(A)).map((r) => r.endpointHash)).toEqual([H(4), H(2)]);
+      expect(await s.voici.listAlerts(B)).toEqual([]);
+
+      expect(await s.voici.deleteAlertsForPage("11".repeat(16))).toBe(0);
+      await s.voici.publishPage(page(1), 0);
+      expect(await s.voici.deleteAccount("alice")).toBe(PAGE);
+      expect(await s.voici.listAlerts(A)).toEqual([]);
+    } finally {
+      done();
+    }
+  });
 });

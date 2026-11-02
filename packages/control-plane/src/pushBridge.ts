@@ -521,9 +521,35 @@ async function sendWebpush(args: {
   // 201 Created = queued. 410/404 = subscription revoked client-side
   // (caller can prune); otherwise non-2xx is a generic failure.
   if (r.status === 410 || r.status === 404) {
-    throw new Error("webpush 410: subscription gone (prune)");
+    throw new WebPushGoneError();
   }
   if (!r.ok) throw new Error(`webpush ${r.status}: ${await r.text()}`);
+}
+
+class WebPushGoneError extends Error {
+  constructor() {
+    super("webpush 410: subscription gone (prune)");
+  }
+}
+
+export type WebPushOutcome = "sent" | "gone" | "failed";
+
+/**
+ * One Web Push to one subscription (`providerToken` = `{endpoint, keys}` JSON), telling the caller whether the push
+ * service says the subscription is gone (404/410), so it can delete it. voi.ci reply alerts use it
+ * (voiciAlerts.ts); the account push tokens keep `buildPushForwarder`.
+ */
+export function buildWebPushSender(cfg: { webpush: NonNullable<PushBridgeConfig["webpush"]>; fetchImpl?: FetchLike; now?: () => number }) {
+  const fetchImpl = cfg.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const now = cfg.now ?? (() => Date.now());
+  return async (providerToken: string, payloadBytes?: Uint8Array): Promise<WebPushOutcome> => {
+    try {
+      await sendWebpush({ cfg: cfg.webpush, providerToken, ...(payloadBytes ? { payloadBytes } : {}), fetchImpl, now });
+      return "sent";
+    } catch (e) {
+      return e instanceof WebPushGoneError ? "gone" : "failed";
+    }
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────

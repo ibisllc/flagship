@@ -22,7 +22,7 @@ export const REPO = join(here, "..", "..");
 export const OUT = join(REPO, "apps", "web", "public", "_voici");
 export const WORKER_MODULE = join(REPO, "apps", "com", "src", "voiciSiteBuild.generated.ts");
 
-const SITE_FILES = ["app.js", "config.js", "dom.js", "i18n.js", "icons.js", "messages.js", "page.js", "report.js", "sheet.js", "strings.js", "style.css"];
+const SITE_FILES = ["app.js", "config.js", "dom.js", "i18n.js", "icons.js", "messages.js", "page.js", "report.js", "sheet.js", "strings.js", "style.css", "sw.js"];
 const EXTRA = [
   ["qrEncoder.js", "apps/web/public/qrEncoder.js"],
   ["favicon.svg", "apps/web/public/favicon.svg"],
@@ -30,6 +30,7 @@ const EXTRA = [
   ["fonts/GeistMono-Variable.woff2", "apps/web/public/fonts/GeistMono-Variable.woff2"],
 ];
 const FLAGSHIP_WEB = join(REPO, "packages", "flagship-web", "src");
+export const SERVICE_WORKER = "sw.js";
 
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
 const sri = (b) => "sha384-" + createHash("sha384").update(b).digest("base64");
@@ -56,7 +57,8 @@ export function buildSite() {
   const dir = build.slice(0, 16);
   files.set("MANIFEST.json", manifest);
   const base = `/_/${dir}`;
-  const modules = paths.filter((p) => p.endsWith(".js") && p !== "app.js");
+  // sw.js is the reply-alert service worker, a classic script the site registers (served as /_/sw.js), not a module.
+  const modules = paths.filter((p) => p.endsWith(".js") && p !== "app.js" && p !== SERVICE_WORKER);
   const shell =
     "<!doctype html>\n" +
     '<html lang="en" data-theme="classic">\n' +

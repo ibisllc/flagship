@@ -558,6 +558,34 @@ export function signVoiciThreadFetchP256(f: VoiciThreadFetch, privateKey: Bytes)
   return hex(p256.sign(canonicalVoiciThreadFetch(f), privateKey, { lowS: true }));
 }
 
+// ── reply alerts (the "Alerts:" note in docs/voici-and-messages.md §8.3) ───
+
+/**
+ * flagship/voici-alerts/v1|<conv>|<on|off>|<endpointHash>|<issuedAt>, signed by the browser key B (P-256, P1363 hex),
+ * like a thread fetch. endpointHash = SHA-256 hex of the Web Push endpoint URL (UTF-8), so the signature names the one
+ * subscription it turns on or off.
+ */
+export const TAG_VOICI_ALERTS = "flagship/voici-alerts/v1";
+
+export interface VoiciAlertsOrder {
+  conv: string;
+  op: "on" | "off";
+  endpointHash: string;
+  issuedAt: number;
+}
+
+export function canonicalVoiciAlerts(o: VoiciAlertsOrder): Bytes {
+  if (!isLowerHex(o.conv, 32) || (o.op !== "on" && o.op !== "off") || !isLowerHex(o.endpointHash, 32) || !isTime(o.issuedAt)) {
+    throw new Error(`${TAG_VOICI_ALERTS}: bad field`);
+  }
+  return enc([TAG_VOICI_ALERTS, o.conv, o.op, o.endpointHash, String(o.issuedAt)].join("|"));
+}
+
+/** Deterministic P-256 (RFC 6979, low-S): tests; browsers sign with WebCrypto. */
+export function signVoiciAlertsP256(o: VoiciAlertsOrder, privateKey: Bytes): string {
+  return hex(p256.sign(canonicalVoiciAlerts(o), privateKey, { lowS: true }));
+}
+
 export function verifyVoiciThreadFetch(f: VoiciThreadFetch, signature: string, delegatePub: string): boolean {
   try {
     return p256VerifyP1363(signature, canonicalVoiciThreadFetch(f), delegatePub);

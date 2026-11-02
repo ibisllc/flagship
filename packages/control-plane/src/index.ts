@@ -34,6 +34,7 @@ export * from "./passkeyAssertion.js";
 export * from "./voici.js";
 export * from "./voiciPages.js";
 export * from "./voiciMailbox.js";
+export * from "./voiciAlerts.js";
 export * from "./serviceRename.js";
 export * from "./customDomain.js";
 export * from "./customDomainEntitlement.js";

@@ -83,5 +83,15 @@
   "Too many reports from your network. Try again later.": "お使いのネットワークからの報告が多すぎます。後でもう一度お試しください。",
   "Couldn't send the report. Try again.": "報告を送信できませんでした。もう一度お試しください。",
   "Thanks. Flagship will look at this page.": "ありがとうございます。Flagship がこのページを確認します。",
-  "Close": "閉じる"
+  "Close": "閉じる",
+  "Alerts are blocked for voi.ci in this browser's settings.": "このブラウザの設定で voi.ci の通知がブロックされています。",
+  "Allow notifications when your browser asks, to get alerts.": "通知を受け取るには、ブラウザに尋ねられたときに通知を許可してください。",
+  "This browser can't show alerts. On an iPhone or iPad, add voi.ci to your Home Screen first.": "このブラウザでは通知を表示できません。iPhone や iPad では、まず voi.ci をホーム画面に追加してください。",
+  "Couldn't turn off alerts. Try again later.": "通知をオフにできませんでした。しばらくしてからもう一度お試しください。",
+  "Couldn't turn on alerts. Try again later.": "通知をオンにできませんでした。しばらくしてからもう一度お試しください。",
+  "You have a reply on voi.ci.": "voi.ci に返信が届いています。",
+  "You'll get an alert when they reply.": "返信があると通知が届きます。",
+  "Turn off alerts": "通知をオフにする",
+  "Get an alert when they reply": "返信があったら通知する",
+  "The alert only says that they replied, never what they wrote.": "通知には返信があったことだけが表示され、内容は表示されません。"
 }

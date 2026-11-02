@@ -83,5 +83,15 @@
   "Too many reports from your network. Try again later.": "Demasiadas denuncias desde tu red. Vuelve a intentarlo más tarde.",
   "Couldn't send the report. Try again.": "No se ha podido enviar la denuncia. Inténtalo de nuevo.",
   "Thanks. Flagship will look at this page.": "Gracias. Flagship revisará esta página.",
-  "Close": "Cerrar"
+  "Close": "Cerrar",
+  "Alerts are blocked for voi.ci in this browser's settings.": "Las alertas de voi.ci están bloqueadas en los ajustes de este navegador.",
+  "Allow notifications when your browser asks, to get alerts.": "Para recibir alertas, permite las notificaciones cuando tu navegador lo pregunte.",
+  "This browser can't show alerts. On an iPhone or iPad, add voi.ci to your Home Screen first.": "Este navegador no puede mostrar alertas. En un iPhone o iPad, añade primero voi.ci a tu pantalla de inicio.",
+  "Couldn't turn off alerts. Try again later.": "No se han podido desactivar las alertas. Vuelve a intentarlo más tarde.",
+  "Couldn't turn on alerts. Try again later.": "No se han podido activar las alertas. Vuelve a intentarlo más tarde.",
+  "You have a reply on voi.ci.": "Tienes una respuesta en voi.ci.",
+  "You'll get an alert when they reply.": "Recibirás una alerta cuando te responda.",
+  "Turn off alerts": "Desactivar alertas",
+  "Get an alert when they reply": "Recibir una alerta cuando responda",
+  "The alert only says that they replied, never what they wrote.": "La alerta solo dice que ha respondido, nunca lo que ha escrito."
 }

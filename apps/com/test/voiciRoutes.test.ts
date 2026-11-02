@@ -3,11 +3,12 @@
  * exactly the voi.ci origin, the voi.ci host's page shells and a publish and a message end to end over the real D1
  * adapter on SQLite.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { D1Database } from "@flagship/storage";
 import { D1Storage } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { adminPub, buildPage, caSeed, fakeBucket, hex, irkPub, uploadHeaders, USER, visitor } from "../../../packages/control-plane/tests/support/voiciFixture.js";
+import { sha256Hex, signVoiciAlertsP256 } from "@flagship/protocol";
 import { route, type RouteEnv } from "../src/route.js";
 import { isVoiciApiPath } from "../src/voiciRoutes.js";
 import { endpointFor } from "../src/rateLimit.js";
@@ -156,6 +157,57 @@ describe("voi.ci routes", () => {
       const rows = await w.seed.voici.listInbox(env.audience, 0, 10);
       expect(rows.map((r) => r.msgId)).toEqual([env.msgId]);
     } finally {
+      w.close();
+    }
+  });
+
+  it("turn reply alerts on for the visitor's own conversation and push once after the owner's reply", async () => {
+    const w = await world();
+    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const pkcs8 = Buffer.from(await crypto.subtle.exportKey("pkcs8", kp.privateKey)).toString("base64");
+    const vapidPub = Buffer.from(await crypto.subtle.exportKey("raw", kp.publicKey)).toString("base64url");
+    const ua = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    const p256dh = Buffer.from(await crypto.subtle.exportKey("raw", ua.publicKey)).toString("base64url");
+    Object.assign(w.env as unknown as Record<string, string>, {
+      WEBPUSH_VAPID_PRIVATE_KEY_PEM: `-----BEGIN PRIVATE KEY-----\n${pkcs8}\n-----END PRIVATE KEY-----\n`,
+      WEBPUSH_VAPID_PUBLIC_KEY_B64URL: vapidPub,
+      WEBPUSH_CONTACT: "mailto:test@example.invalid",
+    });
+    const realFetch = globalThis.fetch;
+    const pushed: { url: string; headers: Record<string, string> }[] = [];
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (!url.startsWith("https://fcm.googleapis.com/")) return realFetch(input, init);
+      pushed.push({ url, headers: init?.headers as Record<string, string> });
+      return new Response(null, { status: 201 });
+    });
+    const jobs: Promise<unknown>[] = [];
+    const call = (url: string, init: RequestInit = {}) => route(new Request(url, init), w.env, { waitUntil: (p: Promise<unknown>) => void jobs.push(p) });
+    try {
+      const now = Date.now();
+      await publishPage(w, now);
+      const key = await call("https://flagshipserver.com/api/voici/web/alert-key", { headers: { origin: "https://voi.ci" } });
+      expect([key.status, key.headers.get("access-control-allow-origin"), await key.json()]).toEqual([200, "https://voi.ci", { key: vapidPub }]);
+      const v = visitor(now);
+      const endpoint = "https://fcm.googleapis.com/fcm/send/visitor-1";
+      const order = { conv: v.conv, op: "on" as const, endpointHash: sha256Hex(endpoint), issuedAt: now };
+      const body = { ...order, endpoint, sig: signVoiciAlertsP256(order, v.browserPriv), cred: v.cred, subscription: { endpoint, keys: { p256dh, auth: "AAAAAAAAAAAAAAAAAAAAAA" } } };
+      delete (body as { endpointHash?: string }).endpointHash;
+      const post = (b: unknown) =>
+        call("https://flagshipserver.com/api/voici/web/alerts", { method: "POST", headers: { origin: "https://voi.ci", "content-type": "application/json" }, body: JSON.stringify(b) });
+      expect(await (await post(body)).json()).toMatchObject({ code: "no-conversation" });
+      await call("https://flagshipserver.com/api/voici/web/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(v.message(now)) });
+      const on = await post(body);
+      expect([on.status, on.headers.get("access-control-allow-origin"), await on.json()]).toEqual([200, "https://voi.ci", { ok: true, alerts: "on" }]);
+      for (const [i, msgId] of ["aa".repeat(16), "ab".repeat(16)].entries()) {
+        const r = await call("https://flagshipserver.com/api/voici/web/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(v.reply(now + i, msgId)) });
+        expect(r.status).toBe(200);
+        await Promise.all(jobs.splice(0));
+      }
+      expect(pushed.map((p) => [p.url, p.headers["content-encoding"]])).toEqual([[endpoint, "aes128gcm"]]);
+      expect(pushed[0]!.headers.authorization).toMatch(new RegExp(`^vapid t=.+, k=${vapidPub}$`));
+    } finally {
+      spy.mockRestore();
       w.close();
     }
   });

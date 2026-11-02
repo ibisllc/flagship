@@ -31,7 +31,9 @@ describe("voi.ci build", () => {
     expect(shell).not.toMatch(/\sstyle=/);
     expect(shell).not.toMatch(/\son[a-z]+=/i);
     const sri = (p: string) => "sha384-" + createHash("sha384").update(b.files.get(p)!).digest("base64");
-    const js = [...b.files.keys()].filter((p) => p.endsWith(".js"));
+    const js = [...b.files.keys()].filter((p) => p.endsWith(".js") && p !== "sw.js");
+    expect(b.files.has("sw.js")).toBe(true);
+    expect(shell).not.toContain("sw.js");
     for (const p of js) {
       const tag = p === "app.js" ? `<script type="module" src="/_/${b.dir}/app.js" integrity="${sri(p)}">` : `<link rel="modulepreload" href="/_/${b.dir}/${p}" integrity="${sri(p)}">`;
       expect(shell, p).toContain(tag);

@@ -6,15 +6,20 @@
  * then the switch). Chunk B2's routes (attestations, reports, bans, takedowns) are voiciAbuseRoutes.ts, dispatched
  * just before these; its ban checks and account cleanup (voiciAbuse.ts) are called from here.
  *
+ * Reply alerts (§8.3 "Alerts:", voiciAlerts.ts): `GET /api/voici/web/alert-key`, `POST /api/voici/web/alerts`, and a
+ * content-free Web Push after an owner's reply is stored, sent after the answer (waitUntil) with the webapp's VAPID keys.
+ *
  * CORS: exactly the voi.ci origin (`VOICI_WEB_ORIGIN`, gym "https://gym.voi.ci"), no credentials, on
  * `GET /api/username/<u>`, `GET /api/voici/pages/<u>`, `/api/voici/web/*` and `POST /api/voici/reports` (§4.4). The `/qr-pipe` upgrade is a
  * WebSocket and needs none.
  */
 import {
   buildVoiciPush,
+  buildWebPushSender,
   caKeypairFromEnv,
   handleMessagesStateGet,
   handleMessagesStatePut,
+  handleVoiciAlerts,
   handleVoiciBlock,
   handleVoiciDraftConsume,
   handleVoiciDraftDeposit,
@@ -28,6 +33,7 @@ import {
   handleVoiciThread,
   resolveVoiciPagePath,
   runVoiciGc,
+  sendVoiciReplyAlerts,
   voiciIndexKey,
   voiciListedPiece,
   voiciPieceKey,
@@ -60,6 +66,10 @@ export interface VoiciEnv extends RateLimitEnv {
   SERVICES_APEX?: string;
   ACCOUNT_READ_TOKEN_SECRET?: string;
   FLAGSHIP_CA_PRIV_HEX?: string;
+  /** The webapp's Web Push (VAPID) keys, reused for voi.ci reply alerts (pushBridge.ts). */
+  WEBPUSH_VAPID_PRIVATE_KEY_PEM?: string;
+  WEBPUSH_VAPID_PUBLIC_KEY_B64URL?: string;
+  WEBPUSH_CONTACT?: string;
   ASSETS?: { fetch(req: Request): Promise<Response> };
 }
 
@@ -190,10 +200,16 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
   let m: RegExpMatchArray | null;
 
   if (path.startsWith("/api/voici/web/")) {
+    if (path === "/api/voici/web/alert-key" && method === "GET") {
+      const key = env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL;
+      if (!key || !webPushSender(env)) return toResponse(voiciRefusal(503, "unavailable"));
+      return new Response(JSON.stringify({ key }), { headers: { "content-type": "application/json", "cache-control": "public, max-age=3600" } });
+    }
     if (method !== "POST") return notFound();
     const origin = voiciWebOrigin(env);
     if (path === "/api/voici/web/send") {
       const forwarder = buildOptionalPushForwarder(env as unknown as ControlPlaneEnv);
+      const sender = webPushSender(env);
       const text = await request.text();
       return toResponse(
         await handleVoiciSend(
@@ -204,6 +220,15 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
             limitSend: () => limited(env, "voici-send", request, undefined, ctx),
             limitNewConversation: (pageId) => limited(env, "voici-new-conversation", request, pageId, ctx),
             isPseudonymBanned: (p) => isPseudonymBanned(db, p),
+            ...(sender
+              ? {
+                  replyStored: (username: string, conv: string) => {
+                    const job = sendVoiciReplyAlerts({ voici: storage.voici, send: sender }, username, conv).catch(() => undefined);
+                    if (ctx) ctx.waitUntil(job);
+                    else return job;
+                  },
+                }
+              : {}),
             ...(forwarder
               ? {
                   push: buildVoiciPush({
@@ -218,6 +243,14 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
           },
           text,
         ),
+      );
+    }
+    if (path === "/api/voici/web/alerts") {
+      const wait = await limited(env, "voici-thread", request, undefined, ctx);
+      if (wait !== null) return tooMany(wait);
+      if (!webPushSender(env)) return toResponse(voiciRefusal(503, "unavailable"));
+      return toResponse(
+        await handleVoiciAlerts({ voici: storage.voici, origin, caKeys: (t: number) => caKeys(env, t), isPseudonymBanned: (p) => isPseudonymBanned(db, p) }, await readJson(request)),
       );
     }
     if (path === "/api/voici/web/thread" || path === "/api/voici/web/revoke") {
@@ -332,6 +365,14 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
   return notFound();
 }
 
+/** The one-subscription Web Push sender, when the Worker holds the VAPID keys (else reply alerts are off). */
+function webPushSender(env: VoiciEnv) {
+  if (!env.WEBPUSH_VAPID_PRIVATE_KEY_PEM || !env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL || !env.WEBPUSH_CONTACT) return null;
+  return buildWebPushSender({
+    webpush: { vapidPrivateKeyPem: env.WEBPUSH_VAPID_PRIVATE_KEY_PEM, vapidPublicKeyB64Url: env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL, contact: env.WEBPUSH_CONTACT },
+  });
+}
+
 function ownerDeps(env: VoiciEnv, storage: D1Storage) {
   const nonces = new D1NonceStore(env.DB!);
   return {
@@ -437,13 +478,14 @@ async function purgeFiles(env: VoiciEnv, paths: string[]): Promise<void> {
 
 /**
  * Takes a page off voi.ci now (chunk B2's takedown, and account deletion): the R2 index and every piece of the page
- * are deleted and purged from files.voi.ci; the D1 piece rows are left marked for the cron.
+ * are deleted and purged from files.voi.ci; the D1 piece rows are left marked for the cron; its visitors' reply
+ * alerts are deleted.
  */
 export async function removeVoiciPageObjects(env: VoiciEnv, storage: Pick<D1Storage, "voici">, username: string, pageId: string): Promise<void> {
   const pieces = await storage.voici.listPagePieces(pageId);
   const keys = [voiciIndexKey(username), ...pieces.map((p) => voiciPieceKey(pageId, p.sha256))];
   if (env.VOICI) for (let i = 0; i < keys.length; i += 1000) await env.VOICI.delete(keys.slice(i, i + 1000));
-  await storage.voici.unreferenceAllPieces(pageId, 0);
+  await Promise.all([storage.voici.unreferenceAllPieces(pageId, 0), storage.voici.deleteAlertsForPage(pageId)]);
   await purgeFiles(env, keys);
 }
 

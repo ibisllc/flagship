@@ -45,6 +45,7 @@ import {
   type Bytes,
   type VoiciCheckRefusal,
   type VoiciMessageCred,
+  type WebDelegation,
   type WebEnvelope,
 } from "@flagship/protocol";
 import type { DeviceCapabilityGrantStorage, PushTokenStorage, UsernameStorage, VoiciStorage } from "@flagship/storage";
@@ -264,6 +265,9 @@ export interface VoiciMailboxDeps {
   limitSend?: () => Promise<number | null>;
   limitNewConversation?: (pageId: string) => Promise<number | null>;
   push?: VoiciPush;
+  /** A reply was stored in `conv`: the visitor's opt-in reply alerts (voiciAlerts.ts). The Worker runs it after the
+   *  answer (waitUntil), so it never delays or fails the send. */
+  replyStored?: (pageUsername: string, conv: string) => void | Promise<unknown>;
   now?: () => number;
 }
 
@@ -410,6 +414,7 @@ async function sendReply(deps: VoiciMailboxDeps, body: SendBody, envBytes: numbe
     pushed: false,
     storedAt: now,
   });
+  if (stored.ok && deps.replyStored) await deps.replyStored(page.username, env.conv);
   return accepted(env.msgId, stored.ok ? now : null);
 }
 
@@ -443,13 +448,49 @@ const wireMessage = (m: { id: number; envelope: string; storedAt: number; fetche
 });
 
 /**
+ * The browser key B's authority over one conversation, as a thread fetch proves it (and a reply-alert order, see
+ * voiciAlerts.ts): `issuedAt` within the send window; cred's attestation still holds (when CA keys are given); its
+ * delegation (by P, for voi.ci, not expired) binds B to P; `conv` is P's conversation with the delegation's page;
+ * `sig` is B's P-256 signature over `bytes`. Refusals are `.com` answers. The caller checks B is not signed out
+ * (`voici.isRevoked(delegation.delegatePub)`, refusal `revoked`), alongside its own read so they leave as one batch.
+ */
+export async function authorizeBrowserKey(
+  deps: VoiciThreadDeps,
+  o: { conv: string; issuedAt: number; sig: unknown; cred: Record<string, unknown>; bytes: () => Bytes },
+): Promise<{ ok: true; delegation: WebDelegation } | { ok: false; response: HandlerResponseWithHeaders }> {
+  const now = nowOf(deps);
+  const refuse = (status: number, code: string) => ({ ok: false as const, response: voiciRefusal(status, code) });
+  if (typeof o.sig !== "string") return refuse(400, "malformed");
+  const d = parseWebDelegation(o.cred.delegation);
+  if (!d || typeof o.cred.delegationSig !== "string") return refuse(400, "malformed");
+  if (Math.abs(now - o.issuedAt) > VOICI_SEND_SKEW_MS) return refuse(403, "stale");
+  await warmCred(o.cred);
+  let notAfter: number | undefined;
+  if (deps.caKeys) {
+    const att = checkMessagesKeyAttestation(o.cred.attestation, { caKeys: deps.caKeys(now), now, pseudonymPub: d.principalPub });
+    if (!att.ok) return refuse(403, "bad-attestation");
+    notAfter = att.attestation.expiresAt;
+  }
+  const del = checkWebDelegation(d, o.cred.delegationSig, {
+    scope: "voici-messages",
+    origin: deps.origin,
+    audience: d.audience,
+    principalPub: d.principalPub,
+    now,
+    ...(notAfter !== undefined ? { notAfter } : {}),
+  });
+  if (!del.ok) return refuse(403, "bad-delegation");
+  if (!/^[0-9a-f]{32}$/.test(d.audience) || o.conv !== voiciConv(d.audience, d.principalPub)) return refuse(403, "wrong-conv");
+  if (!(await p256VerifyFast(o.sig, o.bytes(), d.delegatePub))) return refuse(403, "bad-signature");
+  return { ok: true, delegation: d };
+}
+
+/**
  * Body {conv, since, issuedAt, sig, cred} (also {fetch:{conv, since, issuedAt}, signature, cred}): the browser key B
- * signs the fetch; cred is the message cred, whose attestation must still hold and whose delegation (by P, for voi.ci,
- * not revoked, not expired) binds B to P; conv must be P's conversation with the delegation's page. Answer
- * {items:[{id, envelope, storedAt, fetchedAt, direct}], next, more}: `next` is the cursor for the following call.
+ * signs the fetch (`authorizeBrowserKey`). Answer {items:[{id, envelope, storedAt, fetchedAt, direct}], next, more}:
+ * `next` is the cursor for the following call.
  */
 export async function handleVoiciThread(deps: VoiciThreadDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
-  const now = nowOf(deps);
   const b = (body ?? {}) as Record<string, unknown>;
   const f = (b.fetch && typeof b.fetch === "object" ? b.fetch : b) as { conv?: unknown; since?: unknown; issuedAt?: unknown };
   const sig = b.fetch ? b.signature : b.sig;
@@ -467,29 +508,10 @@ export async function handleVoiciThread(deps: VoiciThreadDeps, body: unknown): P
   }
   const since = cursorId(f.since);
   if (since < 0) return voiciRefusal(400, "malformed");
-  const d = parseWebDelegation(cred.delegation);
-  if (!d || typeof cred.delegationSig !== "string") return voiciRefusal(400, "malformed");
-  if (Math.abs(now - f.issuedAt) > VOICI_SEND_SKEW_MS) return voiciRefusal(403, "stale");
-  await warmCred(cred);
-  let notAfter: number | undefined;
-  if (deps.caKeys) {
-    const att = checkMessagesKeyAttestation(cred.attestation, { caKeys: deps.caKeys(now), now, pseudonymPub: d.principalPub });
-    if (!att.ok) return voiciRefusal(403, "bad-attestation");
-    notAfter = att.attestation.expiresAt;
-  }
-  const del = checkWebDelegation(d, cred.delegationSig, {
-    scope: "voici-messages",
-    origin: deps.origin,
-    audience: d.audience,
-    principalPub: d.principalPub,
-    now,
-    ...(notAfter !== undefined ? { notAfter } : {}),
-  });
-  if (!del.ok) return voiciRefusal(403, "bad-delegation");
-  if (!/^[0-9a-f]{32}$/.test(d.audience) || f.conv !== voiciConv(d.audience, d.principalPub)) return voiciRefusal(403, "wrong-conv");
   const fetch = { conv: f.conv, since: f.since, issuedAt: f.issuedAt };
-  if (!(await p256VerifyFast(sig, canonicalVoiciThreadFetch(fetch), d.delegatePub))) return voiciRefusal(403, "bad-signature");
-  const [revoked, rows] = await Promise.all([deps.voici.isRevoked(d.delegatePub, now), deps.voici.listThread(f.conv, since, VOICI_FETCH_LIMIT + 1)]);
+  const auth = await authorizeBrowserKey(deps, { conv: f.conv, issuedAt: f.issuedAt, sig, cred, bytes: () => canonicalVoiciThreadFetch(fetch) });
+  if (!auth.ok) return auth.response;
+  const [revoked, rows] = await Promise.all([deps.voici.isRevoked(auth.delegation.delegatePub, nowOf(deps)), deps.voici.listThread(f.conv, since, VOICI_FETCH_LIMIT + 1)]);
   if (revoked) return voiciRefusal(403, "revoked");
   const page = rows.slice(0, VOICI_FETCH_LIMIT);
   return okNoStore({
@@ -529,7 +551,11 @@ export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): P
   }
   if (!verifyWebDelegationRevoke(r, b.signature, principalPub)) return voiciRefusal(403, "bad-signature");
   if (!pageId) pageId = (await deps.voici.delegatePage(principalPub, r.delegatePub)) ?? "";
-  if (expiresAt > now) await deps.voici.revokeDelegate({ delegatePub: r.delegatePub, pageId, principalPub, expiresAt, revokedAt: now });
+  await Promise.all([
+    expiresAt > now ? deps.voici.revokeDelegate({ delegatePub: r.delegatePub, pageId, principalPub, expiresAt, revokedAt: now }) : null,
+    // Only a key proven to be this pseudonym's (its delegation, or a stored message) takes its reply alerts with it.
+    pageId ? deps.voici.deleteAlertsForDelegate(r.delegatePub) : null,
+  ]);
   return okNoStore({ ok: true });
 }
 
@@ -653,6 +679,6 @@ export async function runVoiciGc(deps: { voici: VoiciStorage; bucket?: VoiciBuck
     limit: VOICI_GC_ROWS_PER_RUN,
   });
   if (out.pieces.length && deps.bucket) await deps.bucket.delete(out.pieces.map((p) => voiciPieceKey(p.pageId, p.sha256)));
-  return { pieces: out.pieces.length, messages: out.messages, drafts: out.drafts, revoked: out.revoked };
+  return { pieces: out.pieces.length, messages: out.messages, drafts: out.drafts, revoked: out.revoked, alerts: out.alerts };
 }
 

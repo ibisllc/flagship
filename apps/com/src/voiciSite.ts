@@ -32,7 +32,11 @@ export function voiciShellResponse(request: Request, siteHeaders: [string, strin
   });
 }
 
-/** `voi.ci/_/<rest>`: the about page's shell, or one listed file of this build (immutable), else 404. */
+/**
+ * `voi.ci/_/<rest>`: the about page's shell, one listed file of this build (immutable), or `/_/sw.js`, this build's
+ * reply-alert service worker at a fixed URL (so its registration and push subscription outlive a deploy; browsers
+ * re-fetch it to update, so it is never cached), else 404.
+ */
 export async function voiciSiteFile(
   request: Request,
   assets: { fetch(req: Request): Promise<Response> } | undefined,
@@ -40,6 +44,12 @@ export async function voiciSiteFile(
   siteHeaders: [string, string][],
 ): Promise<Response> {
   if (rest === "about" || rest === "about/") return voiciShellResponse(request, siteHeaders);
+  if (rest === "sw.js") {
+    if (!VOICI_SITE_FILES.has("sw.js") || !assets) return notFound(siteHeaders);
+    const sw = await assets.fetch(new Request(new URL(`${VOICI_SITE_ASSET_DIR}/${VOICI_SITE_DIR}/sw.js`, request.url), { method: request.method.toUpperCase() === "HEAD" ? "HEAD" : "GET" }));
+    if (sw.status !== 200) return notFound(siteHeaders);
+    return withHeaders(sw.body, 200, siteHeaders, { "content-type": TYPES.js!, "cache-control": "no-cache", "cross-origin-resource-policy": "same-origin" });
+  }
   const m = /^([0-9a-f]{16})\/([A-Za-z0-9._/-]+)$/.exec(rest);
   if (!m || m[1] !== VOICI_SITE_DIR || !VOICI_SITE_FILES.has(m[2]!) || m[2]!.split("/").some((s) => s === "" || s.startsWith(".")) || !assets) {
     return notFound(siteHeaders);

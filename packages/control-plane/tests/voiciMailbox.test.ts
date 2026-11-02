@@ -223,7 +223,7 @@ describe("voi.ci thread, inbox, revoke, state", () => {
     await m.send(v.message(T0));
     await m.storage.voici.putPiece({ pageId: PAGE_ID, sha256: "ab".repeat(32), username: USER, size: 1, jpeg: false, uploadedAt: T0, unreferencedAt: T0 });
     m.bucket.objects.set(voiciPieceKey(PAGE_ID, "ab".repeat(32)), { bytes: new Uint8Array(1) });
-    expect(await runVoiciGc({ voici: m.storage.voici, bucket: m.bucket }, T0 + 31 * 86_400_000)).toEqual({ pieces: 1, messages: 0, drafts: 0, revoked: 0 });
+    expect(await runVoiciGc({ voici: m.storage.voici, bucket: m.bucket }, T0 + 31 * 86_400_000)).toEqual({ pieces: 1, messages: 0, drafts: 0, revoked: 0, alerts: 0 });
     expect(m.bucket.objects.has(voiciPieceKey(PAGE_ID, "ab".repeat(32)))).toBe(false);
     expect((await runVoiciGc({ voici: m.storage.voici, bucket: m.bucket }, T0 + 181 * 86_400_000)).messages).toBe(1);
   });
