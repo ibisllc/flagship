@@ -240,7 +240,7 @@ public final class PhoneTunnelClient: @unchecked Sendable {
 
     public func start() {
         onState(.connecting)
-        let t = URLSession.shared.webSocketTask(with: url)
+        guard let t = try? URLSession.shared.gatedWebSocketTask(with: url) else { onState(.refused("update-required")); return }
         task = t
         t.resume()
         receive(t)

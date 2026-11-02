@@ -493,7 +493,7 @@ public struct ComPhoneCertIssuer: PhoneCertIssuer {
     }
 
     private func call(_ req: URLRequest) async -> PhoneCertAnswer {
-        guard let (data, res) = try? await session.data(for: req),
+        guard let (data, res) = try? await session.gatedData(for: req),
               let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return .failed(code: "network") }
         let status = o["status"] as? String
         if status == "issued", let pem = o["chainPem"] as? String { return .issued(chainPem: pem, notAfter: (o["notAfter"] as? NSNumber)?.int64Value ?? 0) }

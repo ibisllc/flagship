@@ -192,7 +192,7 @@ public final class LiveRescueConnection: RescueConnection, @unchecked Sendable {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            (data, resp) = try await session.gatedData(for: req)
         } catch {
             if delegate.sawAnotherCertificate { throw RescueTransportError.certificateChanged }
             throw RescueTransportError.unreachable

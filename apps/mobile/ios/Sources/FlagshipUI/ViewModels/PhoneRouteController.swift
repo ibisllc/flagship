@@ -72,7 +72,7 @@ public enum PhoneRouteController {
         req.setValue(device, forHTTPHeaderField: "x-flagship-presence-device")
         req.setValue(String(at), forHTTPHeaderField: "x-flagship-presence-at")
         req.setValue(sig, forHTTPHeaderField: "x-flagship-presence-sig")
-        guard let (_, res) = try? await URLSession.shared.data(for: req), let http = res as? HTTPURLResponse else { return false }
+        guard let (_, res) = try? await URLSession.shared.gatedData(for: req), let http = res as? HTTPURLResponse else { return false }
         return (200..<300).contains(http.statusCode)
     }
 
