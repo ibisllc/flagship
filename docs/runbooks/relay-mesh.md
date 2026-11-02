@@ -32,6 +32,10 @@ and `curl -sI https://feed.flagshipserver.com/v1/head.json` (`cache-control: pub
 
 ## 2. Admit a relay
 
+One relay id runs on exactly one machine. Two machines with the same relay key replace each other's bridges every
+second ("bridge down: … (1000 replaced)" in the logs, and `ops -- mesh` shows "no bridge to"). Fly makes two machines
+on an app's first deploy: run `flyctl scale count 1` after it. More capacity is another relay with its own key.
+
 1. Make its key (never reused, never replaced in place):
    `node scripts/relay-key.mjs new ~/.config/flagship/<relayId>.seed` prints the relay key;
    `node scripts/relay-key.mjs pub <file>` prints it again.
@@ -179,6 +183,7 @@ flyctl secrets set -a flagship-services-gym-b --stage \
   USAGE_REPORT_SECRET="<GYM_USAGE_REPORT_SECRET>" SERVICES_CONTROL_SECRET="<GYM_SERVICES_CONTROL_SECRET>"
 (cd ~/.cache/flagship/gym-worktree && flyctl deploy -c fly.gym.relay-b.toml -a flagship-services-gym-b --remote-only)
 flyctl ips list -a flagship-services-gym-b             # only the v6: release any v4 it allocated
+flyctl scale count 1 -a flagship-services-gym-b --yes  # a first deploy makes 2 machines; one relay id = one machine
 
 # 6. gym-a onto the mesh profile
 flyctl secrets set -a flagship-services-gym --stage \
