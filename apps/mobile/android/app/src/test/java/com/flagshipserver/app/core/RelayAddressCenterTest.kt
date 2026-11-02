@@ -111,7 +111,7 @@ class RelayAddressCenterTest {
         prober: RelayProber,
         target: Pair<String, String>? = "home.alice.flagship.services" to "ab".repeat(32),
         now: () -> Long = { 1_000L },
-        echo: RelayEcho = RelayEcho { it },
+        echo: RelayEcho = RelayEcho { a, _ -> a },
     ) = RelayAddressCenter(backend, { NoticeFetcher { served } }, now, prober = prober, echo = echo, pinTarget = { target })
 
     @Test fun onlyAddressesThatPassTheTestAreProven() = runBlocking {
@@ -130,14 +130,14 @@ class RelayAddressCenterTest {
     // the relay passes the pinned handshake but its echo names the relay behind it.
     @Test fun aForwarderThatPassesTheHandshakeButEchoesAnotherAddressIsDropped() = runBlocking {
         val forwarder = ip("203.0.113.7")
-        val c = tested({ _, _, _ -> true }, echo = { a -> if (a == forwarder) seed[0] else a })
+        val c = tested({ _, _, _ -> true }, echo = { a, _ -> if (a == forwarder) seed[0] else a })
         served = endpoints("203.0.113.7", null)
         c.refresh()
         assertEquals(seed, c.proven(seed))
     }
 
     @Test fun anAddressWithNoEchoIsDroppedButTheSeedNeedsNone() = runBlocking {
-        val c = tested({ _, _, _ -> true }, echo = { null })
+        val c = tested({ _, _, _ -> true }, echo = { _, _ -> null })
         served = endpoints("203.0.113.7", null)
         c.refresh()
         assertEquals(seed, c.proven(seed))
@@ -200,6 +200,19 @@ class RelayAddressCenterTest {
         assertEquals(listOf(label), none.lookup("home.alice.flagship.services"))
     }
 
+    // The relay mesh: each relay of `relays` is echo-checked under its own tunnelHost; the passthrough pair under the Fly name.
+    @Test fun meshRelaysAreTestedWithTheirOwnEchoName() = runBlocking {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = tested({ a, _, _ -> a != ip("203.0.113.10") }, echo = { a, host -> asked += "${a.hostAddress}|$host"; a })
+        served = NoticeFetch.Document(
+            """{"passthroughIPv4":"149.248.216.86","relays":[{"relayId":"fra1","tunnelHost":"fra1.tunnel.flagship.services","ipv4":["203.0.113.9","203.0.113.10"],"ipv6":[]}]}""",
+        )
+        assertTrue(c.refresh())
+        assertEquals(listOf(ip("149.248.216.86"), ip("203.0.113.9")), c.proven(emptyList()))
+        assertTrue(asked.toString(), "149.248.216.86|${TlsRelayEcho.HOST}" in asked)
+        assertTrue(asked.toString(), "203.0.113.9|fra1.tunnel.flagship.services" in asked)
+    }
+
     // The rule shared with iOS: apps/mobile/test-vectors/relay-addresses.json.
     @Test fun everySharedVectorGivesTheSameAddresses() {
         val root = kotlinx.serialization.json.Json.parseToJsonElement(
@@ -211,6 +224,17 @@ class RelayAddressCenterTest {
             val v = e as kotlinx.serialization.json.JsonObject
             val want = (v["expect"] as kotlinx.serialization.json.JsonArray).map { ip((it as kotlinx.serialization.json.JsonPrimitive).content) }
             assertEquals(v["name"].toString(), want, RelayAddressRules.fromEndpoints(v["body"].toString()))
+        }
+        val cands = root["candidates"] as kotlinx.serialization.json.JsonArray
+        assertTrue(cands.size >= 8)
+        for (e in cands) {
+            val v = e as kotlinx.serialization.json.JsonObject
+            val apex = (v["apex"] as kotlinx.serialization.json.JsonPrimitive).content
+            val want = (v["expect"] as kotlinx.serialization.json.JsonArray).map {
+                val o = it as kotlinx.serialization.json.JsonObject
+                RelayCandidate(ip((o["address"] as kotlinx.serialization.json.JsonPrimitive).content), (o["echoHost"] as kotlinx.serialization.json.JsonPrimitive).content)
+            }
+            assertEquals(v["name"].toString(), want, RelayAddressRules.candidatesFromEndpoints(v["body"].toString(), apex))
         }
         for (junk in root["notJson"] as kotlinx.serialization.json.JsonArray) {
             assertEquals(emptyList<InetAddress>(), RelayAddressRules.fromEndpoints((junk as kotlinx.serialization.json.JsonPrimitive).content))

@@ -68,6 +68,9 @@ object BoxEventLabels {
         "server.migration.resumed" to FSStrings.get(R.string.apps_running_again_after_the_move),
         "server.restore.pulled" to FSStrings.get(R.string.fetched_the_backup_data),
         "server.restore.waiting" to FSStrings.get(R.string.waiting_for_its_backup),
+        // The relay mesh (relay-mesh.md sections 9.3, 9.4): the detail is the box's own sentence.
+        "server.relay.moved" to FSStrings.get(R.string.activity_relay_moved),
+        "server.relay.move-refused" to FSStrings.get(R.string.activity_relay_move_refused),
     )
 
     private val genericWrite = Regex("^(get|post|put|patch|delete) /", RegexOption.IGNORE_CASE)

@@ -3230,4 +3230,6 @@
     <string name="on_my_devices">Auf meinen Geräten</string>
     <string name="re_attach_finished">Neuanbindung abgeschlossen.</string>
     <string name="re_attach_in_progress">Neuanbindung läuft.</string>
+    <string name="activity_relay_moved">Zu einem anderen Flagship-Relay gewechselt</string>
+    <string name="activity_relay_move_refused">Beim aktuellen Relay geblieben</string>
 </resources>

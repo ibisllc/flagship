@@ -80,6 +80,76 @@ export function phoneRouteEligibility(
   return d.ok ? { ok: true, expiresAt: view.grant.expiresAt } : { ok: false, reason: d.reason };
 }
 
+// ── the begin (relay mesh, relay-mesh.md §8.2) ────────────────────────────
+
+/** Most grants a phone sends in `begin` (a mesh relay reads no more). */
+export const PHONE_BEGIN_MAX_GRANTS = 8;
+
+/** One grant of the phone's eligibility proof, as `.com`'s `/api/users/:u/device-grants` lists it. */
+export interface PhoneBeginGrant {
+  grant: {
+    grantId: string;
+    username: string;
+    deviceId: string;
+    devicePubHex: string;
+    scopes: string[];
+    issuedAt: number;
+    expiresAt: number;
+  };
+  signatureHex: string;
+  signerRoot: "admin-root";
+}
+
+export interface PhoneBeginMessage {
+  type: "begin";
+  account: string;
+  grants: PhoneBeginGrant[];
+}
+
+/**
+ * The phone's own admin grant chain for `begin`, picked from the `/device-grants` body: grants naming this device key
+ * and account, signed by the admin root, with the `admin` scope and not yet expired; the latest expiry first (then the
+ * smaller grant id), at most {@link PHONE_BEGIN_MAX_GRANTS}. The relay still verifies every one.
+ */
+export function phoneBeginGrants(body: unknown, account: string, devicePub: string, now: number): PhoneBeginGrant[] {
+  const listed = typeof body === "object" && body !== null && Array.isArray((body as { grants?: unknown }).grants) ? (body as { grants: unknown[] }).grants : [];
+  const me = devicePub.toLowerCase();
+  const user = account.toLowerCase();
+  const out: PhoneBeginGrant[] = [];
+  for (const raw of listed) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const g = raw as Record<string, unknown>;
+    if (
+      typeof g.grantId !== "string" || typeof g.username !== "string" || typeof g.deviceId !== "string" ||
+      typeof g.devicePubHex !== "string" || !Array.isArray(g.scopes) || !Number.isSafeInteger(g.issuedAt) ||
+      !Number.isSafeInteger(g.expiresAt) || typeof g.signatureHex !== "string" || !/^[0-9a-fA-F]{128}$/.test(g.signatureHex)
+    ) continue;
+    const scopes = g.scopes.filter((s): s is string => typeof s === "string");
+    if (g.devicePubHex.toLowerCase() !== me || g.username.toLowerCase() !== user || g.signerRoot !== "admin-root") continue;
+    if (!scopes.includes("admin") || (g.expiresAt as number) <= now) continue;
+    out.push({
+      grant: {
+        grantId: g.grantId,
+        username: g.username,
+        deviceId: g.deviceId,
+        devicePubHex: me,
+        scopes,
+        issuedAt: g.issuedAt as number,
+        expiresAt: g.expiresAt as number,
+      },
+      signatureHex: g.signatureHex.toLowerCase(),
+      signerRoot: "admin-root",
+    });
+  }
+  out.sort((a, b) => b.grant.expiresAt - a.grant.expiresAt || (a.grant.grantId < b.grant.grantId ? -1 : a.grant.grantId > b.grant.grantId ? 1 : 0));
+  return out.slice(0, PHONE_BEGIN_MAX_GRANTS);
+}
+
+/** `{type:"begin", account, grants}`; a relay without the mesh ignores `grants`. */
+export function phoneBeginMessage(account: string, grants: readonly PhoneBeginGrant[]): PhoneBeginMessage {
+  return { type: "begin", account: account.toLowerCase(), grants: [...grants] };
+}
+
 // ── the claim ─────────────────────────────────────────────────────────────
 
 export type RouteClaimRefusal =

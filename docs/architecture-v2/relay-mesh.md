@@ -1150,6 +1150,22 @@ iOS `PhoneEndpoint*.swift`, Android `phoneroute/*.kt`, `tools/live-e2e/lib/phone
 Webapp, iOS, Android: hide `confirmedByRelays`; Android/iOS relay-address fallback reads `relays` from
 `/api/services/endpoints`. Parity row `relay-mesh-phone`.
 
+#### 15.6.1 Decisions taken while building F (2026-11-01)
+
+- F: **The begin's grants.** `{type:"begin", account, grants:[{grant:{grantId, username, deviceId, devicePubHex, scopes,
+  issuedAt, expiresAt}, signatureHex, signerRoot:"admin-root"}]}`: the phone reads `.com`'s
+  `/api/users/:u/device-grants` (read token) and keeps the grants naming its own device key and account,
+  admin-root-signed, with the `admin` scope and unexpired, latest expiry first (then the smaller grant id), at most 8
+  (`phoneBeginGrants` / `PhoneRoute.beginGrants`, vectors `phone-route` `begin`). Fetched once per foreground, sent in
+  every `begin` (also after `route-vacant`); `grants` is always present (empty when `.com` can't be read, which a
+  mesh relay refuses `not-eligible`). A relay without the mesh ignores the field (TS and Rust read only `account`).
+  The simulated phone (`tools/live-e2e/lib/phoneSim.ts`) reads the same list when given `com`.
+- F: **`confirmedByRelays`.** No client ever rendered it (the models only decode it), so nothing was hidden.
+- F: **Relay addresses.** `relays` adds candidates after the passthrough pair; each relay's echo is checked under its own
+  `tunnelHost` (`docs/relay-addresses.md` "Several relays").
+- F: **Activity.** `server.relay.moved` "Moved to another Flagship relay" and `server.relay.move-refused` "Stayed on its
+  current relay" (a warning); the box's sentence is the detail line, untranslated like every box line.
+
 ### 15.7 G. Gym, conformance, ops
 
 `tools/relay-conformance/harness.ts` (feed files, directory, PoP blessing, three-relay launcher with mixed runtimes),

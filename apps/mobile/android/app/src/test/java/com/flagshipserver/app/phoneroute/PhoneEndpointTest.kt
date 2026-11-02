@@ -320,6 +320,7 @@ class PhoneTunnelClientTest {
         val server = MockWebServer()
         val claims = LinkedBlockingQueue<String>()
         val claimCount = java.util.concurrent.atomic.AtomicInteger()
+        val begins = LinkedBlockingQueue<String>()
         server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send("""{"type":"hello","relayId":"r","serverTime":1}""")
@@ -330,7 +331,7 @@ class PhoneTunnelClientTest {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val m = Json.parseToJsonElement(text).jsonObject
                 when (m["type"]!!.jsonPrimitive.content) {
-                    "begin" -> webSocket.send("""{"type":"challenge","account":"alice","hostname":"$HOST","generation":4,"sessionNonce":"${"5a".repeat(16)}","serverTime":1,"expiresAt":2}""")
+                    "begin" -> begins.add(text).also { webSocket.send("""{"type":"challenge","account":"alice","hostname":"$HOST","generation":4,"sessionNonce":"${"5a".repeat(16)}","serverTime":1,"expiresAt":2}""") }
                     "claim" -> {
                         claims.add(text)
                         if (claimCount.incrementAndGet() == 1) {
@@ -351,6 +352,7 @@ class PhoneTunnelClientTest {
         val seed = ByteArray(32) { 6 }
         val pub = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
         val states = LinkedBlockingQueue<PhoneTunnelState>()
+        val grantWire = Json.parseToJsonElement("""{"grant":{"grantId":"g1","username":"alice","deviceId":"${"d1".repeat(16)}","devicePubHex":"$pub","scopes":["admin"],"issuedAt":1,"expiresAt":2},"signatureHex":"${"ab".repeat(64)}","signerRoot":"admin-root"}""").jsonObject
         val client = PhoneTunnelClient(
             okHttp = OkHttpClient(),
             url = server.url("/phone-tunnel").toString().replace("http", "ws"),
@@ -360,6 +362,7 @@ class PhoneTunnelClientTest {
             deviceKeyPub = pub,
             tls = SSLContext.getDefault(),
             endpoint = PhoneEndpoint("alice", HOST, pub),
+            grants = listOf(grantWire),
             now = { 1_800_000_000_000 },
             onState = { states.add(it) },
         )
@@ -368,6 +371,12 @@ class PhoneTunnelClientTest {
             assertNotNull(claims.poll(5, TimeUnit.SECONDS))
             val text = claims.poll(5, TimeUnit.SECONDS)
             assertNotNull(text)
+            // Every begin (the first and the one after route-vacant) carries the grant chain (relay-mesh.md section 8.2).
+            repeat(2) {
+                val b = Json.parseToJsonElement(begins.poll(5, TimeUnit.SECONDS)!!).jsonObject
+                assertEquals("alice", b["account"]!!.jsonPrimitive.content)
+                assertEquals(kotlinx.serialization.json.JsonArray(listOf(grantWire)), b["grants"])
+            }
             val o = Json.parseToJsonElement(text!!).jsonObject
             val c = o["claim"]!!.jsonObject
             val claim = RouteClaim(c["account"]!!.jsonPrimitive.content, c["phoneRoutePub"]!!.jsonPrimitive.content, c["hostname"]!!.jsonPrimitive.content, c["generation"]!!.jsonPrimitive.long, c["sessionNonce"]!!.jsonPrimitive.content, c["issuedAt"]!!.jsonPrimitive.long)

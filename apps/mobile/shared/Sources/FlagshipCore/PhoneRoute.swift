@@ -111,6 +111,45 @@ public enum PhoneRoute {
         return isAccount(head) ? head : nil
     }
 
+    // MARK: the begin (relay mesh, relay-mesh.md §8.2)
+
+    /// Most grants a phone sends in `begin` (a mesh relay reads no more).
+    public static let beginMaxGrants = 8
+
+    /// The phone's own admin grant chain for `begin`, picked from `.com`'s `/api/users/:u/device-grants` body: grants
+    /// naming this device key and account, signed by the admin root, with the `admin` scope and not yet expired; the
+    /// latest expiry first (then the smaller grant id), at most 8. Matches the TS `phoneBeginGrants`
+    /// (`phone-route/vectors.json` "begin"). The relay still verifies every one.
+    public static func beginGrants(_ body: Any?, account: String, devicePub: String, now: Int64) -> [[String: Any]] {
+        let listed = ((body as? [String: Any])?["grants"] as? [Any]) ?? []
+        let me = devicePub.lowercased()
+        let user = account.lowercased()
+        func int(_ v: Any?) -> Int64? {
+            guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.doubleValue == Double(n.int64Value) else { return nil }
+            return n.int64Value
+        }
+        var out: [(expiresAt: Int64, grantId: String, wire: [String: Any])] = []
+        for raw in listed {
+            guard let g = raw as? [String: Any], let grantId = g["grantId"] as? String, let username = g["username"] as? String,
+                  let deviceId = g["deviceId"] as? String, let pub = g["devicePubHex"] as? String, let rawScopes = g["scopes"] as? [Any],
+                  let issuedAt = int(g["issuedAt"]), let expiresAt = int(g["expiresAt"]), let sig = g["signatureHex"] as? String,
+                  sig.utf8.count == 128, sig.allSatisfy(\.isHexDigit) else { continue }
+            let scopes = rawScopes.compactMap { $0 as? String }
+            guard pub.lowercased() == me, username.lowercased() == user, g["signerRoot"] as? String == "admin-root",
+                  scopes.contains("admin"), expiresAt > now else { continue }
+            let grant: [String: Any] = ["grantId": grantId, "username": username, "deviceId": deviceId, "devicePubHex": me,
+                                        "scopes": scopes, "issuedAt": issuedAt, "expiresAt": expiresAt]
+            out.append((expiresAt, grantId, ["grant": grant, "signatureHex": sig.lowercased(), "signerRoot": "admin-root"]))
+        }
+        out.sort { $0.expiresAt != $1.expiresAt ? $0.expiresAt > $1.expiresAt : $0.grantId.utf16.lexicographicallyPrecedes($1.grantId.utf16) }
+        return out.prefix(beginMaxGrants).map(\.wire)
+    }
+
+    /// `{type:"begin", account, grants}`; a relay without the mesh ignores `grants`.
+    public static func beginMessage(account: String, grants: [[String: Any]]) -> [String: Any] {
+        ["type": "begin", "account": account.lowercased(), "grants": grants]
+    }
+
     public static func signEd25519(_ bytes: Data, key: Curve25519.Signing.PrivateKey) throws -> String {
         HexUtil.encode(try key.signature(for: bytes))
     }

@@ -13,6 +13,7 @@ import { lookup } from "node:dns/promises";
 import { bytesToHex } from "@noble/hashes/utils";
 import { ed, nameListSha256, signRevokeDeviceCapabilityGrant, signServingRecord, type ServingPolicy } from "@flagship/protocol";
 import { mintDeviceGrant } from "../../lib/fleet.js";
+import { accountReadHeaders } from "../../readToken.js";
 import { pinInstance, registerSimServer, relayInstances as machineIds, revokeServer, simHelloPayload, SimBox, visitSim, type SimServer } from "../../lib/boxSim.js";
 import { CONTROL, SERVICES, SkipError, assert, http, postJson, short, sleep, tryHttp } from "../../lib/harness.js";
 import { SimPhone, selfSignedPhoneCert } from "../../lib/phoneSim.js";
@@ -145,7 +146,7 @@ export const relayInstances: Group = {
           grants.push(g.json.grantId as string);
         }
         const open = async (i: number) => {
-          const p = await SimPhone.connect(url, { account: user, seed: seeds[i]!, label: `P${i + 1}`, tls: selfSignedPhoneCert(bare), headers: pinInstance(ids[i]!) });
+          const p = await SimPhone.connect(url, { account: user, seed: seeds[i]!, label: `P${i + 1}`, tls: selfSignedPhoneCert(bare), headers: pinInstance(ids[i]!), com: { control: CONTROL, readHeaders: async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk)) } });
           phones.push(p);
           return p;
         };
@@ -161,7 +162,7 @@ export const relayInstances: Group = {
         await p2.next((m) => m.type === "route-vacant", 30_000);
         const g2 = await p2.acquire();
         assert(g2.type === "granted", `phone 2 after phone 1 left: ${JSON.stringify(g2)}`);
-        const p1b = await SimPhone.connect(url, { account: user, seed: seeds[0]!, label: "P1b", headers: pinInstance(ids[0]!) });
+        const p1b = await SimPhone.connect(url, { account: user, seed: seeds[0]!, label: "P1b", headers: pinInstance(ids[0]!), com: { control: CONTROL, readHeaders: async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk)) } });
         phones.push(p1b);
         const back = await p1b.acquire();
         assert(back.type === "refused" && back.code === "route-held", `phone 1 back on ${ids[0]}: ${JSON.stringify(back)}`);

@@ -3230,4 +3230,6 @@
     <string name="on_my_devices">Sur mes appareils</string>
     <string name="re_attach_finished">Rattachement terminé.</string>
     <string name="re_attach_in_progress">Rattachement en cours.</string>
+    <string name="activity_relay_moved">Passé à un autre relais Flagship</string>
+    <string name="activity_relay_move_refused">Resté sur son relais actuel</string>
 </resources>

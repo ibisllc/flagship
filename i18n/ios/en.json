@@ -12910,5 +12910,13 @@
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:436",
     "plural": true,
     "manual": true
+  },
+  "Moved to another Flagship relay": {
+    "en": "Moved to another Flagship relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift (Activity, server.relay.moved)"
+  },
+  "Stayed on its current relay": {
+    "en": "Stayed on its current relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift (Activity, server.relay.move-refused)"
   }
 }

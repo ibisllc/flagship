@@ -3227,5 +3227,7 @@
   "on_this_device_copy": "Auf diesem Gerät: %1$s · %2$s",
   "on_my_devices": "Auf meinen Geräten",
   "re_attach_finished": "Neuanbindung abgeschlossen.",
-  "re_attach_in_progress": "Neuanbindung läuft."
+  "re_attach_in_progress": "Neuanbindung läuft.",
+  "activity_relay_moved": "Zu einem anderen Flagship-Relay gewechselt",
+  "activity_relay_move_refused": "Beim aktuellen Relay geblieben"
 }

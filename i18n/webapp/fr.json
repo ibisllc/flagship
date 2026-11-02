@@ -3078,5 +3078,7 @@
   "Run these on any computer to check the same facts without trusting this app.": "Exécutez ces commandes sur n'importe quel ordinateur pour vérifier les mêmes faits sans faire confiance à cette application.",
   "Turned off this server's extra sandbox after it kept failing to start": "Isolation supplémentaire de ce serveur désactivée après des échecs de démarrage répétés",
   "Yes, this is my server": "Oui, c’est mon serveur",
-  "It's waiting for its disk key. Unlock it only if you expected it to restart.": "Il attend la clé de son disque. Ne le déverrouillez que si vous vous attendiez à un redémarrage."
+  "It's waiting for its disk key. Unlock it only if you expected it to restart.": "Il attend la clé de son disque. Ne le déverrouillez que si vous vous attendiez à un redémarrage.",
+  "Moved to another Flagship relay": "Passé à un autre relais Flagship",
+  "Stayed on its current relay": "Resté sur son relais actuel"
 }

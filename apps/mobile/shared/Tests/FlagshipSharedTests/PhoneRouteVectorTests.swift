@@ -22,6 +22,21 @@ final class PhoneRouteVectorTests: XCTestCase {
 
     private func i64(_ v: Any?) -> Int64? { (v as? NSNumber)?.int64Value }
 
+    func testBeginCarriesTheOwnAdminGrants() throws {
+        let b = try XCTUnwrap(try vectors()["begin"] as? [String: Any])
+        let account = b["account"] as! String
+        let device = b["devicePub"] as! String
+        let now = i64(b["now"])!
+        let grants = PhoneRoute.beginGrants(b["deviceGrants"], account: account, devicePub: device, now: now)
+        let built = PhoneRoute.beginMessage(account: account, grants: grants)
+        XCTAssertTrue(NSDictionary(dictionary: built).isEqual(to: try XCTUnwrap(b["message"] as? [String: Any])), "\(built)")
+        // What goes on the wire parses back to the same value.
+        let wire = try JSONSerialization.jsonObject(with: JSONSerialization.data(withJSONObject: built)) as! [String: Any]
+        XCTAssertTrue(NSDictionary(dictionary: wire).isEqual(to: b["message"] as! [String: Any]))
+        XCTAssertTrue(PhoneRoute.beginGrants(b["deviceGrants"], account: account, devicePub: device, now: now + 365 * 86_400_000).isEmpty)
+        XCTAssertTrue(PhoneRoute.beginGrants([String: Any](), account: account, devicePub: device, now: now).isEmpty)
+    }
+
     func testBareNames() throws {
         for b in try XCTUnwrap(try vectors()["bare"] as? [[String: Any]]) {
             XCTAssertEqual(PhoneRoute.bareAccount(b["sni"] as! String, apex: b["apex"] as! String), b["account"] as? String, b["sni"] as! String)

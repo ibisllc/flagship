@@ -68,41 +68,75 @@ public enum RelayAddressRules {
         return parse(text)
     }
 
-    /// The recommended addresses in a `/api/services/endpoints` body: IPv4 then IPv6, public ones only.
-    public static func fromEndpoints(_ body: Data) -> [String] {
-        guard let o = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return [] }
-        var out: [String] = []
-        var seen = Set<Data>()
-        for field in ["passthroughIPv4", "passthroughIPv6"] {
-            guard let text = o[field] as? String, let a = parse(text), let k = key(a), seen.insert(k).inserted else { continue }
-            out.append(a)
-        }
-        return Array(out.prefix(maxAddresses))
+    /// The recommended addresses in a `/api/services/endpoints` body: see `candidates(fromEndpoints:apex:)`.
+    public static func fromEndpoints(_ body: Data, apex: String = Endpoints.prodDataApex) -> [String] {
+        candidates(fromEndpoints: body, apex: apex).map(\.address)
     }
+
+    /// The recommended addresses and the name each one's echo is checked under: the passthrough pair
+    /// (IPv4 then IPv6, under `TlsRelayEcho.host`), then each relay of `relays` (relay-mesh.md §2) in
+    /// order, its IPv4 then IPv6 addresses under its own `tunnelHost`, which must be exactly
+    /// `<relayId>.tunnel.<apex>`. Public ones only, the first time an address appears wins, at most
+    /// `maxAddresses`. Shared with Android: apps/mobile/test-vectors/relay-addresses.json.
+    public static func candidates(fromEndpoints body: Data, apex: String = Endpoints.prodDataApex) -> [RelayCandidate] {
+        guard let o = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return [] }
+        var out: [RelayCandidate] = []
+        var seen = Set<Data>()
+        func add(_ text: Any?, _ host: String) {
+            guard out.count < maxAddresses, let t = text as? String, let a = parse(t), let k = key(a), seen.insert(k).inserted else { return }
+            out.append(RelayCandidate(address: a, echoHost: host))
+        }
+        add(o["passthroughIPv4"], defaultEchoHost)
+        add(o["passthroughIPv6"], defaultEchoHost)
+        for r in (o["relays"] as? [Any]) ?? [] {
+            guard let relay = r as? [String: Any], let id = relay["relayId"] as? String, isRelayId(id),
+                  let host = relay["tunnelHost"] as? String, host == "\(id).tunnel.\(apex.lowercased())" else { continue }
+            for field in ["ipv4", "ipv6"] { for e in (relay[field] as? [Any]) ?? [] { add(e, host) } }
+        }
+        return out
+    }
+
+    /// The name the passthrough pair's echo answers under (the Fly app's own certificate).
+    public static let defaultEchoHost = "flagship-services.fly.dev"
+
+    /// `^[a-z][a-z0-9-]{1,30}$`.
+    static func isRelayId(_ s: String) -> Bool {
+        let b = Array(s.utf8)
+        guard (2...31).contains(b.count), (97...122).contains(b[0]) else { return false }
+        return b.allSatisfy { (97...122).contains($0) || (48...57).contains($0) || $0 == 45 }
+    }
+}
+
+/// A recommended relay address and the name its echo answers under (its own certificate's name).
+public struct RelayCandidate: Equatable, Sendable {
+    public var address: String
+    public var echoHost: String
+    public init(address: String, echoHost: String) { self.address = address; self.echoHost = echoHost }
 }
 
 /// Which address does `address` say it was reached at? A forwarder in front of the relay has to
 /// dial the relay's own address, so its answer names that one. It is read over TLS with the
 /// relay's own public certificate, so a forwarder cannot write it.
 public protocol RelayEcho: Sendable {
-    func reachedAt(address: String) async -> String?
+    /// `host` is the name the relay's echo certificate must carry (`TlsRelayEcho.host`, or a mesh relay's `tunnelHost`).
+    func reachedAt(address: String, host: String) async -> String?
 }
 
 #if canImport(Network)
 public struct TlsRelayEcho: RelayEcho {
-    public static let host = "flagship-services.fly.dev"
+    public static let host = RelayAddressRules.defaultEchoHost
     public static let port: UInt16 = 8444
     public let timeout: TimeInterval
     public init(timeout: TimeInterval = 2.5) { self.timeout = timeout }
 
-    public func reachedAt(address: String) async -> String? {
+    public func reachedAt(address: String, host: String) async -> String? {
         guard let nwPort = NWEndpoint.Port(rawValue: Self.port) else { return nil }
         let tls = NWProtocolTLS.Options()
         let queue = DispatchQueue(label: "flagship.relay-echo")
-        sec_protocol_options_set_tls_server_name(tls.securityProtocolOptions, Self.host)
+        sec_protocol_options_set_tls_server_name(tls.securityProtocolOptions, host)
         sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, trustRef, complete in
             let trust = sec_trust_copy_ref(trustRef).takeRetainedValue()
-            SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, Self.host as CFString))
+            SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, host as CFString))
             complete(SecTrustEvaluateWithError(trust, nil))
         }, queue)
         let conn = NWConnection(host: NWEndpoint.Host(address), port: nwPort, using: NWParameters(tls: tls))
@@ -111,7 +145,7 @@ public struct TlsRelayEcho: RelayEcho {
             conn.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    let ask = Data("GET /echo HTTP/1.1\r\nHost: \(Self.host)\r\nConnection: close\r\n\r\n".utf8)
+                    let ask = Data("GET /echo HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n".utf8)
                     conn.send(content: ask, completion: .contentProcessed { err in
                         if err != nil { return once.resume(nil) }
                         Self.collect(conn, into: Data(), once: once)
@@ -207,6 +241,20 @@ public final class RelayAddressRegistry: @unchecked Sendable {
         return list.compactMap(RelayAddressRules.parse)
     }
 
+    /// The echo name stored for each recommended address (a mesh relay's own; else the passthrough pair's).
+    func storedEchoHosts() -> [Data: String] {
+        guard let data = defaults.data(forKey: Self.storeKey),
+              let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let list = o["relays"] as? [[String: Any]] else { return [:] }
+        var out: [Data: String] = [:]
+        for r in list {
+            guard let a = (r["address"] as? String).flatMap(RelayAddressRules.parse), let k = RelayAddressRules.key(a),
+                  let h = r["echoHost"] as? String else { continue }
+            out[k] = h
+        }
+        return out
+    }
+
     /// What to try when DNS fails and nothing could be tested: the compiled-in `seed` only. An
     /// address `.com` recommended is used only once it has passed the test, never untested.
     public func addresses(seed: [String]) -> [String] {
@@ -224,9 +272,10 @@ public final class RelayAddressRegistry: @unchecked Sendable {
     public func refresh() async -> Bool {
         let fetch = locked { () -> (@Sendable () async -> Data?)? in lastFetch = clock(); return fetchBody }
         guard let fetch, let body = await fetch() else { return false }
-        let found = RelayAddressRules.fromEndpoints(body)
+        let found = RelayAddressRules.candidates(fromEndpoints: body)
+        let relays = found.map { ["address": $0.address, "echoHost": $0.echoHost] }
         guard !found.isEmpty,
-              let data = try? JSONSerialization.data(withJSONObject: ["addresses": found, "at": clock()]) else { return false }
+              let data = try? JSONSerialization.data(withJSONObject: ["addresses": found.map(\.address), "relays": relays, "at": clock()] as [String: Any]) else { return false }
         defaults.set(data, forKey: Self.storeKey)
         return true
     }
@@ -248,6 +297,7 @@ public final class RelayAddressRegistry: @unchecked Sendable {
         guard let target = locked({ pinTarget })?() else { return [] }
         let candidates = candidateList(seed: seed)
         let seedKeys = Set(seed.compactMap(RelayAddressRules.key))
+        let echoHosts = storedEchoHosts()
         let now = clock()
         let stale = candidates.filter { a in
             guard let k = RelayAddressRules.key(a), let t = locked({ tested[k] }) else { return true }
@@ -256,10 +306,11 @@ public final class RelayAddressRegistry: @unchecked Sendable {
         await withTaskGroup(of: (Data, Bool).self) { group in
             for a in stale {
                 guard let k = RelayAddressRules.key(a) else { continue }
+                let echoHost = echoHosts[k] ?? RelayAddressRules.defaultEchoHost
                 group.addTask { [prober, echo] in
                     guard await prober.probe(sniHost: target.host, address: a, port: 443, certSha256: target.pin) else { return (k, false) }
                     if seedKeys.contains(k) { return (k, true) }
-                    return (k, await echo.reachedAt(address: a).flatMap(RelayAddressRules.key) == k)
+                    return (k, await echo.reachedAt(address: a, host: echoHost).flatMap(RelayAddressRules.key) == k)
                 }
             }
             for await (k, ok) in group { locked { tested[k] = (ok, now) } }

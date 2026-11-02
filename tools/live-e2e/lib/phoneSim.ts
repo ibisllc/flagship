@@ -30,11 +30,14 @@ import {
   canonicalRouteRelease,
   checkPhonePresence,
   ed,
+  phoneBeginGrants,
+  phoneBeginMessage,
   phoneEndpointCheck,
   phoneSessionCookie,
   PHONE_CSRF_HEADER,
   PHONE_SESSION_COOKIE,
   signServingRecord,
+  type PhoneBeginGrant,
   type PhonePresence,
   type RouteClaim,
 } from "@flagship/protocol";
@@ -62,6 +65,21 @@ export interface SimPhoneOptions {
   label?: string;
   /** Extra headers on the tunnel's WebSocket upgrade (e.g. Fly's `fly-force-instance-id` to pin a relay machine). */
   headers?: Record<string, string>;
+  /** The admin grant chain sent in `begin` (relay-mesh.md §8.2); a mesh relay refuses a phone without one. */
+  grants?: PhoneBeginGrant[];
+  /** Read the chain from `.com`'s `/api/users/:u/device-grants` before every `begin`, as the apps do. */
+  com?: { control: string; readHeaders: () => Promise<Record<string, string>> };
+}
+
+/** The phone's own admin grants from `.com` (`https://<control>/api/users/<u>/device-grants`), as the apps pick them. */
+export async function fetchBeginGrants(control: string, account: string, devicePub: string, headers: Record<string, string>): Promise<PhoneBeginGrant[]> {
+  try {
+    const res = await fetch(`https://${control}/api/users/${encodeURIComponent(account.toLowerCase())}/device-grants`, { headers, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return [];
+    return phoneBeginGrants(await res.json(), account, devicePub, Date.now());
+  } catch {
+    return [];
+  }
 }
 
 export class SimPhone {
@@ -83,6 +101,7 @@ export class SimPhone {
 
   private constructor(private readonly ws: WebSocket, readonly opts: SimPhoneOptions) {
     this.pub = hexOf(ed.getPublicKey(opts.seed));
+    this.grants = opts.grants ?? [];
     this.endpoint = new PhoneEndpointSim({
       account: opts.account,
       label: opts.label ?? this.pub.slice(0, 8),
@@ -130,9 +149,13 @@ export class SimPhone {
     this.ws.send(JSON.stringify(msg));
   }
 
-  /** Step 1 only: the relay's challenge. */
+  /** The grants this phone's `begin` carries (from `opts.grants`, or `.com` when `opts.com` is set). */
+  grants: PhoneBeginGrant[] = [];
+
+  /** Step 1 only: the relay's challenge. The begin always carries `grants` (a relay without the mesh ignores it). */
   async begin(account = this.opts.account): Promise<Control> {
-    this.send({ type: "begin", account });
+    if (this.opts.com) this.grants = await fetchBeginGrants(this.opts.com.control, this.opts.account, this.pub, await this.opts.com.readHeaders());
+    this.send({ ...phoneBeginMessage(account, this.grants), account });
     return this.next((m) => m.type === "challenge" || m.type === "refused");
   }
 

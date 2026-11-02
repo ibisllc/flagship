@@ -27,6 +27,14 @@ final class RelayFallbackTests: XCTestCase {
             let got = RelayAddressRules.fromEndpoints(body).compactMap(RelayAddressRules.key)
             XCTAssertEqual(got, want, v["name"] as? String ?? "")
         }
+        let cands = try XCTUnwrap(try vectors()["candidates"] as? [[String: Any]])
+        XCTAssertGreaterThanOrEqual(cands.count, 8)
+        for v in cands {
+            let body = try JSONSerialization.data(withJSONObject: try XCTUnwrap(v["body"]))
+            let want = try XCTUnwrap(v["expect"] as? [[String: String]]).map { "\(RelayAddressRules.key($0["address"]!)!.base64EncodedString())|\($0["echoHost"]!)" }
+            let got = RelayAddressRules.candidates(fromEndpoints: body, apex: v["apex"] as! String).map { "\(RelayAddressRules.key($0.address)!.base64EncodedString())|\($0.echoHost)" }
+            XCTAssertEqual(got, want, v["name"] as? String ?? "")
+        }
         for junk in try XCTUnwrap(try vectors()["notJson"] as? [String]) {
             XCTAssertEqual(RelayAddressRules.fromEndpoints(Data(junk.utf8)), [], junk)
         }
@@ -49,9 +57,17 @@ final class RelayFallbackTests: XCTestCase {
     private final class Clock: @unchecked Sendable { var now: Int64 = 1_000 }
 
     /// Answers the relay echo: itself by default, or whatever `says` maps an address to (nil = no answer).
-    private struct Echoes: RelayEcho {
-        var says: @Sendable (String) -> String? = { $0 }
-        func reachedAt(address: String) async -> String? { says(address) }
+    private final class Echoes: RelayEcho, @unchecked Sendable {
+        let says: @Sendable (String) -> String?
+        private let lock = NSLock()
+        private var asked: [String] = []
+        init(says: @escaping @Sendable (String) -> String? = { $0 }) { self.says = says }
+        var calls: [String] { lock.lock(); defer { lock.unlock() }; return asked }
+        private func record(_ s: String) { lock.lock(); asked.append(s); lock.unlock() }
+        func reachedAt(address: String, host: String) async -> String? {
+            record("\(address)|\(host)")
+            return says(address)
+        }
     }
 
     private func registry(_ prober: Prober, clock: Clock = Clock(), body: String? = nil, target: Bool = true, echo: Echoes = Echoes()) -> RelayAddressRegistry {
@@ -122,6 +138,19 @@ final class RelayFallbackTests: XCTestCase {
         _ = await r.refresh()
         let proven = await r.proven(seed: seed)
         XCTAssertEqual(proven, ["2001:db8::7"])
+    }
+
+    // The relay mesh: each relay of `relays` is echo-checked under its own tunnelHost; the passthrough pair under the Fly name.
+    func test_meshRelaysAreTestedWithTheirOwnEchoName() async {
+        let echo = Echoes()
+        let body = #"{"passthroughIPv4":"203.0.113.7","relays":[{"relayId":"fra1","tunnelHost":"fra1.tunnel.flagship.services","ipv4":["203.0.113.9","203.0.113.10"],"ipv6":[]}]}"#
+        let r = registry(Prober(passes: ["203.0.113.7", "203.0.113.9"]), body: body, echo: echo)
+        _ = await r.refresh()
+        XCTAssertEqual(r.stored(), ["203.0.113.7", "203.0.113.9", "203.0.113.10"])
+        let proven = await r.proven(seed: [])
+        XCTAssertEqual(proven, ["203.0.113.7", "203.0.113.9"])
+        XCTAssertTrue(echo.calls.contains("203.0.113.7|\(TlsRelayEcho.host)"), "\(echo.calls)")
+        XCTAssertTrue(echo.calls.contains("203.0.113.9|fra1.tunnel.flagship.services"), "\(echo.calls)")
     }
 
     func test_anEchoReplyIsReadStrictly() {

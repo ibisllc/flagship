@@ -20,6 +20,8 @@ import {
   phoneCertNeedsOrder,
   phoneCsr,
   phoneCsrInfo,
+  phoneBeginGrants,
+  phoneBeginMessage,
   phoneEndpointCheck,
   phoneRouteEligibility,
   signDeviceCapabilityGrant,
@@ -36,6 +38,17 @@ const unhex = (h: string) => new Uint8Array(Buffer.from(h, "hex"));
 const dec = new TextDecoder();
 
 describe("phone-route vectors (drift guard: the file is what Swift and Kotlin read)", () => {
+  it("the begin carries the phone's own admin grants, which pass eligibility under the admin root", () => {
+    const b = V.begin;
+    const grants = phoneBeginGrants(b.deviceGrants, b.account, b.devicePub, b.now);
+    expect(phoneBeginMessage(b.account, grants)).toEqual(b.message);
+    const views: AdminGrantView[] = grants.map((g) => ({ grant: { ...g.grant, devicePubKey: unhex(g.grant.devicePubHex), scopes: g.grant.scopes as never }, signatureHex: g.signatureHex, signerRoot: g.signerRoot }));
+    expect(phoneRouteEligibility(b.devicePub, b.account, b.adminRootPub, views, b.now).ok).toBe(true);
+    expect(phoneBeginGrants(b.deviceGrants, b.account, b.devicePub, b.now + 365 * 86_400_000)).toEqual([]);
+    expect(phoneBeginGrants({}, b.account, b.devicePub, b.now)).toEqual([]);
+    expect(phoneBeginGrants(b.deviceGrants, "bob", b.devicePub, b.now).map((g) => g.grant.username)).toEqual(["bob"]);
+  });
+
   it("bare names", () => {
     for (const b of V.bare) expect(barePhoneAccount(b.sni, b.apex)).toBe(b.account);
   });

@@ -16,6 +16,7 @@ import { lookup } from "node:dns/promises";
 import { bytesToHex } from "@noble/hashes/utils";
 import { ed, PHONE_CSRF_HEADER, PHONE_SESSION_COOKIE, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
 import { mintDeviceGrant } from "../../lib/fleet.js";
+import { accountReadHeaders } from "../../readToken.js";
 import { CONTROL, SERVICES, SkipError, assert, http, postJson, short } from "../../lib/harness.js";
 import { SimPhone, phoneRequest, selfSignedPhoneCert, type PhoneHttpAnswer } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
@@ -52,7 +53,7 @@ export const phoneEndpoint: Group = {
     const cert = selfSignedPhoneCert(bare);
     let phone: SimPhone;
     try {
-      phone = await SimPhone.connect(url, { account: acct.username, seed, label: "P", tls: cert });
+      phone = await SimPhone.connect(url, { account: acct.username, seed, label: "P", tls: cert, com: { control: CONTROL, readHeaders: async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk)) } });
     } catch (e) {
       await rec.check("the gym relay offers /phone-tunnel", async () => {
         throw new SkipError(`no phone tunnel at ${url || "(no tunnelHub)"}: ${String(e)} (the relay needs the serving authority on)`);

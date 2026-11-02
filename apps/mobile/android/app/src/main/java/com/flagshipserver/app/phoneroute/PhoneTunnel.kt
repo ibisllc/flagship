@@ -77,6 +77,8 @@ class PhoneTunnelClient(
     private val deviceKeyPub: String,
     private val tls: SSLContext,
     private val endpoint: PhoneEndpoint,
+    /** The phone's own admin grant chain, sent in every `begin` (relay-mesh.md section 8.2; [PhoneRoute.beginGrants]). */
+    private val grants: List<JsonObject> = emptyList(),
     private val now: () -> Long = System::currentTimeMillis,
     private val onState: (PhoneTunnelState) -> Unit = {},
 ) {
@@ -159,7 +161,7 @@ class PhoneTunnelClient(
     }
 
     private fun begin(socket: WebSocket) {
-        socket.send(buildJsonObject { put("type", "begin"); put("account", account) }.toString())
+        socket.send(PhoneRoute.beginMessage(account, grants).toString())
     }
 
     internal fun handleControl(socket: WebSocket, m: JsonObject) {

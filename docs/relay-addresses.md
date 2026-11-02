@@ -43,6 +43,18 @@ carries the dedicated public address rather than an internal one. Check with
 `GET /echo`, right after the first deploy; if it names something else, `.com` addresses fail the
 echo and the phones fall back to the compiled-in pair, which is safe.
 
+## Several relays (relay mesh, 0.3)
+
+With the relay mesh (`docs/architecture-v2/relay-mesh.md` §2) the same answer also carries
+`relays: [{relayId, tunnelHost, ipv4, ipv6}]`, every relay of the CA-signed directory. The phones
+keep them as more candidates after the passthrough pair: each relay's IPv4 then IPv6 addresses, the
+same public-unicast rule, the first time an address appears wins, at most 8 in all. A relay's
+`tunnelHost` must be exactly `<relayId>.tunnel.<apex>`, and its addresses' echo is read over TLS
+under that name (its own certificate), not under the Fly app's name the passthrough pair uses. The
+pinned handshake and the echo stay the gate for every one (vectors: `candidates` in
+`apps/mobile/test-vectors/relay-addresses.json`; Android `RelayAddressRules.candidatesFromEndpoints`,
+iOS `RelayAddressRules.candidates(fromEndpoints:)`).
+
 ## Test first, then rely
 
 Before an address is used it is tested: a TLS handshake to it under a known box's name that

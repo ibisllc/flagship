@@ -3234,4 +3234,6 @@
     <string name="on_my_devices">On my devices</string>
     <string name="re_attach_finished">Re-attach finished.</string>
     <string name="re_attach_in_progress">Re-attach in progress.</string>
+    <string name="activity_relay_moved">Moved to another Flagship relay</string>
+    <string name="activity_relay_move_refused">Stayed on its current relay</string>
 </resources>

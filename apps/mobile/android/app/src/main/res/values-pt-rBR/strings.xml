@@ -3230,4 +3230,6 @@
     <string name="on_my_devices">Nos meus dispositivos</string>
     <string name="re_attach_finished">Reassociação concluída.</string>
     <string name="re_attach_in_progress">Reassociação em andamento.</string>
+    <string name="activity_relay_moved">Mudou para outro relay do Flagship</string>
+    <string name="activity_relay_move_refused">Permaneceu no relay atual</string>
 </resources>

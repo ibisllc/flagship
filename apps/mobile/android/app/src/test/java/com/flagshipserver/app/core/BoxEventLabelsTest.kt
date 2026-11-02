@@ -27,6 +27,17 @@ class BoxEventLabelsTest {
         }
     }
 
+    @Test fun relayMeshMovesAreNamedWithTheBoxSentenceUnder() {
+        val line = "This server didn't move from relay iad1 to relay fra1: it had moved recently."
+        val refused = BoxActivityEntry(ts = 1, action = "server.relay.move-refused", kind = "server.relay.move-refused", detail = line, ok = false)
+        assertEquals("Stayed on its current relay", BoxEventLabels.title(refused))
+        assertTrue(ActivityItem.BoxEvent(refused).warning)
+        assertEquals(line, ActivityItem.BoxEvent(refused).subtitle)
+        val moved = BoxActivityEntry(ts = 2, action = "server.relay.moved", kind = "server.relay.moved", detail = "This server moved from relay iad1 to relay fra1, closer to most of its visitors.")
+        assertEquals("Moved to another Flagship relay", BoxEventLabels.title(moved))
+        assertFalse(ActivityItem.BoxEvent(moved).warning)
+    }
+
     @Test fun corruptStateReadsAsAWarningWithTheBoxDetail() {
         val detail = "service-access.json couldn't be read and was set aside. Every app on this server is members-only until you open it again."
         val e = BoxActivityEntry(ts = 1, action = "server.state.corrupt", kind = "server.state.corrupt", detail = detail, ok = false)

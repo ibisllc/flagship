@@ -142,4 +142,13 @@ describe("the Container stack card", () => {
       expect(A.boxEntryRow({ ts: 1, kind })?.title, kind).toBe(label);
     }
   });
+
+  it("labels the relay mesh's moves in Activity, with the box's sentence under them", async () => {
+    const A = await load("lib/activityFeed.js");
+    const moved = A.boxEntryRow({ ts: 1, kind: "server.relay.moved", ok: true, detail: "This server moved from relay iad1 to relay fra1, closer to most of its visitors." });
+    expect(moved).toMatchObject({ title: "Moved to another Flagship relay", ok: true, detail: "This server moved from relay iad1 to relay fra1, closer to most of its visitors." });
+    const refused = A.boxEntryRow({ ts: 2, kind: "server.relay.move-refused", ok: false, detail: "This server didn't move from relay iad1 to relay fra1: it had moved recently." });
+    expect(refused).toMatchObject({ title: "Stayed on its current relay", ok: false, icon: "⚠️" });
+    expect(refused?.detail).toContain("it had moved recently");
+  });
 });

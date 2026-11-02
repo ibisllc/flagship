@@ -3230,4 +3230,6 @@
     <string name="on_my_devices">自分のデバイス上</string>
     <string name="re_attach_finished">再接続が完了しました。</string>
     <string name="re_attach_in_progress">再接続を実行中です。</string>
+    <string name="activity_relay_moved">別の Flagship リレーに移動しました</string>
+    <string name="activity_relay_move_refused">現在のリレーにとどまりました</string>
 </resources>

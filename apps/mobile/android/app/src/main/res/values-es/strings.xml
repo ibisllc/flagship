@@ -3230,4 +3230,6 @@
     <string name="on_my_devices">En mis dispositivos</string>
     <string name="re_attach_finished">Reasociación terminada.</string>
     <string name="re_attach_in_progress">Reasociación en curso.</string>
+    <string name="activity_relay_moved">Se trasladó a otro relé de Flagship</string>
+    <string name="activity_relay_move_refused">Se quedó en su relé actual</string>
 </resources>

@@ -183,6 +183,9 @@ public enum BoxEventLabels {
         "server.bootchain.refreshed": String(localized: "Updated how this server unlocks at start-up"),
         "server.bootchain.rolled-back": String(localized: "Kept the previous start-up unlock"),
         "server.sandbox.removed": String(localized: "Turned off this server's extra sandbox after it kept failing to start"),
+        // The relay mesh (relay-mesh.md §9.3, §9.4): the detail is the box's own sentence.
+        "server.relay.moved": String(localized: "Moved to another Flagship relay"),
+        "server.relay.move-refused": String(localized: "Stayed on its current relay"),
     ]
 
     /// The row's title, or nil when the entry isn't worth a row (the log also
@@ -208,6 +211,7 @@ public enum BoxEventLabels {
         if key.hasPrefix("server.debug-access") { return "terminal.fill" }
         if key.hasPrefix("server.disk") { return "internaldrive.fill" }
         if key.hasPrefix("server.bootchain") { return "lock.shield.fill" }
+        if key.hasPrefix("server.relay") { return "antenna.radiowaves.left.and.right" }
         if key.hasPrefix("app.") { return "app.badge.fill" }
         if key.hasPrefix("share.") { return "person.2.fill" }
         return "circle.fill"

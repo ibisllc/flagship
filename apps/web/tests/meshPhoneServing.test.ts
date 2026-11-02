@@ -2,6 +2,7 @@
  * The phone ledger relay (relay-mesh.md §8), the serving gate's mesh inputs (§4.4, §4.6 as amended) and the relay
  * blessing renewed with proof of key (§3.2).
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   checkPhoneItem,
@@ -64,6 +65,19 @@ describe("phone ledger relay", () => {
     await feed.poll();
     const after = (await elig("carol", presented))!;
     expect(phoneRouteEligibility(hex(device.publicKey), "carol", after.adminRootPub, after.grants, Date.now()).ok).toBe(false);
+  });
+
+  it("the phones' begin as the shared vector writes it (what iOS and Android send) is eligible on a mesh relay", async () => {
+    const V = JSON.parse(readFileSync(new URL("../../../packages/protocol/test-vectors/phone-route/vectors.json", import.meta.url), "utf8")).begin;
+    const fx = new MeshFixture();
+    fx.authority(V.account, V.adminRootPub, hex(keypair().publicKey));
+    const feed = new MeshFeed({ servicesApex: APEX, logKey: fx.logPub, source: fx.source() });
+    await feed.poll();
+    const elig = meshPhoneEligibility(() => feed.state, () => V.now);
+    const rec = (await elig(V.account, V.message.grants))!;
+    expect(phoneRouteEligibility(V.devicePub, V.account, rec.adminRootPub, rec.grants, V.now).ok).toBe(true);
+    const none = (await elig(V.account, []))!;
+    expect(phoneRouteEligibility(V.devicePub, V.account, none.adminRootPub, none.grants, V.now).ok).toBe(false);
   });
 });
 

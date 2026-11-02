@@ -14,6 +14,7 @@ import {
   type BoxAttachment,
   type BoxItem,
   type PhoneItem,
+  RELAY_BLESSING_TTL_MS,
 } from "@flagship/protocol";
 import { MeshDirectory } from "../src/tunnel/mesh/directory.js";
 import { AttachmentStore } from "../src/tunnel/mesh/attachments.js";
@@ -67,7 +68,7 @@ describe("mesh directory", () => {
     expect(dir.heldBlessing("ra")?.relayId).toBe("ra");
     const other = keypair();
     expect(dir.offerBlessing(fx.bless({ ...ra, key: other }))).toBe(false);
-    advance(27 * 3_600_000);
+    advance(RELAY_BLESSING_TTL_MS + 3_600_000);
     expect(dir.heldBlessing("ra")).toBeNull();
   });
 });

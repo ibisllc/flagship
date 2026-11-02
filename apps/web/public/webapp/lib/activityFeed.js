@@ -46,6 +46,9 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "server.stack.switch-started": { label: tr("Started a stack move"), icon: "🔀" },
   "server.stack.switched": { label: tr("Finished a stack move"), icon: "🔀" },
   "server.stack.switch-reverted": { label: tr("The stack move was undone"), icon: "↩️" },
+  // The relay mesh (relay-mesh.md §9.3, §9.4): the detail is the box's own sentence (which relays, and why).
+  "server.relay.moved": { label: tr("Moved to another Flagship relay"), icon: "📡" },
+  "server.relay.move-refused": { label: tr("Stayed on its current relay"), icon: "⚠️" },
 });
 
 function humanize(s) {

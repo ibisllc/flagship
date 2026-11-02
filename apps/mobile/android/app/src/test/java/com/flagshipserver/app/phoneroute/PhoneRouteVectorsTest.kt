@@ -50,6 +50,19 @@ class PhoneRouteVectorsTest {
 
     private fun claimOf(o: JsonObject) = RouteClaim(o.s("account"), o.s("phoneRoutePub"), o.s("hostname"), o.l("generation"), o.s("sessionNonce"), o.l("issuedAt"))
 
+    @Test fun theBeginCarriesTheOwnAdminGrants() {
+        val b = root["begin"]!!.jsonObject
+        val account = b.s("account")
+        val device = b.s("devicePub")
+        val now = b.l("now")
+        val grants = PhoneRoute.beginGrants(b["deviceGrants"], account, device, now)
+        assertEquals(b["message"], PhoneRoute.beginMessage(account, grants))
+        // What goes on the wire parses back to the same value.
+        assertEquals(b["message"], Json.parseToJsonElement(PhoneRoute.beginMessage(account, grants).toString()))
+        assertTrue(PhoneRoute.beginGrants(b["deviceGrants"], account, device, now + 365L * 86_400_000).isEmpty())
+        assertTrue(PhoneRoute.beginGrants(JsonObject(emptyMap()), account, device, now).isEmpty())
+    }
+
     @Test fun bareNames() {
         for (b in root["bare"]!!.jsonArray.map { it.jsonObject }) {
             assertEquals(b.s("sni"), b["account"].strOrNull(), PhoneRoute.bareAccount(b.s("sni"), b.s("apex")))

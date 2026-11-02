@@ -13349,5 +13349,13 @@
   "re_attach_in_progress": {
     "en": "Re-attach in progress.",
     "ctx": "viewmodels/ActivityViewModel.kt (Activity post-recovery hint)"
+  },
+  "activity_relay_moved": {
+    "en": "Moved to another Flagship relay",
+    "ctx": "core/BoxEventLabels.kt (Activity, server.relay.moved)"
+  },
+  "activity_relay_move_refused": {
+    "en": "Stayed on its current relay",
+    "ctx": "core/BoxEventLabels.kt (Activity, server.relay.move-refused)"
   }
 }

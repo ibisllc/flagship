@@ -214,6 +214,9 @@ public final class PhoneTunnelClient: @unchecked Sendable {
     private let deviceKey: Curve25519.Signing.PrivateKey
     private let terminator: PhoneTlsTerminator
     private let onState: @Sendable (PhoneTunnelState) -> Void
+    /// The phone's own admin grant chain, sent in every `begin` (relay-mesh.md §8.2; `PhoneRoute.beginGrants`): a mesh
+    /// relay refuses a phone without it, a relay without the mesh ignores it.
+    private let grants: [[String: Any]]
     private let queue = DispatchQueue(label: "flagship.phone-tunnel")
     private var task: URLSessionWebSocketTask?
     private var streams: [UInt32: NWConnection] = [:]
@@ -223,8 +226,9 @@ public final class PhoneTunnelClient: @unchecked Sendable {
     public let responder: PhoneEndpointResponder
 
     public init(url: URL, account: String, apex: String, deviceKey: Curve25519.Signing.PrivateKey, identity: sec_identity_t,
-                onState: @escaping @Sendable (PhoneTunnelState) -> Void) throws {
+                grants: [[String: Any]] = [], onState: @escaping @Sendable (PhoneTunnelState) -> Void) throws {
         self.url = url
+        self.grants = grants
         self.account = account.lowercased()
         self.hostname = PhoneRoute.hostname(account: account, apex: apex)
         self.deviceKey = deviceKey
@@ -320,7 +324,7 @@ public final class PhoneTunnelClient: @unchecked Sendable {
         // first valid claim win.
         case "hello", "route-vacant":
             onState(.claiming)
-            sendJSON(["type": "begin", "account": account], t)
+            sendJSON(PhoneRoute.beginMessage(account: account, grants: grants), t)
         case "challenge":
             guard let c = claim(for: m), let bytes = try? c.canonicalBytes(), let sig = try? PhoneRoute.signEd25519(bytes, key: deviceKey) else {
                 onState(.refused("bad-challenge"))

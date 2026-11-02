@@ -12,6 +12,7 @@ import { connect as tlsConnect } from "node:tls";
 import { bytesToHex } from "@noble/hashes/utils";
 import { ed, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
 import { mintDeviceGrant } from "../../lib/fleet.js";
+import { accountReadHeaders } from "../../readToken.js";
 import { CONTROL, SERVICES, SkipError, assert, http, postJson, short, sleep } from "../../lib/harness.js";
 import { SimPhone, isPhoneCert, sayHello, selfSignedPhoneCert } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
@@ -82,7 +83,7 @@ export const phoneRoute: Group = {
     const grantIds: Record<string, string> = {};
     const phones: SimPhone[] = [];
     const open = async (seed: Uint8Array, label: string, tls?: { key: string; cert: string }) => {
-      const p = await SimPhone.connect(url, { account: acct.username, seed, label, ...(tls ? { tls } : {}) });
+      const p = await SimPhone.connect(url, { account: acct.username, seed, label, ...(tls ? { tls } : {}), com: { control: CONTROL, readHeaders: async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk)) } });
       phones.push(p);
       return p;
     };

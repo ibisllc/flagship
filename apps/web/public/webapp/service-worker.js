@@ -439,7 +439,9 @@
 //  v188: a start-up approval from a server this browser already pinned reads as routine ("It's waiting
 //       for its disk key", Unlock); first contact keeps "Is this the machine in front of you?". Apps are
 //       titled by their name, else their slug in words (precaches lib/appDisplayName.js).
-const SHELL_VERSION = "v188";
+//  v189: Activity names the relay mesh's box events (server.relay.moved, server.relay.move-refused), with the
+//       box's own sentence under them.
+const SHELL_VERSION = "v189";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

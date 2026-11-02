@@ -27,8 +27,14 @@ import {
   phoneCsr,
   phoneCsrInfo,
   phoneEndpointCheck,
+  phoneBeginGrants,
+  phoneBeginMessage,
   phoneHostname,
+  phoneRouteEligibility,
+  signDeviceCapabilityGrant,
   signServingRecord,
+  type DeviceCapabilityGrant,
+  type DeviceScope,
   type PhoneEndpointRequest,
   type PhoneRouteEntry,
   type RouteClaim,
@@ -157,6 +163,58 @@ const endpoint = [
   return { ...c, context: ctx };
 });
 
+// The begin's grant chain (relay-mesh.md §8.2): the phone picks its own admin-root-signed admin grants out of
+// `/api/users/:u/device-grants`; a mesh relay checks them under the log's admin root.
+const adminSeed = new Uint8Array(32).fill(9);
+const adminRoot = { privateKey: adminSeed, publicKey: ed.getPublicKey(adminSeed) };
+const otherSeed = new Uint8Array(32).fill(10);
+const otherPub = hexOf(ed.getPublicKey(otherSeed));
+const beginNow = T0 + DAY;
+const listed = (
+  [
+    ["mine, admin, 90 days", "11", "alice", phonePub, ["browse", "admin"], T0, T0 + 90 * DAY, "admin-root"],
+    ["mine, admin, 180 days", "12", "alice", phonePub, ["admin"], T0, T0 + 180 * DAY, "admin-root"],
+    ["mine, signed by the membership key", "13", "alice", phonePub, ["admin"], T0, T0 + 90 * DAY, "membership"],
+    ["another device", "14", "alice", otherPub, ["admin"], T0, T0 + 90 * DAY, "admin-root"],
+    ["mine, expired", "15", "alice", phonePub, ["admin"], T0 - 90 * DAY, T0, "admin-root"],
+    ["mine, no admin scope", "16", "alice", phonePub, ["browse"], T0, T0 + 90 * DAY, "admin-root"],
+    ["mine, another account", "17", "bob", phonePub, ["admin"], T0, T0 + 90 * DAY, "admin-root"],
+    ["mine, upper-case key", "18", "alice", phonePub.toUpperCase(), ["admin"], T0, T0 + 90 * DAY, "admin-root"],
+  ] as const
+).map(([note, id, username, pub, scopes, issuedAt, expiresAt, signerRoot]) => {
+  const grant: DeviceCapabilityGrant = {
+    grantId: `${id}`.repeat(4) + "-0000-4000-8000-" + `${id}`.repeat(6),
+    username,
+    deviceId: "d1".repeat(16),
+    devicePubKey: new Uint8Array(Buffer.from(pub.toLowerCase(), "hex")),
+    scopes: [...scopes] as DeviceScope[],
+    issuedAt,
+    expiresAt,
+  };
+  const signer = signerRoot === "admin-root" ? adminRoot : { privateKey: otherSeed, publicKey: ed.getPublicKey(otherSeed) };
+  return {
+    note,
+    grantId: grant.grantId,
+    username,
+    deviceId: grant.deviceId,
+    devicePubHex: pub,
+    scopes: [...scopes],
+    issuedAt,
+    expiresAt,
+    signatureHex: hexOf(signDeviceCapabilityGrant(grant, signer)),
+    signerRoot,
+  };
+});
+const beginGrants = phoneBeginGrants({ username: "alice", grants: listed }, "alice", phonePub, beginNow);
+const beginMessage = phoneBeginMessage("alice", beginGrants);
+if (beginGrants.map((g) => g.grant.grantId.slice(0, 2)).join() !== "12,11,18") throw new Error(`begin grants ${beginGrants.map((g) => g.grant.grantId).join()}`);
+const beginViews = beginGrants.map((g) => ({
+  grant: { ...g.grant, devicePubKey: new Uint8Array(Buffer.from(g.grant.devicePubHex, "hex")), scopes: g.grant.scopes as DeviceScope[] },
+  signatureHex: g.signatureHex,
+  signerRoot: g.signerRoot,
+}));
+if (!phoneRouteEligibility(phonePub, "alice", hexOf(adminRoot.publicKey), beginViews, beginNow).ok) throw new Error("begin grants not eligible");
+
 const out = {
   about:
     "Phone route (plan H2/H3, docs/architecture-v2/issuance-and-lease-records.md §4 'Phone routing', phone-route.md): written by tools/phone-route-vectors.ts from packages/protocol/src/phoneRoute.ts. Claims and orders are Ed25519 under signerSeed (deterministic); the CSR signature is RFC 6979 low-S DER (Swift and Kotlin sign randomly, so they must reproduce infoHex exactly and csrHex from the given signature).",
@@ -179,6 +237,15 @@ const out = {
   presence: { record: presence, canonical: dec.decode(canonicalPhonePresence(presence)), signature: presenceSig },
   certReuse,
   endpoint,
+  begin: {
+    about: "The phone's begin (relay-mesh.md §8.2): its own admin grants out of the device-grants body, admin-root-signed with the admin scope and unexpired, latest expiry first (then the smaller grantId), at most 8, keys and signatures lower-case. Compare as JSON values (key order is free).",
+    account: "alice",
+    devicePub: phonePub,
+    now: beginNow,
+    adminRootPub: hexOf(adminRoot.publicKey),
+    deviceGrants: { username: "alice", grants: listed },
+    message: beginMessage,
+  },
 };
 const dir = "packages/protocol/test-vectors/phone-route";
 mkdirSync(dir, { recursive: true });

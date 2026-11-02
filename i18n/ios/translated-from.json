@@ -2973,5 +2973,7 @@
   "On this device: %@ · %@": "08126714716b",
   "On my devices": "78a1ef5f4ca7",
   "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": "daacc9328faa",
-  "%lld apps": "11ca00030b6e"
+  "%lld apps": "11ca00030b6e",
+  "Moved to another Flagship relay": "3b10585ac3b5",
+  "Stayed on its current relay": "14bf38f16e55"
 }

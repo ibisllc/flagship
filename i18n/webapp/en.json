@@ -12613,5 +12613,13 @@
   "It's waiting for its disk key. Unlock it only if you expected it to restart.": {
     "en": "It's waiting for its disk key. Unlock it only if you expected it to restart.",
     "ctx": "webapp/views/boot-approval.js:89"
+  },
+  "Moved to another Flagship relay": {
+    "en": "Moved to another Flagship relay",
+    "ctx": "webapp/lib/activityFeed.js:50"
+  },
+  "Stayed on its current relay": {
+    "en": "Stayed on its current relay",
+    "ctx": "webapp/lib/activityFeed.js:51"
   }
 }

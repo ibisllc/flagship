@@ -9,6 +9,15 @@ package com.flagshipserver.app.phoneroute
 
 import com.flagshipserver.app.core.HexUtil
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
@@ -105,6 +114,61 @@ object PhoneRoute {
     }
 
     fun sign(bytes: ByteArray, key: Ed25519Sign): String = HexUtil.encode(key.sign(bytes))
+
+    /** Most grants a phone sends in `begin` (a mesh relay reads no more). */
+    const val BEGIN_MAX_GRANTS = 8
+    private val HEX_SIG = Regex("^[0-9a-fA-F]{128}$")
+
+    /**
+     * The phone's own admin grant chain for `begin` (relay-mesh.md section 8.2), picked from `.com`'s
+     * `/api/users/:u/device-grants` body: grants naming this device key and account, signed by the admin
+     * root, with the `admin` scope and not yet expired; the latest expiry first (then the smaller grant id),
+     * at most 8. Matches the TS `phoneBeginGrants` (`phone-route/vectors.json` "begin").
+     */
+    fun beginGrants(body: JsonElement?, account: String, devicePub: String, now: Long): List<JsonObject> {
+        val listed = ((body as? JsonObject)?.get("grants") as? JsonArray) ?: return emptyList()
+        val me = devicePub.lowercase()
+        val user = account.lowercase()
+        fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        fun JsonObject.int(k: String) = (this[k] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+        val out = ArrayList<Triple<Long, String, JsonObject>>()
+        for (raw in listed) {
+            val g = raw as? JsonObject ?: continue
+            val grantId = g.str("grantId") ?: continue
+            val username = g.str("username") ?: continue
+            val deviceId = g.str("deviceId") ?: continue
+            val pub = g.str("devicePubHex") ?: continue
+            val scopesRaw = g["scopes"] as? JsonArray ?: continue
+            val issuedAt = g.int("issuedAt") ?: continue
+            val expiresAt = g.int("expiresAt") ?: continue
+            val sig = g.str("signatureHex")?.takeIf { HEX_SIG.matches(it) } ?: continue
+            val scopes = scopesRaw.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            if (pub.lowercase() != me || username.lowercase() != user || g.str("signerRoot") != "admin-root") continue
+            if ("admin" !in scopes || expiresAt <= now) continue
+            out += Triple(expiresAt, grantId, buildJsonObject {
+                putJsonObject("grant") {
+                    put("grantId", grantId)
+                    put("username", username)
+                    put("deviceId", deviceId)
+                    put("devicePubHex", me)
+                    putJsonArray("scopes") { scopes.forEach { add(JsonPrimitive(it)) } }
+                    put("issuedAt", issuedAt)
+                    put("expiresAt", expiresAt)
+                }
+                put("signatureHex", sig.lowercase())
+                put("signerRoot", "admin-root")
+            })
+        }
+        out.sortWith(compareByDescending<Triple<Long, String, JsonObject>> { it.first }.thenBy { it.second })
+        return out.take(BEGIN_MAX_GRANTS).map { it.third }
+    }
+
+    /** `{type:"begin", account, grants}`; a relay without the mesh ignores `grants`. */
+    fun beginMessage(account: String, grants: List<JsonObject>): JsonObject = buildJsonObject {
+        put("type", "begin")
+        put("account", account.lowercase())
+        put("grants", JsonArray(grants))
+    }
 
     /** Should the phone order a certificate now? Reuse a held one until 30 days before its end; back off after a failure. */
     fun needsOrder(notAfter: Long?, lastFailureAt: Long?, now: Long): Boolean {

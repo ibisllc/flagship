@@ -3230,4 +3230,6 @@
     <string name="on_my_devices">在我的设备上</string>
     <string name="re_attach_finished">重新关联已完成。</string>
     <string name="re_attach_in_progress">重新关联进行中。</string>
+    <string name="activity_relay_moved">已移至另一个 Flagship 中继</string>
+    <string name="activity_relay_move_refused">仍留在当前中继</string>
 </resources>

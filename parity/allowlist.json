@@ -409,7 +409,7 @@
     {
       "check": "test-vectors",
       "key": "web:relay-mesh",
-      "reason": "The webapp never talks to a relay's mesh: no attachment, hint, grant or log record is made or checked in a browser. It only stops showing `confirmedByRelays` (chunk F)."
+      "reason": "The webapp never talks to a relay's mesh: no attachment, hint, grant or log record is made or checked in a browser (it never showed `confirmedByRelays`, now always null). Its only mesh change is naming the box's relay moves in Activity (chunk F)."
     },
     {
       "check": "test-vectors",

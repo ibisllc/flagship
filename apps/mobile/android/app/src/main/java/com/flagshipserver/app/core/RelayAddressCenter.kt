@@ -4,7 +4,9 @@
 // compiled-in seed.
 //
 // The app asks `.com`, which it already reaches over ordinary TLS, via
-// `GET /api/services/endpoints` (passthroughIPv4 / passthroughIPv6). Nothing
+// `GET /api/services/endpoints` (passthroughIPv4 / passthroughIPv6, and with the relay
+// mesh every relay of the CA-signed directory in `relays`, each echo-checked under its
+// own `<relayId>.tunnel.<apex>` name). Nothing
 // here is trusted with the box: the connection must still show the box's own
 // pinned certificate, so a wrong address can only fail to connect. The request
 // is one anonymous GET, and failure changes nothing.
@@ -60,16 +62,41 @@ object RelayAddressRules {
         return parse(text)
     }
 
-    /** The recommended addresses in a `/api/services/endpoints` body: IPv4 then IPv6, public ones only. */
-    fun fromEndpoints(body: String): List<InetAddress> {
+    /** The recommended addresses in a `/api/services/endpoints` body: see [candidatesFromEndpoints]. */
+    fun fromEndpoints(body: String, apex: String = Endpoints.PROD_DATA_APEX): List<InetAddress> =
+        candidatesFromEndpoints(body, apex).map { it.address }
+
+    private val RELAY_ID = Regex("^[a-z][a-z0-9-]{1,30}$")
+
+    /**
+     * The recommended addresses and the name each one's echo is checked under: the passthrough pair
+     * (IPv4 then IPv6, under [TlsRelayEcho.HOST]), then each relay of `relays` (relay-mesh.md section 2)
+     * in order, its IPv4 then IPv6 addresses under its own `tunnelHost`, which must be exactly
+     * `<relayId>.tunnel.<apex>`. Public ones only, the first time an address appears wins, at most
+     * [MAX_ADDRESSES]. Shared with iOS: apps/mobile/test-vectors/relay-addresses.json.
+     */
+    fun candidatesFromEndpoints(body: String, apex: String = Endpoints.PROD_DATA_APEX): List<RelayCandidate> {
         val o = runCatching { SecurityNoticeProtocol.json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
-        return listOf("passthroughIPv4", "passthroughIPv6")
-            .mapNotNull { (o[it] as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
-            .mapNotNull(::parse)
-            .distinct()
-            .take(MAX_ADDRESSES)
+        fun str(e: kotlinx.serialization.json.JsonElement?) = (e as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val out = ArrayList<RelayCandidate>()
+        fun add(text: String?, host: String) {
+            val a = text?.let(::parse) ?: return
+            if (out.size < MAX_ADDRESSES && out.none { it.address == a }) out += RelayCandidate(a, host)
+        }
+        add(str(o["passthroughIPv4"]), TlsRelayEcho.HOST)
+        add(str(o["passthroughIPv6"]), TlsRelayEcho.HOST)
+        for (r in (o["relays"] as? JsonArray).orEmpty()) {
+            val relay = r as? JsonObject ?: continue
+            val id = str(relay["relayId"])?.takeIf { RELAY_ID.matches(it) } ?: continue
+            val host = str(relay["tunnelHost"])?.takeIf { it == "$id.tunnel.${apex.lowercase()}" } ?: continue
+            for (field in listOf("ipv4", "ipv6")) for (e in (relay[field] as? JsonArray).orEmpty()) add(str(e), host)
+        }
+        return out
     }
 }
+
+/** A recommended relay address and the name its echo answers under (its own certificate's name). */
+data class RelayCandidate(val address: InetAddress, val echoHost: String)
 
 /**
  * Is [address] the relay, up, forwarding to the box named [sniHost]? A handshake to it
@@ -106,23 +133,24 @@ class TlsPinRelayProber(private val timeoutMs: Int = 2_500) : RelayProber {
  * answer is read over TLS with the relay's own public certificate, so a forwarder cannot write it.
  */
 fun interface RelayEcho {
-    fun reachedAt(address: InetAddress): InetAddress?
+    /** [host] is the name the relay's echo certificate must carry ([TlsRelayEcho.HOST], or a mesh relay's `tunnelHost`). */
+    fun reachedAt(address: InetAddress, host: String): InetAddress?
 }
 
 class TlsRelayEcho(private val timeoutMs: Int = 2_500) : RelayEcho {
-    override fun reachedAt(address: InetAddress): InetAddress? = try {
+    override fun reachedAt(address: InetAddress, host: String): InetAddress? = try {
         val plain = java.net.Socket()
         plain.connect(java.net.InetSocketAddress(address, PORT), timeoutMs)
         plain.soTimeout = timeoutMs
         val ssl = (javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory)
-            .createSocket(plain, HOST, PORT, true) as javax.net.ssl.SSLSocket
+            .createSocket(plain, host, PORT, true) as javax.net.ssl.SSLSocket
         ssl.use {
             val params = it.sslParameters
-            params.serverNames = listOf(javax.net.ssl.SNIHostName(HOST))
+            params.serverNames = listOf(javax.net.ssl.SNIHostName(host))
             params.endpointIdentificationAlgorithm = "HTTPS"
             it.sslParameters = params
             it.startHandshake()
-            it.outputStream.write("GET /echo HTTP/1.1\r\nHost: $HOST\r\nConnection: close\r\n\r\n".toByteArray())
+            it.outputStream.write("GET /echo HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n".toByteArray())
             it.outputStream.flush()
             val raw = it.inputStream.readNBytes(MAX_REPLY).toString(Charsets.UTF_8)
             RelayAddressRules.parseEchoReply(raw)
@@ -162,10 +190,11 @@ class RelayAddressCenter(
     fun proven(seed: List<InetAddress>): List<InetAddress> {
         val target = pinTarget() ?: return emptyList()
         val candidates = (stored() + seed).distinct()
+        val echoHosts = storedEchoHosts()
         val now = clock()
         val stale = candidates.filter { a -> tested[a]?.let { (ok, at) -> now - at >= if (ok) GOOD_MS else BAD_MS } ?: true }
         val threads = stale.map { a ->
-            Thread { tested[a] = (prober.probe(a, target.first, target.second) && (a in seed || echo.reachedAt(a) == a)) to clock() }.also { it.isDaemon = true; it.start() }
+            Thread { tested[a] = (prober.probe(a, target.first, target.second) && (a in seed || echo.reachedAt(a, echoHosts[a] ?: TlsRelayEcho.HOST) == a)) to clock() }.also { it.isDaemon = true; it.start() }
         }
         threads.forEach { it.join(PROBE_WAIT_MS) }
         return candidates.filter { tested[it]?.first == true }
@@ -181,6 +210,19 @@ class RelayAddressCenter(
         emptyList()
     }
 
+    /** The echo name stored for each recommended address (a mesh relay's own; else the passthrough pair's). */
+    private fun storedEchoHosts(): Map<InetAddress, String> = try {
+        val o = SecurityNoticeProtocol.json.parseToJsonElement(backend.read() ?: "") as JsonObject
+        (o["relays"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val r = e as? JsonObject ?: return@mapNotNull null
+            val a = (r["address"] as? JsonPrimitive)?.content?.let(RelayAddressRules::parse) ?: return@mapNotNull null
+            val h = (r["echoHost"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+            a to h
+        }.toMap()
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
     /**
      * What to try when DNS fails and nothing could be tested: the compiled-in [seed] only. An
      * address `.com` recommended is used only once it has passed the test, never untested.
@@ -193,12 +235,13 @@ class RelayAddressCenter(
         lock.withLock {
             lastFetchAt = clock()
             val body = (fetcher().fetch() as? NoticeFetch.Document)?.body
-            val found = body?.let(RelayAddressRules::fromEndpoints).orEmpty()
+            val found = body?.let { RelayAddressRules.candidatesFromEndpoints(it) }.orEmpty()
             if (found.isEmpty()) {
                 false
             } else {
                 backend.write(buildJsonObject {
-                    put("addresses", JsonArray(found.map { JsonPrimitive(it.hostAddress ?: "") }))
+                    put("addresses", JsonArray(found.map { JsonPrimitive(it.address.hostAddress ?: "") }))
+                    put("relays", JsonArray(found.map { c -> buildJsonObject { put("address", c.address.hostAddress ?: ""); put("echoHost", c.echoHost) } }))
                     put("at", clock())
                 }.toString())
                 true
