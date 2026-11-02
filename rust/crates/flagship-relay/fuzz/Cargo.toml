@@ -14,6 +14,7 @@ cargo-fuzz = true
 [dependencies]
 flagship-relay = { path = ".." }
 libfuzzer-sys = "=0.4.12"
+serde_json = { version = "=1.0.151", default-features = false, features = ["std"] }
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -35,6 +36,13 @@ bench = false
 [[bin]]
 name = "payload_parse"
 path = "fuzz_targets/payload_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mesh_control"
+path = "fuzz_targets/mesh_control.rs"
 test = false
 doc = false
 bench = false

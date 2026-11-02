@@ -551,6 +551,8 @@ struct SessState {
     eligible_until: u64,
     closed: bool,
     timers: Vec<tokio::task::AbortHandle>,
+    /// Mesh mode: the admin grant chain the phone presented in `begin` (relay-mesh.md §8.2).
+    grants: Option<Value>,
 }
 
 #[derive(Debug)]
@@ -600,10 +602,19 @@ struct RoutesState {
     lost: BTreeMap<String, u64>,
 }
 
+/// Mesh mode: does the relay take new phone routes now?
+pub type AcceptingFn = dyn Fn() -> bool + Send + Sync;
+
+/// Mesh mode's eligibility (relay-mesh.md §8.2): the phone's own presented grants, judged under the log's admin root.
+pub type PresentedEligibility = dyn Fn(&str, &Value) -> Option<Eligibility> + Send + Sync;
+
 struct Inner {
     relay_id: String,
     apex: String,
     com: Arc<dyn PhoneCom>,
+    presented: Option<Arc<PresentedEligibility>>,
+    /// Mesh mode: false while the relay is stale (a `begin` then is refused and the tunnel closed 1013 `try-again`).
+    accepting: std::sync::OnceLock<Arc<AcceptingFn>>,
     cfg: PhoneConfig,
     st: Mutex<RoutesState>,
     log: Box<dyn Fn(&str) + Send + Sync>,
@@ -643,6 +654,30 @@ impl PhoneRoutes {
             relay_id: relay_id.to_owned(),
             apex: apex.to_lowercase(),
             com,
+            presented: None,
+            accepting: std::sync::OnceLock::new(),
+            cfg,
+            st: Mutex::new(RoutesState::default()),
+            log,
+        }))
+    }
+
+    /// Mesh mode (relay-mesh.md §8): the ledger is a relay's (`com`), and eligibility comes from the grants the phone
+    /// presents in `begin`, judged by `presented` (a phone without them is refused `not-eligible`).
+    pub fn new_mesh(
+        relay_id: &str,
+        apex: &str,
+        com: Arc<dyn PhoneCom>,
+        presented: Arc<PresentedEligibility>,
+        cfg: PhoneConfig,
+        log: Box<dyn Fn(&str) + Send + Sync>,
+    ) -> Self {
+        Self(Arc::new(Inner {
+            relay_id: relay_id.to_owned(),
+            apex: apex.to_lowercase(),
+            com,
+            presented: Some(presented),
+            accepting: std::sync::OnceLock::new(),
             cfg,
             st: Mutex::new(RoutesState::default()),
             log,
@@ -652,6 +687,48 @@ impl PhoneRoutes {
     #[must_use]
     pub fn relay_id(&self) -> &str {
         &self.0.relay_id
+    }
+
+    /// The account's eligibility: `.com`'s answer, or in mesh mode the session's presented grants.
+    async fn eligibility_for(&self, s: &PhoneSession, account: &str) -> Option<Eligibility> {
+        match &self.0.presented {
+            Some(f) => {
+                let grants = s.st.lock().ok().and_then(|x| x.grants.clone());
+                Some(grants.and_then(|g| f(account, &g)).unwrap_or_default())
+            }
+            None => self.0.com.eligibility(account).await,
+        }
+    }
+
+    /// Mesh mode: whether the relay takes new phone routes now (it is fresh).
+    pub fn set_accepting(&self, f: Arc<AcceptingFn>) {
+        let _ = self.0.accepting.set(f);
+    }
+
+    /// Close every phone tunnel (mesh mode past close-all: phones follow the strict rule, §4.6).
+    pub fn close_all(&self, code: u16, reason: &str) {
+        let all: Vec<Arc<PhoneSession>> = self
+            .0
+            .st
+            .lock()
+            .map(|st| st.sessions.values().cloned().collect())
+            .unwrap_or_default();
+        for s in all {
+            let _ = s.out.send(PhoneOut::Close(code, reason.to_owned()));
+        }
+    }
+
+    /// Re-check every held route now (a log entry revoked a grant or changed an account's authority).
+    pub async fn recheck_all(&self) {
+        let all: Vec<Arc<PhoneSession>> = self
+            .0
+            .st
+            .lock()
+            .map(|st| st.holders.values().cloned().collect())
+            .unwrap_or_default();
+        for s in all {
+            self.recheck(&s).await;
+        }
     }
 
     #[must_use]
@@ -762,10 +839,25 @@ impl PhoneRoutes {
     }
 
     /// Step 1: the phone names its account; it gets a nonce for this session and the next generation.
-    pub async fn begin(&self, s: &Arc<PhoneSession>, account: Option<&str>) {
+    pub async fn begin(
+        &self,
+        s: &Arc<PhoneSession>,
+        account: Option<&str>,
+        grants: Option<&Value>,
+    ) {
         let Some(account) = account.filter(|a| is_account(a)) else {
             return self.refuse(s, "malformed", None);
         };
+        if self.0.accepting.get().is_some_and(|f| !f()) {
+            self.refuse(s, "unavailable", None);
+            let _ = s.out.send(PhoneOut::Close(1013, "try-again".into()));
+            return;
+        }
+        if self.0.presented.is_some()
+            && let Ok(mut ss) = s.st.lock()
+        {
+            ss.grants = grants.filter(|g| g.is_array()).cloned();
+        }
         if let Some(h) = s.held()
             && self.holds(s, &h.hostname)
         {
@@ -822,7 +914,7 @@ impl PhoneRoutes {
             Ok(c) => c,
             Err(code) => return self.refuse(s, code, None),
         };
-        let elig = self.0.com.eligibility(&offer.account).await;
+        let elig = self.eligibility_for(s, &offer.account).await;
         if s.closed() {
             return;
         }
@@ -1068,7 +1160,7 @@ impl PhoneRoutes {
         let Some(h) = s.held().filter(|_| !s.closed()) else {
             return;
         };
-        let elig = self.0.com.eligibility(&h.account).await;
+        let elig = self.eligibility_for(s, &h.account).await;
         if s.closed() || s.held().as_ref() != Some(&h) {
             return;
         }
@@ -1402,7 +1494,11 @@ where
                     match v.get("type").and_then(Value::as_str) {
                         Some("begin") => {
                             routes
-                                .begin(&session, v.get("account").and_then(Value::as_str))
+                                .begin(
+                                    &session,
+                                    v.get("account").and_then(Value::as_str),
+                                    v.get("grants"),
+                                )
                                 .await
                         }
                         Some("claim") => routes.claim(&session, v.get("claim"), sig).await,

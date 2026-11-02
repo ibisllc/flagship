@@ -6,8 +6,10 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use std::sync::OnceLock;
+use std::time::Instant;
+
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Semaphore, watch};
 
@@ -102,6 +104,13 @@ fn bump(c: &AtomicU64) {
     c.fetch_add(1, Ordering::Relaxed);
 }
 
+/// A visitor's byte stream: a TCP socket, or the holder's end of a bridged stream (relay-mesh.md §7.4).
+pub trait VisitorIo: AsyncRead + AsyncWrite + Unpin + Send + 'static {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> VisitorIo for T {}
+
+/// Counts a stream's bytes for the home's rebalancing (relay-mesh.md §10.1).
+type Counter = Arc<dyn Fn(usize) + Send + Sync>;
+
 /// Domain → the claim its single park group is waiting for.
 type ParkLot = HashMap<String, watch::Receiver<Option<Arc<Tunnel>>>>;
 
@@ -116,6 +125,8 @@ pub struct Router {
     /// Single-flight park groups: one nudge + one poll per unresolved domain.
     parked: Arc<Mutex<ParkLot>>,
     active: Arc<AtomicUsize>,
+    /// The relay mesh, set once at start when `FLAGSHIP_MESH=on`.
+    mesh: Arc<OnceLock<crate::mesh::Mesh>>,
 }
 
 impl std::fmt::Debug for Router {
@@ -143,7 +154,13 @@ impl Router {
             pending,
             parked: Arc::new(Mutex::new(HashMap::new())),
             active: Arc::new(AtomicUsize::new(0)),
+            mesh: Arc::new(OnceLock::new()),
         }
+    }
+
+    /// Route through the mesh (§7.2) from now on.
+    pub fn set_mesh(&self, mesh: crate::mesh::Mesh) {
+        let _ = self.mesh.set(mesh);
     }
 
     /// Visitor connections currently spliced to a tunnel.
@@ -200,11 +217,35 @@ impl Router {
     }
 
     async fn handle(&self, mut sock: TcpStream, permit: tokio::sync::OwnedSemaphorePermit) {
+        let arrived = Instant::now();
         let peeked = self.peek(&mut sock).await;
         drop(permit);
         let Peek::Hello(sni, initial) = peeked else {
             return;
         };
+        let _ = sock.set_nodelay(true);
+        if let Some(mesh) = self.mesh.get().cloned() {
+            return self.mesh_route(&mesh, sock, sni, initial, arrived).await;
+        }
+        self.route_local(sock, sni, initial, arrived, None).await;
+    }
+
+    fn deadline(&self, arrived: Instant) -> Instant {
+        arrived
+            .checked_add(self.cfg.hold_timeout)
+            .unwrap_or(arrived)
+    }
+
+    /// The holder's routing, exactly today's: the registry, park-and-nudge, or a delayed drop. `entry` is the relay a
+    /// bridged visitor reached (relay-mesh.md §7.4); `None` for a visitor on this relay.
+    pub async fn route_local<S: VisitorIo>(
+        &self,
+        sock: S,
+        sni: String,
+        initial: Vec<u8>,
+        arrived: Instant,
+        entry: Option<String>,
+    ) {
         let (found, nudgeable, user) = match self.registry.lock() {
             Ok(r) => (
                 r.find_by_sni(&sni),
@@ -213,34 +254,112 @@ impl Router {
             ),
             Err(_) => return,
         };
+        let counter = self.counter(&sni, entry);
         if let Some(t) = found {
             bump(&self.stats.routed);
-            self.pipe(sock, t, &sni, initial).await;
+            self.pipe_counted(sock, t, &sni, initial, counter).await;
             return;
         }
         if nudgeable {
-            self.park(sock, sni, initial, user).await;
+            self.park(sock, sni, initial, user, counter).await;
             return;
         }
         if user.is_some() {
             bump(&self.stats.no_box_registered);
             self.stats.missed("no-box-registered", &sni);
-            self.delayed_drop(sock).await;
+            self.delayed_drop(sock, self.deadline(arrived)).await;
             return;
         }
         bump(&self.stats.no_user);
     }
 
-    /// Hold a first-party miss for the same time a parked one waits, then close, saying
-    /// nothing: the close time tells a prober nothing about the account.
-    async fn delayed_drop(&self, mut sock: TcpStream) {
+    /// The home counts an account's visitor bytes by entry relay; the phone's bare name is not counted.
+    fn counter(&self, sni: &str, entry: Option<String>) -> Option<Counter> {
+        let mesh = self.mesh.get()?.clone();
+        match mesh.classify(sni) {
+            crate::mesh::NameClass::Box(_) | crate::mesh::NameClass::Account(_) => {}
+            _ => return None,
+        }
+        let account = crate::registry::user_of(sni, &self.cfg.apex)?;
+        mesh.count_traffic(&account, entry.as_deref(), 0, 1);
+        Some(Arc::new(move |n: usize| {
+            mesh.count_traffic(&account, entry.as_deref(), n as u64, 0);
+        }))
+    }
+
+    /// The entry relay's side of §7.2: route locally, forward to the holder over its bridge, or query the peers first.
+    /// Every refusal closes the visitor at the hold time.
+    async fn mesh_route(
+        &self,
+        mesh: &crate::mesh::Mesh,
+        sock: TcpStream,
+        sni: String,
+        initial: Vec<u8>,
+        arrived: Instant,
+    ) {
+        use crate::mesh::Route;
+        let mut route = mesh.route(&sni);
+        if let Route::Query(pod) = &route {
+            if mesh.fresh() && mesh.query(pod, None).await {
+                route = mesh.route(&sni);
+            } else {
+                route = Route::Drop;
+            }
+        }
+        let mut sock = sock;
+        let mut requeried = false;
+        loop {
+            match route {
+                Route::Local => return self.route_local(sock, sni, initial, arrived, None).await,
+                Route::Query(_) | Route::Drop => break,
+                Route::Forward { holder, key } => {
+                    match mesh
+                        .forward(sock, &holder, key.as_deref(), &sni, initial.clone())
+                        .await
+                    {
+                        Ok(()) => return,
+                        Err((code, back)) => {
+                            sock = back;
+                            mesh.counters()
+                                .forward_refused
+                                .fetch_add(1, Ordering::Relaxed);
+                            // One re-query for a box that moved, never via the relay that refused.
+                            match key {
+                                Some(pod) if code == "not-holder" && !requeried => {
+                                    requeried = true;
+                                    mesh.drop_item(&pod, &holder);
+                                    if mesh.query(&pod, Some(&holder)).await {
+                                        route = mesh.route(&sni);
+                                        if matches!(&route, Route::Forward { holder: h, .. } if *h == holder)
+                                        {
+                                            break;
+                                        }
+                                        continue;
+                                    }
+                                    break;
+                                }
+                                _ => break,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        bump(&self.stats.no_box_registered);
+        self.stats.missed("no-box-registered", &sni);
+        self.delayed_drop(sock, self.deadline(arrived)).await;
+    }
+
+    /// Hold a miss until `until` (the hold time after arrival), then close, saying nothing: the close time tells a
+    /// prober nothing about the account, the mesh or the holder.
+    async fn delayed_drop<S: VisitorIo>(&self, mut sock: S, until: Instant) {
         let prev = self.delayed.fetch_add(1, Ordering::AcqRel);
         if prev >= self.cfg.max_delayed_drops {
             self.delayed.fetch_sub(1, Ordering::AcqRel);
             return;
         }
         let mut sink = [0u8; 1024];
-        let _ = tokio::time::timeout(self.cfg.hold_timeout, async {
+        let _ = tokio::time::timeout_at(tokio::time::Instant::from_std(until), async {
             while let Ok(n) = sock.read(&mut sink).await {
                 if n == 0 {
                     break;
@@ -253,12 +372,13 @@ impl Router {
 
     /// Park until a box claims `sni` (single-flight per domain), reading at most
     /// `max_parked_bytes` from the visitor meanwhile, then replay everything in order.
-    async fn park(
+    async fn park<S: VisitorIo>(
         &self,
-        mut sock: TcpStream,
+        mut sock: S,
         sni: String,
         mut initial: Vec<u8>,
         user: Option<String>,
+        counter: Option<Counter>,
     ) {
         bump(&self.stats.parked);
         let domain = sni.to_lowercase();
@@ -303,7 +423,7 @@ impl Router {
         match claimed {
             Some(t) => {
                 bump(&self.stats.released);
-                self.pipe(sock, t, &domain, initial).await;
+                self.pipe_counted(sock, t, &domain, initial, counter).await;
             }
             None => {
                 bump(&self.stats.hold_timeouts);
@@ -350,12 +470,32 @@ impl Router {
     }
 
     /// Splice the visitor to the tunnel: OPEN, DATA(initial), then both directions bounded.
-    pub async fn pipe(&self, sock: TcpStream, tunnel: Arc<Tunnel>, sni: &str, initial: Vec<u8>) {
+    pub async fn pipe<S: VisitorIo>(
+        &self,
+        sock: S,
+        tunnel: Arc<Tunnel>,
+        sni: &str,
+        initial: Vec<u8>,
+    ) {
+        self.pipe_counted(sock, tunnel, sni, initial, None).await;
+    }
+
+    async fn pipe_counted<S: VisitorIo>(
+        &self,
+        sock: S,
+        tunnel: Arc<Tunnel>,
+        sni: &str,
+        initial: Vec<u8>,
+        counter: Option<Counter>,
+    ) {
         let account = tunnel
             .pod_canonical()
             .and_then(|pc| account_from_canonical(&pc, &self.cfg.apex));
         if let Some(m) = &self.meter {
             m.add(account.as_deref(), initial.len());
+        }
+        if let Some(c) = &counter {
+            c(initial.len());
         }
         let first_wait = self
             .meter
@@ -365,21 +505,21 @@ impl Router {
             return;
         };
         self.active.fetch_add(1, Ordering::AcqRel);
-        let _ = sock.set_nodelay(true);
-        let (rd, wr) = sock.into_split();
+        let (rd, wr) = tokio::io::split(sock);
         let handle = Arc::new(handle);
         let up = {
             let h = handle.clone();
             let me = self.clone();
             let account = account.clone();
+            let counter = counter.clone();
             async move {
                 if let Some(w) = first_wait.filter(|w| !w.is_zero()) {
                     tokio::time::sleep(w).await;
                 }
-                me.uplink(rd, &h, account.as_deref()).await;
+                me.uplink(rd, &h, account.as_deref(), counter).await;
             }
         };
-        let down = downlink(wr, handle.clone());
+        let down = downlink(wr, handle.clone(), counter);
         tokio::pin!(down);
         let mut closed = handle.tunnel.closed_signal();
         let down_done = tokio::select! {
@@ -395,7 +535,13 @@ impl Router {
         self.active.fetch_sub(1, Ordering::AcqRel);
     }
 
-    async fn uplink(&self, mut rd: OwnedReadHalf, h: &StreamHandle, account: Option<&str>) {
+    async fn uplink<S: VisitorIo>(
+        &self,
+        mut rd: ReadHalf<S>,
+        h: &StreamHandle,
+        account: Option<&str>,
+        counter: Option<Counter>,
+    ) {
         let mut buf = vec![0u8; self.cfg.read_chunk.max(1)];
         loop {
             let n = match rd.read(&mut buf).await {
@@ -405,6 +551,9 @@ impl Router {
             let chunk = buf.get(..n).unwrap_or_default().to_vec();
             if !h.tunnel.send_data(h.id, chunk).await {
                 return;
+            }
+            if let Some(c) = &counter {
+                c(n);
             }
             if let Some(m) = &self.meter {
                 m.add(account, n);
@@ -419,12 +568,19 @@ impl Router {
 
 /// Box → visitor until the queue ends (box CLOSE) or is aborted; credit returns as bytes
 /// reach the socket.
-async fn downlink(mut wr: OwnedWriteHalf, h: Arc<StreamHandle>) {
+async fn downlink<S: VisitorIo>(
+    mut wr: WriteHalf<S>,
+    h: Arc<StreamHandle>,
+    counter: Option<Counter>,
+) {
     while let Some(chunk) = h.down.pop().await {
         if wr.write_all(&chunk).await.is_err() {
             h.down.abort();
             h.tunnel.close_stream(h.id);
             return;
+        }
+        if let Some(c) = &counter {
+            c(chunk.len());
         }
         h.tunnel.consumed(h.id, chunk.len());
     }

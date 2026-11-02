@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use flagship_crypto::serving::{
-    Grace, OnLapse, RenewalKeyDelegation, RevocationState, ServingDecision, ServingInput,
-    ServingLease, ServingPolicy, SignedLease, box_revoked, serving_decision,
+    Grace, OnLapse, PolicyHead, RenewalKeyDelegation, RevocationState, ServingDecision,
+    ServingInput, ServingLease, ServingPolicy, SignedLease, box_revoked, serving_decision,
+    serving_decision_at_head,
 };
 use serde_json::Value;
 
@@ -29,6 +30,15 @@ pub struct ComServingRecord {
     pub revoked: bool,
     pub policy: Option<(ServingPolicy, String)>,
     pub leases: Vec<SignedLease>,
+    /// Mesh mode (relay-mesh.md §4.4): the record comes from the relay log, the policy and leases from the box's own
+    /// HELLO; only a policy matching the log's head for (box, regGen) counts.
+    pub mesh: Option<MeshRecord>,
+}
+
+/// The log's part of a mesh-mode record.
+#[derive(Debug, Clone, Default)]
+pub struct MeshRecord {
+    pub policy_head: Option<PolicyHead>,
 }
 
 /// `unknown-box`: `.com` answered that the account has no server under this key (deleted, or its name now belongs to
@@ -37,6 +47,7 @@ pub const UNKNOWN_BOX: &str = "unknown-box";
 
 /// `.com`'s definitive answer about a box.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum ServingFetched {
     Record(ComServingRecord),
     /// [`UNKNOWN_BOX`].
@@ -179,7 +190,35 @@ pub fn parse_com_serving_record(body: &Value) -> Option<ComServingRecord> {
         revoked: o.get("revoked").and_then(Value::as_bool) == Some(true),
         policy,
         leases,
+        mesh: None,
     })
+}
+
+/// The box's own leases from its HELLO (`servingLeases`, relay-mesh.md §9.5): `[{record, signature, delegation?:
+/// {record, signature}}]`, at most 8; entries out of shape are skipped.
+#[must_use]
+pub fn parse_hello_leases(raw: &Value) -> Vec<SignedLease> {
+    raw.get("servingLeases")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(8)
+        .filter_map(|l| {
+            let (r, sig) = signed(l, "lease")?;
+            let delegation = match l.get("delegation") {
+                None | Some(Value::Null) => None,
+                Some(d) => {
+                    let (dr, dsig) = signed(d, "delegation")?;
+                    Some((delegation_of(dr)?, dsig))
+                }
+            };
+            Some(SignedLease {
+                lease: lease_of(r)?,
+                signature: sig,
+                delegation,
+            })
+        })
+        .collect()
 }
 
 /// Where the gate reads `.com`'s record and the account's sensitive-order key.
@@ -268,6 +307,8 @@ pub struct ServingHello {
     pub admin_key: Option<String>,
     /// `servingPolicy`: the box's stored signed policy.
     pub policy: Option<(ServingPolicy, String)>,
+    /// `servingLeases` (mesh mode reads them; `.com`'s copies count otherwise).
+    pub leases: Vec<SignedLease>,
 }
 
 /// How the gate acts on one tunnel. Called with no gate lock held.
@@ -344,6 +385,9 @@ pub struct GateConfig {
     pub retry: Duration,
     /// How often the contact thresholds are checked. Default 5 s.
     pub check_every: Duration,
+    /// Mesh mode (owner decision 2026-11-01, relay-mesh.md §4.6 as amended): past close-all, a box whose decision has no
+    /// end (no dead-man to enforce) keeps its tunnel; every other one is closed.
+    pub keep_indefinite_on_lost: bool,
 }
 
 impl Default for GateConfig {
@@ -353,6 +397,7 @@ impl Default for GateConfig {
             close_all_after: Duration::from_secs(600),
             retry: Duration::from_secs(30),
             check_every: Duration::from_secs(5),
+            keep_indefinite_on_lost: false,
         }
     }
 }
@@ -540,6 +585,18 @@ impl ServingGate {
         }
     }
 
+    /// Mesh mode: contact as of `at` (the issue time of the newest head applied), never moving backwards.
+    pub fn note_contact_at(&self, at: Instant) {
+        if let Ok(mut s) = self.0.st.lock()
+            && at > s.last_contact
+        {
+            s.last_contact = at;
+            if self.contact_of(&s) != Contact::Lost {
+                s.lost_closed = false;
+            }
+        }
+    }
+
     fn contact_of(&self, s: &GateState) -> Contact {
         let quiet = s.last_contact.elapsed();
         if quiet >= self.0.cfg.close_all_after {
@@ -584,15 +641,31 @@ impl ServingGate {
                 ));
                 s.logged = c;
             }
-            if c != Contact::Lost || s.lost_closed {
+            let keep = self.0.cfg.keep_indefinite_on_lost;
+            // Mesh mode keeps checking while lost: a box whose decision loses its exemption (a HELLO refresh) goes too.
+            if c != Contact::Lost || (s.lost_closed && !keep) {
                 return;
             }
             s.lost_closed = true;
-            s.boxes.values().flatten().cloned().collect()
+            s.boxes
+                .values()
+                .flatten()
+                .filter(|b| !(keep && b.decision() == GateDecision::Serve { until: None }))
+                .cloned()
+                .collect()
         };
         for b in victims {
             b.handle.close_tunnel(1013, "serving-feed-lost");
         }
+    }
+
+    /// Is this box exempt from the lost-contact rule (§4.6 as amended): attached here with a decision that serves its
+    /// apps with no end?
+    #[must_use]
+    pub fn exempt(&self, username: &str, box_pub: &str) -> bool {
+        self.boxes_of(&box_key(&username.to_lowercase(), &box_pub.to_lowercase()))
+            .iter()
+            .any(|b| b.decision() == GateDecision::Serve { until: None })
     }
 
     #[must_use]
@@ -804,19 +877,31 @@ impl ServingGate {
             // An older box that pins nothing keeps its control name (recovery stays possible) but serves no app.
             return deny(true, "admin-keys-differ");
         };
-        let policies: Vec<(ServingPolicy, String)> =
-            rec.policy.iter().chain(h.policy.iter()).cloned().collect();
-        match serving_decision(&ServingInput {
+        let policies: Vec<(ServingPolicy, String)> = match &rec.mesh {
+            Some(_) => h.policy.iter().cloned().collect(),
+            None => rec.policy.iter().chain(h.policy.iter()).cloned().collect(),
+        };
+        let leases = if rec.mesh.is_some() {
+            &h.leases
+        } else {
+            &rec.leases
+        };
+        let input = ServingInput {
             account: &h.username,
             box_pub: &h.box_pub,
             reg_gen: rec.reg_gen,
             admin_key_from_com: com_key,
             admin_key_from_box: box_key,
             policies: &policies,
-            leases: &rec.leases,
+            leases,
             revocations: revs,
             now: now_u64(),
-        }) {
+        };
+        let decided = match &rec.mesh {
+            Some(m) => serving_decision_at_head(&input, m.policy_head.as_ref()),
+            None => serving_decision(&input),
+        };
+        match decided {
             ServingDecision::Serve { until, .. } => GateDecision::Serve { until },
             ServingDecision::Refuse {
                 control, reason, ..

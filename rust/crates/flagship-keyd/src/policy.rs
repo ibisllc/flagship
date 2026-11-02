@@ -107,7 +107,9 @@ fn canonical_decimal(s: &str) -> Option<u64> {
     let b = s.as_bytes();
     let ok = match b {
         [b'0'] => true,
-        [first, rest @ ..] => (b'1'..=b'9').contains(first) && rest.len() <= 15 && rest.iter().all(u8::is_ascii_digit),
+        [first, rest @ ..] => {
+            (b'1'..=b'9').contains(first) && rest.len() <= 15 && rest.iter().all(u8::is_ascii_digit)
+        }
         [] => false,
     };
     if ok { s.parse().ok() } else { None }
@@ -927,7 +929,10 @@ mod tests {
         denied(a(PUB, "1760000000000", "1760000000000").as_bytes());
         denied(a(PUB, "1760000000000", "01760001800000").as_bytes());
         denied(a(PUB, "1760000000000", " 1760001800000").as_bytes());
-        denied(format!("flagship/relay-attachment/v1|home.a.flagship.services|{PUB}|1|iad1|1|2").as_bytes());
+        denied(
+            format!("flagship/relay-attachment/v1|home.a.flagship.services|{PUB}|1|iad1|1|2")
+                .as_bytes(),
+        );
         denied(format!("{}|x", a(PUB, "1760000000000", "1760001800000")).as_bytes());
     }
 

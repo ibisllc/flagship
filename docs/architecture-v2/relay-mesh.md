@@ -1,7 +1,7 @@
 # Relay mesh: several relays, one data plane (release 0.3)
 
 Status: design, owner-approved direction (AGENTS.md "Make Fly redundant", 2026-11-01). Chunks A (protocol), B
-(`.com`) and C (TS relay) built. This is the
+(`.com`), C (TS relay) and D (Rust relay) built. This is the
 contract the implementation chunks in §15 build to. Current system: `relay-transport.md` (both relays, frames,
 conformance), `serving-wiring.md` (serving gate, revocation log, feed), `phone-route.md` (the bare name),
 `docs/maintainer-trust-enforcement.md` (relay blessing).
@@ -389,8 +389,8 @@ hash equals the head, so `grace: "indefinite"` is verified against the log, not 
 time-limited policy off as indefinite (it gets `policy-stale`). A box with no policy head and no policy offered gets the
 default policy, which is indefinite. No new log field is needed.
 
-The rule, for a relay that is not fresh (`HEAD_REFUSE_NEW_MS` and `HEAD_CLOSE_ALL_MS` from the moment it stopped being
-fresh):
+The rule, for a relay that is not fresh (`HEAD_REFUSE_NEW_MS` and `HEAD_CLOSE_ALL_MS` counted from the newest applied head's
+`issuedAt`, as §0 item 8 and both relays do; settled in §15.4.1):
 
 - **Past 60 s:** new HELLOs are refused (1013) except from a box that is exempt by its HELLO; `/api/health` stays 503.
   A relay with no applied state at all (it restarted during the outage and no peer gave it the log, §6.3
@@ -1078,6 +1078,62 @@ Same modules and behaviour as C (`feed.rs`, `directory.rs`, `bridge.rs`, `attach
 (replaced by `mesh/feed.rs` in mesh mode), `phone.rs`, `blessing.rs`, `http.rs`, `config.rs`. Bridge dialing uses
 tokio-tungstenite over tokio-rustls (as `serving_feed.rs`). Tests: unit, `tests/mesh_core.rs` (three relays on
 loopback), a fuzz target for bridge control JSON and the attachment parser. `cargo clippy -D warnings`, `cargo deny`.
+
+#### 15.4.1 Decisions taken while building D (2026-11-01)
+
+Code: `rust/crates/flagship-relay/src/mesh/` (plus `ca.rs` for the CA keys, `wire.rs` for the JSON shapes,
+`log_authority.rs` for the log-backed HELLO authority and serving record), `relay::start_with_mesh`; the three-relay
+test is `rust/crates/flagship-relay/tests/mesh_core.rs`, the fuzz target `fuzz/fuzz_targets/mesh_control.rs`. D was
+built against C's decisions (§15.3.1) and follows them wherever they fix a wire or timing detail; the differences
+left are listed last.
+
+- D: **CA keys.** The Rust relay verifies the maintainer chain itself: a minimal port of `@ibisllc/maintainers`
+  (`verifyMandateChainFromPin`, `currentAuthority`, `authorizedCaKeys`) over the `.maintainers/` folder
+  (`FLAGSHIP_RELAY_MAINTAINERS_DIR`, default `.maintainers`; `tracks/ca/mandates/*.json` and every
+  `ca-endorsements/*.json` but `bundle.json`) from the baked `MAINTAINER_PINNED_MANDATE_HASH`
+  (`FLAGSHIP_RELAY_MAINTAINER_PIN` overrides it for the gym's chain). A folder with no mandate verifying from the pin
+  stops the process at start. Shared vectors: `packages/protocol/test-vectors/maintainer-ca/vectors.json`
+  (`npx tsx tools/maintainer-ca-vectors.ts`, made by the library itself over the committed snapshot and tampered
+  copies). Timestamps must be the `toISOString()` form. C's `FLAGSHIP_MESH_CA_KEYS` is honoured only in `conformance`
+  builds. **The relay image must carry `.maintainers/`** (`Dockerfile.relay` copies nothing of it today: a release
+  step), and a relay, like a box, needs an update before the newest CA lease ends.
+- D: **Sealed feed.** `flagship_crypto::relay_feed_seal` is the Rust twin of `relayFeedSeal.ts` and of
+  `flagship.seal.v1` (B's vectors pass byte for byte, the negative ones with the same reasons). `SealedFeed` keeps
+  every epoch key received (blessing answer `meshKeys`, else one read of `keys/<relayId>.json` per file that names an
+  epoch it lacks). `FLAGSHIP_RELAY_FEED_PLAIN=1` reads a clear feed in `conformance` builds only.
+- D: **Freshness clock** as C: fresh while the newest applied head is younger than `HEAD_REFUSE_NEW_MS`; new tunnels and
+  phone `begin`s are refused exactly while not fresh; close-all at `HEAD_CLOSE_ALL_MS` after that head's `issuedAt`
+  (from the start for a relay that applied none). §4.6's amended sentence "from the moment it stopped being fresh"
+  would add 60 s to both; C and D both read §0 item 8 ("Stale 60 s … Stale 10 min") instead. To settle in the text.
+- D: **Outage exemption.** While not fresh a HELLO is attached to the gate anyway and admitted only if its decision is
+  `apps:true, until:null` on the last applied state (else `try-again`, 1013); past close-all the gate closes every
+  non-exempt box on each check (so a box that loses its exemption on a HELLO refresh goes too); phone tunnels are
+  closed 1013 `serving-feed-lost`; returning to fresh re-decides every box. Entry and holder rules as C.
+- D: **The holder routes a bridged stream through its normal local path** (registry, park-and-nudge, metering) over an
+  in-process duplex, so its duties are exactly a local visitor's; the home counts the account's bytes there by entry
+  relay (§10.1). A holder drains a stream's queued bytes before it sends CLOSE. `refuse` and the CLOSE that follows go
+  out on one ordered channel.
+- D: **HELLO lookups, pb-mail streams, mailbox items, phone ledger wire, query answers, account moves at peers,
+  superseded holders, drain, hint limits, name classes, an early end as a refusal**: as C (§15.3.1). D's L also puts
+  `ok:true` in `phone-begun`; its P treats a missing `ok` as success.
+- D: **Store.** One item per (name, relay), checked with chunk A's checks on insert; after a log batch only the names it
+  touches are re-checked (a nameHash index for `box-register`, the box key for `box-revoke`) and a revoked relay's
+  items dropped; after a directory change the items of relays no longer listed (or no longer `full`, for legacy) are
+  re-checked. Valid account moves are re-sent to a peer after its sync dump.
+- D: **Legacy** attachments are minted at once for a box without `mesh-v1`, renewed at a third of their TTL
+  (`FLAGSHIP_MESH_ATTACH_TTL_MS` shortens the TTL), and not minted while another relay holds a box-signed attachment
+  for the name, or a legacy one with a later `attachedAt` (the box reconnected there).
+- D: **Bridges.** A peer over its query limit for 60 s straight is closed 4429 `over-limit` and refused for 10 min (not
+  dialled; its handshake answered `revoked`). The second of two bridges between one pair is closed 4409 `duplicate`.
+  Control messages are handled in the reader, in order.
+- D: **Blessing** renewed once a day old (or past half its life, for a 26 h blessing), retried every 60 s without one.
+- D: **Health and stats.** `/api/health` adds `mesh: {relayId, ready, readiness}` (`no-blessing`, `not-in-directory`,
+  `directory-expired`, `stale`, `draining`, `bridges`, `ready`) and is 503 unless ready; `/api/stats` adds `mesh`
+  (state sizes, head age, directory version, per-peer counters). An `entry` relay answers 404 on `/tunnel` and
+  `/phone-tunnel`, mints no legacy attachment and is never a phone ledger. `FLAGSHIP_MESH_CAPACITY` sets
+  `load.capacity` (default 10,000).
+- D: **Left different from C**, to settle in G: the Rust relay's own CA source (the chain, not an env list), and
+  `FLAGSHIP_RELAY_FEED_PLAIN` / `FLAGSHIP_MESH_CA_KEYS` being conformance-build-only in Rust.
 
 ### 15.5 E. Box side
 

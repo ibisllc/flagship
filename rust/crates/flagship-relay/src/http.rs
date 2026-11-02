@@ -131,21 +131,35 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 fn health(app: &HttpApp) -> Resp {
-    json(
-        StatusCode::OK,
-        &serde_json::json!({
-            "ok": true,
-            "service": app.service,
-            "surface": "services",
-            "runtime": "rust",
-            "version": env!("CARGO_PKG_VERSION"),
-            "uptimeMs": u64::try_from(app.started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            "memory": { "rss": rss_bytes() },
-            "tunnelsOnline": app.hub.live.lock().map_or(0, |l| l.len()),
-            "pid": std::process::id(),
-            "now": now_iso(),
-        }),
-    )
+    let mut v = serde_json::json!({
+        "ok": true,
+        "service": app.service,
+        "surface": "services",
+        "runtime": "rust",
+        "version": env!("CARGO_PKG_VERSION"),
+        "uptimeMs": u64::try_from(app.started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        "memory": { "rss": rss_bytes() },
+        "tunnelsOnline": app.hub.live.lock().map_or(0, |l| l.len()),
+        "pid": std::process::id(),
+        "now": now_iso(),
+    });
+    // A mesh relay is healthy only while mesh-ready (relay-mesh.md §2): the load balancer stops sending it boxes and
+    // visitors otherwise.
+    let mut status = StatusCode::OK;
+    if let Some(m) = &app.hub.mesh {
+        let (ready, why) = m.ready();
+        if !ready {
+            status = StatusCode::SERVICE_UNAVAILABLE;
+        }
+        if let Some(o) = v.as_object_mut() {
+            o.insert("ok".into(), serde_json::json!(ready));
+            o.insert(
+                "mesh".into(),
+                serde_json::json!({"relayId": m.relay_id(), "ready": ready, "readiness": why}),
+            );
+        }
+    }
+    json(status, &v)
 }
 
 fn stats(app: &HttpApp, req: &Request<Incoming>) -> Resp {
@@ -188,6 +202,7 @@ fn stats(app: &HttpApp, req: &Request<Incoming>) -> Resp {
                 }
                 v
             }),
+            "mesh": app.hub.mesh.as_ref().map(crate::mesh::Mesh::stats_json),
             "now": now_iso(),
         }),
     )
@@ -213,6 +228,10 @@ fn upgrade_ok(req: &Request<Incoming>) -> Option<String> {
 fn tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
     if app.hub.draining.load(Ordering::Acquire) {
         return error(StatusCode::SERVICE_UNAVAILABLE, "draining");
+    }
+    // An `entry` relay only accepts visitors (relay-mesh.md §2).
+    if app.hub.mesh.as_ref().is_some_and(|m| !m.is_full()) {
+        return error(StatusCode::NOT_FOUND, "not found");
     }
     let Some(accept) = upgrade_ok(&req) else {
         return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
@@ -245,6 +264,9 @@ fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
     let Some(routes) = app.hub.phone.clone() else {
         return error(StatusCode::NOT_FOUND, "not found");
     };
+    if app.hub.mesh.as_ref().is_some_and(|m| !m.is_full()) {
+        return error(StatusCode::NOT_FOUND, "not found");
+    }
     let Some(accept) = upgrade_ok(&req) else {
         return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
     };
@@ -258,6 +280,37 @@ fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
             let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
                 .await;
             crate::phone::run_phone_tunnel(ws, routes, cfg).await;
+        }
+    });
+    let mut r = Response::new(Full::new(Bytes::new()));
+    *r.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+    r.headers_mut()
+        .insert(UPGRADE, HeaderValue::from_static("websocket"));
+    r.headers_mut()
+        .insert(CONNECTION, HeaderValue::from_static("Upgrade"));
+    if let Ok(v) = HeaderValue::from_str(&accept) {
+        r.headers_mut().insert("sec-websocket-accept", v);
+    }
+    r
+}
+
+/// `/mesh`: a peer relay's bridge (relay-mesh.md §6); 404 with the mesh off.
+fn mesh_bridge(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
+    let Some(mesh) = app.hub.mesh.clone() else {
+        return error(StatusCode::NOT_FOUND, "not found");
+    };
+    let Some(accept) = upgrade_ok(&req) else {
+        return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
+    };
+    let ws_cfg = WebSocketConfig::default()
+        .max_message_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64))
+        .max_frame_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64));
+    let on_upgrade = hyper::upgrade::on(&mut req);
+    tokio::spawn(async move {
+        if let Ok(up) = on_upgrade.await {
+            let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
+                .await;
+            mesh.accept_bridge(ws).await;
         }
     });
     let mut r = Response::new(Full::new(Bytes::new()));
@@ -297,7 +350,13 @@ async fn mailbox(app: &Arc<HttpApp>, id: &str, req: Request<Incoming>) -> Resp {
             "send the sealed envelope as application/octet-stream",
         );
     }
-    if !reg.has(id) {
+    let remote = !reg.has(id)
+        && app
+            .hub
+            .mesh
+            .as_ref()
+            .is_some_and(|m| m.mailbox_holder(id).is_some());
+    if !reg.has(id) && !remote {
         return error(StatusCode::NOT_FOUND, "that holder isn't connected here");
     }
     if app.mail_in_flight.fetch_add(1, Ordering::AcqRel) >= MAX_MAIL_IN_FLIGHT {
@@ -307,7 +366,11 @@ async fn mailbox(app: &Arc<HttpApp>, id: &str, req: Request<Incoming>) -> Resp {
             .insert("retry-after", HeaderValue::from_static("5"));
         return r;
     }
-    let answer = reg.deliver(id, &body).await;
+    // A mailbox whose holder is on another relay goes over the bridge (relay-mesh.md §7.6, one hop).
+    let answer = match (&app.hub.mesh, remote) {
+        (Some(m), true) => m.forward_mail(id, &body).await,
+        _ => reg.deliver(id, &body).await,
+    };
     app.mail_in_flight.fetch_sub(1, Ordering::AcqRel);
     match answer {
         None => error(StatusCode::NOT_FOUND, "that holder isn't connected here"),
@@ -338,6 +401,7 @@ async fn handle(app: Arc<HttpApp>, req: Request<Incoming>) -> Result<Resp, Infal
     Ok(match (method, path.as_str()) {
         (_, TUNNEL_PATH) => tunnel(&app, req),
         (_, crate::phone::PHONE_TUNNEL_PATH) => phone_tunnel(&app, req),
+        (_, crate::mesh::bridge::MESH_PATH) => mesh_bridge(&app, req),
         (Method::GET, "/api/health") => health(&app),
         (Method::GET, "/api/stats") => stats(&app, &req),
         (Method::POST, p) if p.starts_with("/pb/m/") => {

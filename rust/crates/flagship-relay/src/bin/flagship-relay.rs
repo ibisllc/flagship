@@ -15,6 +15,13 @@ use flagship_relay::com::{ComDirectory, Ttls, UreqGet};
 use flagship_relay::config::Settings;
 use flagship_relay::hub::BlessingSource;
 use flagship_relay::mailbox::MailboxRegistry;
+#[cfg(feature = "conformance")]
+use flagship_relay::mesh::StaticCaKeys;
+use flagship_relay::mesh::log_authority::{LogDirectory, MeshServingFetch};
+use flagship_relay::mesh::phone_ledger::{MeshPhoneCom, presented};
+use flagship_relay::mesh::{
+    CaKeySource, HttpFeed, HttpIssuer, MaintainersCa, Mesh, MeshConfig, MeshParts, SealedFeed,
+};
 use flagship_relay::outbound::com_policy::{ComHostPolicy, HttpPost, Ttls as PolicyTtls, UreqPost};
 use flagship_relay::outbound::{HostPolicy, KnownHostsPolicy, Options, OutboundRelay};
 use flagship_relay::phone::{ComPhone, PhoneConfig, PhoneRoutes};
@@ -162,8 +169,111 @@ fn batch_id() -> String {
     flagship_crypto::trust::hex(&b)
 }
 
+/// The CA keys a mesh relay trusts: the maintainer chain from the folder, or (conformance builds only) a fixed list.
+fn mesh_ca(m: &flagship_relay::config::MeshSettings) -> Result<Arc<dyn CaKeySource>, String> {
+    #[cfg(feature = "conformance")]
+    if let Ok(keys) = std::env::var("FLAGSHIP_MESH_CA_KEYS") {
+        return Ok(Arc::new(StaticCaKeys(
+            keys.split(',')
+                .map(|k| k.trim().to_ascii_lowercase())
+                .collect(),
+        )));
+    }
+    let ca = MaintainersCa::load(&m.maintainers_dir, &m.maintainer_pin)?;
+    if ca.chain_len() == 0 {
+        return Err(format!(
+            "no ca-track mandate under {} verifies from the pin",
+            m.maintainers_dir.display()
+        ));
+    }
+    Ok(Arc::new(ca))
+}
+
+/// The sealed feed (§4.5.1); conformance builds read a clear one with `FLAGSHIP_RELAY_FEED_PLAIN=1` (local harnesses).
+fn mesh_feed_cipher(
+    s: &Settings,
+    m: &flagship_relay::config::MeshSettings,
+) -> Arc<dyn flagship_relay::mesh::FeedDecrypt> {
+    #[cfg(feature = "conformance")]
+    if std::env::var("FLAGSHIP_RELAY_FEED_PLAIN").as_deref() == Ok("1") {
+        return Arc::new(flagship_relay::mesh::PlainFeed);
+    }
+    SealedFeed::new(&s.apex, &m.relay_id, m.key_seed)
+}
+
+/// The relay mesh's parts (relay-mesh.md §15.4): the log-backed authority and serving gate, the mesh phone ledger.
+struct MeshWiring {
+    mesh: Mesh,
+    gate: ServingGate,
+    phone: Option<PhoneRoutes>,
+}
+
+fn build_mesh(
+    s: &Settings,
+    m: &flagship_relay::config::MeshSettings,
+) -> Result<MeshWiring, String> {
+    let mut cfg = MeshConfig::new(&m.relay_id, &s.apex, m.kind, &m.log_pub);
+    cfg.refuse_new_after = s.serving_refuse_new;
+    cfg.close_all_after = s.serving_close_all;
+    cfg.peer_urls.clone_from(&m.peer_urls);
+    if let Some(d) = m.feed_poll {
+        cfg.feed_poll = d;
+    }
+    if let Some(d) = m.rebalance {
+        cfg.rebalance_every = d;
+    }
+    if let Some(d) = m.min_move {
+        cfg.min_move = d;
+        cfg.colocate_every = cfg.colocate_every.min(d);
+    }
+    if let Some(c) = m.capacity {
+        cfg.capacity = c;
+    }
+    if let Some(d) = m.attach_ttl {
+        cfg.legacy_ttl = d;
+    }
+    let parts = MeshParts {
+        feed: HttpFeed::new(&m.feed_url),
+        decrypt: mesh_feed_cipher(s, m),
+        ca: mesh_ca(m)?,
+        issuer: HttpIssuer::new(&s.com_base_url),
+    };
+    let mesh = Mesh::new(
+        cfg,
+        ed25519_dalek::SigningKey::from_bytes(&m.key_seed),
+        parts,
+        Box::new(log),
+    )?;
+    let gate = ServingGate::new(
+        Arc::new(MeshServingFetch(mesh.clone())),
+        GateConfig {
+            refuse_new_after: s.serving_refuse_new,
+            close_all_after: s.serving_close_all,
+            check_every: s.serving_check,
+            keep_indefinite_on_lost: true,
+            ..GateConfig::default()
+        },
+        Box::new(log),
+    );
+    let phone = s.phone_route.then(|| {
+        PhoneRoutes::new_mesh(
+            &m.relay_id,
+            &s.apex,
+            Arc::new(MeshPhoneCom(mesh.clone())),
+            presented(&mesh),
+            PhoneConfig::default(),
+            Box::new(log),
+        )
+    });
+    Ok(MeshWiring { mesh, gate, phone })
+}
+
 async fn run(s: Settings) -> Result<(), String> {
     let post: Arc<dyn HttpPost> = Arc::new(UreqPost::new(Duration::from_secs(10)));
+    let wiring = match &s.mesh {
+        Some(m) => Some(build_mesh(&s, m)?),
+        None => None,
+    };
 
     let directory = ComDirectory::new(
         &s.com_base_url,
@@ -176,6 +286,7 @@ async fn run(s: Settings) -> Result<(), String> {
     // fails closed: no new tunnels after 60 s without a frame from `.com`'s feed, every tunnel closed after 10 min.
     let mut serving_tasks = Vec::new();
     let serving = match (&s.serving_revocation_pub, &s.control_secret) {
+        _ if wiring.is_some() => None,
         (Some(pubkey), Some(secret)) => {
             let dir = directory.clone();
             let fetch = ComServingFetch::new(
@@ -229,20 +340,39 @@ async fn run(s: Settings) -> Result<(), String> {
         _ => None,
     };
 
-    let key = load_or_create_key(s.hub_key_path.as_deref())
-        .map_err(|e| format!("no randomness for the hub key: {e}"))?;
-    let blessing = Arc::new(HubBlessing::new(
-        key,
-        &s.hub_host,
-        &s.com_base_url,
-        s.control_secret.as_deref(),
-        Box::new(log),
-    ));
-    log(&format!(
-        "relay-blessing provider started hubKey=ok host={}",
-        s.hub_host
-    ));
-    let _blessing_task = blessing.spawn(Arc::clone(&post), DEFAULT_REFRESH);
+    // Mesh mode: the relay key (from its seed) signs HELLO_ACK and the blessing is asked for with proof of possession
+    // (relay-mesh.md §3.2); otherwise today's hub key and shared-secret blessing.
+    let blessing: Arc<dyn BlessingSource> = match &wiring {
+        Some(w) => {
+            log(&format!(
+                "relay mesh ON relayId={} relayKey={} kind={}",
+                w.mesh.relay_id(),
+                w.mesh.relay_pub(),
+                if w.mesh.is_full() { "full" } else { "entry" }
+            ));
+            Arc::new(w.mesh.clone())
+        }
+        None => {
+            let key = load_or_create_key(s.hub_key_path.as_deref())
+                .map_err(|e| format!("no randomness for the hub key: {e}"))?;
+            let b = Arc::new(HubBlessing::new(
+                key,
+                &s.hub_host,
+                &s.com_base_url,
+                s.control_secret.as_deref(),
+                Box::new(log),
+            ));
+            log(&format!(
+                "relay-blessing provider started hubKey=ok host={}",
+                s.hub_host
+            ));
+            let _blessing_task = b.spawn(Arc::clone(&post), DEFAULT_REFRESH);
+            b
+        }
+    };
+    if let Some(w) = &wiring {
+        serving_tasks.push(w.gate.spawn());
+    }
 
     let usage = match &s.usage_secret {
         Some(secret) => {
@@ -310,18 +440,29 @@ async fn run(s: Settings) -> Result<(), String> {
         c.hub.apex.clone_from(&s.apex);
         c
     };
+    let authority: Arc<dyn flagship_relay::hello::HelloAuthority> = match &wiring {
+        Some(w) => Arc::new(DirectoryAuthority::new(LogDirectory(w.mesh.clone()))),
+        None => Arc::new(authority),
+    };
     let collab = Collaborators {
-        authority: Arc::new(authority),
-        blessing: Some(Arc::clone(&blessing) as Arc<dyn BlessingSource>),
+        authority,
+        blessing: Some(blessing),
         meter: usage.clone().map(|m| m as Arc<dyn Meter>),
         outbound,
         mailboxes: s.pb_mail.then(|| Arc::new(MailboxRegistry::default())),
         stats_secret: s.usage_secret.clone(),
-        serving: serving.as_ref().map(|(g, _, _)| g.clone()),
+        serving: match &wiring {
+            Some(w) => Some(w.gate.clone()),
+            None => serving.as_ref().map(|(g, _, _)| g.clone()),
+        },
         serving_feed: serving.as_ref().map(|(_, f, _)| Arc::clone(f)),
-        phone: serving.as_ref().and_then(|(_, _, p)| p.clone()),
+        phone: match &wiring {
+            Some(w) => w.phone.clone(),
+            None => serving.as_ref().and_then(|(_, _, p)| p.clone()),
+        },
     };
-    let running = relay::start(cfg, listeners, collab).map_err(|e| e.to_string())?;
+    let running = relay::start_with_mesh(cfg, listeners, collab, wiring.map(|w| w.mesh))
+        .map_err(|e| e.to_string())?;
     log(&format!(
         "SNI router listening on :{} (raw TCP / TLS passthrough)",
         running.sni_addr.port()

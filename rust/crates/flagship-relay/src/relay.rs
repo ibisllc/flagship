@@ -81,6 +81,8 @@ pub struct RunningRelay {
     pub echo_addr: Option<SocketAddr>,
     pub registry: SharedRegistry,
     pub router: Router,
+    /// The relay mesh, when on.
+    pub mesh: Option<crate::mesh::Mesh>,
     ctx: HubContext,
     stop_accept: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
@@ -119,6 +121,17 @@ impl std::fmt::Debug for Collaborators {
 }
 
 pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<RunningRelay, StartError> {
+    start_with_mesh(cfg, l, c, None)
+}
+
+/// [`start`] with the relay mesh (relay-mesh.md): the router routes through it, the hub negotiates `mesh-v1`, `/mesh`
+/// accepts bridges, and its background tasks start.
+pub fn start_with_mesh(
+    cfg: RelayConfig,
+    l: Listeners,
+    c: Collaborators,
+    mesh: Option<crate::mesh::Mesh>,
+) -> Result<RunningRelay, StartError> {
     if cfg.require_verified_authority && !c.authority.verifies_signatures() {
         return Err(StartError::UnverifiedAuthority);
     }
@@ -147,8 +160,24 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         phone: c.phone.clone(),
         live: Arc::new(Mutex::new(HashMap::new())),
         draining: Arc::new(AtomicBool::new(false)),
+        mesh: mesh.clone(),
     };
     let router = Router::new(router_cfg, registry.clone(), c.meter);
+    if let Some(m) = &mesh {
+        router.set_mesh(m.clone());
+        if let Some(p) = &ctx.phone {
+            let mm = m.clone();
+            p.set_accepting(Arc::new(move || mm.accepting_new()));
+        }
+        m.attach_hooks(crate::mesh::Hooks {
+            registry: registry.clone(),
+            gate: ctx.serving.clone(),
+            phone: ctx.phone.clone(),
+            router: router.clone(),
+            mailboxes: c.mailboxes.clone(),
+        });
+        m.spawn();
+    }
     let app = crate::http::HttpApp::new(
         ctx.clone(),
         Arc::new(router.clone()),
@@ -178,6 +207,7 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         echo_addr,
         registry,
         router,
+        mesh,
         ctx,
         stop_accept,
         tasks,
@@ -219,8 +249,9 @@ impl RunningRelay {
     /// streams to finish, then close every tunnel left (1012). Returns how many streams were cut.
     pub async fn drain(&self, grace: Duration) -> usize {
         self.ctx.draining.store(true, Ordering::Release);
+        let hinted = self.mesh.as_ref().is_some_and(|m| m.start_draining(grace));
         let _ = self.stop_accept.send(true);
-        hub::announce_drain(&self.ctx.live, grace);
+        hub::announce_drain_except(&self.ctx.live, grace, hinted);
         // As the TS hub: keep serving until every tunnel has gone (drain-v1 boxes redial elsewhere and let their old
         // tunnel close once its streams end) or the grace runs out.
         let _ = tokio::time::timeout(grace, async {
@@ -244,6 +275,9 @@ impl RunningRelay {
 
     pub async fn shutdown(self) {
         let _ = self.drain(Duration::ZERO).await;
+        if let Some(m) = &self.mesh {
+            m.shutdown();
+        }
         for t in self.tasks {
             t.abort();
         }

@@ -18,9 +18,10 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use crate::allocator::SetKey;
 use crate::flow::{DEFAULT_QUANTUM, FairQueue, RecvWindow, STREAM_INITIAL_WINDOW, SendWindow};
 use crate::frame::{
-    self, FRAME_CLOSE, FRAME_CLOSE_REMOTE, FRAME_DATA, FRAME_DRAIN_NOTICE, FRAME_HELLO,
-    FRAME_OUTBOUND_CREDIT, FRAME_OUTBOUND_OPEN, FRAME_PB_MAIL_RESP, FRAME_PB_MAILBOX_ANNOUNCE,
-    FRAME_REQUEST_TRANSFER, FRAME_STREAM_CREDIT, Frame, FrameDecoder, TypeSet,
+    self, FRAME_ATTACHMENT, FRAME_CLOSE, FRAME_CLOSE_REMOTE, FRAME_DATA, FRAME_DRAIN_NOTICE,
+    FRAME_HELLO, FRAME_OUTBOUND_CREDIT, FRAME_OUTBOUND_OPEN, FRAME_PB_MAIL_RESP,
+    FRAME_PB_MAILBOX_ANNOUNCE, FRAME_REQUEST_TRANSFER, FRAME_STREAM_CREDIT, Frame, FrameDecoder,
+    TypeSet,
 };
 use crate::hello::{self, AuthFailure, HelloAuthority, ParsedHello};
 use crate::payload::{
@@ -82,6 +83,8 @@ impl Default for HubConfig {
 pub struct Negotiated {
     pub stream_credit: bool,
     pub drain: bool,
+    /// `mesh-v1` (relay-mesh.md §9.1): ATTACHMENT and MOVE_HINT flow on this tunnel.
+    pub mesh: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +110,8 @@ struct State {
     next_id: u32,
     negotiated: Negotiated,
     pod_canonical: Option<String>,
+    /// A mesh bridge's stream mux (relay-mesh.md §6.4): `Some(true)` opens odd ids (the dialer), `Some(false)` even.
+    bridge: Option<bool>,
 }
 
 /// One connected box. Cloned as `Arc<Tunnel>` into the registry.
@@ -139,6 +144,8 @@ struct MailWaiter {
     tx: Option<oneshot::Sender<crate::mailbox::MailAnswer>>,
 }
 
+/// Bridge stream ids are `1..0x7fffffff` (relay-mesh.md §6.4).
+const BRIDGE_MAX_STREAM_ID: u32 = 0x7fff_ffff;
 /// Mailbox stream ids live high in the hub-opened range, away from the visitor streams that count up from 1.
 const MAIL_STREAM_BASE: u32 = 0x7ff0_0000;
 /// `HELLO_REFUSED_TRY_AGAIN` (`frames.ts`): the hub cannot decide now (its feed from `.com` is quiet); the box retries.
@@ -169,6 +176,7 @@ impl Tunnel {
                 next_id: 1,
                 negotiated: Negotiated::default(),
                 pod_canonical: None,
+                bridge: None,
             }),
             wake: Notify::new(),
             up_space: Notify::new(),
@@ -233,10 +241,32 @@ impl Tunnel {
         }
     }
 
+    /// A mesh bridge's stream mux: streams either side opens, credit always on (relay-mesh.md §6.4).
+    pub(crate) fn new_bridge(cfg: Arc<HubConfig>, odd: bool) -> Arc<Self> {
+        let t = Self::new(cfg);
+        if let Ok(mut s) = t.state.lock() {
+            s.bridge = Some(odd);
+            s.next_id = if odd { 1 } else { 2 };
+            s.negotiated.stream_credit = true;
+        }
+        t
+    }
+
     /// Open a stream toward the box (`OPEN` then `DATA initial`).
     pub fn open_stream(
         self: &Arc<Self>,
         sni: &str,
+        initial: Vec<u8>,
+    ) -> Result<StreamHandle, OpenError> {
+        self.open_stream_kind(sni, "tls", None, initial)
+    }
+
+    /// [`Self::open_stream`]; on a bridge the OPEN is `{sni, kind, hop:1}` and ids keep this side's parity.
+    pub(crate) fn open_stream_kind(
+        self: &Arc<Self>,
+        sni: &str,
+        kind: &str,
+        length: Option<u64>,
         initial: Vec<u8>,
     ) -> Result<StreamHandle, OpenError> {
         if self.is_closed() {
@@ -248,18 +278,40 @@ impl Tunnel {
             if s.streams.len() >= self.cfg.max_streams_per_tunnel {
                 return Err(OpenError::TooManyStreams);
             }
-            let mut id = s.next_id;
-            while s.streams.contains_key(&id) {
-                id = if id >= OUTBOUND_STREAM_ID_BASE - 1 {
-                    1
-                } else {
-                    id.saturating_add(1)
-                };
-            }
-            s.next_id = if id >= OUTBOUND_STREAM_ID_BASE - 1 {
-                1
-            } else {
-                id.saturating_add(1)
+            let id = match s.bridge {
+                Some(odd) => {
+                    let first: u32 = if odd { 1 } else { 2 };
+                    let mut id = s.next_id;
+                    while s.streams.contains_key(&id) || id == 0 {
+                        id = if id >= BRIDGE_MAX_STREAM_ID.saturating_sub(1) {
+                            first
+                        } else {
+                            id.saturating_add(2)
+                        };
+                    }
+                    s.next_id = if id >= BRIDGE_MAX_STREAM_ID.saturating_sub(1) {
+                        first
+                    } else {
+                        id.saturating_add(2)
+                    };
+                    id
+                }
+                None => {
+                    let mut id = s.next_id;
+                    while s.streams.contains_key(&id) {
+                        id = if id >= OUTBOUND_STREAM_ID_BASE - 1 {
+                            1
+                        } else {
+                            id.saturating_add(1)
+                        };
+                    }
+                    s.next_id = if id >= OUTBOUND_STREAM_ID_BASE - 1 {
+                        1
+                    } else {
+                        id.saturating_add(1)
+                    };
+                    id
+                }
             };
             let credit = s.negotiated.stream_credit;
             s.streams.insert(
@@ -272,7 +324,12 @@ impl Tunnel {
                 },
             );
             s.data.open(id, credit.then(SendWindow::default));
-            s.control.push_back(payload::open_frame(id, sni));
+            let open = if s.bridge.is_some() {
+                payload::bridge_open_frame(id, sni, kind, length)
+            } else {
+                payload::open_frame(id, sni)
+            };
+            s.control.push_back(open);
             s.data.push(id, initial);
             id
         };
@@ -282,6 +339,86 @@ impl Tunnel {
             down,
             tunnel: self.clone(),
         })
+    }
+
+    /// A bridge stream the peer opened (its parity): register it like one this side opened, without an OPEN.
+    pub(crate) fn accept_stream(
+        self: &Arc<Self>,
+        id: u32,
+        sni: &str,
+    ) -> Result<StreamHandle, OpenError> {
+        if self.is_closed() {
+            return Err(OpenError::TunnelClosed);
+        }
+        let down = DownQueue::new(self.cfg.stream_queue_bytes, self.budget.clone());
+        {
+            let mut s = self.state.lock().map_err(|_| OpenError::TunnelClosed)?;
+            let theirs = match s.bridge {
+                Some(odd) => id != 0 && id < BRIDGE_MAX_STREAM_ID && (id % 2 == 1) != odd,
+                None => false,
+            };
+            if !theirs || s.streams.contains_key(&id) {
+                return Err(OpenError::TunnelClosed);
+            }
+            if s.streams.len() >= self.cfg.max_streams_per_tunnel {
+                return Err(OpenError::TooManyStreams);
+            }
+            s.streams.insert(
+                id,
+                StreamEntry {
+                    down: down.clone(),
+                    sni: sni.to_ascii_lowercase(),
+                    recv: Some(RecvWindow::default()),
+                    remote_closed: false,
+                },
+            );
+            s.data.open(id, Some(SendWindow::default()));
+        }
+        Ok(StreamHandle {
+            id,
+            down,
+            tunnel: self.clone(),
+        })
+    }
+
+    /// Peer DATA on a credited carrier (a bridge): over its window or past the queue, the stream is cut.
+    pub(crate) fn on_peer_data(&self, id: u32, data: Vec<u8>) {
+        let n = data.len();
+        let down = {
+            let Ok(mut s) = self.state.lock() else { return };
+            let Some(e) = s.streams.get_mut(&id) else {
+                return;
+            };
+            if e.remote_closed {
+                return;
+            }
+            if e.recv.as_mut().is_some_and(|r| r.on_data(n).is_err()) {
+                None
+            } else {
+                Some(e.down.clone())
+            }
+        };
+        let ok = down.is_some_and(|d| d.try_push(data).is_ok());
+        if !ok {
+            self.remote_close(id, true);
+            if let Ok(mut s) = self.state.lock() {
+                s.streams.remove(&id);
+            }
+            self.send_control(Frame::new(id, FRAME_CLOSE, Vec::new()));
+        }
+    }
+
+    /// Bytes of this stream still queued toward the peer.
+    pub(crate) fn stream_queued(&self, id: u32) -> usize {
+        self.state.lock().map_or(0, |s| s.data.queued_bytes(id))
+    }
+
+    /// Peer STREAM_CREDIT.
+    pub(crate) fn on_peer_credit(&self, id: u32, n: u32) {
+        if let Ok(mut s) = self.state.lock() {
+            s.data.grant(id, n);
+        }
+        self.wake.notify_one();
     }
 
     /// Room for more visitor bytes on this stream (per-stream and per-tunnel bounds).
@@ -561,6 +698,8 @@ pub struct HubContext {
     /// Every live tunnel, for drain.
     pub live: Arc<Mutex<HashMap<u64, Arc<Tunnel>>>>,
     pub draining: Arc<AtomicBool>,
+    /// The relay mesh (`FLAGSHIP_MESH=on`); `None`: today's single relay.
+    pub mesh: Option<crate::mesh::Mesh>,
 }
 
 impl std::fmt::Debug for HubContext {
@@ -637,6 +776,7 @@ fn serving_hello(h: &ParsedHello) -> crate::serving::ServingHello {
             .serving_policy
             .as_ref()
             .and_then(crate::serving::parse_signed_policy),
+        leases: crate::serving::parse_hello_leases(&h.raw),
     }
 }
 
@@ -742,6 +882,7 @@ impl Session {
         let n = Negotiated {
             stream_credit: self.ctx.cfg.offer_stream_credit && wants(CAPABILITY_STREAM_CREDIT_V1),
             drain: self.ctx.cfg.offer_drain && wants(CAPABILITY_DRAIN_V1),
+            mesh: self.ctx.mesh.is_some() && wants(frame::CAPABILITY_MESH_V1),
         };
         let mut caps = Vec::new();
         if n.stream_credit {
@@ -756,7 +897,31 @@ impl Session {
         if self.ctx.mailboxes.is_some() {
             caps.push(payload::CAPABILITY_PB_MAIL_V1);
         }
+        if n.mesh {
+            caps.push(frame::CAPABILITY_MESH_V1);
+        }
         (caps, n)
+    }
+
+    /// The HELLO_ACK trust: the blessing source's, plus the mesh fields for a `mesh-v1` box (relay-mesh.md §9.1).
+    fn trust(&self, nonce_hex: &str, mesh_v1: bool) -> Option<HelloAckTrust> {
+        let mut trust = self
+            .ctx
+            .blessing
+            .as_ref()
+            .and_then(|b| b.trust_for(nonce_hex));
+        if mesh_v1
+            && let Some((id, blessing)) = self
+                .ctx
+                .mesh
+                .as_ref()
+                .and_then(crate::mesh::Mesh::ack_fields)
+        {
+            let t = trust.get_or_insert_with(HelloAckTrust::default);
+            t.relay_id = Some(id);
+            t.relay_blessing_json = Some(blessing);
+        }
+        trust
     }
 
     async fn admit(&self, h: &ParsedHello) -> Result<Vec<String>, AuthFailure> {
@@ -843,6 +1008,17 @@ impl Session {
                     let deliver: Arc<dyn crate::mailbox::MailDeliver> =
                         Arc::new(TunnelMail(self.tunnel.clone()));
                     reg.register(&ids, self.tunnel.id, &deliver);
+                    if let Some(m) = &self.ctx.mesh {
+                        m.on_mailbox_announce(&list);
+                    }
+                }
+                Step::Continue
+            }
+            FRAME_ATTACHMENT if self.tunnel.negotiated().mesh => {
+                if let Some(m) = &self.ctx.mesh {
+                    let answer = m.on_attachment(&pc, self.tunnel.id, &f.payload);
+                    self.tunnel
+                        .send_control(Frame::new(0, FRAME_ATTACHMENT, answer));
                 }
                 Step::Continue
             }
@@ -892,7 +1068,13 @@ impl Session {
         };
         let pc_lower = h.root_entitlement.pod_canonical.clone();
         if let Some(gate) = self.ctx.serving.clone() {
-            if !gate.accepting_new_tunnels() {
+            // Stale: refuse, except (mesh, §4.6 as amended) a box whose decision has no end, judged on the last applied
+            // log state once attached.
+            let exempt_only = match &self.ctx.mesh {
+                Some(m) => !m.accepting_new(),
+                None => !gate.accepting_new_tunnels(),
+            };
+            if exempt_only && self.ctx.mesh.is_none() {
                 let r = HELLO_REFUSED_TRY_AGAIN;
                 self.ack(false, Some(r), None, &[]);
                 return Step::Close(1013, r.into());
@@ -910,6 +1092,12 @@ impl Session {
                 return Step::Close(1000, "closed".into());
             }
             let d = b.decision();
+            if exempt_only && d != (crate::serving::GateDecision::Serve { until: None }) {
+                b.detach();
+                let r = HELLO_REFUSED_TRY_AGAIN;
+                self.ack(false, Some(r), None, &[]);
+                return Step::Close(1013, r.into());
+            }
             if !d.control() {
                 b.detach();
                 let reason = d.reason().to_owned();
@@ -936,7 +1124,7 @@ impl Session {
         self.decoder.set_types(TypeSet {
             drain_notice: false,
             stream_credit: negotiated.stream_credit,
-            mesh: false,
+            mesh: negotiated.mesh,
         });
         self.registered = Some(pc.clone());
         self.last_issued_at = h.issued_at;
@@ -945,13 +1133,17 @@ impl Session {
             .outbound
             .as_ref()
             .map(|r| r.session(&pc, Arc::new(TunnelSink(self.tunnel.clone()))));
-        let trust = self
-            .ctx
-            .blessing
-            .as_ref()
-            .and_then(|b| b.trust_for(&h.nonce_hex));
+        let trust = self.trust(&h.nonce_hex, negotiated.mesh);
         self.ack(true, None, trust.as_ref(), &caps);
         self.register(&pc, &canonicals);
+        if let Some(m) = &self.ctx.mesh {
+            m.on_box_registered(
+                &pc,
+                &self.tunnel,
+                &h.root_entitlement.pod_pub_key_hex,
+                negotiated.mesh,
+            );
+        }
         Step::Continue
     }
 
@@ -1025,11 +1217,10 @@ impl Session {
         if self.ctx.mailboxes.is_some() {
             caps.push(payload::CAPABILITY_PB_MAIL_V1);
         }
-        let trust = self
-            .ctx
-            .blessing
-            .as_ref()
-            .and_then(|b| b.trust_for(&h.nonce_hex));
+        if negotiated.mesh {
+            caps.push(frame::CAPABILITY_MESH_V1);
+        }
+        let trust = self.trust(&h.nonce_hex, negotiated.mesh);
         self.ack(true, None, trust.as_ref(), &caps);
         self.register(pc, &canonicals);
         Step::Continue
@@ -1205,6 +1396,9 @@ where
         .await;
     }
     tunnel.close();
+    if let (Some(pc), Some(m)) = (&session.registered, &ctx.mesh) {
+        m.on_box_closed(pc, tunnel.id);
+    }
     if let Some(pc) = &session.registered
         && let Ok(mut reg) = ctx.registry.lock()
     {
@@ -1224,6 +1418,15 @@ where
 /// Send `DRAIN_NOTICE {graceMs}` to every tunnel that negotiated `drain-v1`; a v1 box would
 /// treat the frame as a protocol error, so it gets nothing and simply sees the close.
 pub fn announce_drain(live: &Mutex<HashMap<u64, Arc<Tunnel>>>, grace: Duration) -> usize {
+    announce_drain_except(live, grace, false)
+}
+
+/// [`announce_drain`], leaving out `mesh-v1` boxes when they were sent `retire` hints instead (relay-mesh.md §10.4).
+pub fn announce_drain_except(
+    live: &Mutex<HashMap<u64, Arc<Tunnel>>>,
+    grace: Duration,
+    skip_mesh: bool,
+) -> usize {
     let tunnels: Vec<Arc<Tunnel>> = live
         .lock()
         .map(|l| l.values().cloned().collect())
@@ -1231,7 +1434,8 @@ pub fn announce_drain(live: &Mutex<HashMap<u64, Arc<Tunnel>>>, grace: Duration) 
     let body = format!("{{\"graceMs\":{}}}", grace.as_millis());
     let mut n = 0usize;
     for t in tunnels {
-        if t.negotiated().drain {
+        let negotiated = t.negotiated();
+        if negotiated.drain && !(skip_mesh && negotiated.mesh) {
             t.send_control(Frame::new(0, FRAME_DRAIN_NOTICE, body.clone().into_bytes()));
             n = n.saturating_add(1);
         }

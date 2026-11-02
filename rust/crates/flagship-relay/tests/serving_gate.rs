@@ -101,6 +101,7 @@ fn hello(admin: Option<&SigningKey>, boxk: &SigningKey) -> ServingHello {
         pod_canonical: format!("home.alice.{APEX}"),
         admin_key: admin.map(pubhex),
         policy: None,
+        leases: Vec::new(),
     }
 }
 
@@ -126,6 +127,7 @@ fn record(admin: &SigningKey) -> ComServingRecord {
         revoked: false,
         policy: None,
         leases: Vec::new(),
+        mesh: None,
     }
 }
 

@@ -124,9 +124,12 @@ fn feed_url(cfg: &FeedConfig) -> String {
     )
 }
 
-type Ws = tokio_tungstenite::WebSocketStream<Box<dyn Stream>>;
+pub(crate) type Ws = tokio_tungstenite::WebSocketStream<Box<dyn Stream>>;
 
-trait Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+pub(crate) trait Stream:
+    tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send
+{
+}
 impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> Stream for T {}
 
 async fn dial(cfg: &FeedConfig) -> Result<Ws, String> {
@@ -141,12 +144,21 @@ async fn dial(cfg: &FeedConfig) -> Result<Ws, String> {
             .parse()
             .map_err(|_| "control secret is not a header value".to_owned())?,
     );
+    connect_ws(req, Duration::from_secs(10)).await
+}
+
+/// Open a WebSocket (`ws:` or `wss:` checked by WebPKI against the URL's host) within `timeout` for each of the TCP
+/// connect and the handshake. The serving feed and the mesh bridges dial with it.
+pub(crate) async fn connect_ws(
+    req: tokio_tungstenite::tungstenite::handshake::client::Request,
+    timeout: Duration,
+) -> Result<Ws, String> {
     let uri = req.uri().clone();
-    let host = uri.host().ok_or("feed url has no host")?.to_owned();
+    let host = uri.host().ok_or("url has no host")?.to_owned();
     let tls = uri.scheme_str() == Some("wss");
     let port = uri.port_u16().unwrap_or(if tls { 443 } else { 80 });
     let tcp = tokio::time::timeout(
-        Duration::from_secs(10),
+        timeout,
         tokio::net::TcpStream::connect((host.as_str(), port)),
     )
     .await
@@ -173,13 +185,10 @@ async fn dial(cfg: &FeedConfig) -> Result<Ws, String> {
     } else {
         Box::new(tcp)
     };
-    let (ws, _) = tokio::time::timeout(
-        Duration::from_secs(10),
-        tokio_tungstenite::client_async(req, stream),
-    )
-    .await
-    .map_err(|_| "handshake timed out".to_owned())?
-    .map_err(|e| e.to_string())?;
+    let (ws, _) = tokio::time::timeout(timeout, tokio_tungstenite::client_async(req, stream))
+        .await
+        .map_err(|_| "handshake timed out".to_owned())?
+        .map_err(|e| e.to_string())?;
     Ok(ws)
 }
 

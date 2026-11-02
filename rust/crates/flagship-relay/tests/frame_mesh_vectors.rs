@@ -143,3 +143,48 @@ fn streaming_decoder_with_mesh_types() {
         "a v1 decoder must refuse the first mesh frame"
     );
 }
+
+#[test]
+fn hello_ack_mesh_fields_encode_and_parse_like_ts() {
+    let v = mesh();
+    let c = v["encoded"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "hello-ack mesh")
+        .unwrap();
+    let want = unhex(c["payloadHex"].as_str().unwrap());
+    let p: Value = serde_json::from_slice(&want).unwrap();
+    let trust = flagship_relay::payload::HelloAckTrust {
+        service_blessing_json: Some(p["serviceBlessing"].to_string()),
+        hub_sig: p["hubSig"].as_str().map(str::to_owned),
+        relay_id: p["relayId"].as_str().map(str::to_owned),
+        relay_blessing_json: Some(p["relayBlessing"].to_string()),
+    };
+    let f = flagship_relay::payload::hello_ack_frame(
+        true,
+        None,
+        Some(&trust),
+        &["drain-v1", "mesh-v1"],
+    );
+    assert_eq!(hex(&f.payload), hex(&want));
+    for case in v["parsers"]["helloAck"].as_array().unwrap() {
+        let got =
+            flagship_relay::payload::parse_hello_ack(&unhex(case["payloadHex"].as_str().unwrap()))
+                .unwrap();
+        let r = &case["result"];
+        assert_eq!(got.ok, r["ok"].as_bool().unwrap(), "{}", case["name"]);
+        assert_eq!(
+            got.relay_id.as_deref(),
+            r["relayId"].as_str(),
+            "{}",
+            case["name"]
+        );
+        assert_eq!(
+            got.relay_blessing.as_ref(),
+            r.get("relayBlessing"),
+            "{}",
+            case["name"]
+        );
+    }
+}

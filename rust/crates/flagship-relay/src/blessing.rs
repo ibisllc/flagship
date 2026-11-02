@@ -191,6 +191,7 @@ impl BlessingSource for HubBlessing {
         Some(HelloAckTrust {
             service_blessing_json: Some(blessing.to_string()),
             hub_sig: Some(hex(&self.key.sign(&nonce).to_bytes())),
+            ..HelloAckTrust::default()
         })
     }
 }

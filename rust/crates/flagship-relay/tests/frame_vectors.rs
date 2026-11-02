@@ -63,6 +63,7 @@ fn build(builder: &str, a: &Value) -> Frame {
                             .and_then(Value::as_str)
                             .map(str::to_owned),
                         hub_sig: a.get("hubSig").and_then(Value::as_str).map(str::to_owned),
+                        ..HelloAckTrust::default()
                     }
                 });
             let caps: Vec<&str> = a

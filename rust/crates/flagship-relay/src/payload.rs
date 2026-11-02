@@ -60,6 +60,10 @@ fn control(frame_type: u8, json: String) -> Frame {
 pub struct HelloAckTrust {
     pub service_blessing_json: Option<String>,
     pub hub_sig: Option<String>,
+    /// Mesh relays, to a box that negotiated `mesh-v1` (relay-mesh.md §9.1): the relay's id and its RelayBlessing (the
+    /// JSON as `.com` wrote it, passed through verbatim). Written after `capabilities`: key order is in the vectors.
+    pub relay_id: Option<String>,
+    pub relay_blessing_json: Option<String>,
 }
 
 pub fn hello_ack_frame(
@@ -94,6 +98,16 @@ pub fn hello_ack_frame(
         }
         s.push(']');
     }
+    if let Some(t) = trust {
+        if let Some(r) = &t.relay_id {
+            s.push_str(",\"relayId\":");
+            json::write_str(&mut s, r);
+        }
+        if let Some(b) = &t.relay_blessing_json {
+            s.push_str(",\"relayBlessing\":");
+            s.push_str(b);
+        }
+    }
     s.push('}');
     control(FRAME_HELLO_ACK, s)
 }
@@ -105,6 +119,8 @@ pub struct ParsedHelloAck {
     pub service_blessing: Option<Value>,
     pub hub_sig: Option<String>,
     pub capabilities: Option<Vec<String>>,
+    pub relay_id: Option<String>,
+    pub relay_blessing: Option<Value>,
 }
 
 /// `parseHelloAck`: `None` when the payload is not JSON or not an object (arrays count as
@@ -117,6 +133,8 @@ pub fn parse_hello_ack(payload: &[u8]) -> Option<ParsedHelloAck> {
         service_blessing: None,
         hub_sig: None,
         capabilities: None,
+        relay_id: None,
+        relay_blessing: None,
     };
     if v.is_array() {
         return Some(out);
@@ -132,6 +150,8 @@ pub fn parse_hello_ack(payload: &[u8]) -> Option<ParsedHelloAck> {
             .map(str::to_owned)
             .collect()
     });
+    out.relay_id = o.get("relayId").and_then(Value::as_str).map(str::to_owned);
+    out.relay_blessing = o.get("relayBlessing").filter(|b| !b.is_null()).cloned();
     Some(out)
 }
 
@@ -171,6 +191,50 @@ pub fn parse_request_transfer(payload: &[u8]) -> Option<String> {
 
 pub fn open_frame(stream_id: u32, sni: &str) -> Frame {
     Frame::new(stream_id, FRAME_OPEN, sni.as_bytes().to_vec())
+}
+
+/// A mesh bridge's OPEN (relay-mesh.md §6.4): `{sni, kind:"tls"|"pb-mail", hop:1}`, and for `pb-mail` the envelope's
+/// `length` (§15.4.1).
+pub fn bridge_open_frame(stream_id: u32, sni: &str, kind: &str, length: Option<u64>) -> Frame {
+    let length = length
+        .map(|n| format!(",\"length\":{n}"))
+        .unwrap_or_default();
+    Frame::new(
+        stream_id,
+        FRAME_OPEN,
+        format!(
+            "{{\"sni\":{},\"kind\":{},\"hop\":1{length}}}",
+            str_lit(sni),
+            str_lit(kind)
+        )
+        .into_bytes(),
+    )
+}
+
+/// A parsed bridge OPEN.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeOpen {
+    pub sni: String,
+    pub kind: String,
+    pub hop: u64,
+    pub length: Option<u64>,
+}
+
+/// `None` unless `sni` and `kind` are strings; a missing or non-integer `hop` reads as 0.
+pub fn parse_bridge_open(payload: &[u8]) -> Option<BridgeOpen> {
+    let v = json::parse(payload)?;
+    let o = as_object(&v)?;
+    let sni = o.get("sni")?.as_str()?;
+    let kind = o.get("kind")?.as_str()?;
+    if sni.is_empty() || sni.len() > 253 {
+        return None;
+    }
+    Some(BridgeOpen {
+        sni: sni.to_ascii_lowercase(),
+        kind: kind.to_owned(),
+        hop: o.get("hop").and_then(Value::as_u64).unwrap_or(0),
+        length: o.get("length").and_then(Value::as_u64),
+    })
 }
 
 pub fn parse_open(payload: &[u8]) -> String {

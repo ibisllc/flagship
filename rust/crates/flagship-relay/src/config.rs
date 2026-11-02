@@ -45,6 +45,133 @@ pub struct Settings {
     pub serving_check: Duration,
     /// `FLAGSHIP_PHONE_ROUTE=off` leaves the bare name closed even with the serving authority on.
     pub phone_route: bool,
+    /// `FLAGSHIP_MESH=on` (relay-mesh.md §15.7): the relay mesh. Off (the default) is exactly today's relay.
+    pub mesh: Option<MeshSettings>,
+}
+
+/// The mesh's environment (relay-mesh.md §15.7). `Debug` leaves the key seed out.
+#[derive(Clone, PartialEq)]
+pub struct MeshSettings {
+    /// `FLAGSHIP_RELAY_ID`: required, `^[a-z][a-z0-9-]{1,30}$`.
+    pub relay_id: String,
+    /// `FLAGSHIP_RELAY_KEY_SEED`: 64 hex, the relay key (it also signs HELLO_ACK `hubSig`).
+    pub key_seed: [u8; 32],
+    /// `FLAGSHIP_RELAY_KIND`: `full` (default) or `entry`.
+    pub kind: flagship_crypto::relay_mesh::RelayKind,
+    /// `FLAGSHIP_RELAY_FEED_URL`, default `https://feed.<controlApex>/v1`.
+    pub feed_url: String,
+    /// `FLAGSHIP_RELAY_LOG_PUB` (the old `FLAGSHIP_SERVING_REVOCATION_PUB` is still read).
+    pub log_pub: String,
+    /// `FLAGSHIP_RELAY_MAINTAINERS_DIR` (default `.maintainers`): the ca-track mandates and CaEndorsements.
+    pub maintainers_dir: PathBuf,
+    /// `FLAGSHIP_RELAY_MAINTAINER_PIN`: the pinned ca-track origin mandate hash (default: the baked pin).
+    pub maintainer_pin: String,
+    /// `FLAGSHIP_MESH_PEER_URLS`: `relayId=url,…`, dial a peer there instead of its direct name.
+    pub peer_urls: HashMap<String, String>,
+    /// Test-only shortenings: `FLAGSHIP_MESH_FEED_POLL_MS`, `_REBALANCE_MS`, `_MIN_MOVE_MS`, `_ATTACH_TTL_MS`.
+    pub feed_poll: Option<Duration>,
+    /// `FLAGSHIP_MESH_CAPACITY`: this relay's `load.capacity` (default 10,000).
+    pub capacity: Option<u64>,
+    pub rebalance: Option<Duration>,
+    pub min_move: Option<Duration>,
+    pub attach_ttl: Option<Duration>,
+}
+
+impl std::fmt::Debug for MeshSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MeshSettings")
+            .field("relay_id", &self.relay_id)
+            .field("kind", &self.kind)
+            .field("feed_url", &self.feed_url)
+            .finish_non_exhaustive()
+    }
+}
+
+fn hex32(name: &str, s: &str) -> Result<[u8; 32], String> {
+    let s = s.trim().to_ascii_lowercase();
+    if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("{name} must be 64 hex"));
+    }
+    let mut out = [0u8; 32];
+    for (i, o) in out.iter_mut().enumerate() {
+        let at = i.saturating_mul(2);
+        *o = u8::from_str_radix(s.get(at..at.saturating_add(2)).unwrap_or("zz"), 16)
+            .map_err(|_| format!("{name} must be 64 hex"))?;
+    }
+    Ok(out)
+}
+
+/// `https://feed.<host of .com's base URL>/v1`.
+fn default_feed_url(com_base_url: &str) -> String {
+    let host = com_base_url
+        .split("://")
+        .nth(1)
+        .unwrap_or(com_base_url)
+        .split(['/', ':'])
+        .next()
+        .unwrap_or_default();
+    format!("https://feed.{host}/v1")
+}
+
+fn mesh_settings(
+    vars: &HashMap<String, String>,
+    com_base_url: &str,
+) -> Result<Option<MeshSettings>, String> {
+    if vars.get("FLAGSHIP_MESH").map(|v| v.trim()) != Some("on") {
+        return Ok(None);
+    }
+    let relay_id =
+        nonempty(vars, "FLAGSHIP_RELAY_ID").ok_or("FLAGSHIP_MESH=on needs FLAGSHIP_RELAY_ID")?;
+    if !flagship_crypto::relay_mesh::is_relay_id(&relay_id) {
+        return Err(format!("FLAGSHIP_RELAY_ID {relay_id:?} is not a relay id"));
+    }
+    let key_seed = hex32(
+        "FLAGSHIP_RELAY_KEY_SEED",
+        &nonempty(vars, "FLAGSHIP_RELAY_KEY_SEED")
+            .ok_or("FLAGSHIP_MESH=on needs FLAGSHIP_RELAY_KEY_SEED")?,
+    )?;
+    let log_pub = nonempty(vars, "FLAGSHIP_RELAY_LOG_PUB")
+        .or_else(|| nonempty(vars, "FLAGSHIP_SERVING_REVOCATION_PUB"))
+        .ok_or("FLAGSHIP_MESH=on needs FLAGSHIP_RELAY_LOG_PUB")?
+        .to_ascii_lowercase();
+    hex32("FLAGSHIP_RELAY_LOG_PUB", &log_pub)?;
+    let kind = flagship_crypto::relay_mesh::RelayKind::parse(
+        nonempty(vars, "FLAGSHIP_RELAY_KIND")
+            .as_deref()
+            .unwrap_or("full"),
+    )
+    .map_err(|_| "FLAGSHIP_RELAY_KIND must be full or entry".to_owned())?;
+    let mut peer_urls = HashMap::new();
+    for pair in nonempty(vars, "FLAGSHIP_MESH_PEER_URLS")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|p| !p.trim().is_empty())
+    {
+        let (id, url) = pair
+            .split_once('=')
+            .ok_or_else(|| format!("FLAGSHIP_MESH_PEER_URLS entry {pair:?} is not relayId=url"))?;
+        peer_urls.insert(id.trim().to_owned(), url.trim().to_owned());
+    }
+    Ok(Some(MeshSettings {
+        relay_id,
+        key_seed,
+        kind,
+        feed_url: nonempty(vars, "FLAGSHIP_RELAY_FEED_URL")
+            .unwrap_or_else(|| default_feed_url(com_base_url))
+            .trim_end_matches('/')
+            .to_owned(),
+        log_pub,
+        maintainers_dir: nonempty(vars, "FLAGSHIP_RELAY_MAINTAINERS_DIR")
+            .map_or_else(|| PathBuf::from(".maintainers"), PathBuf::from),
+        maintainer_pin: nonempty(vars, "FLAGSHIP_RELAY_MAINTAINER_PIN")
+            .unwrap_or_else(|| crate::mesh::ca::MAINTAINER_PINNED_MANDATE_HASH.to_owned()),
+        peer_urls,
+        feed_poll: millis(vars, "FLAGSHIP_MESH_FEED_POLL_MS").filter(|d| !d.is_zero()),
+        capacity: nonempty(vars, "FLAGSHIP_MESH_CAPACITY").and_then(|c| c.parse().ok()),
+        rebalance: millis(vars, "FLAGSHIP_MESH_REBALANCE_MS").filter(|d| !d.is_zero()),
+        min_move: millis(vars, "FLAGSHIP_MESH_MIN_MOVE_MS"),
+        attach_ttl: millis(vars, "FLAGSHIP_MESH_ATTACH_TTL_MS").filter(|d| !d.is_zero()),
+    }))
 }
 
 fn port(vars: &HashMap<String, String>, name: &str) -> Result<Option<u16>, String> {
@@ -102,7 +229,9 @@ impl Settings {
                     if k.len() != 64 || !k.bytes().all(|b| b.is_ascii_hexdigit()) {
                         return Err("FLAGSHIP_SERVING_REVOCATION_PUB must be 64 hex".into());
                     }
-                    if nonempty(vars, "SERVICES_CONTROL_SECRET").is_none() {
+                    // A mesh relay reads the log key under its old name too, and never calls `.com`'s feed.
+                    let mesh = vars.get("FLAGSHIP_MESH").map(|v| v.trim()) == Some("on");
+                    if !mesh && nonempty(vars, "SERVICES_CONTROL_SECRET").is_none() {
                         return Err("FLAGSHIP_SERVING_REVOCATION_PUB is set but SERVICES_CONTROL_SECRET is not: the serving feed cannot authenticate".into());
                     }
                     Some(k)
@@ -120,6 +249,11 @@ impl Settings {
                 .filter(|d| !d.is_zero())
                 .unwrap_or(Duration::from_secs(5)),
             phone_route: vars.get("FLAGSHIP_PHONE_ROUTE").map(String::as_str) != Some("off"),
+            mesh: mesh_settings(
+                vars,
+                &nonempty(vars, "FLAGSHIP_COM_BASE_URL")
+                    .unwrap_or_else(|| DEFAULT_COM_BASE_URL.to_owned()),
+            )?,
         })
     }
 }
@@ -201,6 +335,53 @@ mod tests {
         );
         assert_eq!(s.hub_key_path, Some(PathBuf::from("/data/hub.key")));
         assert_eq!(s.echo_port, None);
+    }
+
+    #[test]
+    fn the_mesh_is_off_unless_asked_and_then_needs_its_keys() {
+        let base = [("TUNNEL_TCP_PORT", "8443")];
+        assert!(Settings::from_vars(&vars(&base)).unwrap().mesh.is_none());
+        let seed = "0b".repeat(32);
+        let log = "ed".repeat(32);
+        let on = |extra: &[(&'static str, &'static str)]| {
+            let mut v = vec![("TUNNEL_TCP_PORT", "8443"), ("FLAGSHIP_MESH", "on")];
+            v.extend_from_slice(extra);
+            v
+        };
+        assert!(
+            Settings::from_vars(&vars(&on(&[])))
+                .unwrap_err()
+                .contains("FLAGSHIP_RELAY_ID")
+        );
+        let seed_s: &'static str = Box::leak(seed.into_boxed_str());
+        let log_s: &'static str = Box::leak(log.into_boxed_str());
+        let s = Settings::from_vars(&vars(&on(&[
+            ("FLAGSHIP_RELAY_ID", "iad1"),
+            ("FLAGSHIP_RELAY_KEY_SEED", seed_s),
+            ("FLAGSHIP_SERVING_REVOCATION_PUB", log_s),
+            ("FLAGSHIP_MESH_PEER_URLS", "ams1=ws://127.0.0.1:1/mesh"),
+        ])))
+        .unwrap();
+        let m = s.mesh.unwrap();
+        assert_eq!(m.feed_url, "https://feed.flagshipserver.com/v1");
+        assert_eq!(m.kind, flagship_crypto::relay_mesh::RelayKind::Full);
+        assert_eq!(m.key_seed, [0x0b; 32]);
+        assert_eq!(
+            m.peer_urls.get("ams1").map(String::as_str),
+            Some("ws://127.0.0.1:1/mesh")
+        );
+        assert!(
+            !format!("{m:?}").contains("0b0b"),
+            "the seed never reaches logs"
+        );
+        assert!(
+            Settings::from_vars(&vars(&on(&[
+                ("FLAGSHIP_RELAY_ID", "1bad"),
+                ("FLAGSHIP_RELAY_KEY_SEED", seed_s),
+                ("FLAGSHIP_RELAY_LOG_PUB", log_s),
+            ])))
+            .is_err()
+        );
     }
 
     #[test]
