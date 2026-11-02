@@ -413,6 +413,21 @@
     },
     {
       "check": "test-vectors",
+      "key": "swift:maintainer-ca",
+      "reason": "The maintainer ca-track chain is resolved by the TS library (@ibisllc/maintainers) and replayed by the Rust relay's port (flagship-relay mesh/ca.rs); the iOS app pins the CA keys it is built with and never walks the mandate chain."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:maintainer-ca",
+      "reason": "The maintainer ca-track chain is resolved by the TS library (@ibisllc/maintainers) and replayed by the Rust relay's port (flagship-relay mesh/ca.rs); the Android app pins the CA keys it is built with and never walks the mandate chain."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:maintainer-ca",
+      "reason": "The maintainer ca-track chain is resolved by the TS library (@ibisllc/maintainers) and replayed by the Rust relay's port (flagship-relay mesh/ca.rs); the webapp never walks the mandate chain."
+    },
+    {
+      "check": "test-vectors",
       "key": "web:phone-route",
       "reason": "The bare account name is served by admin phones only (plan H2/H3): a browser cannot hold the relay's raw tunnel or end TLS, so the webapp never builds a route claim, a phone CSR or a phone certificate order."
     },
