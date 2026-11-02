@@ -73,7 +73,7 @@ export const relayMesh: Group = {
   name: "relay-mesh",
   title:
     "the relay mesh across gym-a, gym-b and gym-c: a visit through one relay reaches a box held by another, account home and co-locate moves, the phone name across relays, a revocation and a lease end across relays, rebalancing, a relay leaving and rejoining, a rogue relay refused",
-  needs: [],
+  needs: ["A1"],
   phase: 10.66,
   parallel: false,
   async run({ A, rec }) {

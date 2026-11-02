@@ -328,7 +328,7 @@ else
       say "DRY-RUN would: flyctl deploy -c $FLY_CONFIG -a $FLY_APP --remote-only --strategy=immediate"
     else
       if [ "${GYM_MESH:-}" = on ]; then
-        flyctl secrets list -a "$FLY_APP" 2>/dev/null | grep -qw 'FLAGSHIP_RELAY_KEY_SEED' \
+        flyctl secrets list -a "$FLY_APP" 2>/dev/null | grep -w 'FLAGSHIP_RELAY_KEY_SEED' >/dev/null \
           || die "GYM_MESH=on but $FLY_APP has no FLAGSHIP_RELAY_KEY_SEED secret (docs/runbooks/relay-mesh.md \"Gym\")"
       fi
       (cd "$WT" && flyctl deploy -c "$FLY_CONFIG" -a "$FLY_APP" --remote-only --strategy=immediate --yes 2>&1 | tail -3 | sed 's/^/  /') \
