@@ -75,7 +75,12 @@ async function acmeOf(r: { relayId: string; fly?: string }): Promise<Record<stri
   if (!r.fly) return {};
   const host = relayName(r.relayId, APEX);
   const x = await run("flyctl", ["certs", "show", host, "-a", r.fly, "--json"], 60_000);
-  const target = x.code === 0 ? flyAcmeTarget(JSON.parse(x.stdout || "{}")) : null;
+  let target = x.code === 0 ? flyAcmeTarget(JSON.parse(x.stdout || "{}")) : null;
+  // `certs show` exits non-zero on a relay app (443 is raw TCP, no TLS handler); `certs setup` still names the target.
+  if (!target) {
+    const s = await run("flyctl", ["certs", "setup", host, "-a", r.fly], 60_000);
+    target = /_acme-challenge\.\S+\s+→\s+(\S+?)\.?\s*$/m.exec(s.stdout)?.[1] ?? null;
+  }
   if (!target) {
     console.error(`  ${r.relayId}: no DNS-01 target from \`flyctl certs show ${host} -a ${r.fly}\` (run \`flyctl certs add ${host} -a ${r.fly}\` first, or add the CNAME \`flyctl certs setup\` prints by hand)`);
     return {};
