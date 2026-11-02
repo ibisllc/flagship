@@ -179,7 +179,7 @@ TUNNEL_HUB_URL = "wss://flagship-services-gym.fly.dev:8443/tunnel"
 # The relay mesh (relay-mesh.md): "on" publishes the relay feed and runs its 5 s head alarm, and
 # GET /api/services/endpoints defaults tunnelHub to wss://tunnel.<servicesApex>:8443/tunnel. Off until
 # rollout step 1 (§13.2): the current relay keeps using the internal routes.
-RELAY_MESH = "off"
+RELAY_MESH = "on"
 # Scripted gym runs come from one address; scale the rate limits so a run
 # doesn't trip budgets sized for one person (apps/com/src/rateLimit.ts).
 RATE_LIMIT_SCALE = "10"
