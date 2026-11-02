@@ -20,7 +20,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { canonicalRelayBlessingRequest, ed, verifyRelayBlessing } from "@flagship/protocol";
+import { canonicalRelayBlessingRequest, ed, RELAY_BLESSING_REFRESH_MS, verifyRelayBlessing } from "@flagship/protocol";
 import type { ServiceBlessing } from "@flagship/protocol";
 
 export interface HubKeypair {
@@ -208,8 +208,6 @@ export class HubBlessingProvider {
 
 // ── relay mesh (docs/architecture-v2/relay-mesh.md §3.2) ──────────────────
 
-/** §3.2 as amended (owner decision 2026-11-01): blessings last 30 d and are renewed every 24 h with proof of key. */
-const RELAY_BLESSING_RENEW_MS = 24 * 60 * 60_000;
 
 /**
  * Mesh mode: the relay key comes from `FLAGSHIP_RELAY_KEY_SEED` (64 hex), never generated per boot, because peers and
@@ -331,7 +329,7 @@ export class RelayBlessingProvider {
       if (this.stopped) return;
       await this.refresh();
       if (this.stopped) return;
-      const next = this.currentRelayBlessing() ? (this.opts.refreshIntervalMs ?? RELAY_BLESSING_RENEW_MS) : (this.opts.retryMs ?? 60_000);
+      const next = this.currentRelayBlessing() ? (this.opts.refreshIntervalMs ?? RELAY_BLESSING_REFRESH_MS) : (this.opts.retryMs ?? 60_000);
       this.timer = setTimeout(() => void loop(), next);
       (this.timer as { unref?: () => void }).unref?.();
     };

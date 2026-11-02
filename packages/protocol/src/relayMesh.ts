@@ -147,8 +147,8 @@ export const DIRECTORY_EXPIRED_UNHEALTHY_MS = DAY;
 export const BOX_RELAY_CHECK_MS = HOUR;
 export const BOX_DIRECTORY_MAX_AGE_MS = DAY;
 /** Relay blessings. */
-export const RELAY_BLESSING_TTL_MS = 26 * HOUR;
-export const RELAY_BLESSING_REFRESH_MS = 12 * HOUR;
+export const RELAY_BLESSING_TTL_MS = 30 * DAY;
+export const RELAY_BLESSING_REFRESH_MS = 24 * HOUR;
 /** Rebalancing (§10.2). */
 export const REBALANCE_INTERVAL_MS = HOUR;
 export const REBALANCE_JITTER_MS = 10 * MIN;
