@@ -102,6 +102,7 @@
     <Compile Include="PairingWatchTests.cs" />
     <Compile Include="WifiCredentialStoreTests.cs" />
     <Compile Include="ServerCodeSeenTests.cs" />
+    <Compile Include="ProjectFilesTests.cs" />
   </ItemGroup>
 
   <ItemGroup>
