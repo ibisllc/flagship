@@ -69,6 +69,11 @@ describe("handleGymTeardown", () => {
       { id: "6", name: "*.gym.flagship.services", type: "A" },
       { id: "7", name: "gym.flagship.services", type: "A" },
       { id: "8", name: "home.gx3.gym.flagship.services", type: "A" },
+      // The gym relays' mesh names survive `all` (relay-mesh.md §2): a run never creates them.
+      { id: "9", name: "gym-c.tunnel.gym.flagship.services", type: "A" },
+      { id: "10", name: "tunnel.gym.flagship.services", type: "AAAA" },
+      { id: "11", name: "_acme-challenge.gym-b.tunnel.gym.flagship.services", type: "CNAME" },
+      { id: "12", name: "lb.gym.flagship.services", type: "A" },
     ];
     const deleted: string[] = [];
     const dns = {

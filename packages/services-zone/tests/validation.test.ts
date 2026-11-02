@@ -19,6 +19,11 @@ describe("validateUserLabel", () => {
     expect(validateUserLabel("abc").ok).toBe(true); // min length 3
   });
 
+  it("reserves the relay mesh's names: tunnel (direct and balanced relay names) and lb (the wildcard CNAME target)", () => {
+    for (const l of ["tunnel", "lb", "LB"]) expect(validateUserLabel(l).ok).toBe(false);
+    expect(validateUserLabel("lbx").ok).toBe(true);
+  });
+
   it("reserves relay-fallback: the Android relay fallback name is answered by the root wildcard", () => {
     const r = validateUserLabel("relay-fallback");
     expect(r.ok).toBe(false);

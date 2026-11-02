@@ -11,7 +11,9 @@
  * relay's address, or proxied; when the apex CAA pair (`issue` and `issuewild`
  * "letsencrypt.org") is missing or allows another CA; or when ANY record sits at
  * an account or box name (each one is listed with its id; the reap tool trims
- * them). Run it after the manual DNS step in docs/runbooks/final-deploy.md and
+ * them). The relay mesh's names (`tunnel.<apex>`, `<relayId>.tunnel.<apex>`, their
+ * `_acme-challenge` CNAME/TXT, and `lb.<apex>`) are reserved labels, never account
+ * names, so they pass (docs/runbooks/relay-mesh.md). Run it after the manual DNS step in docs/runbooks/final-deploy.md and
  * about weekly. Exit 2 means it could not run (no secret, 401/403, 503).
  *
  * Env: FLAGSHIP_ADMIN_SECRET (required), FLAGSHIP_BASE_URL (default

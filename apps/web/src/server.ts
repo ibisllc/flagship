@@ -378,6 +378,7 @@ export async function start(opts: {
   const health: { check: () => { ok: boolean; reasons?: string[] } } = { check: () => ({ ok: true }) };
   const meshOn = process.env.FLAGSHIP_MESH === "on" && (surface === "services" || surface === "both");
   const app = buildServer({ surface, ...(meshOn ? { health } : {}) });
+  refuseUnclaimedUpgrades(app.server);
   const serverRegistry = app.serverRegistry;
   // The data-plane apex pod canonicals live under — `flagship.services`
   // in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
@@ -689,6 +690,14 @@ async function startMeshRelay(o: {
     const v = Number(env[name]);
     return env[name] && Number.isFinite(v) && v >= 0 ? v : undefined;
   };
+  // `FLAGSHIP_MESH_PEER_URLS` (`relayId=url,…`): dial a peer there instead of its direct name, as the Rust relay
+  // reads it (a local harness dials loopback; tools/relay-conformance).
+  const peerUrls = new Map<string, string>();
+  for (const pair of (env.FLAGSHIP_MESH_PEER_URLS ?? "").split(",").map((p) => p.trim()).filter(Boolean)) {
+    const at = pair.indexOf("=");
+    if (at <= 0) throw new Error(`FLAGSHIP_MESH_PEER_URLS entry ${JSON.stringify(pair)} is not relayId=url`);
+    peerUrls.set(pair.slice(0, at).trim(), pair.slice(at + 1).trim());
+  }
   const node = new MeshNode({
     relayId,
     relayKind,
@@ -698,6 +707,7 @@ async function startMeshRelay(o: {
     blessing,
     feedSource: httpFeedSource({ baseUrl: feedBase, cipher: () => cipher }),
     registry: o.registry,
+    ...(peerUrls.size > 0 ? { peerUrl: (p: { relayId: string; tunnelHost: string }) => peerUrls.get(p.relayId) ?? `wss://${p.tunnelHost}:8443/mesh` } : {}),
     ...(o.mailboxes ? { mailboxes: o.mailboxes } : {}),
     ...(n("FLAGSHIP_MESH_FEED_POLL_MS") !== undefined ? { feedPollMs: n("FLAGSHIP_MESH_FEED_POLL_MS") } : {}),
     ...(n("FLAGSHIP_SERVING_REFUSE_NEW_MS") !== undefined ? { refuseNewMs: n("FLAGSHIP_SERVING_REFUSE_NEW_MS") } : {}),
@@ -747,6 +757,20 @@ async function startMeshRelay(o: {
     },
   };
   return { node, handle };
+}
+
+/**
+ * A WebSocket upgrade no mounted path took (`/tunnel`, `/phone-tunnel`, `/mesh` each ignore other paths) is answered
+ * 404 and closed, instead of holding the socket open forever (which also kept `close()` from finishing). Checked after
+ * every upgrade listener ran: a taken socket has a WebSocket reading it or was already answered.
+ */
+function refuseUnclaimedUpgrades(server: import("node:http").Server): void {
+  server.on("upgrade", (_req: unknown, socket: import("node:stream").Duplex) => {
+    setImmediate(() => {
+      if (socket.destroyed || socket.writableEnded || socket.listenerCount("data") > 0) return;
+      socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+    });
+  });
 }
 
 function usageMeterFromEnv(comBaseUrl: string): UsageMeter | undefined {

@@ -66,6 +66,12 @@ describe("validateUserLabel — strict, 3–30, dashless", () => {
     expect(validateUserLabel("support").ok).toBe(false);
   });
 
+  it("reserves the relay mesh's labels tunnel and lb as account names (relay-mesh.md §2)", () => {
+    expect(validateUserLabel("tunnel").ok).toBe(false);
+    expect(validateUserLabel("lb").ok).toBe(false);
+    expect(_labelInternal.RESERVED_USER_LABELS.has("lb")).toBe(true);
+  });
+
   it("reserves relay-fallback as an account and as a server name (the Android relay fallback)", () => {
     const u = validateUserLabel("relay-fallback");
     expect(u.ok).toBe(false);

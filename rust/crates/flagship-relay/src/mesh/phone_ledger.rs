@@ -206,7 +206,7 @@ impl Mesh {
 
     /// L: answer one phone request from P (`from` is P's relay id). `None` when it is not a phone request.
     fn ledger_answer(&self, v: &Value, from: &str) -> Option<Value> {
-        let qid = v.get("qid").and_then(Value::as_u64).unwrap_or(0);
+        let qid = wire::qid_echo(v);
         let t = now();
         let s = |k: &str| v.get(k).and_then(Value::as_str).map(str::to_owned);
         match v.get("type").and_then(Value::as_str)? {
@@ -339,7 +339,7 @@ impl Mesh {
             })
             .unwrap_or(0);
         if let Some(o) = msg.as_object_mut() {
-            o.insert("qid".into(), json!(qid));
+            o.insert("qid".into(), wire::qid_wire(qid));
         }
         if l == self.relay_id() {
             return self.ledger_answer(&msg, self.relay_id());

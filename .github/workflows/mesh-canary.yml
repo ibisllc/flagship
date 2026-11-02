@@ -1,0 +1,74 @@
+name: Mesh canary (every relay forwards to a canary box)
+
+# The relay mesh canary (docs/architecture-v2/relay-mesh.md §14.3, docs/runbooks/relay-mesh.md "Canary"): for every
+# relay in the directory, a TLS handshake for the canary box's name sent straight to that relay's own address on :443
+# must end in the box's certificate (the relay forwarded it to the box's holder over the mesh), and the relay's
+# /api/health must be 200 (mesh-ready). A failure names the relay. Manual for now; a 5-minute schedule comes with
+# the Flagship-operated canary box. Reads public endpoints only; needs no secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_apex:
+        description: ".com host whose feed lists the relays (the gym: gym.flagshipserver.com)"
+        default: flagshipserver.com
+        required: true
+      canary_host:
+        description: "the canary box's name, e.g. home.canary.flagship.services (a live box with a Let's Encrypt certificate)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  every-relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CONTROL: ${{ inputs.control_apex }}
+      CANARY: ${{ inputs.canary_host }}
+    steps:
+      - name: Visit the canary through every relay
+        shell: bash
+        run: |
+          set -uo pipefail
+          [[ "$CONTROL" =~ ^[a-z0-9.-]+$ && "$CANARY" =~ ^[a-z0-9.-]+$ ]] || { echo "::error::bad input"; exit 2; }
+          dir="$(curl -fsS --max-time 15 "https://feed.$CONTROL/v1/directory.json" | jq -c '.directory.relays // empty' || true)"
+          if [ -z "$dir" ] || [ "$dir" = "[]" ]; then
+            dir="$(curl -fsS --max-time 15 "https://$CONTROL/api/services/endpoints" | jq -c '.relays // []')"
+          fi
+          n="$(jq 'length' <<<"$dir")"
+          [ "$n" -gt 0 ] || { echo "::error::the directory at $CONTROL lists no relay"; exit 1; }
+          v6=0; ip -6 route show default 2>/dev/null | grep -q . && v6=1
+          failed=()
+          for i in $(seq 0 $((n - 1))); do
+            id="$(jq -r ".[$i].relayId" <<<"$dir")"
+            host="$(jq -r ".[$i].tunnelHost" <<<"$dir")"
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$host:8443/api/health" || echo 000)"
+            if [ "$code" != 200 ]; then
+              echo "::error title=relay $id::/api/health on $host:8443 answered $code (not mesh-ready)"
+              failed+=("$id")
+            fi
+            addrs="$(jq -r ".[$i].ipv4[]?" <<<"$dir")"
+            [ "$v6" = 1 ] && addrs="$addrs $(jq -r ".[$i].ipv6[]?" <<<"$dir")"
+            tried=0
+            for a in $addrs; do
+              tried=1
+              target="$a"; [[ "$a" == *:* ]] && target="[$a]"
+              # curl checks the certificate against the canary's name: a 3-digit answer means the box itself
+              # finished the handshake behind this relay (TLS ends on the box, never on a relay).
+              got="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --resolve "$CANARY:443:$target" "https://$CANARY/" 2>&1 | tail -c 200)"
+              if [[ "$got" =~ ^[1-5][0-9][0-9]$ ]]; then
+                echo "ok   $id via $a: HTTP $got from $CANARY"
+              else
+                echo "::error title=relay $id::the canary $CANARY through $a did not reach the box ($got)"
+                failed+=("$id")
+              fi
+            done
+            [ "$tried" = 1 ] || echo "::warning title=relay $id::no address this runner can reach (IPv6-only relay, no IPv6 here)"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::failing relays: $(printf '%s\n' "${failed[@]}" | sort -u | paste -sd ' ')"
+            exit 1
+          fi
+          echo "every relay forwarded the canary"

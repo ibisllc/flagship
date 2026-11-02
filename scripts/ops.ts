@@ -16,11 +16,15 @@
  *                                     addresses on public resolvers: no NODATA or NXDOMAIN (needs nothing)
  *   npm run ops -- limits             who is hitting a rate limit (npm run rate-limits)
  *   npm run ops -- outbound           where boxes' AI calls leave (npm run outbound-hosts)
+ *   npm run ops -- mesh               every relay in the directory (docs/runbooks/relay-mesh.md): ready or why
+ *                                     not, head age, directory version, bridges, attachments, account moves
  *
  * Env: FLAGSHIP_BASE_URL (default https://flagshipserver.com), FLAGSHIP_SERVICES_URL (default
  * https://flagship.services); USAGE_REPORT_SECRET for `services`; CLOUDFLARE_API_TOKEN (Account
  * Analytics: Read) and CLOUDFLARE_ACCOUNT_ID for `workers`; wrangler login for `slow`;
- * FLAGSHIP_ADMIN_SECRET for `limits` and `outbound`.
+ * FLAGSHIP_ADMIN_SECRET for `limits` and `outbound`; `mesh` reads the directory from
+ * FLAGSHIP_RELAY_FEED_URL (default https://feed.<host of FLAGSHIP_BASE_URL>/v1) and each relay's stats
+ * with USAGE_REPORT_SECRET (health alone without it).
  */
 
 import { spawnSync } from "node:child_process";
@@ -50,7 +54,7 @@ export function parseArgs(argv: string[]): Options {
     else if (a === "-h" || a === "--help") o.command = "help";
     else throw new Error(`unknown argument: ${a}`);
   }
-  if (!["all", "health", "services", "dns", "workers", "slow", "limits", "outbound", "help"].includes(o.command)) {
+  if (!["all", "health", "services", "dns", "workers", "slow", "limits", "outbound", "mesh", "help"].includes(o.command)) {
     throw new Error(`unknown command: ${o.command}`);
   }
   if (!Number.isInteger(o.hours) || o.hours < 1 || o.hours > 72) throw new Error("--hours takes a whole number from 1 to 72");
@@ -306,6 +310,152 @@ async function slowReport(o: Options): Promise<{ lines: string[]; hints: string[
   return formatSlow(tail.summary(), o.seconds);
 }
 
+/* ------------------------------------------------------------------ mesh */
+
+export interface MeshDirectoryRelay {
+  relayId: string;
+  tunnelHost: string;
+  relayKind?: string;
+  region?: string;
+}
+
+/** The relays named by `directory.json` (`{directory:{relays}}`) or by `.com`'s endpoints (`{relays}`). */
+export function relaysFromDirectory(json: unknown): MeshDirectoryRelay[] {
+  const j = json as { directory?: { relays?: unknown }; relays?: unknown } | null;
+  const list = Array.isArray(j?.directory?.relays) ? j!.directory!.relays : Array.isArray(j?.relays) ? j!.relays : [];
+  return (list as Array<Record<string, unknown>>)
+    .filter((r) => typeof r?.relayId === "string" && typeof r?.tunnelHost === "string")
+    .map((r) => ({
+      relayId: r.relayId as string,
+      tunnelHost: r.tunnelHost as string,
+      ...(typeof r.relayKind === "string" ? { relayKind: r.relayKind } : {}),
+      ...(typeof r.region === "string" ? { region: r.region } : {}),
+    }));
+}
+
+export interface MeshRelayReport {
+  relay: MeshDirectoryRelay;
+  health: { status: number; body: unknown } | { error: string };
+  stats: { status: number; body: unknown } | { error: string } | null;
+}
+
+interface MeshView {
+  ready: boolean | null;
+  reasons: string[];
+  headAgeMs: number | null;
+  directoryVersion: number | null;
+  sequence: number | null;
+  boxItems: number | null;
+  phoneItems: number | null;
+  localBoxes: number | null;
+  accountMoves: number | null;
+  draining: boolean | null;
+  peers: Array<{ relayId: string; rejected: number; refusals: number; opens: number; lastHeardMs: number | null }>;
+}
+
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const sumValues = (v: unknown): number => (typeof v === "number" ? v : v && typeof v === "object" ? Object.values(v).reduce<number>((n, x) => n + (typeof x === "number" ? x : 0), 0) : 0);
+
+/** One view over both relays' shapes: TS (`mesh.reasons`, `feed`, `store`, `homes`) and Rust (`readiness`, `state`). */
+export function meshView(healthBody: unknown, statsBody: unknown): MeshView {
+  const h = (healthBody as { mesh?: Record<string, unknown> } | null)?.mesh ?? null;
+  const m = ((statsBody as { mesh?: Record<string, unknown> } | null)?.mesh ?? null) as Record<string, any> | null;
+  const reasons: string[] = [];
+  const from = (x: unknown) => {
+    if (Array.isArray(x)) reasons.push(...x.filter((r): r is string => typeof r === "string"));
+    else if (typeof x === "string" && x !== "ready") reasons.push(x);
+  };
+  from(h?.reasons ?? h?.readiness ?? m?.reasons ?? m?.readiness);
+  const ready = typeof h?.ready === "boolean" ? h.ready : typeof m?.ready === "boolean" ? m.ready : null;
+  const st = m?.state ?? null;
+  const peersRaw: any[] = Array.isArray(m?.peers) ? m!.peers : [];
+  return {
+    ready,
+    reasons: [...new Set(reasons)],
+    headAgeMs: num(m?.feed?.headAgeMs ?? st?.headAgeMs),
+    directoryVersion: num(m?.directory?.version ?? st?.directoryVersion),
+    sequence: num(m?.feed?.sequence ?? st?.sequence),
+    boxItems: num(m?.store?.boxItems ?? st?.boxItems),
+    phoneItems: num(m?.store?.phoneItems ?? st?.phoneItems),
+    localBoxes: num(m?.localBoxes ?? st?.localBoxes),
+    accountMoves: num(m?.homes?.moves ?? st?.accountMoves),
+    draining: typeof m?.draining === "boolean" ? m.draining : typeof st?.draining === "boolean" ? st.draining : null,
+    peers: peersRaw
+      .filter((p) => typeof p?.relayId === "string")
+      .map((p) => ({ relayId: p.relayId, rejected: sumValues(p.rejected), refusals: sumValues(p.refusals), opens: sumValues(p.opens) + sumValues(p.opensIn), lastHeardMs: num(p.lastHeardMs) })),
+  };
+}
+
+export function formatMesh(reports: MeshRelayReport[], source: string): { lines: string[]; hints: string[] } {
+  const lines = [`Relay mesh (${reports.length} relay(s) in the directory, from ${source})`];
+  const hints: string[] = [];
+  if (reports.length === 0) hints.push("The directory lists no relay: is RELAY_MESH on at .com and a relay admitted (npm run relays -- list)?");
+  const ids = reports.map((r) => r.relay.relayId);
+  const versions = new Set<number>();
+  for (const r of reports) {
+    const name = `${r.relay.relayId}${r.relay.region ? ` (${r.relay.region})` : ""}`;
+    if ("error" in r.health) {
+      lines.push(`  DOWN  ${name.padEnd(20)} ${r.relay.tunnelHost}: ${r.health.error.slice(0, 80)}`);
+      hints.push(`${r.relay.relayId} does not answer /api/health on ${r.relay.tunnelHost}:8443.`);
+      continue;
+    }
+    const sb = r.stats && !("error" in r.stats) && r.stats.status === 200 ? r.stats.body : null;
+    const v = meshView(r.health.body, sb);
+    const ok = r.health.status === 200 && v.ready !== false;
+    lines.push(`  ${ok ? "ok  " : "503 "}  ${name.padEnd(20)} ${ok ? "mesh-ready" : `not ready: ${v.reasons.join(", ") || `HTTP ${r.health.status}`}`}`);
+    if (!ok) hints.push(`${r.relay.relayId} is not mesh-ready (${v.reasons.join(", ") || `HTTP ${r.health.status}`}); the load balancer sends it nothing.`);
+    if (!sb) {
+      lines.push(`        stats: ${r.stats === null ? "no USAGE_REPORT_SECRET" : "error" in r.stats ? r.stats.error.slice(0, 80) : `HTTP ${r.stats.status}`}`);
+      continue;
+    }
+    if (v.directoryVersion !== null) versions.add(v.directoryVersion);
+    const age = v.headAgeMs === null ? "no head" : `${Math.round(v.headAgeMs / 1000)} s`;
+    lines.push(`        head ${age}, log ${v.sequence ?? "?"}, directory v${v.directoryVersion ?? "?"}, attachments ${v.boxItems ?? "?"} box / ${v.phoneItems ?? "?"} phone, local boxes ${v.localBoxes ?? "?"}, account moves ${v.accountMoves ?? "?"}${v.draining ? ", DRAINING" : ""}`);
+    if (v.headAgeMs !== null && v.headAgeMs > 30_000) hints.push(`${r.relay.relayId}'s newest head is ${age} old (stale at 60 s): is the feed reachable from it?`);
+    const up = new Set(v.peers.map((p) => p.relayId));
+    for (const p of v.peers) {
+      lines.push(`        bridge ${p.relayId.padEnd(14)} opens ${p.opens}, refusals ${p.refusals}, rejected items ${p.rejected}, heard ${p.lastHeardMs === null ? "?" : `${Math.round(p.lastHeardMs / 1000)} s`} ago`);
+      if (p.rejected > 0) hints.push(`${r.relay.relayId} rejected ${p.rejected} item(s) from ${p.relayId}: a bug or a rogue relay.`);
+    }
+    const missing = ids.filter((id) => id !== r.relay.relayId && !up.has(id));
+    if (missing.length > 0) {
+      lines.push(`        no bridge to: ${missing.join(", ")}`);
+      hints.push(`${r.relay.relayId} has no bridge to ${missing.join(", ")}.`);
+    }
+  }
+  if (versions.size > 1) hints.push(`Relays hold different directory versions (${[...versions].sort((a, b) => a - b).join(", ")}); they converge within a minute.`);
+  return { lines, hints };
+}
+
+async function getJson(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: unknown } | { error: string }> {
+  try {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+async function meshReport(com: string, env: NodeJS.ProcessEnv): Promise<{ lines: string[]; hints: string[] }> {
+  const feed = (env.FLAGSHIP_RELAY_FEED_URL ?? `https://feed.${new URL(com).hostname}/v1`).replace(/\/+$/, "");
+  let source = `${feed}/directory.json`;
+  let dir = await getJson(source);
+  if ("error" in dir || dir.status !== 200 || relaysFromDirectory(dir.body).length === 0) {
+    source = `${com}/api/services/endpoints`;
+    dir = await getJson(source);
+  }
+  const relays = "error" in dir ? [] : relaysFromDirectory(dir.body);
+  const secret = env.USAGE_REPORT_SECRET;
+  const reports = await Promise.all(
+    relays.map(async (relay): Promise<MeshRelayReport> => {
+      const base = `https://${relay.tunnelHost}:8443`;
+      const [health, stats] = await Promise.all([getJson(`${base}/api/health`), secret ? getJson(`${base}/api/stats`, { "x-usage-secret": secret }) : Promise.resolve(null)]);
+      return { relay, health, stats };
+    }),
+  );
+  return formatMesh(reports, source);
+}
+
 /* ------------------------------------------------------------------ main */
 
 function delegate(script: string, args: string[] = []): void {
@@ -332,7 +482,7 @@ async function main(): Promise<void> {
   const all = o.command === "all";
 
   if (o.command === "help") {
-    console.log("usage: npm run ops -- [health | services | dns | workers [--hours N] [--script NAME] | slow [--seconds N] | limits | outbound]");
+    console.log("usage: npm run ops -- [health | services | dns | workers [--hours N] [--script NAME] | slow [--seconds N] | limits | outbound | mesh]");
     return;
   }
   if (all || o.command === "health") {
@@ -355,6 +505,7 @@ async function main(): Promise<void> {
   if (all || o.command === "dns") out(await dnsReport(com).catch((e) => `Wildcard DNS: ${(e as Error).message}`));
   if (all || o.command === "workers") out(await workersReport(o, process.env).catch((e) => `Worker numbers: ${(e as Error).message}`));
   if (o.command === "slow") out(await slowReport(o));
+  if (o.command === "mesh") out(await meshReport(com, process.env));
   if (o.command === "limits") delegate("./rate-limit-report.mjs");
   if (o.command === "outbound") delegate("./outbound-hosts.mjs");
 

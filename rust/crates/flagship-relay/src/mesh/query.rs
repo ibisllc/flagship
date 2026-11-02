@@ -63,7 +63,7 @@ impl Mesh {
             .into_iter()
             .filter(|p| Some(p.relay_id.as_str()) != exclude && p.is_synced())
             .collect();
-        let msg = json!({"type": "query", "qid": qid, "name": name});
+        let msg = json!({"type": "query", "qid": wire::qid_wire(qid), "name": name});
         for p in &peers {
             p.send_json(&msg);
         }

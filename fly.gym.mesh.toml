@@ -1,0 +1,111 @@
+# flagship-services-gym AS `gym-a` OF THE GYM RELAY MESH (docs/architecture-v2/relay-mesh.md §14.1,
+# docs/runbooks/relay-mesh.md "Gym"): fly.gym.toml with the mesh on. A separate profile so the current gym keeps
+# working until the owner switches: `GYM_MESH=on bash scripts/gym-refresh.sh` deploys this file instead of
+# fly.gym.toml (`GYM_MESH=on GYM_RELAY=rust` deploys fly.gym.relay.mesh.toml). Switch back: run gym-refresh without
+# GYM_MESH (the relay is then exactly today's: internal routes, `.com` feed WebSocket, `.com` phone ledger).
+#
+# Secrets to add before the first mesh deploy (gym-refresh refuses without the seed):
+#   flyctl secrets set -a flagship-services-gym --stage \
+#     FLAGSHIP_RELAY_KEY_SEED="$(cat ~/.config/flagship/gym-relay-a.seed)" \
+#     FLAGSHIP_RELAY_LOG_PUB="$(curl -fsS https://gym.flagshipserver.com/api/serving/revocation-key | jq -r .publicKey)"
+# (USAGE_REPORT_SECRET and SERVICES_CONTROL_SECRET are already there.) Then, once:
+#   flyctl certs add gym-a.tunnel.gym.flagship.services -a flagship-services-gym
+#   flyctl certs add tunnel.gym.flagship.services -a flagship-services-gym
+# and the DNS (npx tsx tools/live-e2e/gym-mesh-dns.ts --apply).
+
+app = "flagship-services-gym"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+# Rolling, min 2 — same #10 rationale as prod (never kill the only machine before
+# the new one is healthy, or every tunnel WS drops). The gym carries no real
+# users, but matching prod here keeps the gym a faithful mirror of prod behavior.
+[deploy]
+  strategy = "rolling"
+  wait_timeout = "60s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  TUNNEL_TCP_PORT = "8443"
+  FLAGSHIP_SURFACE = "services"
+  # ⭐ The gym apex. This is the one line that distinguishes the gym data plane
+  # from prod — it makes pod-canonical parsing + first-party guards resolve
+  # against `gym.flagship.services` (test boxes = `<server>.<user>.gym.flagship.services`).
+  FLAGSHIP_SERVICES_APEX = "gym.flagship.services"
+  # ⭐ The gym control plane. The hub resolves a connecting box's IRK + its
+  # hub-blessing + by-domain routing against THIS .com (server.ts: comBaseUrl =
+  # process.env.FLAGSHIP_COM_BASE_URL ?? flagshipserver.com). Without it the gym
+  # hub's irkLookup hits PROD, where a gym box's user doesn't exist → fail-closed
+  # → the box's tunnel claim is rejected → no HELLO_ACK → tunnel.ready() hangs →
+  # the box never starts ACME / serves. Prod's root fly.toml omits it (keeps the
+  # flagshipserver.com default).
+  FLAGSHIP_COM_BASE_URL = "https://gym.flagshipserver.com"
+  RELAY_ECHO_PORT = "3001"
+  FLAGSHIP_MESH = "on"
+  FLAGSHIP_RELAY_ID = "gym-a"
+  FLAGSHIP_RELAY_KIND = "full"
+  FLAGSHIP_RELAY_FEED_URL = "https://feed.gym.flagshipserver.com/v1"
+  # The TS relay's CA keys (relay-mesh.md §15.3.1): the gym CA's hot key, public (`caPubkey` of
+  # `.maintainers/ca-endorsements/gym-live.json` on the `gym` branch).
+  FLAGSHIP_MESH_CA_KEYS = "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930"
+  # Gym only (§15.7 test-only shortenings): the live `relay-mesh` group watches a rebalance and a co-locate move
+  # within one run.
+  FLAGSHIP_MESH_REBALANCE_MS = "60000"
+  FLAGSHIP_MESH_MIN_MOVE_MS = "30000"
+
+# External :443 → internal :8443 (raw TCP, SNI passthrough). Identical to prod.
+# ⭐ ONE machine (vs prod's HA pair): a box opens its tunnel to a SINGLE hub
+# machine, and the in-memory registry is per-machine, so a :443 SNI connection
+# load-balanced to the OTHER machine has no route → intermittent
+# SSL_ERROR_SYSCALL. One machine makes gym SNI routing deterministic for the
+# live Tier-2 slice (the gym serves one box at a time; HA isn't the point).
+[[services]]
+  protocol = "tcp"
+  internal_port = 8443
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+    handlers = []
+
+# External :8443 → internal :3000 (TLS-terminated by Fly with the auto-issued
+# cert for flagship-services-gym.fly.dev). Tunnel-hub WS at /tunnel + /api/health.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# :8444 the relay-address echo (TLS + PROXY header), as prod's fly.toml.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8444
+    handlers = ["tls", "proxy_proto"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

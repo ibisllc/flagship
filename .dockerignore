@@ -44,7 +44,8 @@ out
 # ---- separate Cloudflare workspaces (deployed via wrangler, not Fly) --------
 .wrangler
 **/.wrangler
-.maintainers
+# `.maintainers/` (public mandates and CA endorsements, no keys) is in the context: Dockerfile.relay ships it, the
+# Rust mesh relay verifies the CA chain from it (relay-mesh.md §15.4.1). The Node image never copies it.
 maintainers
 
 # ---- CI / GitHub ------------------------------------------------------------

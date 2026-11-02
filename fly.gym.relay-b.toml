@@ -1,0 +1,106 @@
+# flagship-services-gym-b: the gym relay mesh's second relay, `gym-b` (docs/architecture-v2/relay-mesh.md §14.1,
+# docs/runbooks/relay-mesh.md "Gym"). Its own Fly app, because two machines in one app share one address and cannot be
+# dialled one by one on raw TCP (§2). The TS hub image (root Dockerfile), in another region than gym-a (iad), with
+# an IPv6-only direct name `gym-b.tunnel.gym.flagship.services`. Stateless like every relay: its key comes from a
+# secret, its log, directory and blessing from the gym `.com` feed and its peers.
+#
+# CREATE (owner, once; nothing here runs by itself):
+#   flyctl apps create flagship-services-gym-b
+#   flyctl ips allocate-v6 -a flagship-services-gym-b      # BEFORE the first deploy: no IPv4, ever (§14.1)
+#   flyctl secrets set -a flagship-services-gym-b --stage \
+#     FLAGSHIP_RELAY_KEY_SEED="$(cat ~/.config/flagship/gym-relay-b.seed)" \
+#     FLAGSHIP_RELAY_LOG_PUB="$(curl -fsS https://gym.flagshipserver.com/api/serving/revocation-key | jq -r .publicKey)" \
+#     USAGE_REPORT_SECRET="<the gym's, from .gym-secrets.env GYM_USAGE_REPORT_SECRET>" \
+#     SERVICES_CONTROL_SECRET="<the gym's; unused with the mesh on, kept for the mesh-off rollback>"
+#   flyctl deploy -c fly.gym.relay-b.toml -a flagship-services-gym-b --remote-only   # from the gym worktree
+#   flyctl ips list -a flagship-services-gym-b             # must list only the v6 address; release any v4
+#   flyctl certs add gym-b.tunnel.gym.flagship.services -a flagship-services-gym-b
+#   flyctl certs add tunnel.gym.flagship.services -a flagship-services-gym-b
+#   (DNS for both, the `_acme-challenge` CNAMEs included: npx tsx tools/live-e2e/gym-mesh-dns.ts --apply)
+# TEAR DOWN: flyctl apps destroy flagship-services-gym-b --yes; then `npm run relays -- retire gym-b` on the gym.
+#
+# FLAGSHIP_MESH_CA_KEYS: the TS relay takes the CA keys it checks blessings and the directory under from this list
+# (relay-mesh.md §15.3.1; the Rust relay reads the maintainer chain instead). It is the gym CA's hot key, public: the
+# `caPubkey` of `.maintainers/ca-endorsements/gym-live.json` on the `gym` branch
+# (`git show origin/gym:.maintainers/ca-endorsements/gym-live.json | jq -r .caPubkey`). Check it against the gym
+# directory's signer: `curl -fsS https://feed.gym.flagshipserver.com/v1/directory.json | jq -r .directory.signedBy`.
+
+app = "flagship-services-gym-b"
+primary_region = "ams"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[deploy]
+  strategy = "rolling"
+  wait_timeout = "60s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  TUNNEL_TCP_PORT = "8443"
+  RELAY_ECHO_PORT = "3001"
+  FLAGSHIP_SURFACE = "services"
+  FLAGSHIP_SERVICES_APEX = "gym.flagship.services"
+  FLAGSHIP_COM_BASE_URL = "https://gym.flagshipserver.com"
+  FLAGSHIP_MESH = "on"
+  FLAGSHIP_RELAY_ID = "gym-b"
+  FLAGSHIP_RELAY_KIND = "full"
+  FLAGSHIP_RELAY_FEED_URL = "https://feed.gym.flagshipserver.com/v1"
+  FLAGSHIP_MESH_CA_KEYS = "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930"
+  # Gym only (§15.7 test-only shortenings): the live `relay-mesh` group watches a rebalance and a co-locate move
+  # within one run, which the production cadence (60 min, 6 h between moves) would never show.
+  FLAGSHIP_MESH_REBALANCE_MS = "60000"
+  FLAGSHIP_MESH_MIN_MOVE_MS = "30000"
+
+# auto_stop "off" on every service: a mesh relay that Fly stops when idle drops its bridges, and its peers' readiness
+# (bridges to at least half of the others, §2) with it.
+
+# :443 raw TCP (SNI passthrough) to the router.
+[[services]]
+  protocol = "tcp"
+  internal_port = 8443
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+    handlers = []
+
+# :8443 TLS ended by Fly (certs for gym-b.tunnel.gym.flagship.services and tunnel.gym.flagship.services): /tunnel,
+# /phone-tunnel, /mesh, /api/health (503 until mesh-ready: the load balancer's monitor reads it), /api/stats.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# :8444 the relay-address echo (TLS + PROXY header), as prod's fly.toml.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8444
+    handlers = ["tls", "proxy_proto"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

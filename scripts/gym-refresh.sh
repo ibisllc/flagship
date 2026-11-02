@@ -22,6 +22,7 @@
 # Usage: bash scripts/gym-refresh.sh [--no-push] [--skip-fly-deploy] [--skip-deploy] [--dry-run]
 #
 # Env: GYM_WORKTREE      (default ~/.cache/flagship/gym-worktree)
+#      GYM_RELAY=rust    the Rust relay (fly.gym.relay.toml); GYM_MESH=on the relay mesh profile (*.mesh.toml)
 #      GYM_SECRETS_FILE  (default <main checkout>/.gym-secrets.env)
 #      GYM_UPCLOUD_TOKEN_FILE (default ~/.config/flagship/upcloud-token)
 #      GYM_BASE_REF      rebase the gym branch onto this ref instead of origin/main (never pushed)
@@ -47,7 +48,7 @@ for arg in "$@"; do
     --skip-fly-deploy) fly_deploy=0 ;;
     --skip-deploy) deploy=0; fly_deploy=0 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -64,6 +65,9 @@ UPCLOUD_TOKEN_FILE="${GYM_UPCLOUD_TOKEN_FILE:-$HOME/.config/flagship/upcloud-tok
 FLY_APP="flagship-services-gym"
 # GYM_RELAY=rust runs the gym on the Rust relay (Dockerfile.relay); anything else keeps the Node hub.
 FLY_CONFIG="fly.gym.toml"; [ "${GYM_RELAY:-}" = rust ] && FLY_CONFIG="fly.gym.relay.toml"
+# GYM_MESH=on deploys the same relay as `gym-a` of the gym relay mesh (fly.gym.mesh.toml / fly.gym.relay.mesh.toml,
+# docs/runbooks/relay-mesh.md "Gym"); anything else keeps today's relay. It needs the relay's key seed as a Fly secret.
+if [ "${GYM_MESH:-}" = on ]; then FLY_CONFIG="${FLY_CONFIG%.toml}.mesh.toml"; fi
 PROD_FLY_APP="flagship-services"
 D1="flagship-state-gym"
 CFG="wrangler.gym.toml"
@@ -323,6 +327,10 @@ else
     if [ "$DRY" = "1" ]; then
       say "DRY-RUN would: flyctl deploy -c $FLY_CONFIG -a $FLY_APP --remote-only --strategy=immediate"
     else
+      if [ "${GYM_MESH:-}" = on ]; then
+        flyctl secrets list -a "$FLY_APP" 2>/dev/null | grep -q '^FLAGSHIP_RELAY_KEY_SEED' \
+          || die "GYM_MESH=on but $FLY_APP has no FLAGSHIP_RELAY_KEY_SEED secret (docs/runbooks/relay-mesh.md \"Gym\")"
+      fi
       (cd "$WT" && flyctl deploy -c "$FLY_CONFIG" -a "$FLY_APP" --remote-only --strategy=immediate --yes 2>&1 | tail -3 | sed 's/^/  /') \
         || die "gym Fly deploy failed"
     fi

@@ -208,10 +208,20 @@ export class MockCom {
     }
   }
 
+  /** Routes a subclass serves first (the mesh feed and relay blessings, mesh.ts); true when it answered. */
+  protected extraRoute(_req: IncomingMessage, _res: ServerResponse, _url: URL): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected async readBody(req: IncomingMessage): Promise<unknown> {
+    return this.body(req);
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://x");
     const p = url.pathname;
     this.paths.push(`${req.method} ${p}`);
+    if (await this.extraRoute(req, res, url)) return;
     const send = (status: number, body: unknown) => {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
@@ -411,7 +421,9 @@ export class RawBox {
   private waiters: Array<() => void> = [];
   closed: Promise<{ code: number; reason: string }>;
   closeInfo: { code: number; reason: string } | null = null;
-  constructor(readonly ws: WebSocket) {
+  /** Called with every frame as it arrives (a box that answers streams itself). */
+  onFrame: ((f: Frame) => void) | null = null;
+  constructor(readonly ws: WebSocket, private readonly decode: { mesh?: boolean } = {}) {
     this.closed = new Promise((r) =>
       ws.on("close", (code, reason) => {
         this.closeInfo = { code, reason: reason.toString() };
@@ -426,18 +438,19 @@ export class RawBox {
       j.set(raw, this.buf.length);
       this.buf = j;
       for (;;) {
-        const d = decodeFrame(this.buf, { drainNotice: true });
+        const d = decodeFrame(this.buf, { drainNotice: true, ...(this.decode.mesh ? { mesh: true } : {}) });
         if (d.kind !== "ok") break;
         this.buf = this.buf.subarray(d.consumed);
         this.frames.push(d.frame);
+        this.onFrame?.(d.frame);
       }
       this.wake();
     });
   }
 
-  static async connect(hubPort: number): Promise<RawBox> {
+  static async connect(hubPort: number, decode: { mesh?: boolean } = {}): Promise<RawBox> {
     const ws = new WebSocket(`ws://127.0.0.1:${hubPort}/tunnel`);
-    const b = new RawBox(ws);
+    const b = new RawBox(ws, decode);
     await new Promise<void>((res, rej) => {
       ws.once("open", () => res());
       ws.once("error", rej);
@@ -559,6 +572,8 @@ export interface RelayOptions {
   outboundUpstream?: { host: string; publicIp: string; local: string };
   /** Reuse these ports (a restart or a rollback onto the same addresses). */
   ports?: { hub: number; sni: number; echo: number };
+  /** The relay mesh (FLAGSHIP_MESH=on): every variable as the relay reads it (mesh.ts `meshRelayEnv`). */
+  meshEnv?: Record<string, string>;
 }
 
 export interface RunningRelayTarget {
@@ -604,6 +619,7 @@ function relayEnv(com: MockCom, o: RelayOptions, ports: { hub: number; sni: numb
     if (o.serving.closeAllMs !== undefined) env.FLAGSHIP_SERVING_CLOSE_ALL_MS = String(o.serving.closeAllMs);
     env.FLAGSHIP_SERVING_CHECK_MS = String(o.serving.checkMs ?? 100);
   }
+  if (o.meshEnv) Object.assign(env, o.meshEnv);
   return env;
 }
 
@@ -612,7 +628,10 @@ const RELAY_ENV_KEYS = [
   "SERVICES_CONTROL_SECRET", "FLAGSHIP_HUB_HOST", "FLAGSHIP_DRAIN_GRACE_MS", "FLAGSHIP_OUTBOUND_RELAY", "FLAGSHIP_RELAY_ID",
   "FLAGSHIP_PHONE_ROUTE", "USAGE_REPORT_SECRET", "USAGE_FLUSH_MS", "FLAGSHIP_OVER_QUOTA_KBPS", "FLAGSHIP_SERVING_REVOCATION_PUB",
   "FLAGSHIP_SERVING_REFUSE_NEW_MS", "FLAGSHIP_SERVING_CLOSE_ALL_MS", "FLAGSHIP_SERVING_CHECK_MS", "FLAGSHIP_PB_MAIL",
-  "FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM",
+  "FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM", "FLAGSHIP_MESH", "FLAGSHIP_RELAY_KEY_SEED", "FLAGSHIP_RELAY_KIND",
+  "FLAGSHIP_RELAY_FEED_URL", "FLAGSHIP_RELAY_LOG_PUB", "FLAGSHIP_MESH_CA_KEYS", "FLAGSHIP_MESH_PEER_URLS",
+  "FLAGSHIP_MESH_FEED_POLL_MS", "FLAGSHIP_MESH_REBALANCE_MS", "FLAGSHIP_MESH_MIN_MOVE_MS", "FLAGSHIP_MESH_ATTACH_TTL_MS",
+  "FLAGSHIP_MESH_CAPACITY", "FLAGSHIP_RELAY_FEED_PLAIN",
 ];
 
 async function ports(o: RelayOptions): Promise<{ hub: number; sni: number; echo: number }> {

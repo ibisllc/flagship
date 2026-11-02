@@ -21,7 +21,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin relay
 COPY --from=builder /out/flagship-relay /usr/local/bin/flagship-relay
+# The maintainer chain a mesh relay checks blessings and the directory under (relay-mesh.md §15.4.1): the build tree's
+# `.maintainers/` (the gym worktree's carries the gym-root mandate; the gym also sets FLAGSHIP_RELAY_MAINTAINER_PIN).
+# Public files, read-only to the relay. A relay, like a box, needs a new image before the newest CA lease ends.
+COPY .maintainers /app/.maintainers
 USER relay
-ENV PORT=3000 TUNNEL_TCP_PORT=8443 RELAY_ECHO_PORT=3001
+ENV PORT=3000 TUNNEL_TCP_PORT=8443 RELAY_ECHO_PORT=3001 FLAGSHIP_RELAY_MAINTAINERS_DIR=/app/.maintainers
 EXPOSE 3000 8443 3001
 ENTRYPOINT ["/usr/local/bin/flagship-relay"]

@@ -1131,7 +1131,7 @@ impl Mesh {
                     self.cut(peer);
                     return;
                 }
-                let qid = v.get("qid").and_then(Value::as_u64).unwrap_or(0);
+                let qid = wire::qid_echo(v);
                 if !ok {
                     peer.send_json(
                         &json!({"type": "answer", "qid": qid, "items": [], "busy": true}),
@@ -1144,8 +1144,9 @@ impl Mesh {
                 );
             }
             "answer" => {
-                let qid = v.get("qid").and_then(Value::as_u64).unwrap_or(0);
-                self.on_answer(peer, qid, v);
+                if let Some(qid) = wire::qid_parse(v) {
+                    self.on_answer(peer, qid, v);
+                }
             }
             "head" => {
                 if let Some((h, sig)) = wire::head_from_json(v) {
@@ -1217,8 +1218,9 @@ impl Mesh {
             }
             "phone-begun" | "phone-claimed" | "phone-renewed" | "phone-released"
             | "mail-answer" => {
-                let qid = v.get("qid").and_then(Value::as_u64).unwrap_or(0);
-                peer.reply(qid, v.clone());
+                if let Some(qid) = wire::qid_parse(v) {
+                    peer.reply(qid, v.clone());
+                }
             }
             "phone-begin" | "phone-claim" | "phone-renew" | "phone-release" | "phone-vacant" => {
                 self.on_phone_message(peer, v);

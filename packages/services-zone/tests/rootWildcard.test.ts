@@ -208,6 +208,28 @@ describe("evaluateZoneHealth", () => {
     expect(h.challenges).toBe(1);
   });
 
+  it("accepts the relay mesh's names under tunnel.<apex> (relay-mesh.md §2): direct names, the balanced name, their challenges", () => {
+    const mesh = [
+      rec("A", `tunnel.${APEX}`, "198.51.100.10"),
+      rec("AAAA", `iad1.tunnel.${APEX}`, "2001:db8::10"),
+      rec("A", `iad1.tunnel.${APEX}`, "198.51.100.10"),
+      rec("AAAA", `ams1.tunnel.${APEX}`, "2001:db8::11"),
+      rec("A", `upc-fra1.tunnel.${APEX}`, "198.51.100.12"),
+      rec("CNAME", `_acme-challenge.iad1.tunnel.${APEX}`, "iad1.tunnel.flagship.services.abc.flydns.net"),
+      rec("CNAME", `_acme-challenge.tunnel.${APEX}`, "tunnel.flagship.services.abc.flydns.net"),
+      rec("TXT", `_acme-challenge.upc-fra1.tunnel.${APEX}`, "t"),
+      rec("A", `lb.${APEX}`, "198.51.100.13"),
+    ];
+    for (const r of mesh) expect(classifyZoneName(r.name, APEX).kind).toBe("system");
+    const h = health([...ROOT, ...mesh]);
+    expect(h.problems).toEqual([]);
+    expect(h.ok).toBe(true);
+    expect(blockingRecords([...ROOT, ...mesh], APEX)).toEqual([]);
+    // The gym's relays live under its own apex the same way.
+    const gym = "gym.flagship.services";
+    expect(classifyZoneName(`gym-c.tunnel.${gym}`, gym).kind).toBe("system");
+  });
+
   it("fails on a missing wildcard, a wrong address or a missing apex CAA", () => {
     expect(health(ROOT.slice(1)).problems.map((p) => p.code)).toContain("wildcard");
     expect(health(ROOT.slice(0, 2)).problems.map((p) => p.code)).toEqual(["caa-missing", "caa-missing"]);

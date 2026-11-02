@@ -32,6 +32,9 @@ const RESERVED_USER_LABELS = new Set([
   "status", "ops", "ns1", "ns2", "mail", "email", "smtp", "imap", "pop",
   "static", "cdn", "assets", "files", "git", "tunnel", "control",
   "control-plane", "console", "dashboard", "blog", "docs",
+  // The relay mesh (relay-mesh.md §2): `lb.<apex>` is the load-balanced name if the zone's `*` has to be a
+  // CNAME to it; `tunnel` (above) holds every relay's direct name `<relayId>.tunnel.<apex>`.
+  "lb",
   // Per-account gossip fan-out reserved names (Phase 4). `broadcast` is the
   // reserved fan-out label `broadcast--<user>.flagship.services` the hub mirrors
   // gossip through; `servers`/`all` are reserved collective addresses for the

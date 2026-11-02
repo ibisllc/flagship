@@ -11,6 +11,33 @@ use serde_json::{Map, Value, json};
 
 use crate::json::write_str;
 
+/// A bridge request id (§6.3 `query`, §8.2 phone requests) is opaque to the side that answers: it is echoed exactly as
+/// it came (a string of at most 64 characters, as the TS relay sends `q<n>`, or a number). Anything else is null.
+#[must_use]
+pub fn qid_echo(v: &Value) -> Value {
+    match v.get("qid") {
+        Some(Value::String(q)) if q.len() <= 64 => Value::String(q.clone()),
+        Some(Value::Number(q)) if q.is_u64() => Value::Number(q.clone()),
+        _ => Value::Null,
+    }
+}
+
+/// This relay's own request id on the wire: `q<n>`, a string, so a TS peer (which keys its waiters by string) echoes it.
+#[must_use]
+pub fn qid_wire(n: u64) -> Value {
+    Value::String(format!("q{n}"))
+}
+
+/// The id of an answer to one of this relay's requests (`q<n>`, or a bare number from an older build).
+#[must_use]
+pub fn qid_parse(v: &Value) -> Option<u64> {
+    match v.get("qid")? {
+        Value::Number(q) => q.as_u64(),
+        Value::String(q) => q.strip_prefix('q')?.parse().ok(),
+        _ => None,
+    }
+}
+
 fn s(v: &Value, k: &str) -> Option<String> {
     v.get(k)?.as_str().map(str::to_owned)
 }

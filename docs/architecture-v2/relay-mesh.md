@@ -1,7 +1,7 @@
 # Relay mesh: several relays, one data plane (release 0.3)
 
 Status: design, owner-approved direction (AGENTS.md "Make Fly redundant", 2026-11-01). Chunks A (protocol), B
-(`.com`), C (TS relay) and D (Rust relay) built. This is the
+(`.com`), C (TS relay), D (Rust relay) and G (gym, conformance, ops) built. This is the
 contract the implementation chunks in §15 build to. Current system: `relay-transport.md` (both relays, frames,
 conformance), `serving-wiring.md` (serving gate, revocation log, feed), `phone-route.md` (the bare name),
 `docs/maintainer-trust-enforcement.md` (relay blessing).
@@ -1181,6 +1181,37 @@ Env (both relays): `FLAGSHIP_MESH=on|off` (default off), `FLAGSHIP_RELAY_ID`, `F
 `.com`: `RELAY_MESH=on|off` (Worker var, default off), `RELAY_MESH_KEY_SEED` (secret), R2 binding `RELAY_FEED`; test-only shortening: `FLAGSHIP_MESH_REBALANCE_MS`, `FLAGSHIP_MESH_MIN_MOVE_MS`,
 `FLAGSHIP_MESH_ATTACH_TTL_MS`, `FLAGSHIP_MESH_FEED_POLL_MS` (with the existing `FLAGSHIP_SERVING_REFUSE_NEW_MS`,
 `FLAGSHIP_SERVING_CLOSE_ALL_MS`).
+
+#### 15.7.1 Decisions taken while building G (2026-11-01)
+
+- G: **Conformance harness** (`tools/relay-conformance/mesh.ts`, scenarios `tests/relayMesh.test.ts`). The mock `.com`
+  publishes the log in B's sealed format (`head.json` and `log/<page>.json` sealed per epoch, `directory.json` and
+  `keys/<relayId>.json` in clear) under one URL prefix per relay (`/feed/<relayId>/v1`, so one relay's feed can be
+  paused alone), and answers `POST /api/services/relay-blessing` only with proof of the relay key, with `meshKeys`.
+  Meshes are `ra`+`rb`+`rc` as TS+TS+Rust and Rust+Rust+TS (every entry/holder pairing); a harness peer `aa-obs` (an
+  admitted `entry` relay) watches and forges bridge traffic. Both relays take the CA keys from `FLAGSHIP_MESH_CA_KEYS`
+  (the Rust binary is built with `--features conformance` by the harness).
+- G: **Bridge request ids are opaque strings.** C sent `qid` as a string and keyed its waiters by string; D read and
+  sent `qid` as a number, so a query or a phone-ledger request between a TS and a Rust relay was never answered (the
+  phone's `begin` on a TS P with a Rust L was refused `unavailable`). Fixed in D: an answer echoes the `qid` exactly as
+  it came; D's own requests send `q<n>`.
+- G: **`FLAGSHIP_MESH_PEER_URLS`** (`relayId=url,…`, dial a peer there instead of its direct name) is read by the TS
+  relay too, as D already did.
+- G: **An upgrade no mounted path takes** (`/tunnel`, `/phone-tunnel`, `/mesh`) is answered 404 and closed by the TS
+  relay; before, the socket stayed open forever and kept `close()` from finishing.
+- G: **Left different, to settle later** (not wire-visible between relays): with the mesh on, the Rust relay still
+  honours `FLAGSHIP_PHONE_ROUTE=off` (no `/phone-tunnel`) while the TS relay ignores it; a shortened
+  `FLAGSHIP_MESH_REBALANCE_MS` also shortens the TS home's counting window (Rust keeps the hour); `/api/health`'s `mesh`
+  block is `{ready, reasons[]}` on TS and `{relayId, ready, readiness}` on Rust, and the `/api/stats` mesh blocks have
+  different keys (`npm run ops -- mesh` reads both; peers' `relayId` and `rejected` match); a second bridge between one
+  pair: TS keeps the newer (closes the older 1000 `replaced`), Rust closes the second 4409 `duplicate` (read in the code,
+  not exercised).
+- G: **Gym** (`docs/runbooks/relay-mesh.md` "Gym"): `gym-a` (`flagship-services-gym`, mesh profiles
+  `fly.gym.mesh.toml` / `fly.gym.relay.mesh.toml` selected by `GYM_MESH=on` in `gym-refresh.sh`), `gym-b`
+  (`fly.gym.relay-b.toml`), `gym-c` (`scripts/gym-relay-c.sh`, UpCloud, gym-labelled so the fleet sweep reaps it; the
+  gym teardown leaves `tunnel.<apex>` and `lb.<apex>` names alone). The live group `relay-mesh` supersedes
+  `relayInstances` (unregistered); its `.com contact` check is a documented skip (no gym switch pauses the feed, and
+  peers' gossip would keep a relay whose own feed is blocked fresh): MESH09 covers it.
 
 ### 15.8 Constants
 

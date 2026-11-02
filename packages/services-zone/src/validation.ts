@@ -69,6 +69,10 @@ const RESERVED_USER_LABELS = new Set([
   "files",
   "git",
   "tunnel",
+  // The relay mesh's load-balanced name if Cloudflare cannot balance a wildcard (relay-mesh.md §2: `*` CNAME
+  // to `lb.<apex>`); `tunnel` above is the boxes' and phones' balanced name and the parent of every relay's
+  // direct name `<relayId>.tunnel.<apex>`.
+  "lb",
   "control",
   "control-plane",
   "console",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WorkerTail } from "../tools/live-e2e/lib/workerTail.js";
-import { checkHealth, formatDns, formatHealth, formatServices, formatSlow, formatWorkers, parseArgs, probeWildcard, rowsFromAnalytics, type DnsLookup, type ServicesStats } from "./ops.js";
+import { checkHealth, formatDns, formatMesh, meshView, relaysFromDirectory, formatHealth, formatServices, formatSlow, formatWorkers, parseArgs, probeWildcard, rowsFromAnalytics, type DnsLookup, type ServicesStats } from "./ops.js";
 
 describe("ops", () => {
   it("reads its arguments", () => {
@@ -83,5 +83,52 @@ describe("ops", () => {
     expect(hints.join(" ")).toMatch(/9\.9\.9\.9 answered .* with 203\.0\.113\.9/);
     const clean = formatDns(await probeWildcard("flagship.services", ["1.1.1.1"], async (_s, _n, t) => (t === "A" ? ["149.248.216.86"] : ["2a09:8280:1::110:d2b6:0"])), "149.248.216.86", "2a09:8280:1::110:d2b6:0");
     expect(clean.hints).toEqual([]);
+  });
+
+  it("reads the mesh from either relay's shapes and points at what is wrong", () => {
+    expect(parseArgs(["mesh"]).command).toBe("mesh");
+    const dir = { directory: { relays: [
+      { relayId: "iad1", tunnelHost: "iad1.tunnel.flagship.services", relayKind: "full", region: "iad" },
+      { relayId: "ams1", tunnelHost: "ams1.tunnel.flagship.services", relayKind: "full", region: "ams" },
+      { relayId: "upc-fra1", tunnelHost: "upc-fra1.tunnel.flagship.services", relayKind: "full", region: "fra" },
+    ] } };
+    const relays = relaysFromDirectory(dir);
+    expect(relays.map((r) => r.relayId)).toEqual(["iad1", "ams1", "upc-fra1"]);
+    expect(relaysFromDirectory({ relays: [{ relayId: "a1", tunnelHost: "a1.tunnel.x" }, { relayId: 3 }] })).toHaveLength(1);
+    // TS relay: health `mesh.reasons`, stats `feed` / `directory` / `store` / `homes` / `peers`.
+    const ts = meshView(
+      { ok: true, mesh: { ready: true, reasons: [] } },
+      { mesh: { ready: true, reasons: [], draining: false, feed: { sequence: 40, headAgeMs: 3_000 }, directory: { version: 7 }, store: { boxItems: 12, phoneItems: 1 }, homes: { moves: 2 }, localBoxes: 5,
+        peers: [{ relayId: "ams1", opens: 4, opensIn: 1, refusals: { "not-holder": 1 }, rejected: 0, lastHeardMs: 900 }] } },
+    );
+    expect(ts).toMatchObject({ ready: true, headAgeMs: 3_000, directoryVersion: 7, boxItems: 12, accountMoves: 2, localBoxes: 5 });
+    expect(ts.peers[0]).toMatchObject({ relayId: "ams1", opens: 5, refusals: 1 });
+    // Rust relay: health `mesh.readiness` (one word), stats `state` and per-peer counters.
+    const rust = meshView(
+      { ok: false, mesh: { relayId: "upc-fra1", ready: false, readiness: "stale" } },
+      { mesh: { ready: false, readiness: "stale", state: { sequence: 38, headAgeMs: 75_000, directoryVersion: 6, boxItems: 11, phoneItems: 0, localBoxes: 2, accountMoves: 0, draining: false },
+        peers: [{ relayId: "iad1", opens: 2, refusals: 0, rejected: 3, lastHeardMs: 2_000 }] } },
+    );
+    expect(rust).toMatchObject({ ready: false, reasons: ["stale"], headAgeMs: 75_000, directoryVersion: 6 });
+    const { lines, hints } = formatMesh(
+      [
+        { relay: relays[0]!, health: { status: 200, body: { mesh: { ready: true, reasons: [] } } }, stats: { status: 200, body: { mesh: { feed: { sequence: 40, headAgeMs: 3_000 }, directory: { version: 7 }, store: { boxItems: 12, phoneItems: 1 }, peers: [{ relayId: "ams1", rejected: 0 }, { relayId: "upc-fra1", rejected: 0 }] } } } },
+        { relay: relays[1]!, health: { error: "ECONNREFUSED" }, stats: null },
+        { relay: relays[2]!, health: { status: 503, body: { mesh: { ready: false, readiness: "stale" } } }, stats: { status: 200, body: { mesh: { state: { sequence: 38, headAgeMs: 75_000, directoryVersion: 6 }, peers: [{ relayId: "iad1", rejected: 3 }] } } } },
+      ],
+      "test",
+    );
+    const text = lines.join("\n");
+    expect(text).toContain("mesh-ready");
+    expect(text).toContain("DOWN");
+    expect(text).toContain("not ready: stale");
+    expect(text).toContain("no bridge to: ams1");
+    const h = hints.join(" ");
+    expect(h).toMatch(/ams1 does not answer/);
+    expect(h).toMatch(/upc-fra1 is not mesh-ready \(stale\)/);
+    expect(h).toMatch(/75 s old/);
+    expect(h).toMatch(/rejected 3 item\(s\) from iad1/);
+    expect(h).toMatch(/different directory versions \(6, 7\)/);
+    expect(formatMesh([], "x").hints.join(" ")).toMatch(/lists no relay/);
   });
 });

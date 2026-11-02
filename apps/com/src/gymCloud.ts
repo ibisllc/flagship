@@ -120,7 +120,11 @@ export async function handleGymTeardown(
   );
 
   // DNS: the named boxes' records, the named users' whole zones, and with
-  // `all` every record under the gym apex except the apex and its wildcard.
+  // `all` every record under the gym apex except the apex, its wildcard and the
+  // relay mesh's own names (`tunnel.<apex>` and below, `lb.<apex>`: the gym
+  // relays' direct and balanced names, docs/runbooks/relay-mesh.md), which no
+  // run creates and every run needs. `tunnel` and `lb` are reserved labels, so
+  // no account's records live there.
   // The zone is shared with prod and capped (200 records on this plan), so a
   // gym run must leave nothing behind.
   let dnsDeleted = 0;
@@ -132,9 +136,11 @@ export async function handleGymTeardown(
   if (deps.dns && (all || domains.length || usernames.length)) {
     const zones = (usernames as string[]).map((u) => `${u.toLowerCase()}.${apex}`);
     const boxes = (domains as string[]).map((d) => d.toLowerCase());
+    const meshInfra = (n: string): boolean =>
+      [`tunnel.${apex}`, `lb.${apex}`].some((h) => n === h || n.endsWith(`.${h}`));
     const doomed = (name: string): boolean => {
       const n = name.toLowerCase();
-      if (all && n.endsWith(`.${apex}`) && n !== `*.${apex}`) return true;
+      if (all && n.endsWith(`.${apex}`) && n !== `*.${apex}` && !meshInfra(n)) return true;
       if (boxes.some((d) => n === d || n.endsWith(`.${d}`))) return true;
       return zones.some((z) => n === z || n.endsWith(`.${z}`));
     };

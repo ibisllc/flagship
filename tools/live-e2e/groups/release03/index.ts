@@ -24,7 +24,8 @@ import { phoneRoute } from "./phoneRoute.js";
 import { stackSwitch } from "./stackSwitch.js";
 import { rustCore } from "./rustCore.js";
 import { relayAuthority } from "./relayAuthority.js";
-import { relayInstances } from "./relayInstances.js";
+// relayInstances.ts is superseded by relayMesh (relay-mesh.md §14.1) and no longer registered.
+import { relayMesh } from "./relayMesh.js";
 import { phoneEndpoint } from "./phoneEndpoint.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
@@ -54,5 +55,5 @@ export const RELEASE_03_GROUPS: Group[] = [
   phoneRoute,
   phoneEndpoint,
   relayAuthority,
-  relayInstances,
+  relayMesh,
 ];
