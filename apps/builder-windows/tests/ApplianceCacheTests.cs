@@ -36,6 +36,9 @@ public sealed class ApplianceCacheTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { }
     }
 
+    // The engine installs only an exact commit (SEC-INSTALL-001), never a branch name.
+    private const string Commit = "0123456789abcdef0123456789abcdef01234567";
+
     private static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
     private static byte[] Manifest(string gitRef = "main", string arch = "amd64")
@@ -252,13 +255,13 @@ public sealed class ApplianceCacheTests : IDisposable
     [Fact]
     public async Task CreatesTheServerOnAnOverlayWithItsSeed()
     {
-        var basePath = await Cache(new Fakes()).EnsureAsync("main");
+        var basePath = await Cache(new Fakes { Body = Manifest(Commit) }).EnsureAsync(Commit);
         var vm = new VMManager(new VMInventoryStore(new VMBundleLayout(Path.Combine(_root, "VMs"))), null, "tests");
         var config = Config();
         string[]? ran = null;
         var vector = JsonDocument.Parse(EmbeddedVectors()).RootElement.GetProperty("vectors")[0];
         var recipeJson = Encoding.UTF8.GetBytes(vector.GetProperty("recipeJson").GetString()!);
-        await ApplianceHosting.CreateServerAsync(vm, config, basePath, new Recipe { InstallerGitRef = "main" },
+        await ApplianceHosting.CreateServerAsync(vm, config, basePath, new Recipe { InstallerGitRef = Commit },
             recipeJson, new NativePreseedEngine(), (args, _) => { ran = args; return Task.CompletedTask; }, default);
 
         var disk = vm.Store.Layout.DiskImagePath(config.Name);
@@ -283,18 +286,18 @@ public sealed class ApplianceCacheTests : IDisposable
     [Fact]
     public async Task AFailedOverlayLeavesNoServerBehind()
     {
-        var basePath = await Cache(new Fakes()).EnsureAsync("main");
+        var basePath = await Cache(new Fakes { Body = Manifest(Commit) }).EnsureAsync(Commit);
         var vm = new VMManager(new VMInventoryStore(new VMBundleLayout(Path.Combine(_root, "VMs"))), null, "tests");
         var vector = JsonDocument.Parse(EmbeddedVectors()).RootElement.GetProperty("vectors")[0];
         var recipeJson = Encoding.UTF8.GetBytes(vector.GetProperty("recipeJson").GetString()!);
         await Assert.ThrowsAsync<IOException>(() => ApplianceHosting.CreateServerAsync(
-            vm, Config(), basePath, new Recipe { InstallerGitRef = "main" }, recipeJson, new NativePreseedEngine(),
+            vm, Config(), basePath, new Recipe { InstallerGitRef = Commit }, recipeJson, new NativePreseedEngine(),
             (_, _) => throw new IOException("qemu-img create failed"), default));
         Assert.Empty(vm.Servers);
         Assert.False(Directory.Exists(vm.Store.Layout.BundleDir(Config().Name)));
 
         await Assert.ThrowsAsync<InvalidDataException>(() => ApplianceHosting.CreateServerAsync(
-            vm, Config(disk: 1024), basePath, new Recipe { InstallerGitRef = "main" }, recipeJson, new NativePreseedEngine(),
+            vm, Config(disk: 1024), basePath, new Recipe { InstallerGitRef = Commit }, recipeJson, new NativePreseedEngine(),
             (_, _) => Task.CompletedTask, default));
         Assert.Empty(vm.Servers);
     }
