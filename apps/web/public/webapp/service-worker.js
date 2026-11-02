@@ -441,7 +441,13 @@
 //       titled by their name, else their slug in words (precaches lib/appDisplayName.js).
 //  v189: Activity names the relay mesh's box events (server.relay.moved, server.relay.move-refused), with the
 //       box's own sentence under them.
-const SHELL_VERSION = "v189";
+//  v190: voi.ci pages + Messages (docs/voici-and-messages.md §11, release 0.3 H11 chunk F): a Messages tab
+//       (views/messages.js, thread.js), the page editor (views/page-editor.js, lib/voiciImage.js), Settings →
+//       Messages and the voi.ci sign-in approval (views/voici-sign-in.js, lib/voiciSignIn.js); precaches the
+//       voi.ci protocol (lib/voiciProtocol.js and its four modules) and lib/voiciOwner.js, voiciWorld.js,
+//       voiciCopy.js; content-free `messages` and `page-drafts` pushes open the tab or the editor.
+//       Reply alerts on pages this account wrote to (lib/voiciReplies.js).
+const SHELL_VERSION = "v190";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -607,6 +613,21 @@ const OPTIONAL_SHELL = [
   "/lib/modal.js",
   "/lib/nameDibs.js",
   "/lib/voiciName.js",
+  "/lib/voiciProtocol.js",
+  "/lib/voiciCore.js",
+  "/lib/voiciText.js",
+  "/lib/voiciPage.js",
+  "/lib/voiciMessages.js",
+  "/lib/voiciOwner.js",
+  "/lib/voiciWorld.js",
+  "/lib/voiciCopy.js",
+  "/lib/voiciImage.js",
+  "/lib/voiciSignIn.js",
+  "/lib/voiciReplies.js",
+  "/views/messages.js",
+  "/views/thread.js",
+  "/views/page-editor.js",
+  "/views/voici-sign-in.js",
   "/lib/linkField.js",
   "/views/name-dibs.js",
   "/lib/lockSweep.js",
@@ -885,6 +906,12 @@ const ACCOUNT_NOTICES = {
   "server-registered": "A new server was added to your account.",
 };
 
+// voi.ci Messages (docs/voici-and-messages.md §8.3): content-free pushes, fixed words, open the right screen.
+const VOICI_NOTICES = {
+  messages: { body: "New message", deepLink: "/?view=messages" },
+  "page-drafts": { body: "A device on your account has changes waiting to be published on your page.", deepLink: "/?view=page-editor" },
+};
+
 self.addEventListener("push", (event) => {
   let data = null;
   try {
@@ -1023,6 +1050,21 @@ self.addEventListener("push", (event) => {
     return;
   }
 
+  const voici = data && typeof data.category === "string" ? VOICI_NOTICES[data.category] : undefined;
+  if (voici) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: voici.body,
+        tag: `flagship-${data.category}`,
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: data.category, deepLink: voici.deepLink },
+      }),
+    );
+    return;
+  }
+
   // Account notices that carry only their category (as APNs and FCM see it):
   // a box's relay-trust SOS and a newly registered server. Home shows which.
   const noticeText = data && typeof data.category === "string" ? ACCOUNT_NOTICES[data.category] : undefined;
@@ -1082,6 +1124,9 @@ const WEBAPP_ROUTES = {
   "account/devices": "/?view=trusted-devices",
   "account/re-pair": "/?view=trusted-devices",
   "account/activity": "/?view=account-audit",
+  "messages": "/?view=messages",
+  "page": "/?view=page-editor",
+  "page-editor": "/?view=page-editor",
 };
 function webappDeepLink(link) {
   if (typeof link !== "string") return null;

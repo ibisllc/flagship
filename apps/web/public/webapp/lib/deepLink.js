@@ -74,6 +74,19 @@ export async function dispatchInitialView() {
     return enterAccessAuthorize(raw);
   }
 
+  // A voi.ci sign-in link (`/voici-sign-in?s=&k=&p=&u=`, docs/voici-and-messages.md §6.5) handed over by the
+  // open-in-app page: approve it here, on the slow tier (§9.5).
+  if (window.location.pathname.replace(/\/+$/, "") === "/voici-sign-in") {
+    const raw = window.location.href;
+    window.history.replaceState({}, "", "/");
+    const { parseVoiciSignInLink } = await import("./voiciSignIn.js");
+    const link = parseVoiciSignInLink(raw);
+    if (link) {
+      const { enterVoiciSignIn } = await import("../views/voici-sign-in.js");
+      return enterVoiciSignIn(link);
+    }
+  }
+
   // Service-access friend deep-link: if this load was a /invite#<secret>
   // landing that detoured through bootstrap/unlock/PIN/recovery to get the
   // friend's key, resume the redeem now instead of the normal dispatch
@@ -104,6 +117,14 @@ export async function dispatchInitialView() {
     if (q.view === "view-services-list" || q.view === "view-apps-list") {
       const { enterServicesList } = await import("../views/services-list.js");
       return enterServicesList();
+    }
+    if (q.view === "view-messages") {
+      const { enterMessages } = await import("../views/messages.js");
+      return enterMessages();
+    }
+    if (q.view === "view-page-editor") {
+      const { enterPageEditor } = await import("../views/page-editor.js");
+      return enterPageEditor();
     }
     if (q.view === "view-install-progress") {
       const { enterInstallProgress } = await import("../views/install-progress.js");

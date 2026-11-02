@@ -12621,5 +12621,545 @@
   "Stayed on its current relay": {
     "en": "Stayed on its current relay",
     "ctx": "webapp/lib/activityFeed.js:51"
+  },
+  "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.": {
+    "en": "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
+    "ctx": "webapp/lib/voiciCopy.js:9"
+  },
+  "Page and message rules": {
+    "en": "Page and message rules",
+    "ctx": "webapp/lib/voiciCopy.js:11"
+  },
+  "Don't post or send anything illegal, threatening, hateful or sexual involving minors, and don't use your page or messages to harass or deceive people. Flagship removes pages and stops accounts from sending messages when they break these rules.": {
+    "en": "Don't post or send anything illegal, threatening, hateful or sexual involving minors, and don't use your page or messages to harass or deceive people. Flagship removes pages and stops accounts from sending messages when they break these rules.",
+    "ctx": "webapp/lib/voiciCopy.js:13"
+  },
+  "People with a Flagship account can write to you. They appear as visitors, not by name.": {
+    "en": "People with a Flagship account can write to you. They appear as visitors, not by name.",
+    "ctx": "webapp/lib/voiciCopy.js:15"
+  },
+  "Messages are private. If someone reports your message, Flagship can see which account sent it.": {
+    "en": "Messages are private. If someone reports your message, Flagship can see which account sent it.",
+    "ctx": "webapp/lib/voiciCopy.js:16"
+  },
+  "Waiting for an admin device to publish": {
+    "en": "Waiting for an admin device to publish",
+    "ctx": "webapp/lib/voiciCopy.js:17"
+  },
+  "Unlock Flagship first.": {
+    "en": "Unlock Flagship first.",
+    "ctx": "webapp/lib/voiciCopy.js:26"
+  },
+  "Only an admin device can publish your page.": {
+    "en": "Only an admin device can publish your page.",
+    "ctx": "webapp/lib/voiciCopy.js:28"
+  },
+  "Couldn't publish. Try again.": {
+    "en": "Couldn't publish. Try again.",
+    "ctx": "webapp/lib/voiciCopy.js:31"
+  },
+  "This page couldn't be checked.": {
+    "en": "This page couldn't be checked.",
+    "ctx": "webapp/lib/voiciCopy.js:33"
+  },
+  "This page isn't published.": {
+    "en": "This page isn't published.",
+    "ctx": "webapp/lib/voiciCopy.js:35"
+  },
+  "This page doesn't accept messages right now.": {
+    "en": "This page doesn't accept messages right now.",
+    "ctx": "webapp/lib/voiciCopy.js:37"
+  },
+  "Your page was removed by Flagship. You can appeal from the abuse page.": {
+    "en": "Your page was removed by Flagship. You can appeal from the abuse page.",
+    "ctx": "webapp/lib/voiciCopy.js:39"
+  },
+  "Your account can't send messages. If you think this is a mistake, tell us.": {
+    "en": "Your account can't send messages. If you think this is a mistake, tell us.",
+    "ctx": "webapp/lib/voiciCopy.js:41"
+  },
+  "You've started as many new conversations as you can today. Try again {0}.": {
+    "en": "You've started as many new conversations as you can today. Try again {0}.",
+    "ctx": "webapp/lib/voiciCopy.js:43"
+  },
+  "You've started as many new conversations as you can today.": {
+    "en": "You've started as many new conversations as you can today.",
+    "ctx": "webapp/lib/voiciCopy.js:43"
+  },
+  "This device already started Messages for another account this month.": {
+    "en": "This device already started Messages for another account this month.",
+    "ctx": "webapp/lib/voiciCopy.js:45"
+  },
+  "New accounts can start conversations from the web after 7 days.": {
+    "en": "New accounts can start conversations from the web after 7 days.",
+    "ctx": "webapp/lib/voiciCopy.js:47"
+  },
+  "Too many tries. Try again {0}.": {
+    "en": "Too many tries. Try again {0}.",
+    "ctx": "webapp/lib/voiciCopy.js:49"
+  },
+  "Wait for a reply before sending more.": {
+    "en": "Wait for a reply before sending more.",
+    "ctx": "webapp/lib/voiciCopy.js:51"
+  },
+  "The photo isn't on this device. Pick it again.": {
+    "en": "The photo isn't on this device. Pick it again.",
+    "ctx": "webapp/lib/voiciCopy.js:53"
+  },
+  "This device can't sign for the account. Remove it and add it again from an admin device.": {
+    "en": "This device can't sign for the account. Remove it and add it again from an admin device.",
+    "ctx": "webapp/lib/voiciCopy.js:56"
+  },
+  "The website's request didn't check out. Start again on voi.ci.": {
+    "en": "The website's request didn't check out. Start again on voi.ci.",
+    "ctx": "webapp/lib/voiciCopy.js:59"
+  },
+  "The sign-in timed out. Start again on voi.ci.": {
+    "en": "The sign-in timed out. Start again on voi.ci.",
+    "ctx": "webapp/lib/voiciCopy.js:62"
+  },
+  "The voi.ci tab isn't connected any more. Start again on voi.ci.": {
+    "en": "The voi.ci tab isn't connected any more. Start again on voi.ci.",
+    "ctx": "webapp/lib/voiciCopy.js:64"
+  },
+  "Your Messages settings couldn't be opened on this device.": {
+    "en": "Your Messages settings couldn't be opened on this device.",
+    "ctx": "webapp/lib/voiciCopy.js:66"
+  },
+  "That's too big to publish.": {
+    "en": "That's too big to publish.",
+    "ctx": "webapp/lib/voiciCopy.js:68"
+  },
+  "Something went wrong. Try again.": {
+    "en": "Something went wrong. Try again.",
+    "ctx": "webapp/lib/voiciCopy.js:70"
+  },
+  "Write something first.": {
+    "en": "Write something first.",
+    "ctx": "webapp/lib/voiciCopy.js:78"
+  },
+  "Keep it to {0} characters.": {
+    "en": "Keep it to {0} characters.",
+    "ctx": "webapp/lib/voiciCopy.js:80"
+  },
+  "Remove the invisible or control characters.": {
+    "en": "Remove the invisible or control characters.",
+    "ctx": "webapp/lib/voiciCopy.js:86"
+  },
+  "That text can't be used.": {
+    "en": "That text can't be used.",
+    "ctx": "webapp/lib/voiciCopy.js:88"
+  },
+  "Visitor {0}": {
+    "en": "Visitor {0}",
+    "ctx": "webapp/lib/voiciWorld.js:113"
+  },
+  "Couldn't check your page.": {
+    "en": "Couldn't check your page.",
+    "ctx": "webapp/views/messages.js:31"
+  },
+  "Not published": {
+    "en": "Not published",
+    "ctx": "webapp/views/messages.js:32"
+  },
+  "{0} change not published": {
+    "en": "{0} change not published",
+    "ctx": "webapp/views/messages.js:33"
+  },
+  "{0} changes not published": {
+    "en": "{0} changes not published",
+    "ctx": "webapp/views/messages.js:33"
+  },
+  "Published": {
+    "en": "Published",
+    "ctx": "webapp/views/messages.js:34"
+  },
+  "Your page": {
+    "en": "Your page",
+    "ctx": "webapp/index.html"
+  },
+  "No messages yet. Turn on Accept messages on your page to get them.": {
+    "en": "No messages yet. Turn on Accept messages on your page to get them.",
+    "ctx": "webapp/views/messages.js:54"
+  },
+  "No message requests.": {
+    "en": "No message requests.",
+    "ctx": "webapp/views/messages.js:57"
+  },
+  "Unread": {
+    "en": "Unread",
+    "ctx": "webapp/views/messages.js:72"
+  },
+  "Websites you're signed in to": {
+    "en": "Websites you're signed in to",
+    "ctx": "webapp/views/messages.js:150"
+  },
+  "A voi.ci page, since {0}": {
+    "en": "A voi.ci page, since {0}",
+    "ctx": "webapp/views/messages.js:155"
+  },
+  "You aren't signed in to any website.": {
+    "en": "You aren't signed in to any website.",
+    "ctx": "webapp/views/messages.js:159"
+  },
+  "Approve a voi.ci sign-in": {
+    "en": "Approve a voi.ci sign-in",
+    "ctx": "webapp/views/messages.js:160"
+  },
+  "Inbox key": {
+    "en": "Inbox key",
+    "ctx": "webapp/views/messages.js:162"
+  },
+  "Make a new key for messages people send to your page. Messages you already have stay readable.": {
+    "en": "Make a new key for messages people send to your page. Messages you already have stay readable.",
+    "ctx": "webapp/views/messages.js:164"
+  },
+  "Rotate inbox key": {
+    "en": "Rotate inbox key",
+    "ctx": "webapp/views/messages.js:166"
+  },
+  "Only an admin device can rotate the inbox key.": {
+    "en": "Only an admin device can rotate the inbox key.",
+    "ctx": "webapp/views/messages.js:167"
+  },
+  "Signed out of that website.": {
+    "en": "Signed out of that website.",
+    "ctx": "webapp/views/messages.js:178"
+  },
+  "Paste the link voi.ci shows under its code.": {
+    "en": "Paste the link voi.ci shows under its code.",
+    "ctx": "webapp/views/messages.js:188"
+  },
+  "That isn't a voi.ci sign-in link.": {
+    "en": "That isn't a voi.ci sign-in link.",
+    "ctx": "webapp/views/messages.js:191"
+  },
+  "Rotate inbox key?": {
+    "en": "Rotate inbox key?",
+    "ctx": "webapp/views/messages.js:199"
+  },
+  "New messages will be sealed to a new key. People already writing to you keep their conversations.": {
+    "en": "New messages will be sealed to a new key. People already writing to you keep their conversations.",
+    "ctx": "webapp/views/messages.js:200"
+  },
+  "Rotate": {
+    "en": "Rotate",
+    "ctx": "webapp/views/messages.js:201"
+  },
+  "Inbox key rotated.": {
+    "en": "Inbox key rotated.",
+    "ctx": "webapp/views/messages.js:208"
+  },
+  "Published at {0}": {
+    "en": "Published at {0}",
+    "ctx": "webapp/views/page-editor.js:96"
+  },
+  "Profile": {
+    "en": "Profile",
+    "ctx": "webapp/views/page-editor.js:117"
+  },
+  "Your photo": {
+    "en": "Your photo",
+    "ctx": "webapp/views/page-editor.js:120"
+  },
+  "Choose photo": {
+    "en": "Choose photo",
+    "ctx": "webapp/views/page-editor.js:122"
+  },
+  "Remove photo": {
+    "en": "Remove photo",
+    "ctx": "webapp/views/page-editor.js:124"
+  },
+  "Display name": {
+    "en": "Display name",
+    "ctx": "webapp/views/page-editor.js:127"
+  },
+  "Bio": {
+    "en": "Bio",
+    "ctx": "webapp/views/page-editor.js:129"
+  },
+  "Links": {
+    "en": "Links",
+    "ctx": "webapp/views/page-editor.js:131"
+  },
+  "Link address": {
+    "en": "Link address",
+    "ctx": "webapp/views/page-editor.js:137"
+  },
+  "Link label": {
+    "en": "Link label",
+    "ctx": "webapp/views/page-editor.js:138"
+  },
+  "Move up": {
+    "en": "Move up",
+    "ctx": "webapp/views/page-editor.js:141"
+  },
+  "Move down": {
+    "en": "Move down",
+    "ctx": "webapp/views/page-editor.js:142"
+  },
+  "Add link": {
+    "en": "Add link",
+    "ctx": "webapp/views/page-editor.js:149"
+  },
+  "Look": {
+    "en": "Look",
+    "ctx": "webapp/views/page-editor.js:150"
+  },
+  "Save profile": {
+    "en": "Save profile",
+    "ctx": "webapp/views/page-editor.js:154"
+  },
+  "Accept messages": {
+    "en": "Accept messages",
+    "ctx": "webapp/views/page-editor.js:158"
+  },
+  "Posts": {
+    "en": "Posts",
+    "ctx": "webapp/views/page-editor.js:163"
+  },
+  "Write a post": {
+    "en": "Write a post",
+    "ctx": "webapp/views/page-editor.js:165"
+  },
+  "Post": {
+    "en": "Post",
+    "ctx": "webapp/views/page-editor.js:166"
+  },
+  "Preview": {
+    "en": "Preview",
+    "ctx": "webapp/views/page-editor.js:173"
+  },
+  "Publish": {
+    "en": "Publish",
+    "ctx": "webapp/views/page-editor.js:177"
+  },
+  "Only an admin device can publish your page. Changes you make here wait for it.": {
+    "en": "Only an admin device can publish your page. Changes you make here wait for it.",
+    "ctx": "webapp/views/page-editor.js:178"
+  },
+  "Ink": {
+    "en": "Ink",
+    "ctx": "webapp/views/page-editor.js:199"
+  },
+  "Sea": {
+    "en": "Sea",
+    "ctx": "webapp/views/page-editor.js:199"
+  },
+  "Classic": {
+    "en": "Classic",
+    "ctx": "webapp/views/page-editor.js:199"
+  },
+  "Removal not published yet": {
+    "en": "Removal not published yet",
+    "ctx": "webapp/views/page-editor.js:203"
+  },
+  "Remove card": {
+    "en": "Remove card",
+    "ctx": "webapp/views/page-editor.js:211"
+  },
+  "Send me a message": {
+    "en": "Send me a message",
+    "ctx": "webapp/views/page-editor.js:262"
+  },
+  "That photo is too detailed to fit. Try another one.": {
+    "en": "That photo is too detailed to fit. Try another one.",
+    "ctx": "webapp/views/page-editor.js:371"
+  },
+  "That file couldn't be read as a photo.": {
+    "en": "That file couldn't be read as a photo.",
+    "ctx": "webapp/views/page-editor.js:371"
+  },
+  "{0} isn't a link that can go on your page. Use an https:// address.": {
+    "en": "{0} isn't a link that can go on your page. Use an https:// address.",
+    "ctx": "webapp/views/page-editor.js:383"
+  },
+  "A page can have one email link.": {
+    "en": "A page can have one email link.",
+    "ctx": "webapp/views/page-editor.js:388"
+  },
+  "That profile can't be published.": {
+    "en": "That profile can't be published.",
+    "ctx": "webapp/views/page-editor.js:390"
+  },
+  "Edit post": {
+    "en": "Edit post",
+    "ctx": "webapp/views/page-editor.js:420"
+  },
+  "Delete this post?": {
+    "en": "Delete this post?",
+    "ctx": "webapp/views/page-editor.js:435"
+  },
+  "It's removed from your page when the change is published.": {
+    "en": "It's removed from your page when the change is published.",
+    "ctx": "webapp/views/page-editor.js:435"
+  },
+  "Sent to your admin device to publish.": {
+    "en": "Sent to your admin device to publish.",
+    "ctx": "webapp/views/page-editor.js:460"
+  },
+  "I agree": {
+    "en": "I agree",
+    "ctx": "webapp/views/page-editor.js:480"
+  },
+  "Publish your page?": {
+    "en": "Publish your page?",
+    "ctx": "webapp/views/page-editor.js:488"
+  },
+  "Published.": {
+    "en": "Published.",
+    "ctx": "webapp/views/page-editor.js:513"
+  },
+  "Spam": {
+    "en": "Spam",
+    "ctx": "webapp/views/thread.js:21"
+  },
+  "Harassment": {
+    "en": "Harassment",
+    "ctx": "webapp/views/thread.js:22"
+  },
+  "Pretending to be someone": {
+    "en": "Pretending to be someone",
+    "ctx": "webapp/views/thread.js:23"
+  },
+  "Illegal content": {
+    "en": "Illegal content",
+    "ctx": "webapp/views/thread.js:24"
+  },
+  "Something else": {
+    "en": "Something else",
+    "ctx": "webapp/views/thread.js:25"
+  },
+  "Delivered": {
+    "en": "Delivered",
+    "ctx": "webapp/views/thread.js:54"
+  },
+  "Some messages haven't arrived yet": {
+    "en": "Some messages haven't arrived yet",
+    "ctx": "webapp/views/thread.js:69"
+  },
+  "This is a message request. Reply or accept it to move it to Messages.": {
+    "en": "This is a message request. Reply or accept it to move it to Messages.",
+    "ctx": "webapp/views/thread.js:78"
+  },
+  "Report": {
+    "en": "Report",
+    "ctx": "webapp/views/thread.js:112"
+  },
+  "Write a reply": {
+    "en": "Write a reply",
+    "ctx": "webapp/views/thread.js:129"
+  },
+  "Rename": {
+    "en": "Rename",
+    "ctx": "webapp/views/thread.js:181"
+  },
+  "Only you see this name. It syncs to your other devices.": {
+    "en": "Only you see this name. It syncs to your other devices.",
+    "ctx": "webapp/views/thread.js:182"
+  },
+  "Block {0}?": {
+    "en": "Block {0}?",
+    "ctx": "webapp/views/thread.js:205"
+  },
+  "You won't get messages from them on this page. They aren't told.": {
+    "en": "You won't get messages from them on this page. They aren't told.",
+    "ctx": "webapp/views/thread.js:206"
+  },
+  "Block": {
+    "en": "Block",
+    "ctx": "webapp/views/thread.js:207"
+  },
+  "Blocked.": {
+    "en": "Blocked.",
+    "ctx": "webapp/views/thread.js:214"
+  },
+  "Report this message?": {
+    "en": "Report this message?",
+    "ctx": "webapp/views/thread.js:224"
+  },
+  "Flagship gets the message and can see which account sent it, not what it says.": {
+    "en": "Flagship gets the message and can see which account sent it, not what it says.",
+    "ctx": "webapp/views/thread.js:225"
+  },
+  "Reported. Thank you.": {
+    "en": "Reported. Thank you.",
+    "ctx": "webapp/views/thread.js:231"
+  },
+  "Delete this conversation?": {
+    "en": "Delete this conversation?",
+    "ctx": "webapp/views/thread.js:241"
+  },
+  "It's removed from your devices.": {
+    "en": "It's removed from your devices.",
+    "ctx": "webapp/views/thread.js:242"
+  },
+  "Delete conversation": {
+    "en": "Delete conversation",
+    "ctx": "webapp/views/thread.js:260"
+  },
+  "Checking the page…": {
+    "en": "Checking the page…",
+    "ctx": "webapp/views/voici-sign-in.js:64"
+  },
+  "Check that voi.ci shows this code:": {
+    "en": "Check that voi.ci shows this code:",
+    "ctx": "webapp/views/voici-sign-in.js:81"
+  },
+  "You appear as Visitor {0}. They never see your username.": {
+    "en": "You appear as Visitor {0}. They never see your username.",
+    "ctx": "webapp/views/voici-sign-in.js:83"
+  },
+  "From the web, an account can start a new conversation once it is 7 days old, one a day.": {
+    "en": "From the web, an account can start a new conversation once it is 7 days old, one a day.",
+    "ctx": "webapp/views/voici-sign-in.js:85"
+  },
+  "Waiting for voi.ci…": {
+    "en": "Waiting for voi.ci…",
+    "ctx": "webapp/views/voici-sign-in.js:86"
+  },
+  "Sign in to voi.ci to message {0}?": {
+    "en": "Sign in to voi.ci to message {0}?",
+    "ctx": "webapp/views/voici-sign-in.js:92"
+  },
+  "Approve this sign-in?": {
+    "en": "Approve this sign-in?",
+    "ctx": "webapp/views/voici-sign-in.js:114"
+  },
+  "voi.ci will be able to send messages to {0} as Visitor {1}.": {
+    "en": "voi.ci will be able to send messages to {0} as Visitor {1}.",
+    "ctx": "webapp/views/voici-sign-in.js:115"
+  },
+  "Signed in. You can go back to voi.ci.": {
+    "en": "Signed in. You can go back to voi.ci.",
+    "ctx": "webapp/views/voici-sign-in.js:127"
+  },
+  "Messages": {
+    "en": "Messages",
+    "ctx": "webapp/index.html"
+  },
+  "Requests": {
+    "en": "Requests",
+    "ctx": "webapp/index.html"
+  },
+  "More": {
+    "en": "More",
+    "ctx": "webapp/index.html"
+  },
+  "Sign in to voi.ci": {
+    "en": "Sign in to voi.ci",
+    "ctx": "webapp/index.html"
+  },
+  "You can start {0} new conversation a day. Try again {1}.": {
+    "en": "You can start {0} new conversation a day. Try again {1}.",
+    "ctx": "webapp/lib/voiciCopy.js:43"
+  },
+  "You can start {0} new conversations a day. Try again {1}.": {
+    "en": "You can start {0} new conversations a day. Try again {1}.",
+    "ctx": "webapp/lib/voiciCopy.js:43"
+  },
+  "You have a reply on voi.ci/{0}": {
+    "en": "You have a reply on voi.ci/{0}",
+    "ctx": "webapp/views/messages.js:118"
   }
 }

@@ -245,6 +245,52 @@
         </div>
       </section>
 
+      <!-- Messages tab (docs/voici-and-messages.md §11): the owner's voi.ci page row, then the conversations
+           (views/messages.js), a thread (views/thread.js), the page editor (views/page-editor.js), Settings →
+           Messages and the voi.ci sign-in approval (views/voici-sign-in.js). Rendered by JS; text only. -->
+      <section id="view-messages" class="hidden" data-tab="messages">
+        <h2>Messages</h2>
+        <div id="messages-page-row"></div>
+        <div id="messages-reply-alerts"></div>
+        <div class="fs-segmented mt-3" id="messages-segments" role="radiogroup" aria-label="Messages">
+          <button type="button" role="radio" aria-checked="true" data-messages-tab="messages">Messages</button>
+          <button type="button" role="radio" aria-checked="false" data-messages-tab="requests">Requests <span id="messages-requests-count"></span></button>
+        </div>
+        <div id="messages-list" class="mt-3"></div>
+      </section>
+
+      <section id="view-thread" class="hidden">
+        <div class="thread-head">
+          <button type="button" class="secondary" id="thread-back">← Back</button>
+          <h2 id="thread-title" class="thread-title"></h2>
+          <button type="button" class="secondary" id="thread-menu">More</button>
+        </div>
+        <div id="thread-notice"></div>
+        <div id="thread-list" class="thread-list" aria-live="polite"></div>
+        <div id="thread-compose" class="thread-compose"></div>
+      </section>
+
+      <section id="view-page-editor" class="hidden">
+        <div class="thread-head">
+          <button type="button" class="secondary" id="page-editor-back">← Back</button>
+          <h2 class="thread-title">Your page</h2>
+        </div>
+        <div id="page-editor-content"></div>
+      </section>
+
+      <section id="view-messages-settings" class="hidden">
+        <h2>Messages</h2>
+        <div id="messages-settings-content"></div>
+        <div class="row-2 mt-2">
+          <button type="button" class="secondary" id="messages-settings-back">← Back</button>
+        </div>
+      </section>
+
+      <section id="view-voici-sign-in" class="hidden">
+        <h2>Sign in to voi.ci</h2>
+        <div id="voici-sign-in-content"></div>
+      </section>
+
       <!-- View 3c: Settings tab — providers, push, recovery, tier, identity, danger zone -->
       <!-- Detail panel (view-settings) below renders the actual content; the Settings
            tab itself is the entry strip linking to its sub-sections. -->
@@ -268,6 +314,7 @@
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-messages"><span class="fs-row-icon icon" data-row-icon="messages"></span><span class="fs-row-body"><span class="fs-row-title">Messages</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
@@ -1186,6 +1233,11 @@
       <button class="tab-bar-btn" data-tab-target="apps" role="tab" aria-label="Services">
         <span class="icon" data-tab-icon="apps"></span>
         <span class="tab-bar-label">Services</span>
+      </button>
+      <button class="tab-bar-btn" data-tab-target="messages" role="tab" aria-label="Messages">
+        <span class="icon" data-tab-icon="messages"></span>
+        <span class="tab-bar-label">Messages</span>
+        <span class="tab-bar-badge hidden" id="messages-tab-badge" aria-hidden="true"></span>
       </button>
       <button class="tab-bar-btn" data-tab-target="activity" role="tab" aria-label="Activity">
         <span class="icon" data-tab-icon="activity"></span>

@@ -506,16 +506,11 @@ A: B must reach the app before it can sign D, so after the 6-digit code the brow
 `{kind:"flagship/voici-sign-in/v1", pageId, pseudonymPub, attestation, delegation, delegationSig, threadStmt,
 threadSig, threadSeed}` and the delegation must carry the request's `delegatePub` and `nonce`
 (`checkVoiciSignInAnswer`).
-E: the relay forwards only one phone-role frame per session, so the request rides a second leg whose sid both
-sides derive from the X25519 secret; see "E: delivered (Android)" in §14.
+E: (superseded) Android first proposed a second pipe leg for the request; it now follows the "C:" link format below.
 
-F: the pipe, as the webapp (and any app) runs it: the app joins `/qr-pipe/<sid>?role=phone` and sends
-`{kind:"hello", phonePk}`; both sides derive the code and key exactly as device pairing does (`pairingRelay.js`
-`deriveMaterial`: HKDF salt `flagship/qr/v1`, info `flagship/qr/enc/v1` / `flagship/qr/sas/v1`); the browser then
-sends ONE frame the relay hands to the phone as `{kind:"peer-deliver", ciphertext, nonce}` (the request, AES-GCM under
-that key, base64url); the app answers with one `{kind:"deliver", ciphertext, nonce}` and waits for `delivered`. The
-deployed relay refuses browser-sent frames ("browser sends nothing"), so it must pass this one request through for
-`voici-sign-in` sessions (B1/C).
+F: the webapp reads the "C:" link below (fragment `s, k, p, u, d, n`, same rules as `parseSignInLink`), forms the
+request from it, joins `/qr-pipe/<sid>?role=phone`, says hello, shows the code from its own key and `k`, and on Approve
+sends its one sealed answer; no relay change.
 
 C: the `/qr-pipe` relay is one-way (the browser only listens; the app sends one sealed frame), so the browser cannot
 send the sign-in request inside the pipe. Its two fields ride in the link instead, in the fragment (it names a
@@ -911,6 +906,19 @@ worker shows the content-free `messages` push as "New message" (opens the tab) a
 page has changes waiting" text B1 chose (opens the editor); it routes `app/messages`, `app/page` and `app/page-editor`.
 Links in the editor reorder with Up and Down rather than by drag.
 
+F: reply alerts on the visitor's side (owner decision, 2026-11-02). When the webapp approves a voi.ci sign-in it
+records the page (`signedInSites` in the state blob as before, plus the page's username and the last reply seen in
+this browser's storage: the blob's `signedInSites` schema is strict and shared by every client and has no username,
+so this part does not sync; adding `username` there is a change for A/D/E together). On each open of the app (no push,
+no background polling) it fetches its own thread with each recorded page: it holds P, so it makes a short-lived P-256
+key, signs a delegation to it with P (origin the voi.ci origin, audience the pageId, at most 10 minutes, within the
+attestation it already has, renewed when lapsed), signs the thread statement, and posts `POST /api/voici/web/thread`
+`{conv, since:"", issuedAt, sig, cred}` with `flagship/voici-thread-fetch/v1|<conv>|<since>|<issuedAt>` signed by that
+key. A reply counts when it checks under the page's current `ownerSignPub` and opens with T; one newer than the last
+seen shows a row "You have a reply on voi.ci/<x>" (and the tab badge) that opens `https://voi.ci/<x>`. The
+conversation itself is never shown in the app. The webapp now carries the thread-fetch tag (`lib/voiciReplies.js`,
+not the shared `lib/voici*.js` protocol port); parity: iOS has it, Android does not yet.
+
 ### 11.4 Sign-in approval screen (visitor's app)
 
 §6.1 text, the 6-digit code, the page's verified display name and avatar, Approve (biometric) / Cancel. Refusals as
@@ -1136,11 +1144,22 @@ D: as built (iOS), and the decisions the spec left open:
   (locked, no page); 429 `rate-limited` past 8 concurrent or §8.2's per-minute budgets; a blocked sender gets
   `200 {accepted:true}` with no ack (no oracle).
 - Reports from the app carry `attached: null` (A's ports have no report-text sealing): no "Include the message text".
-- Accept (§11.1) is local (state blob `accepted`); `.com` cannot see it, so its `awaiting-reply` cap lifts only on a
-  reply. B1 to decide whether Accept needs a signed record.
+- Accept (§11.1): the state blob's `accepted` plus a signed `unblock` of the pseudonym on the block route, which
+  lifts `.com`'s 3-before-a-reply limit (release manager).
 - A non-admin device's op is shown grayed until: (lane) it left the lane, or (direct) an index with a higher `seq`
   than at the ack exists.
 - The sign-in link fragment (C's note) is also accepted as a query and as `flagship://voici-sign-in?…` (the gym).
+- Reply alerts (owner decision): the visitor's app shows "You have a reply on voi.ci/<x>" (Messages tab, top); a tap
+  opens `https://voi.ci/<x>`; the conversation is never shown in the app. On open and foreground only (no push, no
+  background poll), for each page in the state blob's `signedInSites` whose username this device knows, the app derives
+  P and an app-held P-256 key `HKDF(messagesSecret, "flagship/voici-app-reader/v1|<pageId>")` (the same on every device),
+  signs a delegation P → that key (origin voi.ci, audience pageId, issuedAt/expiresAt of the kept attestation, nonce =
+  first 16 bytes of SHA-256("<pageId>|<att issuedAt>")) and does the thread fetch (`POST /api/voici/web/thread`
+  `{fetch, signature, cred:{attestation, delegation, delegationSig}}`, `flagship/voici-thread-fetch/v1` signed by that
+  key). A reply counts only if `checkVoiciReply` passes against the page's verified `ownerSignPub`. It needs the
+  attestation the approving device kept, so only that device checks (others: no notice). The cursor and last-seen
+  `storedAt` are kept per page on the device. Parity: `web:flagship/voici-app-reader/v1` is allowlisted (HKDF info).
+- Deep links: `flagship://messages`, `flagship://page-editor` (Android's host name); AASA claims `/voici-sign-in`.
 
 ### E. Android — 8 days
 
@@ -1150,34 +1169,19 @@ E: delivered (Android). Where the spec was silent, chunk E decided the following
 otherwise (the Android client is `apps/mobile/android/.../api/VoiciClient.kt`, `core/voici/VoiciCenter.kt`,
 `VoiciOwner.kt`, `VoiciSignIn.kt`):
 
-- **HTTP bodies** (all JSON, refusals `{error, code, retryAfterSec?}`):
-  - `POST /api/voici/pages/<u>/pieces`: body = the piece bytes (`application/json` or `image/jpeg`); headers
-    `x-flagship-page-id`, `x-flagship-piece-sha256`, `x-flagship-piece-size`, `x-flagship-issued-at`,
-    `x-flagship-signer-pub`, `x-flagship-signature` (the §3 upload bytes, sensitive key).
-  - `POST …/publish` `{index}` → `{index}`; 409 `seq-conflict` carries the stored `index`. `GET /api/voici/pages/<u>`
-    → `{index}` or 404.
-  - Drafts: `POST /api/accounts/<u>/voici-drafts` `{envelope}` (device headers); `GET` → `{drafts:[{envelope, at}]}`;
-    `POST …/consume` `{consume:{opIds, issuedAt}, signerPub, signature}` where the signature is the sensitive key's
-    over **`flagship/voici-drafts-consume/v1|<u>|<opIds sorted, joined ,>|<issuedAt>`** (new tag; not in chunk A).
-  - `GET /api/voici/pages/<u>/inbox?since=` → `{items:[{envelope, storedAt, fetched, direct}], cursor, blocks,
-    revoked}`; items hold both directions (visitor messages and every owner device's replies). `cursor` echoes
-    `since` when nothing is new.
-  - `POST /api/voici/web/send` `{envelope, direct?:true}`; `POST …/block` `{block:{pageId, pseudonymPub, op,
-    issuedAt}, signature}`; `POST /api/voici/web/revoke` `{revoke:{delegatePub, issuedAt}, pageId, pseudonymPub,
-    signature}` (P is named so `.com` can check without a lookup); `POST /api/voici/reports`
-    `{report:{kind, pageId, envelope, reason, attached, issuedAt}, signature}`.
-  - `GET /api/accounts/<u>/messages-state` → `{state:{version, nonce, ct}}` or 404; `PUT` `{state}` (device headers);
-    409 `version-conflict` carries the stored `state`.
-  - **Attestation route** (§6.3 named none): `POST /api/accounts/<u>/messages-attestation` with device headers,
-    body `{request:{username, pseudonymPub, renewOfHash, deviceCheckRef, issuedAt}, signature, integrity:
-    {platform:"android", token} | null}` → `{attestation}`. `deviceCheckRef` is `android` only when a Play
-    Integrity token rides along (its `requestHash` = hex SHA-256 of the request's canonical bytes), else `none`.
-- **Sign-in pipe: two legs** (§6.5 assumed the browser could talk on its leg; the relay forwards one phone-role frame
-  per session). Leg 1 = the QR's `s` (voi.ci = `browser`, app = `phone`, hello with its X25519 key, both show the
-  SAS). Leg 2's sid = base64url(HKDF-SHA256(X25519 shared, salt `flagship/qr/v1`, info
-  `flagship/voici-sign-in/return-sid/v1`, 16 bytes)); the app listens there as `browser` *before* its leg-1 hello,
-  voi.ci joins as `phone` and spends its deliver on the sign-in request sealed under the leg-1 key (the QR kEnc);
-  the app delivers the answer on leg 1. The link's params are read from the query or the fragment.
+- **HTTP bodies**: superseded by B1's and B2's notes above, which the Android client now follows (piece headers
+  `x-flagship-sha256`/`-size`, pieces read from `GET /api/voici/pages/<u>/pieces/<sha256>`, drafts list
+  `{drafts:[envelope]}`, consume `{consume:{username, opIds, issuedAt}, signature}` over the bytes of
+  `packages/protocol/src/voiciDraftsConsume.ts`, inbox `{items:[{id, envelope, storedAt, fetchedAt, direct}],
+  cursor, more, blocks, revoked}` read until `more` is false, report flat `{kind:"message", pageId, envelope, reason,
+  attached, issuedAt, signature}`, revoke `{revoke, principalPub, signature}`, state GET = the blob, attestation
+  `{request, signature, integrity?, previous?}` with `integrity` only when a Play Integrity token exists and
+  `previous` on a renewal). **Accept** sends a signed `unblock` order on the block route (B1: that marks the
+  conversation accepted at `.com`).
+- ~~Sign-in pipe: two legs~~ **superseded** (release manager): C's link-fragment format stands. The browser key B and
+  nonce ride in the link (`#s=&k=&p=&u=&d=&n=`); the app forms the request from them with its configured origin and
+  answers on the normal one-leg `/qr-pipe` (hello as `phone`, one sealed `deliver`). Android's reader
+  (`VoiciSignInLink.parse`) matches `parseSignInLink` and also accepts the same params as a query.
 - **Sign-in times**: the delegation and thread statement are issued 5 minutes back (clock skew between phone,
   browser and `.com`); the app judges a fresh attestation at its own `issuedAt` when `.com` is ahead by ≤ 10 min.
   Recommend `.com` backdate attestation `issuedAt` a few minutes too. The app reuses a stored attestation for the
@@ -1194,6 +1198,19 @@ otherwise (the Android client is `apps/mobile/android/.../api/VoiciClient.kt`, `
   message text" option.
 - **Rules sheet**: accepted once per device (kept in the device's sealed local copy), before the first publish and
   the first sign-in approval. Pushes `messages` / `page-drafts` open `/app/messages` / `/app/page-editor`.
+- **Reply notices on the visitor's app** (owner decision): after approving a sign-in the app records the pageId and the
+  page's username on this device (the state blob's strict `signedInSites` schema has no username field, so the pair is
+  kept in the device's sealed local copy; a site approved on another device gets no notice there). On open and on
+  foreground only (no push, no background polling) it reads its own thread with `POST /api/voici/web/thread`: the
+  fetch (`flagship/voici-thread-fetch/v1`) is signed by an app reader key, P-256 from HKDF-SHA256(messages secret,
+  salt empty, `flagship/voici-app-reader/v1|<pageId>`), which P delegates to (scope `voici-messages`, the configured
+  origin, audience pageId, issuedAt/expiresAt = the stored attestation's, nonce = first 16 bytes of
+  SHA-256(`<pageId>|<att.issuedAt>`)), the same as iOS; never the account key. A `voici-reply` that checks against the
+  page's signed `ownerSignPub` and is newer than the last one opened shows "You have a reply on voi.ci/<u>", which
+  opens `https://voi.ci/<u>` in the browser; the conversation is not shown in the app. An expired attestation stops
+  the notices until the next sign-in (no silent renewal). Signing out of the page's last browser drops its notices.
+  Parity: Android now carries `flagship/voici-thread-fetch/v1` (iOS and the webapp already did); its at-rest AAD
+  `flagship/voici-local/v1` is allowlisted for iOS and web.
 - **Owner setup (Android)**: the Play Integrity Cloud project number is the Gradle property
   `flagship.playIntegrityProject` (BuildConfig `PLAY_INTEGRITY_PROJECT`); 0 = unattested tier.
 

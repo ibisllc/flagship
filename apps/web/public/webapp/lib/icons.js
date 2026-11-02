@@ -25,6 +25,9 @@ export const keyIcon = `<svg ${COMMON}><path d="m21 2-9.6 9.6"/><circle cx="7.5"
 
 export const shieldIcon = `<svg ${COMMON}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
 
+/** Lucide message-circle: the Messages tab. */
+export const messageCircleIcon = `<svg ${COMMON}><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`;
+
 export const sendIcon = `<svg ${COMMON}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 
 export const plusIcon = `<svg ${COMMON}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;

@@ -195,6 +195,8 @@ export interface Call {
   url: URL;
   body: any;
   headers: Record<string, string>;
+  /** The request body's bytes (binary uploads), or null. */
+  raw?: Buffer | null;
 }
 export type Answer =
   | { status?: number; json: unknown }
@@ -267,7 +269,7 @@ export class Mock {
     } catch {
       body = req.postData();
     }
-    const call: Call = { method: req.method(), url, body, headers: req.headers() };
+    const call: Call = { method: req.method(), url, body, headers: req.headers(), raw: req.postDataBuffer() };
     if (url.pathname.endsWith("/read-token")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ token: "art1.gym.mac", expiresAt: Date.now() + 86_400_000 }) });
       return;

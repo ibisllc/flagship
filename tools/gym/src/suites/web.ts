@@ -25,6 +25,7 @@ import { WEB_MISC } from "./webMisc.js";
 import { WEB_DIALOGS } from "./webDialogs.js";
 import { WEB_NOTICES } from "./webNotices.js";
 import { WEB_GONE } from "./webGone.js";
+import { WEB_MESSAGES } from "./webMessages.js";
 import { WEB_UX } from "./webUx.js";
 import { WEB_LOCAL_AI } from "./webLocalAi.js";
 import { WEB_ACCELERATORS } from "./webAccelerators.js";
@@ -2055,6 +2056,7 @@ export const WEB_GYM_SCENARIOS: readonly Scenario[] = [
   ...WEB_DIALOGS,
   ...WEB_NOTICES,
   ...WEB_GONE,
+  ...WEB_MESSAGES,
   ...WEB_UX,
   ...WEB_LOCAL_AI,
   ...WEB_ACCELERATORS,
