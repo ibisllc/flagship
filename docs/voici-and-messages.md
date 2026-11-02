@@ -1252,6 +1252,8 @@ otherwise (the Android client is `apps/mobile/android/.../api/VoiciClient.kt`, `
   the notices until the next sign-in (no silent renewal). Signing out of the page's last browser drops its notices.
   Parity: Android now carries `flagship/voici-thread-fetch/v1` (iOS and the webapp already did); its at-rest AAD
   `flagship/voici-local/v1` is allowlisted for iOS and web.
+- **Auto-publish**: the unlocked-session rule (§5.1) never makes the first publish; that waits for the rules sheet and
+  the linkability confirm (O1) on the Publish button. After it, pending changes publish without a prompt.
 - **Owner setup (Android)**: the Play Integrity Cloud project number is the Gradle property
   `flagship.playIntegrityProject` (BuildConfig `PLAY_INTEGRITY_PROJECT`); 0 = unattested tier.
 

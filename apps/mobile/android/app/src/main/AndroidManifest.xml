@@ -67,6 +67,8 @@
                      app, the site shows a "get the app" page at each path. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote/" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/voici-sign-in" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/voici-sign-in/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/builder" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/builder/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/access" />

@@ -48,6 +48,9 @@ android {
         versionCode = (releaseVersion["androidVersionCode"] as Number).toInt()
         versionName = releaseVersion["product"] as String
         buildConfigField("String", "PRODUCT_LABEL", "\"${releaseVersion["label"]}\"")
+        // Play Integrity (docs/voici-and-messages.md §9.5): the Google Cloud project linked in Play Console. 0 until
+        // the owner sets it up; the app then asks for Messages on the unattested (slower) tier.
+        buildConfigField("long", "PLAY_INTEGRITY_PROJECT", (project.findProperty("flagship.playIntegrityProject") ?: "0").toString() + "L")
         vectorDrawables { useSupportLibrary = true }
         // GYM (§10 Phase-5) — the on-device instrumentation runner the UI gym
         // drives via `connectedDebugAndroidTest`. AndroidJUnitRunner hosts the
@@ -241,6 +244,9 @@ dependencies {
     // CredentialManager (passkey-PRF cloud recovery)
     implementation("androidx.credentials:credentials:1.3.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+
+    // Play Integrity standard requests: the per-device cap on new Messages accounts (voi.ci §9.5)
+    implementation("com.google.android.play:integrity:1.6.0")
 
     // kotlinx.coroutines-play-services for Task.await()
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

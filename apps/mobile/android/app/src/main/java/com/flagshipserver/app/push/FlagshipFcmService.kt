@@ -18,6 +18,7 @@ import androidx.core.net.toUri
 import com.flagshipserver.app.MainActivity
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.launch
 
 class FlagshipFcmService : FirebaseMessagingService() {
 
@@ -85,6 +86,15 @@ class FlagshipFcmService : FirebaseMessagingService() {
             data["title"] = "Flagship"
             data["body"] = if (category == GENERIC_CATEGORY) GENERIC_TEXT else APP_ACCESS_TEXT
             data.remove("deepLink")
+        }
+
+        // voi.ci Messages (§8.3): content-free; the app fetches and opens what arrived. The text is fixed here.
+        if (category == NotificationChannels.MESSAGES_CATEGORY || category == NotificationChannels.PAGE_DRAFTS_CATEGORY) {
+            com.flagshipserver.app.core.voici.VoiciCenter.shared?.let { c -> c.scope.launch { runCatching { c.refresh() } } }
+            val drafts = category == NotificationChannels.PAGE_DRAFTS_CATEGORY
+            data["title"] = "Flagship"
+            data["body"] = FSStrings.get(if (drafts) R.string.voici_push_drafts else R.string.voici_push_message)
+            data["deepLink"] = com.flagshipserver.app.core.Endpoints.appRoute(if (drafts) "page-editor" else "messages")
         }
 
         // Settings → Push notifications is off: the registration is (being)

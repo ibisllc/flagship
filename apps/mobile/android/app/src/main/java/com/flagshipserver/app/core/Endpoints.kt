@@ -66,6 +66,15 @@ object Endpoints {
     val controlBaseUrl: String
         get() = "$scheme://$controlHost"
 
+    /** The voi.ci site origin a page's web delegation names (docs/voici-and-messages.md §6.4): `https://voi.ci`,
+     *  `https://gym.voi.ci` for the gym apex. */
+    val voiciOrigin: String
+        get() = if (controlHost.startsWith("gym.")) "https://gym.voi.ci" else "https://voi.ci"
+
+    /** Where page pieces are served (§2.8): `https://files.voi.ci`, gym `https://files.gym.voi.ci`. */
+    val voiciFilesBase: String
+        get() = if (controlHost.startsWith("gym.")) "https://files.gym.voi.ci" else "https://files.voi.ci"
+
     /** True for the control apex or its `www.` twin, the hosts our https App
      *  Links (`/join`, `/remote`, `/builder`, `/access`, `/invite-accept`, `/app/…`) arrive on. */
     fun isControlHost(host: String?): Boolean {

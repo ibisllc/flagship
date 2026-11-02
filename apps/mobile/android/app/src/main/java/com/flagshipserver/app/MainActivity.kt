@@ -334,6 +334,29 @@ class MainActivity : FragmentActivity() {
             isDemo = { com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value) },
         )
 
+        // voi.ci pages and Messages (docs/voici-and-messages.md): one center per process; it reads the account
+        // lazily, so a profile switch only needs a refresh.
+        val voiciCenter = com.flagshipserver.app.core.voici.VoiciCenter(
+            client = mocks?.voici ?: com.flagshipserver.app.api.LiveVoiciClient(OkHttpJsonTransport(okHttp), okHttp),
+            keyring = com.flagshipserver.app.core.voici.VoiciKeystoreKeyring(appState, { com.flagshipserver.app.core.Variant.forceAdminRoot }, mockRun = mocks != null),
+            vault = com.flagshipserver.app.core.voici.VoiciVault(
+                if (mocks != null) com.flagshipserver.app.core.voici.MemoryVoiciVaultStore()
+                else com.flagshipserver.app.core.voici.FileVoiciVaultStore(java.io.File(filesDir, "voici")),
+            ),
+            caKeysSource = mocks?.voiciCaKeys ?: { TrustChecker(OkHttpJsonTransport(okHttp)).verifiedCaKeys() },
+            http = if (mocks != null) null else okHttp,
+        )
+        com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
+        val voiciSignInFlows = com.flagshipserver.app.ui.screens.VoiciSignInFlows {
+            com.flagshipserver.app.core.voici.VoiciSignInFlow(
+                voiciCenter,
+                com.flagshipserver.app.core.voici.VoiciKeystoreKeyring(appState, { com.flagshipserver.app.core.Variant.forceAdminRoot }, mockRun = mocks != null),
+                mocks?.voiciSignInPipe?.invoke() ?: com.flagshipserver.app.core.voici.LiveVoiciSignInPipe(okHttp),
+                if (mocks != null) com.flagshipserver.app.core.voici.VoiciIntegrity.NONE
+                else com.flagshipserver.app.core.voici.PlayVoiciIntegrity(applicationContext),
+            )
+        }
+
         // Architecture v2: bind this phone's identities to ML-DSA-65 keys ("PQ, hardware-wrapped")
         // at account creation, after a join or admin-root change, and after each unlock. Never
         // prompts; anything unfinished waits for the next unlock.
@@ -420,6 +443,11 @@ class MainActivity : FragmentActivity() {
                     com.flagshipserver.app.phoneroute.PhoneRouteController.install(applicationContext, appState, okHttp)
                     if (foreground.value) com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
                 }
+            }
+
+            // voi.ci: load this account's page and conversations, then refresh from `.com` (also on a switch).
+            LaunchedEffect(servingUser) {
+                if (!servingUser.isNullOrEmpty()) voiciCenter.start()
             }
 
             // Maintainer-trust check on launch (live only — the Mock control
@@ -827,6 +855,8 @@ class MainActivity : FragmentActivity() {
                     LocalServerTransferClient provides effectiveTransfer,
                     com.flagshipserver.app.core.LocalNameDibsClient provides effectiveNameDibs,
                     com.flagshipserver.app.core.LocalVoiciNameClient provides effectiveVoiciName,
+                    com.flagshipserver.app.ui.screens.LocalVoiciCenter provides voiciCenter,
+                    com.flagshipserver.app.ui.screens.LocalVoiciSignInFlows provides voiciSignInFlows,
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
                     com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mocks?.shares),
@@ -891,6 +921,8 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
         com.flagshipserver.app.keystore.ServingRenewal.appOpened()
         com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
+        // voi.ci reply notices are checked on foreground only (no push, no background polling).
+        com.flagshipserver.app.core.voici.VoiciCenter.shared?.let { c -> c.scope.launch { runCatching { c.checkReplies() } } }
         // The visible activity owns the biometric prompt (another instance's
         // onDestroy must never leave key use without one).
         if (::biometric.isInitialized) BiometricAuthority.set(biometric)

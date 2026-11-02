@@ -63,3 +63,7 @@
 # class names always resolve.
 -keep class com.flagshipserver.app.MainActivity { *; }
 -keep class com.flagshipserver.app.push.FlagshipFcmService { *; }
+
+# Rhino 1.9.1 (the on-device preseed engine) references java.beans in JavaToJSONConverters, a path the app never
+# takes; Android has no java.beans, so R8 must not stop the release build on it.
+-dontwarn java.beans.**

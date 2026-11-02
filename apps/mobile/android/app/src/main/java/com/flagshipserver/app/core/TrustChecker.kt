@@ -104,6 +104,21 @@ class TrustChecker(
 
     private val parser = Json { ignoreUnknownKeys = true }
 
+    /** The CA key `.com`'s CA-signed artifacts verify under (voi.ci attestations), checked from the baked pin
+     *  through the served chain at this clock; empty when it can't be fetched or doesn't verify. */
+    suspend fun verifiedCaKeys(): List<String> = runCatching {
+        val resp = transport.execute("GET", "$baseUrl/api/maintainer-blessing")
+        val j = parser.decodeFromString(BlessingJson.serializer(), String(resp.body, Charsets.UTF_8))
+        val blessing = MaintainerBlessing(
+            pinnedMandateHash = j.pinnedMandateHash,
+            caPubkey = j.caPubkey,
+            mandates = j.mandates.map(::toMandate),
+            caEndorsements = j.caEndorsements.map(::toEndorsement),
+            caLeasePq = j.caLeasePq,
+        )
+        if (MaintainersComTrust.verifyComBlessing(blessing, now())) listOf(blessing.caPubkey.lowercase()) else emptyList()
+    }.getOrDefault(emptyList())
+
     /** Fetch + verify. Trusted/Untrusted on a VALID response; NoVerdict on a
      *  network/parse failure (caller leaves the center untouched). */
     suspend fun check(): Outcome {

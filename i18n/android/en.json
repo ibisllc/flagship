@@ -13357,5 +13357,613 @@
   "activity_relay_move_refused": {
     "en": "Stayed on its current relay",
     "ctx": "core/BoxEventLabels.kt (Activity, server.relay.move-refused)"
+  },
+  "voici_tab": {
+    "en": "Messages",
+    "ctx": "voi.ci / Messages: bottom bar tab"
+  },
+  "voici_publish_reason": {
+    "en": "Publish your page",
+    "ctx": "voi.ci / Messages: biometric prompt subtitle"
+  },
+  "voici_your_page": {
+    "en": "Your page",
+    "ctx": "voi.ci / Messages: Messages tab row"
+  },
+  "voici_published": {
+    "en": "Published",
+    "ctx": "voi.ci / Messages: page status"
+  },
+  "voici_not_published": {
+    "en": "Not published",
+    "ctx": "voi.ci / Messages: page status"
+  },
+  "voici_changes_not_published": {
+    "en": "%1$d changes not published",
+    "ctx": "voi.ci / Messages: page status, count"
+  },
+  "voici_one_change_not_published": {
+    "en": "1 change not published",
+    "ctx": "voi.ci / Messages: page status"
+  },
+  "voici_waiting_for_admin": {
+    "en": "Waiting for an admin device to publish",
+    "ctx": "voi.ci / Messages: non-admin device"
+  },
+  "voici_segment_messages": {
+    "en": "Messages",
+    "ctx": "voi.ci / Messages: segmented control"
+  },
+  "voici_segment_requests": {
+    "en": "Requests (%1$d)",
+    "ctx": "voi.ci / Messages: segmented control, count"
+  },
+  "voici_segment_requests_none": {
+    "en": "Requests",
+    "ctx": "voi.ci / Messages: segmented control"
+  },
+  "voici_visitor_name": {
+    "en": "Visitor %1$s",
+    "ctx": "voi.ci / Messages: a generated visitor name; %1$s is a 4-character code like 4F3A"
+  },
+  "voici_empty_messages": {
+    "en": "No messages yet. Turn on Accept messages on your page to get them.",
+    "ctx": "voi.ci / Messages: empty state"
+  },
+  "voici_empty_requests": {
+    "en": "No message requests.",
+    "ctx": "voi.ci / Messages: empty state"
+  },
+  "voici_messages_paused": {
+    "en": "Messages need your page published first.",
+    "ctx": "voi.ci / Messages: Messages tab note"
+  },
+  "voici_thread_gap": {
+    "en": "Some messages haven't arrived yet",
+    "ctx": "voi.ci / Messages: thread note"
+  },
+  "voici_compose_hint": {
+    "en": "Write a reply",
+    "ctx": "voi.ci / Messages: compose placeholder"
+  },
+  "voici_send": {
+    "en": "Send",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_status_sent": {
+    "en": "Sent",
+    "ctx": "voi.ci / Messages: message status"
+  },
+  "voici_status_delivered": {
+    "en": "Delivered",
+    "ctx": "voi.ci / Messages: message status"
+  },
+  "voici_status_direct": {
+    "en": "Delivered to their phone",
+    "ctx": "voi.ci / Messages: message status"
+  },
+  "voici_open_link_title": {
+    "en": "Open %1$s?",
+    "ctx": "voi.ci / Messages: dialog title, host"
+  },
+  "voici_open": {
+    "en": "Open",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_cancel": {
+    "en": "Cancel",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_menu_rename": {
+    "en": "Rename",
+    "ctx": "voi.ci / Messages: menu"
+  },
+  "voici_menu_accept": {
+    "en": "Accept",
+    "ctx": "voi.ci / Messages: menu"
+  },
+  "voici_menu_block": {
+    "en": "Block",
+    "ctx": "voi.ci / Messages: menu"
+  },
+  "voici_menu_unblock": {
+    "en": "Unblock",
+    "ctx": "voi.ci / Messages: menu"
+  },
+  "voici_menu_report": {
+    "en": "Report",
+    "ctx": "voi.ci / Messages: menu"
+  },
+  "voici_menu_delete": {
+    "en": "Delete conversation",
+    "ctx": "voi.ci / Messages: menu"
+  },
+  "voici_more": {
+    "en": "More",
+    "ctx": "voi.ci / Messages: overflow menu label"
+  },
+  "voici_rename_title": {
+    "en": "Rename this visitor",
+    "ctx": "voi.ci / Messages: dialog"
+  },
+  "voici_rename_hint": {
+    "en": "Only you see this name, on your devices.",
+    "ctx": "voi.ci / Messages: dialog"
+  },
+  "voici_name_label": {
+    "en": "Name",
+    "ctx": "voi.ci / Messages: field"
+  },
+  "voici_save": {
+    "en": "Save",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_block_title": {
+    "en": "Block this visitor?",
+    "ctx": "voi.ci / Messages: dialog"
+  },
+  "voici_block_body": {
+    "en": "They can't write to you again from this page. They aren't told.",
+    "ctx": "voi.ci / Messages: dialog"
+  },
+  "voici_delete_title": {
+    "en": "Delete this conversation?",
+    "ctx": "voi.ci / Messages: dialog"
+  },
+  "voici_delete_body": {
+    "en": "It's removed from your devices. Flagship's copy expires on its own.",
+    "ctx": "voi.ci / Messages: dialog"
+  },
+  "voici_delete": {
+    "en": "Delete",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_report_title": {
+    "en": "Report this message",
+    "ctx": "voi.ci / Messages: sheet"
+  },
+  "voici_report_body": {
+    "en": "Flagship gets this message as it was sent, encrypted. Flagship can then see which account sent it.",
+    "ctx": "voi.ci / Messages: sheet"
+  },
+  "voici_reason_spam": {
+    "en": "Spam",
+    "ctx": "voi.ci / Messages: report reason"
+  },
+  "voici_reason_harassment": {
+    "en": "Harassment",
+    "ctx": "voi.ci / Messages: report reason"
+  },
+  "voici_reason_impersonation": {
+    "en": "Impersonation",
+    "ctx": "voi.ci / Messages: report reason"
+  },
+  "voici_reason_illegal": {
+    "en": "Illegal content",
+    "ctx": "voi.ci / Messages: report reason"
+  },
+  "voici_reason_other": {
+    "en": "Something else",
+    "ctx": "voi.ci / Messages: report reason"
+  },
+  "voici_report_send": {
+    "en": "Report",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_reported": {
+    "en": "Reported. Thank you.",
+    "ctx": "voi.ci / Messages: toast"
+  },
+  "voici_blocked": {
+    "en": "Blocked",
+    "ctx": "voi.ci / Messages: toast"
+  },
+  "voici_request_banner": {
+    "en": "This is a message request. Reply or accept to move it to Messages.",
+    "ctx": "voi.ci / Messages: thread banner"
+  },
+  "voici_editor_title": {
+    "en": "Your page",
+    "ctx": "voi.ci / Messages: screen title"
+  },
+  "voici_warning": {
+    "en": "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
+    "ctx": "voi.ci / Messages: linkability warning (O1)"
+  },
+  "voici_photo": {
+    "en": "Photo",
+    "ctx": "voi.ci / Messages: section"
+  },
+  "voici_choose_photo": {
+    "en": "Choose photo",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_remove_photo": {
+    "en": "Remove photo",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_photo_failed": {
+    "en": "This photo can't be used. Try another one.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_display_name": {
+    "en": "Display name",
+    "ctx": "voi.ci / Messages: field"
+  },
+  "voici_bio": {
+    "en": "About you",
+    "ctx": "voi.ci / Messages: field"
+  },
+  "voici_counter": {
+    "en": "%1$d of %2$d",
+    "ctx": "voi.ci / Messages: character counter"
+  },
+  "voici_links": {
+    "en": "Links",
+    "ctx": "voi.ci / Messages: section"
+  },
+  "voici_add_link": {
+    "en": "Add link",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_link_url": {
+    "en": "Address (https://…)",
+    "ctx": "voi.ci / Messages: field"
+  },
+  "voici_link_label": {
+    "en": "Label",
+    "ctx": "voi.ci / Messages: field"
+  },
+  "voici_link_invalid": {
+    "en": "Use an https:// address (or one mailto: link).",
+    "ctx": "voi.ci / Messages: field error"
+  },
+  "voici_remove": {
+    "en": "Remove",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_move_up": {
+    "en": "Move up",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_move_down": {
+    "en": "Move down",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_theme": {
+    "en": "Theme",
+    "ctx": "voi.ci / Messages: section"
+  },
+  "voici_theme_classic": {
+    "en": "Classic",
+    "ctx": "voi.ci / Messages: theme"
+  },
+  "voici_theme_ink": {
+    "en": "Ink",
+    "ctx": "voi.ci / Messages: theme"
+  },
+  "voici_theme_sea": {
+    "en": "Sea",
+    "ctx": "voi.ci / Messages: theme"
+  },
+  "voici_accept_messages": {
+    "en": "Accept messages",
+    "ctx": "voi.ci / Messages: switch"
+  },
+  "voici_accept_messages_body": {
+    "en": "People with a Flagship account can write to you. They appear as visitors, not by name.",
+    "ctx": "voi.ci / Messages: switch help"
+  },
+  "voici_posts": {
+    "en": "Posts",
+    "ctx": "voi.ci / Messages: section"
+  },
+  "voici_new_post": {
+    "en": "New post",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_edit": {
+    "en": "Edit",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_not_published_yet": {
+    "en": "Not published yet",
+    "ctx": "voi.ci / Messages: grayed item"
+  },
+  "voici_preview": {
+    "en": "Preview",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_publish": {
+    "en": "Publish",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_publishing": {
+    "en": "Publishing…",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_copy_link": {
+    "en": "Copy link",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_share": {
+    "en": "Share",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_link_copied": {
+    "en": "Link copied",
+    "ctx": "voi.ci / Messages: toast"
+  },
+  "voici_save_profile": {
+    "en": "Save changes",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_saved_waiting": {
+    "en": "Saved. It stays on this device until an admin device publishes it.",
+    "ctx": "voi.ci / Messages: note"
+  },
+  "voici_first_publish_title": {
+    "en": "Publish your page?",
+    "ctx": "voi.ci / Messages: confirm"
+  },
+  "voici_post_text": {
+    "en": "What's new?",
+    "ctx": "voi.ci / Messages: field"
+  },
+  "voici_post_links_found": {
+    "en": "Links in this post",
+    "ctx": "voi.ci / Messages: section"
+  },
+  "voici_card_fetching": {
+    "en": "Getting the link preview…",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_card_none": {
+    "en": "No preview for this link",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_remove_card": {
+    "en": "Remove preview",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_card_note": {
+    "en": "This phone opens each link once to make its preview. The site sees that visit.",
+    "ctx": "voi.ci / Messages: note"
+  },
+  "voici_post_save": {
+    "en": "Save post",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_delete_post": {
+    "en": "Delete post",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_delete_post_title": {
+    "en": "Delete this post?",
+    "ctx": "voi.ci / Messages: confirm"
+  },
+  "voici_preview_title": {
+    "en": "Preview",
+    "ctx": "voi.ci / Messages: screen title"
+  },
+  "voici_send_me_a_message": {
+    "en": "Send me a message",
+    "ctx": "voi.ci / Messages: page preview button"
+  },
+  "voici_show_older": {
+    "en": "Show older posts",
+    "ctx": "voi.ci / Messages: page preview"
+  },
+  "voici_preview_note": {
+    "en": "Grayed parts aren't published yet.",
+    "ctx": "voi.ci / Messages: preview note"
+  },
+  "voici_rules_title": {
+    "en": "Page and message rules",
+    "ctx": "voi.ci / Messages: sheet title"
+  },
+  "voici_rules_body": {
+    "en": "Don't post or send anything illegal, hateful, sexual involving minors, violent threats, harassment, spam or someone else's private information. Flagship removes pages and blocks accounts that break these rules. Reports are reviewed by people at Flagship.",
+    "ctx": "voi.ci / Messages: rules text, needs native review"
+  },
+  "voici_rules_agree": {
+    "en": "I agree",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_settings_title": {
+    "en": "Messages",
+    "ctx": "voi.ci / Messages: screen title"
+  },
+  "voici_settings_row_subtitle": {
+    "en": "Websites you're signed in to, inbox key, rules",
+    "ctx": "voi.ci / Messages: settings row"
+  },
+  "voici_sites": {
+    "en": "Websites you're signed in to",
+    "ctx": "voi.ci / Messages: section"
+  },
+  "voici_sites_none": {
+    "en": "You aren't signed in to any page.",
+    "ctx": "voi.ci / Messages: empty"
+  },
+  "voici_site_row": {
+    "en": "voi.ci page %1$s",
+    "ctx": "voi.ci / Messages: row title, short page id"
+  },
+  "voici_site_signed_in": {
+    "en": "Signed in %1$s",
+    "ctx": "voi.ci / Messages: row subtitle, date"
+  },
+  "voici_sign_out": {
+    "en": "Sign out",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_rotate": {
+    "en": "Rotate inbox key",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_rotate_body": {
+    "en": "Messages sent before the change stay readable on this device. New messages use the new key.",
+    "ctx": "voi.ci / Messages: help"
+  },
+  "voici_rotate_done": {
+    "en": "Inbox key changed",
+    "ctx": "voi.ci / Messages: toast"
+  },
+  "voici_rules_open": {
+    "en": "Page and message rules",
+    "ctx": "voi.ci / Messages: row"
+  },
+  "voici_signin_title": {
+    "en": "Sign in to voi.ci",
+    "ctx": "voi.ci / Messages: screen title"
+  },
+  "voici_signin_question": {
+    "en": "Sign in to voi.ci to message %1$s?",
+    "ctx": "voi.ci / Messages: approval question, display name"
+  },
+  "voici_signin_pseudonym": {
+    "en": "You appear as %1$s. They never see your username.",
+    "ctx": "voi.ci / Messages: approval note, visitor name"
+  },
+  "voici_signin_privacy": {
+    "en": "Messages are private. If someone reports your message, Flagship can see which account sent it.",
+    "ctx": "voi.ci / Messages: approval note"
+  },
+  "voici_signin_code": {
+    "en": "Check that voi.ci shows the same code: %1$s",
+    "ctx": "voi.ci / Messages: approval, code"
+  },
+  "voici_signin_connecting": {
+    "en": "Connecting to voi.ci…",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_signin_waiting": {
+    "en": "Code %1$s. Waiting for voi.ci…",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_signin_working": {
+    "en": "Signing in…",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_signin_done": {
+    "en": "Signed in. Go back to voi.ci to write your message.",
+    "ctx": "voi.ci / Messages: status"
+  },
+  "voici_approve": {
+    "en": "Approve",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_close": {
+    "en": "Close",
+    "ctx": "voi.ci / Messages: button"
+  },
+  "voici_signin_reason": {
+    "en": "Sign in to voi.ci",
+    "ctx": "voi.ci / Messages: biometric subtitle"
+  },
+  "voici_err_conflict": {
+    "en": "Couldn't publish. Try again.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_taken_down": {
+    "en": "Flagship removed this page. If you think this is a mistake, tell us.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_rate_limited": {
+    "en": "Too many changes for today. Try again later.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_not_admin": {
+    "en": "Only an admin device can publish your page.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_bad_page": {
+    "en": "Part of your page couldn't be saved. Check it and try again.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_banned_page": {
+    "en": "Your account can't publish a page. If you think this is a mistake, tell us.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_network": {
+    "en": "Couldn't reach Flagship. Try again.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_text": {
+    "en": "This text can't be used. Remove unusual characters and keep it within the limit.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_first_contact": {
+    "en": "You've started as many new conversations as you can today. Try again later.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_first_contact_hours": {
+    "en": "You've started as many new conversations as you can today. Try again in about %1$d hours.",
+    "ctx": "voi.ci / Messages: error, hours"
+  },
+  "voici_err_device_limit": {
+    "en": "This phone already started Messages for another account this month.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_banned": {
+    "en": "Your account can't send messages. If you think this is a mistake, tell us.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_too_new": {
+    "en": "New accounts can start conversations from the web after 7 days.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_not_accepting": {
+    "en": "This page isn't accepting messages.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_unchecked": {
+    "en": "This page couldn't be checked.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_expired": {
+    "en": "The sign-in timed out. Start again on voi.ci.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_bad_link": {
+    "en": "This sign-in link doesn't work. Start again on voi.ci.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_bad_answer": {
+    "en": "Flagship's answer couldn't be checked. Try again.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_err_awaiting_reply": {
+    "en": "Wait for a reply before writing more.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_channel_messages": {
+    "en": "Messages",
+    "ctx": "voi.ci / Messages: notification channel"
+  },
+  "voici_channel_messages_desc": {
+    "en": "New messages to your voi.ci page",
+    "ctx": "voi.ci / Messages: notification channel"
+  },
+  "voici_channel_drafts": {
+    "en": "Page changes",
+    "ctx": "voi.ci / Messages: notification channel"
+  },
+  "voici_channel_drafts_desc": {
+    "en": "Changes to your voi.ci page waiting for this admin device",
+    "ctx": "voi.ci / Messages: notification channel"
+  },
+  "voici_push_message": {
+    "en": "New message",
+    "ctx": "voi.ci / Messages: push text"
+  },
+  "voici_push_drafts": {
+    "en": "Changes to your page are waiting to be published",
+    "ctx": "voi.ci / Messages: push text"
+  },
+  "voici_reply_notice": {
+    "en": "You have a reply on voi.ci/%1$s",
+    "ctx": "voi.ci / Messages: visitor's reply notice, opens the page in the browser; %1$s is the page's username"
   }
 }

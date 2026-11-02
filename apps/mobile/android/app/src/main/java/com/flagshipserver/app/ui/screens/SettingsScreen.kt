@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Build
@@ -251,6 +252,13 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = stringResource(R.string.offline_settings_subtitle),
                     onClick = { nav.navigate("offline-control") },
                     testTag = "settings-open-offline-control",
+                ),
+                FSSettingsRowData(
+                    icon = Icons.Outlined.ChatBubbleOutline,
+                    title = stringResource(R.string.voici_settings_title),
+                    subtitle = stringResource(R.string.voici_settings_row_subtitle),
+                    onClick = { nav.navigate("messages-settings") },
+                    testTag = "settings-open-messages",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.AutoAwesome,

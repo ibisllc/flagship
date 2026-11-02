@@ -151,6 +151,15 @@ sealed interface DeepLink {
     /** An account/settings page this app has no screen for: the Settings tab. */
     data object Settings : DeepLink
 
+    /** voi.ci "Sign in with Flagship" (docs/voici-and-messages.md §6.5): the visitor's app approves a browser key. */
+    data class VoiciSignIn(val rawLink: String) : DeepLink
+
+    /** The Messages tab (a `messages` push), or one conversation in it. */
+    data class Messages(val conv: String? = null) : DeepLink
+
+    /** The page editor (a `page-drafts` push on an admin device). */
+    data object PageEditor : DeepLink
+
     companion object {
         /// Parse a `flagship://...` URI, its `https://<control host>/app/...`
         /// twin, a control-host App Link (/join, /remote, …) OR a box
@@ -199,7 +208,7 @@ sealed interface DeepLink {
             return parseHost(host, uri)
         }
 
-        private val APP_LINK_PATHS = listOf("join", "remote", "builder", "access", "invite", "invite-accept")
+        private val APP_LINK_PATHS = listOf("join", "remote", "builder", "access", "invite", "invite-accept", "voici-sign-in")
 
         /** `http(s)://<control host>/app/<route>[/<more>][?q]` ≡ `flagship://<route>[/<more>][?q]`. */
         private fun appRouteTwin(uri: Uri): Uri? {
@@ -294,6 +303,9 @@ sealed interface DeepLink {
                     if (params["c"].isNullOrEmpty() || BuilderPairing.parse(uri.toString()) == null) null
                     else BuilderPair(uri.toString())
                 }
+                "voici-sign-in" -> if (com.flagshipserver.app.core.voici.VoiciSignInLink.parse(uri.toString()) != null) VoiciSignIn(uri.toString()) else null
+                "messages" -> Messages(params["conv"]?.takeIf { Regex("^[0-9a-f]{64}$").matches(it) })
+                "page-editor" -> PageEditor
                 "invite-accept" -> {
                     val acceptance = InviteLink.decodeAcceptance(uri.toString())
                     if (acceptance?.serverDomain == null) null else AcceptInvite(uri.toString())

@@ -92,7 +92,12 @@ object PhoneRouteController {
             val chain = certs.current(user) ?: return@launch
             val hub = tunnelHub(http) ?: return@launch
             val grants = beginGrants(http, user, devicePub)
-            val ep = PhoneEndpoint(user, PhoneRoute.hostname(user, apex), devicePub)
+            val ep = PhoneEndpoint(
+                user, PhoneRoute.hostname(user, apex), devicePub,
+                web = VoiciPhoneWebHandler,
+                origins = if (Endpoints.voiciOrigin == "https://voi.ci") com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_WEB_ORIGINS
+                else com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_WEB_ORIGINS_GYM,
+            )
             val c = PhoneTunnelClient(
                 okHttp = http,
                 url = PhoneTunnelClient.phoneTunnelUrl(hub),
@@ -145,4 +150,12 @@ object PhoneRouteController {
             Json.parseToJsonElement(res.body?.string().orEmpty()).jsonObject["tunnelHub"]?.jsonPrimitive?.content
         }
     }.getOrNull()?.takeIf { it.startsWith("wss://") }
+}
+
+/** The phone endpoint's voi.ci operations, answered by the app's VoiciCenter (none yet: `live` is a 404). */
+object VoiciPhoneWebHandler : PhoneWebHandler {
+    override fun live() = com.flagshipserver.app.core.voici.VoiciCenter.shared?.phoneLive()
+    override fun deliver(body: ByteArray, phoneRoutePub: String): Pair<Int, String> =
+        com.flagshipserver.app.core.voici.VoiciCenter.shared?.phoneDeliver(body, phoneRoutePub)
+            ?: (404 to """{"error":"not found","code":"not-found"}""")
 }

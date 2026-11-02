@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timeline
@@ -78,8 +79,15 @@ fun RootShell(
     val pending by deepLinker.pending.collectAsState()
 
     var backupApproval by remember { mutableStateOf<com.flagshipserver.app.core.DeepLink.ApproveBackupDownload?>(null) }
+    var voiciSignIn by remember { mutableStateOf<String?>(null) }
     androidx.compose.runtime.LaunchedEffect(pending) {
         val link = pending ?: return@LaunchedEffect
+        if (link is com.flagshipserver.app.core.DeepLink.VoiciSignIn) {
+            // A voi.ci tab asking this account to sign it in: approve over this phone's own keys.
+            deepLinker.consume()
+            voiciSignIn = link.rawLink
+            return@LaunchedEffect
+        }
         if (link is com.flagshipserver.app.core.DeepLink.ApproveBackupDownload) {
             // A backup's browser download page: approve over this phone's own keys.
             deepLinker.consume()
@@ -122,6 +130,9 @@ fun RootShell(
             com.flagshipserver.app.core.DeepLink.TrustedDevices -> RootDestination.SETTINGS
             com.flagshipserver.app.core.DeepLink.AccountActivity -> RootDestination.ACTIVITY
             com.flagshipserver.app.core.DeepLink.Settings -> RootDestination.SETTINGS
+            is com.flagshipserver.app.core.DeepLink.VoiciSignIn -> selected
+            is com.flagshipserver.app.core.DeepLink.Messages -> RootDestination.MESSAGES
+            com.flagshipserver.app.core.DeepLink.PageEditor -> RootDestination.MESSAGES
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so
@@ -135,6 +146,10 @@ fun RootShell(
             requestId = a.requestId,
             onDismiss = { backupApproval = null },
         )
+    }
+
+    voiciSignIn?.let { raw ->
+        com.flagshipserver.app.ui.screens.VoiciSignInDialog(rawLink = raw, onDismiss = { voiciSignIn = null })
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalWindowWidthClass provides widthSizeClass) {
@@ -167,7 +182,7 @@ private fun CompactShell(
                         NavigationBarItem(
                             selected = dest == selected,
                             onClick = { onSelect(dest) },
-                            icon = { Icon(iconFor(dest), contentDescription = labelFor(dest)) },
+                            icon = { TabIcon(dest) },
                             label = { Text(labelFor(dest), maxLines = 1) },
                             modifier = Modifier.testTag("tab-${dest.key}"),
                         )
@@ -191,7 +206,7 @@ private fun ExpandedShell(
                 NavigationRailItem(
                     selected = dest == selected,
                     onClick = { onSelect(dest) },
-                    icon = { Icon(iconFor(dest), contentDescription = labelFor(dest)) },
+                    icon = { TabIcon(dest) },
                     label = { Text(labelFor(dest)) },
                     modifier = Modifier.testTag("tab-${dest.key}"),
                 )
@@ -218,9 +233,24 @@ private fun TabContent(selected: RootDestination, padding: PaddingValues) {
         when (selected) {
             RootDestination.HOME -> HomeTab()
             RootDestination.APPS -> ServicesTab()
+            RootDestination.MESSAGES -> com.flagshipserver.app.ui.shell.tabs.MessagesTab()
             RootDestination.ACTIVITY -> ActivityTab()
             RootDestination.SETTINGS -> SettingsTab()
         }
+    }
+}
+
+/** A tab's icon; Messages carries the unread count (§11.1). */
+@Composable
+private fun TabIcon(dest: RootDestination) {
+    val center = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
+    val unread = if (dest == RootDestination.MESSAGES && center != null) center.messages.collectAsState().value.unreadCount else 0
+    if (unread > 0) {
+        androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text(unread.toString()) } }) {
+            Icon(iconFor(dest), contentDescription = labelFor(dest))
+        }
+    } else {
+        Icon(iconFor(dest), contentDescription = labelFor(dest))
     }
 }
 
@@ -229,6 +259,7 @@ private fun labelFor(dest: RootDestination) = stringResource(
     when (dest) {
         RootDestination.HOME -> R.string.home
         RootDestination.APPS -> R.string.services
+        RootDestination.MESSAGES -> R.string.voici_tab
         RootDestination.ACTIVITY -> R.string.activity
         RootDestination.SETTINGS -> R.string.settings
     },
@@ -237,6 +268,7 @@ private fun labelFor(dest: RootDestination) = stringResource(
 private fun iconFor(dest: RootDestination) = when (dest) {
     RootDestination.HOME -> Icons.Outlined.Home
     RootDestination.APPS -> Icons.Outlined.Apps
+    RootDestination.MESSAGES -> Icons.Outlined.ChatBubbleOutline
     RootDestination.ACTIVITY -> Icons.Outlined.Timeline
     RootDestination.SETTINGS -> Icons.Outlined.Settings
 }

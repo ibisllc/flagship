@@ -177,6 +177,7 @@ object Variant : AppVariant {
         val boxDirect = MockBoxDirect()
         GymProbe.boxDirect = boxDirect
         PodDirect.transport = { boxDirect }
+        GymVoici.reset(appState.currentUser.value ?: cfg.username, appState.activeProfile?.deviceId)
         return GymLaunch(
             tab,
             GymMocks(
@@ -192,6 +193,9 @@ object Variant : AppVariant {
                 shares = shares,
                 accessBoxes = accessBoxes,
                 chatBoxes = { app -> app.currentPod?.let { listOf(AccessBox(it.podId, it.fqdn, screens)) }.orEmpty() },
+                voici = GymVoici.client,
+                voiciCaKeys = { listOf(GymVoici.client.caPub) },
+                voiciSignInPipe = { GymVoici.pipe() },
             ),
         )
     }

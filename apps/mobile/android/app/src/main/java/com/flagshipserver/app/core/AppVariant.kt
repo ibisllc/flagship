@@ -128,6 +128,12 @@ class GymMocks(
     val accessBoxes: ((AppState) -> List<AccessBox>)?,
     /** The boxes app-chat requests are read from (the mock box). */
     val chatBoxes: ((AppState) -> List<AccessBox>)? = null,
+    /** voi.ci pages and Messages: the mock `.com` (docs/voici-and-messages.md). */
+    val voici: com.flagshipserver.app.api.VoiciClient? = null,
+    /** The CA keys the mock `.com`'s attestations verify under. */
+    val voiciCaKeys: (suspend () -> List<String>)? = null,
+    /** A scripted voi.ci sign-in pipe (the browser's side played in process). */
+    val voiciSignInPipe: (() -> com.flagshipserver.app.core.voici.VoiciSignInPipe)? = null,
 )
 
 /** The mock box's access-control fixture (fixed device keys and names). */

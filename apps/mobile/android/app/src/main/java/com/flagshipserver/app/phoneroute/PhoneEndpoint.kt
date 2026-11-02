@@ -1,13 +1,11 @@
 // The phone endpoint served on the bare `<account>.<apex>` name (docs/architecture-v2/phone-route.md
 // section 4): TLS ends here, on the phone, with its own key (SSLEngine per relayed stream), then a
-// minimal HTTP/1.1 server answers. Every state-changing request passes PhoneEndpointPolicy (exact
-// Host and Origin, the host-only `__Host-` cookie, the CSRF header); no CORS headers are sent.
+// minimal HTTP/1.1 server answers: the signed hello, `.well-known/flagship-phone`, and voi.ci's `live` and
+// `deliver` (docs/voici-and-messages.md §8.2), the only operations a website can reach, from the listed origins only.
 
 package com.flagshipserver.app.phoneroute
 
-import com.flagshipserver.app.core.HexUtil
 import java.nio.ByteBuffer
-import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLEngine
 import javax.net.ssl.SSLEngineResult
@@ -175,20 +173,30 @@ data class HttpHead(val method: String, val path: String, val headers: Map<Strin
     }
 }
 
-/** The endpoint's answers. Pure: the tunnel feeds it whole requests and writes back what it returns. */
+/** The voi.ci operations the endpoint serves (docs/voici-and-messages.md §8.2); VoiciCenter in the app. */
+interface PhoneWebHandler {
+    /** `GET /api/phone/live`: the page's owner signing key, or null when this phone isn't receiving. */
+    fun live(): com.flagshipserver.app.core.voici.PhoneLiveAnswer?
+    /** `POST /api/phone/deliver`: (status, JSON body). */
+    fun deliver(body: ByteArray, phoneRoutePub: String): Pair<Int, String>
+}
+
+/**
+ * The endpoint's answers. Pure: the tunnel feeds it whole requests and writes back what it returns. The one-time
+ * code browser session (`/api/phone/session`, `/api/phone/ping`, the `__Host-` cookie) is retired (voi.ci §8.2):
+ * the only operations a website reaches are voi.ci's `live` and `deliver`, with CORS for the listed origins only, and
+ * no cookie is read or set.
+ */
 class PhoneEndpoint(
     val account: String,
     val hostname: String,
     val phoneRoutePub: String,
     private val now: () -> Long = System::currentTimeMillis,
-    private val random: SecureRandom = SecureRandom(),
+    private val web: PhoneWebHandler? = null,
+    private val origins: List<String> = com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_WEB_ORIGINS,
 ) {
-    private data class Code(val value: String, val expiresAt: Long)
-    private data class Session(val csrf: String, val expiresAt: Long)
-
-    @Volatile private var code: Code? = null
-    private val sessions = ConcurrentHashMap<String, Session>()
     private val seen = ConcurrentHashMap<String, Long>()
+    private val inFlight = java.util.concurrent.atomic.AtomicInteger()
 
     /** Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms).
      *  A hello proves only that its own key signed it, so only keys in the account's device book are returned. */
@@ -207,71 +215,84 @@ class PhoneEndpoint(
         return true
     }
 
-    /** A fresh one-time code (6 digits, 5 minutes) for the owner to type in the browser that opens a session. */
-    fun newCode(): String {
-        val v = (random.nextInt(900_000) + 100_000).toString()
-        code = Code(v, now() + 5 * 60_000)
-        return v
-    }
-
     fun respond(head: HttpHead, body: ByteArray): ByteArray {
         val host = head.header("host")?.substringBefore(':') ?: ""
-        val establish = head.method == "POST" && head.path == "/api/phone/session"
-        val token = head.cookie(PhoneRoute.SESSION_COOKIE)
-        val session = token?.let { t -> sessions[t]?.takeIf { it.expiresAt > now() } }
-        val verdict = PhoneEndpointPolicy.check(
-            PhoneEndpointRequest(
-                method = head.method,
-                host = host,
-                origin = head.header("origin"),
-                sessionCookie = token,
-                csrf = head.header(PhoneRoute.CSRF_HEADER),
-                upgrade = head.header("upgrade") != null,
-                establish = establish,
+        val path = head.path.substringBefore('?')
+        val verdict = com.flagshipserver.app.core.voici.VoiciPhoneWeb.phoneWebCheck(
+            com.flagshipserver.app.core.voici.PhoneWebRequest(
+                method = head.method, path = path, host = host, origin = head.header("origin"),
+                contentType = head.header("content-type"),
+                acrMethod = head.header("access-control-request-method"), acrHeaders = head.header("access-control-request-headers"),
             ),
-            hostname,
-            if (session != null) token else null,
-            session?.csrf,
+            hostname, origins,
         )
-        if (verdict != "allow") return answer(403, """{"code":"$verdict"}""")
-        return when {
-            head.method == "GET" && head.path == "/" -> answer(200, """{"present":true,"recorded":${hello(head)}}""")
-            head.method == "GET" && head.path == "/.well-known/flagship-phone" ->
-                answer(200, """{"account":"$account","hostname":"$hostname","phoneRoutePub":"$phoneRoutePub"}""")
-            establish -> {
-                val typed = Regex("\"code\"\\s*:\\s*\"(\\d{6})\"").find(String(body, Charsets.UTF_8))?.groupValues?.get(1)
-                val c = code
-                if (typed == null || c == null || c.expiresAt <= now() || typed != c.value) return answer(403, """{"code":"bad-code"}""")
-                code = null
-                if (sessions.size >= 8) sessions.keys.firstOrNull()?.let(sessions::remove)
-                val t = HexUtil.encode(ByteArray(32).also(random::nextBytes))
-                val csrf = HexUtil.encode(ByteArray(32).also(random::nextBytes))
-                sessions[t] = Session(csrf, now() + 3_600_000)
-                answer(200, """{"csrf":"$csrf"}""", extra = "set-cookie: ${PhoneEndpointPolicy.sessionCookie(t)}\r\n")
+        return when (verdict) {
+            is com.flagshipserver.app.core.voici.PhoneWebVerdict.Refuse -> answer(verdict.status, """{"error":"refused","code":"${verdict.code}"}""")
+            is com.flagshipserver.app.core.voici.PhoneWebVerdict.Preflight -> answer(204, "", verdict.headers)
+            is com.flagshipserver.app.core.voici.PhoneWebVerdict.Allowed -> {
+                val handler = web ?: return answer(404, """{"error":"not found","code":"not-found"}""", verdict.corsHeaders)
+                if (verdict.kind == "live") {
+                    val live = handler.live() ?: return answer(404, """{"error":"not found","code":"not-found"}""", verdict.corsHeaders)
+                    answer(200, """{"live":true,"account":"${live.account}","ownerSignPub":"${live.ownerSignPub}"}""", verdict.corsHeaders)
+                } else {
+                    if (inFlight.incrementAndGet() > com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_DELIVER_MAX_CONCURRENT) {
+                        inFlight.decrementAndGet()
+                        return answer(429, """{"error":"busy","code":"rate-limited","retryAfterSec":5}""", verdict.corsHeaders)
+                    }
+                    try {
+                        val (status, json) = handler.deliver(body, phoneRoutePub)
+                        answer(status, json, verdict.corsHeaders)
+                    } finally {
+                        inFlight.decrementAndGet()
+                    }
+                }
             }
-            head.method == "POST" && head.path == "/api/phone/ping" -> answer(200, """{"ok":true}""")
-            else -> answer(404, """{"code":"not-found"}""")
+            com.flagshipserver.app.core.voici.PhoneWebVerdict.Other -> {
+                val policy = PhoneEndpointPolicy.check(
+                    PhoneEndpointRequest(
+                        method = head.method, host = host, origin = head.header("origin"), sessionCookie = null, csrf = null,
+                        upgrade = head.header("upgrade") != null, establish = false,
+                    ),
+                    hostname, null, null,
+                )
+                if (policy != "allow") return answer(403, """{"code":"$policy"}""")
+                when {
+                    head.method == "GET" && path == "/" -> answer(200, """{"present":true,"recorded":${hello(head)}}""")
+                    head.method == "GET" && path == "/.well-known/flagship-phone" ->
+                        answer(200, """{"account":"$account","hostname":"$hostname","phoneRoutePub":"$phoneRoutePub"}""")
+                    else -> answer(404, """{"code":"not-found"}""")
+                }
+            }
         }
     }
 
-    private fun answer(status: Int, json: String, extra: String = ""): ByteArray {
-        val reason = when (status) { 200 -> "OK"; 403 -> "Forbidden"; else -> "Not Found" }
+    private fun answer(status: Int, json: String, cors: Map<String, String> = emptyMap()): ByteArray {
+        val reason = when (status) {
+            200 -> "OK"; 204 -> "No Content"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 405 -> "Method Not Allowed"
+            409 -> "Conflict"; 413 -> "Payload Too Large"; 415 -> "Unsupported Media Type"; 421 -> "Misdirected Request"
+            429 -> "Too Many Requests"; else -> "Error"
+        }
         val body = json.toByteArray(Charsets.UTF_8)
-        val head = "HTTP/1.1 $status $reason\r\n" +
-            "content-type: application/json\r\n" +
-            "content-length: ${body.size}\r\n" +
-            "cache-control: no-store\r\n" +
-            "x-content-type-options: nosniff\r\n" +
-            "content-security-policy: default-src 'none'; frame-ancestors 'none'\r\n" +
-            "referrer-policy: no-referrer\r\n" +
-            extra +
-            "connection: close\r\n\r\n"
-        return head.toByteArray(Charsets.UTF_8) + body
+        val head = StringBuilder("HTTP/1.1 $status $reason\r\n")
+        if (status != 204) head.append("content-type: application/json\r\n")
+        head.append("content-length: ${body.size}\r\n")
+            .append("cache-control: no-store\r\n")
+            .append("x-content-type-options: nosniff\r\n")
+            .append("content-security-policy: default-src 'none'; frame-ancestors 'none'\r\n")
+            .append("referrer-policy: no-referrer\r\n")
+        for ((k, v) in cors) head.append(k.lowercase()).append(": ").append(v).append("\r\n")
+        head.append("connection: close\r\n\r\n")
+        return head.toString().toByteArray(Charsets.UTF_8) + body
     }
 }
 
 /** Collects one request (head and Content-Length body) from plaintext chunks. */
-class HttpRequestReader(private val maxBytes: Int = 64 * 1024) {
+class HttpRequestReader(private val maxBytes: Int = MAX_REQUEST) {
+    companion object {
+        /** A voici-draft envelope may be 1 MiB (voi.ci §5.2); a message stays at 64 KiB (checked by the handler). */
+        const val MAX_REQUEST = 1024 * 1024 + 16 * 1024
+    }
+
     private var buf = ByteArray(0)
 
     /** The request once whole; null while more is needed. Throws when it grows past `maxBytes`. */

@@ -1,6 +1,6 @@
 // The phone endpoint end to end on the JVM: TLS terminated by TlsServerStream (SSLEngine) with the
-// phone's key and a certificate for exactly its bare name, the minimal HTTP answers, the session
-// opened with the one-time code, and the sibling-app attacks of Appendix H scenario 11 refused.
+// phone's key and a certificate for exactly its bare name, the minimal HTTP answers, voi.ci's live and
+// deliver with their CORS rules (the retired one-time-code session answers nothing), and sibling-app attacks refused.
 // Also: certificate reuse (no order per handover) and the tunnel client's claim against a fake relay.
 
 package com.flagshipserver.app.phoneroute
@@ -154,37 +154,49 @@ class PhoneEndpointTest {
         assertFalse("no CORS header is ever sent", answer.lowercase().contains("access-control-"))
     }
 
-    @Test fun sessionWithTheOneTimeCodeThenSiblingAttacksAreRefused() {
-        val ep = PhoneEndpoint("alice", HOST, pub)
-        val origin = "origin" to "https://$HOST"
-        // No code issued yet / wrong code.
-        assertEquals(403, status(ep.respond(req("POST", "/api/phone/session", origin, body = """{"code":"123456"}""").first, """{"code":"123456"}""".toByteArray())))
-        val code = ep.newCode()
-        // A sibling app (same site, different origin) cannot open a session even with the code.
-        val sibling = ep.respond(req("POST", "/api/phone/session", "origin" to "https://notes.$HOST").first, """{"code":"$code"}""".toByteArray())
-        assertEquals(403, status(sibling))
-        assertTrue(body(sibling).contains("cross-origin"))
-        val open = ep.respond(req("POST", "/api/phone/session", origin).first, """{"code":"$code"}""".toByteArray())
-        assertEquals(200, status(open))
-        val setCookie = String(open).lines().first { it.startsWith("set-cookie:") }
-        assertTrue(setCookie.contains("__Host-flagship-phone=") && setCookie.contains("Secure") && setCookie.contains("HttpOnly") && setCookie.contains("SameSite=Strict") && setCookie.contains("Path=/"))
-        assertFalse(setCookie.contains("Domain", ignoreCase = true))
-        val token = setCookie.substringAfter("__Host-flagship-phone=").substringBefore(';')
-        val csrf = Json.parseToJsonElement(body(open)).jsonObject["csrf"]!!.jsonPrimitive.content
-        // The code is single use.
-        assertEquals(403, status(ep.respond(req("POST", "/api/phone/session", origin).first, """{"code":"$code"}""".toByteArray())))
-        val cookie = "cookie" to "__Host-flagship-phone=$token"
-        assertEquals(200, status(ep.respond(req("POST", "/api/phone/ping", origin, cookie, PhoneRoute.CSRF_HEADER to csrf).first, ByteArray(0))))
-        // CSRF: a form post from anywhere carries no header.
-        assertEquals(403, status(ep.respond(req("POST", "/api/phone/ping", origin, cookie).first, ByteArray(0))))
-        // Cross-origin read/write from a sibling, cookie and all.
-        assertEquals(403, status(ep.respond(req("POST", "/api/phone/ping", "origin" to "https://notes.$HOST", cookie, PhoneRoute.CSRF_HEADER to csrf).first, ByteArray(0))))
-        // An injected cookie (not a live session) is no session.
-        assertEquals(403, status(ep.respond(req("POST", "/api/phone/ping", origin, "cookie" to "__Host-flagship-phone=${"x".repeat(64)}", PhoneRoute.CSRF_HEADER to csrf).first, ByteArray(0))))
-        // A WebSocket upgrade from a sibling origin.
-        assertEquals(403, status(ep.respond(req("GET", "/api/phone/ws", "origin" to "https://notes.$HOST", "upgrade" to "websocket", cookie).first, ByteArray(0))))
-        // A request for a sibling's Host.
-        assertEquals(403, status(ep.respond(req("GET", "/.well-known/flagship-phone", "host" to "notes.$HOST").first, ByteArray(0))))
+    @Test fun onlyVoiciLiveAndDeliverReachTheEndpointCrossOriginAndTheSessionIsGone() {
+        val delivered = ArrayList<ByteArray>()
+        val ep = PhoneEndpoint("alice", HOST, pub, web = object : PhoneWebHandler {
+            override fun live() = com.flagshipserver.app.core.voici.PhoneLiveAnswer("alice", "cd".repeat(32))
+            override fun deliver(body: ByteArray, phoneRoutePub: String): Pair<Int, String> {
+                delivered += body
+                return 200 to """{"ack":{"route":"$phoneRoutePub"}}"""
+            }
+        })
+        val voici = "origin" to "https://voi.ci"
+        // The preflight: only POST, only content-type; no credentials ever.
+        val pre = ep.respond(req("OPTIONS", "/api/phone/deliver", voici, "access-control-request-method" to "POST", "access-control-request-headers" to "content-type").first, ByteArray(0))
+        assertEquals(204, status(pre))
+        val preText = String(pre).lowercase()
+        assertTrue(preText.contains("access-control-allow-origin: https://voi.ci"))
+        assertTrue(preText.contains("access-control-max-age: 600"))
+        assertFalse(preText.contains("allow-credentials"))
+        assertEquals(403, status(ep.respond(req("OPTIONS", "/api/phone/deliver", voici, "access-control-request-method" to "POST", "access-control-request-headers" to "content-type, x-evil").first, ByteArray(0))))
+        // live, from voi.ci and from a native app.
+        val live = ep.respond(req("GET", "/api/phone/live", voici).first, ByteArray(0))
+        assertEquals(200, status(live))
+        assertEquals("""{"live":true,"account":"alice","ownerSignPub":"${"cd".repeat(32)}"}""", body(live))
+        assertEquals(200, status(ep.respond(req("GET", "/api/phone/live").first, ByteArray(0))))
+        // deliver: exactly the envelope content type.
+        val ct = "content-type" to "application/flagship-envelope+json"
+        val ok = ep.respond(req("POST", "/api/phone/deliver", voici, ct).first, "{}".toByteArray())
+        assertEquals(200, status(ok))
+        assertTrue(body(ok).contains(pub))
+        assertEquals(1, delivered.size)
+        assertEquals(415, status(ep.respond(req("POST", "/api/phone/deliver", voici, "content-type" to "text/plain").first, "{}".toByteArray())))
+        assertEquals(405, status(ep.respond(req("GET", "/api/phone/deliver", voici).first, ByteArray(0))))
+        // Any other origin: 403 with no CORS header. Another Host: 421.
+        val evil = ep.respond(req("POST", "/api/phone/deliver", "origin" to "https://notes.$HOST", ct).first, "{}".toByteArray())
+        assertEquals(403, status(evil))
+        assertFalse(String(evil).lowercase().contains("access-control-"))
+        assertEquals(403, status(ep.respond(req("GET", "/.well-known/flagship-phone", voici).first, ByteArray(0))))
+        assertEquals(421, status(ep.respond(req("GET", "/api/phone/live", "host" to "notes.$HOST").first, ByteArray(0))))
+        // The retired session: no code, no cookie, nothing.
+        val session = ep.respond(req("POST", "/api/phone/session", "origin" to "https://$HOST").first, """{"code":"123456"}""".toByteArray())
+        assertEquals(403, status(session))
+        assertFalse(String(session).lowercase().contains("set-cookie"))
+        assertEquals(403, status(ep.respond(req("POST", "/api/phone/ping").first, ByteArray(0))))
+        assertEquals(1, delivered.size)
     }
 
     @Test fun aSignedHelloIsRecordedAndAnythingElseIsNot() {

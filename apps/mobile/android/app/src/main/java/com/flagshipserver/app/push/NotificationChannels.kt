@@ -45,13 +45,28 @@ object NotificationChannels {
         FSStrings.get(R.string.reminders_to_check_in_before_a),
         NotificationManager.IMPORTANCE_HIGH,
     )
+    /** voi.ci Messages (docs/voici-and-messages.md §8.3): content-free "New message". */
+    val MESSAGES get() = Channel(
+        "flagship.messages", FSStrings.get(R.string.voici_channel_messages),
+        FSStrings.get(R.string.voici_channel_messages_desc),
+        NotificationManager.IMPORTANCE_HIGH,
+    )
+    /** Page changes from another device waiting for this admin device to publish (§5.2). */
+    val PAGE_DRAFTS get() = Channel(
+        "flagship.page-drafts", FSStrings.get(R.string.voici_channel_drafts),
+        FSStrings.get(R.string.voici_channel_drafts_desc),
+        NotificationManager.IMPORTANCE_DEFAULT,
+    )
     val GENERAL get() = Channel(
         "flagship.alerts", FSStrings.get(R.string.other_alerts),
         FSStrings.get(R.string.everything_else_from_flagship),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
 
-    val all = listOf(APPROVALS, SETUP, SECURITY, APPS, BUILDS, REMINDERS, GENERAL)
+    val all = listOf(APPROVALS, SETUP, SECURITY, APPS, BUILDS, REMINDERS, MESSAGES, PAGE_DRAFTS, GENERAL)
+
+    const val MESSAGES_CATEGORY = "messages"
+    const val PAGE_DRAFTS_CATEGORY = "page-drafts"
 
     private val SECURITY_CATEGORIES = setOf(
         "server-registered",
@@ -71,6 +86,8 @@ object NotificationChannels {
         category in SECURITY_CATEGORIES -> SECURITY
         category == FlagshipFcmService.APP_ACCESS_CATEGORY -> APPS
         category == "vibecode-needs-you" -> BUILDS
+        category == MESSAGES_CATEGORY -> MESSAGES
+        category == PAGE_DRAFTS_CATEGORY -> PAGE_DRAFTS
         else -> GENERAL
     }
 

@@ -83,6 +83,7 @@ fun SettingsTab() {
         popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
     ) {
         composable("settings-root") { SettingsScreen(nav) }
+        composable("messages-settings") { com.flagshipserver.app.ui.screens.MessagesSettingsScreen(nav) }
         composable("delete-account") { AccountDeletionScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }
         // H5 — Replace-device FINALIZE (24h grace countdown + Complete).
