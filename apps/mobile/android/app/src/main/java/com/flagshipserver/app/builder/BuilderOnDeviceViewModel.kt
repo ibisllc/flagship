@@ -275,7 +275,11 @@ class BuilderOnDeviceViewModel(
  */
 class AssetPreseedSource(
     context: android.content.Context,
-    private val burnOptsJson: String = "{}",
+    // The boot worker the installed disk asks for its unlock follows the backend this app talks to (the gym
+    // in a gym-pointed debug build), as the Studios' burns do; in production it is the engine's own default.
+    private val burnOptsJson: String = kotlinx.serialization.json.buildJsonObject {
+        put("bootHost", kotlinx.serialization.json.JsonPrimitive(com.flagshipserver.app.core.Endpoints.bootBaseUrl))
+    }.toString(),
 ) : PreseedSource {
     private val appContext = context.applicationContext
     private val engine by lazy { PreseedEngine.fromAssets(appContext) }

@@ -21,7 +21,7 @@ import com.flagshipserver.app.viewmodels.ServerShareRuntime
 interface AppVariant {
     /** Launch-intent overrides applied before any client is built (debug:
      *  the gym's backend apex). */
-    fun applyLaunchOverrides(intent: Intent?)
+    fun applyLaunchOverrides(context: android.content.Context, intent: Intent?)
 
     /** True for a debug gym launch (the release build never is). */
     fun isGymLaunch(intent: Intent?): Boolean

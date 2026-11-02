@@ -134,7 +134,7 @@ class MainActivity : FragmentActivity() {
         applyOrientationPolicy()
         // FIRST: a debug build's launch overrides (the gym's backend apex),
         // BEFORE the clients below read Endpoints. A release build has none.
-        com.flagshipserver.app.core.Variant.applyLaunchOverrides(intent)
+        com.flagshipserver.app.core.Variant.applyLaunchOverrides(applicationContext, intent)
         Keystore.attach(applicationContext)
         // First contact (docs/first-contact.md): the one pin store, the enrollment secrets of the
         // servers this device created, and app-name grants waiting for their box, all device-local.

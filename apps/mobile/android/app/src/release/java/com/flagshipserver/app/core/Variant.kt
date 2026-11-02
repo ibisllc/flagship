@@ -13,7 +13,7 @@ import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
 
 object Variant : AppVariant {
-    override fun applyLaunchOverrides(intent: Intent?) = Unit
+    override fun applyLaunchOverrides(context: android.content.Context, intent: Intent?) = Unit
 
     override fun isGymLaunch(intent: Intent?): Boolean = false
 

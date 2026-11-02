@@ -29,6 +29,12 @@ object Variant : AppVariant {
      *  gym environment, or an unreachable host to keep a live run offline). */
     const val EXTRA_APEX_HOST = "flagship.apexHost"
 
+    /** The same, remembered for later plain launches (a dev build on a real phone for the hardware acceptance):
+     *  a launch from the home screen or a notification keeps the same backend. The production host forgets it.
+     *  An explicit [EXTRA_APEX_HOST] (the gym runs) wins for that launch; a mock run ignores it. */
+    const val EXTRA_STICKY_APEX_HOST = "flagship.stickyApexHost"
+    private const val STICKY_PREFS = "flagship-debug-apex"
+
     @Volatile private var mockRun = false
 
     /** True once the app was launched against a real backend (a plain launch or
@@ -47,10 +53,15 @@ object Variant : AppVariant {
 
     override fun isGymLaunch(intent: Intent?): Boolean = intent?.hasExtra(SmokeModeConfig.EXTRA_SMOKE_MODE) == true
 
-    override fun applyLaunchOverrides(intent: Intent?) {
+    override fun applyLaunchOverrides(context: android.content.Context, intent: Intent?) {
         // A gym scenario's in-memory key slot ends with its launch (the process lives on).
         com.flagshipserver.app.keystore.Keystore.restorePersistedActiveProfile()
-        val host = intent?.getStringExtra(EXTRA_APEX_HOST)?.trim()?.lowercase().orEmpty()
+        val prefs = context.getSharedPreferences(STICKY_PREFS, android.content.Context.MODE_PRIVATE)
+        intent?.getStringExtra(EXTRA_STICKY_APEX_HOST)?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { sticky ->
+            prefs.edit().apply { if (sticky == Endpoints.PROD_CONTROL_HOST) remove("host") else putString("host", sticky) }.commit()
+        }
+        val host = intent?.getStringExtra(EXTRA_APEX_HOST)?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+            ?: (if (isGymLaunch(intent)) null else prefs.getString("host", null)).orEmpty()
         // No apex asked: the production one, whatever an earlier scenario in this process pointed at.
         if (host.isEmpty()) { Endpoints.setOverride(null as Endpoints.Override?); return }
         if (host == Endpoints.PROD_CONTROL_HOST) Endpoints.setOverride(null as Endpoints.Override?) else Endpoints.setOverride(host)
