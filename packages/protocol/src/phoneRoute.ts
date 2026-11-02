@@ -470,3 +470,98 @@ function constantTimeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return d === 0;
 }
+
+// ── the phone endpoint's voi.ci operations (docs/voici-and-messages.md §8.2) ─────────────
+
+/**
+ * The only website origins that may reach the phone endpoint cross-origin, and only for `deliver` and `live`. The
+ * session routes (`POST /api/phone/session`, `/api/phone/ping`, the cookie) are retired in 0.3; `phoneEndpointCheck`
+ * above stays for any later browser operation.
+ */
+export const PHONE_WEB_ORIGINS: readonly string[] = ["https://voi.ci"];
+export const PHONE_WEB_ORIGINS_GYM: readonly string[] = ["https://gym.voi.ci"];
+export const PHONE_DELIVER_PATH = "/api/phone/deliver";
+export const PHONE_LIVE_PATH = "/api/phone/live";
+export const PHONE_ENVELOPE_CONTENT_TYPE = "application/flagship-envelope+json";
+/** Phone limits (§8.2): a message body; drafts may be larger (VOICI_DRAFT_MAX_ENVELOPE_BYTES). */
+export const PHONE_DELIVER_MAX_BYTES = 64 * 1024;
+export const PHONE_DELIVER_MAX_CONCURRENT = 8;
+export const PHONE_DELIVER_PER_SENDER_PER_MINUTE = 20;
+export const PHONE_DELIVER_PER_MINUTE = 120;
+
+export interface PhoneWebRequest {
+  method: string;
+  /** Path without the query string. */
+  path: string;
+  host: string;
+  origin: string | null;
+  contentType: string | null;
+  /** Access-Control-Request-Method / -Headers on a preflight, else null. */
+  acrMethod: string | null;
+  acrHeaders: string | null;
+}
+
+export type PhoneWebVerdict =
+  | { kind: "preflight"; status: 204; headers: Record<string, string> }
+  | { kind: "live" | "deliver"; corsHeaders: Record<string, string> }
+  | { kind: "refuse"; status: 403 | 405 | 415 | 421; code: "wrong-host" | "origin" | "preflight" | "method" | "content-type" }
+  /** No Origin and not one of the two operations: the endpoint's other (native / same-origin) rules apply. */
+  | { kind: "other" };
+
+function corsFor(origin: string | null): Record<string, string> {
+  return origin === null ? {} : { "Access-Control-Allow-Origin": origin, Vary: "Origin" };
+}
+
+/**
+ * The phone endpoint's verdict for a request (§8.2): Host exactly the phone's name (421 otherwise); an Origin, when
+ * present, must be in `origins` (403, no CORS headers); `OPTIONS /api/phone/deliver` is a preflight only for
+ * method POST and exactly the `content-type` request header (204 with the allow headers, never Allow-Credentials);
+ * `GET /api/phone/live`; `POST /api/phone/deliver` only with Content-Type exactly application/flagship-envelope+json
+ * (415). Anything else with an Origin is 403. No cookie is read or set.
+ */
+export function phoneWebCheck(r: PhoneWebRequest, o: { hostname: string; origins: readonly string[] }): PhoneWebVerdict {
+  if (r.host.toLowerCase() !== o.hostname.toLowerCase()) return { kind: "refuse", status: 421, code: "wrong-host" };
+  const method = r.method.toUpperCase();
+  const listed = r.origin !== null && o.origins.includes(r.origin);
+  if (r.origin !== null && !listed) return { kind: "refuse", status: 403, code: "origin" };
+  const known = r.path === PHONE_DELIVER_PATH || r.path === PHONE_LIVE_PATH;
+  if (method === "OPTIONS") {
+    if (r.path !== PHONE_DELIVER_PATH || !listed) return { kind: "refuse", status: 403, code: "preflight" };
+    const hdrs = (r.acrHeaders ?? "").split(",").map((h) => h.trim().toLowerCase()).filter((h) => h !== "");
+    if (r.acrMethod?.toUpperCase() !== "POST" || hdrs.length !== 1 || hdrs[0] !== "content-type") return { kind: "refuse", status: 403, code: "preflight" };
+    return {
+      kind: "preflight",
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": r.origin!,
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "content-type",
+        "Access-Control-Max-Age": "600",
+        Vary: "Origin",
+      },
+    };
+  }
+  if (!known) return r.origin !== null ? { kind: "refuse", status: 403, code: "origin" } : { kind: "other" };
+  if (r.path === PHONE_LIVE_PATH) {
+    return method === "GET" ? { kind: "live", corsHeaders: corsFor(r.origin) } : { kind: "refuse", status: 405, code: "method" };
+  }
+  if (method !== "POST") return { kind: "refuse", status: 405, code: "method" };
+  if (r.contentType !== PHONE_ENVELOPE_CONTENT_TYPE) return { kind: "refuse", status: 415, code: "content-type" };
+  return { kind: "deliver", corsHeaders: corsFor(r.origin) };
+}
+
+/** `GET /api/phone/live` answer: {live:true, account, ownerSignPub}. */
+export interface PhoneLiveAnswer {
+  live: true;
+  account: string;
+  ownerSignPub: string;
+}
+
+export function parsePhoneLiveAnswer(v: unknown): PhoneLiveAnswer | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  const ks = Object.keys(r).sort();
+  if (ks.join(",") !== "account,live,ownerSignPub" || r.live !== true) return null;
+  if (typeof r.account !== "string" || !ACCOUNT.test(r.account) || typeof r.ownerSignPub !== "string" || !HEX64.test(r.ownerSignPub)) return null;
+  return { live: true, account: r.account, ownerSignPub: r.ownerSignPub };
+}

@@ -507,6 +507,7 @@ const OPTIONAL_SHELL = [
   "/lib/releasePqPin.js",
   "/lib/assurancePolicy.js",
   "/vendor/noble-post-quantum/pq-verify.js",
+  "/vendor/noble-post-quantum/pq-seal.js",
   "/lib/x25519.js",
   "/lib/companionReceiver.js",
   "/lib/companionGuard.js",

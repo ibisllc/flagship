@@ -208,16 +208,6 @@
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/envelope/v2",
-      "reason": "The webapp is verify-only for the architecture-v2 suites (keyless-web rule): it checks hybrid signatures, key bindings and the assurance policy but seals nothing hybrid, so it has no envelope, seal or KEM key-id code yet; the native apps and the box use them (pq-suites.md §11.1)."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/hybrid-seal/v1",
-      "reason": "The webapp is verify-only for the architecture-v2 suites (keyless-web rule): it checks hybrid signatures, key bindings and the assurance policy but seals nothing hybrid, so it has no envelope, seal or KEM key-id code yet; the native apps and the box use them (pq-suites.md §11.1)."
-    },
-    {
-      "check": "signed-tags",
       "key": "android:flagship/pq-seed-wrap/v1",
       "reason": "iOS wraps a software ML-DSA seed under its Secure Enclave key, local storage only and never on the wire; Android wraps it in the Android Keystore."
     },

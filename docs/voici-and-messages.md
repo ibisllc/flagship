@@ -78,6 +78,11 @@ Owner additions (binding, 2026-11-02):
   decimal ms; keys and hashes lowercase hex; absent = empty string; lists joined by `,`.
 - `H(x)` = SHA-256, lowercase hex. `KDF(umk, info)` = HKDF-SHA256(ikm = UMK, salt = empty, info, 32), the same
   `derive` the existing key helpers use (`packages/protocol/src/keys.ts`).
+- A: **Canonical JSON** (`canonicalJson` in `webEnvelope.ts`), used for every JSON record and piece below: keys sorted
+  by UTF-16 code unit, no whitespace, strings escaped exactly as `JSON.stringify` does for well-formed strings, safe
+  integers only (no floats), lone surrogates refused. Pieces, sealed bodies, draft and state plaintexts must be
+  canonical (parse, re-serialize, compare). Base64 is standard and padded, and must re-encode to the same string.
+  Hybrid-seal `context` fields are the UTF-8 bytes of the hex strings named.
 
 Keys (all derived from the UMK, so every device of an account has them; non-admin devices hold the UMK today):
 
@@ -94,6 +99,9 @@ Keys (all derived from the UMK, so every device of an account has them; non-admi
 
 `inboxEpoch` starts at 1 and moves when the owner rotates the inbox (Settings, or automatically after Wipe &
 restart, which makes a new UMK anyway).
+
+A: Pseudonym P and thread T derive with `KDF(messagesSecret, info)` (same HKDF, salt empty). The visible code is
+base32 (RFC 4648, A-Z2-7) of SHA-256 over the **raw 32-byte** P, first 4 characters (`voiciPseudonymName.ts`).
 
 **Why no per-device fan-out.** Every device of an account holds the UMK, so a key derived from it reaches all of
 them, including devices added later (they see the history). Wrapping per device would publish the device count and
@@ -157,6 +165,14 @@ displayName 1..64 chars, bio 0..280 chars, after NFC; refused: control chars exc
 (U+202A-U+202E, U+2066-U+2069), U+FEFF.
 ```
 
+A: Lengths are Unicode code points after NFC; stored text must already be NFC (`not-nfc`). Also refused everywhere:
+DEL, C1 controls (U+0080-U+009F), lone surrogates, and U+200B-U+200D / U+2060 at the start or end. Link URLs: `https://`
+with a lowercase ASCII host of at least two labels (punycode for IDNs), optional port, no userinfo, the path from the
+RFC 3986 unreserved/sub-delims/`%:@/?#[]` set; at most one `mailto:` link per profile; `site` must be an id of the
+shared table or null. Card fields: title 1..120, site 0..60, description 0..200, no newlines. The message link
+matcher (`findVoiciLinks`) skips a URL whose host is followed by `@` or `:` and drops trailing `.,;:!?)'"]`.
+`voiciJpegHasMetadata` is the APP1/APP2 check the re-encode tests use. Rules: `packages/protocol/src/voiciText.ts`.
+
 **Posts chunk** (`application/json`, at most 256 KiB). Posts are kept in creation order in chunks of at most 20;
 chunk 0 holds the oldest. Adding a post rewrites only the last chunk (a new piece); editing or deleting rewrites the
 chunk that holds it.
@@ -183,7 +199,11 @@ ownerSignPub Ed25519, hex
 
 Envelope: `{kind:"VoiciPage", version:1, username, pageId, seq, issuedAt, acceptsMessages, inboxEpoch, inboxPub,
 ownerSignPub, pieces:[{role, sha256, size}], signerKind, signerPub, signature}`. `seq` starts at 1 and rises by
-exactly 1. Caps: 2,000 pieces, 300 KiB index. **No cap on the number of posts or the total page size** (owner):
+exactly 1. A: `acceptsMessages` is the integer 0 or 1 in the JSON too; pieces are sorted by the
+`"<role>:<sha256>:<size>"` string in code-unit order; a `profile` piece is required; a card role is `card-` + the
+first 16 hex of that piece's own hash; per-role size caps apply in the index (profile 16 KiB, chunk 256 KiB, avatar
+150 KiB, card image 40 KiB). `voiciPieceRefsOk` checks the avatar and card images the content names are exactly the
+listed image pieces. Caps: 2,000 pieces, 300 KiB index. **No cap on the number of posts or the total page size** (owner):
 only per-piece caps and per-day upload brakes (§9.4).
 
 ### 2.8 Storage and caching
@@ -230,6 +250,7 @@ the profile and chunk pieces parse under §2.6; `inboxPub`/`ownerSignPub` well f
 
 Refusal codes: `malformed`, `too-large`, `not-sensitive-key`, `bad-signature`, `stale`, `seq-conflict`,
 `missing-piece`, `bad-piece`, `taken-down`, `banned`, `rate-limited` (+`retryAfterSec`), `not-found`.
+A: plus `wrong-page` (the index names another pageId than the stored one: a pageId never changes).
 
 ## 4. The voi.ci site
 
@@ -313,6 +334,11 @@ No inline script or style (the shell is static; a source-grep test fails on any)
 plaintext {v:1, opId:<32 hex>, op: "post-add"|"post-edit"|"post-delete"|"profile"|"accept-messages",
            at, deviceId, post?|profile?|accepts?}
 sealed    AES-256-GCM(draftsKey, nonce 12, aad = "flagship/voici-draft/v1|<u>|<opId>")
+          A: the envelope's msgId IS the opId (so the receiver can form the aad before decrypting); the body is
+          canonicalJson({suite:"flagship/voici-draft/v1", nonce:<hex>, ct:<b64>}); the plaintext fields are
+          post-add/post-edit `post`, post-delete `postId`, profile `profile`, accept-messages `accepts` (0|1), and
+          optional `images:[{sha256, data:<b64>}]` (JPEG, ≤150 KiB each, ≤4). Because of the images a voici-draft
+          envelope may be 1 MiB (body 960 KiB), not the 64 KiB of §7.1, also on the phone endpoint.
 envelope  flagship/web-envelope/v1 (§7.1) with kind "voici-draft", signed by the device key; the receiver checks
           the device's grant chain against the account's admin root.
 ```
@@ -327,7 +353,11 @@ bytes, at most 150 KiB each).
 
 Two admin devices: the loser of the `seq` compare-and-set gets 409 with the stored index, fetches its pieces, merges
 by post `id` (newer `editedAt`/`at` wins; a delete beats an edit; profile fields last-writer-wins by `at`), re-signs
-`seq + 1` and retries (at most 3 times, then shows "Couldn't publish. Try again."). Merging is a pure function in
+`seq + 1` and retries (at most 3 times, then shows "Couldn't publish. Try again."). A: `mergeVoiciPage(published, ops)`: ops apply in (at, opId) order; a new post appends to the
+last chunk (a new chunk at 20); for an existing id the newer `editedAt ?? createdAt` wins; an edit of a post no longer
+present is dropped; a delete removes the post and leaves its (maybe empty) chunk; profile and accept-messages ops win
+when `at` is later than the published index's issuedAt (then than the last applied op); touched chunks stay in
+creation order. Merging is a pure function in
 `packages/protocol` with vectors, ported to Swift/Kotlin/webapp.
 
 ### 5.4 Accept messages
@@ -374,6 +404,12 @@ abuseTag  flagship/hybrid-seal/v1 to the abuse key of abuseEpoch, purpose "flags
           context [Ppub]; plaintext {v:1, username, accountCreatedAt, issuedAt}
 ```
 
+A: `deviceCheckRef` is the platform of the integrity evidence sent beside the request, `ios`, `android` or `none`
+(the evidence is over H(request bytes), so it cannot be inside them). The answer envelope is `{kind, version,
+pseudonymPub, abuseEpoch, abuseTagHash, abuseTag (base64 of the sealed bytes), issuedAt, expiresAt, signedBy,
+signature}`; `H(abuseTag)` is over the sealed bytes. The tag's hybrid-seal header has senderKeyId = SHA-256(raw P) and
+issuedAt = the attestation's; the plaintext is canonical JSON. `renewOfHash` = H(canonicalJson(previous attestation)).
+
 - Lifetime 30 days. A **renewal** names `renewOfHash = H(previous attestation JSON)`; `.com` checks it signed that
   attestation for the same P (expired at most 7 days) and does not count it as a new recipient.
 - `.com` builds the tag itself (a sender cannot put someone else's account in it) and **stores no P ↔ account
@@ -412,6 +448,12 @@ as a QR on a desktop, and as an "Open Flagship" button on a phone (an app link; 
 the pipe for 10 minutes. The sealed answer is `flagship/voici-sign-in/v1` (X25519 + HKDF + AES-GCM, the remote-ticket
 construction). The webapp can approve too (§9.5 tier).
 
+A: B must reach the app before it can sign D, so after the 6-digit code the browser sends, inside the pipe,
+`{kind:"flagship/voici-sign-in-request/v1", origin, pageId, username, delegatePub, nonce}`; the app's answer is
+`{kind:"flagship/voici-sign-in/v1", pageId, pseudonymPub, attestation, delegation, delegationSig, threadStmt,
+threadSig, threadSeed}` and the delegation must carry the request's `delegatePub` and `nonce`
+(`checkVoiciSignInAnswer`).
+
 ## 7. The message envelope
 
 ### 7.1 `flagship/web-envelope/v1` (generic primitive)
@@ -432,7 +474,8 @@ cred      voici-message: {attestation, delegation, delegationSig, threadStmt, th
 sigAlg    "p256" (signed by B, IEEE P1363 r‖s, hex) for voici-message; "ed25519" otherwise
 ```
 
-Hard caps: whole envelope 64 KiB; body 24 KiB.
+Hard caps: whole envelope 64 KiB; body 24 KiB. A: (voici-draft: 1 MiB / 960 KiB, §5.2.) `msgId` is 16 bytes hex;
+`cred` hashes as `H(canonicalJson(cred))`; the envelope's own JSON is not required to be canonical.
 
 ### 7.2 Sealed body
 
@@ -444,6 +487,9 @@ wraps    hybrid-seal/v1 of CEK, purpose "flagship/voici-cek/v1", context [conv, 
          voici-message: the owner inbox key (index's inboxPub) and the sender's T
          voici-reply:   the sender's T and the owner inbox key (the owner's own copy)
 plaintext {v:1, text, replyTo:<msgId>|null}; text 1..2000 chars after NFC, same refusals as the bio
+A: nonce is hex; ct and each `sealed` are base64; `keyId` = hex of `pqKeyId(SUITE_HYBRID_SEAL_V1, recipient pub)`;
+exactly two wraps; each wrap's hybrid-seal header has senderKeyId = SHA-256(raw `from` key) and issuedAt = sentAt;
+context [UTF-8 conv, UTF-8 msgId]. The body and the plaintext are canonical JSON.
 ```
 
 No attachments in 0.3. Links are just text.
@@ -455,6 +501,8 @@ No attachments in 0.3. Links are just text.
   receipt. Receivers keep the highest `seq` per `(conv, from)` and drop lower or equal.
 - Receipts: "Sent" (`.com` stored it), "Delivered to their phone" (a direct ack, §8.2), "Delivered" (an owner device
   fetched it; `.com` records `fetched_at`). No read receipts in 0.3 (D7).
+- A: the 10-minute window applies where a message is received for sending (`.com`, the phone); a browser or app
+  reading history checks signatures only. The thread-fetch cursor `since` is `[A-Za-z0-9_-]{0,64}` ("" = start).
 
 ### 7.4 Replies
 
@@ -498,6 +546,12 @@ the envelope's own chain. The phone checks, in order (§12.1), stores, forwards 
 ack  flagship/voici-ack/v1|<conv>|<msgId>|<receivedAt>|<phoneRoutePub>
      signed by the owner messages signing key (voici-message) or by the admin device key (voici-draft)
 ```
+
+A: conv is "" in a draft's ack. The wire ack is `{conv, msgId, receivedAt, phoneRoutePub, signature}`. The
+endpoint's verdicts (`phoneWebCheck`): a Host other than the phone's name is 421; a non-listed Origin 403; a preflight
+asking for any header but `content-type` 403; a wrong method on the two paths 405; a deliver whose Content-Type is not
+exactly `application/flagship-envelope+json` (no parameters) 415; a request with no Origin to any other path falls
+through to the endpoint's other rules.
 
 A native sender also checks the TLS leaf's public key equals the ack's `phoneRoutePub` (the pin) and, for drafts,
 that the signing device key holds an admin grant of its own account (from its read-token `device-grants`). A browser
@@ -557,6 +611,11 @@ blocked pseudonym's sends are dropped before any signature check; the browser se
   owner ticks "Include the message text" (default off; the sheet says Flagship can then read it).
 - **A page** (anyone, on voi.ci, "Report this page"): `{kind:"page", username, seq, reason, note ≤ 500}`;
   anonymous, or signed with B when signed in. Reasons: spam, harassment, impersonation, illegal, other.
+- A: both carry `issuedAt`. Signed bytes: `flagship/voici-report/v1|message|<pageId>|<H(canonicalJson(envelope))>|
+  <reason>|<H(attached bytes) or "">|<issuedAt>` (Ed25519, ownerSignPub) and
+  `flagship/voici-report/v1|page|<username>|<seq>|<reason>|<H(note)>|<issuedAt>` (P-256 by B, with the delegation, when
+  signed in). `attached` is base64; its seal has purpose `flagship/voici-report-text/v1`, context [conv, msgId],
+  senderKeyId SHA-256(raw ownerSignPub).
 - Stored in D1 `voici_reports`; the reporter's IP is not stored (rate limits count it in Durable Objects only).
 
 ### 9.3 The abuse key, review and bans
@@ -651,6 +710,10 @@ code and the appeal link. `restore` reverses it (the owner republishes).
 signedInSites:[{pageId, delegatePub, at}], pendingOps:[]}` sealed with the state key (AES-256-GCM, aad
 `flagship/messages-state/v1|<u>|<version>`), at most 256 KiB, `PUT` with `version = stored + 1`; on conflict merge
 (union for sets, newer `at` for names) and retry.
+
+A: a nickname is stored as `{name, at}` so the merge can pick the newer; readUpTo keeps the local entry when both
+sides have one; signed-in sites merge by delegatePub (newer `at`); pending ops by opId; output lists sorted. Wire:
+`{version, nonce:<hex>, ct:<b64>}`.
 
 ### 10.2 Rotation and recovery
 
@@ -813,6 +876,13 @@ parallel against A's vectors.
   matcher, pseudonym names.
 - Phone endpoint policy in `phoneRoute.ts`: `PHONE_WEB_ORIGINS`, `phoneWebCheck` (preflight and request verdicts);
   session functions kept, routes retired.
+- A: delivered. Ports: Swift `apps/mobile/shared/Sources/FlagshipCore/{CanonicalJson,WebEnvelope,WebDelegation,
+  MessagesAttestation,VoiciText,VoiciPage,VoiciMessages,VoiciMessagesRecords,VoiciPhoneWeb}.swift`; Kotlin
+  `apps/mobile/android/.../core/voici/*.kt`; browser `apps/web/public/webapp/lib/voiciProtocol.js` (façade over
+  `voiciCore.js`, `voiciText.js`, `voiciPage.js`, `voiciMessages.js`; X-Wing, P-256, HKDF and AES-GCM from the vendored
+  `vendor/noble-post-quantum/pq-seal.js`), which chunk C can reuse for flagship-web. Apps and the webapp carry no
+  abuse-tag sealing, abuse-key list, report-text sealing or thread fetch (`.com`, the offline tool and voi.ci only).
+  JSON pieces and sealed bodies with a leading byte-order mark are refused.
 
 ### B1. `.com` pages, mailbox, drafts — 5 days
 
