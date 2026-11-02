@@ -372,6 +372,14 @@ describe("suggested lists (drafts)", () => {
     expect(isAccessDraft(reqs[0])).toBe(true);
     expect(isAccessDraft(reqs[1])).toBe(false);
     expect(reqs[1]).toMatchObject({ serviceId: "harry-weather", host: "x.com" });
+    const slugged = readAccessRequests({
+      requests: [
+        { serviceId: "harry--notes", appName: "notes", kind: "draft", hosts: [{ host: "a.com" }] },
+        { serviceId: "harry--notes", appName: "notes", host: "api.example.com", source: "attempt", attempts: 1 },
+        { serviceId: "harry--chess-club", host: "b.com", source: "app" },
+      ],
+    });
+    expect(slugged.map((r) => r.appName)).toEqual(["Notes", "Notes", "Chess Club"]);
     expect(readAccessSummary({ access: { rules: 1, pending: 0, draft: true } })).toEqual({ rules: 1, pending: 0, draft: true });
     expect(hasAccessDraft({ access: { rules: 1, pending: 0, draft: true } })).toBe(true);
     expect(hasAccessDraft({ access: { rules: 1, pending: 0 } })).toBe(false);

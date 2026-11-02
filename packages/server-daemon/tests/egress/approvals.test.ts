@@ -13,7 +13,7 @@ import {
   type AppEgressGrant,
 } from "@flagship/protocol";
 import { AppAccessStore } from "../../src/egress/accessStore.js";
-import { accessAuthorizer, accessSummary, buildAppAccessHttp, egressView, type AppAccessHttpOptions } from "../../src/egress/approvals.js";
+import { accessAuthorizer, accessRequestAppName, accessSummary, buildAppAccessHttp, egressView, type AppAccessHttpOptions } from "../../src/egress/approvals.js";
 import { buildScreensHttp } from "../../src/screens/screensHttp.js";
 import type { HttpRequest } from "../../src/runtime.js";
 
@@ -209,6 +209,18 @@ describe("GET/POST /api/screens/services/:id/access", () => {
       },
       { serviceId: "harry-notes", appName: "notes", host: "sync.example.com", source: "attempt", attempts: 1, firstSeen: NOW, lastSeen: NOW },
     ]);
+  });
+});
+
+describe("accessRequestAppName", () => {
+  it("names the app by its display name, never its bare slug", () => {
+    expect(accessRequestAppName("river-otter--notes", "notes")).toBe("Notes");
+    expect(accessRequestAppName("river-otter--chess-club", " chess-club ")).toBe("Chess Club");
+    expect(accessRequestAppName("river-otter--chess-club", "Club d'échecs")).toBe("Club d'échecs");
+    expect(accessRequestAppName("river-otter--notes", "Notes")).toBe("Notes");
+    expect(accessRequestAppName("river-otter--chess-club", "")).toBe("Chess Club");
+    expect(accessRequestAppName("river-otter--chess-club", null)).toBe("Chess Club");
+    expect(accessRequestAppName("budget", undefined)).toBe("Budget");
   });
 });
 

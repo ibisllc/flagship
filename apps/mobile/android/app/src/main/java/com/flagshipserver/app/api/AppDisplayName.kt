@@ -14,6 +14,16 @@ object AppDisplayName {
 
     /** `<account>--<slug>` → the slug's name; an id without `--` is taken as the slug. */
     fun fromServiceId(serviceId: String): String = fromSlug(serviceId.substringAfterLast("--"))
+
+    /**
+     * The name an access request or draft is shown under. The box's `appName` is often just the slug
+     * (older boxes send nothing better), so an empty one, or one equal to the slug of [serviceId],
+     * reads as the slug in words; anything else is the box's real display name and is kept.
+     */
+    fun forAccessRequest(serviceId: String, appName: String?): String {
+        val name = appName?.trim().orEmpty()
+        return if (name.isEmpty() || name == serviceId.substringAfterLast("--")) fromServiceId(serviceId) else name
+    }
 }
 
 /** The box's own `name` when it sends one, else the slug as words. */

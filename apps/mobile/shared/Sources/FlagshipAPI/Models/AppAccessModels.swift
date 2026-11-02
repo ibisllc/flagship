@@ -444,7 +444,8 @@ public struct AppAccessRequest: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         serviceId = try c.decode(String.self, forKey: .serviceId)
         host = try c.decode(String.self, forKey: .host)
-        appName = try c.decodeIfPresent(String.self, forKey: .appName) ?? serviceId
+        appName = AppDisplayName.forAccessRequest(
+            serviceId: serviceId, appName: try c.decodeIfPresent(String.self, forKey: .appName))
         source = try c.decodeIfPresent(String.self, forKey: .source) ?? "attempt"
         attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
         firstSeen = try c.decodeIfPresent(Int64.self, forKey: .firstSeen) ?? 0
@@ -475,7 +476,8 @@ public struct AppAccessDraftEntry: Codable, Equatable, Sendable {
             throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "not a draft")
         }
         serviceId = try c.decode(String.self, forKey: .serviceId)
-        appName = try c.decodeIfPresent(String.self, forKey: .appName) ?? serviceId
+        appName = AppDisplayName.forAccessRequest(
+            serviceId: serviceId, appName: try c.decodeIfPresent(String.self, forKey: .appName))
         hosts = try c.decodeIfPresent([AppAccessDraftHost].self, forKey: .hosts) ?? []
         createdAt = try c.decodeIfPresent(Int64.self, forKey: .createdAt) ?? 0
     }

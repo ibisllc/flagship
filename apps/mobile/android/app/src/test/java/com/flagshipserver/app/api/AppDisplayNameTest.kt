@@ -19,4 +19,14 @@ class AppDisplayNameTest {
         assertEquals("Club d'échecs", app.copy(name = "Club d'échecs").displayName)
         assertEquals("Chess Club", app.copy(name = "  ").displayName)
     }
+
+    @Test fun accessRequestNamesTheAppNotItsSlug() {
+        assertEquals("Notes", AppDisplayName.forAccessRequest("river-otter--notes", "notes"))
+        assertEquals("Chess Club", AppDisplayName.forAccessRequest("river-otter--chess-club", " chess-club "))
+        assertEquals("Club d'échecs", AppDisplayName.forAccessRequest("river-otter--chess-club", "Club d'échecs"))
+        assertEquals("Notes", AppDisplayName.forAccessRequest("river-otter--notes", "Notes"))
+        assertEquals("Chess Club", AppDisplayName.forAccessRequest("river-otter--chess-club", ""))
+        assertEquals("Chess Club", AppDisplayName.forAccessRequest("river-otter--chess-club", null))
+        assertEquals("Notes", AccessRequest(serviceId = "a--notes", appName = "notes", host = "x.com").displayAppName)
+    }
 }

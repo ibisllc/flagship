@@ -20,6 +20,22 @@ public enum AppDisplayName {
         }
         return fromSlug(serviceId)
     }
+
+    /// The name an access request or draft is shown under. The box's `appName`
+    /// is often just the slug (older boxes send nothing better), so an empty
+    /// one, or one equal to the slug of `serviceId`, reads as the slug in
+    /// words; anything else is the box's real display name and is kept.
+    public static func forAccessRequest(serviceId: String, appName: String?) -> String {
+        let slug: String
+        if let delim = serviceId.range(of: "--", options: .backwards) {
+            slug = String(serviceId[delim.upperBound...])
+        } else {
+            slug = serviceId
+        }
+        let name = appName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if name.isEmpty || name == slug { return fromServiceId(serviceId) }
+        return name
+    }
 }
 
 extension AppSummary {

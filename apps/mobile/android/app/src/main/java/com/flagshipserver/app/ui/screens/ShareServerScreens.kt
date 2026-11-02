@@ -962,7 +962,7 @@ private fun ReadySections(
                     if (ui.accessRequests.isEmpty()) Muted(stringResource(R.string.no_app_is_asking_to_reach))
                     ui.accessRequests.forEachIndexed { idx, r ->
                         if (idx > 0) FSCardDivider()
-                        val app = r.appName ?: r.serviceId
+                        val app = r.displayAppName
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                             Text(fsString(R.string.wants_to_reach, app, r.host), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {

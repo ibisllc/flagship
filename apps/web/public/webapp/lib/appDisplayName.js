@@ -26,3 +26,15 @@ export function appDisplayName(app) {
   if (typeof app?.slug === "string" && app.slug) return appNameFromSlug(app.slug);
   return appNameFromServiceId(app?.serviceId ?? "");
 }
+
+/** The name an access request or draft is shown under. The box's `appName` is often just the slug
+ *  (older boxes send nothing better), so an empty one, or one equal to the slug of `serviceId`, reads
+ *  as the slug in words; anything else is the box's real display name and is kept. */
+export function accessRequestAppName(serviceId, appName) {
+  const id = String(serviceId ?? "");
+  const at = id.lastIndexOf("--");
+  const slug = at >= 0 ? id.slice(at + 2) : id;
+  const name = typeof appName === "string" ? appName.trim() : "";
+  if (!name || name === slug) return appNameFromServiceId(id);
+  return name;
+}

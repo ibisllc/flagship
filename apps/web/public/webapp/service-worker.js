@@ -447,7 +447,10 @@
 //       voi.ci protocol (lib/voiciProtocol.js and its four modules) and lib/voiciOwner.js, voiciWorld.js,
 //       voiciCopy.js; content-free `messages` and `page-drafts` pushes open the tab or the editor.
 //       Reply alerts on pages this account wrote to (lib/voiciReplies.js).
-const SHELL_VERSION = "v190";
+//  v191: internet-access alerts (wants to reach, suggests an access list, the answered toast) name the app by
+//       its display name, else its slug in words, never the bare slug (lib/appDisplayName.js
+//       accessRequestAppName).
+const SHELL_VERSION = "v191";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

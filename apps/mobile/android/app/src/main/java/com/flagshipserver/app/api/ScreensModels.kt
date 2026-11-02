@@ -388,6 +388,8 @@ data class AccessRequest(
     val createdAt: Long = 0,
 ) {
     val isDraft: Boolean get() = kind == KIND_DRAFT
+    /** The app's display name, never its bare slug ([AppDisplayName.forAccessRequest]). */
+    val displayAppName: String get() = AppDisplayName.forAccessRequest(serviceId, appName)
 
     companion object {
         const val KIND_DRAFT = "draft"

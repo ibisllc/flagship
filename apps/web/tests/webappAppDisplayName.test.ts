@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { appDisplayName, appNameFromServiceId, appNameFromSlug } from "../public/webapp/lib/appDisplayName.js";
+import { accessRequestAppName, appDisplayName, appNameFromServiceId, appNameFromSlug } from "../public/webapp/lib/appDisplayName.js";
 
 describe("webapp app display name", () => {
   it("reads a slug as words", () => {
@@ -13,6 +13,16 @@ describe("webapp app display name", () => {
     expect(appNameFromSlug("-")).toBe("-");
     expect(appNameFromServiceId("river-otter--chess-club")).toBe("Chess Club");
     expect(appNameFromServiceId("budget")).toBe("Budget");
+  });
+
+  it("names an access request by its display name, not its slug", () => {
+    expect(accessRequestAppName("river-otter--notes", "notes")).toBe("Notes");
+    expect(accessRequestAppName("river-otter--chess-club", " chess-club ")).toBe("Chess Club");
+    expect(accessRequestAppName("river-otter--chess-club", "Club d'échecs")).toBe("Club d'échecs");
+    expect(accessRequestAppName("river-otter--notes", "Notes")).toBe("Notes");
+    expect(accessRequestAppName("river-otter--chess-club", "")).toBe("Chess Club");
+    expect(accessRequestAppName("river-otter--chess-club", undefined)).toBe("Chess Club");
+    expect(accessRequestAppName("river-otter--notes", "  ")).toBe("Notes");
   });
 
   it("prefers the box's own name", () => {

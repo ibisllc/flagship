@@ -596,7 +596,7 @@ class SharedServerViewModel(
                 fallbackServerDomain = { entry.serverDomain },
                 signer = { reason -> client.memberSigner(entry, reason) },
             ),
-            appName = request.appName ?: request.serviceId,
+            appName = request.displayAppName,
         )
         val ok = vm.answer(request.host, allow)
         if (ok) {

@@ -40,7 +40,7 @@ data class AccessAlert(val box: AccessBox, val request: AccessRequest) {
     val key: String get() =
         if (isDraft) "${box.fqdn}|${request.serviceId}|draft|${request.createdAt}"
         else "${box.fqdn}|${request.serviceId}|${request.host}"
-    val appName: String get() = request.appName?.takeIf { it.isNotBlank() } ?: request.serviceId
+    val appName: String get() = request.displayAppName
     val asks: String get() =
         if (isDraft) AppAccessViewModel.draftAsksText(appName) else AppAccessViewModel.asksText(appName, request.host)
     val detail: String get() =

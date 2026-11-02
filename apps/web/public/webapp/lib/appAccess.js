@@ -11,6 +11,7 @@
 import { requireOwnerProfile } from "./companionGuard.js";
 
 import { tr } from "./i18n.js";
+import { accessRequestAppName } from "./appDisplayName.js";
 export const TAG_APP_ACCESS = "flagship/app-access/v1";
 export const MAX_ACCESS_RULES = 200;
 /** A new app's list: denies everything and shows how to open it up. The box
@@ -284,13 +285,13 @@ export function readAccessRequests(body) {
     .map((r) => ({
       kind: "draft",
       serviceId: r.serviceId,
-      appName: typeof r.appName === "string" ? r.appName : "",
+      appName: accessRequestAppName(r.serviceId, r.appName),
       hosts: readDraftHosts(r.hosts),
       createdAt: Number.isFinite(r.createdAt) ? r.createdAt : null,
     }));
-  const requests = readRequests(all.filter((r) => !isAccessDraft(r))).filter(
-    (r) => typeof r.serviceId === "string" && r.serviceId,
-  );
+  const requests = readRequests(all.filter((r) => !isAccessDraft(r)))
+    .filter((r) => typeof r.serviceId === "string" && r.serviceId)
+    .map((r) => ({ ...r, appName: accessRequestAppName(r.serviceId, r.appName) }));
   return [...drafts, ...requests];
 }
 

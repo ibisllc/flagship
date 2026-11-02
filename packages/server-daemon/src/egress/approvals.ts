@@ -162,6 +162,24 @@ export function egressView(store: AppAccessStore, serviceId: string, declared: r
   return { declared: [...declared], approved: declared.filter((d) => coveringRule(rules, d)?.action === "allow") };
 }
 
+/**
+ * The name an access request or draft is shown under: the manifest's `name` when it is a real
+ * display name, else the slug in words ("chess-club" → "Chess Club"). A `name` that is empty or
+ * equal to the slug of `serviceId` (`<account>--<slug>`) counts as no name. Same rule as the
+ * apps' `accessRequestAppName` / `AppDisplayName.forAccessRequest`.
+ */
+export function accessRequestAppName(serviceId: string, name: string | null | undefined): string {
+  const at = serviceId.lastIndexOf("--");
+  const slug = at >= 0 ? serviceId.slice(at + 2) : serviceId;
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (trimmed && trimmed !== slug) return trimmed;
+  const words = slug
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  return words.length ? words.join(" ") : slug;
+}
+
 /** Drafts first (newest first), then single-host requests (newest first). */
 export function accessRequests(
   store: AppAccessStore,
@@ -172,13 +190,14 @@ export function accessRequests(
     const a = app(serviceId);
     const d = store.draft(serviceId);
     if (!a || !d) continue;
-    drafts.push({ serviceId, appName: a.name, kind: "draft", hosts: d.hosts, createdAt: d.createdAt });
+    drafts.push({ serviceId, appName: accessRequestAppName(serviceId, a.name), kind: "draft", hosts: d.hosts, createdAt: d.createdAt });
   }
   const out: AccessRequestEntry[] = [];
   for (const serviceId of store.pendingServiceIds()) {
     const a = app(serviceId);
     if (!a) continue;
-    for (const r of store.pending(serviceId)) out.push({ serviceId, appName: a.name, ...r });
+    const appName = accessRequestAppName(serviceId, a.name);
+    for (const r of store.pending(serviceId)) out.push({ serviceId, appName, ...r });
   }
   return [...drafts.sort((x, y) => y.createdAt - x.createdAt), ...out.sort((x, y) => y.lastSeen - x.lastSeen)];
 }

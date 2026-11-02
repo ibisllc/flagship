@@ -20,4 +20,20 @@ final class AppDisplayNameTests: XCTestCase {
         app.name = "  "
         XCTAssertEqual(app.displayName, "Chess Club")
     }
+
+    func test_accessRequestNamesTheAppNotItsSlug() throws {
+        XCTAssertEqual(AppDisplayName.forAccessRequest(serviceId: "river-otter--notes", appName: "notes"), "Notes")
+        XCTAssertEqual(AppDisplayName.forAccessRequest(serviceId: "river-otter--chess-club", appName: " chess-club "), "Chess Club")
+        XCTAssertEqual(AppDisplayName.forAccessRequest(serviceId: "river-otter--chess-club", appName: "Club d'échecs"), "Club d'échecs")
+        XCTAssertEqual(AppDisplayName.forAccessRequest(serviceId: "river-otter--notes", appName: "Notes"), "Notes")
+        XCTAssertEqual(AppDisplayName.forAccessRequest(serviceId: "river-otter--chess-club", appName: ""), "Chess Club")
+        XCTAssertEqual(AppDisplayName.forAccessRequest(serviceId: "river-otter--chess-club", appName: nil), "Chess Club")
+
+        let req = try JSONDecoder().decode(AppAccessRequest.self, from: Data(
+            #"{"serviceId":"a--notes","appName":"notes","host":"api.example.com"}"#.utf8))
+        XCTAssertEqual(req.appName, "Notes")
+        let draft = try JSONDecoder().decode(AppAccessDraftEntry.self, from: Data(
+            #"{"kind":"draft","serviceId":"a--chess-club","hosts":[]}"#.utf8))
+        XCTAssertEqual(draft.appName, "Chess Club")
+    }
 }
