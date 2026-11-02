@@ -147,7 +147,7 @@ async function openApp(page: Page): Promise<void> {
     const { enterServiceDetail } = await import("/views/service-detail.js");
     await enterServiceDetail(id);
   }, SERVICE_ID);
-  await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
+  await expect(page.locator("#service-detail-content .card-title").first()).toContainText("Notes", { timeout: 10_000 });
 }
 
 async function thisDevicePub(page: Page): Promise<string> {
@@ -215,7 +215,7 @@ test.describe("gym webapp dialogs", () => {
 
     await box(MEDIA).uncheck();
     await expect(page.locator(".modal-title")).toHaveText("Remove from this server?");
-    await expect(page.locator(".modal-message")).toHaveText("notes and its data on media are deleted. Your other servers keep their copies.");
+    await expect(page.locator(".modal-message")).toHaveText("Notes and its data on media are deleted. Your other servers keep their copies.");
     await shot(page, testInfo, "runs-on-remove-confirm");
     await page.click("[data-modal-cancel]");
     await expect(box(MEDIA)).toBeChecked();

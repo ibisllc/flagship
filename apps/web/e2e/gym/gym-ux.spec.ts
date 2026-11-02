@@ -1327,7 +1327,7 @@ test.describe("gym ux browser grants", () => {
 
     const sheet = page.locator(".modal-overlay", { has: page.locator("[data-browser-grant-sheet]") });
     await expect(sheet.locator("[data-browser-grant-sheet]")).toHaveText("Browser access request", { timeout: 10_000 });
-    await expect(sheet.locator("[data-grant-title]")).toHaveText("notes wants to use this server's browser.");
+    await expect(sheet.locator("[data-grant-title]")).toHaveText("Notes wants to use this server's browser.");
     await expect(sheet.locator("[data-grant-sites]")).toContainText("*.example.com and every address under it");
     await expect(sheet.locator("[data-grant-sites]")).toContainText("shop.example.org");
     await expect(sheet.locator("[data-grant-lan]")).toHaveText("These devices on your network: printer.local");
@@ -1352,7 +1352,7 @@ test.describe("gym ux browser grants", () => {
     await page.locator('.modal-overlay [data-choice="later"]').click();
     await page.click('[data-tab-target="activity"]');
     const card = page.locator('#activity-browser [data-browser-request="22222222-2222-4222-8222-222222222222"]');
-    await expect(card).toContainText("notes wants to use this server's browser.", { timeout: 10_000 });
+    await expect(card).toContainText("Notes wants to use this server's browser.", { timeout: 10_000 });
     await expect(page.locator("#activity-browser-heading")).toHaveText("Browser access requests");
     await shot(page, testInfo, "browser-grant-activity");
     await card.locator('[data-browser-answer="deny"]').click();
@@ -1563,7 +1563,7 @@ test.describe("gym ux upstream sync", () => {
     await reachHome(page, { kind: "admin" });
     const m = await mock(page);
     await openSyncedApp(page, m, syncDetail({ importedFrom: undefined }));
-    await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
+    await expect(page.locator("#service-detail-content .card-title").first()).toContainText("Notes", { timeout: 10_000 });
     await expect(page.locator("#sd-sync-upstream")).toHaveCount(0);
     await shot(page, testInfo, "upstream-sync-no-repo");
   });

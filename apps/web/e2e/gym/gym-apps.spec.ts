@@ -157,7 +157,7 @@ async function openApp(page: Page): Promise<void> {
     await enterServiceDetail(id);
   }, SERVICE_ID);
   await expect(page.locator("#view-service-detail")).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
+  await expect(page.locator("#service-detail-content .card-title").first()).toContainText("Notes", { timeout: 10_000 });
 }
 
 /** Whether `sigHex` is this browser's signature over `canonical`: the
@@ -764,7 +764,7 @@ test.describe("gym webapp apps", () => {
     await shot(page, testInfo, "access-requests");
 
     await openai.locator('[data-access-act="allow"]').click();
-    await expect(page.locator("#toast")).toContainText("notes can now reach api.openai.com", { timeout: 10_000 });
+    await expect(page.locator("#toast")).toContainText("Notes can now reach api.openai.com", { timeout: 10_000 });
     await expect(section.locator('[data-access-host="api.openai.com"]')).toHaveCount(0);
     await expect(section.locator("#sd-access-count")).toHaveText("2 rules");
     const allow = calls.filter((c) => c.method === "POST" && c.url.pathname === svc("/access"))[0]!;
@@ -775,7 +775,7 @@ test.describe("gym webapp apps", () => {
     expect(await signedBy(page, ["flagship/app-access/v1", g1.serverDomain, g1.serviceId, g1.listSha256, g1.issuedAt].join("|"), allow.body.signature)).toBe(true);
 
     await section.locator('[data-access-host="tracker.example.com"] [data-access-act="deny"]').click();
-    await expect(page.locator("#toast")).toContainText("notes won't reach tracker.example.com", { timeout: 10_000 });
+    await expect(page.locator("#toast")).toContainText("Notes won't reach tracker.example.com", { timeout: 10_000 });
     await expect(section.locator("[data-access-host]")).toHaveCount(0);
     await expect(section.locator("#sd-access-count")).toHaveText("3 rules");
     const deny = calls.filter((c) => c.method === "POST" && c.url.pathname === svc("/access"))[1]!;
@@ -1141,7 +1141,7 @@ test.describe("gym webapp apps", () => {
 
     await box(MEDIA).uncheck();
     await expect(page.locator(".modal-title")).toHaveText("Remove from this server?");
-    await expect(page.locator(".modal-message")).toHaveText("notes and its data on media are deleted. Your other servers keep their copies.");
+    await expect(page.locator(".modal-message")).toHaveText("Notes and its data on media are deleted. Your other servers keep their copies.");
     await page.click("[data-modal-ok]");
     await expect(page.locator("#toast")).toContainText("Removed from media.", { timeout: 10_000 });
     await expect(box(MEDIA)).not.toBeChecked();

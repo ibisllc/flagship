@@ -109,7 +109,7 @@ async function openApp(page: Page): Promise<void> {
     const { enterServiceDetail } = await import("/views/service-detail.js");
     await enterServiceDetail(id);
   }, SERVICE_ID);
-  await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
+  await expect(page.locator("#service-detail-content .card-title").first()).toContainText("Notes", { timeout: 10_000 });
 }
 
 /** This browser's account device key (hex), as the box's Account members names it. */
@@ -295,7 +295,7 @@ test.describe("gym webapp members and app pages", () => {
     // The card opens the app; its Refresh re-reads it and Back returns to the list.
     await page.locator(`.fs-app-card[data-service-id="${SERVICE_ID}"] [data-action="open"]`).click();
     await expect(page.locator("#view-service-detail")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
+    await expect(page.locator("#service-detail-content .card-title").first()).toContainText("Notes", { timeout: 10_000 });
     const reads = () => m.sent(`/api/screens/app-detail/${SERVICE_ID}`, "GET").length;
     const r0 = reads();
     await page.click("#service-detail-refresh");
@@ -871,7 +871,7 @@ test.describe("gym webapp members and app pages", () => {
     );
     await openApp(page);
     await page.locator('#sd-egress [data-access-act="allow"]').click({ timeout: 10_000 });
-    await sawToast(page, "notes can now reach api.openai.com");
+    await sawToast(page, "Notes can now reach api.openai.com");
     const post = m.last(onHome(svc("/access")))!;
     expect(await signer(page, keys, CANON.access, post.body.grant, post.body.signature)).toBe("irk");
     await shot(page, testInfo, "demo-access-allowed");
@@ -1029,7 +1029,7 @@ test.describe("gym webapp members and app pages", () => {
     await expect(btn).toHaveText("Remove app");
     await btn.click();
     await expect(page.locator(".modal-title")).toHaveText("Remove this app?");
-    await expect(page.locator(".modal-message")).toContainText(`This uninstalls notes from ${HOME} and deletes its files, database, sign-ins, keys and settings there.`);
+    await expect(page.locator(".modal-message")).toContainText(`This uninstalls Notes from ${HOME} and deletes its files, database, sign-ins, keys and settings there.`);
     await page.click("[data-modal-cancel]");
     expect(m.sent(`/api/services/${SERVICE_ID}`, "DELETE")).toHaveLength(0);
 
@@ -1041,7 +1041,7 @@ test.describe("gym webapp members and app pages", () => {
 
     await btn.click();
     await page.click("[data-modal-ok]");
-    await sawToast(page, "Removed notes.");
+    await sawToast(page, "Removed Notes.");
     await expect(page.locator("#view-services-list")).toBeVisible({ timeout: 10_000 });
     const del = m.last(`/api/services/${SERVICE_ID}`, "DELETE")!;
     expect(del.body.request).toMatchObject({ serverId: HOME, creator: "smoketest", slug: "notes" });
