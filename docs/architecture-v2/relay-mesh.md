@@ -1,7 +1,7 @@
 # Relay mesh: several relays, one data plane (release 0.3)
 
-Status: design, owner-approved direction (AGENTS.md "Make Fly redundant", 2026-11-01). Chunks A (protocol) and B
-(`.com`) built. This is the
+Status: design, owner-approved direction (AGENTS.md "Make Fly redundant", 2026-11-01). Chunks A (protocol), B
+(`.com`) and C (TS relay) built. This is the
 contract the implementation chunks in §15 build to. Current system: `relay-transport.md` (both relays, frames,
 conformance), `serving-wiring.md` (serving gate, revocation log, feed), `phone-route.md` (the bare name),
 `docs/maintainer-trust-enforcement.md` (relay blessing).
@@ -992,6 +992,84 @@ client in `phoneRoute.ts`), `rebalance.ts`, `legacy.ts`. Integration: `tunnelHub
 `servingGate.ts` (§4.4 inputs from the log and HELLO), `hubBlessingProvider.ts` (relay key from seed, relay-blessing
 request), `mailboxRelay.ts`, `server.ts` (`/api/health` mesh-ready, `/api/stats` mesh block), `drainOnSignal.ts`
 (retire hints). Unit tests per module; an in-process three-relay test.
+
+#### 15.3.1 Decisions taken while building C (2026-11-01)
+
+Where the text above left a detail open, chunk C fixed it as follows (code: `apps/web/src/tunnel/mesh/`, wiring in
+`apps/web/src/server.ts` `wireMeshRelay`; the in-process three-relay test is `apps/web/tests/relayMeshThree.test.ts`).
+The Rust twin (D) should match these; the shared conformance (G) is the judge.
+
+- C: **Files.** One extra module, `mesh/node.ts` (`MeshNode`), wires the §15.3 modules together and gives the hub, the
+  SNI router, the serving gate, the phone routes and the HTTP server their hooks. `wireMeshRelay` (server.ts) is the
+  one wiring used by `start()` and by the test.
+- C: **Freshness clock (§4.6).** "Not fresh for N" is measured from the `issuedAt` of the newest head the state has
+  **applied** (capped at the relay's now): refuse-new when that is ≥ `HEAD_REFUSE_NEW_MS` (60 s) old, which is also
+  exactly when the relay stops being fresh, and close-all at `HEAD_CLOSE_ALL_MS`. A relay that has applied no head yet
+  is not fresh (no start-up grace, unlike the non-mesh gate: it refuses new tunnels and is 503 until its first head);
+  its close-all clock runs from its start. `FLAGSHIP_SERVING_REFUSE_NEW_MS` / `_CLOSE_ALL_MS` shorten both.
+- C: **Sealed feed reader (§4.5.1).** `FeedCipher.open(kind, body, page)` opens the head and pages only;
+  `directory.json` is read in clear. Production uses `MeshFeedKeys.cipher()` (B's `openRelayFeedObject`), with epoch
+  keys from the blessing answer's `meshKeys` and, on an epoch it lacks, one fetch of `keys/<relayId>.json` per epoch.
+  `FLAGSHIP_RELAY_FEED_PLAIN=1` reads a clear feed (local harnesses only).
+- C: **Outage exemption at the entry (§4.6 as amended).** An entry that is not fresh cannot tell a policy's grace (the
+  log carries only its hash), so it forwards a box-scoped name only when the name's registration is unrevoked in its
+  last applied state and a peer holds the winning attachment; the holder then serves it only to a local box its gate
+  finds exempt (decision `apps:true, until:null`), else answers `refuse stale`. Account-level names, bare names and
+  every name on a relay with no applied state are dropped while stale. A `begin` on a stale relay is refused
+  `unavailable` and the phone tunnel closed 1013 `try-again`; phone tunnels close 1013 `serving-feed-lost` at the
+  close-all deadline (the strict rule).
+- C: **Name classes (§7.1).** Under the apex: one label = bare; three or more = box-scoped with key = the last two
+  labels; two labels = box-scoped if the log has a `box-register` for the name or the store an attachment, else
+  account-level (`<app>.<user>`). Names outside the apex keep today's local path.
+- C: **No attachment yet.** A box-scoped name with no valid attachment anywhere but a local tunnel routes locally (a
+  mesh box between its HELLO_ACK and its first attachment, an old box during the legacy wait); an account-level name
+  whose account has no home but online local tunnels also routes locally. Without a local tunnel: query (if the log
+  says the name exists), else drop.
+- C: **Bridged streams at the holder.** The holder waits for the first DATA (the ClientHello) and routes from local
+  tunnels only; it never drops a bridged stream itself: a miss is `refuse not-holder` (or `apps-off` when the name is
+  held but the serving decision stops it), and the entry does all hold timing. At the entry, any end of a bridged
+  stream before the holder's first byte is treated as a refusal (the visitor is closed at arrival + `HOLD_TIMEOUT`);
+  only `not-holder` triggers the one re-query (excluding that relay). The visitor's bytes are kept until the holder's
+  first byte so the retry can replay them.
+- C: **Stream close.** A bridge CLOSE ends the whole stream (v1 semantics): the side that sends it stops reading too.
+  `STREAM_CREDIT` 0x06 is encoded on bridges by the relay itself (the TS tunnel-protocol has no encoder for it): stream
+  id, type 0x06, length 4, `u32 BE` credit > 0. Credit is returned when the reader has drained a quarter window (or
+  everything it was sent). An overrun destroys that stream.
+- C: **Handshake messages are queued from the socket's creation**, so an acceptor's `mesh-hello` arriving in the same
+  tick as the dialer's `open`, or a peer's first `sync` right after its last auth message, is never lost.
+- C: **pb-mail streams (§7.6).** `OPEN` JSON adds `length` (envelope bytes, ≤ 1 MiB); the entry sends the envelope
+  as DATA; the holder answers `u32 BE status` then the body, then CLOSE. A refused or bodiless answer is "not
+  delivered" (404 / 502 to the poster). A mailbox item is kept only from the peer it names (`relayId` = the
+  announcing peer): `{kind:"mailbox", announce:{pikPubHex, epoch}, signature: sigHex, relayId}`.
+- C: **Phone ledger wire (§8.2).** Every P→L request carries a `qid`. `phone-begun.generation` is the next generation
+  to offer. `phone-renew` and `phone-release` are answered with `phone-claimed` too (`{qid, ok, code?, generation,
+  grant?, grantSignature?}`). L accepts a claim only when its `holder.relayId` is the asking relay, and a renew or
+  release only from the holder's relay. When the ranking has no reachable relay, a lone `full` relay with no directory
+  is its own ledger.
+- C: **Query answers.** A phone item in an answer is checked as announced by its grant's `holderRelayId` (the L
+  signature binds the holder); box and legacy items are self-authenticating. An answer counts only when the item
+  becomes the store's winner.
+- C: **Account moves at peers.** The move names `accountHash`; a peer finds the account among the accounts it holds
+  attachments (or local boxes) for and checks the move against its own home computation; a peer that holds nothing of
+  the account takes the move's own `fromRelayId` as the expected home (it routes nothing for the account either way).
+- C: **HELLO lookups from the log (§4.1).** `authLookup` returns the name's newest registered key (null when revoked);
+  a different key presented for the name passes the STK check, and `evictionLookup` then marks every key but the
+  newest as retired, so the box gets the typed "replaced". `revocationLookup` reads the log's `cert-revoke` entries;
+  `irkLookup` / `authorityLookup` read `account-authority`.
+- C: **Superseded holder.** When another relay's attachment for the same box key wins, the old holder sends one
+  withdrawal for its own items and stops its legacy renewals; it then forwards like any entry. Legacy announcements
+  also stop once the box attaches itself (never withdrawn separately: a withdrawal covers the box-signed item too).
+- C: **Drain (§10.4).** While another `full` relay is reachable, mesh boxes get `retire` hints instead of
+  DRAIN_NOTICE; `drain-v1` boxes without `mesh-v1` get DRAIN_NOTICE as before.
+- C: **Relay-side hint limits.** `co-locate` is sent at most once per box per `MOVE_COLOCATE_MIN_MS`
+  (`FLAGSHIP_MESH_MIN_MOVE_MS` shortens it with the 6 h account-move spacing); hints go only to `mesh-v1` boxes and
+  only to a target whose valid blessing the relay holds (from `directory.json` or a handshake).
+- C: **CA keys.** Until the relay reads the maintainer chain itself, it takes the authorized CA keys from
+  `FLAGSHIP_MESH_CA_KEYS` (comma-separated hex); none means no blessing or directory verifies and the relay never turns
+  ready (fail closed). `FLAGSHIP_MESH_CAPACITY` sets `load.capacity` (default 10,000).
+- C: **Blessing renewal** every 24 h (30 d blessings), or every 60 s while the relay holds no valid one.
+- C: **Not built in TS for 0.3:** a relay started with `FLAGSHIP_RELAY_KIND=entry` still runs the tunnel hub (0.3 has
+  only `full` relays); it signs no legacy attachments and is never a phone ledger.
 
 ### 15.4 D. Rust relay mesh (`rust/crates/flagship-relay/src/mesh/`)
 

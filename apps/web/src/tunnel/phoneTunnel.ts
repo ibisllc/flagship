@@ -179,7 +179,7 @@ function attachPhone(ws: WsSocket, routes: PhoneRoutes, opts: PhoneTunnelOptions
   async function onControl(msg: Record<string, unknown>): Promise<void> {
     switch (msg.type) {
       case "begin":
-        return routes.begin(session, msg.account);
+        return routes.begin(session, msg.account, msg.grants);
       case "claim":
         return routes.claim(session, msg.claim, msg.signature);
       case "release":

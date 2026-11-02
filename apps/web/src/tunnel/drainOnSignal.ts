@@ -6,6 +6,13 @@
  */
 export const DEFAULT_DRAIN_GRACE_MS = 20_000;
 
+/*
+ * Relay mesh (relay-mesh.md §10.4): a mesh relay's `drain` first marks it draining (`/api/health` 503, `load.draining`
+ * to its peers) and sends each `mesh-v1` box a `retire` hint to the best other `full` relay, spread over the first
+ * half of the grace (`MeshNode.beginDrain`); only the remaining `drain-v1` boxes get DRAIN_NOTICE. The signal handling
+ * below is the same in both modes.
+ */
+
 export interface Drainable {
   drain(graceMs: number): Promise<void>;
   close(): Promise<void>;

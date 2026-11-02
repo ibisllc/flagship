@@ -1,4 +1,5 @@
 import { createServer, type Server, type Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import {
   closeFrame,
   dataFrame,
@@ -11,6 +12,27 @@ import { fanOutNudge } from "./gossipFanout.js";
 import { accountFromCanonical, type UsageMeter } from "./usageMeter.js";
 import { PauseReasons, SourcePauser } from "./throttle.js";
 import { routerStats } from "./routerStats.js";
+import type { MeshDecision } from "./mesh/node.js";
+
+/**
+ * The relay mesh's routing hooks (docs/architecture-v2/relay-mesh.md §7.2), implemented by `MeshNode`. When set, every
+ * parsed ClientHello is decided by the mesh first: route locally (today's path), forward over a bridge to the holder,
+ * query the peers, or drop at the hold time. A stream that came over a bridge is only ever routed locally (one hop).
+ */
+export interface MeshRouting {
+  readonly selfRelayId: string;
+  decide(sni: string, bridged: boolean): MeshDecision;
+  ask(name: string, exclude: string[]): Promise<string | null>;
+  openTo(relayId: string, sni: string): (Duplex & { refused: string | null }) | null;
+  notHolder(name: string, relayId: string): void;
+  traffic(podCanonical: string, sni: string, entry: string): ((bytes: number) => void) | null;
+}
+
+/** Where a stream came from: a visitor's own TCP connection (with its arrival time) or a peer relay's bridge. */
+interface RouteCtx {
+  arrivedAt?: number;
+  bridged?: { entry: string; refuse: (code: string) => void };
+}
 
 /**
  * How long the hub holds a parked client stream — after nudging the user's
@@ -69,13 +91,15 @@ export interface SniRouterOptions {
   maxPendingHellos?: number;
   /** Override the slow-visitor cut (tests). Defaults to {@link SLOW_VISITOR_GRACE_MS}. */
   slowVisitorGraceMs?: number;
+  /** The relay mesh (FLAGSHIP_MESH=on). Absent: today's single-relay routing, unchanged. */
+  mesh?: MeshRouting;
 }
 
 /**
  * One parked client stream awaiting a route claim.
  */
 interface Waiter {
-  client: Socket;
+  client: Duplex;
   initialBytes: Uint8Array;
   /** Post-ClientHello bytes that arrived while parked (replayed after pipe). */
   buffered: Uint8Array[];
@@ -101,6 +125,11 @@ type ParkLot = Map<string, ParkGroup>;
 export interface RunningSniRouter {
   port: number;
   close(): Promise<void>;
+  /**
+   * Mesh holder duties (§7.4): route a stream a peer relay opened over a bridge, from local tunnels only. `refuse`
+   * answers the entry relay (`not-holder`, `apps-off`, …) instead of the delayed drop the entry does itself.
+   */
+  routeBridged(stream: Duplex, sni: string, initialBytes: Uint8Array, ctx: { entry: string; refuse: (code: string) => void }): void;
 }
 
 const DEFAULT_MAX_PEEK_BYTES = DEFAULT_SNI_LIMITS.maxRawBytes;
@@ -131,6 +160,7 @@ export function startSniRouter(
     pendingHellos: { count: 0 },
     maxPendingHellos: opts.maxPendingHellos ?? MAX_PENDING_HELLOS,
     slowVisitorGraceMs: opts.slowVisitorGraceMs ?? SLOW_VISITOR_GRACE_MS,
+    ...(opts.mesh ? { mesh: opts.mesh } : {}),
   };
 
   const server: Server = createServer((client) =>
@@ -149,6 +179,10 @@ export function startSniRouter(
         port: address.port,
         close() {
           return new Promise<void>((res) => server.close(() => res()));
+        },
+        routeBridged(stream, sni, initialBytes, ctx) {
+          routeToTunnel(stream, sni, initialBytes, hold, { bridged: ctx });
+          if (!stream.destroyed) stream.resume();
         },
       });
     });
@@ -172,6 +206,7 @@ interface HoldConfig {
   pendingHellos: { count: number };
   maxPendingHellos: number;
   slowVisitorGraceMs: number;
+  mesh?: MeshRouting;
 }
 
 function handleConnection(
@@ -187,6 +222,7 @@ function handleConnection(
     return;
   }
   hold.pendingHellos.count += 1;
+  const arrivedAt = Date.now();
   const limits = { ...DEFAULT_SNI_LIMITS, maxRawBytes: maxPeek };
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -232,7 +268,8 @@ function handleConnection(
       client.destroy(new Error("no SNI — refusing to route"));
       return;
     }
-    routeToTunnel(client, r.sni, peeked, hold);
+    // The mesh measures every miss from the visitor's arrival (§7.2); without it the hold starts at the miss, as before.
+    routeToTunnel(client, r.sni, peeked, hold, hold.mesh ? { arrivedAt } : {});
   };
 
   client.on("data", onData);
@@ -245,21 +282,50 @@ function handleConnection(
 }
 
 function routeToTunnel(
-  client: Socket,
+  client: Duplex,
   sni: string,
   initialBytes: Uint8Array,
   hold: HoldConfig,
+  ctx: RouteCtx = {},
 ): void {
+  const mesh = hold.mesh;
+  if (mesh) {
+    const d = mesh.decide(sni, ctx.bridged !== undefined);
+    if (d.kind === "refuse") {
+      ctx.bridged?.refuse(d.code);
+      return;
+    }
+    if (d.kind === "drop") {
+      routerStats.noBoxRegistered += 1;
+      routerStats.missed("no-box-registered", sni.toLowerCase());
+      delayedDrop(client, sni, hold, ctx.arrivedAt);
+      return;
+    }
+    if (d.kind === "forward") {
+      forwardOverMesh(mesh, client, sni, d.name, d.relayId, initialBytes, hold, ctx, false);
+      return;
+    }
+    if (d.kind === "query") {
+      queryThenForward(mesh, client, sni, d.name, d.exclude, initialBytes, hold, ctx, false);
+      return;
+    }
+  }
   const tunnel = hold.registry.findBySni(sni);
   if (tunnel) {
     routerStats.routed += 1;
-    pipeToTunnel(client, tunnel, sni, initialBytes, hold.meter, hold.slowVisitorGraceMs);
+    const count = mesh?.traffic(tunnel.podCanonical, sni, ctx.bridged?.entry ?? mesh.selfRelayId) ?? undefined;
+    pipeToTunnel(client, tunnel, sni, initialBytes, hold.meter, hold.slowVisitorGraceMs, count);
     return;
   }
   // MISS. Either park-on-miss (a leader-routed meta-URL whose user has online
   // boxes — nudge them and wait for one to claim it) or today's drop.
   if (hold.registry.isNudgeableSni(sni)) {
     parkAndNudge(client, sni, initialBytes, hold);
+    return;
+  }
+  // A bridged stream is never dropped here: the entry relay keeps the hold timing; the holder only says why.
+  if (ctx.bridged) {
+    ctx.bridged.refuse(hold.registry.servingRefused(sni) ? "apps-off" : "not-holder");
     return;
   }
   // Under the wildcard DNS (docs/wildcard-dns.md) every name below an account
@@ -269,11 +335,109 @@ function routeToTunnel(
   if (hold.registry.userOfSni(sni)) {
     routerStats.noBoxRegistered += 1;
     routerStats.missed("no-box-registered", sni.toLowerCase());
-    delayedDrop(client, sni, hold);
+    delayedDrop(client, sni, hold, ctx.arrivedAt);
     return;
   }
   routerStats.noUser += 1;
   client.destroy(new Error(`no tunnel for ${sni}`));
+}
+
+/** Most bytes a visitor may send while the entry relay waits for the holder's first byte (a TLS client sends none). */
+const MAX_EARLY_BYTES = 64 * 1024;
+
+/**
+ * Entry duties (§7.2 step 5): open a stream to the holder over its bridge, send the peeked ClientHello as the first
+ * DATA, and splice. Until the holder answers, the visitor's bytes are kept so a `not-holder` refusal can be retried
+ * once elsewhere (the attachment is dropped and the peers asked again, never through the refusing relay). Any other
+ * end before an answer closes the visitor at the hold time, like every miss.
+ */
+function forwardOverMesh(
+  mesh: MeshRouting,
+  client: Duplex,
+  sni: string,
+  name: string,
+  relayId: string,
+  initialBytes: Uint8Array,
+  hold: HoldConfig,
+  ctx: RouteCtx,
+  retried: boolean,
+): void {
+  if (client.destroyed) return;
+  const s = mesh.openTo(relayId, sni);
+  if (!s) {
+    if (!retried) queryThenForward(mesh, client, sni, name, [relayId], initialBytes, hold, ctx, true);
+    else delayedDrop(client, sni, hold, ctx.arrivedAt);
+    return;
+  }
+  let answered = false;
+  let early: Uint8Array[] = [];
+  let earlyBytes = 0;
+  const onEarly = (c: Buffer) => {
+    early.push(bufferToBytes(c));
+    earlyBytes += c.byteLength;
+    if (earlyBytes >= MAX_EARLY_BYTES) client.pause();
+  };
+  const onClientGone = () => {
+    if (!s.destroyed) s.destroy();
+  };
+  client.on("data", onEarly);
+  client.once("close", onClientGone);
+  client.once("error", onClientGone);
+  client.resume();
+  s.on("error", () => undefined);
+  s.once("data", (first: Buffer) => {
+    answered = true;
+    client.off("data", onEarly);
+    for (const b of early) s.write(Buffer.from(b));
+    early = [];
+    client.write(first);
+    s.pipe(client);
+    client.pipe(s);
+    client.resume();
+  });
+  s.once("close", () => {
+    if (answered) {
+      if (!client.destroyed) client.end();
+      return;
+    }
+    client.off("data", onEarly);
+    client.off("close", onClientGone);
+    client.off("error", onClientGone);
+    if (client.destroyed) return;
+    if (s.refused === "not-holder" && !retried) {
+      mesh.notHolder(name, relayId);
+      const replay = early.length ? concatAll([initialBytes, ...early]) : initialBytes;
+      queryThenForward(mesh, client, sni, name, [relayId], replay, hold, ctx, true);
+      return;
+    }
+    routerStats.noBoxRegistered += 1;
+    routerStats.missed("no-box-registered", sni.toLowerCase());
+    delayedDrop(client, sni, hold, ctx.arrivedAt);
+  });
+  s.write(Buffer.from(initialBytes));
+}
+
+/** §7.2 step 4: ask the peers (single-flight, 1.5 s), then forward to the answer or drop at the hold time. */
+function queryThenForward(
+  mesh: MeshRouting,
+  client: Duplex,
+  sni: string,
+  name: string,
+  exclude: string[],
+  initialBytes: Uint8Array,
+  hold: HoldConfig,
+  ctx: RouteCtx,
+  retried: boolean,
+): void {
+  client.pause();
+  void mesh.ask(name, exclude).then(
+    (relayId) => {
+      if (client.destroyed) return;
+      if (relayId && !exclude.includes(relayId)) forwardOverMesh(mesh, client, sni, name, relayId, initialBytes, hold, ctx, retried);
+      else delayedDrop(client, sni, hold, ctx.arrivedAt);
+    },
+    () => delayedDrop(client, sni, hold, ctx.arrivedAt),
+  );
 }
 
 /**
@@ -281,7 +445,7 @@ function routeToTunnel(
  * nothing in between: no TLS reply, no byte to any tunnel. Uses the same wait
  * as {@link parkAndNudge}'s drop so the two are indistinguishable by timing.
  */
-function delayedDrop(client: Socket, sni: string, hold: HoldConfig): void {
+function delayedDrop(client: Duplex, sni: string, hold: HoldConfig, arrivedAt?: number): void {
   if (hold.delayed.count >= hold.maxDelayed) {
     client.destroy(new Error(`no tunnel for ${sni}`));
     return;
@@ -295,9 +459,13 @@ function delayedDrop(client: Socket, sni: string, hold: HoldConfig): void {
     clearTimeout(timer);
     client.destroy();
   };
-  const timer = setTimeout(finish, hold.holdTimeoutMs);
+  // Mesh entries measure the hold from the visitor's arrival, so a local miss, a mesh miss and a holder's refusal all
+  // close at the same time (§7.2). Without the mesh the hold starts here, as before.
+  const wait = arrivedAt === undefined ? hold.holdTimeoutMs : Math.max(0, arrivedAt + hold.holdTimeoutMs - Date.now());
+  const timer = setTimeout(finish, wait);
   // Swallow whatever the client sends meanwhile; a client that hangs up first frees the slot.
   client.on("data", () => undefined);
+  client.resume();
   client.once("close", finish);
   client.once("error", finish);
 }
@@ -308,7 +476,7 @@ function delayedDrop(client: Socket, sni: string, hold: HoldConfig): void {
  * for the SAME domain share ONE nudge + ONE poll and release together.
  */
 function parkAndNudge(
-  client: Socket,
+  client: Duplex,
   sni: string,
   initialBytes: Uint8Array,
   hold: HoldConfig,
@@ -431,12 +599,14 @@ function dropGroup(parkLot: ParkLot, domain: string, group: ParkGroup): void {
  * up front (the ClientHello, plus any bytes buffered while parked).
  */
 function pipeToTunnel(
-  client: Socket,
+  client: Duplex,
   tunnel: RegisteredTunnel,
   sni: string,
   initialBytes: Uint8Array,
   meter: UsageMeter | undefined,
   slowVisitorGraceMs: number = SLOW_VISITOR_GRACE_MS,
+  /** Mesh rebalancing: visitor bytes by entry relay (§10.1). */
+  count?: (bytes: number) => void,
 ): void {
   // Per-account metering: attribute this stream to the box's owner. Custom
   // domains resolve to a tunnel whose podCanonical carries the username too.
@@ -512,6 +682,7 @@ function pipeToTunnel(
       // box → visitor (the dominant egress leg).
       if (closed) return;
       meter?.add(account, data.byteLength);
+      count?.(data.byteLength);
       client.write(Buffer.from(data));
       if (client.writableLength >= VISITOR_QUEUE_BYTES) watchSlowVisitor();
       const wait = meter?.throttleDelayMs(account, data.byteLength) ?? 0;
@@ -545,6 +716,7 @@ function pipeToTunnel(
     // visitor → box (request leg; small, but still relay egress).
     if (closed) return;
     meter?.add(account, chunk.byteLength);
+    count?.(chunk.byteLength);
     sendToBox(bufferToBytes(chunk));
     visitorSide.hold(meter?.throttleDelayMs(account, chunk.byteLength) ?? 0);
   });

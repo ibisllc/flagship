@@ -5,8 +5,14 @@
  * goes quiet. Every rule lives in `@flagship/protocol`; this file only gathers the inputs and acts on the answer.
  */
 import {
+  accountHash,
   boxRevoked,
   emptyRevocationState,
+  relayLogAdminKey,
+  relayLogBox,
+  relayLogPolicyHead,
+  relayLogRevocations,
+  type RelayLogState,
   servingDecision,
   type RenewalKeyDelegation,
   type RevocationState,
@@ -30,13 +36,51 @@ export interface ComServingRecord {
   policy: SignedServingRecord<ServingPolicy> | null;
   /** Leases joined with the delegation that signed them, when one did. */
   leases: LeaseInput[];
+  /**
+   * Mesh mode (relay-mesh.md §4.4): the relay log's newest `policy-head` for (box, regGen). Only a HELLO policy that
+   * hashes to it counts (`policy-stale` otherwise); null: the log has none, so the HELLO policy counts as given.
+   */
+  policyHead?: { policySha256: string } | null;
 }
 
 /** `.com` answered that the account has no server under this key (deleted, or its name now belongs to another key). */
 export const UNKNOWN_BOX = "unknown-box";
 
-/** Null: `.com` could not be asked (an outage, not an answer). */
-export type ServingRecordFetch = (username: string, boxPub: string) => Promise<ComServingRecord | typeof UNKNOWN_BOX | null>;
+/** Null: `.com` could not be asked (an outage, not an answer). `hello` is what the box said (mesh mode reads its leases). */
+export type ServingRecordFetch = (username: string, boxPub: string, hello?: ServingHello) => Promise<ComServingRecord | typeof UNKNOWN_BOX | null>;
+
+/**
+ * Mesh mode (relay-mesh.md §4.4): the box's record from the relay log and its own HELLO, never from `.com`.
+ * `adminKey` is the log's admin root for the account (else IRK); `regGen` and revocation from the log's `box-register`
+ * / `box-revoke`; the policy is the HELLO's (checked against the log's `policy-head`); the leases are the HELLO's
+ * `servingLeases`. A name whose newest registration is another key, or none, is an unknown box. Never null: the log
+ * is local, so there is no outage to report (lost contact is the feed's freshness).
+ */
+export function meshServingFetcher(log: () => RelayLogState, apex: string): ServingRecordFetch {
+  return async (username, boxPub, hello) => {
+    const state = log();
+    const reg = hello ? relayLogBox(state, hello.podCanonical.toLowerCase()) : null;
+    if (!hello || !reg || reg.boxPub !== boxPub || !hello.podCanonical.toLowerCase().endsWith(`.${username}.${apex}`)) return UNKNOWN_BOX;
+    const head = relayLogPolicyHead(state, boxPub, reg.regGen);
+    return {
+      adminKey: relayLogAdminKey(state, username),
+      regGen: reg.regGen,
+      revoked: boxRevoked(relayLogRevocations(state), boxPub, reg.regGen),
+      policy: null,
+      leases: hello.leases ?? [],
+      policyHead: head ? { policySha256: head.policySha256 } : null,
+    };
+  };
+}
+
+/** The account hash of a username, or null when it is not an account name. */
+function accountHashOrNull(u: string): string | null {
+  try {
+    return accountHash(u);
+  } catch {
+    return null;
+  }
+}
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -121,6 +165,8 @@ export interface ServingHello {
   adminKey: string | null;
   /** `servingPolicy`: the box's stored signed policy. */
   policy: SignedServingRecord<ServingPolicy> | null;
+  /** Mesh mode: HELLO `servingLeases` (§9.5); a mesh relay never fetches leases from `.com`. */
+  leases?: LeaseInput[];
 }
 
 /** How the gate acts on one tunnel. */
@@ -156,6 +202,18 @@ export interface ServingGateOptions {
   retryMs?: number;
   /** One line per change worth reading in the relay's log (refusals, apps stopped or back, contact with `.com`). */
   log?: (m: string) => void;
+  /**
+   * Mesh mode: how long since the relay was last fresh (relay-mesh.md §4.6: the newest applied head's age), replacing
+   * the time since the last frame from `.com`'s feed.
+   */
+  contactAgeMs?: () => number;
+  /**
+   * Mesh mode, owner decision (relay-mesh.md §4.6 as amended): when contact is lost past the close-all deadline, a box
+   * whose verified policy is indefinite (apps on, no `until`) keeps serving; time-limited boxes are closed as before.
+   */
+  keepIndefiniteOnLoss?: boolean;
+  /** Mesh mode: false while the relay has applied no log at all (then no box is exempt, §4.6). */
+  hasAppliedState?: () => boolean;
 }
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -258,7 +316,7 @@ export class ServingGate {
   }
 
   contact(): "ok" | "refuse-new" | "lost" {
-    const quiet = this.now() - this.lastContact;
+    const quiet = this.opts.contactAgeMs ? this.opts.contactAgeMs() : this.now() - this.lastContact;
     if (quiet >= this.closeAllAfterMs) return "lost";
     if (quiet >= this.refuseNewAfterMs) return "refuse-new";
     return "ok";
@@ -268,17 +326,50 @@ export class ServingGate {
     return this.contact() === "ok";
   }
 
+  /**
+   * Mesh, §4.6 as amended: a box is exempt from the outage rules while its decision from the last applied log state
+   * (the HELLO's policy checked against the log's `policy-head`, and its leases) serves apps with no `until`: its
+   * owner chose no time limit, so there is no dead-man to enforce. Never without applied state.
+   */
+  private isExempt(b: ServingBox): boolean {
+    if (!this.opts.keepIndefiniteOnLoss || !(this.opts.hasAppliedState?.() ?? true)) return false;
+    return b.decision.apps === true && b.decision.until === null;
+  }
+
+  /** Is a new HELLO exempt (§4.6 "Past 60 s: new HELLOs are refused except from a box that is exempt by its HELLO")? */
+  async exemptHello(hello: ServingHello): Promise<boolean> {
+    if (!this.opts.keepIndefiniteOnLoss || !(this.opts.hasAppliedState?.() ?? true)) return false;
+    const rec = await this.opts.fetchRecord(hello.username, hello.boxPub, hello);
+    if (!rec) return false;
+    const probe = new ServingBox(this, hello, { closeTunnel: () => undefined, closeAppStreams: () => undefined, onAppsChanged: () => undefined });
+    if (rec === UNKNOWN_BOX) probe.unknown = true;
+    else probe.com = rec;
+    const d = this.decide(probe);
+    return d.apps === true && d.until === null;
+  }
+
+  /** Is an attached box (by key) exempt now? The mesh holder answers a stale entry's forward with it (§4.6). */
+  exemptBox(boxPub: string): boolean {
+    for (const set of this.boxes.values()) for (const b of set) if (b.hello.boxPub === boxPub && this.isExempt(b)) return true;
+    return false;
+  }
+
   /** Close every tunnel once contact has been gone for `closeAllAfterMs`; they come back when it returns. */
   tick(): void {
     const c = this.contact();
     if (c !== this.loggedContact) {
-      this.log(`[serving] contact with .com: ${c}${c === "ok" ? "" : ` (${Math.round((this.now() - this.lastContact) / 1000)} s without a frame)`}`);
+      const quiet = this.opts.contactAgeMs ? this.opts.contactAgeMs() : this.now() - this.lastContact;
+      this.log(`[serving] contact with .com: ${c}${c === "ok" ? "" : ` (${Math.round(quiet / 1000)} s without a frame)`}`);
       this.loggedContact = c;
+      if (c === "ok") this.lostClosed = false;
     }
     if (c !== "lost" || this.lostClosed) return;
     this.lostClosed = true;
     for (const set of [...this.boxes.values()]) {
-      for (const b of [...set]) b.handle.closeTunnel(1013, "serving-feed-lost");
+      for (const b of [...set]) {
+        if (this.isExempt(b)) continue;
+        b.handle.closeTunnel(1013, "serving-feed-lost");
+      }
     }
   }
 
@@ -339,6 +430,17 @@ export class ServingGate {
     await Promise.all([...set].map((b) => this.refresh(b)));
   }
 
+  /** Re-decide every box matching `pred` (mesh: a `policy-head` or `account-authority` entry for it). */
+  async refreshMatching(pred: (hello: ServingHello) => boolean): Promise<void> {
+    const all = [...this.boxes.values()].flatMap((s) => [...s]).filter((b) => !b.closed && pred(b.hello));
+    await Promise.all(all.map((b) => this.refresh(b)));
+  }
+
+  /** Re-decide the boxes of the account whose hash is `h` (an `account-authority` entry). */
+  refreshAccountHash(h: string): Promise<void> {
+    return this.refreshMatching((hello) => accountHashOrNull(hello.username) === h);
+  }
+
   /** Re-read every box (after the feed reconnects: `changed` frames sent while it was away were missed). */
   async refreshAll(): Promise<void> {
     const all = [...this.boxes.values()].flatMap((s) => [...s]);
@@ -354,7 +456,7 @@ export class ServingGate {
 
   async refresh(b: ServingBox, o: { initial?: boolean } = {}): Promise<GateDecision> {
     const gen = ++b.fetchGen;
-    const rec = await this.opts.fetchRecord(b.hello.username, b.hello.boxPub);
+    const rec = await this.opts.fetchRecord(b.hello.username, b.hello.boxPub, b.hello);
     let comKey: string | null = rec && rec !== UNKNOWN_BOX ? rec.adminKey : null;
     if (rec && rec !== UNKNOWN_BOX && !comKey && this.opts.adminKeyLookup) comKey = await this.opts.adminKeyLookup(b.hello.username).catch(() => null);
     if (b.closed || gen !== b.fetchGen) return b.decision;
@@ -420,6 +522,7 @@ export class ServingGate {
       policies: [rec.policy, b.hello.policy].filter((p): p is SignedServingRecord<ServingPolicy> => p !== null),
       leases: rec.leases,
       revocations: this.revocationState,
+      ...(rec.policyHead !== undefined ? { policyHead: rec.policyHead } : {}),
       now: this.now(),
     });
     return d.apps ? { control: true, apps: true, until: d.until } : { control: d.control, apps: false, reason: d.reason };

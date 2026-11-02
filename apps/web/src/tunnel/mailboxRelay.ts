@@ -28,13 +28,30 @@ export function verifyMailboxAnnouncements(list: MailboxAnnouncement[], now: num
   return out;
 }
 
+/**
+ * The relay mesh (relay-mesh.md §7.6): a mailbox held on another relay. `onAnnounce` tells the mesh which mailboxes a
+ * local tunnel proved (it announces them to every peer); `has` / `deliver` fall back to the peer that announced one.
+ */
+export interface RemoteMailboxes {
+  onAnnounce(list: MailboxAnnouncement[]): void;
+  has(id: string): boolean;
+  deliver(id: string, envelope: Uint8Array): Promise<{ status: number; body: Uint8Array } | null>;
+}
+
 export class MailboxRegistry {
   private readonly routes = new Map<string, { owner: object; deliver: MailDeliver }>();
+  private remote: RemoteMailboxes | null = null;
 
-  /** Point these mailbox ids at a tunnel. A later announcement for the same id wins. */
-  register(ids: string[], owner: object, deliver: MailDeliver): void {
+  /** Mesh mode: mailboxes held on other relays. */
+  setRemote(r: RemoteMailboxes | null): void {
+    this.remote = r;
+  }
+
+  /** Point these mailbox ids at a tunnel. A later announcement for the same id wins. `list`: the proofs (mesh). */
+  register(ids: string[], owner: object, deliver: MailDeliver, list?: MailboxAnnouncement[]): void {
     for (const [id, r] of this.routes) if (r.owner === owner && !ids.includes(id)) this.routes.delete(id);
     for (const id of ids) this.routes.set(id, { owner, deliver });
+    if (list && this.remote) this.remote.onAnnounce(list);
   }
 
   /** The tunnel closed. */
@@ -43,6 +60,11 @@ export class MailboxRegistry {
   }
 
   has(id: string): boolean {
+    return this.routes.has(id) || (this.remote?.has(id) ?? false);
+  }
+
+  /** Held by a tunnel on this relay (a bridged pb-mail stream is served only from these: one hop). */
+  hasLocal(id: string): boolean {
     return this.routes.has(id);
   }
 
@@ -52,7 +74,12 @@ export class MailboxRegistry {
 
   async deliver(id: string, envelope: Uint8Array): Promise<{ status: number; body: Uint8Array } | null> {
     const r = this.routes.get(id);
-    if (!r) return null;
-    return r.deliver(id, envelope);
+    if (r) return r.deliver(id, envelope);
+    return this.remote ? this.remote.deliver(id, envelope) : null;
+  }
+
+  async deliverLocal(id: string, envelope: Uint8Array): Promise<{ status: number; body: Uint8Array } | null> {
+    const r = this.routes.get(id);
+    return r ? r.deliver(id, envelope) : null;
   }
 }

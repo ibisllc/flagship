@@ -132,8 +132,11 @@ export interface PhoneEligibilityRecord {
   grants: AdminGrantView[];
 }
 
-/** Null: `.com` could not be asked. */
-export type PhoneEligibilityFetch = (account: string) => Promise<PhoneEligibilityRecord | null>;
+/**
+ * Null: `.com` could not be asked. `presented` is the grant chain the phone sent in `begin` (relay mesh, relay-mesh.md
+ * §8.2: a mesh relay checks the phone's own grants against the log instead of asking `.com`); `.com`'s fetch ignores it.
+ */
+export type PhoneEligibilityFetch = (account: string, presented?: unknown) => Promise<PhoneEligibilityRecord | null>;
 
 const HEX = /^[0-9a-f]*$/;
 
@@ -231,6 +234,8 @@ export class PhoneSession {
   held: Held | null = null;
   /** Refused while another phone held the route: told when it becomes vacant. */
   standby: string | null = null;
+  /** The admin grant chain the phone presented in `begin` (mesh relays check eligibility from it). */
+  presented: unknown = undefined;
   eligibleUntil = 0;
   closed = false;
   timers: unknown[] = [];
@@ -254,6 +259,11 @@ export interface PhoneRoutesOptions {
   standbyPollMs?: number;
   /** Visitor streams one phone may have open at once. */
   maxStreams?: number;
+  /**
+   * Mesh (relay-mesh.md §4.6): false while the relay is not fresh; a `begin` is then refused `unavailable` and the
+   * tunnel closed 1013 "try-again". Absent: always accepting.
+   */
+  accepting?: () => boolean;
   log?: (m: string) => void;
 }
 
@@ -342,8 +352,14 @@ export class PhoneRoutes {
   }
 
   /** Step 1: the phone names its account; it gets a nonce for this session and the next generation. */
-  async begin(s: PhoneSession, account: unknown): Promise<void> {
+  async begin(s: PhoneSession, account: unknown, grants?: unknown): Promise<void> {
     if (typeof account !== "string" || !ACCOUNT.test(account)) return this.refuse(s, "malformed");
+    if (this.opts.accepting && !this.opts.accepting()) {
+      this.refuse(s, "unavailable");
+      s.handle.close(1013, "try-again");
+      return;
+    }
+    if (grants !== undefined) s.presented = grants;
     if (s.held && this.holders.get(s.held.hostname) === s) return this.refuse(s, "holding", { generation: s.held.generation });
     const hostname = phoneHostname(account, this.apex);
     const entry = await this.opts.ledger.read(hostname);
@@ -371,7 +387,7 @@ export class PhoneRoutes {
     const c = claim as RouteClaim;
     const checked = checkRouteClaim({ claim: c, signature, apex: this.apex, account: offer.account, sessionNonce: offer.nonce, generation: offer.generation, now });
     if (!checked.ok) return this.refuse(s, checked.code);
-    const elig = await this.eligible(offer.account, c.phoneRoutePub);
+    const elig = await this.eligible(offer.account, c.phoneRoutePub, s.presented);
     if (s.closed) return;
     if (elig === null) return this.refuse(s, "unavailable");
     if (!elig.ok) return this.refuse(s, "not-eligible");
@@ -447,6 +463,16 @@ export class PhoneRoutes {
     if (s?.held && s.held.generation < generation) this.lose(s, "expired");
   }
 
+  /** Close every phone tunnel (mesh: contact lost past the close-all deadline, §4.6). */
+  closeAll(code: number, reason: string): void {
+    for (const s of [...this.sessions]) s.handle.close(code, reason);
+  }
+
+  /** The relay log revoked a device grant (mesh: the log names no account): re-check every held route now. */
+  recheckAll(): Promise<void> {
+    return Promise.all([...this.holders.values()].map((s) => this.recheck(s))).then(() => undefined);
+  }
+
   /** The feed says a device or admin grant of `username` changed: re-check every route of the account now. */
   eligibilityChanged(username: string): Promise<void> {
     const u = username.toLowerCase();
@@ -463,7 +489,7 @@ export class PhoneRoutes {
   async recheck(s: PhoneSession): Promise<void> {
     const h = s.held;
     if (!h || s.closed) return;
-    const elig = await this.eligible(h.account, h.phoneRoutePub);
+    const elig = await this.eligible(h.account, h.phoneRoutePub, s.presented);
     if (s.closed || s.held !== h) return;
     if (elig === null) return;
     if (elig.ok) {
@@ -520,8 +546,8 @@ export class PhoneRoutes {
     for (const s of st.sessions) if (!s.closed) s.handle.send({ type: "route-vacant", hostname, generation });
   }
 
-  private async eligible(account: string, phoneRoutePub: string): Promise<{ ok: true; expiresAt: number } | { ok: false } | null> {
-    const rec = await this.opts.eligibility(account);
+  private async eligible(account: string, phoneRoutePub: string, presented: unknown): Promise<{ ok: true; expiresAt: number } | { ok: false } | null> {
+    const rec = await this.opts.eligibility(account, presented);
     if (!rec) return null;
     return phoneRouteEligibility(phoneRoutePub, account, rec.adminRootPub, rec.grants, this.now());
   }

@@ -3,7 +3,10 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import {
   CAPABILITY_DRAIN_V1,
+  CAPABILITY_MESH_V1,
   CAPABILITY_OUTBOUND_V1,
+  FRAME_ATTACHMENT,
+  MAX_HELLO_SERVING_LEASES,
   decodeFrame,
   drainNoticeFrame,
   FRAME_HEADER_BYTES,
@@ -54,6 +57,8 @@ import {
   type TunnelHelloV2,
 } from "@flagship/protocol";
 import { parseSignedRecord, type ServingBox, type ServingGate, type ServingHello, type ServingTunnelHandle } from "./servingGate.js";
+import type { MeshBoxSession, MeshBoxTunnel } from "./mesh/node.js";
+import type { RenewalKeyDelegation, ServingLease } from "@flagship/protocol";
 import type { RegisteredTunnel, StreamCallbacks, TunnelRegistry } from "./registry.js";
 import { PauseReasons, SourcePauser } from "./throttle.js";
 
@@ -216,7 +221,23 @@ export interface TunnelHubOptions {
    * new tunnel is taken while contact with `.com`'s feed is lost. Omitted: every name a box proves routes.
    */
   serving?: ServingGate;
+  /**
+   * The relay mesh (docs/architecture-v2/relay-mesh.md §9.1). When set, a box that offers `mesh-v1` gets it echoed in
+   * the HELLO_ACK with `relayId` and `relayBlessing` (while this relay holds a valid blessing), may send ATTACHMENT
+   * frames, and may be sent MOVE_HINT frames; every box tunnel is reported (`boxUp`) for attachments and legacy
+   * announcements. Omitted: today's relay, byte for byte.
+   */
+  mesh?: MeshHubHooks;
   now?: () => number;
+}
+
+/** What the hub needs from the mesh node. */
+export interface MeshHubHooks {
+  /** HELLO_ACK mesh fields; null when no valid relay blessing is held (then `mesh-v1` is not echoed). */
+  ackFields(): { relayId: string; relayBlessing: unknown } | null;
+  boxUp(t: MeshBoxTunnel): MeshBoxSession;
+  /** Draining: true while mesh boxes are sent `retire` hints instead (§10.4), so they get no DRAIN_NOTICE. */
+  drainsByHint?(): boolean;
 }
 
 /** The running hub: call it to stop, or `drain` it before a shutdown. */
@@ -319,11 +340,15 @@ function attachTunnel(
   let servingBox: ServingBox | null = null;
   let outbound: OutboundSession | null = null;
   let boxOffersDrain = false;
+  /** `mesh-v1` was offered by the box and echoed (relay-mesh.md §9.1). */
+  let meshNegotiated = false;
+  let meshSession: MeshBoxSession | null = null;
   const ackCapabilities = (): string[] | undefined => {
     const caps = [
       ...(opts.outboundRelay ? [CAPABILITY_OUTBOUND_V1] : []),
       ...(opts.mailboxes ? [CAPABILITY_PB_MAIL_V1] : []),
       ...(boxOffersDrain ? [CAPABILITY_DRAIN_V1] : []),
+      ...(meshNegotiated ? [CAPABILITY_MESH_V1] : []),
     ];
     return caps.length > 0 ? caps : undefined;
   };
@@ -427,9 +452,15 @@ function attachTunnel(
     const src = opts.blessingSource;
     if (!src) return undefined;
     const blessing = src.currentBlessing();
-    if (!blessing) return undefined;
+    // Mesh: `hubSig` is made with the RelayBlessing's key, so a mesh box can verify it even without a v1 blessing.
+    const mesh = meshNegotiated ? opts.mesh?.ackFields() ?? null : null;
+    if (!blessing && !mesh) return undefined;
     try {
-      return { serviceBlessing: blessing, hubSig: src.signNonce(nonce) };
+      return {
+        ...(blessing ? { serviceBlessing: blessing } : {}),
+        hubSig: src.signNonce(nonce),
+        ...(mesh ? { relayId: mesh.relayId, relayBlessing: mesh.relayBlessing } : {}),
+      };
     } catch {
       return undefined;
     }
@@ -452,6 +483,7 @@ function attachTunnel(
   let resolveClosed!: () => void;
   const connection: HubConnection = {
     notifyDrain(graceMs) {
+      if (meshNegotiated && opts.mesh?.drainsByHint?.()) return;
       if (boxOffersDrain && registered) send(drainNoticeFrame(graceMs));
     },
     close(code, reason) {
@@ -480,11 +512,11 @@ function attachTunnel(
   /** Next whole frame, "wait" for more bytes, or a decode refusal. */
   const nextFrame = (): Frame | "wait" | { error: string } => {
     if (pending.length < FRAME_HEADER_BYTES) return "wait";
-    const head = decodeFrame(pending.peek(FRAME_HEADER_BYTES));
+    const head = decodeFrame(pending.peek(FRAME_HEADER_BYTES), { mesh: meshNegotiated });
     if (head.kind === "error") return { error: head.reason };
     const total = head.kind === "ok" ? head.consumed : head.needAtLeast;
     if (pending.length < total) return "wait";
-    const r = decodeFrame(pending.peek(total));
+    const r = decodeFrame(pending.peek(total), { mesh: meshNegotiated });
     if (r.kind !== "ok") return { error: r.kind === "error" ? r.reason : "frame decode error" };
     pending.consume(r.consumed);
     return r.frame;
@@ -524,6 +556,8 @@ function attachTunnel(
   ws.on("close", () => {
     closed = true;
     servingBox?.detach();
+    meshSession?.down();
+    meshSession = null;
     hub.connections.delete(connection);
     resolveClosed();
     cancelIdleClose();
@@ -602,9 +636,14 @@ function attachTunnel(
       let box: ServingBox | null = null;
       if (opts.serving) {
         if (!opts.serving.acceptingNewTunnels()) {
-          send(helloAckFrame(false, HELLO_REFUSED_TRY_AGAIN));
-          ws.close(1013, HELLO_REFUSED_TRY_AGAIN);
-          return;
+          // Mesh, §4.6: a box whose log-verified policy has no time limit is still taken during a `.com` outage.
+          const exempt = await opts.serving.exemptHello(servingHelloOf(helloOk));
+          if (closed) return;
+          if (!exempt) {
+            send(helloAckFrame(false, HELLO_REFUSED_TRY_AGAIN));
+            ws.close(1013, HELLO_REFUSED_TRY_AGAIN);
+            return;
+          }
         }
         box = await opts.serving.attach(servingHelloOf(helloOk), servingHandle);
         if (closed) {
@@ -621,6 +660,7 @@ function attachTunnel(
         servingBox = box;
       }
       boxOffersDrain = helloOk.capabilities.includes(CAPABILITY_DRAIN_V1);
+      meshNegotiated = !!opts.mesh && helloOk.capabilities.includes(CAPABILITY_MESH_V1) && opts.mesh.ackFields() !== null && opts.blessingSource !== undefined;
       const canonicals = built.canonicals;
       const tunnel: RegisteredTunnel = {
         podCanonical: helloOk.rootEntitlement.podCanonical.toLowerCase(),
@@ -646,6 +686,16 @@ function attachTunnel(
       lastHelloIssuedAt = helloOk.issuedAt;
       send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), ackCapabilities()));
       if (hub.draining && boxOffersDrain) send(drainNoticeFrame(0));
+      if (opts.mesh) {
+        meshSession = opts.mesh.boxUp({
+          podCanonical: tunnel.podCanonical,
+          boxPub: bytesToHex(helloOk.rootEntitlement.podPubKey),
+          username: helloOk.rootEntitlement.username.toLowerCase(),
+          meshNegotiated,
+          ackedAt: now(),
+          sendFrame: send,
+        });
+      }
       // Broadcast a fresh snapshot to every affected set so all
       // currently-connected pods learn about the new arrival.
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
@@ -756,7 +806,13 @@ function attachTunnel(
           mailWaiting.set(id, { asm: new MailAssembler("resp"), resolve, timer });
           for (const fr of mailRequestFrames(id, mailboxId, envelope)) send(fr);
         }),
+        list ?? undefined,
       );
+      return;
+    }
+    if (f.type === FRAME_ATTACHMENT) {
+      // Only reachable with mesh-v1 negotiated (the decoder refuses 0x07 otherwise).
+      meshSession?.onAttachment(f.payload);
       return;
     }
     if (f.type === FRAME_PB_MAIL_RESP) {
@@ -830,6 +886,8 @@ interface ParsedHelloV2 {
   servingAdminKey: string | null;
   /** HELLO `servingPolicy`: the box's stored signed policy, checked by `servingDecision`. */
   servingPolicy: SignedServingRecord<ServingPolicy> | null;
+  /** HELLO `servingLeases` (mesh, relay-mesh.md §9.5): at most 8, each with its delegation when one signed it. */
+  servingLeases: Array<SignedServingRecord<ServingLease> & { delegation?: SignedServingRecord<RenewalKeyDelegation> }>;
 }
 
 interface ParsedAppGrant {
@@ -945,7 +1003,20 @@ function parseHello(payload: Uint8Array): HelloParse {
     servingAdminKey:
       typeof o.servingAdminKey === "string" && /^[0-9a-f]{64}$/.test(o.servingAdminKey) ? o.servingAdminKey : null,
     servingPolicy: parseSignedRecord<ServingPolicy>(o.servingPolicy, "policy"),
+    servingLeases: parseServingLeases(o.servingLeases),
   };
+}
+
+function parseServingLeases(raw: unknown): ParsedHelloV2["servingLeases"] {
+  if (!Array.isArray(raw)) return [];
+  const out: ParsedHelloV2["servingLeases"] = [];
+  for (const r of raw.slice(0, MAX_HELLO_SERVING_LEASES)) {
+    const l = parseSignedRecord<ServingLease>(r, "lease");
+    if (!l) continue;
+    const d = parseSignedRecord<RenewalKeyDelegation>((r as Record<string, unknown>).delegation, "delegation");
+    out.push(d ? { ...l, delegation: d } : l);
+  }
+  return out;
 }
 
 function servingHelloOf(h: ParsedHelloV2): ServingHello {
@@ -955,6 +1026,7 @@ function servingHelloOf(h: ParsedHelloV2): ServingHello {
     podCanonical: h.rootEntitlement.podCanonical,
     adminKey: h.servingAdminKey,
     policy: h.servingPolicy,
+    ...(h.servingLeases.length > 0 ? { leases: h.servingLeases } : {}),
   };
 }
 

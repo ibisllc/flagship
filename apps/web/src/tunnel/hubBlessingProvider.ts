@@ -20,7 +20,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { ed } from "@flagship/protocol";
+import { canonicalRelayBlessingRequest, ed, verifyRelayBlessing } from "@flagship/protocol";
 import type { ServiceBlessing } from "@flagship/protocol";
 
 export interface HubKeypair {
@@ -203,5 +203,144 @@ export class HubBlessingProvider {
       this.clearIntervalFn(this.timer);
       this.timer = null;
     }
+  }
+}
+
+// ── relay mesh (docs/architecture-v2/relay-mesh.md §3.2) ──────────────────
+
+/** §3.2 as amended (owner decision 2026-11-01): blessings last 30 d and are renewed every 24 h with proof of key. */
+const RELAY_BLESSING_RENEW_MS = 24 * 60 * 60_000;
+
+/**
+ * Mesh mode: the relay key comes from `FLAGSHIP_RELAY_KEY_SEED` (64 hex), never generated per boot, because peers and
+ * `.com` know the relay by it. The same key signs HELLO_ACK `hubSig`, bridge auth, legacy attachments, move hints,
+ * account moves and phone route grants.
+ */
+export function relayKeypairFromSeed(seedHex: string): HubKeypair {
+  const s = seedHex.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(s)) throw new Error("FLAGSHIP_RELAY_KEY_SEED must be 64 lowercase hex");
+  const privateKey = hexToBytes(s);
+  return { privateKey, publicKey: ed.getPublicKey(privateKey) };
+}
+
+export interface RelayBlessingProviderOptions {
+  keypair: HubKeypair;
+  relayId: string;
+  servicesApex: string;
+  comBaseUrl: string;
+  /** The CA keys authorized now: a blessing from `.com` or a peer is kept only if it verifies under them. */
+  caKeys: () => readonly string[];
+  /** Renewal cadence. Default 24 h (blessings last 30 d, §3.2); a relay without a valid blessing retries every `retryMs`. */
+  refreshIntervalMs?: number;
+  retryMs?: number;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  log?: (line: string) => void;
+  /**
+   * Whatever else `.com` returned with the blessing (owner decision: the feed's epoch key, sealed to this relay key);
+   * the feed cipher takes it from here. Called after every successful renewal.
+   */
+  onIssued?: (body: Record<string, unknown>) => void;
+}
+
+/**
+ * Holds this relay's RelayBlessing (and the v1 ServiceBlessing old boxes still check), renewed with proof of key:
+ * `POST /api/services/relay-blessing` `{relayId, relayKey, servicesApex, issuedAt, signature}`, the signature by the
+ * relay key over `flagship/relay-blessing-request/v1`. No state on disk: after a restart during a `.com` outage a peer
+ * returns the relay its last blessing in the bridge handshake (`adopt`).
+ */
+export class RelayBlessingProvider {
+  private relayBlessing: import("@flagship/protocol").RelayBlessing | null = null;
+  private serviceBlessing: ServiceBlessing | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private readonly now: () => number;
+  private readonly log: (line: string) => void;
+  private stopped = false;
+
+  constructor(private readonly opts: RelayBlessingProviderOptions) {
+    this.now = opts.now ?? (() => Date.now());
+    this.log = opts.log ?? ((l) => console.log(l));
+  }
+
+  relayKeyHex(): string {
+    return bytesToHex(this.opts.keypair.publicKey);
+  }
+
+  sign(msg: Uint8Array): Uint8Array {
+    return ed.sign(msg, this.opts.keypair.privateKey);
+  }
+
+  signNonce(nonce: Uint8Array): string {
+    return bytesToHex(ed.sign(nonce, this.opts.keypair.privateKey));
+  }
+
+  /** The v1 ServiceBlessing (`hubKeyPub` = relay key) for old boxes' observe-mode check. */
+  currentBlessing(): ServiceBlessing | null {
+    return this.serviceBlessing && this.serviceBlessing.expiresAt > this.now() ? this.serviceBlessing : null;
+  }
+
+  /** This relay's RelayBlessing while it is valid, else null. */
+  currentRelayBlessing(): import("@flagship/protocol").RelayBlessing | null {
+    const b = this.relayBlessing;
+    if (!b) return null;
+    return verifyRelayBlessing(b, this.opts.caKeys(), this.now(), this.opts.servicesApex).ok ? b : null;
+  }
+
+  /** A blessing for this relay from anywhere (`.com`, or a peer after a restart): kept when it verifies and names our key. */
+  adopt(raw: unknown): boolean {
+    const b = raw as import("@flagship/protocol").RelayBlessing;
+    if (b?.relayId !== this.opts.relayId || b.relayKey !== this.relayKeyHex()) return false;
+    if (!verifyRelayBlessing(b, this.opts.caKeys(), this.now(), this.opts.servicesApex).ok) return false;
+    if (this.relayBlessing && this.currentRelayBlessing() && this.relayBlessing.expiresAt >= b.expiresAt) return false;
+    this.relayBlessing = b;
+    return true;
+  }
+
+  async refresh(): Promise<boolean> {
+    const issuedAt = this.now();
+    const req = { relayId: this.opts.relayId, relayKey: this.relayKeyHex(), servicesApex: this.opts.servicesApex, issuedAt };
+    try {
+      const signature = bytesToHex(this.sign(canonicalRelayBlessingRequest(req)));
+      const resp = await (this.opts.fetchImpl ?? fetch)(`${this.opts.comBaseUrl.replace(/\/+$/, "")}/api/services/relay-blessing`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...req, signature }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) {
+        this.log(`[relay-blessing] renewal refused status=${resp.status} (keeping the one held)`);
+        return false;
+      }
+      const body = (await resp.json()) as Record<string, unknown>;
+      const ok = this.adopt(body.relayBlessing);
+      const sb = body.serviceBlessing as ServiceBlessing | undefined;
+      if (sb?.kind === "ServiceBlessing" && sb.hubKeyPub?.toLowerCase() === this.relayKeyHex()) this.serviceBlessing = sb;
+      if (ok) {
+        this.log(`[relay-blessing] renewed ${this.opts.relayId} expiresAt=${this.relayBlessing?.expiresAt}`);
+        this.opts.onIssued?.(body);
+      } else this.log("[relay-blessing] .com returned no usable relay blessing (keeping the one held)");
+      return ok;
+    } catch (e) {
+      this.log(`[relay-blessing] renewal failed: ${e instanceof Error ? e.message : String(e)} (keeping the one held)`);
+      return false;
+    }
+  }
+
+  async start(): Promise<void> {
+    const loop = async () => {
+      if (this.stopped) return;
+      await this.refresh();
+      if (this.stopped) return;
+      const next = this.currentRelayBlessing() ? (this.opts.refreshIntervalMs ?? RELAY_BLESSING_RENEW_MS) : (this.opts.retryMs ?? 60_000);
+      this.timer = setTimeout(() => void loop(), next);
+      (this.timer as { unref?: () => void }).unref?.();
+    };
+    await loop();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
   }
 }

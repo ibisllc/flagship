@@ -86,11 +86,16 @@ import {
   coldStartRedirections,
 } from "./routes/controlRedirections.js";
 import { registerGossipFanout } from "./routes/gossipFanout.js";
-import { comServingFetcher, ServingGate } from "./tunnel/servingGate.js";
+import { comServingFetcher, meshServingFetcher, ServingGate } from "./tunnel/servingGate.js";
 import { comStkLookup } from "./tunnel/stkLookup.js";
 import { ServingFeedClient } from "./tunnel/servingFeedClient.js";
 import { comPhoneEligibility, comPhoneRouteLedger, PhoneRoutes } from "./tunnel/phoneRoute.js";
 import { startPhoneTunnel, type PhoneTunnelHandle } from "./tunnel/phoneTunnel.js";
+import { MeshNode } from "./tunnel/mesh/node.js";
+import { httpFeedSource, MeshFeedKeys, plainFeedCipher, type FeedCipher } from "./tunnel/mesh/feed.js";
+import { meshPhoneEligibility } from "./tunnel/mesh/phoneLedger.js";
+import { RelayBlessingProvider, relayKeypairFromSeed } from "./tunnel/hubBlessingProvider.js";
+import type { RelayKind } from "@flagship/protocol";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -100,6 +105,8 @@ export interface ServerHandle {
   serverRegistry: ServerRegistry;
   router: RunningSniRouter | null;
   stopHub: TunnelHubHandle;
+  /** The relay mesh node when FLAGSHIP_MESH=on, else null. */
+  mesh: MeshNode | null;
   /** Tell drain-v1 boxes to move, serve the rest for `graceMs`, then close every tunnel. */
   drain(graceMs: number): Promise<void>;
   close(): Promise<void>;
@@ -162,6 +169,11 @@ export interface BuildServerOptions {
    * production set FLAGSHIP_CA_PRIV_HEX.
    */
   ca?: CaIssuer;
+  /**
+   * Relay mesh (relay-mesh.md §2): `/api/health` answers 503 with the reasons while this says not ready. Unset: the
+   * health route answers as before.
+   */
+  health?: { check(): { ok: boolean; reasons?: string[] } };
 }
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
@@ -198,10 +210,13 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   }
 
   const bootedAt = Date.now();
-  app.get("/api/health", async () => {
+  app.get("/api/health", async (_req, reply) => {
     const mem = process.memoryUsage();
+    const gate = opts.health?.check();
+    if (gate && !gate.ok) reply.code(503);
     return {
-      ok: true,
+      ok: gate ? gate.ok : true,
+      ...(gate ? { mesh: { ready: gate.ok, reasons: gate.reasons ?? [] } } : {}),
       service: surface === "services" ? "flagship.services" : "flagshipserver.com",
       surface,
       uptimeMs: Date.now() - bootedAt,
@@ -359,7 +374,10 @@ export async function start(opts: {
     process.env.FLAGSHIP_SURFACE === "both"
       ? (process.env.FLAGSHIP_SURFACE as "services" | "com" | "both")
       : "both";
-  const app = buildServer({ surface });
+  // The mesh's readiness, filled in once the mesh node exists (FLAGSHIP_MESH=on).
+  const health: { check: () => { ok: boolean; reasons?: string[] } } = { check: () => ({ ok: true }) };
+  const meshOn = process.env.FLAGSHIP_MESH === "on" && (surface === "services" || surface === "both");
+  const app = buildServer({ surface, ...(meshOn ? { health } : {}) });
   const serverRegistry = app.serverRegistry;
   // The data-plane apex pod canonicals live under — `flagship.services`
   // in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
@@ -374,6 +392,7 @@ export async function start(opts: {
 
   // Filled in once the serving authority starts (after listen); null while it is off.
   let servingStats: () => unknown = () => null;
+  let meshStats: () => unknown = () => null;
 
   // What the router has done since this machine started (docs/ops-command.md). Guarded by the
   // hub's shared secret; off when there is none.
@@ -392,6 +411,7 @@ export async function start(opts: {
         tunnelsOnline: registry.size(),
         router: routerStats.snapshot(),
         serving: servingStats(),
+        ...(meshOn ? { mesh: meshStats() } : {}),
         now: new Date().toISOString(),
       };
     });
@@ -408,6 +428,11 @@ export async function start(opts: {
   // FLAGSHIP_PB_MAIL=off stops advertising them.
   const mailboxes = (surface === "services" || surface === "both") && process.env.FLAGSHIP_PB_MAIL !== "off" ? new MailboxRegistry() : undefined;
   if (mailboxes) registerMailboxRelay(app, { mailboxes });
+  if (meshOn) {
+    const running = await startMeshRelay({ app, registry, mailboxes, servicesApex, comBaseUrl, health, host, opts });
+    meshStats = () => running.node.stats();
+    return running.handle;
+  }
   await app.listen({ port: httpPort, host });
   // Warm the RAM redirection table from .com before routing starts
   // (best-effort + 5s-bounded; push backfills anything missed).
@@ -588,6 +613,7 @@ export async function start(opts: {
     serverRegistry,
     router,
     stopHub,
+    mesh: null,
     drain: (graceMs: number) => stopHub.drain(graceMs),
     async close() {
       meter?.stop();
@@ -599,6 +625,233 @@ export async function start(opts: {
       if (echo) await echo.close();
       await stopHub();
       await app.close();
+    },
+  };
+}
+
+/**
+ * The relay in mesh mode (FLAGSHIP_MESH=on, docs/architecture-v2/relay-mesh.md): the relay key from its seed, the
+ * blessing renewed with proof of key, the public relay log in place of `.com`'s internal routes (HELLO lookups,
+ * serving inputs, revocations, eviction), bridges on `/mesh`, the phone ledger on the relays, and `/api/health` 503
+ * until mesh-ready. Never calls `.com`'s internal serving, revocation, eviction or phone routes.
+ */
+async function startMeshRelay(o: {
+  app: FastifyInstance;
+  registry: TunnelRegistry;
+  mailboxes: MailboxRegistry | undefined;
+  servicesApex: string;
+  comBaseUrl: string;
+  health: { check: () => { ok: boolean; reasons?: string[] } };
+  host: string;
+  opts: { httpPort?: number; tunnelTcpPort?: number; relayEchoPort?: number };
+}): Promise<{ node: MeshNode; handle: ServerHandle }> {
+  const env = process.env;
+  const relayId = env.FLAGSHIP_RELAY_ID;
+  const seed = env.FLAGSHIP_RELAY_KEY_SEED;
+  const logKey = (env.FLAGSHIP_RELAY_LOG_PUB ?? env.FLAGSHIP_SERVING_REVOCATION_PUB)?.trim().toLowerCase();
+  if (!relayId || !seed || !logKey) throw new Error("FLAGSHIP_MESH=on needs FLAGSHIP_RELAY_ID, FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB");
+  const relayKind: RelayKind = env.FLAGSHIP_RELAY_KIND === "entry" ? "entry" : "full";
+  // The CA keys a relay checks blessings and the directory under. Until the relay reads the maintainer chain itself,
+  // they come from the environment; none means nothing verifies and the relay never turns ready (fail closed).
+  const caKeyList = (env.FLAGSHIP_MESH_CA_KEYS ?? "").split(",").map((k) => k.trim().toLowerCase()).filter((k) => /^[0-9a-f]{64}$/.test(k));
+  if (caKeyList.length === 0) console.warn("[mesh] FLAGSHIP_MESH_CA_KEYS is empty: no blessing or directory will verify");
+  const caKeys = () => caKeyList;
+  const keypair = relayKeypairFromSeed(seed);
+  const controlApex = new URL(o.comBaseUrl).hostname;
+  const feedBase = (env.FLAGSHIP_RELAY_FEED_URL ?? `https://feed.${controlApex}/v1`).replace(/\/+$/, "");
+  // The head and pages are sealed to the mesh key (§4.5.1): the epoch keys come with every blessing renewal, or from
+  // `keys/<relayId>.json` when a file names an epoch this relay does not hold yet.
+  const keys = new MeshFeedKeys({
+    servicesApex: o.servicesApex,
+    relayId,
+    seed: keypair.privateKey,
+    fetchKeyFile: async () => {
+      try {
+        const r = await fetch(`${feedBase}/keys/${encodeURIComponent(relayId)}.json`, { signal: AbortSignal.timeout(5_000) });
+        return r.ok ? ((await r.json()) as unknown) : null;
+      } catch {
+        return null;
+      }
+    },
+    log: (m) => console.log(m),
+  });
+  // FLAGSHIP_RELAY_FEED_PLAIN=1 reads a clear feed (a local harness); production feeds are always sealed.
+  const cipher: FeedCipher = env.FLAGSHIP_RELAY_FEED_PLAIN === "1" ? plainFeedCipher : keys.cipher();
+  const blessing = new RelayBlessingProvider({
+    keypair,
+    relayId,
+    servicesApex: o.servicesApex,
+    comBaseUrl: o.comBaseUrl,
+    caKeys,
+    onIssued: (body) => void keys.adopt(body.meshKeys),
+  });
+  const n = (name: string): number | undefined => {
+    const v = Number(env[name]);
+    return env[name] && Number.isFinite(v) && v >= 0 ? v : undefined;
+  };
+  const node = new MeshNode({
+    relayId,
+    relayKind,
+    servicesApex: o.servicesApex,
+    logKey,
+    caKeys,
+    blessing,
+    feedSource: httpFeedSource({ baseUrl: feedBase, cipher: () => cipher }),
+    registry: o.registry,
+    ...(o.mailboxes ? { mailboxes: o.mailboxes } : {}),
+    ...(n("FLAGSHIP_MESH_FEED_POLL_MS") !== undefined ? { feedPollMs: n("FLAGSHIP_MESH_FEED_POLL_MS") } : {}),
+    ...(n("FLAGSHIP_SERVING_REFUSE_NEW_MS") !== undefined ? { refuseNewMs: n("FLAGSHIP_SERVING_REFUSE_NEW_MS") } : {}),
+    ...(n("FLAGSHIP_SERVING_CLOSE_ALL_MS") !== undefined ? { closeAllMs: n("FLAGSHIP_SERVING_CLOSE_ALL_MS") } : {}),
+    ...(n("FLAGSHIP_MESH_REBALANCE_MS") !== undefined ? { rebalanceMs: n("FLAGSHIP_MESH_REBALANCE_MS") } : {}),
+    ...(n("FLAGSHIP_MESH_MIN_MOVE_MS") !== undefined ? { minMoveMs: n("FLAGSHIP_MESH_MIN_MOVE_MS") } : {}),
+    ...(n("FLAGSHIP_MESH_CAPACITY") !== undefined ? { capacity: n("FLAGSHIP_MESH_CAPACITY") } : {}),
+    log: (m) => console.log(m),
+  });
+  const r = await wireMeshRelay({
+    httpServer: o.app.server,
+    registry: o.registry,
+    node,
+    blessing,
+    servicesApex: o.servicesApex,
+    mailboxes: o.mailboxes,
+    ...(o.opts.tunnelTcpPort !== undefined ? { tunnelTcpPort: o.opts.tunnelTcpPort } : {}),
+    host: o.host,
+    meter: usageMeterFromEnv(o.comBaseUrl),
+  });
+  o.health.check = () => {
+    const rd = node.readiness();
+    return { ok: rd.ready, reasons: rd.reasons };
+  };
+  await o.app.listen({ port: o.opts.httpPort ?? (Number(env.PORT) || 3000), host: o.host });
+  r.start();
+  void blessing.start();
+  let echo: RunningAddressEcho | null = null;
+  if (o.opts.relayEchoPort !== undefined) echo = await startAddressEcho({ port: o.opts.relayEchoPort, host: o.host });
+  console.log(`relay mesh ON: ${relayId} (${relayKind}), relay key ${blessing.relayKeyHex()}`);
+  const handle: ServerHandle = {
+    app: o.app,
+    registry: o.registry,
+    serverRegistry: o.app.serverRegistry,
+    router: r.router,
+    stopHub: r.hub,
+    mesh: node,
+    drain: (graceMs: number) => {
+      node.beginDrain(graceMs);
+      return r.hub.drain(graceMs);
+    },
+    async close() {
+      blessing.stop();
+      await r.stop();
+      if (echo) await echo.close();
+      await o.app.close();
+    },
+  };
+  return { node, handle };
+}
+
+function usageMeterFromEnv(comBaseUrl: string): UsageMeter | undefined {
+  const usageSecret = process.env.USAGE_REPORT_SECRET;
+  if (!usageSecret) return undefined;
+  return new UsageMeter({
+    reportUrl: `${comBaseUrl}/api/usage/report`,
+    secret: usageSecret,
+    flushIntervalMs: process.env.USAGE_FLUSH_MS ? Number(process.env.USAGE_FLUSH_MS) : undefined,
+    throttleBytesPerSec: overQuotaBytesPerSec(process.env.FLAGSHIP_OVER_QUOTA_KBPS),
+  });
+}
+
+/**
+ * Wire a mesh node into a relay's pieces on an HTTP server: the serving gate on the log (§4.4, §4.6 with the
+ * indefinite-policy outage rule), the phone routes on the mesh ledger (§8), the tunnel hub with mesh hooks and log
+ * lookups, `/phone-tunnel`, `/mesh`, and the SNI router with the §7.2 algorithm. Used by `start()` and by the
+ * in-process three-relay test, so both run the same wiring.
+ */
+export async function wireMeshRelay(o: {
+  httpServer: import("node:http").Server;
+  registry: TunnelRegistry;
+  node: MeshNode;
+  blessing: RelayBlessingProvider;
+  servicesApex: string;
+  mailboxes?: MailboxRegistry | undefined;
+  tunnelTcpPort?: number;
+  host?: string;
+  meter?: UsageMeter | undefined;
+  /** Test overrides for the hub and router. */
+  hubOverrides?: Partial<import("./tunnel/tunnelHub.js").TunnelHubOptions>;
+  holdTimeoutMs?: number;
+  checkMs?: number;
+}): Promise<{ router: RunningSniRouter | null; hub: TunnelHubHandle; gate: ServingGate; phoneRoutes: PhoneRoutes; start(): void; stop(): Promise<void> }> {
+  const { node, registry } = o;
+  const gate = new ServingGate({
+    fetchRecord: meshServingFetcher(() => node.feed.state, o.servicesApex),
+    contactAgeMs: () => node.feed.quietMs(),
+    refuseNewAfterMs: node.feed.refuseNewMs,
+    closeAllAfterMs: node.feed.closeAllMs,
+    keepIndefiniteOnLoss: true,
+    hasAppliedState: () => node.feed.hasAppliedState(),
+    log: (m) => console.log(m),
+  });
+  node.serving = gate;
+  const phoneRoutes = new PhoneRoutes({
+    relayId: node.selfRelayId,
+    apex: o.servicesApex,
+    ledger: node.phoneClient,
+    eligibility: meshPhoneEligibility(() => node.feed.state),
+    accepting: () => node.fresh(),
+    log: (m) => console.log(m),
+  });
+  node.setPhoneRoutes(phoneRoutes);
+  registry.setPhoneRoutes(phoneRoutes);
+  if (o.mailboxes) {
+    const mb = o.mailboxes;
+    node.setMailboxes(mb);
+    mb.setRemote({
+      onAnnounce: (list) => node.announceMailboxes(list),
+      has: (id) => node.store.mailboxRelay(id) !== null,
+      deliver: (id, env) => node.deliverRemote(id, env),
+    });
+  }
+  const lookups = node.helloLookups();
+  const hub = startTunnelHub(o.httpServer, registry, {
+    surface: "services",
+    apex: o.servicesApex,
+    ...(o.mailboxes ? { mailboxes: o.mailboxes } : {}),
+    authLookup: lookups.authLookup,
+    irkLookup: lookups.irkLookup,
+    authorityLookup: lookups.authorityLookup,
+    revocationLookup: lookups.revocationLookup,
+    evictionLookup: lookups.evictionLookup,
+    blessingSource: o.blessing,
+    serving: gate,
+    mesh: { ackFields: () => node.ackFields(), boxUp: (t) => node.boxUp(t), drainsByHint: () => node.bestOtherRelay() !== null },
+    ...(o.hubOverrides ?? {}),
+  });
+  const stopPhone = startPhoneTunnel(o.httpServer, phoneRoutes);
+  const detachMesh = node.attach(o.httpServer);
+  let router: RunningSniRouter | null = null;
+  if (o.tunnelTcpPort !== undefined) {
+    router = await startSniRouter(registry, { port: o.tunnelTcpPort, host: o.host ?? "0.0.0.0", mesh: node, ...(o.holdTimeoutMs !== undefined ? { holdTimeoutMs: o.holdTimeoutMs } : {}) }, o.meter);
+    const rt = router;
+    node.setRouterEntry((stream, sni, bytes, ctx) => rt.routeBridged(stream, sni, bytes, ctx));
+  }
+  return {
+    router,
+    hub,
+    gate,
+    phoneRoutes,
+    start() {
+      node.start();
+      gate.start(o.checkMs ?? 5_000);
+      o.meter?.start();
+    },
+    async stop() {
+      o.meter?.stop();
+      gate.stop();
+      await node.stop();
+      detachMesh();
+      await stopPhone();
+      if (router) await router.close();
+      await hub();
     },
   };
 }

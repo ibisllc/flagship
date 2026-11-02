@@ -179,6 +179,14 @@ export class TunnelRegistry {
     return v.apps || lower === t.podCanonical.toLowerCase() ? t : undefined;
   }
 
+  /** A name a registered box holds but whose serving decision refuses it now (the mesh's `apps-off` refusal). */
+  servingRefused(sni: string): boolean {
+    const lower = sni.toLowerCase();
+    if (barePhoneAccount(lower, this.apex) !== null) return false;
+    const t = this.resolveSni(lower);
+    return !!t?.serving && this.findBySni(lower) === undefined;
+  }
+
   /** Route each account's bare name to the phone that holds it (unset: the bare name never routes). */
   setPhoneRoutes(r: PhoneRouteResolver | null): void {
     this.phoneRoutes = r;
