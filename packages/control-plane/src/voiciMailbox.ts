@@ -526,7 +526,7 @@ export async function handleVoiciThread(deps: VoiciThreadDeps, body: unknown): P
 /**
  * Body {revoke:{delegatePub, issuedAt}, signature} with either {delegation, delegationSig} (the delegation proves
  * which pseudonym the browser key belongs to) or {principalPub} (then a stored message of that pseudonym signed with
- * that key does, or nothing ties the key to a page and it is refused page-less). Only that pseudonym may sign it out.
+ * that key does; otherwise 404 unknown-delegate and nothing is stored). Only that pseudonym may sign it out.
  * Kept until the delegation's expiry (30 days when `.com` never saw the delegation).
  */
 export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
@@ -550,11 +550,13 @@ export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): P
     principalPub = b.principalPub;
   }
   if (!verifyWebDelegationRevoke(r, b.signature, principalPub)) return voiciRefusal(403, "bad-signature");
+  // Revocation is looked up by browser key alone, so a pseudonym that never proved the key is its own (no delegation,
+  // no stored message sent with it) must not be able to sign a stranger's browser out.
   if (!pageId) pageId = (await deps.voici.delegatePage(principalPub, r.delegatePub)) ?? "";
+  if (!pageId) return voiciRefusal(404, "unknown-delegate");
   await Promise.all([
     expiresAt > now ? deps.voici.revokeDelegate({ delegatePub: r.delegatePub, pageId, principalPub, expiresAt, revokedAt: now }) : null,
-    // Only a key proven to be this pseudonym's (its delegation, or a stored message) takes its reply alerts with it.
-    pageId ? deps.voici.deleteAlertsForDelegate(r.delegatePub) : null,
+    deps.voici.deleteAlertsForDelegate(r.delegatePub),
   ]);
   return okNoStore({ ok: true });
 }

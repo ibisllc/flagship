@@ -198,6 +198,10 @@ describe("voi.ci thread, inbox, revoke, state", () => {
     await m.send(w.message(T0));
     const r3 = { delegatePub: w.browserPub, issuedAt: T0 };
     expect((await handleVoiciRevoke(m.deps, { revoke: r3, signature: signWebDelegationRevoke(r3, w.pseud.seed), principalPub: other.pPub })).status).toBe(403);
+    // A stranger who knows w's browser key signs with its own pseudonym: it never sent with that key, so nothing is stored.
+    const stranger = await handleVoiciRevoke(m.deps, { revoke: r3, signature: signWebDelegationRevoke(r3, other.pseud.seed), principalPub: other.pPub });
+    expect([stranger.status, (stranger.body as { code: string }).code]).toEqual([404, "unknown-delegate"]);
+    expect(await m.deps.voici.isRevoked(w.browserPub, T0)).toBe(false);
     expect((await handleVoiciRevoke(m.deps, { revoke: r3, signature: signWebDelegationRevoke(r3, w.pseud.seed), principalPub: w.pPub })).status).toBe(200);
     expect((await m.send(w.message(T0))).body.code).toBe("revoked");
     const inbox = await handleVoiciInbox(m.owner, USER, "", null);
