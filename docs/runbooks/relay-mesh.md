@@ -23,8 +23,8 @@ From §15.2 (prod names; gym in brackets):
 4. Apply migration 0122 (prod and gym) and stamp the ledger; deploy `.com` (`npm run deploy`; the gym through
    `scripts/gym-refresh.sh`).
 5. Admit the relays (section 2), `npm run relays -- backfill`, then set `RELAY_MESH = "on"` in the wrangler file and
-   deploy. The first alarm writes every page, the head and `log-key.json`; the admission already wrote
-   `directory.json` and the key files.
+   deploy, then `npm run relays -- mint-directory`: nothing writes `directory.json` while `RELAY_MESH` is off, so an
+   admission made before the switch left none. The first alarm writes every page, the head and `log-key.json`.
 
 Check: `curl -s https://feed.flagshipserver.com/v1/directory.json | jq '.directory.directoryVersion, [.directory.relays[].relayId]'`
 and `curl -sI https://feed.flagshipserver.com/v1/head.json` (`cache-control: public, max-age=2`; the body is a
@@ -164,6 +164,7 @@ FLAGSHIP_BASE_URL=$GYM npm run relays -- add gym-b "$(node scripts/relay-key.mjs
 FLAGSHIP_BASE_URL=$GYM npm run relays -- add gym-c "$(node scripts/relay-key.mjs pub ~/.config/flagship/gym-relay-c.seed)" full fra --ipv4 <gym-c ip>
 FLAGSHIP_BASE_URL=$GYM npm run relays -- backfill
 # then RELAY_MESH = "on" in apps/com/wrangler.gym.toml and: bash scripts/gym-refresh.sh --skip-fly-deploy
+FLAGSHIP_BASE_URL=$GYM npm run relays -- mint-directory     # directory.json is written only while the mesh is on
 
 # 4. certificates and DNS
 flyctl certs add gym-a.tunnel.gym.flagship.services -a flagship-services-gym
