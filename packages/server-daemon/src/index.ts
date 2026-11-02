@@ -94,6 +94,7 @@ import {
 } from "./hostPower.js";
 import { buildPowerHttp } from "./powerHttp.js";
 import { ServingStore } from "./servingStore.js";
+import { buildRelayMeshBox } from "./tunnel/relayMeshWiring.js";
 import { ServingLockController } from "./servingLock.js";
 import { BootSuspensionClient, bootBaseFromControl } from "./bootSuspensionClient.js";
 import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
@@ -1897,6 +1898,20 @@ async function main(): Promise<void> {
         })
       : null;
   await servingStore?.load();
+  // The relay mesh (docs/architecture-v2/relay-mesh.md §9): the box signs an attachment for the relay that holds its
+  // tunnel, follows signed move hints only to blessed relays in the directory, and checks its relay hourly.
+  const relayMeshBox =
+    cfg && env.serverFqdn && env.controlPlaneBaseUrl && process.env.FLAGSHIP_RELAY_MESH !== "0"
+      ? await buildRelayMeshBox({
+          dataDir,
+          serverFqdn: env.serverFqdn,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+          boxPub: bytesToHexLocal(identityKeypair.publicKey),
+          regGen: () => servingStore?.view().regGen ?? 1,
+          sign: (m) => custodian.signAsBox(m),
+          note: (kind, detail, ok) => activityLog.note(kind, detail, { ok }),
+        })
+      : null;
   const statusHeartbeatRef: { current: DaemonStatusHeartbeat | null } = { current: null };
   // A server created to restore a backup waits for it (docs/server-backup-
   // and-clone.md): the owner-signed restore order rides beside the pairing
@@ -2056,6 +2071,8 @@ async function main(): Promise<void> {
       ...(doorbellRef.current ? { doorbell: doorbellRef.current } : {}),
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
       ...(servingStore ? { servingHello: { fields: () => servingStore.helloFields(), rehelloRef: servingRehelloRef } } : {}),
+      ...(servingStore ? { servingAppsAllowed: () => servingStore.appsAllowed() } : {}),
+      ...(relayMeshBox ? { relayMesh: relayMeshBox } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
       acmeEmail: env.acmeEmail!,
       acmeEnvironment: env.acmeEnvironment!,

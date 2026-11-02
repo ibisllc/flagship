@@ -19,6 +19,15 @@ import {
   CAPABILITY_DRAIN_V1,
   CAPABILITY_OUTBOUND_V1,
   CAPABILITY_PB_MAIL_V1,
+  CAPABILITY_MESH_V1,
+  FRAME_ATTACHMENT,
+  FRAME_MOVE_HINT,
+  attachmentFrame,
+  parseAttachmentResult,
+  parseMoveHintFrame,
+  type AttachmentFramePayload,
+  type AttachmentResultPayload,
+  type MoveHintFramePayload,
   FRAME_DRAIN_NOTICE,
   parseDrainNotice,
   FRAME_PB_MAIL_REQ,
@@ -52,6 +61,8 @@ import {
   type RootEntitlement,
   type TunnelHelloV2,
 } from "@flagship/protocol";
+import type { MeshRelay, MoveTarget, RelayCheckFailure } from "./relayMesh.js";
+import type { MoveHintReason } from "@flagship/protocol";
 
 export interface BackendTarget {
   host: string;
@@ -115,6 +126,26 @@ export interface ServingHelloFields {
   servingAdminKey: string | null;
   /** The box's stored signed `serving-policy/v1` as `{record, signature}`, or null. */
   servingPolicy: { record: unknown; signature: string } | null;
+  /**
+   * Mesh (relay-mesh.md §9.5): the box's best leases (at most 8, the best per signer), so a mesh relay never fetches
+   * them from `.com`. A relay that predates the field ignores it.
+   */
+  servingLeases?: Array<{ record: unknown; signature: string; delegation?: { record: unknown; signature: string } }>;
+}
+
+/**
+ * `mesh-v1` on the box (relay-mesh.md §9.1-9.2). With it the HELLO offers the capability; a mesh relay's accepting
+ * HELLO_ACK names its `relayId` and `relayBlessing`, and once `verifyAck` accepts them the client signs and sends an
+ * attachment for that relay, and renews it every `renewMs`. A relay that answers without them is served as before.
+ */
+export interface TunnelMeshOptions {
+  verifyAck(e: { relayId?: string; relayBlessing?: unknown; hubSig?: string; nonce: Uint8Array }): Promise<{ ok: true; relay: MeshRelay } | { ok: false; reason: string }>;
+  signAttachment(relay: MeshRelay, attachedAt: number): Promise<AttachmentFramePayload>;
+  /** Default `ATTACH_RENEW_MS` (10 min). */
+  renewMs?: number;
+  /** The relay's answer to an attachment (`clock`: the box's clock is off by more than 60 s). */
+  onAttachmentResult?(r: AttachmentResultPayload, relay: MeshRelay): void;
+  log?(m: string): void;
 }
 
 export interface TunnelClientOptions {
@@ -193,6 +224,12 @@ export interface TunnelClientOptions {
    * take `.com`'s copy of the policy alone. Unsigned by the HELLO: the policy carries the admin's own signature.
    */
   servingHello?: () => ServingHelloFields;
+  /** `mesh-v1`: attachments for a mesh relay (see TunnelMeshOptions). */
+  mesh?: TunnelMeshOptions;
+  /** A verified mesh tunnel's MOVE_HINT frames (the supervisor decides; the client only parses). */
+  onMoveHint?: (p: MoveHintFramePayload) => void;
+  /** Test seam — clock for `attachedAt`. */
+  now?: () => number;
   /** Test seam — replace WebSocket constructor + ready-state constants. */
   wsFactory?: WebSocketFactory;
   /** Test seam — replace setInterval/clearInterval (keep-alive cadence). */
@@ -233,6 +270,13 @@ export interface TunnelClient {
    * with a `RelayError` (unavailable / refused / timeout / lost).
    */
   openOutbound?(host: string, port: number): Promise<Duplex>;
+  /** The verified mesh relay this tunnel is attached to, or null (non-mesh relay, unverified blessing). */
+  meshRelay?(): MeshRelay | null;
+  /**
+   * Settles once the first accepting HELLO_ACK has been handled: the verified relay once its attachment is sent, else
+   * null (not a mesh relay, a blessing that didn't verify, a refused HELLO, or a closed socket).
+   */
+  attached?(): Promise<MeshRelay | null>;
   close(): Promise<void>;
 }
 
@@ -271,6 +315,13 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   const mailIn = new Map<number, MailAssembler>();
   let missedPongs = 0;
   let onCloseFired = false;
+  const nowFn = opts.now ?? (() => Date.now());
+  let meshRelay: MeshRelay | null = null;
+  let meshHandled = false;
+  let renewTimer: ReturnType<typeof setInterval> | null = null;
+  let resolveAttached!: (r: MeshRelay | null) => void;
+  const attachedP = new Promise<MeshRelay | null>((r) => (resolveAttached = r));
+  const meshLog = opts.mesh?.log ?? ((m: string) => console.log(m));
 
   function send(frame: Frame): void {
     if (ws.readyState === factory.OPEN) ws.send(encodeFrame(frame), { binary: true });
@@ -335,6 +386,11 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       clearIntervalFn(announceTimer);
       announceTimer = null;
     }
+    if (renewTimer !== null) {
+      clearIntervalFn(renewTimer);
+      renewTimer = null;
+    }
+    resolveAttached(null);
     try {
       opts.onClose?.();
     } catch {
@@ -346,7 +402,11 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     if (!opts.servingHello) return {};
     try {
       const f = opts.servingHello();
-      return { servingAdminKey: f.servingAdminKey, servingPolicy: f.servingPolicy };
+      return {
+        servingAdminKey: f.servingAdminKey,
+        servingPolicy: f.servingPolicy,
+        ...(opts.mesh && f.servingLeases && f.servingLeases.length > 0 ? { servingLeases: f.servingLeases } : {}),
+      };
     } catch {
       return { servingAdminKey: null, servingPolicy: null };
     }
@@ -401,7 +461,9 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       nonce: bytesToHex(nonce),
       issuedAt,
       signature: bytesToHex(signature),
-      ...(opts.onDrain ? { capabilities: [CAPABILITY_DRAIN_V1] } : {}),
+      ...(opts.onDrain || opts.mesh
+        ? { capabilities: [...(opts.onDrain ? [CAPABILITY_DRAIN_V1] : []), ...(opts.mesh ? [CAPABILITY_MESH_V1] : [])] }
+        : {}),
       ...servingFields(),
     });
     send({
@@ -455,7 +517,10 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     const incoming = toUint8(raw);
     buffered = concat(buffered, incoming);
     while (true) {
-      const r = decodeFrame(buffered, { drainNotice: hubCapabilities.includes(CAPABILITY_DRAIN_V1) });
+      const r = decodeFrame(buffered, {
+        drainNotice: hubCapabilities.includes(CAPABILITY_DRAIN_V1),
+        mesh: !!opts.mesh && hubCapabilities.includes(CAPABILITY_MESH_V1),
+      });
       if (r.kind === "incomplete") return;
       if (r.kind === "error") {
         rejectReady(new Error(r.reason));
@@ -527,12 +592,45 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       if (body.ok) {
         acked = true;
         hubCapabilities = body.capabilities ?? [];
+        const attachedAt = nowFn();
         resolveReady();
+        if (!meshHandled) {
+          meshHandled = true;
+          void startMesh(body, attachedAt, lastHelloNonce);
+        }
         announceMailboxes();
         if (announceTimer === null && opts.mailboxAnnouncements && hubCapabilities.includes(CAPABILITY_PB_MAIL_V1)) {
           announceTimer = setIntervalFn(announceMailboxes, 60 * 60_000);
         }
-      } else rejectReady(new Error(body.reason ?? "HELLO_ACK rejected"));
+      } else {
+        rejectReady(new Error(body.reason ?? "HELLO_ACK rejected"));
+        if (!meshHandled) {
+          meshHandled = true;
+          resolveAttached(null);
+        }
+      }
+      return;
+    }
+    if (f.type === FRAME_ATTACHMENT) {
+      const r = parseAttachmentResult(f.payload);
+      if (!r || !meshRelay) return;
+      if (!r.ok) meshLog(`[relay-mesh] relay ${meshRelay.relayId} refused the attachment: ${r.code}${r.code === "clock" ? " (this server's clock is off by more than a minute)" : ""}`);
+      try {
+        opts.mesh?.onAttachmentResult?.(r, meshRelay);
+      } catch {
+        /* diagnostics only */
+      }
+      return;
+    }
+    if (f.type === FRAME_MOVE_HINT) {
+      const p = parseMoveHintFrame(f.payload);
+      // Only a tunnel whose relay proved its blessed key may move the box.
+      if (!p || !meshRelay || !opts.onMoveHint) return;
+      try {
+        opts.onMoveHint(p);
+      } catch {
+        /* the hint is advice; the tunnel stays */
+      }
       return;
     }
     if (f.type === FRAME_PB_MAIL_REQ) {
@@ -589,6 +687,46 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       if (sock) sock.end();
       streams.delete(f.streamId);
       return;
+    }
+  }
+
+  async function startMesh(body: { relayId?: string; relayBlessing?: unknown; hubSig?: string }, attachedAt: number, ackNonce: Uint8Array): Promise<void> {
+    const mesh = opts.mesh;
+    if (!mesh || !hubCapabilities.includes(CAPABILITY_MESH_V1) || body.relayId === undefined) {
+      resolveAttached(null);
+      return;
+    }
+    try {
+      const v = await mesh.verifyAck({ relayId: body.relayId, relayBlessing: body.relayBlessing, hubSig: body.hubSig, nonce: ackNonce });
+      if (!v.ok) {
+        // §9.2: still served, no attachment; a `full` relay announces the box as legacy.
+        meshLog(`[relay-mesh] relay ${body.relayId} didn't prove its blessing (${v.reason}); no attachment sent`);
+        resolveAttached(null);
+        return;
+      }
+      if (onCloseFired) {
+        resolveAttached(null);
+        return;
+      }
+      meshRelay = v.relay;
+      send(attachmentFrame(await mesh.signAttachment(v.relay, attachedAt)));
+      const renew = () => {
+        const relay = meshRelay;
+        if (!relay || onCloseFired) return;
+        void mesh.signAttachment(relay, attachedAt).then(
+          (p) => send(attachmentFrame(p)),
+          (e: unknown) => meshLog(`[relay-mesh] couldn't sign the attachment renewal: ${(e as Error).message}`),
+        );
+      };
+      if (renewTimer === null && !onCloseFired) {
+        renewTimer = setIntervalFn(renew, mesh.renewMs ?? 10 * 60_000);
+        (renewTimer as { unref?: () => void }).unref?.();
+      }
+      resolveAttached(v.relay);
+    } catch (e) {
+      meshLog(`[relay-mesh] attachment failed: ${(e as Error).message}`);
+      meshRelay = null;
+      resolveAttached(null);
     }
   }
 
@@ -657,6 +795,8 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     rehello: () => sendHello(),
     outboundAvailable,
     openOutbound,
+    meshRelay: () => meshRelay,
+    attached: () => attachedP,
     requestTransfer: (fqdn: string) => {
       send(requestTransferFrame({ fqdn: fqdn.toLowerCase() }));
     },
@@ -748,8 +888,37 @@ export interface SupervisedTunnelClient {
   outboundAvailable(): boolean;
   /** Open an outbound stream on the live connection; rejects `RelayError` when none. */
   openOutbound(host: string, port: number): Promise<Duplex>;
+  /** The live tunnel's verified mesh relay, or null. */
+  meshRelay(): MeshRelay | null;
+  /** Whether a make-before-break move is in flight. */
+  moving(): boolean;
+  /** Run the hourly relay check now (tests, diagnostics). */
+  checkRelayNow(): Promise<void>;
   /** Stop supervising. Cancels any pending reconnect timer + closes the live WS. */
   close(): Promise<void>;
+}
+
+const MOVE_DIAL_TIMEOUT_MS_DEFAULT = 10_000;
+const MOVE_OLD_TUNNEL_GRACE_MS_DEFAULT = 30_000;
+const BOX_RELAY_CHECK_MS_DEFAULT = 60 * 60_000;
+
+/**
+ * The supervisor's half of the mesh (relay-mesh.md §9.3-9.4), used only with `mesh`: whether to act on a hint (the
+ * daemon's RelayMeshBox), the move bookkeeping, and the hourly relay check.
+ */
+export interface SupervisorMeshOptions {
+  checkHint(p: MoveHintFramePayload, current: MeshRelay): Promise<{ ok: true; target: MoveTarget } | { ok: false; reason: string; toRelayId: string | null }>;
+  checkRelay(current: MeshRelay): Promise<{ ok: true } | { ok: false; reason: RelayCheckFailure }>;
+  recordMove(reason: MoveHintReason): Promise<void>;
+  recordFailed(relayId: string): Promise<void>;
+  onMoved?(e: { from: string; to: string | null; reason: MoveHintReason | "relay-check"; why?: RelayCheckFailure }): void;
+  onRefused?(e: { from: string; to: string | null; reason: string }): void;
+  /** Default 10 s (`MOVE_DIAL_TIMEOUT_MS`). */
+  dialTimeoutMs?: number;
+  /** Default 30 s (`MOVE_OLD_TUNNEL_GRACE_MS`). */
+  graceMs?: number;
+  /** Default 1 h (`BOX_RELAY_CHECK_MS`). */
+  checkIntervalMs?: number;
 }
 
 export interface SupervisorOptions {
@@ -791,6 +960,8 @@ export interface SupervisorOptions {
   onReconnectAttempt?: (attempt: number) => void;
   /** Fires whenever an inner client is closed (clean or not). */
   onDisconnect?: () => void;
+  /** Mesh moves and relay checks; needs `mesh` too. */
+  meshSupervisor?: SupervisorMeshOptions;
 }
 
 export type SuperviseTunnelClientOptions = TunnelClientOptions & SupervisorOptions;
@@ -840,11 +1011,82 @@ export function superviseTunnelClient(
     rejectReady = rej;
   });
   let readyResolved = false;
+  const meshSup = opts.mesh ? opts.meshSupervisor : undefined;
+  let moving = false;
+  // A make-before-break dial that is not live yet (relay-mesh.md §9.3).
+  let candidate: TunnelClient | null = null;
+  let candidateClosed: (() => void) | null = null;
+  let checkTimer: ReturnType<typeof setInterval> | null = null;
+  if (meshSup) {
+    checkTimer = (opts.setIntervalImpl ?? setInterval)(() => void relayCheck(), meshSup.checkIntervalMs ?? BOX_RELAY_CHECK_MS_DEFAULT);
+    (checkTimer as { unref?: () => void }).unref?.();
+  }
 
   function fullJitterDelay(): number {
     // RFC: random(0, min(max, base * 2^attempt))
     const exp = Math.min(maxReconnectMs, baseReconnectMs * Math.pow(2, attempt));
     return Math.floor(random() * exp);
+  }
+
+  /** The options every inner client shares; the caller adds the lifecycle hooks. */
+  function baseClientOptions(url: string): TunnelClientOptions {
+    return {
+      hubUrl: url,
+      ...(opts.sign ? { sign: opts.sign } : {}),
+      ...(opts.signingKey ? { signingKey: opts.signingKey } : {}),
+      getEntitlements: opts.getEntitlements,
+      resolveBackend: opts.resolveBackend,
+      onDomainGranted: opts.onDomainGranted,
+      onHelloAckTrust: opts.onHelloAckTrust,
+      ...(opts.servingHello ? { servingHello: opts.servingHello } : {}),
+      ...(opts.mailboxAnnouncements ? { mailboxAnnouncements: opts.mailboxAnnouncements } : {}),
+      ...(opts.onMail ? { onMail: opts.onMail } : {}),
+      ...(opts.mesh ? { mesh: opts.mesh } : {}),
+      ...(opts.now ? { now: opts.now } : {}),
+      keepAlive: { intervalMs: keepAliveIntervalMs, maxMissedPongs },
+      wsFactory: opts.wsFactory,
+      setIntervalImpl: opts.setIntervalImpl,
+      clearIntervalImpl: opts.clearIntervalImpl,
+    };
+  }
+
+  /** A client that is (or was) live closed: forget it and reconnect, unless it was retiring or replaced. */
+  function handleClose(c: TunnelClient): void {
+    if (c === candidate) {
+      candidate = null;
+      candidateClosed?.();
+      return;
+    }
+    if (retiring.delete(c)) return;
+    // A replaced client's late close must not forget its successor.
+    if (c !== live) return;
+    // Forget the live ref + schedule the next reconnect. We don't
+    // distinguish "graceful close" from "network drop" here —
+    // either way the supervisor reconnects until close() is called.
+    live = null;
+    opts.onDisconnect?.();
+    if (stopped) return;
+    scheduleReconnect();
+  }
+
+  function retireAfter(old: TunnelClient, graceMs: number): void {
+    retiring.add(old);
+    const t = setTimeoutFn(() => {
+      if (retiring.delete(old)) void old.close();
+    }, graceMs);
+    (t as { unref?: () => void }).unref?.();
+  }
+
+  function handleDrain(c: TunnelClient, graceMs: number): void {
+    if (stopped || c !== live) return;
+    live = null;
+    if (pendingTimer !== null) {
+      clearTimeoutFn(pendingTimer);
+      pendingTimer = null;
+    }
+    attempt = 0;
+    startOne();
+    retireAfter(c, graceMs);
   }
 
   function startOne(): void {
@@ -858,60 +1100,27 @@ export function superviseTunnelClient(
     let closedDuringStart = false;
     try {
       client = startClient({
-        hubUrl: opts.hubUrl,
-        ...(opts.sign ? { sign: opts.sign } : {}),
-        ...(opts.signingKey ? { signingKey: opts.signingKey } : {}),
-        getEntitlements: opts.getEntitlements,
-        resolveBackend: opts.resolveBackend,
-        onDomainGranted: opts.onDomainGranted,
-        onHelloAckTrust: opts.onHelloAckTrust,
-        ...(opts.servingHello ? { servingHello: opts.servingHello } : {}),
-        ...(opts.mailboxAnnouncements ? { mailboxAnnouncements: opts.mailboxAnnouncements } : {}),
-        ...(opts.onMail ? { onMail: opts.onMail } : {}),
-        keepAlive: { intervalMs: keepAliveIntervalMs, maxMissedPongs },
-        wsFactory: opts.wsFactory,
-        setIntervalImpl: opts.setIntervalImpl,
-        clearIntervalImpl: opts.clearIntervalImpl,
+        ...baseClientOptions(opts.hubUrl),
         onClose: () => {
-          if (self === null) closedDuringStart = true;
-          else if (retiring.delete(self)) return;
-          // A replaced client's late close must not forget its successor.
-          else if (self !== live) return;
-          // Forget the live ref + schedule the next reconnect. We don't
-          // distinguish "graceful close" from "network drop" here —
-          // either way the supervisor reconnects until close() is called.
-          live = null;
-          opts.onDisconnect?.();
-          if (stopped) return;
-          scheduleReconnect();
+          if (self === null) {
+            closedDuringStart = true;
+            live = null;
+            opts.onDisconnect?.();
+            if (!stopped) scheduleReconnect();
+            return;
+          }
+          handleClose(self);
         },
         onDrain: (graceMs) => {
-          if (stopped || self === null || self !== live) return;
-          const old = self;
-          retiring.add(old);
-          live = null;
-          if (pendingTimer !== null) {
-            clearTimeoutFn(pendingTimer);
-            pendingTimer = null;
-          }
-          attempt = 0;
-          startOne();
-          const t = setTimeoutFn(() => {
-            if (retiring.delete(old)) void old.close();
-          }, graceMs);
-          (t as { unref?: () => void }).unref?.();
+          if (self !== null) handleDrain(self, graceMs);
         },
+        ...(meshSup ? { onMoveHint: (p: MoveHintFramePayload) => self !== null && void handleHint(self, p) } : {}),
       });
     } catch (e) {
       // Synchronous startClient failures (test seam) — treat as a failed
       // attempt and schedule the next try. Don't reject ready; the
       // supervisor by design retries forever.
       live = null;
-      if (!readyResolved && attempt === 1) {
-        // First attempt failed synchronously. We still schedule reconnect
-        // (per the no-retry-cap contract). Tests that want to assert a
-        // hard failure can override onReconnectAttempt.
-      }
       void e;
       scheduleReconnect();
       return;
@@ -943,6 +1152,122 @@ export function superviseTunnelClient(
         }
       },
     );
+  }
+
+  /**
+   * Make-before-break (relay-mesh.md §9.3): dial `url` beside the live tunnel, require an accepting HELLO_ACK within
+   * the dial timeout whose relay proved `expect`'s key (the client then sends its attachment for it), and only then
+   * make it live; the old tunnel keeps its open streams (and any OPEN its relay still sends) for the grace, then
+   * closes. Any failure leaves the live tunnel as it was.
+   */
+  async function moveTo(url: string, expect: { relayId: string; relayKey: string } | null): Promise<{ ok: true; relay: MeshRelay | null } | { ok: false; why: "busy" | "timeout" | "closed" | "refused" | "wrong-relay" | "superseded" }> {
+    const old = live;
+    if (stopped || moving || old === null) return { ok: false, why: "busy" };
+    moving = true;
+    let client: TunnelClient | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      let self: TunnelClient | null = null;
+      const closed = new Promise<"closed">((r) => (candidateClosed = () => r("closed")));
+      try {
+        client = startClient({
+          ...baseClientOptions(url),
+          onClose: () => {
+            if (self === null) candidateClosed?.();
+            else handleClose(self);
+          },
+          onDrain: (graceMs) => {
+            if (self !== null) handleDrain(self, graceMs);
+          },
+          ...(meshSup ? { onMoveHint: (p: MoveHintFramePayload) => self !== null && void handleHint(self, p) } : {}),
+        });
+      } catch {
+        return { ok: false, why: "closed" };
+      }
+      self = client;
+      candidate = client;
+      const c = client;
+      const timeout = new Promise<"timeout">((r) => {
+        timer = setTimeoutFn(() => r("timeout"), meshSup?.dialTimeoutMs ?? MOVE_DIAL_TIMEOUT_MS_DEFAULT);
+        (timer as { unref?: () => void }).unref?.();
+      });
+      const acked = c.ready().then(
+        async () => ({ relay: c.attached ? await c.attached() : null }),
+        () => "refused" as const,
+      );
+      const outcome = await Promise.race([acked, closed, timeout]);
+      if (typeof outcome === "string") return { ok: false, why: outcome };
+      if (expect && (!outcome.relay || outcome.relay.relayId !== expect.relayId || outcome.relay.relayKey !== expect.relayKey)) {
+        return { ok: false, why: "wrong-relay" };
+      }
+      if (stopped || candidate !== c) return { ok: false, why: "closed" };
+      if (live !== old && live !== null) return { ok: false, why: "superseded" };
+      candidate = null;
+      client = null;
+      if (pendingTimer !== null) {
+        clearTimeoutFn(pendingTimer);
+        pendingTimer = null;
+      }
+      attempt = 0;
+      if (live === old) retireAfter(old, meshSup?.graceMs ?? MOVE_OLD_TUNNEL_GRACE_MS_DEFAULT);
+      live = c;
+      return { ok: true, relay: outcome.relay };
+    } finally {
+      if (timer !== null) clearTimeoutFn(timer);
+      moving = false;
+      candidateClosed = null;
+      // A candidate that didn't become live goes away; its close is no longer ours to handle.
+      if (client !== null) {
+        const c: TunnelClient = client;
+        if (candidate === c) candidate = null;
+        void c.close();
+      }
+    }
+  }
+
+  async function handleHint(c: TunnelClient, p: MoveHintFramePayload): Promise<void> {
+    if (!meshSup || stopped || c !== live || moving) return;
+    const current = c.meshRelay?.() ?? null;
+    if (!current) return;
+    let r: Awaited<ReturnType<SupervisorMeshOptions["checkHint"]>>;
+    try {
+      r = await meshSup.checkHint(p, current);
+    } catch {
+      return;
+    }
+    if (!r.ok) {
+      meshSup.onRefused?.({ from: current.relayId, to: r.toRelayId, reason: r.reason });
+      return;
+    }
+    if (c !== live || moving || stopped) return;
+    const target = r.target;
+    await meshSup.recordMove(target.reason).catch(() => {});
+    const res = await moveTo(target.url, { relayId: target.relayId, relayKey: target.relayKey });
+    if (res.ok) {
+      meshSup.onMoved?.({ from: current.relayId, to: target.relayId, reason: target.reason });
+      return;
+    }
+    if (res.why === "busy" || res.why === "superseded") return;
+    await meshSup.recordFailed(target.relayId).catch(() => {});
+    meshSup.onRefused?.({ from: current.relayId, to: target.relayId, reason: "dial-failed" });
+  }
+
+  /** §9.4: leave a relay whose blessing ran out or that left the directory, through the load-balanced name. */
+  async function relayCheck(): Promise<void> {
+    const c = live;
+    const current = c?.meshRelay?.() ?? null;
+    if (!meshSup || !c || !current || moving || stopped) return;
+    let r: Awaited<ReturnType<SupervisorMeshOptions["checkRelay"]>>;
+    try {
+      r = await meshSup.checkRelay(current);
+    } catch {
+      return;
+    }
+    if (r.ok || c !== live) return;
+    const res = await moveTo(opts.hubUrl, null);
+    if (res.ok && res.relay?.relayId !== current.relayId) {
+      meshSup.onMoved?.({ from: current.relayId, to: res.relay?.relayId ?? null, reason: "relay-check", why: r.reason });
+    }
   }
 
   function scheduleReconnect(): void {
@@ -980,12 +1305,22 @@ export function superviseTunnelClient(
     outboundAvailable: () => live?.outboundAvailable?.() ?? false,
     openOutbound: (host: string, port: number) =>
       live?.openOutbound ? live.openOutbound(host, port) : Promise.reject(relayUnavailable()),
+    meshRelay: () => live?.meshRelay?.() ?? null,
+    moving: () => moving,
+    checkRelayNow: () => relayCheck(),
     close: async () => {
       stopped = true;
       if (pendingTimer !== null) {
         clearTimeoutFn(pendingTimer);
         pendingTimer = null;
       }
+      if (checkTimer !== null) {
+        (opts.clearIntervalImpl ?? clearInterval)(checkTimer);
+        checkTimer = null;
+      }
+      const cand = candidate;
+      candidate = null;
+      if (cand) void cand.close();
       const c = live;
       live = null;
       const old = [...retiring];

@@ -109,6 +109,20 @@ describe("what the box key may sign", () => {
     denied(`flagship/boot-suspension/v1|x|1|1|suspend|r|box`);
   });
 
+  it("signs relay attachments only for this box, at most 30 minutes long", () => {
+    const a = (pub: string, issued: string, notAfter: string) =>
+      `flagship/relay-attachment/v1|home.a.flagship.services|${pub}|1|iad1|1760000000000|${issued}|${notAfter}`;
+    expect(ok(a(hex(PUB), "1760000000000", "1760001800000"))).toBe("flagship/relay-attachment/v1");
+    expect(ok(a(hex(PUB), "1760000000000", "1760000000001"))).toBe("flagship/relay-attachment/v1");
+    denied(a("00".repeat(32), "1760000000000", "1760001800000"));
+    denied(a(hex(PUB), "1760000000000", "1760001800001"));
+    denied(a(hex(PUB), "1760000000000", "1760000000000"));
+    denied(a(hex(PUB), "1760000000000", "01760001800000"));
+    denied(a(hex(PUB), "1760000000000", " 1760001800000"));
+    denied(`flagship/relay-attachment/v1|home.a.flagship.services|${hex(PUB)}|1|iad1|1|2`);
+    denied(`${a(hex(PUB), "1760000000000", "1760001800000")}|x`);
+  });
+
   it("signs boot requests only as the box with its own key", () => {
     const a = (role: string, pub: string) => `flagship/boot-auth/v1|${role}|home.a.flagship.services|GET|/api/boot/x|${pub}|aabb|1760000000000`;
     expect(ok(a("box", hex(PUB)))).toBe("flagship/boot-auth/v1");

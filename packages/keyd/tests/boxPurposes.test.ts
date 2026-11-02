@@ -38,6 +38,12 @@ const RESCUE_BOX_PURPOSES = new Set(["flagship/rescue-hello/v1"]);
  * its certificates (gym 19); packages/server-daemon/tests/serviceIssuance.test.ts covers the order.
  */
 const ISSUANCE_BOX_PURPOSES = new Set(["flagship/certificate-order/v1"]);
+/**
+ * The relay attachment's bytes come from canonicalBoxAttachment (packages/protocol/src/relayMesh.ts), which this scan
+ * cannot follow (packages/server-daemon/src/tunnel/relayMesh.ts signs them); packages/server-daemon/tests/relayMesh.test.ts
+ * signs one through keyd's policy.
+ */
+const MESH_BOX_PURPOSES = new Set(["flagship/relay-attachment/v1"]);
 
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [
@@ -70,7 +76,7 @@ describe("box signing purposes", () => {
   });
 
   it("lists nothing the box does not sign", () => {
-    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t));
+    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t) && !MESH_BOX_PURPOSES.has(t));
     expect(idle).toEqual([]);
     for (const t of NOT_BOX_PURPOSES) expect(BOX_SIGN_PURPOSES.has(t), t).toBe(false);
   });

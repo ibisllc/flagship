@@ -107,7 +107,8 @@ function bareImports(file: string): string[] {
   const src = readFileSync(file, "utf8");
   const out = new Set<string>();
   const patterns = [
-    /^\s*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
+    // `from` follows whitespace or `}`: a string such as "not-from" inside an exported union is not an import.
+    /^\s*(?:import|export)\b[^;]*?[\s}]from\s*["']([^"']+)["']/gm,
     /^\s*import\s*["']([^"']+)["']/gm,
     /\bimport\(\s*["']([^"']+)["']\s*\)/g,
   ];

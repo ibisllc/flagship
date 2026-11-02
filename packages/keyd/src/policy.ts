@@ -67,6 +67,9 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/chat-wire/v1",
   // The box's own certificate order to .com's issuance service (apps/com/src/certificateIssuance.ts).
   "flagship/certificate-order/v1",
+  // The box naming the relay that holds its tunnel (docs/architecture-v2/relay-mesh.md §5.1), signed through
+  // signRelayMeshRecord. Only for this box's own key and at most ATTACH_TTL_MS (30 min) long.
+  "flagship/relay-attachment/v1",
   // Older peer-backup messages that predate the tag convention.
   "pb-put",
   "pb-resp",
@@ -115,6 +118,9 @@ export function isServiceId(id: string): boolean {
 }
 
 export const MAX_SIGN_BYTES = 256 * 1024;
+
+/** `ATTACH_TTL_MS` (relay-mesh.md §15.8): the longest attachment the box key signs. */
+export const RELAY_ATTACHMENT_MAX_MS = 30 * 60_000;
 
 const DECODER = new TextDecoder("utf-8", { fatal: true });
 
@@ -184,6 +190,15 @@ export function checkSign(
     const isMaster = assertedIdentity(new TextDecoder().decode(msg))?.role === "master";
     if (isMaster && !opts?.masterEvidence) throw new KeydError("forbidden", "master needs sign.identity with the owner's evidence");
     if (!isMaster && opts?.masterEvidence) throw new KeydError("forbidden", "sign.identity is for master assertions only");
+  }
+  if (purpose === "flagship/relay-attachment/v1") {
+    // tag|serverFqdn|boxPub|regGen|relayId|attachedAt|issuedAt|notAfter
+    const parts = new TextDecoder().decode(msg).split("|");
+    const n = (i: number) => (/^(?:0|[1-9][0-9]{0,15})$/.test(parts[i] ?? "") ? Number(parts[i]) : Number.NaN);
+    const span = n(7) - n(6);
+    if (parts.length !== 8 || parts[2] !== publicKeyHex || !(span > 0 && span <= RELAY_ATTACHMENT_MAX_MS)) {
+      throw new KeydError("forbidden", "the box attaches only itself, for at most 30 minutes");
+    }
   }
   if (purpose === "flagship/boot-suspension/v1" || purpose === "flagship/boot-auth/v1") {
     const parts = new TextDecoder().decode(msg).split("|");

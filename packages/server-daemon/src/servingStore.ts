@@ -78,8 +78,15 @@ export interface ServingStoreOptions {
   log?: (m: string) => void;
 }
 
+/** At most this many leases ride in a HELLO (`MAX_HELLO_SERVING_LEASES`, relay-mesh.md §9.5). */
+export const HELLO_SERVING_LEASES_MAX = 8;
+/** How long the box reuses its own apps-on/off answer before deciding again (§9.6: every minute). */
+const APPS_GATE_TTL_MS = 60_000;
+
 export class ServingStore {
   private state: Persisted = { comRegGen: null, policy: null, leases: [] };
+  private version = 0;
+  private gate: { version: number; at: number; apps: boolean; until: number | null } | null = null;
   private readonly floorPath: string;
   private readonly now: () => number;
   private readonly log: (m: string) => void;
@@ -102,6 +109,7 @@ export class ServingStore {
       if (p && (!next.policy || stronger(p.record, next.policy.record))) next.policy = p;
     }
     this.state = next;
+    this.version++;
     if (next.policy) {
       const leases = [...(Array.isArray(main?.leases) ? main.leases : []), ...(Array.isArray(floor?.leases) ? floor.leases : [])];
       for (const l of leases) this.keepLease(l);
@@ -170,8 +178,35 @@ export class ServingStore {
     return { grace: p.grace, onLapse: p.onLapse, until, policyGen: p.policyGen, regGen, scopeSha256, boxPub };
   }
 
-  helloFields(): { servingAdminKey: string | null; servingPolicy: SignedPolicy | null } {
-    return { servingAdminKey: this.opts.adminKey, servingPolicy: this.state.policy };
+  helloFields(): { servingAdminKey: string | null; servingPolicy: SignedPolicy | null; servingLeases: StoredLease[] } {
+    return { servingAdminKey: this.opts.adminKey, servingPolicy: this.state.policy, servingLeases: this.helloLeases() };
+  }
+
+  /**
+   * The leases a HELLO carries (relay-mesh.md §9.5): those that still count, one per signer (the store keeps only the
+   * best per signer), latest end first, at most eight. A mesh relay takes leases from the box, never from `.com`.
+   */
+  helloLeases(now = this.now()): StoredLease[] {
+    return this.state.leases
+      .filter((l) => l.record.notAfter > now && this.leaseCounts(l, now))
+      .sort((a, b) => b.record.notAfter - a.record.notAfter)
+      .slice(0, HELLO_SERVING_LEASES_MAX)
+      .map((l) => (l.delegation ? { record: l.record, signature: l.signature, delegation: l.delegation } : { record: l.record, signature: l.signature }));
+  }
+
+  /**
+   * Box-side stop-apps (relay-mesh.md §9.6): may this box serve app routes now, by its own `servingDecision`? True
+   * when nothing is pinned or no policy is held (the default is indefinitely). The answer is kept until the records
+   * change, its `until` passes, or a minute goes by, so a stream open costs no signature check.
+   */
+  appsAllowed(now = this.now()): boolean {
+    const g = this.gate;
+    if (g && g.version === this.version && now - g.at < APPS_GATE_TTL_MS && now >= g.at && (!g.apps || g.until === null || now < g.until)) return g.apps;
+    const input = this.decisionInput(now);
+    const d = input ? servingDecision(input) : null;
+    const apps = !d || d.apps;
+    this.gate = { version: this.version, at: now, apps, until: d && d.apps ? d.until : null };
+    return apps;
   }
 
   /**
@@ -225,6 +260,7 @@ export class ServingStore {
     }
 
     if (JSON.stringify(this.state) !== before) {
+      this.version++;
       await this.persist();
       this.opts.onChange?.();
     }

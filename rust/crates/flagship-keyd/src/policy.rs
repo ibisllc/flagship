@@ -54,6 +54,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/pb-root-deposit/v1",
     "flagship/chat-wire/v1",
     "flagship/certificate-order/v1",
+    "flagship/relay-attachment/v1",
     "pb-put",
     "pb-resp",
     "pb/request-peers/v1",
@@ -97,6 +98,20 @@ pub fn is_service_id(id: &str) -> bool {
 }
 
 pub const MAX_SIGN_BYTES: usize = 256 * 1024;
+
+/// `RELAY_ATTACHMENT_MAX_MS`: the longest relay attachment the box key signs (`ATTACH_TTL_MS`).
+pub const RELAY_ATTACHMENT_MAX_MS: u64 = 30 * 60_000;
+
+/// A canonical decimal (`^(?:0|[1-9][0-9]{0,15})$`), as the TS policy reads relay-attachment times.
+fn canonical_decimal(s: &str) -> Option<u64> {
+    let b = s.as_bytes();
+    let ok = match b {
+        [b'0'] => true,
+        [first, rest @ ..] => (b'1'..=b'9').contains(first) && rest.len() <= 15 && rest.iter().all(u8::is_ascii_digit),
+        [] => false,
+    };
+    if ok { s.parse().ok() } else { None }
+}
 
 fn no_purpose() -> KeydError {
     KeydError::forbidden("the message does not start with a purpose")
@@ -228,6 +243,19 @@ fn check_sign_inner(
         if !is_master && master_evidence {
             return Err(KeydError::forbidden(
                 "sign.identity is for master assertions only",
+            ));
+        }
+    }
+    if purpose == "flagship/relay-attachment/v1" {
+        // tag|serverFqdn|boxPub|regGen|relayId|attachedAt|issuedAt|notAfter
+        let text = String::from_utf8_lossy(msg);
+        let parts: Vec<&str> = text.split('|').collect();
+        let issued = parts.get(6).and_then(|s| canonical_decimal(s));
+        let not_after = parts.get(7).and_then(|s| canonical_decimal(s));
+        let span_ok = matches!((issued, not_after), (Some(i), Some(n)) if n > i && n - i <= RELAY_ATTACHMENT_MAX_MS);
+        if parts.len() != 8 || parts.get(2).copied() != Some(public_key_hex) || !span_ok {
+            return Err(KeydError::forbidden(
+                "the box attaches only itself, for at most 30 minutes",
             ));
         }
     }
@@ -877,6 +905,30 @@ mod tests {
         denied(s("box", "suspend", "").as_bytes());
         denied(s("box", "suspend", "abc").as_bytes());
         denied(b"flagship/boot-suspension/v1|x|1|1|suspend|r|box");
+    }
+
+    #[test]
+    fn relay_attachments_only_for_this_box_and_at_most_30_minutes() {
+        let a = |key: &str, issued: &str, not_after: &str| {
+            format!(
+                "flagship/relay-attachment/v1|home.a.flagship.services|{key}|1|iad1|1760000000000|{issued}|{not_after}"
+            )
+        };
+        assert_eq!(
+            ok(&a(PUB, "1760000000000", "1760001800000")),
+            "flagship/relay-attachment/v1"
+        );
+        assert_eq!(
+            ok(&a(PUB, "1760000000000", "1760000000001")),
+            "flagship/relay-attachment/v1"
+        );
+        denied(a(&"00".repeat(32), "1760000000000", "1760001800000").as_bytes());
+        denied(a(PUB, "1760000000000", "1760001800001").as_bytes());
+        denied(a(PUB, "1760000000000", "1760000000000").as_bytes());
+        denied(a(PUB, "1760000000000", "01760001800000").as_bytes());
+        denied(a(PUB, "1760000000000", " 1760001800000").as_bytes());
+        denied(format!("flagship/relay-attachment/v1|home.a.flagship.services|{PUB}|1|iad1|1|2").as_bytes());
+        denied(format!("{}|x", a(PUB, "1760000000000", "1760001800000")).as_bytes());
     }
 
     #[test]

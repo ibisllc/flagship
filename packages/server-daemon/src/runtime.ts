@@ -56,6 +56,7 @@ import {
   superviseTunnelClient,
   type SupervisedTunnelClient,
 } from "./tunnel/tunnelClient.js";
+import { boxStreamGate } from "./tunnel/relayMesh.js";
 import { RelayTrustVerifier, servicesApexOf } from "./relayTrustVerifier.js";
 import {
   RelayLockdownController,
@@ -271,6 +272,17 @@ export interface DaemonRuntimeOptions {
   servingHello?: {
     fields: () => import("./tunnel/tunnelClient.js").ServingHelloFields;
     rehelloRef?: { current: (() => void) | null };
+  };
+  /**
+   * Box-side stop-apps (docs/architecture-v2/relay-mesh.md §9.6): the box's own serving decision. While it answers
+   * false, the tunnel opens no stream for any name but the box's control name, so a relay that ignores the owner's
+   * dead-man still can't keep the apps serving.
+   */
+  servingAppsAllowed?: () => boolean;
+  /** `mesh-v1` (relay-mesh.md §9): attachments for a mesh relay, move hints and the hourly relay check. */
+  relayMesh?: {
+    client: import("./tunnel/tunnelClient.js").TunnelMeshOptions;
+    supervisor: import("./tunnel/tunnelClient.js").SupervisorMeshOptions;
   };
   /**
    * LAN-direct (docs/lan-direct.md): also accept connections on the box's
@@ -1281,8 +1293,15 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // Under ENFORCE a locked-down box refuses NEW streams (returns null →
     // the hub gets FRAME_CLOSE_REMOTE) while the WS itself stays up for
     // recovery. Under OBSERVE isRelayAllowed() is always true.
-    resolveBackend: () =>
-      relayLockdown.isRelayAllowed() ? { host: "127.0.0.1", port: tlsPort } : null,
+    resolveBackend: boxStreamGate({
+      controlName: opts.serverFqdn,
+      relayAllowed: () => relayLockdown.isRelayAllowed(),
+      // Only on a mesh relay, which gets leases from this box alone: an older relay reads them from .com, which a box
+      // hears of a heartbeat later, so the box would keep apps stopped after the owner's renewal reached the relay.
+      ...(opts.servingAppsAllowed ? { appsAllowed: () => tunnel.meshRelay() === null || opts.servingAppsAllowed!() } : {}),
+      target: { host: "127.0.0.1", port: tlsPort },
+    }),
+    ...(opts.relayMesh ? { mesh: opts.relayMesh.client, meshSupervisor: opts.relayMesh.supervisor } : {}),
     onHelloAckTrust,
     ...(opts.servingHello ? { servingHello: opts.servingHello.fields } : {}),
     ...(opts.peerMail ? { mailboxAnnouncements: opts.peerMail.announcements, onMail: opts.peerMail.onMail } : {}),
