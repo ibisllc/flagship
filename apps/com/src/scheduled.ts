@@ -42,6 +42,7 @@ import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterVetting } from "./adapterVetting.js";
 import { runVoiciNamesCron } from "./voiciNamesCron.js";
 import { runAdapterInsights } from "./adapterInsights.js";
+import { runRelayDirectoryCron, type RelayDirectoryEnv } from "./relayDirectory.js";
 import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
 import { pruneOutboundDaily } from "./outboundHosts.js";
@@ -166,6 +167,8 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runAdapterInsights(env, now);
     case "voici-names":
       return runVoiciNamesCron(env, now, plan.voiciWindow ?? { start: 0, count: 10 });
+    case "relay-directory":
+      return runRelayDirectoryCron(env as unknown as RelayDirectoryEnv, now);
   }
 }
 

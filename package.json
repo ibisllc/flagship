@@ -40,6 +40,7 @@
     "rate-limits": "node scripts/rate-limit-report.mjs",
     "canary": "tsx scripts/canary.ts",
     "outbound-hosts": "node scripts/outbound-hosts.mjs",
+    "relays": "node scripts/relays.mjs",
     "ops": "tsx scripts/ops.ts",
     "release-manifest": "node scripts/release-manifest.mjs",
     "reap-orphans": "node scripts/reap-orphans.mjs",

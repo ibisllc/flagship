@@ -464,7 +464,12 @@ function feedStub(env: ServingEnv): { fetch(request: Request): Promise<Response>
 /** Tell the feed something changed. Never throws: the relays also re-read on their own. */
 export async function pokeServingFeed(
   env: ServingEnv,
-  message: { type: "flush" } | { type: "changed"; username: string; boxPub: string } | { type: "phone-eligibility"; username: string },
+  message:
+    | { type: "flush" }
+    | { type: "changed"; username: string; boxPub: string }
+    | { type: "phone-eligibility"; username: string }
+    | { type: "relay-feed"; force?: "tail" | "all" }
+    | { type: "ensure" },
 ): Promise<void> {
   const stub = feedStub(env);
   if (!stub) return;
@@ -594,7 +599,11 @@ async function postPolicy(
     .bind(u, policy.box, policy.regGen, policy.policyGen, JSON.stringify(policy), signature, now)
     .run();
   if (!put.meta?.changes) return refuse(409, "serving-policy-stale");
-  await afterResponse(deps, pokeServingFeed(env, { type: "changed", username: u, boxPub: policy.box }));
+  // The policy-head entry the insert appended (relay-mesh.md §4.2) is signed and published now.
+  await afterResponse(
+    deps,
+    Promise.all([pokeServingFeed(env, { type: "changed", username: u, boxPub: policy.box }), pokeServingFeed(env, { type: "flush" })]).then(() => undefined),
+  );
   return json({ ok: true, policyGen: policy.policyGen });
 }
 
@@ -763,35 +772,32 @@ export interface AccountServingEntry {
   /** Whether `servingDecision` lets the box serve apps now, and why not. */
   serving: boolean;
   reason: string | null;
-  /** Every relay heard in the last 10 minutes acknowledged every revocation about this server. */
-  confirmedByRelays: boolean;
+  /**
+   * Always null since the relay mesh (relay-mesh.md §15.2): relays read the public feed and acknowledge nothing, so
+   * `.com` cannot say which relay has applied what. The apps hide the line.
+   */
+  confirmedByRelays: null;
 }
 
 async function accountServing(db: D1Database, u: string, now: number, deps: ServingRouteDeps): Promise<{ servers: AccountServingEntry[] }> {
   const user = await deps.usernames.get(u);
-  const [servers, policies, leases, delegations, acks, logTops] = await readAll<unknown>(db, [
+  const [servers, policies, leases, delegations] = await readAll<unknown>(db, [
     [SQL.servers, [u]],
     [SQL.policies, [u]],
     [SQL.leases, [u]],
     [SQL.delegations, [u]],
-    ["SELECT relay_id, sequence, seen_at FROM serving_relay_acks WHERE seen_at > ?", [now - RELAY_FRESH_MS]],
-    ["SELECT kind, subject, MAX(sequence) AS seq FROM revocation_log WHERE account = ? GROUP BY kind, subject", [u]],
   ]);
   if (!user) return { servers: [] };
   const admin = adminKeyOf(user);
   const live = new Map<string, DelegationRow>();
   for (const d of delegations as DelegationRow[]) if (d.revoked_at == null) live.set(d.renewal_pub, d);
-  const fresh = acks as Array<{ relay_id: string; sequence: number }>;
-  const tops = logTops as Array<{ kind: string; subject: string; seq: number }>;
-  const keySeq = tops.filter((t) => t.kind === "renewal-key").reduce((a, t) => Math.max(a, t.seq), 0);
+  const confirmedByRelays = null;
   const out: AccountServingEntry[] = [];
   for (const s of servers as ServerRow[]) {
     const revoked = s.revoked_at != null;
     const policyRow = (policies as PolicyRow[]).find((p) => p.box_pub === s.box_pub && p.reg_gen === s.reg_gen);
     const policy = policyRow ? signed<ServingPolicy>(policyRow.record_json, policyRow.signature) : null;
     const best = leasesFor(leases as LeaseRow[], live, s.box_pub, s.reg_gen).filter((l) => l.record.policyGen === policy?.record.policyGen)[0];
-    const relevant = Math.max(keySeq, tops.find((t) => t.kind === "box" && t.subject === s.box_pub)?.seq ?? 0);
-    const confirmedByRelays = relevant === 0 || (fresh.length > 0 && fresh.every((r) => r.sequence >= relevant));
     const grace = policy?.record.grace ?? "indefinite";
     const onLapse = policy?.record.onLapse ?? "stop-apps";
     const lease = best ? { record: best.record, signature: best.signature, delegationPub: best.delegation?.record.renewalPub ?? null } : null;

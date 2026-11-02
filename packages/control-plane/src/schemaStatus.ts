@@ -105,6 +105,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0120",
   // The certificate issuance service: orders, the service's ACME account URL, the CA back-off, CA revocations.
   "0121",
+  // The relay mesh: the relay log and its triggers, admitted relays, directories, mesh-key epochs.
+  "0122",
 ];
 
 export interface SchemaStatusDeps {

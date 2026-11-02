@@ -98,3 +98,4 @@ export * from "./peerBackupNetwork.js";
 export * from "./issuance/x509.js";
 export * from "./issuance/acmeClient.js";
 export * from "./issuance/policy.js";
+export * from "./relayFeedSeal.js";

@@ -30,6 +30,9 @@ import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
 import { mayCommitRevocation, pokeServingFeed, type ServingFeedNamespace } from "./servingAuthority.js";
 import { phoneEligibilityAccount } from "./phoneRoute.js";
+import { endpointRelays, handleRelayAdmin, RELAY_ADMIN_PATH } from "./relayDirectory.js";
+import { handleRelayBlessing, RELAY_BLESSING_PATH } from "./relayBlessing.js";
+import { relayMeshOn, type RelayFeedBucket } from "./relayFeed.js";
 import {
   handleAdapterIndex,
   isAdapterIndexPath,
@@ -389,6 +392,12 @@ export interface RouteEnv {
   /** The serving authority's revocation-log seed and feed (servingAuthority.ts, servingFeed.ts). */
   SERVING_REVOCATION_SEED?: string;
   SERVING_FEED?: ServingFeedNamespace;
+  /** The relay mesh (relay-mesh.md; relayFeed.ts, relayDirectory.ts, relayBlessing.ts): "on" publishes the feed. */
+  RELAY_MESH?: string;
+  /** Worker secret, 64 hex: the mesh-key epochs are derived from it. */
+  RELAY_MESH_KEY_SEED?: string;
+  /** R2 bucket served on feed.<controlApex> (flagship-relay-feed; gym: flagship-relay-feed-gym). */
+  RELAY_FEED?: RelayFeedBucket;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -757,7 +766,15 @@ async function routeImpl(
   }
 
   if (url.pathname === SERVICES_ENDPOINTS_PATH) {
-    return jsonServicesEndpoints(env);
+    return jsonServicesEndpoints(env, await endpointRelays(env.DB, Date.now()));
+  }
+
+  // The relay mesh: a relay's proof-of-key blessing renewal (its only call to .com) and the owner's relay admin.
+  if (url.pathname === RELAY_BLESSING_PATH) {
+    return handleRelayBlessing(request, env, ctx ? { waitUntil: (p) => ctx.waitUntil(p) } : {});
+  }
+  if (url.pathname === RELAY_ADMIN_PATH) {
+    return handleRelayAdmin(request, env);
   }
 
   // Universal Links — Apple insists on Content-Type: application/json for
@@ -1415,12 +1432,17 @@ function jsonHealth(): Response {
  * daemons must ignore unknown fields, and a future Worker deploy can
  * populate the array without any daemon-side change.
  */
-function jsonServicesEndpoints(env: RouteEnv): Response {
+function jsonServicesEndpoints(env: RouteEnv, relays: Array<{ relayId: string; tunnelHost: string; ipv4: string[]; ipv6: string[] }>): Response {
+  // With the mesh on, the default hub is the load-balanced name every full relay answers (relay-mesh.md §2);
+  // TUNNEL_HUB_URL, when set, still wins (rollout step 4 sets it to the same name).
+  const meshHub = `wss://tunnel.${(env.SERVICES_APEX ?? "flagship.services").toLowerCase()}:8443/tunnel`;
   const body = {
     version: SERVICES_ENDPOINTS_VERSION,
-    tunnelHub: env.TUNNEL_HUB_URL ?? DEFAULT_TUNNEL_HUB_URL,
+    tunnelHub: env.TUNNEL_HUB_URL ?? (relayMeshOn(env) ? meshHub : DEFAULT_TUNNEL_HUB_URL),
     passthroughIPv4: env.SERVICES_PASSTHROUGH_IPV4 ?? null,
     passthroughIPv6: env.SERVICES_PASSTHROUGH_IPV6 ?? null,
+    // Every relay in the newest CA-signed directory; phones test each with the echo (docs/relay-addresses.md).
+    relays,
     siblings: [] as Array<{ wsUrl: string; pubKeyHex: string }>,
     issuedAt: new Date().toISOString(),
   };

@@ -100,6 +100,16 @@ class_name = "RateLimitCounter"
 name = "SERVING_FEED"
 class_name = "ServingFeed"
 
+# The relay mesh's public feed (docs/architecture-v2/relay-mesh.md §4.5; apps/com/src/relayFeed.ts): the
+# ServingFeed Durable Object writes the encrypted log pages and head, the directory and each relay's sealed
+# mesh keys here; Cloudflare serves the bucket on https://feed.gym.flagshipserver.com/v1/ (an R2 custom domain plus a
+# cache rule that ignores query strings). Nothing is written while RELAY_MESH is not "on". Provision once:
+#   npx wrangler r2 bucket create flagship-relay-feed-gym
+#   then in the dashboard: R2 > flagship-relay-feed-gym > Settings > Custom domain feed.gym.flagshipserver.com
+[[r2_buckets]]
+binding = "RELAY_FEED"
+bucket_name = "flagship-relay-feed-gym"
+
 # --- D1: the gym's OWN database (never wiped; runs use unique names) ---------------------------
 # PLACEHOLDER database_id — create the real DB once and paste its id here:
 #   cd apps/com && npx wrangler d1 create flagship-state-gym
@@ -166,6 +176,10 @@ SERVICES_BASE_URL = "https://flagship-services-gym.fly.dev:8443"
 # other account (prod: 4 of 8, distinct accounts and networks).
 PB_NETWORK = '{"k":1,"n":1,"diversity":"account"}'
 TUNNEL_HUB_URL = "wss://flagship-services-gym.fly.dev:8443/tunnel"
+# The relay mesh (relay-mesh.md): "on" publishes the relay feed and runs its 5 s head alarm, and
+# GET /api/services/endpoints defaults tunnelHub to wss://tunnel.<servicesApex>:8443/tunnel. Off until
+# rollout step 1 (§13.2): the current relay keeps using the internal routes.
+RELAY_MESH = "off"
 # Scripted gym runs come from one address; scale the rate limits so a run
 # doesn't trip budgets sized for one person (apps/com/src/rateLimit.ts).
 RATE_LIMIT_SCALE = "10"
@@ -234,6 +248,8 @@ UPCLOUD_EXTRA_LABELS = "flagship-env=gym"
 #   SERVING_REVOCATION_SEED        32-byte hex (openssl rand -hex 32), the gym's own: signs the serving
 #                                  revocation log; its public key goes on the gym Fly app as
 #                                  FLAGSHIP_SERVING_REVOCATION_PUB
+#   RELAY_MESH_KEY_SEED            32-byte hex (openssl rand -hex 32), the gym's own: the relay mesh's
+#                                  mesh-key seed (relay-mesh.md §4.5.1); never the prod value
 #   SERVICES_HMAC_KEY             Worker↔Fly shared secret (match the gym Fly app's)
 #   CLOUDFLARE_DNS_API_TOKEN      Zone:DNS:Edit on flagship.services (for the gym `gym.` records)
 #   WEBPUSH_VAPID_PRIVATE_KEY_PEM  test VAPID pair (mint fresh; do NOT reuse prod's)

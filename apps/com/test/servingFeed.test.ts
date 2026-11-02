@@ -107,7 +107,7 @@ describe("ServingFeed", () => {
       await t.storage.servers.revoke("home.alice.flagship.services", "lost", 10);
       await t.storage.servers.revoke("home.carol.flagship.services", "lost", 11);
       const r = await t.feed.fetch(new Request("https://serving-feed/notify", { method: "POST", body: JSON.stringify({ type: "flush" }) }));
-      expect(await r.json()).toEqual({ sequence: 2 });
+      expect(await r.json()).toMatchObject({ sequence: 2 });
       expect(a.frames("revocation").map((f) => (f.entry as { sequence: number }).sequence)).toEqual([1, 2]);
       // b never said hello: it gets nothing live until its replay.
       expect(b.frames("revocation")).toEqual([]);

@@ -1,0 +1,159 @@
+{
+  "description": "relay feed encryption (docs/architecture-v2/relay-mesh.md §4.5.1; packages/control-plane/src/relayFeedSeal.ts). Feed objects are deterministic given the nonce; the key file's seals are random, so only opening is checked.",
+  "servicesApex": "flagship.services",
+  "meshKeySeed": "3333333333333333333333333333333333333333333333333333333333333333",
+  "epochKeys": [
+    {
+      "epoch": 1,
+      "key": "7fcd60a83854aa7e38a4395bd1218a03e2112f6e2b5889e4aa2d8ed37b8c99c5"
+    },
+    {
+      "epoch": 2,
+      "key": "5be2bdf3d2a3199b326c2307d76beccc2cdc6fb33c2e1e3bc2317fa1ea199873"
+    }
+  ],
+  "sealed": [
+    {
+      "name": "head, epoch 2",
+      "aad": "flagship/relay-feed-sealed/v1|flagship.services|head||2",
+      "key": "5be2bdf3d2a3199b326c2307d76beccc2cdc6fb33c2e1e3bc2317fa1ea199873",
+      "nonce": "070707070707070707070707",
+      "plaintext": "{\"head\":{\"servicesApex\":\"flagship.services\",\"sequence\":0,\"tipSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"directoryVersion\":1,\"issuedAt\":1793491200000},\"signature\":\"abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\"}",
+      "object": {
+        "kind": "RelayFeedSealed",
+        "version": 1,
+        "servicesApex": "flagship.services",
+        "object": "head",
+        "page": null,
+        "epoch": 2,
+        "nonce": "070707070707070707070707",
+        "ciphertext": "jH1cCNa9HfntmXh6Vx7B0yd6OqphExwNtrN6xlZ7XbTEWG9sUfCkfxA4rME3cO5Al6iZg9hWSD9033XhqBi+ABHrCr5bmOp6b6Ye2D8ax5yJcLCMpXZ991m7jQSqppPqNa4pRxBUmOvS7PP1wp8ToKe7/x92okuJ+MwHQ2H8WRDGRCchmGI4cmZGm5DITcsyPsWN7iGK4ip579dCzWcFo83pAHQNb84CefI+UC9nNcZxzr0G3HsOQdg4VldcAvPT5ZW/+5Tb8D8xAvp5nP5xilj301szfO3KccYxSRwMW/wJ0iREntKMMN+XcKthPZKQA4rbVK7z9RKipxt3h4IuF1OuKLerwnzP69WgnplBLqOTDt1fS6YFwHLSj6m/XjXqaifSw/Mw7Wuo8oZ18N7WNds5JVj+HjM6U1fuTKOF61dgcDj2pVdRNcuZCbkYnrRf/Pa+wSTl"
+      }
+    },
+    {
+      "name": "log page 3, epoch 1",
+      "aad": "flagship/relay-feed-sealed/v1|flagship.services|log|3|1",
+      "key": "7fcd60a83854aa7e38a4395bd1218a03e2112f6e2b5889e4aa2d8ed37b8c99c5",
+      "nonce": "090909090909090909090909",
+      "plaintext": "{\"page\":3,\"entries\":[]}",
+      "object": {
+        "kind": "RelayFeedSealed",
+        "version": 1,
+        "servicesApex": "flagship.services",
+        "object": "log",
+        "page": 3,
+        "epoch": 1,
+        "nonce": "090909090909090909090909",
+        "ciphertext": "SNMrMAxjzsHlH/Yhl9jENLIFTJwxz6+7uKXTe8Gu/9mzyledVNF+"
+      }
+    }
+  ],
+  "meshKeys": {
+    "relayId": "iad1",
+    "relaySeed": "6161616161616161616161616161616161616161616161616161616161616161",
+    "relayKey": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+    "document": {
+      "kind": "RelayMeshKeys",
+      "version": 1,
+      "servicesApex": "flagship.services",
+      "relayId": "iad1",
+      "relayKey": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+      "current": 2,
+      "epochs": [
+        {
+          "epoch": 1,
+          "sealed": "29d1173393cca33e8c2f162cf8e7baa1d4b8d534e5b82247bb90ddd4eecd7142ed15f479e2ebb4449ef27fb8dfdf9b822878570f83c2e93db24869d3106c89560813eb5a0384111334cc5c03ab2d6b5feeae66d668656854a039d080cef9517a9b10c8b897a0e46cc81e0cefd5727ac67d309ec493869c5cfe8206b8e5f6e594ffa4148662b7f5ae177d8a201828951c3bd18cdc55a3d42bb3f8f048967d49c3f76ba7204932056e058c03af2917c9ef"
+        },
+        {
+          "epoch": 2,
+          "sealed": "884d9c5684f7a09ba5b9f72a792ac1ab2a19730b18abed95b8a1e1e50db680146de430a3e4f0f0fce71c08f0241d5687482d49888ba45fbe1b7d81837e609da6677f0027db76b8f83e846f778994f7e0e6630d77420ab9e69ca292a74c5193f21f37f4fa37bd14f38fc9160ffed1281f0592a579cf312fc752a1e127baa95f181582d6c36c308000b77c592cd6cfc6041bc27d160de18aa7b46b23ff48f07d450565e3dafea91ba2c8dcf2ac73eb09ab"
+        }
+      ]
+    },
+    "expect": {
+      "current": 2,
+      "keys": {
+        "1": "7fcd60a83854aa7e38a4395bd1218a03e2112f6e2b5889e4aa2d8ed37b8c99c5",
+        "2": "5be2bdf3d2a3199b326c2307d76beccc2cdc6fb33c2e1e3bc2317fa1ea199873"
+      }
+    }
+  },
+  "negative": [
+    {
+      "name": "head opened as a log page",
+      "object": {
+        "kind": "RelayFeedSealed",
+        "version": 1,
+        "servicesApex": "flagship.services",
+        "object": "head",
+        "page": null,
+        "epoch": 2,
+        "nonce": "070707070707070707070707",
+        "ciphertext": "jH1cCNa9HfntmXh6Vx7B0yd6OqphExwNtrN6xlZ7XbTEWG9sUfCkfxA4rME3cO5Al6iZg9hWSD9033XhqBi+ABHrCr5bmOp6b6Ye2D8ax5yJcLCMpXZ991m7jQSqppPqNa4pRxBUmOvS7PP1wp8ToKe7/x92okuJ+MwHQ2H8WRDGRCchmGI4cmZGm5DITcsyPsWN7iGK4ip579dCzWcFo83pAHQNb84CefI+UC9nNcZxzr0G3HsOQdg4VldcAvPT5ZW/+5Tb8D8xAvp5nP5xilj301szfO3KccYxSRwMW/wJ0iREntKMMN+XcKthPZKQA4rbVK7z9RKipxt3h4IuF1OuKLerwnzP69WgnplBLqOTDt1fS6YFwHLSj6m/XjXqaifSw/Mw7Wuo8oZ18N7WNds5JVj+HjM6U1fuTKOF61dgcDj2pVdRNcuZCbkYnrRf/Pa+wSTl"
+      },
+      "expect": {
+        "servicesApex": "flagship.services",
+        "object": "log",
+        "page": 0
+      },
+      "reason": "wrong-place"
+    },
+    {
+      "name": "page claimed for another slot (AAD mismatch)",
+      "object": {
+        "kind": "RelayFeedSealed",
+        "version": 1,
+        "servicesApex": "flagship.services",
+        "object": "log",
+        "page": 4,
+        "epoch": 1,
+        "nonce": "090909090909090909090909",
+        "ciphertext": "SNMrMAxjzsHlH/Yhl9jENLIFTJwxz6+7uKXTe8Gu/9mzyledVNF+"
+      },
+      "expect": {
+        "servicesApex": "flagship.services",
+        "object": "log",
+        "page": 4
+      },
+      "reason": "undecryptable"
+    },
+    {
+      "name": "epoch relabelled",
+      "object": {
+        "kind": "RelayFeedSealed",
+        "version": 1,
+        "servicesApex": "flagship.services",
+        "object": "log",
+        "page": 3,
+        "epoch": 2,
+        "nonce": "090909090909090909090909",
+        "ciphertext": "SNMrMAxjzsHlH/Yhl9jENLIFTJwxz6+7uKXTe8Gu/9mzyledVNF+"
+      },
+      "expect": {
+        "servicesApex": "flagship.services",
+        "object": "log",
+        "page": 3
+      },
+      "reason": "undecryptable"
+    },
+    {
+      "name": "another apex",
+      "object": {
+        "kind": "RelayFeedSealed",
+        "version": 1,
+        "servicesApex": "flagship.services",
+        "object": "head",
+        "page": null,
+        "epoch": 2,
+        "nonce": "070707070707070707070707",
+        "ciphertext": "jH1cCNa9HfntmXh6Vx7B0yd6OqphExwNtrN6xlZ7XbTEWG9sUfCkfxA4rME3cO5Al6iZg9hWSD9033XhqBi+ABHrCr5bmOp6b6Ye2D8ax5yJcLCMpXZ991m7jQSqppPqNa4pRxBUmOvS7PP1wp8ToKe7/x92okuJ+MwHQ2H8WRDGRCchmGI4cmZGm5DITcsyPsWN7iGK4ip579dCzWcFo83pAHQNb84CefI+UC9nNcZxzr0G3HsOQdg4VldcAvPT5ZW/+5Tb8D8xAvp5nP5xilj301szfO3KccYxSRwMW/wJ0iREntKMMN+XcKthPZKQA4rbVK7z9RKipxt3h4IuF1OuKLerwnzP69WgnplBLqOTDt1fS6YFwHLSj6m/XjXqaifSw/Mw7Wuo8oZ18N7WNds5JVj+HjM6U1fuTKOF61dgcDj2pVdRNcuZCbkYnrRf/Pa+wSTl"
+      },
+      "expect": {
+        "servicesApex": "gym.flagship.services",
+        "object": "head",
+        "page": null
+      },
+      "reason": "wrong-place"
+    }
+  ]
+}

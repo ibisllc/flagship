@@ -11,10 +11,25 @@
  * Hibernatable: each socket's state lives in its attachment, the broadcast cursor in storage, and the beat
  * is an alarm that is only set while sockets are open. The Worker posts `{type:"flush"}` after a write that
  * can commit a revocation and `{type:"changed"}` after a policy, lease or delegation write.
+ *
+ * Relay mesh (docs/architecture-v2/relay-mesh.md §4.5): the same object is the publisher of the public relay feed.
+ * A flush also signs the relay log; with RELAY_MESH "on" it writes the changed log pages and a fresh head to R2
+ * (relayFeed.ts), and the alarm runs every 5 s to re-mint the head and catch up any missed publish.
+ *   .com → POST /notify {type:"relay-feed", force?: "tail"|"all"}   publish now (after an epoch rotation: "tail")
+ *   .com → POST /notify {type:"ensure"}                              start the alarm if the mesh is on and none is set
  */
 import type { D1Database } from "@flagship/storage";
 import { revocationsSince, signPendingRevocations } from "./servingAuthority.js";
 import { handlePhoneRouteLedger } from "./phoneRoute.js";
+import {
+  publishRelayFeed,
+  relayMeshOn,
+  RELAY_FEED_HEAD_MS,
+  servicesApexOf,
+  signPendingRelayLog,
+  type RelayFeedEnv,
+  type RelayFeedPublishState,
+} from "./relayFeed.js";
 
 /** Relays treat 60 s without a frame as lost contact, so the beat comes well inside that. */
 export const BEAT_MS = 30_000;
@@ -22,9 +37,11 @@ export const BEAT_MS = 30_000;
 const ACK_REWRITE_MS = 5 * 60_000;
 const MAX_FRAME_BYTES = 4096;
 const CURSOR_KEY = "broadcast";
+const RELAY_FEED_KEY = "relay-feed";
+const LAST_BEAT_KEY = "last-beat";
 const RELAY_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
-export interface ServingFeedEnv {
+export interface ServingFeedEnv extends RelayFeedEnv {
   DB?: D1Database;
   SERVING_REVOCATION_SEED?: string;
 }
@@ -106,7 +123,20 @@ export class ServingFeed {
         msg = null;
       }
       const m = msg as { type?: unknown; username?: unknown; boxPub?: unknown } | null;
-      if (m?.type === "flush") return Response.json({ sequence: await this.flush() });
+      if (m?.type === "flush") {
+        const sequence = await this.flush();
+        const relay = await this.publishRelayFeed();
+        return Response.json({ sequence, relaySequence: relay?.sequence ?? null });
+      }
+      if (m?.type === "relay-feed") {
+        const force = (msg as { force?: unknown }).force;
+        const relay = await this.publishRelayFeed(force === "tail" || force === "all" ? force : undefined);
+        return Response.json({ relaySequence: relay?.sequence ?? null });
+      }
+      if (m?.type === "ensure") {
+        await this.ensureAlarm();
+        return Response.json({ ok: true, mesh: relayMeshOn(this.env) });
+      }
       if (m?.type === "phone-eligibility" && typeof m.username === "string") {
         this.broadcast({ type: "phone-eligibility", username: m.username });
         return Response.json({ ok: true });
@@ -161,14 +191,62 @@ export class ServingFeed {
 
   async webSocketError(): Promise<void> {}
 
-  /** The beat: sign and push anything pending, tell every relay the newest sequence, and come back. */
+  /**
+   * The beat: sign and push anything pending, tell every relay the newest sequence (every BEAT_MS), publish the relay
+   * feed with a fresh head (every RELAY_FEED_HEAD_MS while the mesh is on), and come back.
+   */
   async alarm(): Promise<void> {
-    const sequence = await this.flush();
-    for (const ws of this.sockets()) {
-      const a = readAttachment(ws);
-      if (a?.ready) send(ws, { type: "beat", sequence });
+    const now = this.now();
+    const lastBeat = (await this.state.storage.get<number>(LAST_BEAT_KEY)) ?? 0;
+    const open = this.sockets().length > 0;
+    if (open && now - lastBeat >= BEAT_MS - RELAY_FEED_HEAD_MS) {
+      const sequence = await this.flush();
+      for (const ws of this.sockets()) {
+        const a = readAttachment(ws);
+        if (a?.ready) send(ws, { type: "beat", sequence });
+      }
+      await this.state.storage.put(LAST_BEAT_KEY, now);
     }
-    if (this.sockets().length > 0) await this.state.storage.setAlarm(this.now() + BEAT_MS);
+    await this.publishRelayFeed();
+    const mesh = this.meshPublishing();
+    if (mesh) await this.state.storage.setAlarm(this.now() + RELAY_FEED_HEAD_MS);
+    else if (this.sockets().length > 0) await this.state.storage.setAlarm(this.now() + BEAT_MS);
+  }
+
+  private meshPublishing(): boolean {
+    return relayMeshOn(this.env) && !!this.env.RELAY_FEED && !!this.env.DB && !!this.env.SERVING_REVOCATION_SEED && !!this.env.RELAY_MESH_KEY_SEED;
+  }
+
+  private async ensureAlarm(): Promise<void> {
+    if (!this.meshPublishing()) return;
+    if ((await this.state.storage.getAlarm()) == null) await this.state.storage.setAlarm(this.now() + RELAY_FEED_HEAD_MS);
+  }
+
+  private publishing: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Sign the relay log; with the mesh on, publish what changed and a fresh head. One publish at a time (an alarm and
+   * a flush may arrive together). Never throws: a failed publish is logged and retried at the next alarm.
+   */
+  async publishRelayFeed(force?: "tail" | "all"): Promise<RelayFeedPublishState | null> {
+    const run = this.publishing.then(async () => {
+      const db = this.env.DB;
+      if (!db || !this.env.SERVING_REVOCATION_SEED) return null;
+      try {
+        await signPendingRelayLog(db, this.env.SERVING_REVOCATION_SEED, servicesApexOf(this.env));
+        if (!this.meshPublishing()) return null;
+        const prev = (await this.state.storage.get<RelayFeedPublishState>(RELAY_FEED_KEY)) ?? null;
+        const next = await publishRelayFeed({ env: this.env, db, bucket: this.env.RELAY_FEED!, now: this.now(), state: prev, ...(force ? { force } : {}) });
+        await this.state.storage.put(RELAY_FEED_KEY, next);
+        await this.ensureAlarm();
+        return next;
+      } catch (e) {
+        console.error(JSON.stringify({ event: "relay-feed-publish-failed", error: String(e) }));
+        return null;
+      }
+    });
+    this.publishing = run.catch(() => undefined);
+    return run;
   }
 
   /** Sign what the triggers left unsigned and send every ready relay what it hasn't had. Returns the newest sequence. */

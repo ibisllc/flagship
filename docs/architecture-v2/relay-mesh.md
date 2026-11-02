@@ -1,6 +1,7 @@
 # Relay mesh: several relays, one data plane (release 0.3)
 
-Status: design, owner-approved direction (AGENTS.md "Make Fly redundant", 2026-11-01). Nothing built. This is the
+Status: design, owner-approved direction (AGENTS.md "Make Fly redundant", 2026-11-01). Chunks A (protocol) and B
+(`.com`) built. This is the
 contract the implementation chunks in §15 build to. Current system: `relay-transport.md` (both relays, frames,
 conformance), `serving-wiring.md` (serving gate, revocation log, feed), `phone-route.md` (the bare name),
 `docs/maintainer-trust-enforcement.md` (relay blessing).
@@ -23,17 +24,21 @@ checks, the serving decision (`servingDecision`), the `:8444` PROXY-header echo,
 5. **Bridges** between relays are WebSockets on the existing `:8443` (`/mesh`), server-authenticated by WebPKI and
    mutually authenticated by relay-key signatures over both nonces and both relay ids. Not mTLS: Fly ends TLS at its
    edge, so a relay process cannot see a client certificate. One hop only; only ciphertext. §6.
-6. **`.com`'s relay-facing data becomes one public, signed, append-only relay log** served as static files from R2
+6. **`.com`'s relay-facing data becomes one signed, append-only relay log** served as static files from R2
    behind Cloudflare's cache (`https://feed.<controlApex>/v1/`), plus a signed head re-minted every 5 s and a
-   CA-signed relay directory. No caller identity. It publishes keys, hashes and generations only: never leases,
-   policies, delegations, device grants, account names or the phone ledger. Boxes present their own leases and
-   policy to their relay; phones present their own grants. §4.
+   CA-signed relay directory. The head and the log pages are **encrypted to a Flagship-owned mesh key** (one per
+   epoch), which each admitted relay receives sealed to its own relay key (owner decision 2026-11-01, §4.5.1); the
+   directory stays in clear (boxes read it). No caller identity. It carries keys, hashes and generations only: never
+   leases, policies, delegations, device grants, account names or the phone ledger. Boxes present their own leases
+   and policy to their relay; phones present their own grants. §4.
 7. **The phone ledger moves from `.com` to a relay.** Each account's phone ledger lives on the first reachable `full`
    relay in a rendezvous-hash ranking of the directory. The existing ledger functions run there unchanged. The phone
    keeps its tunnel wherever it landed; visitors go straight to that relay. `.com` no longer learns when a phone is in
    the foreground or where. §8.
 8. **Contact rules on signed data.** A relay is fresh while it holds a verified head no older than 60 s (from `.com`'s
-   feed or from any peer). Stale 60 s: refuse new tunnels. Stale 10 min: close every tunnel. §4.6.
+   feed or from any peer). Stale 60 s: refuse new tunnels. Stale 10 min: close every tunnel, except boxes whose
+   log-verified policy has no time limit, which keep serving through a `.com` outage of any length (owner decision
+   2026-11-01). §4.6.
 9. **Old boxes** (no `mesh-v1`) are announced by their relay with a relay-signed legacy attachment, honoured only from
    `full` relays and always beaten by a box-signed one. They are never moved. §5.3.
 10. **Defence in depth on the box**: a mesh box applies `stop-apps` itself (refuses app streams when its own
@@ -69,7 +74,8 @@ accept records under `tunnel.` (today it fails on any record at an account name)
 If Cloudflare does not support a DNS-only load balancer on a wildcard hostname, the zone keeps one wildcard **CNAME**
 `*` → `lb.<apex>` (a reserved label, to add) and the LB sits on `lb.<apex>`. To verify before the owner step.
 
-`.com` stops hard-coding the hub: `GET /api/services/endpoints` returns `tunnelHub: "wss://tunnel.<apex>:8443/tunnel"`,
+`.com` stops hard-coding the hub: `GET /api/services/endpoints` returns `tunnelHub: "wss://tunnel.<apex>:8443/tunnel"`
+(with the mesh on; `TUNNEL_HUB_URL` still wins when set),
 keeps `passthroughIPv4/6` (the first-party primary, for old phones) and adds
 `relays: [{relayId, tunnelHost, ipv4: [...], ipv6: [...]}]` from the directory, which phones test with the echo
 (`docs/relay-addresses.md`) instead of the single pair.
@@ -92,10 +98,22 @@ fallback of every other.
 
 ### 3.1 Admission (owner, once per relay)
 
-`.com` keeps the relays it admits in D1 `relays(relay_id PK, relay_key, kind, tunnel_host, region, ipv4_json,
-ipv6_json, added_at, retired_at)` (migration in chunk B). Admin route `POST /api/admin/relays` (`x-admin-secret`) with
-`{op: "add"|"retire"|"update", ...}`; CLI `npm run relays -- add <relayId> <relayKey> <kind> <region> [--ipv4 ..]
-[--ipv6 ..] | retire <relayId> | list`. Retiring appends a `relay-revoke` log entry (§4.2) and mints a new directory.
+`.com` keeps the relays it admits in D1 `relays(relay_id PK, relay_key UNIQUE, kind, tunnel_host, region, ipv4_json,
+ipv6_json, added_at, retired_at, next_relay_key, key_deadline, blessing_json, blessed_at, mesh_keys_json)` (migration
+0122). Admin route `POST /api/admin/relays` (`x-admin-secret`, `apps/com/src/relayDirectory.ts`) with `{op, ...}`;
+CLI `npm run relays -- <op>` (`scripts/relays.mjs`):
+
+| op | Effect |
+|---|---|
+| `add <relayId> <relayKey> <full\|entry> <region> [--ipv4 a,b] [--ipv6 a,b]` | admit; new directory version; mesh keys sealed to it |
+| `update <relayId> [--kind] [--region] [--ipv4] [--ipv6]` | new directory version |
+| `retire <relayId>` | `relay-revoke` log entry (§4.2), a new mesh-key epoch sealed to every other relay (§4.5.1), new directory version |
+| `stage-key <relayId> <nextKey> [--deadline <time>]` | the relay's next key; its first blessing request under it promotes it (§3.2) |
+| `key-deadline <relayId> <time\|none>` | forced rotation: after it no blessing is renewed for the current key |
+| `rotate-mesh-key [reason]` | a new mesh-key epoch sealed to every active relay |
+| `mint-directory`, `backfill`, `republish`, `list` | re-mint now; §13.2 step 1 backfill; rewrite every page; show state |
+
+A relay id and a relay key are never reused (a key staged or admitted once belongs to that relay for good).
 
 ### 3.2 RelayBlessing
 
@@ -104,18 +122,40 @@ flagship/relay-blessing/v1|<relayId>|<relayKey>|<servicesApex>|<tunnelHost>|<rel
 ```
 
 JSON envelope, shaped like `ServiceBlessing`: `{kind:"RelayBlessing", version:1, relayId, relayKey, servicesApex,
-tunnelHost, relayKind, nonce, issuedAt, expiresAt, signedBy, signatures:[{pubkey, sig}]}`. Signed by `.com`'s hot CA
-key. Verified exactly like `verifyCaSignedServiceBlessing` (pin → mandate chain → CA key authorized now → signature →
-TTL), plus `servicesApex` equals the verifier's apex. TTL 26 h, refreshed every 12 h. `nonce` is 32 lowercase hex,
+tunnelHost, relayKind, nonce, issuedAt, expiresAt, signedBy, signatures:[{pubkey, sig}]}`. Signed by `.com`'s online
+hot CA key (`FLAGSHIP_CA_PRIV_HEX`, the key that signs `ServiceBlessing`; no offline step). Verified exactly like
+`verifyCaSignedServiceBlessing` (pin → mandate chain → CA key authorized now → signature → TTL), plus `servicesApex`
+equals the verifier's apex. **TTL 30 days** (owner decision 2026-11-01: short-lived, renewed only with proof of the key;
+`.com` mints `expiresAt = issuedAt + 30 d`, `RELAY_BLESSING_COM_TTL_MS`), renewed every 24 h. Verification does not
+bound the TTL, so a relay built against chunk A's `RELAY_BLESSING_TTL_MS` (26 h) / `RELAY_BLESSING_REFRESH_MS` (12 h)
+still accepts and renews correctly; those two constants are to move to 30 d / 24 h in A's next change (TS, Rust,
+vectors). `nonce` is 32 lowercase hex,
 `tunnelHost` is exactly `<relayId>.tunnel.<servicesApex>`, and `issuedAt` may be up to 60 s ahead of the verifier's
 clock (relays and boxes run their own clocks).
 
-Issuance: `POST /api/services/relay-blessing` `{relayId, relayKey, servicesApex, issuedAt, signature}` where the
-signature is the relay key over
-`flagship/relay-blessing-request/v1|<relayId>|<relayKey>|<servicesApex>|<issuedAt>`. `.com` answers only for an
-admitted, unretired row with that key, `|issuedAt − now| ≤ 60 s`. Answer: `{relayBlessing, serviceBlessing}`. The
-`ServiceBlessing` (v1, `hubKeyPub` = relay key) is still minted so old boxes' observe-mode check keeps passing. This
-replaces the shared-secret issuer (`maintainer-trust-enforcement.md` step 7: a dedicated credential per relay).
+Issuance (`apps/com/src/relayBlessing.ts`): `POST /api/services/relay-blessing` `{relayId, relayKey, servicesApex,
+issuedAt, signature}` where the signature is the relay key over
+`flagship/relay-blessing-request/v1|<relayId>|<relayKey>|<servicesApex>|<issuedAt>`. The request carries nothing else
+(no stats, no box list) and is the relay's only call to `.com`: there is no other periodic relay→`.com` handshake.
+`.com` answers only for an admitted, unretired row, `|issuedAt − now| ≤ 60 s`, and:
+
+- `relayKey` = the row's `relay_key`: blessed, unless the owner's `key_deadline` has passed (refused
+  `relay-key-rotation-required`; the last blessing then lapses at its own `expiresAt`, at most 30 d later);
+- `relayKey` = the row's `next_relay_key` (staged with `stage-key`): the key is promoted (`relay_key` := it, deadline
+  cleared, mesh keys re-sealed to it), a new directory version is minted **before** answering, then blessed;
+- anything else: refused `relay-key-unknown`.
+
+Refusal codes: `relay-blessing-malformed` (400), `relay-blessing-wrong-apex` (400), `relay-blessing-stale` (400),
+`relay-blessing-signature` (401), `relay-not-admitted`, `relay-key-unknown`, `relay-key-rotation-required` (403). Answer:
+`{relayBlessing, serviceBlessing, meshKeys}`. The `ServiceBlessing` (v1, `hubKeyPub` = relay key, `hubHost` = the
+apex, same `expiresAt` as the relay blessing) is still minted so old boxes' observe-mode check keeps passing. `meshKeys`
+is the relay's `RelayMeshKeys` document (§4.5.1; null while `RELAY_MESH_KEY_SEED` is unset). The newest blessing is
+stored and published in `directory.json`. This replaces the shared-secret issuer (`maintainer-trust-enforcement.md`
+step 7: a dedicated credential per relay).
+
+Forcing an operator to rotate: `npm run relays -- stage-key <id> <newKey> --deadline <time>` (or `key-deadline`
+alone). The operator restarts the relay with the new seed before the deadline; its first renewal promotes the key.
+Retiring a relay (§3.4), not a deadline, is the way to cut one off at once.
 
 The relay keeps no state on disk. A relay that restarts during a `.com` outage gets its own last
 blessing back from a peer during the bridge handshake (§6.2) and reuses it while it is valid. This closes step 8 without a volume.
@@ -136,15 +176,20 @@ version and a new `issuedAt`; `expiresAt = issuedAt + 7 d`. A verifier keeps the
 goes back. An expired directory is still used (fail-open for routing) but makes `/api/health` 503 after 24 h past
 expiry.
 
-Published at `https://feed.<controlApex>/v1/directory.json` (§4.5), carried in the head's `directoryVersion`, gossiped
-on bridges (§6.3). Boxes fetch it hourly (§9.4).
+Published at `https://feed.<controlApex>/v1/directory.json` (§4.5), **in clear** (it lists relays only, and boxes,
+which hold no mesh key, fetch it hourly, §9.4), carried in the head's `directoryVersion`, gossiped on bridges (§6.3).
+`.com` keeps every minted directory in D1 `relay_directories(version PK, issued_at, expires_at, entries_sha256,
+directory_json)`; a version is minted on every admin change and on a key promotion, and the six-hourly cron
+(`relay-directory` job) re-mints the same version once it is a day old.
 
 ### 3.4 Revoking a relay
 
 Owner retires it (§3.1). Effects, all from signed data: the `relay-revoke` log entry reaches every relay within the
 head cadence (§4.6) and over gossip; peers close the bridge (4403), drop every attachment it announced and refuse its
-announcements and queries; it disappears from the next directory; its blessing is not renewed (≤ 26 h). The operator
-also removes its LB pool. Boxes on it find it missing from the directory within an hour and move (§9.4).
+announcements and queries; it disappears from the next directory; its blessing is not renewed (≤ 30 d). The operator
+also removes its LB pool. Boxes on it find it missing from the directory within an hour and move (§9.4). Retiring
+also starts a new mesh-key epoch sealed to every other relay, so the retired relay cannot read anything published
+after it (§4.5.1); its blessing lapses at its `expiresAt` (≤ 30 d), but peers refuse it from the `relay-revoke` entry on.
 
 ## 4. The public relay feed
 
@@ -159,18 +204,23 @@ also removes its LB pool. Boxes on it find it missing from the directory within 
 | `/api/internal/phone-route/ledger` | which relay a phone uses, when it is in the foreground | the ledger lives on a relay (§8) |
 | `/api/username/:u`, `/api/server/by-domain/:id`, `/api/cert-revocations/:u`, eviction chain (public today) | per-name lookups tell `.com` which relay asked about which box | `account-authority`, `box-register` (newest per name = eviction), `cert-revoke` |
 
-What the log still reveals: every registered box key with a hash of its name, every account's admin root and IRK
-public keys keyed by a hash of the account name, and when boxes were registered, revoked or changed policy. Names are
-hashed, not secret (Certificate Transparency already lists every box name, so a dictionary inverts the hash); the hash
-only keeps the log from being a plain list. Accepted.
+What the log still reveals **to an admitted relay**: every registered box key with a hash of its name, every account's
+admin root and IRK public keys keyed by a hash of the account name, and when boxes were registered, revoked or changed
+policy. Names are hashed, not secret (Certificate Transparency already lists every box name, so a dictionary inverts
+the hash); the hash only keeps the log from being a plain list. Accepted. To anyone else (Cloudflare's cache, a
+scraper of `feed.<controlApex>`, a retired relay for anything after its removal) the head and pages are ciphertext
+(§4.5.1); only the file names, sizes, the epoch and page numbers, the directory and the log key are visible.
 
 Mesh-mode relays never call the internal routes. They stay in `.com` for one release so a rollback to a non-mesh relay
 works (§13.3), then go.
 
 ### 4.2 Log entries
 
-One table `relay_log(sequence INTEGER PRIMARY KEY, kind, at, f1, f2, f3, f4, signature)` replaces `revocation_log`
-(migration in chunk B: the old entries are re-appended as new kinds; 0.3 is unreleased, so no v1 compatibility).
+One table `relay_log(sequence INTEGER PRIMARY KEY AUTOINCREMENT, kind, at, account, src, f1, f2, f3, f4, signature,
+created_at)` (migration 0122) takes over from `revocation_log` (the backfill re-appends the old entries as new kinds;
+0.3 is unreleased, so no v1 compatibility). `account` and `src` are `.com`'s own bookkeeping (the account an entry is
+about; the pod name or serving-policy JSON the signer hashes) and are never published. `revocation_log`,
+`serving_relay_acks` and their triggers stay until no relay runs with the mesh off (§13.3); a later migration drops them.
 
 ```text
 flagship/relay-log/v1|<servicesApex>|<sequence>|<kind>|<at>|<f1>|<f2>|<f3>|<f4>
@@ -187,8 +237,19 @@ flagship/relay-log/v1|<servicesApex>|<sequence>|<kind>|<at>|<f1>|<f2>|<f3>|<f4>
 | `cert-revoke` | accountHash | certId | | | an entitlement or ServiceGrant cert is revoked |
 | `relay-revoke` | relayId | relayKey | | | a relay is retired |
 
-Each entry is appended in the same D1 transaction as the change that causes it, at the next sequence, signed by the
-log key. JSON on the wire: `{entry:{sequence, kind, at, f1, f2, f3, f4}, signature}`.
+Each entry is appended in the same D1 transaction as the change that causes it, at the next sequence, by a D1
+trigger on the table the writer changes (migration 0122: `servers` insert / `reg_gen` / key / `revoked_at` / delete,
+`usernames` insert / `irk_pub_hex` / `admin_root_pub_hex`, `serving_policies`, `renewal_delegations.revoked_at`,
+`device_capability_grants` revoke / delete, `device_identities` revoke / delete, `entitlement_revocation_lists`,
+`relays.retired_at`), so every handler that makes such a change appends, including ones written later. A trigger
+cannot hash, so it leaves `f1` (nameHash, accountHash) or `f4` (the policy's sha256) NULL; `signPendingRelayLog`
+(`apps/com/src/relayFeed.ts`) fills them and signs pending rows in sequence order with the log key; signed rows are
+always a prefix of the log. A trigger writes only a row the protocol can carry (key, name and account shapes are
+checked in its `WHEN`), so a malformed row can never stop the log. `authorityGen` is 1 + the account's earlier
+`account-authority` entries. `cert-revoke` is appended for each cert id new to an account's
+`entitlement_revocation_lists` list (a list that later drops an id does not un-revoke it). Code that writes the log
+itself (the backfill) uses `relayLogAppend`, the same row. JSON on the wire: `{entry:{sequence, kind, at, f1, f2, f3,
+f4}, signature}`.
 
 State a relay derives (`RelayLogState`, protocol chunk A): per nameHash the newest `box-register` (an older key for
 the name is evicted); per boxPub the highest revoked regGen; per accountHash the newest authority; per (boxPub, regGen)
@@ -220,17 +281,78 @@ on HELLO refresh, on a `policy-head`, `box-revoke`, `renewal-key-revoke` or `acc
 
 | Object | Content | Cache-Control |
 |---|---|---|
-| `v1/head.json` | the latest signed head | `public, max-age=2` |
-| `v1/log/<page>.json` | `{page, entries:[...]}`, entries `page*512 .. page*512+511` | full page: `public, max-age=31536000, immutable`; the tail page `public, max-age=2` |
-| `v1/directory.json` | `{directory, blessings:[current RelayBlessing per relay]}` | `public, max-age=60` |
-| `v1/log-key.json` | `{logKey}` (also `GET /api/serving/revocation-key`) | `public, max-age=3600` |
+| `v1/head.json` | `RelayFeedSealed` (§4.5.1) of the latest signed head `{head, signature}` | `public, max-age=2` |
+| `v1/log/<page>.json` | `RelayFeedSealed` of `{page, entries:[...]}`, entries `page*512 .. page*512+511` (page 0 starts at 1) | full page: `public, max-age=31536000, immutable`; the tail page `public, max-age=2` |
+| `v1/directory.json` | `{directory, blessings:[current RelayBlessing per relay]}`, in clear | `public, max-age=60` |
+| `v1/log-key.json` | `{logKey}` (also `GET /api/serving/revocation-key`), in clear | `public, max-age=3600` |
+| `v1/keys/<relayId>.json` | `RelayMeshKeys` (§4.5.1): every epoch key sealed to that relay's key | `public, max-age=60` |
 
-The `ServingFeed` Durable Object becomes the publisher: after each append the Worker calls it; it reads the tail from
-D1 and rewrites the tail page and the head. An alarm every 5 s re-mints the head (fresh `issuedAt`) and catches up any
-missed publish. A relay polls `head.json` every 5 s and fetches only pages past its sequence. Query strings are not part
+R2 bucket `flagship-relay-feed` (gym `flagship-relay-feed-gym`), binding `RELAY_FEED`. The `ServingFeed` Durable
+Object becomes the publisher (`publishRelayFeed`): after a write the Worker pokes it (`{type:"flush"}` after a
+revoking write or a policy, `{type:"relay-feed"}` after a relay change); it signs the pending rows, rewrites every page
+from the one holding its last published sequence + 1 to the tail (each encrypted separately, so pages stay small), and
+the head. An alarm every 5 s re-mints the head (fresh `issuedAt`) and catches up any missed publish. All of it only
+while the Worker var `RELAY_MESH` is `"on"` (default `"off"`: the triggers still append and the log is still signed,
+but nothing is published and no alarm runs; today's relays keep the internal routes). A relay polls `head.json` every
+5 s and fetches only pages past its sequence. Query strings are not part
 of the object key (R2 custom domain + a cache rule that ignores them), so spam cannot bust the cache. Requests carry
 nothing about the relay; an operator who wants `.com` (or Cloudflare) not to see its address fetches through any proxy
 or from a peer (§6.3).
+
+#### 4.5.1 Encryption to the mesh key (owner decision 2026-11-01)
+
+The head and every log page are encrypted; the directory, the log key and the key files are not (they hold no box
+data). Signatures stay over the plaintext canonical bytes (§4.2, §4.3): a relay decrypts, then verifies exactly as
+before, and gossips plaintext entries and heads over its authenticated bridges (§6.3). Code:
+`packages/control-plane/src/relayFeedSeal.ts` (`sealRelayFeedObject`, `openRelayFeedObject`, `sealRelayMeshKeys`,
+`openRelayMeshKeys`); vectors `packages/control-plane/tests/vectors/relay-feed-seal.json`
+(`scripts/relay-feed-seal-vectors.ts`), for the TS relay to import and the Rust relay to match.
+
+**Mesh key.** 32 bytes per **epoch** (an integer ≥ 1). `.com` derives it, and nobody else can:
+`HKDF-SHA256(ikm = RELAY_MESH_KEY_SEED (Worker secret, 32 bytes), salt = empty,
+info = "flagship/relay-mesh-key-derive/v1|<servicesApex>|<epoch>", L = 32)`. D1 `relay_mesh_epochs(epoch, created_at,
+reason)` records which epochs exist (epoch 1 from the start). New files are always written under the newest epoch.
+
+**Sealed file** (`head.json`, `log/<page>.json`):
+
+```text
+{kind:"RelayFeedSealed", version:1, servicesApex, object:"head"|"log", page, epoch, nonce, ciphertext}
+  page        the page number for "log" (≥ 0); null for "head"
+  nonce       12 random bytes, lowercase hex (24 chars)
+  ciphertext  standard base64 (padded) of AES-256-GCM output: ciphertext ‖ 16-byte tag
+  key         the epoch's mesh key
+  AAD         UTF-8 of flagship/relay-feed-sealed/v1|<servicesApex>|<object>|<page, or empty for the head>|<epoch>
+  plaintext   UTF-8 JSON of {head, signature} or {page, entries:[{entry, signature}, ...]}
+```
+
+`servicesApex`, `object`, `page` and `epoch` are in clear (a relay needs the epoch before decrypting); a relay opens
+a file only as the object and page it asked for (anything else is `wrong-place`), and the AAD binds them, so a page
+cannot be served in another page's slot or relabelled to another epoch (`undecryptable`).
+
+**Key delivery** (`RelayMeshKeys`, in the blessing answer's `meshKeys` and at `v1/keys/<relayId>.json`):
+
+```text
+{kind:"RelayMeshKeys", version:1, servicesApex, relayId, relayKey, current, epochs:[{epoch, sealed}, ...]}
+  sealed  hex of sealForEd25519Recipient(UTF-8 line, relayKey): the repo's flagship.seal.v1
+          (ephemeral X25519 pub ‖ 12-byte nonce ‖ AES-256-GCM; key = HKDF-SHA256(X25519 shared, salt = eph pub,
+          info "flagship.seal.v1")) to the X25519 form of the Ed25519 relay key
+  line    flagship/relay-mesh-key/v1|<servicesApex>|<relayId>|<epoch>|<mesh key, 64 lowercase hex>
+```
+
+The relay opens each entry with its relay key seed (`FLAGSHIP_RELAY_KEY_SEED`, the Ed25519 seed converted to X25519,
+`openSealedFromEd25519Recipient`) and keeps an entry only when the line names its apex, its relay id and the epoch it
+is filed under. Every epoch from 1 to `current` is sealed to every active relay (a new relay can read the old full
+pages). A relay keeps every epoch key it has received (memory only: on restart it gets them back with its blessing or
+from `v1/keys/<relayId>.json`). A relay that has neither (it restarted while `.com` and R2 are unreachable) still
+catches up from its peers: bridges carry heads and entries in plaintext (`head`, `log`, `log-since`, §6.3). On a head or page whose epoch it lacks, it
+fetches `v1/keys/<relayId>.json` (or renews its blessing) once, then treats the file as missing.
+
+**Rotation.** `npm run relays -- rotate-mesh-key`, and automatically on `retire`: a new epoch row, every active relay's
+key file re-sealed (retired relays get nothing new), and the publisher rewrites the tail page and the head under the new
+epoch at once. A removed or suspect relay keeps what it already had (it read those pages while trusted) but cannot read
+any head or page written after. Full pages keep the epoch they were completed under. Replacing `RELAY_MESH_KEY_SEED`
+itself changes every epoch's key: run `npm run relays -- republish` (every page and the head rewritten, every key file
+re-sealed).
 
 Later (when the log passes ~100k entries): a daily signed snapshot (`v1/snapshot-<sequence>.json`, the derived state
 with a log-key signature over its sha256) so a new relay starts from it. Not needed for 0.3.
@@ -245,7 +367,42 @@ or from any peer (heads are verifiable wherever they come from).
   `/api/health` is 503 (the LB stops sending new boxes and visitors).
 - Not fresh for 10 min (`HEAD_CLOSE_ALL_MS`): every tunnel is closed 1013 `serving-feed-lost`, as today.
 - Entry duties need freshness too: a relay that is not fresh refuses to forward to a mesh holder (delayed drop), because
-  it cannot know about revocations.
+  it cannot know about revocations, except for an exempt box (below).
+
+**Boxes with no time limit outlive a `.com` outage** (owner decision 2026-11-01). The two deadlines above guard the
+dead-man switch: a box under a 7 d / 30 d policy must stop serving apps when its lease runs out, and a relay that has
+lost `.com` cannot learn about a revocation either. A box whose owner chose no time limit has no dead-man to enforce,
+so it keeps serving however long `.com` is gone; time-limited boxes keep the strict rule.
+
+A box is **exempt** while all of these hold against the relay's **last applied** log state (`RelayLogState` at the
+newest head it applied, however old):
+
+1. its `box-register` for nameHash(serverFqdn) names this `boxPub` at this `regGen`, and `revokedBoxes` does not cover
+   that `regGen`;
+2. `servingDecision` computed with the §4.4 inputs from that state (`adminKeyFromCom` from its authority entry,
+   `policyHead` = its `policy-head` for (boxPub, regGen), the HELLO policy and leases) returns `apps: true` and
+   `until: null`.
+
+What the log carries for this is the `policy-head`: its `f4` is the sha256 of the policy's canonical bytes, and those
+bytes include `grace`. The relay holds the box's policy from HELLO, and `servingDecision` only counts a policy whose
+hash equals the head, so `grace: "indefinite"` is verified against the log, not taken from the box: a box cannot pass a
+time-limited policy off as indefinite (it gets `policy-stale`). A box with no policy head and no policy offered gets the
+default policy, which is indefinite. No new log field is needed.
+
+The rule, for a relay that is not fresh (`HEAD_REFUSE_NEW_MS` and `HEAD_CLOSE_ALL_MS` from the moment it stopped being
+fresh):
+
+- **Past 60 s:** new HELLOs are refused (1013) except from a box that is exempt by its HELLO; `/api/health` stays 503.
+  A relay with no applied state at all (it restarted during the outage and no peer gave it the log, §6.3
+  `log-since`) has no exempt boxes.
+- **Past 10 min:** every tunnel is closed 1013 `serving-feed-lost` except exempt boxes' tunnels, which stay with their
+  app and control streams. Phone tunnels follow the strict rule.
+- **Entry relays:** forward to a mesh holder only for a box that is exempt in their own last applied state; the holder
+  re-checks and answers `refuse stale` for anything else.
+- **Recovery:** the moment a fresh head is applied, every exempt box is re-decided against the new state (a
+  revocation or policy change made during the outage applies then) and the normal rules resume.
+- Exemption is re-evaluated on every HELLO refresh: a box whose decision changes (it sends a time-limited policy the
+  head matches, say) loses it at once.
 
 A gap (the log page lacks an entry, a tip hash mismatch, a bad signature) stops applying at that point and refetches;
 a bad signature from the feed is logged and the entry ignored until a correct copy arrives.
@@ -611,7 +768,7 @@ to its account's best other `full` relay (lowest load, same region first), sprea
 | **A relay stops forwarding** (crash, hang) | Bridge pings fail in 30 s → its attachments unreachable; LB health drops it within ~30 s; boxes on it reconnect through the LB when their keepalive fails (30 s × 3); visitors to them get a delayed drop meanwhile |
 | **Traffic loops** | `hop:1` on every bridged OPEN; a holder matches bridged streams only against local tunnels and refuses `not-holder`; the entry relay re-queries once, never via the holder |
 | **Partition between relays** | Each side routes what it can see. Two relays may each think they are an account's home or phone ledger: shortened names and the bare name may be served from both sides. Healed by the deterministic rules once bridges return (higher generation / rule order wins) |
-| **`.com` outage** | Routing continues from the replicated state; heads stop being minted. At 60 s every relay refuses new tunnels and is 503 to the LB; at 10 min every tunnel closes (today's rule, now fleet-wide). Peers' gossip cannot help: nobody has a fresher head. See §16 risk 1 |
+| **`.com` outage** | Routing continues from the replicated state; heads stop being minted. At 60 s every relay refuses new tunnels (but HELLOs from exempt, no-time-limit boxes) and is 503 to the LB; at 10 min every tunnel closes except exempt boxes', which keep serving for the whole outage (§4.6). Peers' gossip cannot help: nobody has a fresher head |
 | **Cloudflare (R2/cache) outage, `.com` up** | Heads come from peers that still reach it; a relay that reaches neither goes stale |
 | **Clock skew** | Box: attachment refused `clock` (diagnostics). Relays: handshake and attachment checks allow 60 s; a relay off by more is cut by its peers (`stale`), so keep NTP on non-Fly hosts |
 | **Mixed versions** | §13.1 |
@@ -626,7 +783,8 @@ to its account's best other `full` relay (lowest load, same region first), sprea
   streams itself (§9.6). Entry relays do not know leases.
 - **Renewal-key, device-grant, cert revocations**: the same propagation; the holder re-decides the affected boxes and
   phones on apply.
-- **Relay revocation**: peers drop it on apply; boxes leave it within the hour (§9.4); its blessing dies in ≤ 26 h.
+- **Relay revocation**: peers drop it on apply; boxes leave it within the hour (§9.4); it cannot read feed files
+  written after its removal (new mesh-key epoch, §4.5.1); its blessing is not renewed and lapses in ≤ 30 d.
 - **`.com` never learns which relay holds a box or a phone**: no protocol message to `.com` names a box and a relay
   together. Remaining side channels, accepted for 0.3: first-party relays' usage reports (`/api/usage/report`, per
   account, from a relay's source address, no relay field) and outbound AI checks (`/api/outbound/*`) are made by the
@@ -647,7 +805,8 @@ to its account's best other `full` relay (lowest load, same region first), sprea
 ### 13.2 Rollout
 
 1. Protocol, vectors, `.com` feed and directory deployed; the log is backfilled (one `box-register`, `account-authority`
-   and `policy-head` per existing server and account, then the revocations) and published. Relays unchanged.
+   and `policy-head` per existing server and account, then the revocations: `npx tsx scripts/relay-log-backfill.ts`,
+   idempotent) and published (`RELAY_MESH = "on"`, after the owner steps in §15.2). Relays unchanged.
 2. Relays (TS and Rust) gain mesh code, off by default. Conformance §14.2 green on both, existing S/P/M scenarios
    unchanged with mesh off.
 3. Gym: three relays (§14.1), LB on the gym names, mesh on; the mesh groups and the full shared run green.
@@ -693,8 +852,8 @@ address:
 
 ### 14.2 Conformance (`tools/relay-conformance`, both relays, and mixed pairs)
 
-The harness's mock `.com` gains the public feed (R2-shaped files, head minting, directory, relay-blessing issuance with
-proof of possession). Mesh scenarios run with three relays in one mesh: TS–TS, Rust–Rust and TS–Rust in both entry and
+The harness's mock `.com` gains the feed (R2-shaped files encrypted per §4.5.1, head minting, directory, relay-blessing
+issuance with proof of possession and `meshKeys`, an epoch rotation). Mesh scenarios run with three relays in one mesh: TS–TS, Rust–Rust and TS–Rust in both entry and
 holder roles. Same answers required on both.
 
 | Id | Scenario |
@@ -780,21 +939,48 @@ Where the text above left a detail open, chunk A fixed it as follows (code: `pac
 - **Extra constants**: `LEGACY_ATTACH_WAIT_MS` 10 s, `HEAD_FRESH_MS` 60 s, `DIRECTORY_EXPIRED_UNHEALTHY_MS` 24 h,
   `BOX_DIRECTORY_MAX_AGE_MS` 24 h, `MESH_PEER_OVER_LIMIT_MS` 60 s / `MESH_PEER_CUT_MS` 10 min,
   `ACCOUNT_MOVE_HINT_SPACING_MS` 2 s, `REBALANCE_BUCKET_MS` 1 min, `RELAY_LOG_TIP_HISTORY` 1,024.
-- **Confidentiality of the feed** (open owner decision: public, or encrypted to a mesh key sent with blessings) does
-  not touch these records: an encryption layer would wrap the published files (chunk B), not the canonical forms.
+- **Confidentiality of the feed**: decided by the owner (2026-11-01): encrypted to a mesh key sent with blessings
+  (§4.5.1). It wraps the published files only; these canonical records and their signatures are unchanged.
 
 ### 15.2 B. `.com` feed, directory and blessing
 
-Files: `packages/storage/migrations/01xx_relay_mesh.sql` (`relay_log`, `relays`; drops `revocation_log`,
-`serving_relay_acks` after backfill), `apps/com/src/relayFeed.ts` (append helper used by every writer, the publisher in
-the `ServingFeed` DO, R2 binding `RELAY_FEED`), `apps/com/src/relayDirectory.ts` (admission, directory minting, daily
-cron tick in `cronPlan.ts`), `apps/com/src/relayBlessing.ts` (`POST /api/services/relay-blessing`), the writers
-(server register / revoke / un-revoke / delete, admin root and IRK rotation, `serving-policy`, device removal,
-renewal-key revoke, cert revoke) calling the append helper in their transaction, `GET /api/services/endpoints`
-(`relays`, new `tunnelHub` default), backfill script `scripts/relay-log-backfill.ts`, CLI `scripts/relays.mjs`
-(`npm run relays`), `wrangler.toml` bindings for prod and gym. `confirmedByRelays` in `GET /api/accounts/:u/serving`
-becomes null (the apps hide the line; chunk F). Tests: append-in-transaction for each writer, page/head files,
-cache headers, PoP refusals, directory versioning, backfill idempotence, `apps/com/test/cpuBudget.test.ts` still green.
+Files: `packages/storage/migrations/0122_relay_mesh.sql` (`relay_log`, `relays`, `relay_directories`,
+`relay_mesh_epochs` and the triggers that append for every writer; nothing dropped: `revocation_log` and
+`serving_relay_acks` stay for the mesh-off rollback and go in a later migration), `apps/com/src/relayFeed.ts`
+(`relayLogAppend`, `signPendingRelayLog`, `publishRelayFeed`, mesh-key epochs, `backfillRelayLog`),
+`apps/com/src/servingFeed.ts` (the `ServingFeed` DO as publisher: `flush` also signs and publishes the relay log,
+`relay-feed` and `ensure` notices, the 5 s alarm while `RELAY_MESH` is on), `apps/com/src/relayDirectory.ts`
+(admission route and ops, directory minting and publishing, the `relay-directory` six-hourly cron job in `cronPlan.ts`,
+the endpoints' `relays`), `apps/com/src/relayBlessing.ts` (`POST /api/services/relay-blessing`),
+`packages/control-plane/src/relayFeedSeal.ts` (§4.5.1, shared with chunk C), `scripts/relays.mjs` (`npm run relays`),
+`scripts/relay-log-backfill.ts`, `scripts/relay-feed-seal-vectors.ts`, `wrangler.toml` / `wrangler.gym.toml`
+(`RELAY_FEED` R2 binding, `RELAY_MESH = "off"`). `GET /api/services/endpoints` gains `relays` (the newest directory's
+`{relayId, tunnelHost, ipv4, ipv6}`, cached a minute per isolate) and, with the mesh on and no `TUNNEL_HUB_URL`, the
+default `tunnelHub` `wss://tunnel.<apex>:8443/tunnel`. `confirmedByRelays` in `GET /api/accounts/:u/serving` is always
+null (the apps hide the line; chunk F). Tests: `apps/com/test/relayMesh.test.ts`,
+`packages/control-plane/tests/relayFeedSeal.test.ts`, and `cpuBudget` / `cronBudget` unchanged.
+
+Decided while building B (2026-11-01):
+
+- **Appending is done by triggers**, not by a helper each handler calls: the existing revocation log already works
+  this way, a trigger runs in the writer's transaction whatever handler made the change, and a new handler cannot
+  forget it. The hashed fields are filled at signing (§4.2). `relayLogAppend` is the code path for the backfill.
+- **The directory and blessings are signed by the online hot CA key** (as `ServiceBlessing` is); no offline step.
+- **Mesh off by default.** With `RELAY_MESH` not `"on"` the log is appended and signed but nothing is published and
+  no alarm runs; the internal routes and the WebSocket feed are unchanged, so the current single relay keeps working.
+
+Owner and release steps, in order (none is done by the code):
+
+1. Create the buckets: `npx wrangler r2 bucket create flagship-relay-feed` and `flagship-relay-feed-gym`. **Before the
+   next `.com` deploy**: the `RELAY_FEED` binding is in both wrangler files and a deploy fails without its bucket.
+2. Serve each bucket on its custom domain (`feed.flagshipserver.com`, `feed.gym.flagshipserver.com`: R2 > bucket >
+   Settings > Custom domain) with a cache rule that ignores the query string.
+3. Secrets: `openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED` on prod and (a different value) on the gym
+   Worker. `SERVING_REVOCATION_SEED` (already set) is the log key.
+4. Apply migration 0122 (prod and gym) and stamp the ledger; deploy `.com`.
+5. Admit the relays (`npm run relays -- add ...`, the relay key from each relay's `FLAGSHIP_RELAY_KEY_SEED`), run the
+   backfill (`npx tsx scripts/relay-log-backfill.ts`), then set `RELAY_MESH = "on"` and deploy: the first alarm
+   publishes every page, the head, `log-key.json`; `directory.json` and the key files are written by the admission.
 
 ### 15.3 C. TS relay mesh (`apps/web/src/tunnel/mesh/`)
 
@@ -841,7 +1027,8 @@ work; the release manager adds the group to it.
 
 Env (both relays): `FLAGSHIP_MESH=on|off` (default off), `FLAGSHIP_RELAY_ID`, `FLAGSHIP_RELAY_KEY_SEED`,
 `FLAGSHIP_RELAY_KIND=full|entry`, `FLAGSHIP_RELAY_FEED_URL` (default `https://feed.<controlApex>/v1`),
-`FLAGSHIP_RELAY_LOG_PUB`; test-only shortening: `FLAGSHIP_MESH_REBALANCE_MS`, `FLAGSHIP_MESH_MIN_MOVE_MS`,
+`FLAGSHIP_RELAY_LOG_PUB` (no mesh-key variable: the epoch keys come sealed with the blessing, §4.5.1);
+`.com`: `RELAY_MESH=on|off` (Worker var, default off), `RELAY_MESH_KEY_SEED` (secret), R2 binding `RELAY_FEED`; test-only shortening: `FLAGSHIP_MESH_REBALANCE_MS`, `FLAGSHIP_MESH_MIN_MOVE_MS`,
 `FLAGSHIP_MESH_ATTACH_TTL_MS`, `FLAGSHIP_MESH_FEED_POLL_MS` (with the existing `FLAGSHIP_SERVING_REFUSE_NEW_MS`,
 `FLAGSHIP_SERVING_CLOSE_ALL_MS`).
 
@@ -860,17 +1047,17 @@ Env (both relays): `FLAGSHIP_MESH=on|off` (default off), `FLAGSHIP_RELAY_ID`, `F
 | feed | head re-minted 5 s, polled 5 s, page 512 entries |
 | `HEAD_REFUSE_NEW_MS` / `HEAD_CLOSE_ALL_MS` | 60 s / 10 min |
 | directory | TTL 7 d, re-minted daily; box re-check 1 h |
-| blessing | TTL 26 h, refresh 12 h |
+| blessing | TTL 30 d (minted by `.com`), renewed every 24 h; A's constants still say 26 h / 12 h (§3.2) |
+| mesh key | 32 bytes per epoch; AES-256-GCM, 12-byte nonce; head and pages sealed, directory and key files clear |
 | rebalance | every 60 min ± 10; ≥ 64 MiB or 500 streams; share ≥ 0.6 and ≥ home + 0.3; target load < 0.8 |
 | moves | account move TTL 10 min, ≥ 6 h apart; box `locality` ≥ 6 h; `co-locate` ≥ 10 min, ≤ 6 / 24 h; dial 10 s; old tunnel grace 30 s; failed target ignored 1 h |
 | phone | grant 60 s, renew 15 s (existing constants) |
 
 ## 16. Risks and open points
 
-1. **A `.com` outage longer than 10 minutes stops every box on every relay.** That is today's contact rule, but today
-   it guards one relay; the mesh makes the same rule fleet-wide, so adding relays adds no availability against `.com`.
-   Options for the owner: a longer close-all for boxes whose policy is indefinite (they have no dead-man to enforce;
-   revocation is the only thing lost), or a second head signer. Not decided here.
+1. **A `.com` outage longer than 10 minutes stops every time-limited box on every relay.** Decided (owner,
+   2026-11-01): boxes with no time limit keep serving for the whole outage (§4.6); what they lose is only that a
+   revocation made meanwhile applies when `.com` is back. Time-limited boxes keep the strict rule, fleet-wide.
 2. **Partitions break exclusivity.** The bare name and shortened names can be served from two places while relays
    cannot see each other. The phone ledger used to be one compare-and-set in a Durable Object; now it is a relay chosen
    by ranking. Accepted for 0.3 (both holders are the owner's own devices or boxes).
@@ -880,7 +1067,9 @@ Env (both relays): `FLAGSHIP_MESH=on|off` (default off), `FLAGSHIP_RELAY_ID`, `F
    relays are `entry` only until there is an anonymous reporting scheme.
 5. **Cloudflare LB on a wildcard, DNS-only**, and the LB's cost (pools, origins, health-check regions) need checking with
    Cloudflare before step 4 of the rollout.
-6. **The log makes every box key and name hash public.** CT already publishes the names; the owner should still confirm.
+6. **The log shows every box key and name hash to every admitted relay.** Decided (owner, 2026-11-01): the feed is
+   encrypted to the mesh key (§4.5.1), so it is not public; an admitted relay (and Cloudflare, only as ciphertext)
+   still sees what §4.1 lists.
 7. **An IPv4-only box cannot follow a hint to an IPv6-only relay.** It stays where the LB put it (the dial fails, it
    backs off); its account may stay split. Prod `full` relays should keep an IPv4 direct address.
 8. **Bridge throughput through Fly's proxy** (WebSocket on `:8443`) is unmeasured; add a mesh row to

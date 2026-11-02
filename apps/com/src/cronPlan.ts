@@ -8,7 +8,8 @@
  * and the gym Worker uses two):
  *
  *   `0 *\/6 * * *`  every six hours: custom-domain verification, the CA lease
- *                  warning, log pruning. Cheap and constant.
+ *                  warning, log pruning, the relay directory's daily re-mint
+ *                  (relayDirectory.ts; nothing while the mesh is off). Cheap and constant.
  *   `*\/10 * * * *` every ten minutes: the demo poller every tick, plus ONE
  *                  more thing, rotated:
  *                    even ticks      a window of the CT scan (CT_USERS_PER_TICK
@@ -40,7 +41,8 @@ export type CronJobId =
   | "legacy-dns-sweep"
   | "adapter-publish"
   | "adapter-insights"
-  | "voici-names";
+  | "voici-names"
+  | "relay-directory";
 
 export interface CronPlan {
   jobs: CronJobId[];
@@ -71,7 +73,7 @@ const MINOR_GROUPS: CronJobId[][] = [
 
 export function cronPlan(cron: string, scheduledTime: number): CronPlan {
   if (cron === SIX_HOURLY_CRON) {
-    return { jobs: ["custom-domain-verify", "ca-lease-warning", "prune-rate-limit-log", "prune-late-logs"] };
+    return { jobs: ["custom-domain-verify", "ca-lease-warning", "prune-rate-limit-log", "prune-late-logs", "relay-directory"] };
   }
   if (cron === TEN_MINUTE_CRON) {
     const d = new Date(scheduledTime);

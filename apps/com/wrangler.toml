@@ -241,6 +241,16 @@ class_name = "RateLimitCounter"
 name = "SERVING_FEED"
 class_name = "ServingFeed"
 
+# The relay mesh's public feed (docs/architecture-v2/relay-mesh.md §4.5; apps/com/src/relayFeed.ts): the
+# ServingFeed Durable Object writes the encrypted log pages and head, the directory and each relay's sealed
+# mesh keys here; Cloudflare serves the bucket on https://feed.flagshipserver.com/v1/ (an R2 custom domain plus a
+# cache rule that ignores query strings). Nothing is written while RELAY_MESH is not "on". Provision once:
+#   npx wrangler r2 bucket create flagship-relay-feed
+#   then in the dashboard: R2 > flagship-relay-feed > Settings > Custom domain feed.flagshipserver.com
+[[r2_buckets]]
+binding = "RELAY_FEED"
+bucket_name = "flagship-relay-feed"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state"
@@ -407,6 +417,10 @@ SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
 # /api/services/endpoints so daemons can discover migrations silently
 # (no need to update each daemon's environment when we move the hub).
 TUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"
+# The relay mesh (relay-mesh.md): "on" publishes the relay feed and runs its 5 s head alarm, and
+# GET /api/services/endpoints defaults tunnelHub to wss://tunnel.<servicesApex>:8443/tunnel. Off until
+# rollout step 1 (§13.2): the current relay keeps using the internal routes.
+RELAY_MESH = "off"
 # Cloudflare zone ID for flagship.services. Used ONLY in the legacy
 # direct-CF-token mode below; production routes DNS through the
 # dns-broker Worker via DNS_BROKER_URL.
@@ -482,3 +496,10 @@ UPCLOUD_STORAGE_GB = "30"
 # public key, FLAGSHIP_SERVING_REVOCATION_PUB on the Fly app):
 #   wrangler secret put SERVING_REVOCATION_SEED   # paste output of `openssl rand -hex 32`
 # Without it the revocation routes answer 503 and the feed pushes nothing.
+# The same key signs the relay mesh's log and heads (relay-mesh.md §4); relays in mesh mode read it as
+# FLAGSHIP_RELAY_LOG_PUB.
+#
+# Relay mesh (apps/com/src/relayFeed.ts): the mesh-key seed. Every epoch key the published feed is
+# encrypted under is derived from it; relays only ever receive epoch keys sealed to their own relay key.
+#   wrangler secret put RELAY_MESH_KEY_SEED       # paste output of `openssl rand -hex 32`
+# Replacing it makes every published page unreadable until `npm run relays -- republish`.

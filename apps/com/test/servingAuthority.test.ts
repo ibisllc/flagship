@@ -355,14 +355,14 @@ describe("GET /api/accounts/:u/serving", () => {
       const token = await readToken(env, "bob");
       const r = await call(env, "/api/accounts/bob/serving", { headers: { authorization: `Bearer ${token}` } });
       expect(r.status).toBe(200);
-      const { servers } = (await r.json()) as { servers: Array<{ boxPub: string; until: number | null; onLapse: string; grace: string; serving: boolean; confirmedByRelays: boolean }> };
+      const { servers } = (await r.json()) as { servers: Array<{ boxPub: string; until: number | null; onLapse: string; grace: string; serving: boolean; confirmedByRelays: boolean | null }> };
       expect(servers).toHaveLength(1);
-      expect(servers[0]).toMatchObject({ boxPub: BOX2, until: l.notAfter, onLapse: "lock-server", grace: "30d", serving: true, confirmedByRelays: true });
+      expect(servers[0]).toMatchObject({ boxPub: BOX2, until: l.notAfter, onLapse: "lock-server", grace: "30d", serving: true, confirmedByRelays: null });
 
-      // After a revocation no relay has acknowledged yet, it is not confirmed.
+      // Relays acknowledge nothing in the mesh (relay-mesh.md §15.2): the line is always null.
       await storage.servers.revoke("home.bob.flagship.services", "lost", Date.now());
-      const after = (await (await call(env, "/api/accounts/bob/serving", { headers: { authorization: `Bearer ${token}` } })).json()) as { servers: Array<{ revoked: boolean; confirmedByRelays: boolean }> };
-      expect(after.servers[0]).toMatchObject({ revoked: true, confirmedByRelays: false });
+      const after = (await (await call(env, "/api/accounts/bob/serving", { headers: { authorization: `Bearer ${token}` } })).json()) as { servers: Array<{ revoked: boolean; confirmedByRelays: boolean | null }> };
+      expect(after.servers[0]).toMatchObject({ revoked: true, confirmedByRelays: null });
     } finally {
       close();
     }
