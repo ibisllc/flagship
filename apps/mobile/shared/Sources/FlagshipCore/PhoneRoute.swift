@@ -317,16 +317,31 @@ public struct HttpRequestReader {
     }
 }
 
+/// What the phone endpoint's voi.ci operations need from the app (docs/voici-and-messages.md §8.2): the current page's
+/// owner key while the app can take deliveries, and the check-store-forward-ack of one delivered envelope.
+public protocol PhoneWebInbox: AnyObject, Sendable {
+    /// The published page's `ownerSignPub` while this phone takes deliveries, else nil (the visitor uses the mailbox).
+    func liveOwnerSignPub() -> String?
+    /// One envelope as delivered (the body, at most the draft cap). Answers the HTTP status and a JSON body:
+    /// `{ack}` on 200, `{error, code}` otherwise.
+    func deliver(_ body: Data, origin: String?) async -> (status: Int, json: String)
+}
+
 /// The endpoint's answers. Thread-safe; the tunnel feeds it whole requests and writes back what it returns.
+/// The one-time-code browser session (`/api/phone/session`, `/api/phone/ping`, the `__Host-flagship-phone` cookie) is
+/// retired (§8.2): no cookie is read or set. Cross-origin, only `GET /api/phone/live` and `POST /api/phone/deliver` from
+/// the voi.ci origin; natively (no Origin) the same two plus the signed hello and the well-known name.
 public final class PhoneEndpointResponder: @unchecked Sendable {
     public let account: String
     public let hostname: String
     public let phoneRoutePub: String
+    /// The website origins allowed cross-origin (`PHONE_WEB_ORIGINS`; the gym's beside a gym apex).
+    public let webOrigins: [String]
     private let now: () -> Int64
     private let lock = NSLock()
-    private var code: (value: String, expiresAt: Int64)?
-    private var sessions: [String: (csrf: String, expiresAt: Int64)] = [:]
     private var seen: [String: Int64] = [:]
+    private weak var web: (any PhoneWebInbox)?
+    private var inFlight = 0
 
     /// Devices that said hello (signed presence) while this phone held the name: device key → last seen (ms).
     /// A hello proves only that its own key signed it, so only keys in the account's device book are returned.
@@ -343,68 +358,87 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
         return true
     }
 
-    public init(account: String, hostname: String, phoneRoutePub: String, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+    public init(account: String, hostname: String, phoneRoutePub: String, webOrigins: [String] = [Endpoints.voiciOrigin],
+                now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.account = account
         self.hostname = hostname
         self.phoneRoutePub = phoneRoutePub
+        self.webOrigins = webOrigins
         self.now = now
     }
 
-    /// A fresh one-time code (6 digits, 5 minutes) the owner types in the browser that opens a session.
-    public func newCode() -> String {
-        let v = String(Int.random(in: 100_000...999_999))
-        lock.withLock { code = (v, now() + 5 * 60_000) }
-        return v
+    /// Who answers `live` and `deliver` (the app's Messages store); none: `live` is 404 and `deliver` 503.
+    public func setWebInbox(_ inbox: (any PhoneWebInbox)?) { lock.withLock { web = inbox } }
+
+    private func verdict(_ head: HttpHead) -> VoiciPhoneWeb.Verdict {
+        let host = head.header("host").map { String($0.split(separator: ":").first ?? "") } ?? ""
+        let path = String(head.path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+        return VoiciPhoneWeb.phoneWebCheck(
+            VoiciPhoneWeb.Request(method: head.method, path: path, host: host, origin: head.header("origin"),
+                                  contentType: head.header("content-type"), acrMethod: head.header("access-control-request-method"),
+                                  acrHeaders: head.header("access-control-request-headers")),
+            hostname: hostname, origins: webOrigins)
     }
 
-    private static func random32() -> String {
-        var b = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, b.count, &b)
-        return HexUtil.encode(Data(b))
+    /// Every request: `deliver` waits for the app's check, store, forward and ack; the rest answer at once.
+    public func handle(_ head: HttpHead, body: Data) async -> Data {
+        guard case .deliver(let cors) = verdict(head) else { return respond(head, body: body) }
+        let inbox: (any PhoneWebInbox)? = lock.withLock {
+            guard inFlight < VoiciPhoneWeb.deliverMaxConcurrent else { return nil }
+            inFlight += 1
+            return web
+        }
+        guard let inbox else {
+            let busy = lock.withLock { inFlight >= VoiciPhoneWeb.deliverMaxConcurrent }
+            return busy ? Self.answer(429, #"{"error":"busy","code":"rate-limited"}"#, headers: cors)
+                : Self.answer(503, #"{"error":"unavailable","code":"unavailable"}"#, headers: cors)
+        }
+        defer { lock.withLock { inFlight -= 1 } }
+        let (status, json) = await inbox.deliver(body, origin: head.header("origin"))
+        return Self.answer(status, json, headers: cors)
     }
 
+    /// The synchronous answers (everything but a delivery, which `handle` takes).
     public func respond(_ head: HttpHead, body: Data) -> Data {
         lock.lock()
         defer { lock.unlock() }
-        let host = head.header("host").map { String($0.split(separator: ":").first ?? "") } ?? ""
-        let establish = head.method == "POST" && head.path == "/api/phone/session"
-        let token = head.cookie(PhoneRoute.sessionCookie)
-        let session = token.flatMap { t in sessions[t].flatMap { $0.expiresAt > now() ? $0 : nil } }
-        let verdict = PhoneEndpointPolicy.check(
-            PhoneEndpointRequest(method: head.method, host: host, origin: head.header("origin"), sessionCookie: token,
-                                 csrf: head.header(PhoneRoute.csrfHeader), upgrade: head.header("upgrade") != nil, establish: establish),
-            hostname: hostname, sessionToken: session == nil ? nil : token, csrfToken: session?.csrf)
-        guard verdict == "allow" else { return Self.answer(403, #"{"code":"\#(verdict)"}"#) }
-        if head.method == "GET" && head.path == "/" { return Self.answer(200, #"{"present":true,"recorded":\#(hello(head))}"#) }
-        if head.method == "GET" && head.path == "/.well-known/flagship-phone" {
+        switch verdict(head) {
+        case .refuse(let status, let code):
+            return Self.answer(status, #"{"error":"refused","code":"\#(code)"}"#)
+        case .preflight(let headers):
+            return Self.answer(204, nil, headers: headers)
+        case .live(let cors):
+            guard let pub = web?.liveOwnerSignPub() else { return Self.answer(404, #"{"error":"not live","code":"not-live"}"#, headers: cors) }
+            return Self.answer(200, #"{"account":"\#(account)","live":true,"ownerSignPub":"\#(pub)"}"#, headers: cors)
+        case .deliver(let cors):
+            return Self.answer(503, #"{"error":"unavailable","code":"unavailable"}"#, headers: cors)
+        case .other:
+            break
+        }
+        guard head.method == "GET" || head.method == "HEAD", head.header("upgrade") == nil else {
+            return Self.answer(403, #"{"error":"refused","code":"cross-origin"}"#)
+        }
+        if head.path == "/" { return Self.answer(200, #"{"present":true,"recorded":\#(hello(head))}"#) }
+        if head.path == "/.well-known/flagship-phone" {
             return Self.answer(200, #"{"account":"\#(account)","hostname":"\#(hostname)","phoneRoutePub":"\#(phoneRoutePub)"}"#)
         }
-        if establish {
-            let text = String(decoding: body, as: UTF8.self)
-            let typed = text.range(of: #""code"\s*:\s*"(\d{6})""#, options: .regularExpression).map { String(text[$0]).filter(\.isNumber) }
-            guard let typed, let c = code, c.expiresAt > now(), typed == c.value else { return Self.answer(403, #"{"code":"bad-code"}"#) }
-            code = nil
-            if sessions.count >= 8, let k = sessions.keys.first { sessions[k] = nil }
-            let t = Self.random32(), csrf = Self.random32()
-            sessions[t] = (csrf, now() + 3_600_000)
-            return Self.answer(200, #"{"csrf":"\#(csrf)"}"#, extra: "set-cookie: \(PhoneEndpointPolicy.sessionCookie(t))\r\n")
-        }
-        if head.method == "POST" && head.path == "/api/phone/ping" { return Self.answer(200, #"{"ok":true}"#) }
-        return Self.answer(404, #"{"code":"not-found"}"#)
+        return Self.answer(404, #"{"error":"not found","code":"not-found"}"#)
     }
 
-    static func answer(_ status: Int, _ json: String, extra: String = "") -> Data {
-        let reason = status == 200 ? "OK" : status == 403 ? "Forbidden" : "Not Found"
-        let body = Data(json.utf8)
-        let head = "HTTP/1.1 \(status) \(reason)\r\n" +
-            "content-type: application/json\r\n" +
-            "content-length: \(body.count)\r\n" +
+    static func answer(_ status: Int, _ json: String?, headers: [String: String] = [:]) -> Data {
+        let reasons = [200: "OK", 204: "No Content", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed",
+                       413: "Content Too Large", 415: "Unsupported Media Type", 421: "Misdirected Request", 429: "Too Many Requests",
+                       503: "Service Unavailable"]
+        let body = Data((json ?? "").utf8)
+        var head = "HTTP/1.1 \(status) \(reasons[status] ?? "Error")\r\n"
+        if json != nil { head += "content-type: application/json\r\n" }
+        head += "content-length: \(body.count)\r\n" +
             "cache-control: no-store\r\n" +
             "x-content-type-options: nosniff\r\n" +
             "content-security-policy: default-src 'none'; frame-ancestors 'none'\r\n" +
-            "referrer-policy: no-referrer\r\n" +
-            extra +
-            "connection: close\r\n\r\n"
+            "referrer-policy: no-referrer\r\n"
+        for (k, v) in headers.sorted(by: { $0.key < $1.key }) { head += "\(k.lowercased()): \(v)\r\n" }
+        head += "connection: close\r\n\r\n"
         return Data(head.utf8) + body
     }
 }

@@ -146,6 +146,15 @@ public enum DeepLink: Equatable, Sendable {
     /// non-admin device invited someone to one of the account's apps).
     case accountActivity
 
+    /// "Sign in with Flagship" from a voi.ci page (docs/voici-and-messages.md §6.5): the visitor's app approves a
+    /// sign-in for one page. Carries the whole link; `VoiciSignInLink.parse` reads it.
+    case voiciSignIn(link: String)
+
+    /// The Messages tab: the `messages` push (a new message or request) and `page-drafts` (another device
+    /// wrote a post or edited the page; it opens the page editor).
+    case messages
+    case pageEditor
+
     /// An in-app destination as an https app link,
     /// `https://<controlHost>/app/<route>[?query]`: the form every producer
     /// emits, routed exactly like the legacy `flagship://<route>[?query]`.
@@ -191,6 +200,7 @@ public enum DeepLink: Equatable, Sendable {
             case "/builder":  return builderLink(url)
             case "/access":   return accessLink(fragmentOrQueryParams(url))
             case "/invite-accept": return inviteAcceptLink(fragmentOrQueryParams(url))
+            case "/voici-sign-in": return VoiciSignInLink.parse(url.absoluteString) != nil ? .voiciSignIn(link: url.absoluteString) : nil
             case "/invite":
                 // The box /invite page's "Open in the Flagship app" button:
                 // `#server=<box>&k=<secret>&a=&i=&s=`, all in the fragment.
@@ -346,6 +356,16 @@ public enum DeepLink: Equatable, Sendable {
             // The provision-status push names no server in its link; the
             // create flow is where a phone follows an install.
             return .createServer
+        case "messages":
+            return .messages
+        case "voici-sign-in":
+            // The custom-scheme twin of the https sign-in link (the gym opens this form).
+            let c = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let query = c?.percentEncodedFragment ?? c?.percentEncodedQuery ?? ""
+            let https = "https://\(Endpoints.controlHost)\(VoiciSignInLink.path)#\(query)"
+            return VoiciSignInLink.parse(https) != nil ? .voiciSignIn(link: https) : nil
+        case "page-editor":
+            return .pageEditor
         default:
             break
         }

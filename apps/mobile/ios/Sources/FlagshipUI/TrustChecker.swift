@@ -1,4 +1,5 @@
 import Foundation
+import os
 import FlagshipCore
 import FlagshipAPI
 
@@ -86,6 +87,31 @@ public struct TrustChecker: Sendable {
         case trusted
         case untrusted(TrustFailure)
         case noVerdict
+    }
+
+    /// The CA key `.com`'s CA-signed artifacts (Messages attestations, docs/voici-and-messages.md §6.3) may be signed
+    /// by now: the served CA key, only when the full pin → chain → authorized-now check passes here. Cached an hour.
+    public func authorizedCaKeys(now: Date = Date()) async -> [String] {
+        if let c = Self.cache.withLock({ $0 }), now.timeIntervalSince(c.at) < 3_600 { return c.keys }
+        guard let blessing = await fetchBlessing(), MaintainersTrust.verifyComBlessing(blessing, now: now) else { return [] }
+        Self.cache.withLock { $0 = (now, [blessing.caPubkey]) }
+        return [blessing.caPubkey]
+    }
+
+    private static let cache = OSAllocatedUnfairLock<(at: Date, keys: [String])?>(initialState: nil)
+
+    private func fetchBlessing() async -> MaintainerBlessing? {
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/maintainer-blessing"))
+        req.httpMethod = "GET"
+        guard let (data, resp) = try? await urlSession.gatedData(for: req), let http = resp as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode), let j = try? JSONDecoder().decode(BlessingJSON.self, from: data) else { return nil }
+        return MaintainerBlessing(
+            pinnedMandateHash: j.pinnedMandateHash,
+            caPubkey: j.caPubkey,
+            mandates: j.mandates.map(toMandate),
+            caEndorsements: j.caEndorsements.map(toEndorsement),
+            caLeasePqJSON: j.caLeasePq.flatMap { try? JSONEncoder().encode($0) }.flatMap { String(data: $0, encoding: .utf8) }
+        )
     }
 
     public func check(now: Date = Date()) async -> Outcome {

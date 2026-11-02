@@ -181,8 +181,10 @@ targets:
       configs:
         Debug:
           APS_ENVIRONMENT: development
+          APPATTEST_ENVIRONMENT: development
         Release:
           APS_ENVIRONMENT: production
+          APPATTEST_ENVIRONMENT: production
     info:
       path: Info.plist
       properties:
@@ -203,6 +205,8 @@ targets:
         # production APNs gateway only accepts production-environment
         # device tokens).
         aps-environment: $(APS_ENVIRONMENT)
+        # App Attest for Messages (docs/voici-and-messages.md §9.5): the App ID needs the App Attest capability.
+        com.apple.developer.devicecheck.appattest-environment: $(APPATTEST_ENVIRONMENT)
         com.apple.developer.associated-domains:
           - applinks:flagshipserver.com
           - webcredentials:flagshipserver.com

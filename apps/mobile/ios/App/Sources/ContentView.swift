@@ -492,6 +492,7 @@ struct ContentView: View {
         switch args[idx + 1] {
         case "home":     return .home
         case "apps":     return .apps
+        case "messages": return .messages
         case "activity": return .activity
         case "settings": return .settings
         default:         return nil

@@ -568,6 +568,20 @@ public struct Keystore {
         cachedSessionUmk(activeProfileId)?.withUnsafeBytes { Data($0) }
     }
 
+    /// The UMK for Messages and the voi.ci page (docs/voici-and-messages.md §1): the one this unlocked session holds,
+    /// else one Face ID. Every Messages key derives from it.
+    public static func messagesUMK(reason: String) async throws -> Data {
+        try await unwrappedUMK(reason: reason).withUnsafeBytes { Data($0) }
+    }
+
+    /// The Messages UMK without a prompt (the unlocked session's), or nil.
+    public static func messagesUMKIfCached() -> Data? {
+        #if DEBUG
+        if let seed = GymSeams.accountRootSeed { return seed }
+        #endif
+        return sessionUMKIfCached()
+    }
+
     /// The account IRK from the UMK this session already holds, or nil.
     /// Never prompts.
     public static func sessionIRKIfCached() -> Curve25519.Signing.PrivateKey? {

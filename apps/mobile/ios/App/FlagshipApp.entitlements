@@ -4,6 +4,8 @@
 <dict>
 	<key>aps-environment</key>
 	<string>$(APS_ENVIRONMENT)</string>
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>$(APPATTEST_ENVIRONMENT)</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:flagshipserver.com</string>

@@ -19,6 +19,8 @@ public struct GymMocks {
     public let relay: MockQrRelayClient
     /// The device-pairing relay (Join an account by pairing).
     public var pairingRelay: MockPairingRelayClient?
+    /// voi.ci pages and Messages (`.com`).
+    public var voici: MockVoiciComClient?
 
     public init(screens: MockScreensClient, server: MockFlagshipServerClient?, mailbox: MockSecretMailboxClient,
                 lockPower: MockLockPowerClient, frontPage: MockFrontPageClient, uninstall: MockServiceUninstallClient,
@@ -78,6 +80,7 @@ public enum GymSweepSeams {
         share(args, app, mocks)
         security(args, app, mocks)
         release03(args, app, mocks)
+        messages(args, app, mocks)
         localAi(args, app, mocks)
         accelerators(args, app, mocks)
         stack(args, app, mocks)

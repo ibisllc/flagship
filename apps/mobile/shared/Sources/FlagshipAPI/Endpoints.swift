@@ -106,6 +106,17 @@ public enum Endpoints {
         "\(scheme)://\(controlHost)/api/server/register"
     }
 
+    // MARK: - voi.ci pages (docs/voici-and-messages.md)
+
+    /// `voi.ci` beside the prod apex, `gym.voi.ci` beside any other.
+    public static var voiciHost: String { controlHost == prodControlHost ? "voi.ci" : "gym.voi.ci" }
+
+    /// The only website origin a voi.ci sign-in and the phone endpoint accept.
+    public static var voiciOrigin: String { "https://\(voiciHost)" }
+
+    /// Where the signed indexes and the pieces are served: `https://files.voi.ci`.
+    public static var voiciFilesBaseUrl: URL { URL(string: "https://files.\(voiciHost)")! }
+
     // MARK: - Data plane
 
     /// The data-plane apex suffix (no leading dot): `flagship.services` (prod).

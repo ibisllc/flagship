@@ -79,6 +79,10 @@ public final class PushNotifications: NSObject {
     /// account activity; older payloads without one still land there.
     public nonisolated static let inviteCreatedCategory = "invite-created"
 
+    /// voi.ci Messages pushes (content-free): `messages` with kind `message` or `message-request`, and `page-drafts`.
+    public nonisolated static let messagesCategory = "messages"
+    public nonisolated static let pageDraftsCategory = "page-drafts"
+
     /// `kind` of the local notice raised when an app on a server ran out of
     /// its disk limit (docs/app-runtimes.md 5.3); a tap opens the app's page.
     public nonisolated static let appStorageFullKind = "app-storage-full"
@@ -99,6 +103,10 @@ public final class PushNotifications: NSObject {
             ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
         if (kind ?? category) == "secret-request" { return .secretRequests }
         if (kind ?? category) == inviteCreatedCategory { return .accountActivity }
+        // Content-free voi.ci pushes (docs/voici-and-messages.md §8.3): a message or a request opens Messages, another
+        // device's post or page edit opens the page editor (admin devices publish it there).
+        if category == messagesCategory || kind == "message" || kind == "message-request" { return .messages }
+        if category == pageDraftsCategory { return .pageEditor }
         if let category, accountNoticeCategories.contains(category) { return nil }
         if kind == appStorageFullKind, let serviceId = info["serviceId"] as? String, !serviceId.isEmpty {
             if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {

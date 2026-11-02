@@ -47,6 +47,15 @@ public struct RootShell: View {
     /// v2 manual-approve — the AUTHOR finalizing a consumer's acceptance reply
     /// (`https://flagshipserver.com/invite-accept#…`), presented as a full-screen cover.
     @State private var pendingAccept: AcceptTarget?
+    /// "Sign in with Flagship" from a voi.ci page (docs/voici-and-messages.md §6.5).
+    @State private var pendingVoiciSignIn: VoiciSignInTarget?
+    @Environment(\.voiciComClient) private var voiciCom
+    @Environment(\.qrRelayClient) private var qrRelay
+
+    private struct VoiciSignInTarget: Identifiable, Equatable {
+        let link: String
+        var id: String { link }
+    }
 
     private struct RedeemTarget: Identifiable, Equatable {
         let serverDomain: String
@@ -199,6 +208,17 @@ public struct RootShell: View {
                 }
             }
         }
+        .fullScreenCover(item: $pendingVoiciSignIn) { target in
+            NavigationStack {
+                if let link = VoiciSignInLink.parse(target.link), let voiciCom {
+                    VoiciSignInScreen(vm: VoiciSignInViewModel(link: link, client: voiciCom, relay: qrRelay, username: app.currentUser ?? ""),
+                                      onDone: { pendingVoiciSignIn = nil })
+                } else {
+                    ContentUnavailableView("This sign-in link isn't valid", systemImage: "exclamationmark.triangle")
+                        .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Close") { pendingVoiciSignIn = nil } } }
+                }
+            }
+        }
         .fullScreenCover(item: $pendingKnock) { target in
             NavigationStack {
                 KnockAuthorizeScreen(
@@ -243,6 +263,8 @@ public struct RootShell: View {
                 pendingKnock = nil
                 pendingAccept = nil
                 pendingBackupApproval = nil
+                pendingVoiciSignIn = nil
+                MessagesStore.shared.lock()
                 lockGeneration += 1
                 PresentationSweeper.dismissAll()
             }
@@ -328,6 +350,13 @@ public struct RootShell: View {
             pendingBackupApproval = BackupApprovalTarget(serverFqdn: serverFqdn, archiveId: archiveId, requestId: requestId)
             return
         }
+        if case let .voiciSignIn(raw) = link {
+            // Signs with this account's keys (one Face ID): wait for unlock, like an invite.
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingVoiciSignIn = VoiciSignInTarget(link: raw)
+            return
+        }
         if case .shareServer = link {
             // Accepting signs with this account's keys: wait for unlock, then
             // let HomeTab push the accept screen from the same pending link.
@@ -371,7 +400,8 @@ public struct RootShell: View {
         case .recoverySetup, .joinAccount, .companionDockApproval,
              .accountSecurity, .accountDevices: return .settings
         case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
-        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload: return selected
+        case .messages, .pageEditor: return .messages
+        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn: return selected
         }
     }
 }
@@ -406,6 +436,7 @@ private struct iPhoneShell: View {
                     .tabItem {
                         Label(dest.title, systemImage: dest.systemImage)
                     }
+                    .badge(dest == .messages ? MessagesStore.shared.unreadCount : 0)
                     .tag(dest)
             }
         }
@@ -547,6 +578,7 @@ private func destinationContent(_ dest: RootDestination) -> some View {
     switch dest {
     case .home:     HomeTab()
     case .apps:     ServicesTab()
+    case .messages: MessagesTab()
     case .activity: ActivityTab()
     case .settings: SettingsTab()
     }

@@ -177,13 +177,17 @@ final class PhoneTlsTerminator: @unchecked Sendable {
             if retried { c.cancel() } else { queue.asyncAfter(deadline: .now() + 0.3) { self.accept(c, retried: true) } }
             return
         }
-        var reader = HttpRequestReader()
+        // A draft envelope may be 1 MiB (docs/voici-and-messages.md §5.2); the deliver handler applies each kind's cap.
+        var reader = HttpRequestReader(maxBytes: VoiciMessages.draftMaxEnvelopeBytes + 16 * 1024)
         func read() {
             c.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [responder] data, _, done, err in
                 if let data, !data.isEmpty {
                     do {
                         if let (head, body) = try reader.push(data) {
-                            c.send(content: responder.respond(head, body: body), isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+                            Task {
+                                let answer = await responder.handle(head, body: body)
+                                c.send(content: answer, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+                            }
                             return
                         }
                     } catch {

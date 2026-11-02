@@ -5,8 +5,8 @@ import XCTest
 /// VoiciMessagesRecords, VoiciPhoneWeb) to packages/protocol/test-vectors/messages/vectors.json
 /// (tools/voici-vectors.ts; the TS replay is packages/protocol/tests/voiciVectors.test.ts). CryptoKit's Ed25519
 /// signatures are randomized and the vectors' P-256 ones are RFC 6979, so signatures are verified, never compared;
-/// everything else must match byte for byte. Not replayed: `threadFetch` and the abuse-tag sealing / abuse key list
-/// (not part of the app's port).
+/// everything else must match byte for byte. Not replayed: the abuse-tag sealing / abuse key list (not part of the
+/// app's port). `threadFetch` is replayed for its canonical bytes only: the app uses it for reply alerts.
 final class MessagesVectorTests: XCTestCase {
     typealias S = VoiciVectorSupport
 
@@ -373,5 +373,12 @@ final class MessagesVectorTests: XCTestCase {
         for c in S.a(v["phoneWeb"]?["liveAnswers"]) {
             XCTAssertEqual(.bool(VoiciPhoneWeb.parsePhoneLiveAnswer(c["answer"]) != nil), c["expected"])
         }
+    }
+
+    func testThreadFetchCanonical() throws {
+        let t = try XCTUnwrap(try vectors()["threadFetch"])
+        let f = VoiciThreadFetch(conv: S.s(t["fetch"]?["conv"]), since: S.s(t["fetch"]?["since"]), issuedAt: S.i(t["fetch"]?["issuedAt"]))
+        XCTAssertEqual(String(decoding: try f.canonicalBytes(), as: UTF8.self), S.s(t["canonical"]))
+        XCTAssertThrowsError(try VoiciThreadFetch(conv: "x", since: "", issuedAt: 1).canonicalBytes())
     }
 }

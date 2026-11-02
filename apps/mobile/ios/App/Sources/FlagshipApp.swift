@@ -89,6 +89,7 @@ struct FlagshipApp: App {
         )
         self.readTokens = readTokens
         self.liveVoiciName = LiveVoiciNameClient(readTokens: readTokens)
+        self.liveVoiciCom = LiveVoiciComClient(readTokens: readTokens, caKeys: { await TrustChecker().authorizedCaKeys() })
         ServerShareServices.readTokens.set(readTokens)
         var pqLive = true
         #if DEBUG
@@ -542,6 +543,8 @@ struct FlagshipApp: App {
     // Custom voi.ci name client — hits `.com` with the account read token for
     // its checks and list.
     private let liveVoiciName: any VoiciNameClient
+    // voi.ci pages and Messages (`.com`, docs/voici-and-messages.md).
+    private let liveVoiciCom: any VoiciComClient
     // Cross-device pairing relay (Add a device / Join an account): the live
     // /qr-pipe transport, or the in-process relay the gym and unit tests pair
     // through in a Debug build launched with mocks.
@@ -610,6 +613,8 @@ struct FlagshipApp: App {
     private let liveNameDibs: any NameDibsClient = LiveNameDibsClient()
     // Custom voi.ci name client — mock half; the live half is built with the read token.
     private let mockVoiciName = MockVoiciNameClient()
+    // voi.ci pages and Messages: the in-memory `.com` the GymMessages scenarios seed.
+    private let mockVoiciCom = MockVoiciComClient()
     // Server-migration lane client — hits `.com` (the migration orchestration
     // lane), not a box-pinned pipe; live/mock split as transfer.
     private let mockServerMigration = MockServerMigrationClient()
@@ -644,6 +649,7 @@ struct FlagshipApp: App {
                              access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration,
                              relay: mockRelay)
         mocks.pairingRelay = mockPairingRelay
+        mocks.voici = mockVoiciCom
         return mocks
     }
     #else
@@ -732,6 +738,12 @@ struct FlagshipApp: App {
         #endif
         return liveVoiciName
     }
+    private var activeVoiciCom: any VoiciComClient {
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockVoiciCom }
+        #endif
+        return liveVoiciCom
+    }
     private var activeServerMigration: any ServerMigrationClient {
         #if DEBUG
         if GymLaunch.usesMocks { return mockServerMigration }
@@ -772,6 +784,7 @@ struct FlagshipApp: App {
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.nameDibsClient, activeNameDibs)
                 .environment(\.voiciNameClient, activeVoiciName)
+                .environment(\.voiciComClient, activeVoiciCom)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .alert(
@@ -840,6 +853,13 @@ struct FlagshipApp: App {
                     }
                 }
                 .task { startNotices() }
+                // Messages (docs/voici-and-messages.md): the store follows the account, so the admin phone takes
+                // direct deliveries and publishes waiting edits even before the tab is opened.
+                .task(id: "\(appState.currentUser ?? "")|\(appState.isUnlocked)") {
+                    MessagesStore.shared.configure(client: activeVoiciCom, username: appState.currentUser,
+                                                   deviceId: appState.activeProfile?.deviceId, isDemo: appState.isDemoAccount)
+                    if appState.isUnlocked { await MessagesStore.shared.refresh() }
+                }
                 .task {
                     #if DEBUG
                     if GymLaunch.usesMocks {
@@ -853,6 +873,7 @@ struct FlagshipApp: App {
                         RelayAddressRegistry.shared.startIfDue()
                         Task { await ServingRenewal.appOpened() }
                         PhoneRouteController.appForeground()
+                        Task { await MessagesStore.shared.checkReplies() }
                     }
                     // The relay forwarder is a listener on this phone's loopback: close it (and the
                     // session that remembers its port) before suspension; the next need starts a new one.

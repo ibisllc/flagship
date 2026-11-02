@@ -52,6 +52,8 @@ const ALLOWED: Record<string, string> = {
   "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift": "reads one record from the control apex",
   "apps/mobile/ios/Sources/Flagship/PhoneEndpoint.swift": "the phone-route tunnel to the relay (wss only): visitors' TLS ends on the phone's own key and the claim is signed over a relay nonce, so the relay is never trusted with content",
   "apps/mobile/ios/Sources/FlagshipUI/ViewModels/PhoneRouteController.swift": "anonymous GET of the relay's endpoints from the control apex; the route tunnel itself checks the relay's pinned key",
+  "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesPhone.swift": "a draft to the account's own phone at its bare name (not a box); delivery counts only with an ack signed by a key holding the account's admin grant",
+  "apps/mobile/ios/Sources/FlagshipUI/Services/VoiciMedia.swift": "an ephemeral, cookie-less session for a post's link card on a third-party site; hosts under the data apex (boxes) are never fetched",
 };
 
 describe("mobile HTTP clients", () => {

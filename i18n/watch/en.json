@@ -21,21 +21,21 @@
   },
   "Home": {
     "en": "Home",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:107",
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:108",
     "translatable": false
   },
   "Office": {
     "en": "Office",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:108",
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:109",
     "translatable": false
   },
   "Couldn't reach iPhone: %@": {
     "en": "Couldn't reach iPhone: %@",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:171"
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:197"
   },
   "Approval failed.": {
     "en": "Approval failed.",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:168"
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:194"
   },
   "Flagship": {
     "en": "Flagship",
@@ -77,28 +77,28 @@
     "en": "Boot approvals and account changes show up here.",
     "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:78"
   },
-  "Online": {
-    "en": "Online",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:285"
-  },
-  "Offline": {
-    "en": "Offline",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:286"
-  },
-  "Waiting to start": {
-    "en": "Waiting to start",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:287"
-  },
-  "Setting up": {
-    "en": "Setting up",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:288"
-  },
-  "Unknown": {
-    "en": "Unknown",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:289"
-  },
   "Leader": {
     "en": "Leader",
     "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:106"
+  },
+  "Online": {
+    "en": "Online",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift"
+  },
+  "Offline": {
+    "en": "Offline",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift"
+  },
+  "Waiting to start": {
+    "en": "Waiting to start",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift"
+  },
+  "Setting up": {
+    "en": "Setting up",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift"
+  },
+  "Unknown": {
+    "en": "Unknown",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift"
   }
 }

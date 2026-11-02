@@ -6,31 +6,31 @@
   },
   "Home": {
     "en": "Home",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:341"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:348"
   },
   "New server": {
     "en": "New server",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:437"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:444"
   },
   "Provisioning": {
     "en": "Provisioning",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:487"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:494"
   },
   "Account no longer listed": {
     "en": "Account no longer listed",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:769"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:791"
   },
   "Keep on This iPhone": {
     "en": "Keep on This iPhone",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:777"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:799"
   },
   "Erase Local Keys and Data": {
     "en": "Erase Local Keys and Data",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:780"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:802"
   },
   "Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.": {
     "en": "Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:788"
+    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:810"
   },
   "Approve unlock": {
     "en": "Approve unlock",
@@ -128,23 +128,23 @@
   },
   "Open your Flagship account": {
     "en": "Open your Flagship account",
-    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:598"
+    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:612"
   },
   "Create your Flagship admin key": {
     "en": "Create your Flagship admin key",
-    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:701"
+    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:715"
   },
   "Set up your admin key on this device": {
     "en": "Set up your admin key on this device",
-    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:737"
+    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:751"
   },
   "Authorize an admin action": {
     "en": "Authorize an admin action",
-    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:767"
+    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:781"
   },
   "Authorize this action": {
     "en": "Authorize this action",
-    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:845"
+    "ctx": "apps/mobile/ios/Sources/Flagship/Keystore.swift:859"
   },
   "GPUs": {
     "en": "GPUs",
@@ -783,6 +783,15 @@
     "en": "%lld rows rewritten",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:281"
   },
+  "%lld apps": {
+    "en": {
+      "one": "%lld app",
+      "other": "%lld apps"
+    },
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:436",
+    "plural": true,
+    "manual": true
+  },
   "View report": {
     "en": "View report",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:285"
@@ -1069,9 +1078,17 @@
     "en": "Turned off this server's extra sandbox after it kept failing to start",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:185"
   },
+  "Moved to another Flagship relay": {
+    "en": "Moved to another Flagship relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:187"
+  },
+  "Stayed on its current relay": {
+    "en": "Stayed on its current relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:188"
+  },
   "Event": {
     "en": "Event",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:196"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:199"
   },
   "Add a device": {
     "en": "Add a device",
@@ -4255,6 +4272,22 @@
     "en": "Your servers",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:607"
   },
+  "All": {
+    "en": "All",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1140"
+  },
+  "Online": {
+    "en": "Online",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1141"
+  },
+  "Pending": {
+    "en": "Pending",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1142"
+  },
+  "Offline": {
+    "en": "Offline",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1143"
+  },
   "No servers match “%@”.": {
     "en": "No servers match “%@”.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:633"
@@ -4287,25 +4320,13 @@
     "en": "Never came online",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1077"
   },
-  "Offline": {
-    "en": "Offline",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1078"
-  },
   "Waiting for approval": {
     "en": "Waiting for approval",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1079"
   },
-  "Pending": {
-    "en": "Pending",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1081"
-  },
   "Coming online…": {
     "en": "Coming online…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1081"
-  },
-  "Online": {
-    "en": "Online",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1084"
   },
   "Checking": {
     "en": "Checking",
@@ -5362,6 +5383,182 @@
     "en": "Still couldn't reach the boot service.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LockPowerViews.swift:129"
   },
+  "Messages": {
+    "en": "Messages",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:60"
+  },
+  "Rotate your inbox key?": {
+    "en": "Rotate your inbox key?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:65"
+  },
+  "None. When you sign in to message someone on voi.ci, the website shows here.": {
+    "en": "None. When you sign in to message someone on voi.ci, the website shows here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:19"
+  },
+  "Signing out…": {
+    "en": "Signing out…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:31"
+  },
+  "Websites you're signed in to": {
+    "en": "Websites you're signed in to",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:43"
+  },
+  "Rotate inbox key": {
+    "en": "Rotate inbox key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:47"
+  },
+  "New messages are sealed to a new key. This device keeps reading the old ones.": {
+    "en": "New messages are sealed to a new key. This device keeps reading the old ones.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:50"
+  },
+  "Page and message rules": {
+    "en": "Page and message rules",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:54"
+  },
+  "Rotate": {
+    "en": "Rotate",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:66"
+  },
+  "Your page is published again with the new key.": {
+    "en": "Your page is published again with the new key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:68"
+  },
+  "A voi.ci page": {
+    "en": "A voi.ci page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift:113"
+  },
+  "Visitor ": {
+    "en": "Visitor ",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:152"
+  },
+  "Visitor": {
+    "en": "Visitor",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:152"
+  },
+  "Couldn't publish. Try again.": {
+    "en": "Couldn't publish. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:477"
+  },
+  "Couldn't reach Flagship. Check your connection and try again.": {
+    "en": "Couldn't reach Flagship. Check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:783"
+  },
+  "Unlock Flagship to use Messages.": {
+    "en": "Unlock Flagship to use Messages.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:784"
+  },
+  "This page was removed by Flagship. You can appeal from flagshipserver.com/abuse.": {
+    "en": "This page was removed by Flagship. You can appeal from flagshipserver.com/abuse.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:788"
+  },
+  "Your account can't send messages. If you think this is a mistake, tell us.": {
+    "en": "Your account can't send messages. If you think this is a mistake, tell us.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:789"
+  },
+  "A photo for this page is missing on this device. Pick it again.": {
+    "en": "A photo for this page is missing on this device. Pick it again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:790"
+  },
+  "Your published page couldn't be checked. Try again later.": {
+    "en": "Your published page couldn't be checked. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:791"
+  },
+  "Only an admin device can publish this page.": {
+    "en": "Only an admin device can publish this page.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:792"
+  },
+  "Reply first to keep this conversation going.": {
+    "en": "Reply first to keep this conversation going.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:793"
+  },
+  "Something went wrong. Try again.": {
+    "en": "Something went wrong. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:794"
+  },
+  "Publish your page": {
+    "en": "Publish your page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:440"
+  },
+  "That's too long.": {
+    "en": "That's too long.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:800"
+  },
+  "Write something first.": {
+    "en": "Write something first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:801"
+  },
+  "That text has characters a page can't show.": {
+    "en": "That text has characters a page can't show.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:802"
+  },
+  "Too many tries. Try again in about %lld minutes.": {
+    "en": "Too many tries. Try again in about %lld minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:786"
+  },
+  "Too many tries. Try again later.": {
+    "en": "Too many tries. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:787"
+  },
+  "Messages need your own Flagship account. Sample accounts can't have a page.": {
+    "en": "Messages need your own Flagship account. Sample accounts can't have a page.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:73"
+  },
+  "You have a reply on voi.ci/%@": {
+    "en": "You have a reply on voi.ci/%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:85"
+  },
+  "Your conversations with other pages are on voi.ci.": {
+    "en": "Your conversations with other pages are on voi.ci.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:94"
+  },
+  "Show": {
+    "en": "Show",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:102"
+  },
+  "Requests": {
+    "en": "Requests",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:104"
+  },
+  "Requests (%lld)": {
+    "en": "Requests (%lld)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:104"
+  },
+  "No requests. New conversations wait here until you reply or accept them.": {
+    "en": "No requests. New conversations wait here until you reply or accept them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:137"
+  },
+  "No messages yet. Turn on Accept messages on your page to get them.": {
+    "en": "No messages yet. Turn on Accept messages on your page to get them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:138"
+  },
+  "Your page": {
+    "en": "Your page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:148"
+  },
+  "Not published yet": {
+    "en": "Not published yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:161"
+  },
+  "No page yet": {
+    "en": "No page yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:161"
+  },
+  "Published · 1 change not published": {
+    "en": "Published · 1 change not published",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:162"
+  },
+  "Published · %lld changes not published": {
+    "en": "Published · %lld changes not published",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:163"
+  },
+  "Published": {
+    "en": "Published",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:164"
+  },
+  "Unread": {
+    "en": "Unread",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:178"
+  },
   "Migrate server": {
     "en": "Migrate server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift:62"
@@ -6183,6 +6380,178 @@
     "en": "Create your private account directory",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OpenAccountViewModel.swift:183"
   },
+  "Publish your page?": {
+    "en": "Publish your page?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:91"
+  },
+  "Theme": {
+    "en": "Theme",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:43"
+  },
+  "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.": {
+    "en": "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:34"
+  },
+  "Profile": {
+    "en": "Profile",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:102"
+  },
+  "Classic": {
+    "en": "Classic",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:45"
+  },
+  "Ink": {
+    "en": "Ink",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:46"
+  },
+  "Sea": {
+    "en": "Sea",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:47"
+  },
+  "Save profile": {
+    "en": "Save profile",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:53"
+  },
+  "Add a display name.": {
+    "en": "Add a display name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:183"
+  },
+  "Waiting for an admin device to publish": {
+    "en": "Waiting for an admin device to publish",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:245"
+  },
+  "Accept messages": {
+    "en": "Accept messages",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:60"
+  },
+  "People with a Flagship account can write to you. They appear as visitors, not by name.": {
+    "en": "People with a Flagship account can write to you. They appear as visitors, not by name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:63"
+  },
+  "Posts": {
+    "en": "Posts",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:197"
+  },
+  "Preview": {
+    "en": "Preview",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:72"
+  },
+  "That photo couldn't be made small enough. Try another.": {
+    "en": "That photo couldn't be made small enough. Try another.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:172"
+  },
+  "Publish": {
+    "en": "Publish",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:93"
+  },
+  "Display name": {
+    "en": "Display name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:113"
+  },
+  "Remove photo": {
+    "en": "Remove photo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:109"
+  },
+  "Add photo": {
+    "en": "Add photo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:106"
+  },
+  "Change photo": {
+    "en": "Change photo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:106"
+  },
+  "Bio": {
+    "en": "Bio",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:116"
+  },
+  "Add link": {
+    "en": "Add link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:142"
+  },
+  "Links": {
+    "en": "Links",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:146"
+  },
+  "Write a post": {
+    "en": "Write a post",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:199"
+  },
+  "Adding…": {
+    "en": "Adding…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:206"
+  },
+  "Add post": {
+    "en": "Add post",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:206"
+  },
+  "Edit": {
+    "en": "Edit",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:227"
+  },
+  "Remove link cards": {
+    "en": "Remove link cards",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:236"
+  },
+  "Publishing…": {
+    "en": "Publishing…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:282"
+  },
+  "Share": {
+    "en": "Share",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:295"
+  },
+  "Label": {
+    "en": "Label",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:338"
+  },
+  "Add": {
+    "en": "Add",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:353"
+  },
+  "Give the link a short label (40 characters at most).": {
+    "en": "Give the link a short label (40 characters at most).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:361"
+  },
+  "A page can have one email link.": {
+    "en": "A page can have one email link.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:363"
+  },
+  "Use a full https:// address.": {
+    "en": "Use a full https:// address.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:364"
+  },
+  "Edit post": {
+    "en": "Edit post",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:381"
+  },
+  "Post": {
+    "en": "Post",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:379"
+  },
+  "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.": {
+    "en": "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:414"
+  },
+  "Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.": {
+    "en": "Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:415"
+  },
+  "Messages are private. If someone reports your message, Flagship can see which account sent it.": {
+    "en": "Messages are private. If someone reports your message, Flagship can see which account sent it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:416"
+  },
+  "The full rules are in the terms at flagshipserver.com/terms.": {
+    "en": "The full rules are in the terms at flagshipserver.com/terms.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:417"
+  },
+  "I agree": {
+    "en": "I agree",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:427"
+  },
+  "Send me a message": {
+    "en": "Send me a message",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PagePreviewScreen.swift:37"
+  },
   "Hidden while your screen is being recorded or shared.": {
     "en": "Hidden while your screen is being recorded or shared.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PairingSafeguards.swift:73"
@@ -6951,6 +7320,10 @@
     "en": "From this phone",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:27"
   },
+  "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": {
+    "en": "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:76"
+  },
   "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.": {
     "en": "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:89"
@@ -6963,19 +7336,22 @@
     "en": "That server is already gone — nothing to revoke.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RevokeServerViewModel.swift:110"
   },
+  "This sign-in link isn't valid": {
+    "en": "This sign-in link isn't valid",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:217"
+  },
   "Destinations": {
     "en": "Destinations",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:492"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:523"
   },
   "Flagship": {
     "en": "Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:476",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:507",
     "translatable": false
   },
-  "%lld %@": {
-    "en": "%lld %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:483",
-    "translatable": false
+  "1 server": {
+    "en": "1 server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:514"
   },
   "Save your new admin key": {
     "en": "Save your new admin key",
@@ -7092,35 +7468,39 @@
   },
   "Approved %@. Your server will pick it up.": {
     "en": "Approved %@. Your server will pick it up.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:71"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:75"
   },
   "Unlock device and authorize it to join your cloud": {
     "en": "Unlock device and authorize it to join your cloud",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:97"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:104"
   },
   "Unlock device": {
     "en": "Unlock device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:98"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:105"
   },
   "Authorize device to join your cloud": {
     "en": "Authorize device to join your cloud",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:99"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:106"
   },
   "Boot secret": {
     "en": "Boot secret",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:100"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:107"
+  },
+  "It's waiting for its disk key. Unlock it only if you expected it to restart.": {
+    "en": "It's waiting for its disk key. Unlock it only if you expected it to restart.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:131"
   },
   "Is this the machine in front of you? Only approve if you recognise it.": {
     "en": "Is this the machine in front of you? Only approve if you recognise it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:121"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:132"
   },
   "Yes, this is my server": {
     "en": "Yes, this is my server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:132"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:144"
   },
   "Region": {
     "en": "Region",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:114"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecretRequestsScreen.swift:121"
   },
   "Secure your account": {
     "en": "Secure your account",
@@ -7522,6 +7902,10 @@
     "en": "No backup",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:37"
   },
+  "On my devices": {
+    "en": "On my devices",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:38"
+  },
   "On other servers": {
     "en": "On other servers",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:41"
@@ -7554,6 +7938,10 @@
     "en": "The backup from %@ is removed from the server. Copies you saved stay.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:191"
   },
+  "Change": {
+    "en": "Change",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:206"
+  },
   "Approve backups for this server": {
     "en": "Approve backups for this server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:260"
@@ -7562,13 +7950,13 @@
     "en": "One Face ID approves about a year of backups. The server can seal new backups with them, never open old ones.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:265"
   },
-  "Change": {
-    "en": "Change",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:284"
-  },
   "Save…": {
     "en": "Save…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:327"
+  },
+  "Keep a copy on this device": {
+    "en": "Keep a copy on this device",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:355"
   },
   "Only on Wi-Fi while charging.": {
     "en": "Only on Wi-Fi while charging.",
@@ -7628,95 +8016,99 @@
   },
   "Approve backups for %@": {
     "en": "Approve backups for %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:177"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:175"
   },
   "Change the backup policy of %@": {
     "en": "Change the backup policy of %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:320"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:318"
   },
   "Not chosen yet": {
     "en": "Not chosen yet",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:346"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:344"
   },
   "Backup policy: %@ · up to %@": {
     "en": "Backup policy: %@ · up to %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:354"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:352"
   },
   "Backup policy: %@": {
     "en": "Backup policy: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:355"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:353"
   },
   "Backup policy: Not chosen yet": {
     "en": "Backup policy: Not chosen yet",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:352"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:350"
   },
   "Apps use %@ of %@ (a third of this server's disk)": {
     "en": "Apps use %@ of %@ (a third of this server's disk)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:364"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:362"
   },
   "Apps use %@ of %@": {
     "en": "Apps use %@ of %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:364"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:362"
   },
   "Apps use %@": {
     "en": "Apps use %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:362"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:360"
   },
   "Peer backups: %@": {
     "en": "Peer backups: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:379"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:377"
   },
   "%lld of %lld pieces safe": {
     "en": "%lld of %lld pieces safe",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:380"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:378"
   },
   "Kept on %lld other server": {
     "en": "Kept on %lld other server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:379"
   },
   "Kept on %lld other servers": {
     "en": "Kept on %lld other servers",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:379"
   },
   "Last placed %@": {
     "en": "Last placed %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:382"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:380"
   },
   "Holds %@ for other servers": {
     "en": "Holds %@ for other servers",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:383"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381"
   },
   "Backing up… %@ (%lld/%lld)": {
     "en": "Backing up… %@ (%lld/%lld)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:406"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:404"
   },
   "Last backup: %@ · %@": {
     "en": "Last backup: %@ · %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:409"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:407"
   },
   "No backups yet.": {
     "en": "No backups yet.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:410"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:408"
   },
   "The last backup failed: %@.": {
     "en": "The last backup failed: %@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:416"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:414"
   },
   "Scheduled backups are off.": {
     "en": "Scheduled backups are off.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:422"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:420"
   },
   "Next backup: %@": {
     "en": "Next backup: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:423"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:421"
   },
   "Scheduled": {
     "en": "Scheduled",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:434"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:433"
   },
   "Left out: %@": {
     "en": "Left out: %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:438"
+  },
+  "On this device: %@ · %@": {
+    "en": "On this device: %@ · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:447"
   },
   "The backup file is damaged.": {
     "en": "The backup file is damaged.",
@@ -8349,7 +8741,7 @@
   },
   "Removed.": {
     "en": "Removed.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:728"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:745"
   },
   "Everyone who joined through this link loses access, unless they were also invited another way.": {
     "en": "Everyone who joined through this link loses access, unless they were also invited another way.",
@@ -8385,143 +8777,155 @@
   },
   "Rank: %@": {
     "en": "Rank: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:281"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:282"
   },
   "Refused": {
     "en": "Refused",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:285"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:286"
   },
   "Rank: Refused": {
     "en": "Rank: Refused",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:293"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:294"
   },
   "%@ is refused in this app.": {
     "en": "%@ is refused in this app.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:717"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:734"
   },
   "%@ is now %@.": {
     "en": "%@ is now %@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:718"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:735"
   },
   "Refuse": {
     "en": "Refuse",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:255"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:256"
   },
   "Kept out of this app until an admin gives a rank again": {
     "en": "Kept out of this app until an admin gives a rank again",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:256"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:257"
   },
   "Members (%lld)": {
     "en": "Members (%lld)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:305"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:306"
+  },
+  "+ Add person": {
+    "en": "+ Add person",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:309"
+  },
+  "+ Add group": {
+    "en": "+ Add group",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:311"
   },
   "No members yet. Add a person or a group.": {
     "en": "No members yet. Add a person or a group.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:322"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:323"
   },
   "Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext. Send the link over a private channel.": {
     "en": "Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext. Send the link over a private channel.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:346"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:347"
   },
   "Group name (only you + your servers see it)": {
     "en": "Group name (only you + your servers see it)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:351"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:352"
   },
   "Name (only you + your servers see it)": {
     "en": "Name (only you + your servers see it)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:351"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:352"
   },
   "Chess club": {
     "en": "Chess club",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:352"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:353"
   },
   "Everyone who joins through the link gets this rank.": {
     "en": "Everyone who joins through the link gets this rank.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:372"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:373"
   },
   "Create invite link": {
     "en": "Create invite link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:384"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:385"
   },
   "Shareable link": {
     "en": "Shareable link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:393"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:394"
   },
   "Add a group": {
     "en": "Add a group",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:337"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:338"
   },
   "Rank": {
     "en": "Rank",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:355"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:356"
   },
   "I approve them before they get in": {
     "en": "I approve them before they get in",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:379"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:380"
   },
   "Group invite created.": {
     "en": "Group invite created.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:690"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:707"
   },
   "Invite for %@ created.": {
     "en": "Invite for %@ created.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:690"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:707"
   },
   "They'll accept, then send a reply back to you — open it to approve them.": {
     "en": "They'll accept, then send a reply back to you — open it to approve them.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:496"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:497"
   },
   "Anyone with this link (up to the limit) joins. Share it carefully.": {
     "en": "Anyone with this link (up to the limit) joins. Share it carefully.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:498"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:499"
   },
   "Send it over a private channel. It locks to the first account that opens it.": {
     "en": "Send it over a private channel. It locks to the first account that opens it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:500"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:501"
   },
   "How many people can use it? (0 = no limit)": {
     "en": "How many people can use it? (0 = no limit)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:456"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:457"
   },
   "Expire this link in 7 days": {
     "en": "Expire this link in 7 days",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:460"
-  },
-  "Remove photo": {
-    "en": "Remove photo",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:484"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:461"
   },
   "Add photo (optional)": {
     "en": "Add photo (optional)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:471"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:472"
   },
   "Photo is too large (max 256 KB). Pick a smaller image.": {
     "en": "Photo is too large (max 256 KB). Pick a smaller image.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:738"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:755"
   },
   "Couldn't read that image.": {
     "en": "Couldn't read that image.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:744"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:761"
   },
   "Revoke %@": {
     "en": "Revoke %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:552"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:549"
   },
   "%lld joined": {
     "en": "%lld joined",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:571"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:588"
   },
   "%lld of %lld joined": {
     "en": "%lld of %lld joined",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:571"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:588"
+  },
+  "active": {
+    "en": "active",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:591"
+  },
+  "invite sent — not opened yet": {
+    "en": "invite sent — not opened yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:591"
   },
   "Now members only.": {
     "en": "Now members only.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:657"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:674"
   },
   "Now open to all.": {
     "en": "Now open to all.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:657"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:674"
   },
   "Only an admin device can give a higher rank": {
     "en": "Only an admin device can give a higher rank",
@@ -9107,365 +9511,361 @@
   },
   "Settings": {
     "en": "Settings",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:359"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:363"
   },
   "Disconnect failed": {
     "en": "Disconnect failed",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:379"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:383"
   },
   "Name not saved": {
     "en": "Name not saved",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:410"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:414"
   },
   "Replace this device?": {
     "en": "Replace this device?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:434"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:438"
   },
   "Wipe and start over?": {
     "en": "Wipe and start over?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:446"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:450"
   },
   "Sign out?": {
     "en": "Sign out?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:458"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:462"
   },
   "Welcome to Flagship": {
     "en": "Welcome to Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:330"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:334"
   },
   "Your stuff, on your hardware, with a real green padlock.": {
     "en": "Your stuff, on your hardware, with a real green padlock.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:331"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:335"
   },
   "Account": {
     "en": "Account",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:514"
-  },
-  "Display name": {
-    "en": "Display name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:517"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:518"
   },
   "Code protection on — recovery needs a code.": {
     "en": "Code protection on — recovery needs a code.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:530"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:534"
   },
   "Single-device — recovery is a 3-day wait.": {
     "en": "Single-device — recovery is a 3-day wait.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:531"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:535"
   },
   "Strict protection per server": {
     "en": "Strict protection per server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:535"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:539"
   },
   "Bring-your-own keys for building apps": {
     "en": "Bring-your-own keys for building apps",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:537"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:541"
   },
   "Your servers on this Wi-Fi, without Flagship": {
     "en": "Your servers on this Wi-Fi, without Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:539"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:543"
   },
   "Recover on a new device": {
     "en": "Recover on a new device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:542"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:546"
   },
   "Have your passkey checked too": {
     "en": "Have your passkey checked too",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:545"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:549"
   },
   "Back up account key": {
     "en": "Back up account key",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:548"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:552"
   },
   "Save an encrypted key file": {
     "en": "Save an encrypted key file",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:548"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:552"
   },
   "Own the .com? The matching name is held for you": {
     "en": "Own the .com? The matching name is held for you",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:550"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:554"
   },
   "Switch between your clouds": {
     "en": "Switch between your clouds",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:553"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:557"
   },
   "Trusted devices": {
     "en": "Trusted devices",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:558"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:562"
   },
   "Browser sessions": {
     "en": "Browser sessions",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:869"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:873"
   },
   "Companions": {
     "en": "Companions",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:910"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:914"
   },
   "Read-only browser session (4h)": {
     "en": "Read-only browser session (4h)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:911"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:915"
   },
   "Web access": {
     "en": "Web access",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:924"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:928"
   },
   "Open secured sessions": {
     "en": "Open secured sessions",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:925"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:929"
   },
   "Sites you've signed a browser into": {
     "en": "Sites you've signed a browser into",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:925"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:929"
   },
   "Backup & peers": {
     "en": "Backup & peers",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:931"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:935"
   },
   "Where the pieces of your backup are kept": {
     "en": "Where the pieces of your backup are kept",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:932"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:936"
   },
   "Privacy": {
     "en": "Privacy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1055"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1059"
   },
   "App lock, push notifications": {
     "en": "App lock, push notifications",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1055"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1059"
   },
   "About Flagship": {
     "en": "About Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1056"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1063"
   },
   "Version, license, source": {
     "en": "Version, license, source",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1056"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1063"
   },
   "Remove this device from your account?": {
     "en": "Remove this device from your account?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1005"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1009"
   },
   "Flagship • Patent Pending • BUSL-1.1 • Your stuff, on your hardware.": {
     "en": "Flagship • Patent Pending • BUSL-1.1 • Your stuff, on your hardware.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1070"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1077"
   },
   "Revoke device?": {
     "en": "Revoke device?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:363"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:367"
   },
   "This revokes the device's account access. Its presentation name is never sent to Flagship's control plane in plaintext.": {
     "en": "This revokes the device's account access. Its presentation name is never sent to Flagship's control plane in plaintext.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:376"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:380"
   },
   "Couldn't save the encrypted name. Check the name and try again.": {
     "en": "Couldn't save the encrypted name. Check the name and try again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:405"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:409"
   },
   "Revoke session %@?": {
     "en": "Revoke session %@?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:417"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:421"
   },
   "Revoke this session?": {
     "en": "Revoke this session?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:417"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:421"
   },
   "Session %@ loses access to this account.": {
     "en": "Session %@ loses access to this account.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:431"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:435"
   },
   "Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, services stay installed. The change takes effect after a 24-hour grace window; your other devices are notified, and only this phone can cancel it.": {
     "en": "Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, services stay installed. The change takes effect after a 24-hour grace window; your other devices are notified, and only this phone can cancel it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:443"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:447"
   },
   "Wipe and start over": {
     "en": "Wipe and start over",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:450"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:454"
   },
   "Your account keeps the same username and your servers keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.": {
     "en": "Your account keeps the same username and your servers keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:455"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:459"
   },
   "This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.": {
     "en": "This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:470"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:474"
   },
   "Couldn't disconnect — check your connection and try again.": {
     "en": "Couldn't disconnect — check your connection and try again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:503"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:507"
   },
   "Encrypted account presentation name": {
     "en": "Encrypted account presentation name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:518"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:522"
   },
   "Edit account name": {
     "en": "Edit account name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:522"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:526"
   },
   "Phones and tablets that hold your account keys.": {
     "en": "Phones and tablets that hold your account keys.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:565"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:569"
   },
   "Just this device": {
     "en": "Just this device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:578"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:582"
   },
   "Sign in on another phone or tablet to add a trusted device.": {
     "en": "Sign in on another phone or tablet to add a trusted device.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:579"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:583"
   },
   "For your own phones and tablets. To give another person access, use Share this server on the server's page.": {
     "en": "For your own phones and tablets. To give another person access, use Share this server on the server's page.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:611"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:615"
   },
   "A new device asked to take over this account. It becomes active on %@ unless an admin rejects it. It has no admin authority until then.": {
     "en": "A new device asked to take over this account. It becomes active on %@ unless an admin rejects it. It has no admin authority until then.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:656"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:660"
   },
   "Reject recovery": {
     "en": "Reject recovery",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:664"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:668"
   },
   "A recovery of this account is waiting": {
     "en": "A recovery of this account is waiting",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:652"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:656"
   },
   "Keep waiting": {
     "en": "Keep waiting",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:680"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:684"
   },
   "The grace window has elapsed — finalize the device replacement now.": {
     "en": "The grace window has elapsed — finalize the device replacement now.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:704"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:708"
   },
   "Finalize now": {
     "en": "Finalize now",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:709"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:713"
   },
   "Replace pending": {
     "en": "Replace pending",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:699"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:703"
   },
   "Administrator-managed · locked": {
     "en": "Administrator-managed · locked",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:760"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:764"
   },
   "·": {
     "en": "·",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:751",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:755",
     "translatable": false
   },
   "Web": {
     "en": "Web",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:853"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:857"
   },
   "Rename this device": {
     "en": "Rename this device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:771"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:775"
   },
   "Edit managed name": {
     "en": "Edit managed name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:780"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:784"
   },
   "Set managed name": {
     "en": "Set managed name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:780"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:784"
   },
   "Couldn't remove the managed name.": {
     "en": "Couldn't remove the managed name.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:792"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:796"
   },
   "Remove managed name": {
     "en": "Remove managed name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:796"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:800"
   },
   "Wipe & restart…": {
     "en": "Wipe & restart…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:823"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:827"
   },
   "Computers you've docked a browser from. They can manage this account for a few hours, then expire.": {
     "en": "Computers you've docked a browser from. They can manage this account for a few hours, then expire.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:871"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:875"
   },
   "paired %@": {
     "en": "paired %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:890"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:894"
   },
   "Approve writes from docked browsers": {
     "en": "Approve writes from docked browsers",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1078"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1085"
   },
   "%lld pending writes from docked browsers": {
     "en": "%lld pending writes from docked browsers",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1080"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1087"
   },
   "Lock the app": {
     "en": "Lock the app",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:962"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:966"
   },
   "Remove this device from account": {
     "en": "Remove this device from account",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:990"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:994"
   },
   "Remove this device": {
     "en": "Remove this device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1010"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1014"
   },
   "We'll revoke this device's notification access and erase its local keys. Use your recovery passkey to sign in again later.": {
     "en": "We'll revoke this device's notification access and erase its local keys. Use your recovery passkey to sign in again later.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1016"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1020"
   },
   "Light": {
     "en": "Light",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1029"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1033"
   },
   "Light appearance": {
     "en": "Light appearance",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1030"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1034"
   },
   "Dark": {
     "en": "Dark",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1031"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1035"
   },
   "Dark appearance": {
     "en": "Dark appearance",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1032"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1036"
   },
   "Auto": {
     "en": "Auto",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1033"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1037"
   },
   "Automatic appearance": {
     "en": "Automatic appearance",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1034"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1038"
   },
   "App icon": {
     "en": "App icon",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1039"
-  },
-  "Classic": {
-    "en": "Classic",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1042"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1043"
   },
   "AppIcon-Legacy": {
     "en": "AppIcon-Legacy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1043",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1047",
     "translatable": false
   },
   "Legacy": {
     "en": "Legacy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1043"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1047"
+  },
+  "Websites you're signed in to, inbox key, rules": {
+    "en": "Websites you're signed in to, inbox key, rules",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1061"
   },
   "The device may retain its own suggestion, but the managed name remains visible until an administrator removes it.": {
     "en": "The device may retain its own suggestion, but the managed name remains visible until an administrator removes it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1148"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1155"
   },
   "Names are encrypted and apply only inside this Flagship account.": {
     "en": "Names are encrypted and apply only inside this Flagship account.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1152"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1159"
   },
   "Lock managed name": {
     "en": "Lock managed name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1147"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1154"
   },
   "Post-quantum key registered": {
     "en": "Post-quantum key registered",
@@ -9477,11 +9877,11 @@
   },
   "Demo account": {
     "en": "Demo account",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:351"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:352"
   },
   "Wipe & restart": {
     "en": "Wipe & restart",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:362"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:363"
   },
   "Add one of your own phones or tablets": {
     "en": "Add one of your own phones or tablets",
@@ -9489,84 +9889,84 @@
   },
   "Done. All other devices are now disconnected. Re-pair them on next open.": {
     "en": "Done. All other devices are now disconnected. Re-pair them on next open.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:289"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:290"
   },
   "Set up account recovery to use this.": {
     "en": "Set up account recovery to use this.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:307"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:308"
   },
   "Remove from this device": {
     "en": "Remove from this device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:352"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:353"
   },
   "This demo account is managed by Flagship, so it can't be deleted from the app — you can remove it from this device instead. Accounts you create yourself are permanently deleted from here.": {
     "en": "This demo account is managed by Flagship, so it can't be deleted from the app — you can remove it from this device instead. Accounts you create yourself are permanently deleted from here.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:359"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:360"
   },
   "To keep a server, open it from Home and choose Transfer to another account before you delete.": {
     "en": "To keep a server, open it from Home and choose Transfer to another account before you delete.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:439"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:440"
   },
   "On by default: unlock each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.": {
     "en": "On by default: unlock each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:719"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:722"
   },
   "Require your passphrase": {
     "en": "Require your passphrase",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:728"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:731"
   },
   "Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just a quick unlock. Strongest and slowest.": {
     "en": "Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just a quick unlock. Strongest and slowest.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:740"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:743"
   },
   "Require unlock when the app opens": {
     "en": "Require unlock when the app opens",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:715"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:718"
   },
   "Sign in with your passphrase every time": {
     "en": "Sign in with your passphrase every time",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:735"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:738"
   },
   "Enable app lock": {
     "en": "Enable app lock",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:776"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:779"
   },
   "Couldn't enable: %@": {
     "en": "Couldn't enable: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:784"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:787"
   },
   "Recovery is active.": {
     "en": "Recovery is active.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:819"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:822"
   },
   "UMK recovered.": {
     "en": "UMK recovered.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:828"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:831"
   },
   "About": {
     "en": "About",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:930"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:933"
   },
   "Your stuff, on your hardware.": {
     "en": "Your stuff, on your hardware.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:916"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:919"
   },
   "License": {
     "en": "License",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:922"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:925"
   },
   "BUSL-1.1 → Apache 2.0 (2030)": {
     "en": "BUSL-1.1 → Apache 2.0 (2030)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:922",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:925",
     "translatable": false
   },
   "Patents": {
     "en": "Patents",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:923"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:926"
   },
   "Source": {
     "en": "Source",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:924"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:927"
   },
   "View trusted devices": {
     "en": "View trusted devices",
@@ -9785,10 +10185,6 @@
     "en": "%@ is starting. Unlock it?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:790"
   },
-  "It's waiting for its disk key. Unlock it only if you expected it to restart.": {
-    "en": "It's waiting for its disk key. Unlock it only if you expected it to restart.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:792"
-  },
   "Unlock with Face ID": {
     "en": "Unlock with Face ID",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:794"
@@ -9904,6 +10300,114 @@
   "Authorize %@ to join your cloud": {
     "en": "Authorize %@ to join your cloud",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SwkDepositCoordinator.swift:179"
+  },
+  "This conversation is gone": {
+    "en": "This conversation is gone",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:28"
+  },
+  "Rename": {
+    "en": "Rename",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:73"
+  },
+  "Block this visitor?": {
+    "en": "Block this visitor?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:82"
+  },
+  "Delete this conversation?": {
+    "en": "Delete this conversation?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:87"
+  },
+  "Reported": {
+    "en": "Reported",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:105"
+  },
+  "You blocked this visitor. Their messages don't reach you.": {
+    "en": "You blocked this visitor. Their messages don't reach you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:64"
+  },
+  "Some messages haven't arrived yet": {
+    "en": "Some messages haven't arrived yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:41"
+  },
+  "Only you see this name, on your devices.": {
+    "en": "Only you see this name, on your devices.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:80"
+  },
+  "Block": {
+    "en": "Block",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:83"
+  },
+  "They won't be told. Their new messages won't reach you.": {
+    "en": "They won't be told. Their new messages won't reach you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:85"
+  },
+  "It goes from all your devices. A new message from them starts a new request.": {
+    "en": "It goes from all your devices. A new message from them starts a new request.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:95"
+  },
+  "Spam": {
+    "en": "Spam",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:247"
+  },
+  "Harassment": {
+    "en": "Harassment",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:247"
+  },
+  "Pretending to be someone": {
+    "en": "Pretending to be someone",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:248"
+  },
+  "Illegal content": {
+    "en": "Illegal content",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:248"
+  },
+  "Something else": {
+    "en": "Something else",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:249"
+  },
+  "Thanks. Flagship will look at it. You can also block this visitor.": {
+    "en": "Thanks. Flagship will look at it. You can also block this visitor.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:108"
+  },
+  "Accept": {
+    "en": "Accept",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:130"
+  },
+  "Unblock": {
+    "en": "Unblock",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:134"
+  },
+  "Report": {
+    "en": "Report",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:140"
+  },
+  "Delete conversation": {
+    "en": "Delete conversation",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:143"
+  },
+  "More": {
+    "en": "More",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:145"
+  },
+  "Sent": {
+    "en": "Sent",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:181"
+  },
+  "Delivered to their phone": {
+    "en": "Delivered to their phone",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:183"
+  },
+  "Send": {
+    "en": "Send",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:230"
+  },
+  "Reply": {
+    "en": "Reply",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:208"
+  },
+  "Flagship gets this message as it was sent, sealed. It can then see which account sent it, not what it says.": {
+    "en": "Flagship gets this message as it was sent, sealed. It can then see which account sent it, not what it says.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:262"
   },
   "Type to confirm": {
     "en": "Type to confirm",
@@ -10492,6 +10996,74 @@
     "en": "Change your link",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:281"
   },
+  "This page couldn't be checked.": {
+    "en": "This page couldn't be checked.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:52"
+  },
+  "This page isn't taking messages.": {
+    "en": "This page isn't taking messages.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:48"
+  },
+  "This page isn't on voi.ci.": {
+    "en": "This page isn't on voi.ci.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:42"
+  },
+  "You can start %lld new conversations a day. Try again %@.": {
+    "en": "You can start %lld new conversations a day. Try again %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:151"
+  },
+  "You've started as many new conversations as you can today. Try again %@.": {
+    "en": "You've started as many new conversations as you can today. Try again %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:152"
+  },
+  "This device already set up Messages for another account this month.": {
+    "en": "This device already set up Messages for another account this month.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:153"
+  },
+  "New accounts can start conversations from the web after 7 days.": {
+    "en": "New accounts can start conversations from the web after 7 days.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:155"
+  },
+  "Flagship's answer couldn't be checked. Try again.": {
+    "en": "Flagship's answer couldn't be checked. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:156"
+  },
+  "The voi.ci page stopped waiting. Start again from the page.": {
+    "en": "The voi.ci page stopped waiting. Start again from the page.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:162"
+  },
+  "Couldn't reach the voi.ci page. Try again.": {
+    "en": "Couldn't reach the voi.ci page. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:163"
+  },
+  "Sign in to voi.ci": {
+    "en": "Sign in to voi.ci",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:80"
+  },
+  "tomorrow": {
+    "en": "tomorrow",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:150"
+  },
+  "You're signed in. Go back to voi.ci to write your message.": {
+    "en": "You're signed in. Go back to voi.ci to write your message.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:188"
+  },
+  "Sign in to voi.ci to message %@?": {
+    "en": "Sign in to voi.ci to message %@?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:213"
+  },
+  "Check the code matches the one on the page": {
+    "en": "Check the code matches the one on the page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:219"
+  },
+  "You appear as a visitor. They never see your username.": {
+    "en": "You appear as a visitor. They never see your username.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:230"
+  },
+  "You appear as %@. They never see your username.": {
+    "en": "You appear as %@. They never see your username.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciSignInScreen.swift:228"
+  },
   "Let your watch start this server?": {
     "en": "Let your watch start this server?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:34"
@@ -10686,6 +11258,18 @@
   "\"%@\" is not a valid host name": {
     "en": "\"%@\" is not a valid host name",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:171"
+  },
+  "Member": {
+    "en": "Member",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:20"
+  },
+  "Manager": {
+    "en": "Manager",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:21"
+  },
+  "Master": {
+    "en": "Master",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:22"
   },
   "Its database is closed until it is under its limit again.": {
     "en": "Its database is closed until it is under its limit again.",
@@ -11090,302 +11674,302 @@
   },
   "Garden sensor": {
     "en": "Garden sensor",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:872"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:875"
   },
   "Dashboard": {
     "en": "Dashboard",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:874",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:877",
     "translatable": false
   },
   "Wiki": {
     "en": "Wiki",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1718",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1721",
     "translatable": false
   },
   "via vibe-code": {
     "en": "via vibe-code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:135",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:138",
     "translatable": false
   },
   "no publisher": {
     "en": "no publisher",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:242"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:245"
   },
   "This debug access grant is from an older app. Update the app and turn debug access on again.": {
     "en": "This debug access grant is from an older app. Update the app and turn debug access on again.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:291",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:294",
     "translatable": false
   },
   "Debug access needs an SSH public key.": {
     "en": "Debug access needs an SSH public key.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:298"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:301"
   },
   "Debug access can be on for at most 7 days at a time.": {
     "en": "Debug access can be on for at most 7 days at a time.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:300"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:303"
   },
   "That debug access grant is for another server.": {
     "en": "That debug access grant is for another server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:301",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:304",
     "translatable": false
   },
   "This server takes debug access only from an admin device of this account.": {
     "en": "This server takes debug access only from an admin device of this account.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:303",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:306",
     "translatable": false
   },
   "That isn't an SSH public key this server can use.": {
     "en": "That isn't an SSH public key this server can use.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:299"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:302"
   },
   "That debug access grant can't be read.": {
     "en": "That debug access grant can't be read.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:296",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:299",
     "translatable": false
   },
   "That request is for another server.": {
     "en": "That request is for another server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:319",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:322",
     "translatable": false
   },
   "That request to turn off debug access can't be read.": {
     "en": "That request to turn off debug access can't be read.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:317",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:320",
     "translatable": false
   },
   "Houseplant watering tracker": {
     "en": "Houseplant watering tracker",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:370",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:373",
     "translatable": false
   },
   "Personal notes + recipes": {
     "en": "Personal notes + recipes",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:383",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:386",
     "translatable": false
   },
   "Markdown scratchpad": {
     "en": "Markdown scratchpad",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:396",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:399",
     "translatable": false
   },
   "{\"error\":\"the app is already on this server\"}": {
     "en": "{\"error\":\"the app is already on this server\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:451",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:454",
     "translatable": false
   },
   "{\"error\":\"the order is for a different server\"}": {
     "en": "{\"error\":\"the order is for a different server\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:446",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:449",
     "translatable": false
   },
   "{\"error\":\"not declared in the app's network.egress: %@\"}": {
     "en": "{\"error\":\"not declared in the app's network.egress: %@\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:492",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:495",
     "translatable": false
   },
   "{\"error\":\"no such service\"}": {
     "en": "{\"error\":\"no such service\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:486",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:489",
     "translatable": false
   },
   "{\"error\":\"the list has errors\",\"errors\":[%@]}": {
     "en": "{\"error\":\"the list has errors\",\"errors\":[%@]}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:574",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:577",
     "translatable": false
   },
   "{\"error\":\"the list is not normalized\",\"errors\":[]}": {
     "en": "{\"error\":\"the list is not normalized\",\"errors\":[]}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:568",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:571",
     "translatable": false
   },
   "{\"error\":\"%@\"}": {
     "en": "{\"error\":\"%@\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:564",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:567",
     "translatable": false
   },
   "Plant %lld": {
     "en": "Plant %lld",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:667",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:670",
     "translatable": false
   },
   "{\"error\":\"refused\"}": {
     "en": "{\"error\":\"refused\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:703",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:706",
     "translatable": false
   },
   "{\"error\":\"not found\"}": {
     "en": "{\"error\":\"not found\"}",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:889",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:892",
     "translatable": false
   },
   "no such app": {
     "en": "no such app",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1162",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1165",
     "translatable": false
   },
   "Build a habit tracker.": {
     "en": "Build a habit tracker.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1253",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1256",
     "translatable": false
   },
   "Sketching schema for habits + check-ins…": {
     "en": "Sketching schema for habits + check-ins…",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1254",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1257",
     "translatable": false
   },
   "Tab %@": {
     "en": "Tab %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1268",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1271",
     "translatable": false
   },
   "Sketching ": {
     "en": "Sketching ",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1437",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1440",
     "translatable": false
   },
   "Two tables: ": {
     "en": "Two tables: ",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1437",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1440",
     "translatable": false
   },
   "Building manifest…\n": {
     "en": "Building manifest…\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1438",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1441",
     "translatable": false
   },
   "Creating Docker image…\n": {
     "en": "Creating Docker image…\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1439",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1442",
     "translatable": false
   },
   "Deploying to ": {
     "en": "Deploying to ",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1440",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1443",
     "translatable": false
   },
   "Live. 🎉": {
     "en": "Live. 🎉",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1441",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1444",
     "translatable": false
   },
   "FROM node:20-alpine": {
     "en": "FROM node:20-alpine",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1452",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1455",
     "translatable": false
   },
   "RUN apk add postgresql-client": {
     "en": "RUN apk add postgresql-client",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1452",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1455",
     "translatable": false
   },
   "COPY . /app": {
     "en": "COPY . /app",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1452",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1455",
     "translatable": false
   },
   "Build ok in 8.4s": {
     "en": "Build ok in 8.4s",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1452",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1455",
     "translatable": false
   },
   "Build me a plants tracker": {
     "en": "Build me a plants tracker",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1580",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1583",
     "translatable": false
   },
   "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.": {
     "en": "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1581",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1584",
     "translatable": false
   },
   "OpenWeather API key": {
     "en": "OpenWeather API key",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1586",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1589",
     "translatable": false
   },
   "Plants": {
     "en": "Plants",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1893",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1896",
     "translatable": false
   },
   "This server holds %@ of app data, over its backup limit of %@ (%@). Remove apps or data, or change the backup policy on the server page.": {
     "en": "This server holds %@ of app data, over its backup limit of %@ (%@). Remove apps or data, or change the backup policy on the server page.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2055",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2058",
     "translatable": false
   },
   "This server holds %@ of app data, more than the %@ your device would keep. Reserve at least %@ on that device, or remove apps or data first.": {
     "en": "This server holds %@ of app data, more than the %@ your device would keep. Reserve at least %@ on that device, or remove apps or data first.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2087",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2090",
     "translatable": false
   },
   "This server holds %@ of app data, more than a third of its disk (%@), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.": {
     "en": "This server holds %@ of app data, more than a third of its disk (%@), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2088",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2091",
     "translatable": false
   },
   "Claude Code": {
     "en": "Claude Code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2336",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2339",
     "translatable": false
   },
   "Run the command in a terminal, or pass the JSON with --mcp-config": {
     "en": "Run the command in a terminal, or pass the JSON with --mcp-config",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2337",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2340",
     "translatable": false
   },
   "Cursor": {
     "en": "Cursor",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2339",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2342",
     "translatable": false
   },
   "VS Code": {
     "en": "VS Code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2342",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2345",
     "translatable": false
   },
   "Your user mcp.json (Command Palette → MCP: Open User Configuration)": {
     "en": "Your user mcp.json (Command Palette → MCP: Open User Configuration)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2343",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2346",
     "translatable": false
   },
   "Cline": {
     "en": "Cline",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2345",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2348",
     "translatable": false
   },
   "Cline → MCP Servers → Configure MCP Servers": {
     "en": "Cline → MCP Servers → Configure MCP Servers",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2345",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2348",
     "translatable": false
   },
   "Found flagship.app.json": {
     "en": "Found flagship.app.json",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2370",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2373",
     "translatable": false
   },
   "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it": {
     "en": "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2378",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2381",
     "translatable": false
   },
   "AI adapt not configured": {
     "en": "AI adapt not configured",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2388",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2391",
     "translatable": false
   },
   "Build a houseplant watering tracker": {
     "en": "Build a houseplant watering tracker",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2560",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2563",
     "translatable": false
   },
   "wrote flagship.app.json": {
     "en": "wrote flagship.app.json",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2565",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2568",
     "translatable": false
   },
   "deployed to home pod": {
     "en": "deployed to home pod",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2570",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2573",
     "translatable": false
   },
   "bad dibs URL": {
@@ -11484,10 +12068,6 @@
     "en": "Servers holding its pieces: %lld. Needed to bring it back: %lld.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:156"
   },
-  "Too many tries. Try again later.": {
-    "en": "Too many tries. Try again later.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:29"
-  },
   "Too many tries %@. Try again %@.": {
     "en": "Too many tries %@. Try again %@.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:49"
@@ -11534,31 +12114,27 @@
   },
   "HTTP/1.": {
     "en": "HTTP/1.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:296",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:347",
     "translatable": false
   },
   "HTTP/1.1 400 Bad Request\r\n\r\n": {
     "en": "HTTP/1.1 400 Bad Request\r\n\r\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:444",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:495",
     "translatable": false
   },
   "HTTP/1.1 403 Forbidden\r\n\r\n": {
     "en": "HTTP/1.1 403 Forbidden\r\n\r\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:447",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:498",
     "translatable": false
   },
   "HTTP/1.1 502 Bad Gateway\r\n\r\n": {
     "en": "HTTP/1.1 502 Bad Gateway\r\n\r\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:459",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:510",
     "translatable": false
   },
   "Verified": {
     "en": "Verified",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:114"
-  },
-  "Not published yet": {
-    "en": "Not published yet",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:115"
   },
   "Can't reach flagshipserver.com": {
     "en": "Can't reach flagshipserver.com",
@@ -12011,10 +12587,6 @@
     "en": "We couldn't complete that. Try again.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/UserErrorText.swift:25"
   },
-  "Something went wrong. Try again.": {
-    "en": "Something went wrong. Try again.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/UserErrorText.swift:26"
-  },
   "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name.": {
     "en": "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/UserErrorText.swift:31"
@@ -12254,11 +12826,11 @@
   },
   "The AI needs an environment variable to continue.": {
     "en": "The AI needs an environment variable to continue.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift:149"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift:157"
   },
   "The AI is asking you a question.": {
     "en": "The AI is asking you a question.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift:150"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift:158"
   },
   "Reject this recovery?": {
     "en": "Reject this recovery?",
@@ -12850,73 +13422,14 @@
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
   },
-  "All": {
-    "en": "All",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1140"
-  },
-  "Member": {
-    "en": "Member",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:20"
-  },
-  "Manager": {
-    "en": "Manager",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:21"
-  },
-  "Master": {
-    "en": "Master",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:22"
-  },
-  "+ Add person": {
-    "en": "+ Add person",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:308"
-  },
-  "+ Add group": {
-    "en": "+ Add group",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:310"
-  },
-  "active": {
-    "en": "active",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:574"
-  },
-  "invite sent — not opened yet": {
-    "en": "invite sent — not opened yet",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:574"
-  },
-  "1 server": {
-    "en": "1 server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:483"
-  },
-  "Keep a copy on this device": {
-    "en": "Keep a copy on this device",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:355"
-  },
-  "On this device: %@ · %@": {
-    "en": "On this device: %@ · %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:447"
-  },
-  "On my devices": {
-    "en": "On my devices",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:343"
-  },
-  "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": {
-    "en": "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:76"
-  },
-  "%lld apps": {
-    "en": {
-      "one": "%lld app",
-      "other": "%lld apps"
-    },
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:436",
-    "plural": true,
+  "New message": {
+    "en": "New message",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
   },
-  "Moved to another Flagship relay": {
-    "en": "Moved to another Flagship relay",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift (Activity, server.relay.moved)"
-  },
-  "Stayed on its current relay": {
-    "en": "Stayed on its current relay",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift (Activity, server.relay.move-refused)"
+  "A device on your account has changes waiting to be published on your page.": {
+    "en": "A device on your account has changes waiting to be published on your page.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }

@@ -133,31 +133,61 @@ final class PhoneEndpointResponderTests: XCTestCase {
     private func status(_ d: Data) -> Int { Int(String(decoding: d, as: UTF8.self).split(separator: " ")[1])! }
     private func body(_ d: Data) -> String { String(String(decoding: d, as: UTF8.self).components(separatedBy: "\r\n\r\n").last!) }
 
-    func testSessionWithTheCodeAndSiblingAttacksRefused() throws {
-        let ep = PhoneEndpointResponder(account: "alice", hostname: host, phoneRoutePub: String(repeating: "ab", count: 32))
+    final class Inbox: PhoneWebInbox, @unchecked Sendable {
+        var pub: String? = String(repeating: "cd", count: 32)
+        var got: [Data] = []
+        func liveOwnerSignPub() -> String? { pub }
+        func deliver(_ body: Data, origin: String?) async -> (status: Int, json: String) {
+            got.append(body)
+            return (200, #"{"ack":{}}"#)
+        }
+    }
+
+    private func headers(_ d: Data) -> String { String(String(decoding: d, as: UTF8.self).components(separatedBy: "\r\n\r\n").first!).lowercased() }
+
+    /// docs/voici-and-messages.md §8.2: the one-time-code session is gone; only live and deliver cross origins, only from voi.ci.
+    func testRetiredSessionAndTheVoiciOperations() async throws {
+        let ep = PhoneEndpointResponder(account: "alice", hostname: host, phoneRoutePub: String(repeating: "ab", count: 32), webOrigins: ["https://voi.ci"])
+        let voici = ["origin": "https://voi.ci"]
         XCTAssertEqual(status(ep.respond(head("GET", "/.well-known/flagship-phone", [:]), body: Data())), 200)
-        let origin = ["origin": "https://\(host)"]
-        let code = ep.newCode()
-        let sibling = ep.respond(head("POST", "/api/phone/session", ["origin": "https://notes.\(host)"]), body: Data(#"{"code":"\#(code)"}"#.utf8))
-        XCTAssertEqual(status(sibling), 403)
-        let open = ep.respond(head("POST", "/api/phone/session", origin), body: Data(#"{"code":"\#(code)"}"#.utf8))
-        XCTAssertEqual(status(open), 200)
-        let text = String(decoding: open, as: UTF8.self)
-        let setCookie = try XCTUnwrap(text.components(separatedBy: "\r\n").first { $0.hasPrefix("set-cookie:") })
-        XCTAssertTrue(setCookie.contains("__Host-flagship-phone=") && setCookie.contains("Secure") && setCookie.contains("HttpOnly") && setCookie.contains("SameSite=Strict"))
-        XCTAssertFalse(setCookie.lowercased().contains("domain"))
-        XCTAssertFalse(text.lowercased().contains("access-control-"))
-        let token = String(setCookie.components(separatedBy: "__Host-flagship-phone=")[1].split(separator: ";")[0])
-        let csrf = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(body(open).utf8)) as? [String: Any])?["csrf"] as? String)
-        // Single-use code.
-        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/session", origin), body: Data(#"{"code":"\#(code)"}"#.utf8))), 403)
-        let cookie = "__Host-flagship-phone=\(token)"
-        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/ping", origin.merging(["cookie": cookie, PhoneRoute.csrfHeader: csrf]) { $1 }), body: Data())), 200)
-        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/ping", origin.merging(["cookie": cookie]) { $1 }), body: Data())), 403)
-        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/ping", ["origin": "https://notes.\(host)", "cookie": cookie, PhoneRoute.csrfHeader: csrf]), body: Data())), 403)
-        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/ping", origin.merging(["cookie": "__Host-flagship-phone=\(String(repeating: "x", count: 64))", PhoneRoute.csrfHeader: csrf]) { $1 }), body: Data())), 403)
-        XCTAssertEqual(status(ep.respond(head("GET", "/ws", ["origin": "https://notes.\(host)", "upgrade": "websocket", "cookie": cookie]), body: Data())), 403)
-        XCTAssertEqual(status(ep.respond(head("GET", "/.well-known/flagship-phone", ["host": "notes.\(host)"]), body: Data())), 403)
+        // Retired: no session, no cookie, from any origin.
+        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/session", ["origin": "https://\(host)"]), body: Data(#"{"code":"123456"}"#.utf8))), 403)
+        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/session", [:]), body: Data())), 403)
+        XCTAssertEqual(status(ep.respond(head("POST", "/api/phone/ping", voici), body: Data())), 403)
+        // No inbox yet: live says not live, deliver is unavailable.
+        XCTAssertEqual(status(ep.respond(head("GET", "/api/phone/live", voici), body: Data())), 404)
+        let inbox = Inbox()
+        ep.setWebInbox(inbox)
+        let live = ep.respond(head("GET", "/api/phone/live", voici), body: Data())
+        XCTAssertEqual(status(live), 200)
+        XCTAssertTrue(headers(live).contains("access-control-allow-origin: https://voi.ci"))
+        XCTAssertFalse(headers(live).contains("access-control-allow-credentials"))
+        XCTAssertFalse(headers(live).contains("set-cookie"))
+        let answer = try XCTUnwrap(JSONValue.parse(body(live)))
+        XCTAssertEqual(VoiciPhoneWeb.parsePhoneLiveAnswer(answer)?.ownerSignPub, inbox.pub)
+        // Preflight: only POST deliver with exactly content-type.
+        let pre = ep.respond(head("OPTIONS", "/api/phone/deliver", voici.merging(["access-control-request-method": "POST", "access-control-request-headers": "content-type"]) { $1 }), body: Data())
+        XCTAssertEqual(status(pre), 204)
+        XCTAssertTrue(headers(pre).contains("access-control-max-age: 600"))
+        XCTAssertEqual(status(ep.respond(head("OPTIONS", "/api/phone/deliver", voici.merging(["access-control-request-method": "POST", "access-control-request-headers": "content-type, x-evil"]) { $1 }), body: Data())), 403)
+        // Another origin: 403 with no CORS headers, even for live.
+        let evil = ep.respond(head("GET", "/api/phone/live", ["origin": "https://evil.example"]), body: Data())
+        XCTAssertEqual(status(evil), 403)
+        XCTAssertFalse(headers(evil).contains("access-control-"))
+        XCTAssertEqual(status(ep.respond(head("GET", "/", ["origin": "https://voi.ci"]), body: Data())), 403)
+        // Deliver: exact content type, through the inbox.
+        let env = Data("{}".utf8)
+        let wrongType = await ep.handle(head("POST", "/api/phone/deliver", voici.merging(["content-type": "application/json"]) { $1 }), body: env)
+        XCTAssertEqual(status(wrongType), 415)
+        let ok = await ep.handle(head("POST", "/api/phone/deliver", voici.merging(["content-type": "application/flagship-envelope+json"]) { $1 }), body: env)
+        XCTAssertEqual(status(ok), 200)
+        XCTAssertEqual(inbox.got, [env])
+        let wrongMethod = await ep.handle(head("GET", "/api/phone/deliver", voici), body: Data())
+        XCTAssertEqual(status(wrongMethod), 405)
+        // Native (no Origin) reaches deliver too; a wrong Host is 421.
+        let native = await ep.handle(head("POST", "/api/phone/deliver", ["content-type": "application/flagship-envelope+json"]), body: env)
+        XCTAssertEqual(status(native), 200)
+        XCTAssertEqual(status(ep.respond(head("GET", "/.well-known/flagship-phone", ["host": "notes.\(host)"]), body: Data())), 421)
     }
 
     func testASignedHelloIsRecorded() throws {

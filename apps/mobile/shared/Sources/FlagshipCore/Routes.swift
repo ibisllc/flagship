@@ -144,6 +144,8 @@ public enum ActivityRoute: Hashable, Sendable {
 }
 
 public enum SettingsRoute: Hashable, Sendable {
+    /// Settings → Messages: websites signed in to, the inbox key, the rules (docs/voici-and-messages.md §11.3).
+    case messages
     /// Settings → AI keys. View saved BYOK keys (masked slugs), add, delete.
     /// Device-local; never shows a full key.
     case aiKeys
@@ -220,10 +222,10 @@ public enum SettingsRoute: Hashable, Sendable {
     case deleteAccount
 }
 
-/// The four top-level destinations. Both the iPhone TabView and the iPad
+/// The five top-level destinations (Messages, docs/voici-and-messages.md §11.1, sits between Services and Activity). Both the iPhone TabView and the iPad
 /// NavigationSplitView sidebar use this as the selection type.
 public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Sendable {
-    case home, apps, activity, settings
+    case home, apps, messages, activity, settings
 
     public var id: String { rawValue }
 
@@ -231,6 +233,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
         switch self {
         case .home:     return String(localized: "Home")
         case .apps:     return String(localized: "Services")
+        case .messages: return String(localized: "Messages")
         case .activity: return String(localized: "Activity")
         case .settings: return String(localized: "Settings")
         }
@@ -240,6 +243,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
         switch self {
         case .home:     return "house.fill"
         case .apps:     return "square.grid.2x2.fill"
+        case .messages: return "bubble.left"
         case .activity: return "waveform.path.ecg"
         case .settings: return "gearshape.fill"
         }

@@ -7832,6 +7832,143 @@
         }
       }
     },
+    "%lld apps": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "new",
+                  "value": "%lld app"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "new",
+                  "value": "%lld apps"
+                }
+              }
+            }
+          }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld app"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld app"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps"
+                }
+              }
+            }
+          }
+        },
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld App"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Apps"
+                }
+              }
+            }
+          }
+        },
+        "pt-BR": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld app"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "アプリ %lld 件"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld 个应用"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "View report": {
       "extractionState": "manual",
       "localizations": {
@@ -10657,6 +10794,88 @@
           "stringUnit": {
             "state": "translated",
             "value": "此服务器多次启动失败，已关闭其额外的隔离保护"
+          }
+        }
+      }
+    },
+    "Moved to another Flagship relay": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se trasladó a otro relé de Flagship"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passé à un autre relais Flagship"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu einem anderen Flagship-Relay gewechselt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mudou para outro relay do Flagship"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別の Flagship リレーに移動しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已移至另一个 Flagship 中继"
+          }
+        }
+      }
+    },
+    "Stayed on its current relay": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se quedó en su relé actual"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resté sur son relais actuel"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim aktuellen Relay geblieben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permaneceu no relay atual"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のリレーにとどまりました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仍留在当前中继"
           }
         }
       }
@@ -42805,6 +43024,170 @@
         }
       }
     },
+    "All": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべて"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部"
+          }
+        }
+      }
+    },
+    "Online": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En línea"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En ligne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンライン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在线"
+          }
+        }
+      }
+    },
+    "Pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendiente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausstehend"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendente"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待处理"
+          }
+        }
+      }
+    },
+    "Offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin conexión"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hors ligne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフライン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离线"
+          }
+        }
+      }
+    },
     "No servers match “%@”.": {
       "extractionState": "manual",
       "localizations": {
@@ -43133,47 +43516,6 @@
         }
       }
     },
-    "Offline": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sin conexión"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hors ligne"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Offline"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Offline"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "オフライン"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "离线"
-          }
-        }
-      }
-    },
     "Waiting for approval": {
       "extractionState": "manual",
       "localizations": {
@@ -43215,47 +43557,6 @@
         }
       }
     },
-    "Pending": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pendiente"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En attente"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ausstehend"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pendente"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保留中"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "待处理"
-          }
-        }
-      }
-    },
     "Coming online…": {
       "extractionState": "manual",
       "localizations": {
@@ -43293,47 +43594,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在上线…"
-          }
-        }
-      }
-    },
-    "Online": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En línea"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En ligne"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Online"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Online"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "オンライン"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在线"
           }
         }
       }
@@ -53998,6 +54258,252 @@
         }
       }
     },
+    "Messages": {
+      "extractionState": "manual"
+    },
+    "Rotate your inbox key?": {
+      "extractionState": "manual"
+    },
+    "None. When you sign in to message someone on voi.ci, the website shows here.": {
+      "extractionState": "manual"
+    },
+    "Signing out…": {
+      "extractionState": "manual"
+    },
+    "Websites you're signed in to": {
+      "extractionState": "manual"
+    },
+    "Rotate inbox key": {
+      "extractionState": "manual"
+    },
+    "New messages are sealed to a new key. This device keeps reading the old ones.": {
+      "extractionState": "manual"
+    },
+    "Page and message rules": {
+      "extractionState": "manual"
+    },
+    "Rotate": {
+      "extractionState": "manual"
+    },
+    "Your page is published again with the new key.": {
+      "extractionState": "manual"
+    },
+    "A voi.ci page": {
+      "extractionState": "manual"
+    },
+    "Visitor ": {
+      "extractionState": "manual"
+    },
+    "Visitor": {
+      "extractionState": "manual"
+    },
+    "Couldn't publish. Try again.": {
+      "extractionState": "manual"
+    },
+    "Couldn't reach Flagship. Check your connection and try again.": {
+      "extractionState": "manual"
+    },
+    "Unlock Flagship to use Messages.": {
+      "extractionState": "manual"
+    },
+    "This page was removed by Flagship. You can appeal from flagshipserver.com/abuse.": {
+      "extractionState": "manual"
+    },
+    "Your account can't send messages. If you think this is a mistake, tell us.": {
+      "extractionState": "manual"
+    },
+    "A photo for this page is missing on this device. Pick it again.": {
+      "extractionState": "manual"
+    },
+    "Your published page couldn't be checked. Try again later.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can publish this page.": {
+      "extractionState": "manual"
+    },
+    "Reply first to keep this conversation going.": {
+      "extractionState": "manual"
+    },
+    "Something went wrong. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo salió mal. Inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un problème est survenu. Réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etwas ist schiefgelaufen. Versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo deu errado. Tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "問題が発生しました。もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出了点问题。请重试。"
+          }
+        }
+      }
+    },
+    "Publish your page": {
+      "extractionState": "manual"
+    },
+    "That's too long.": {
+      "extractionState": "manual"
+    },
+    "Write something first.": {
+      "extractionState": "manual"
+    },
+    "That text has characters a page can't show.": {
+      "extractionState": "manual"
+    },
+    "Too many tries. Try again in about %lld minutes.": {
+      "extractionState": "manual"
+    },
+    "Too many tries. Try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demasiados intentos. Inténtalo más tarde."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de tentatives. Réessayez plus tard."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu viele Versuche. Versuche es später erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muitas tentativas. Tente de novo mais tarde."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "試行回数が多すぎます。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尝试次数过多。请稍后再试。"
+          }
+        }
+      }
+    },
+    "Messages need your own Flagship account. Sample accounts can't have a page.": {
+      "extractionState": "manual"
+    },
+    "You have a reply on voi.ci/%@": {
+      "extractionState": "manual"
+    },
+    "Your conversations with other pages are on voi.ci.": {
+      "extractionState": "manual"
+    },
+    "Show": {
+      "extractionState": "manual"
+    },
+    "Requests": {
+      "extractionState": "manual"
+    },
+    "Requests (%lld)": {
+      "extractionState": "manual"
+    },
+    "No requests. New conversations wait here until you reply or accept them.": {
+      "extractionState": "manual"
+    },
+    "No messages yet. Turn on Accept messages on your page to get them.": {
+      "extractionState": "manual"
+    },
+    "Your page": {
+      "extractionState": "manual"
+    },
+    "Not published yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no publicado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore publié"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nicht veröffentlicht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não publicado"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだ公開されていません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未发布"
+          }
+        }
+      }
+    },
+    "No page yet": {
+      "extractionState": "manual"
+    },
+    "Published · 1 change not published": {
+      "extractionState": "manual"
+    },
+    "Published · %lld changes not published": {
+      "extractionState": "manual"
+    },
+    "Published": {
+      "extractionState": "manual"
+    },
+    "Unread": {
+      "extractionState": "manual"
+    },
     "Migrate server": {
       "extractionState": "manual",
       "localizations": {
@@ -62362,6 +62868,249 @@
         }
       }
     },
+    "Publish your page?": {
+      "extractionState": "manual"
+    },
+    "Theme": {
+      "extractionState": "manual"
+    },
+    "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.": {
+      "extractionState": "manual"
+    },
+    "Profile": {
+      "extractionState": "manual"
+    },
+    "Classic": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clásico"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Classique"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klassisch"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clássico"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クラシック"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "经典"
+          }
+        }
+      }
+    },
+    "Ink": {
+      "extractionState": "manual"
+    },
+    "Sea": {
+      "extractionState": "manual"
+    },
+    "Save profile": {
+      "extractionState": "manual"
+    },
+    "Add a display name.": {
+      "extractionState": "manual"
+    },
+    "Waiting for an admin device to publish": {
+      "extractionState": "manual"
+    },
+    "Accept messages": {
+      "extractionState": "manual"
+    },
+    "People with a Flagship account can write to you. They appear as visitors, not by name.": {
+      "extractionState": "manual"
+    },
+    "Posts": {
+      "extractionState": "manual"
+    },
+    "Preview": {
+      "extractionState": "manual"
+    },
+    "That photo couldn't be made small enough. Try another.": {
+      "extractionState": "manual"
+    },
+    "Publish": {
+      "extractionState": "manual"
+    },
+    "Display name": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre visible"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom d’affichage"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anzeigename"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome de exibição"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示名"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示名称"
+          }
+        }
+      }
+    },
+    "Remove photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar foto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer la photo"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foto entfernen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover foto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写真を削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除照片"
+          }
+        }
+      }
+    },
+    "Add photo": {
+      "extractionState": "manual"
+    },
+    "Change photo": {
+      "extractionState": "manual"
+    },
+    "Bio": {
+      "extractionState": "manual"
+    },
+    "Add link": {
+      "extractionState": "manual"
+    },
+    "Links": {
+      "extractionState": "manual"
+    },
+    "Write a post": {
+      "extractionState": "manual"
+    },
+    "Adding…": {
+      "extractionState": "manual"
+    },
+    "Add post": {
+      "extractionState": "manual"
+    },
+    "Edit": {
+      "extractionState": "manual"
+    },
+    "Remove link cards": {
+      "extractionState": "manual"
+    },
+    "Publishing…": {
+      "extractionState": "manual"
+    },
+    "Share": {
+      "extractionState": "manual"
+    },
+    "Label": {
+      "extractionState": "manual"
+    },
+    "Add": {
+      "extractionState": "manual"
+    },
+    "Give the link a short label (40 characters at most).": {
+      "extractionState": "manual"
+    },
+    "A page can have one email link.": {
+      "extractionState": "manual"
+    },
+    "Use a full https:// address.": {
+      "extractionState": "manual"
+    },
+    "Edit post": {
+      "extractionState": "manual"
+    },
+    "Post": {
+      "extractionState": "manual"
+    },
+    "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.": {
+      "extractionState": "manual"
+    },
+    "Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.": {
+      "extractionState": "manual"
+    },
+    "Messages are private. If someone reports your message, Flagship can see which account sent it.": {
+      "extractionState": "manual"
+    },
+    "The full rules are in the terms at flagshipserver.com/terms.": {
+      "extractionState": "manual"
+    },
+    "I agree": {
+      "extractionState": "manual"
+    },
+    "Send me a message": {
+      "extractionState": "manual"
+    },
     "Hidden while your screen is being recorded or shared.": {
       "extractionState": "manual",
       "localizations": {
@@ -70029,6 +70778,47 @@
         }
       }
     },
+    "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo aún no guarda copias de seguridad. Cuando las copias de un servidor van a «En mis dispositivos», la más reciente se guarda aquí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil ne conserve pas encore de sauvegardes. Lorsque les sauvegardes d’un serveur vont sur « Sur mes appareils », la plus récente est conservée ici."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät bewahrt noch keine Backups auf. Wenn die Backups eines Servers auf „Auf meinen Geräten“ gehen, wird das neueste hier aufbewahrt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo ainda não guarda backups. Quando os backups de um servidor vão para “Nos meus dispositivos”, o mais recente fica guardado aqui."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスにはまだバックアップがありません。サーバーのバックアップ先を「自分のデバイス上」にすると、最新のものがここに保管されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备目前没有保存任何备份。当某台服务器的备份设为“在我的设备上”时，最新的一份会保存在这里。"
+          }
+        }
+      }
+    },
     "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.": {
       "extractionState": "manual",
       "localizations": {
@@ -70152,6 +70942,9 @@
         }
       }
     },
+    "This sign-in link isn't valid": {
+      "extractionState": "manual"
+    },
     "Destinations": {
       "extractionState": "manual",
       "localizations": {
@@ -70189,6 +70982,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "目的地"
+          }
+        }
+      }
+    },
+    "1 server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Server"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 台のサーバー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 台服务器"
           }
         }
       }
@@ -71501,6 +72335,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "启动密钥"
+          }
+        }
+      }
+    },
+    "It's waiting for its disk key. Unlock it only if you expected it to restart.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Está esperando la clave de su disco. Desbloquéalo solo si esperabas que se reiniciara."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il attend la clé de son disque. Ne le déverrouillez que si vous vous attendiez à un redémarrage."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Er wartet auf seinen Datenträgerschlüssel. Entsperre ihn nur, wenn du einen Neustart erwartet hast."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ele está aguardando a chave de disco dele. Desbloqueie somente se você esperava que ele reiniciasse."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディスクキーを待っています。再起動を予期していた場合にのみ、ロックを解除してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它正在等待其磁盘密钥。只有在你预期它会重启时才解锁。"
           }
         }
       }
@@ -75728,6 +76603,47 @@
         }
       }
     },
+    "On my devices": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En mis dispositivos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur mes appareils"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf meinen Geräten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nos meus dispositivos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自分のデバイス上"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在我的设备上"
+          }
+        }
+      }
+    },
     "On other servers": {
       "extractionState": "manual",
       "localizations": {
@@ -76056,6 +76972,47 @@
         }
       }
     },
+    "Change": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändern"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alterar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "変更"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改"
+          }
+        }
+      }
+    },
     "Approve backups for this server": {
       "extractionState": "manual",
       "localizations": {
@@ -76138,47 +77095,6 @@
         }
       }
     },
-    "Change": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cambiar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifier"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ändern"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alterar"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "変更"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "更改"
-          }
-        }
-      }
-    },
     "Save…": {
       "extractionState": "manual",
       "localizations": {
@@ -76216,6 +77132,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存…"
+          }
+        }
+      }
+    },
+    "Keep a copy on this device": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar una copia en este dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder une copie sur cet appareil"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Kopie auf diesem Gerät behalten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manter uma cópia neste dispositivo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスにコピーを保存"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此设备上保留一份副本"
           }
         }
       }
@@ -77733,6 +78690,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "已排除：%@"
+          }
+        }
+      }
+    },
+    "On this device: %@ · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En este dispositivo: %@ · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur cet appareil : %@ · %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf diesem Gerät: %@ · %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neste dispositivo: %@ · %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイス：%@ · %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此设备上：%@ · %@"
           }
         }
       }
@@ -84215,6 +85213,88 @@
         }
       }
     },
+    "+ Add person": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Añadir persona"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Ajouter une personne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Person hinzufügen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Adicionar pessoa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ 人を追加"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ 添加个人"
+          }
+        }
+      }
+    },
+    "+ Add group": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Añadir grupo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Ajouter un groupe"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Gruppe hinzufügen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ Adicionar grupo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ グループを追加"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ 添加群组"
+          }
+        }
+      }
+    },
     "No members yet. Add a person or a group.": {
       "extractionState": "manual",
       "localizations": {
@@ -84953,47 +86033,6 @@
         }
       }
     },
-    "Remove photo": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quitar foto"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Supprimer la photo"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Foto entfernen"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remover foto"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "写真を削除"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除照片"
-          }
-        }
-      }
-    },
     "Add photo (optional)": {
       "extractionState": "manual",
       "localizations": {
@@ -85236,6 +86275,88 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld / %lld 人已加入"
+          }
+        }
+      }
+    },
+    "active": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "activo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "actif"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktiv"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ativo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已激活"
+          }
+        }
+      }
+    },
+    "invite sent — not opened yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invitación enviada: aún sin abrir"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invitation envoyée — pas encore ouverte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einladung gesendet – noch nicht geöffnet"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "convite enviado — ainda não aberto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "招待を送信済み — まだ開かれていません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "邀请已发送 — 尚未打开"
           }
         }
       }
@@ -91554,47 +92675,6 @@
         }
       }
     },
-    "Display name": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nombre visible"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nom d’affichage"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anzeigename"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nome de exibição"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "表示名"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "显示名称"
-          }
-        }
-      }
-    },
     "Code protection on — recovery needs a code.": {
       "extractionState": "manual",
       "localizations": {
@@ -94588,47 +95668,6 @@
         }
       }
     },
-    "Classic": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clásico"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Classique"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Klassisch"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clássico"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "クラシック"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "经典"
-          }
-        }
-      }
-    },
     "Legacy": {
       "extractionState": "manual",
       "localizations": {
@@ -94669,6 +95708,9 @@
           }
         }
       }
+    },
+    "Websites you're signed in to, inbox key, rules": {
+      "extractionState": "manual"
     },
     "The device may retain its own suggestion, but the managed name remains visible until an administrator removes it.": {
       "extractionState": "manual",
@@ -97950,47 +98992,6 @@
         }
       }
     },
-    "It's waiting for its disk key. Unlock it only if you expected it to restart.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Está esperando la clave de su disco. Desbloquéalo solo si esperabas que se reiniciara."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Il attend la clé de son disque. Ne le déverrouillez que si vous vous attendiez à un redémarrage."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Er wartet auf seinen Datenträgerschlüssel. Entsperre ihn nur, wenn du einen Neustart erwartet hast."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ele está aguardando a chave de disco dele. Desbloqueie somente se você esperava que ele reiniciasse."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ディスクキーを待っています。再起動を予期していた場合にのみ、ロックを解除してください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "它正在等待其磁盘密钥。只有在你预期它会重启时才解锁。"
-          }
-        }
-      }
-    },
     "Unlock with Face ID": {
       "extractionState": "manual",
       "localizations": {
@@ -99179,6 +100180,87 @@
           }
         }
       }
+    },
+    "This conversation is gone": {
+      "extractionState": "manual"
+    },
+    "Rename": {
+      "extractionState": "manual"
+    },
+    "Block this visitor?": {
+      "extractionState": "manual"
+    },
+    "Delete this conversation?": {
+      "extractionState": "manual"
+    },
+    "Reported": {
+      "extractionState": "manual"
+    },
+    "You blocked this visitor. Their messages don't reach you.": {
+      "extractionState": "manual"
+    },
+    "Some messages haven't arrived yet": {
+      "extractionState": "manual"
+    },
+    "Only you see this name, on your devices.": {
+      "extractionState": "manual"
+    },
+    "Block": {
+      "extractionState": "manual"
+    },
+    "They won't be told. Their new messages won't reach you.": {
+      "extractionState": "manual"
+    },
+    "It goes from all your devices. A new message from them starts a new request.": {
+      "extractionState": "manual"
+    },
+    "Spam": {
+      "extractionState": "manual"
+    },
+    "Harassment": {
+      "extractionState": "manual"
+    },
+    "Pretending to be someone": {
+      "extractionState": "manual"
+    },
+    "Illegal content": {
+      "extractionState": "manual"
+    },
+    "Something else": {
+      "extractionState": "manual"
+    },
+    "Thanks. Flagship will look at it. You can also block this visitor.": {
+      "extractionState": "manual"
+    },
+    "Accept": {
+      "extractionState": "manual"
+    },
+    "Unblock": {
+      "extractionState": "manual"
+    },
+    "Report": {
+      "extractionState": "manual"
+    },
+    "Delete conversation": {
+      "extractionState": "manual"
+    },
+    "More": {
+      "extractionState": "manual"
+    },
+    "Sent": {
+      "extractionState": "manual"
+    },
+    "Delivered to their phone": {
+      "extractionState": "manual"
+    },
+    "Send": {
+      "extractionState": "manual"
+    },
+    "Reply": {
+      "extractionState": "manual"
+    },
+    "Flagship gets this message as it was sent, sealed. It can then see which account sent it, not what it says.": {
+      "extractionState": "manual"
     },
     "Type to confirm": {
       "extractionState": "manual",
@@ -105043,6 +106125,57 @@
         }
       }
     },
+    "This page couldn't be checked.": {
+      "extractionState": "manual"
+    },
+    "This page isn't taking messages.": {
+      "extractionState": "manual"
+    },
+    "This page isn't on voi.ci.": {
+      "extractionState": "manual"
+    },
+    "You can start %lld new conversations a day. Try again %@.": {
+      "extractionState": "manual"
+    },
+    "You've started as many new conversations as you can today. Try again %@.": {
+      "extractionState": "manual"
+    },
+    "This device already set up Messages for another account this month.": {
+      "extractionState": "manual"
+    },
+    "New accounts can start conversations from the web after 7 days.": {
+      "extractionState": "manual"
+    },
+    "Flagship's answer couldn't be checked. Try again.": {
+      "extractionState": "manual"
+    },
+    "The voi.ci page stopped waiting. Start again from the page.": {
+      "extractionState": "manual"
+    },
+    "Couldn't reach the voi.ci page. Try again.": {
+      "extractionState": "manual"
+    },
+    "Sign in to voi.ci": {
+      "extractionState": "manual"
+    },
+    "tomorrow": {
+      "extractionState": "manual"
+    },
+    "You're signed in. Go back to voi.ci to write your message.": {
+      "extractionState": "manual"
+    },
+    "Sign in to voi.ci to message %@?": {
+      "extractionState": "manual"
+    },
+    "Check the code matches the one on the page": {
+      "extractionState": "manual"
+    },
+    "You appear as a visitor. They never see your username.": {
+      "extractionState": "manual"
+    },
+    "You appear as %@. They never see your username.": {
+      "extractionState": "manual"
+    },
     "Let your watch start this server?": {
       "extractionState": "manual",
       "localizations": {
@@ -106884,6 +108017,129 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%@”不是有效的主机名"
+          }
+        }
+      }
+    },
+    "Member": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Membre"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitglied"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Membro"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メンバー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成员"
+          }
+        }
+      }
+    },
+    "Manager": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestionnaire"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manager"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerente"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マネージャー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者"
+          }
+        }
+      }
+    },
+    "Master": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maestro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maître"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mestre"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マスター"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主控"
           }
         }
       }
@@ -109676,47 +110932,6 @@
         }
       }
     },
-    "Too many tries. Try again later.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Demasiados intentos. Inténtalo más tarde."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trop de tentatives. Réessayez plus tard."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zu viele Versuche. Versuche es später erneut."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Muitas tentativas. Tente de novo mais tarde."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "試行回数が多すぎます。しばらくしてからもう一度お試しください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "尝试次数过多。请稍后再试。"
-          }
-        }
-      }
-    },
     "Too many tries %@. Try again %@.": {
       "extractionState": "manual",
       "localizations": {
@@ -110205,47 +111420,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "已验证"
-          }
-        }
-      }
-    },
-    "Not published yet": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aún no publicado"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pas encore publié"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Noch nicht veröffentlicht"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ainda não publicado"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "まだ公開されていません"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "尚未发布"
           }
         }
       }
@@ -114100,47 +115274,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "我们无法完成此操作。请重试。"
-          }
-        }
-      }
-    },
-    "Something went wrong. Try again.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Algo salió mal. Inténtalo de nuevo."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un problème est survenu. Réessayez."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Etwas ist schiefgelaufen. Versuche es erneut."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Algo deu errado. Tente de novo."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "問題が発生しました。もう一度お試しください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出了点问题。请重试。"
           }
         }
       }
@@ -121402,757 +122535,11 @@
         }
       }
     },
-    "All": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Todos"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tous"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alle"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Todos"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "すべて"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全部"
-          }
-        }
-      }
+    "New message": {
+      "extractionState": "manual"
     },
-    "Member": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Miembro"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Membre"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mitglied"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Membro"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メンバー"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "成员"
-          }
-        }
-      }
-    },
-    "Manager": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gestor"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gestionnaire"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manager"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gerente"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "マネージャー"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "管理者"
-          }
-        }
-      }
-    },
-    "Master": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maestro"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maître"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Master"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mestre"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "マスター"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主控"
-          }
-        }
-      }
-    },
-    "+ Add person": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Añadir persona"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Ajouter une personne"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Person hinzufügen"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Adicionar pessoa"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ 人を追加"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ 添加个人"
-          }
-        }
-      }
-    },
-    "+ Add group": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Añadir grupo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Ajouter un groupe"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Gruppe hinzufügen"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ Adicionar grupo"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ グループを追加"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+ 添加群组"
-          }
-        }
-      }
-    },
-    "active": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "activo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "actif"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "aktiv"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ativo"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有効"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已激活"
-          }
-        }
-      }
-    },
-    "invite sent — not opened yet": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "invitación enviada: aún sin abrir"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "invitation envoyée — pas encore ouverte"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Einladung gesendet – noch nicht geöffnet"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "convite enviado — ainda não aberto"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "招待を送信済み — まだ開かれていません"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "邀请已发送 — 尚未打开"
-          }
-        }
-      }
-    },
-    "1 server": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 servidor"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 serveur"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 Server"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 servidor"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 台のサーバー"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 台服务器"
-          }
-        }
-      }
-    },
-    "Keep a copy on this device": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Guardar una copia en este dispositivo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Garder une copie sur cet appareil"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Eine Kopie auf diesem Gerät behalten"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manter uma cópia neste dispositivo"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このデバイスにコピーを保存"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在此设备上保留一份副本"
-          }
-        }
-      }
-    },
-    "On this device: %@ · %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En este dispositivo: %@ · %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sur cet appareil : %@ · %@"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auf diesem Gerät: %@ · %@"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neste dispositivo: %@ · %@"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このデバイス：%@ · %@"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在此设备上：%@ · %@"
-          }
-        }
-      }
-    },
-    "On my devices": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En mis dispositivos"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sur mes appareils"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auf meinen Geräten"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nos meus dispositivos"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自分のデバイス上"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在我的设备上"
-          }
-        }
-      }
-    },
-    "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este dispositivo aún no guarda copias de seguridad. Cuando las copias de un servidor van a «En mis dispositivos», la más reciente se guarda aquí."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cet appareil ne conserve pas encore de sauvegardes. Lorsque les sauvegardes d’un serveur vont sur « Sur mes appareils », la plus récente est conservée ici."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dieses Gerät bewahrt noch keine Backups auf. Wenn die Backups eines Servers auf „Auf meinen Geräten“ gehen, wird das neueste hier aufbewahrt."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este dispositivo ainda não guarda backups. Quando os backups de um servidor vão para “Nos meus dispositivos”, o mais recente fica guardado aqui."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このデバイスにはまだバックアップがありません。サーバーのバックアップ先を「自分のデバイス上」にすると、最新のものがここに保管されます。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此设备目前没有保存任何备份。当某台服务器的备份设为“在我的设备上”时，最新的一份会保存在这里。"
-          }
-        }
-      }
-    },
-    "%lld apps": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "new",
-                  "value": "%lld app"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "new",
-                  "value": "%lld apps"
-                }
-              }
-            }
-          }
-        },
-        "es": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld app"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld apps"
-                }
-              },
-              "many": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld apps"
-                }
-              }
-            }
-          }
-        },
-        "fr": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld app"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld apps"
-                }
-              },
-              "many": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld apps"
-                }
-              }
-            }
-          }
-        },
-        "de": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld App"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld Apps"
-                }
-              }
-            }
-          }
-        },
-        "pt-BR": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld app"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld apps"
-                }
-              },
-              "many": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld apps"
-                }
-              }
-            }
-          }
-        },
-        "ja": {
-          "variations": {
-            "plural": {
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "アプリ %lld 件"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans": {
-          "variations": {
-            "plural": {
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld 个应用"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Moved to another Flagship relay": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se trasladó a otro relé de Flagship"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Passé à un autre relais Flagship"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zu einem anderen Flagship-Relay gewechselt"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mudou para outro relay do Flagship"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "別の Flagship リレーに移動しました"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已移至另一个 Flagship 中继"
-          }
-        }
-      }
-    },
-    "Stayed on its current relay": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se quedó en su relé actual"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Resté sur son relais actuel"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Beim aktuellen Relay geblieben"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Permaneceu no relay atual"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在のリレーにとどまりました"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仍留在当前中继"
-          }
-        }
-      }
+    "A device on your account has changes waiting to be published on your page.": {
+      "extractionState": "manual"
     }
   },
   "version": "1.0"

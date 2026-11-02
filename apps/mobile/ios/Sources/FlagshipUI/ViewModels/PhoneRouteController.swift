@@ -48,6 +48,9 @@ public enum PhoneRouteController {
                   let c = try? PhoneTunnelClient(url: url, account: user, apex: apex, deviceKey: deviceKey, identity: identity, grants: grants,
                                                  onState: { s in Task { @MainActor in state = s } }) else { return }
             client = c
+            // The voi.ci operations (docs/voici-and-messages.md §8.2): live and deliver, answered by Messages.
+            c.responder.setWebInbox(MessagesStore.shared.phoneInbox)
+            MessagesStore.shared.updatePhoneInbox()
             c.start()
         }
     }

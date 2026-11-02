@@ -72,6 +72,7 @@
 		EB76A98873BEC76F5CA15F11 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CFA43B23D68777AA3E79F2B2 /* PrivacyInfo.xcprivacy */; };
 		EC1F3F7A2AB2B6ED0B414A74 /* GymSweepShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01707620726A615E515D90B8 /* GymSweepShareTests.swift */; };
 		F8E5776F2B87DE67108074EE /* GymLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */; };
+		677AFE2622E9BB7DFC119484 /* GymMessagesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920E90123CC0BCEAAAC75B74 /* GymMessagesTests.swift */; };
 		FC64923B7DC383ED61C87497 /* WatchSecurityAlertsPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */; };
 		FC7A32B60913EC265EF082CE /* GymRelease03Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01DE4E402E7E4B630F6551 /* GymRelease03Tests.swift */; };
 		FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 62BE221458756CDD4E0B2EC4 /* FlagshipCore */; };
@@ -195,6 +196,7 @@
 		8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSmokeTests.swift; sourceTree = "<group>"; };
 		8FB476FFF2CDD63046368414 /* GymSweepBuildTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepBuildTests.swift; sourceTree = "<group>"; };
 		91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymLiveTests.swift; sourceTree = "<group>"; };
+		920E90123CC0BCEAAAC75B74 /* GymMessagesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymMessagesTests.swift; sourceTree = "<group>"; };
 		9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymEveryMergeTests.swift; sourceTree = "<group>"; };
 		94B12B136089A4BDE59177C0 /* GymTotalDetailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymTotalDetailTests.swift; sourceTree = "<group>"; };
 		95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
@@ -387,6 +389,7 @@
 				2A2B35B7246FAB05386D1BEA /* GymIPadSweepTests.swift */,
 				2D3499CD4ED81FE13DF74CC7 /* GymIPadTests.swift */,
 				91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */,
+				920E90123CC0BCEAAAC75B74 /* GymMessagesTests.swift */,
 				778293C02E165AE3AE539BD9 /* GymNoticeTests.swift */,
 				FD2441AEC552535EC74BF456 /* GymOctoberTests.swift */,
 				BF01DE4E402E7E4B630F6551 /* GymRelease03Tests.swift */,
@@ -666,6 +669,7 @@
 				C394A5E1241291F4E4EF8754 /* GymIPadSweepTests.swift in Sources */,
 				044DDAEFDED42ACC06772BE5 /* GymIPadTests.swift in Sources */,
 				F8E5776F2B87DE67108074EE /* GymLiveTests.swift in Sources */,
+				677AFE2622E9BB7DFC119484 /* GymMessagesTests.swift in Sources */,
 				227B03E0DE023D0460D103D9 /* GymNoticeTests.swift in Sources */,
 				D187D390DC7D5142B6143266 /* GymOctoberTests.swift in Sources */,
 				FC7A32B60913EC265EF082CE /* GymRelease03Tests.swift in Sources */,
@@ -756,6 +760,7 @@
 		0CA6F1D31BF51AD8E594F1AB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPATTEST_ENVIRONMENT = production;
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Legacy";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -964,6 +969,7 @@
 		55F58111300FB7BE0F331AC7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPATTEST_ENVIRONMENT = development;
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Legacy";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

@@ -37,6 +37,14 @@
             "comment": "Trailing-slash variant of the same transfer take-over URL."
           },
           {
+            "/": "/voici-sign-in",
+            "comment": "Sign in with Flagship from a voi.ci page. /voici-sign-in#s=&k=&p=&u=&d=&n= opens the approval in the installed app; the fields ride in the fragment."
+          },
+          {
+            "/": "/voici-sign-in/",
+            "comment": "Trailing-slash variant of the same sign-in link."
+          },
+          {
             "/": "/share",
             "comment": "Share this server. /share#s=<shareId>&k=<secret> opens the accept flow in the installed app; the secret rides in the fragment."
           },

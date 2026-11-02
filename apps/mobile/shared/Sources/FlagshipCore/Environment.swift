@@ -294,3 +294,16 @@ public extension EnvironmentValues {
         set { self[SecuredSessionStoreKey.self] = newValue }
     }
 }
+
+/// voi.ci pages and Messages (`.com`, docs/voici-and-messages.md): the live client, or the mock gym's. Nil until the
+/// app injects one (previews and unit tests build their own).
+private struct VoiciComClientKey: EnvironmentKey {
+    static let defaultValue: (any VoiciComClient)? = nil
+}
+
+public extension EnvironmentValues {
+    var voiciComClient: (any VoiciComClient)? {
+        get { self[VoiciComClientKey.self] }
+        set { self[VoiciComClientKey.self] = newValue }
+    }
+}

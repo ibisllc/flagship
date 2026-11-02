@@ -495,6 +495,21 @@
       "check": "signed-tags",
       "key": "web:flagship/pq-key-binding/v2",
       "reason": "Only release keys carry a v2 PQ key binding, checked by the box installer's verify-box-artifact.sh; Android carries the tag only inside the embedded preseed engine it shares with the builder. No phone or browser signs or checks one."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-app-reader/v1",
+      "reason": "HKDF info, not a signed tag: the native apps' own delegated key for checking whether a voi.ci page replied to this account (owner decision, reply alerts). The webapp reads replies with a short-lived key P delegates on each open instead (lib/voiciReplies.js), so it derives no app-reader key."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/voici-local/v1",
+      "reason": "Android's own at-rest AAD for its sealed local copy of the page and conversations (VoiciVault, under the Messages state key); device-local, never on the wire, so other clients need no twin."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-local/v1",
+      "reason": "Android's own at-rest AAD for its sealed local copy of the page and conversations (VoiciVault, under the Messages state key); device-local, never on the wire, so other clients need no twin."
     }
   ]
 }
