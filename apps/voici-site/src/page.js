@@ -158,6 +158,13 @@ export function footer(doc, o) {
     { class: "site-footer" },
     o.onReport ? h(doc, "button", { class: "btn-ghost", type: "button", on: { click: o.onReport } }, icon(doc, "flag", "icon icon-sm"), t("Report this page")) : null,
     h(doc, "a", { class: "made-with", href: `https://${o.apex}/` }, flagshipMark(doc, "mark icon-sm"), t("Made with Flagship")),
+    h(
+      doc,
+      "nav",
+      { class: "footer-links", "aria-label": t("Rules and reports") },
+      h(doc, "a", { href: `https://${o.apex}/terms` }, t("Terms")),
+      h(doc, "a", { href: `https://${o.apex}/abuse#voici` }, t("Report abuse")),
+    ),
     o.languagePicker ?? null,
   );
 }

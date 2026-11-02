@@ -93,5 +93,8 @@
   "You'll get an alert when they reply.": "返信があると通知が届きます。",
   "Turn off alerts": "通知をオフにする",
   "Get an alert when they reply": "返信があったら通知する",
-  "The alert only says that they replied, never what they wrote.": "通知には返信があったことだけが表示され、内容は表示されません。"
+  "The alert only says that they replied, never what they wrote.": "通知には返信があったことだけが表示され、内容は表示されません。",
+  "Rules and reports": "ルールと報告",
+  "Terms": "利用規約",
+  "Report abuse": "不正利用を報告"
 }

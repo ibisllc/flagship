@@ -1271,6 +1271,20 @@ no oracle); report → `open-tag` with a gym abuse key → ban → attestation r
 pieces gone); the CORS rules from a fake origin. `phoneSim` gains `deliver`/`live`. A headless browser run of the
 site (Playwright, already in the webapp gym). `.com` unit tests ride with B1/B2.
 
+G: as built. `tools/live-e2e/groups/release03/voici.ts` (`--groups voici`, no box: two throwaway real accounts), its
+offline self-checks `tools/live-e2e/tests/voici.test.ts`. The admin phone is `lib/phoneSim.ts` with
+`lib/voiciPhone.ts` (`live`, the preflight, `deliver` under `phoneWebCheck`; forward with `direct: true`, ack); the
+visitor's browser is `packages/flagship-web` in Node behind a fetch that enforces CORS as a browser does (Origin
+`https://gym.voi.ci`, preflight for non-simple requests, ACAO required); the /qr-pipe sign-in itself is not driven (the
+group signs the delegation as the app would). Gym prerequisites, each a skip with its reason: (1) a gym abuse key in the
+**gym branch's** `.maintainers/abuse-keys/list.json` (`.com` has no runtime seam; `npx tsx tools/live-e2e/lib/gymAbuseKey.ts`
+prints the entry, deterministic test material signed by the gym ca-track key K), else every attestation is 503
+`no-abuse-key` and the visitor checks skip; (2) a visitor attestation needs integrity evidence or an account 7+ days
+old, so the group backdates its own throwaway visitor's `claimed_at` in the gym D1 (`wrangler d1 execute`,
+`GYM_VOICI_BACKDATE=0` turns it off); (3) the relay's `/phone-tunnel`. First run 2026-11-02: 11 passed, 2 failed (the
+deployed site predates the footer links; a taken-down publish is 410, not 403: the group now accepts the code), 8
+skipped (no gym abuse key); the Worker tail showed `pieces` and `publish` over 10 ms CPU on most calls (publish 30 ms).
+
 ### H. Copy, policy, store — 2 days
 
 Translations, `REVIEW.md`, terms and privacy sections, abuse.html appeal, store listing notes (UGC), FAQ.

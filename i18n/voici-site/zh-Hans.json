@@ -93,5 +93,8 @@
   "You'll get an alert when they reply.": "对方回复时，你会收到提醒。",
   "Turn off alerts": "关闭提醒",
   "Get an alert when they reply": "对方回复时提醒我",
-  "The alert only says that they replied, never what they wrote.": "提醒只会告诉你对方已回复，不会显示回复内容。"
+  "The alert only says that they replied, never what they wrote.": "提醒只会告诉你对方已回复，不会显示回复内容。",
+  "Rules and reports": "规则与举报",
+  "Terms": "条款",
+  "Report abuse": "举报滥用"
 }

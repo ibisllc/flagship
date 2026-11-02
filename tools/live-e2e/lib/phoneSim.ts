@@ -288,7 +288,9 @@ export class SimPhone {
       const req = parseHttpRequest(buf);
       if (!req) return;
       answered = true;
-      tls.end(this.endpoint.respond(req, sni));
+      void Promise.resolve(this.endpoint.respond(req, sni))
+        .catch(() => answer(500, { code: "sim-error" }))
+        .then((a) => tls.end(a));
     });
     tls.on("error", () => s.close());
     return s;
@@ -403,7 +405,12 @@ export class PhoneEndpointSim {
     return v;
   }
 
-  respond(req: HttpRequestHead, hostname: string): string {
+  /** The voi.ci operations (deliver, live), when the sim plays a phone with a page (lib/voiciPhone.ts). */
+  web: { respond(req: HttpRequestHead, hostname: string): string | Promise<string> | null } | null = null;
+
+  respond(req: HttpRequestHead, hostname: string): string | Promise<string> {
+    const viaWeb = this.web?.respond(req, hostname);
+    if (viaWeb) return viaWeb;
     const host = (req.headers.host ?? "").split(":")[0]!;
     const establish = req.method === "POST" && req.path === "/api/phone/session";
     const token = cookieValue(req.headers.cookie, PHONE_SESSION_COOKIE);
@@ -454,9 +461,12 @@ export class PhoneEndpointSim {
   }
 }
 
-function answer(status: number, body: unknown, extra = ""): string {
-  const json = JSON.stringify(body);
-  const reason = status === 200 ? "OK" : status === 403 ? "Forbidden" : "Not Found";
+const REASONS: Record<number, string> = { 200: "OK", 204: "No Content", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type", 421: "Misdirected Request", 429: "Too Many Requests", 500: "Internal Server Error", 503: "Service Unavailable" };
+
+/** One whole HTTP/1.1 answer as the sim sends it; `extra` is raw header lines (each ending in CRLF). */
+export function answer(status: number, body: unknown, extra = ""): string {
+  const json = status === 204 ? "" : JSON.stringify(body);
+  const reason = REASONS[status] ?? "Status";
   return (
     `HTTP/1.1 ${status} ${reason}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(json)}\r\n` +
     "cache-control: no-store\r\nx-content-type-options: nosniff\r\ncontent-security-policy: default-src 'none'; frame-ancestors 'none'\r\n" +

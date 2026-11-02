@@ -611,6 +611,19 @@ body.has-sheet {
 .made-with:hover {
   color: var(--ink);
 }
+.footer-links {
+  display: inline-flex;
+  gap: 16px;
+  font-size: 13px;
+}
+.footer-links a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+.footer-links a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
 .lang {
   font: inherit;
   font-size: 13px;

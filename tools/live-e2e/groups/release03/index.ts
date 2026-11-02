@@ -27,6 +27,7 @@ import { relayAuthority } from "./relayAuthority.js";
 // relayInstances.ts is superseded by relayMesh (relay-mesh.md §14.1) and no longer registered.
 import { relayMesh } from "./relayMesh.js";
 import { phoneEndpoint } from "./phoneEndpoint.js";
+import { voici } from "./voici.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
   firstContact,
@@ -56,4 +57,5 @@ export const RELEASE_03_GROUPS: Group[] = [
   phoneEndpoint,
   relayAuthority,
   relayMesh,
+  voici,
 ];

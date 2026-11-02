@@ -307,9 +307,21 @@
     "en": "Made with Flagship",
     "ctx": "voici-site/page.js:160"
   },
+  "Rules and reports": {
+    "en": "Rules and reports",
+    "ctx": "voici-site/page.js:164"
+  },
+  "Terms": {
+    "en": "Terms",
+    "ctx": "voici-site/page.js:165"
+  },
+  "Report abuse": {
+    "en": "Report abuse",
+    "ctx": "voici-site/page.js:166"
+  },
   "Loading": {
     "en": "Loading",
-    "ctx": "voici-site/page.js:199"
+    "ctx": "voici-site/page.js:206"
   },
   "Spam": {
     "en": "Spam",

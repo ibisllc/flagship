@@ -25,6 +25,8 @@ page at voi.ci/<username> (sign-in sheet, thread, report sheet, error states). K
 webapp; rebuild with `node apps/voici-site/i18n.mjs build` and check with `node apps/voici-site/i18n.mjs check`.
 Review first: "Messages are private. If someone reports your message, Flagship can see which account sent it.", the
 two "You appear …" lines, and the report reasons (legal meaning of "Illegal content", "Pretending to be someone else").
+The footer's "Terms" and "Report abuse" links (to the control apex's /terms and /abuse#voici) were added later
+(chunk G); check "Terms" reads as the legal terms of service in each language.
 
 **Messages and voi.ci pages in the iPhone app (`i18n/ios`, 2026-11-02, drafted by an agent, needs native review).**
 129 strings in es, fr, de, pt-BR, ja and zh-Hans: the Messages tab, the page editor, the thread, the sign-in approval
