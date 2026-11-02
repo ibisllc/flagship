@@ -13431,5 +13431,41 @@
     "en": "A device on your account has changes waiting to be published on your page.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "start the line with \"allow\" or \"deny\"": {
+    "en": "start the line with \"allow\" or \"deny\"",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:146"
+  },
+  "say what to allow or deny, e.g. \"allow example.com\"": {
+    "en": "say what to allow or deny, e.g. \"allow example.com\"",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:148"
+  },
+  "one host per line": {
+    "en": "one host per line",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:149"
+  },
+  "write the host only, without http:// or https://": {
+    "en": "write the host only, without http:// or https://",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:151"
+  },
+  "write the host only, without a path": {
+    "en": "write the host only, without a path",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:152"
+  },
+  "write the host only, without a port": {
+    "en": "write the host only, without a port",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:154"
+  },
+  "write \"all\" instead of \"*\"": {
+    "en": "write \"all\" instead of \"*\"",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:157"
+  },
+  "a * may only start a host, as in *.example.com": {
+    "en": "a * may only start a host, as in *.example.com",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:161"
+  },
+  "an access list can have at most %lld rules": {
+    "en": "an access list can have at most %lld rules",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:67"
   }
 }

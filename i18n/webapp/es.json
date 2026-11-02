@@ -3215,5 +3215,6 @@
   "Sign in to voi.ci": "Iniciar sesión en voi.ci",
   "You can start {0} new conversation a day. Try again {1}.": "Puedes iniciar {0} conversación nueva al día. Vuelve a intentarlo {1}.",
   "You can start {0} new conversations a day. Try again {1}.": "Puedes iniciar {0} conversaciones nuevas al día. Vuelve a intentarlo {1}.",
-  "You have a reply on voi.ci/{0}": "Tienes una respuesta en voi.ci/{0}"
+  "You have a reply on voi.ci/{0}": "Tienes una respuesta en voi.ci/{0}",
+  "{0} rule": "{0} regla"
 }

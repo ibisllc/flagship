@@ -593,9 +593,9 @@ fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit) {
         ui.items.forEach { item ->
             val (status, kind) = when (val s = item.status) {
                 is SharedItem.Status.Active -> ShareCopy.level(s.level) to FSPillKind.Online
-                SharedItem.Status.Waiting -> "Waiting for the owner" to FSPillKind.Pending
-                SharedItem.Status.Starting -> "Waiting to start" to FSPillKind.Pending
-                SharedItem.Status.Unreachable -> "Can't reach it now" to FSPillKind.Offline
+                SharedItem.Status.Waiting -> stringResource(R.string.share_status_waiting_for_owner) to FSPillKind.Pending
+                SharedItem.Status.Starting -> stringResource(R.string.share_status_waiting_to_start) to FSPillKind.Pending
+                SharedItem.Status.Unreachable -> stringResource(R.string.share_status_cant_reach_now) to FSPillKind.Offline
             }
             FSListRow(
                 leading = FSListLeading.Icon(icon = Icons.Outlined.Dns, color = FS.colors.primary),
@@ -1047,7 +1047,7 @@ private fun SharedMetricsCard(m: ServerMetricsResponse) {
             Meter(stringResource(R.string.processor), "%.0f%%".format(m.cpuPercent), (m.cpuPercent / 100).toFloat())
             Meter(stringResource(R.string.memory), fsString(R.string.of, bytes(m.memUsedBytes), bytes(m.memTotalBytes)), if (m.memTotalBytes > 0) m.memUsedBytes.toFloat() / m.memTotalBytes else 0f)
             Meter(stringResource(R.string.disk), fsString(R.string.of, bytes(m.diskUsedBytes), bytes(m.diskTotalBytes)), if (m.diskTotalBytes > 0) m.diskUsedBytes.toFloat() / m.diskTotalBytes else 0f)
-            Muted("Network: ${bytes(m.netRxBytesPerSec.toLong())}/s in · ${bytes(m.netTxBytesPerSec.toLong())}/s out")
+            Muted(fsString(R.string.shared_metrics_network_in_out, bytes(m.netRxBytesPerSec.toLong()), bytes(m.netTxBytesPerSec.toLong())))
         }
     }
 }

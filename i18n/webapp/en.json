@@ -13161,5 +13161,9 @@
   "You have a reply on voi.ci/{0}": {
     "en": "You have a reply on voi.ci/{0}",
     "ctx": "webapp/views/messages.js:118"
+  },
+  "{0} rule": {
+    "en": "{0} rule",
+    "ctx": "webapp/lib/appAccess.js:321"
   }
 }

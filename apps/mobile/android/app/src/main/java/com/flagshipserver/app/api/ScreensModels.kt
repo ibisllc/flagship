@@ -591,10 +591,10 @@ data class AppSandbox(
                 Notice(
                     danger = true,
                     text = if (firewall) {
-                        val why = r.substring(FIREWALL_PREFIX.length).trimStart(':', ' ').ifEmpty { "it hasn't started" }
+                        val why = r.substring(FIREWALL_PREFIX.length).trimStart(':', ' ').ifEmpty { FSStrings.get(R.string.sandbox_firewall_not_started) }
                         FSStrings.get(R.string.apps_cant_start_on_this_server, why)
                     } else {
-                        FSStrings.get(R.string.apps_cant_start_on_this_server_2, r.ifEmpty { "unknown reason" })
+                        FSStrings.get(R.string.apps_cant_start_on_this_server_2, r.ifEmpty { FSStrings.get(R.string.unknown_reason_lower) })
                     },
                 )
             }
@@ -1750,7 +1750,7 @@ data class AppMembersResponse(
 
     companion object {
         fun alsoInText(others: List<Pair<String, String>>, label: (String) -> String): String =
-            if (others.isEmpty()) "" else "also in " + others.joinToString(", ") { (l, r) -> "$l: ${label(r)}" }
+            if (others.isEmpty()) "" else FSStrings.get(R.string.also_in_groups, others.joinToString(", ") { (l, r) -> "$l: ${label(r)}" })
     }
 }
 

@@ -3107,5 +3107,14 @@
   "Open Flagship to see what's new.": "Ouvrez Flagship pour voir les nouveautés.",
   "A server shared with you is asking you to unlock it.": "Un serveur partagé avec vous vous demande de le déverrouiller.",
   "New message": "Nouveau message",
-  "A device on your account has changes waiting to be published on your page.": "Un appareil de votre compte a des modifications en attente de publication sur votre page."
+  "A device on your account has changes waiting to be published on your page.": "Un appareil de votre compte a des modifications en attente de publication sur votre page.",
+  "start the line with \"allow\" or \"deny\"": "commencez la ligne par « allow » ou « deny »",
+  "say what to allow or deny, e.g. \"allow example.com\"": "indiquez quoi autoriser ou refuser, p. ex. « allow example.com »",
+  "one host per line": "un hôte par ligne",
+  "write the host only, without http:// or https://": "écrivez uniquement l’hôte, sans http:// ni https://",
+  "write the host only, without a path": "écrivez uniquement l’hôte, sans chemin",
+  "write the host only, without a port": "écrivez uniquement l’hôte, sans port",
+  "write \"all\" instead of \"*\"": "écrivez « all » au lieu de « * »",
+  "a * may only start a host, as in *.example.com": "un * ne peut commencer qu’un hôte, comme dans *.example.com",
+  "an access list can have at most %lld rules": "une liste d’accès peut contenir au plus %lld règles"
 }

@@ -64,7 +64,7 @@ public enum AppAccessList {
     /// Allow / Deny add rules above it, so these lines stay last.
     public static let defaultList = "# Uncomment the following line to allow all hosts\n#allow all\n"
     public static let maxRules = 200
-    public static let tooManyRulesMessage = "an access list can have at most \(maxRules) rules"
+    public static var tooManyRulesMessage: String { String(localized: "an access list can have at most \(maxRules) rules") }
 
     /// `\r\n` and `\r` become `\n`, trailing spaces go, trailing blank lines
     /// go, and a non-empty list ends in one `\n`. This text is what gets
@@ -143,22 +143,22 @@ public enum AppAccessList {
         guard let first = tokens.first else { return .none }
         func fail(_ m: String) -> LineResult { .error(AppAccessLineError(line: number, message: m)) }
         guard let action = AppAccessAction(rawValue: first.lowercased()) else {
-            return fail("start the line with \"allow\" or \"deny\"")
+            return fail(String(localized: "start the line with \"allow\" or \"deny\""))
         }
-        guard tokens.count >= 2 else { return fail("say what to allow or deny, e.g. \"allow example.com\"") }
-        guard tokens.count == 2 else { return fail("one host per line") }
+        guard tokens.count >= 2 else { return fail(String(localized: "say what to allow or deny, e.g. \"allow example.com\"")) }
+        guard tokens.count == 2 else { return fail(String(localized: "one host per line")) }
         var target = tokens[1].lowercased()
-        if target.contains("://") { return fail("write the host only, without http:// or https://") }
-        if target.contains("/") { return fail("write the host only, without a path") }
+        if target.contains("://") { return fail(String(localized: "write the host only, without http:// or https://")) }
+        if target.contains("/") { return fail(String(localized: "write the host only, without a path")) }
         if isIPv6Literal(target) { return fail(String(localized: "IP addresses can't be allowed or denied; use a host name")) }
-        if target.contains(":") { return fail("write the host only, without a port") }
+        if target.contains(":") { return fail(String(localized: "write the host only, without a port")) }
         if target.hasSuffix("."), target.count > 1 { target.removeLast() }
         if target == "all" { return .rule(AppAccessRule(line: number, action: action, target: "all")) }
-        if target == "*" { return fail("write \"all\" instead of \"*\"") }
+        if target == "*" { return fail(String(localized: "write \"all\" instead of \"*\"")) }
         var host = target
         if target.contains("*") {
             guard target.hasPrefix("*."), !target.dropFirst(2).contains("*") else {
-                return fail("a * may only start a host, as in *.example.com")
+                return fail(String(localized: "a * may only start a host, as in *.example.com"))
             }
             host = String(target.dropFirst(2))
         }

@@ -13965,5 +13965,107 @@
   "voici_reply_notice": {
     "en": "You have a reply on voi.ci/%1$s",
     "ctx": "voi.ci / Messages: visitor's reply notice, opens the page in the browser; %1$s is the page's username"
+  },
+  "share_status_waiting_for_owner": {
+    "en": "Waiting for the owner",
+    "ctx": "ui/screens/ShareServerScreens.kt (prose)"
+  },
+  "share_status_waiting_to_start": {
+    "en": "Waiting to start",
+    "ctx": "ui/screens/ShareServerScreens.kt (prose)"
+  },
+  "share_status_cant_reach_now": {
+    "en": "Can't reach it now",
+    "ctx": "ui/screens/ShareServerScreens.kt (prose)"
+  },
+  "shared_metrics_network_in_out": {
+    "en": "Network: %1$s/s in · %2$s/s out",
+    "ctx": "ui/screens/ShareServerScreens.kt (prose)",
+    "args": 2
+  },
+  "share_activity_someone": {
+    "en": "someone",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_gave_access": {
+    "en": "gave %1$s access",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)",
+    "args": 1
+  },
+  "share_activity_changed_what": {
+    "en": "changed what %1$s can do",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)",
+    "args": 1
+  },
+  "share_activity_lost_access": {
+    "en": "lost access",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_removed_access": {
+    "en": "removed %1$s's access",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)",
+    "args": 1
+  },
+  "share_activity_with_target": {
+    "en": "%1$s (%2$s)",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)",
+    "args": 2
+  },
+  "share_activity_refused_suffix": {
+    "en": ", refused",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_signed_in": {
+    "en": "signed in",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_left": {
+    "en": "left",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_ai_start": {
+    "en": "started an app build with AI",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_ai_reply": {
+    "en": "answered the AI",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_access_edit": {
+    "en": "changed an app's internet access",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_access_dismiss": {
+    "en": "ignored an internet request",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_update_accept": {
+    "en": "accepted an app update",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_db_write": {
+    "en": "changed app data",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_db_read": {
+    "en": "read app data",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "share_activity_server_update": {
+    "en": "updated the server",
+    "ctx": "viewmodels/ServerShareViewModel.kt (prose)"
+  },
+  "sandbox_firewall_not_started": {
+    "en": "it hasn't started",
+    "ctx": "api/ScreensModels.kt (prose)"
+  },
+  "unknown_reason_lower": {
+    "en": "unknown reason",
+    "ctx": "api/ScreensModels.kt (prose)"
+  },
+  "also_in_groups": {
+    "en": "also in %1$s",
+    "ctx": "api/ScreensModels.kt (prose)",
+    "args": 1
   }
 }

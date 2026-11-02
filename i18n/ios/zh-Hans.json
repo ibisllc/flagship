@@ -3106,5 +3106,14 @@
   "Open Flagship to see what's new.": "打开 Flagship 查看最新动态。",
   "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。",
   "New message": "新消息",
-  "A device on your account has changes waiting to be published on your page.": "你账户中的一台设备有等待发布到你页面上的更改。"
+  "A device on your account has changes waiting to be published on your page.": "你账户中的一台设备有等待发布到你页面上的更改。",
+  "start the line with \"allow\" or \"deny\"": "每行请以“allow”或“deny”开头",
+  "say what to allow or deny, e.g. \"allow example.com\"": "请说明要允许或拒绝什么，例如“allow example.com”",
+  "one host per line": "每行一个主机",
+  "write the host only, without http:// or https://": "只写主机名，不要带 http:// 或 https://",
+  "write the host only, without a path": "只写主机名，不要带路径",
+  "write the host only, without a port": "只写主机名，不要带端口",
+  "write \"all\" instead of \"*\"": "请写“all”而不是“*”",
+  "a * may only start a host, as in *.example.com": "* 只能放在主机名开头，例如 *.example.com",
+  "an access list can have at most %lld rules": "访问列表最多可有 %lld 条规则"
 }

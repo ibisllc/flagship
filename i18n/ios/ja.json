@@ -3106,5 +3106,14 @@
   "Open Flagship to see what's new.": "Flagship を開いて新着を確認してください。",
   "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。",
   "New message": "新しいメッセージ",
-  "A device on your account has changes waiting to be published on your page.": "アカウントのデバイスに、ページへの公開を待っている変更があります。"
+  "A device on your account has changes waiting to be published on your page.": "アカウントのデバイスに、ページへの公開を待っている変更があります。",
+  "start the line with \"allow\" or \"deny\"": "行は「allow」または「deny」で始めてください",
+  "say what to allow or deny, e.g. \"allow example.com\"": "許可または拒否する対象を指定してください。例：「allow example.com」",
+  "one host per line": "1 行に 1 ホスト",
+  "write the host only, without http:// or https://": "ホスト名のみを書いてください（http:// や https:// は不要）",
+  "write the host only, without a path": "ホスト名のみを書いてください（パスは不要）",
+  "write the host only, without a port": "ホスト名のみを書いてください（ポートは不要）",
+  "write \"all\" instead of \"*\"": "「*」ではなく「all」と書いてください",
+  "a * may only start a host, as in *.example.com": "* はホストの先頭にのみ使えます（例：*.example.com）",
+  "an access list can have at most %lld rules": "アクセスリストのルールは最大 %lld 件までです"
 }

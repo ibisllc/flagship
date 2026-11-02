@@ -115,7 +115,7 @@ object ShareCopy {
     // "Three ranks"), so a members-only app still lets them in.
     val MEMBERS_ONLY_HINT get() = FSStrings.get(R.string.members_only_as_a_co_manager)
 
-    const val UPDATE_TITLE = "Update"
+    val UPDATE_TITLE get() = FSStrings.get(R.string.update_2)
     val UPDATE_CURRENT get() = FSStrings.get(R.string.up_to_date)
 
     fun updateButton(tag: String?, commit: String): String = FSStrings.get(R.string.update_to, tag?.takeIf { it.isNotBlank() } ?: commit.take(8))
@@ -131,30 +131,35 @@ object ShareCopy {
 
     /** "Sam · started an app build with AI", "You · shared this server". */
     fun activityLine(e: ActivityEntry): String {
-        val who = if (e.actor.kind == "share") e.actor.label?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.someone_you_shared_with) else "You"
-        val person = e.target?.takeIf { it.isNotBlank() } ?: "someone"
+        val who = if (e.actor.kind == "share") e.actor.label?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.someone_you_shared_with) else FSStrings.get(R.string.you)
+        val person = e.target?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.share_activity_someone)
         val what = when (e.action) {
-            "share.granted" -> "gave $person access"
-            "share.changed" -> "changed what $person can do"
-            "share.revoked" -> if (e.actor.kind == "share") "lost access" else "removed $person's access"
-            else -> (ACTIONS[e.action] ?: e.action) +
-                (e.target?.takeIf { it.isNotBlank() && !e.action.startsWith("share.") }?.let { " ($it)" } ?: "")
+            "share.granted" -> FSStrings.get(R.string.share_activity_gave_access, person)
+            "share.changed" -> FSStrings.get(R.string.share_activity_changed_what, person)
+            "share.revoked" ->
+                if (e.actor.kind == "share") FSStrings.get(R.string.share_activity_lost_access)
+                else FSStrings.get(R.string.share_activity_removed_access, person)
+            else -> {
+                val action = ACTIONS[e.action]?.let { FSStrings.get(it) } ?: e.action
+                e.target?.takeIf { it.isNotBlank() && !e.action.startsWith("share.") }
+                    ?.let { FSStrings.get(R.string.share_activity_with_target, action, it) } ?: action
+            }
         }
-        val failed = if (e.ok) "" else ", refused"
+        val failed = if (e.ok) "" else FSStrings.get(R.string.share_activity_refused_suffix)
         return FSStrings.get(R.string.text_2, who, what, failed)
     }
 
     private val ACTIONS = mapOf(
-        "share.signed-in" to "signed in",
-        "share.left" to "left",
-        "ai.start" to "started an app build with AI",
-        "ai.reply" to "answered the AI",
-        "app.access.edit" to "changed an app's internet access",
-        "app.access.dismiss" to "ignored an internet request",
-        "app.update.accept" to "accepted an app update",
-        "db.write" to "changed app data",
-        "db.read" to "read app data",
-        "server.update" to "updated the server",
+        "share.signed-in" to R.string.share_activity_signed_in,
+        "share.left" to R.string.share_activity_left,
+        "ai.start" to R.string.share_activity_ai_start,
+        "ai.reply" to R.string.share_activity_ai_reply,
+        "app.access.edit" to R.string.share_activity_access_edit,
+        "app.access.dismiss" to R.string.share_activity_access_dismiss,
+        "app.update.accept" to R.string.share_activity_update_accept,
+        "db.write" to R.string.share_activity_db_write,
+        "db.read" to R.string.share_activity_db_read,
+        "server.update" to R.string.share_activity_server_update,
     )
 }
 

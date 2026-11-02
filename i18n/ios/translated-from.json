@@ -3104,5 +3104,14 @@
   "Open Flagship to see what's new.": "476499b4ed78",
   "A server shared with you is asking you to unlock it.": "1195c60720dd",
   "New message": "a0cf4e425f5a",
-  "A device on your account has changes waiting to be published on your page.": "23955d8152c7"
+  "A device on your account has changes waiting to be published on your page.": "23955d8152c7",
+  "start the line with \"allow\" or \"deny\"": "8382f5b540e5",
+  "say what to allow or deny, e.g. \"allow example.com\"": "515762de3d1d",
+  "one host per line": "e9986b63a282",
+  "write the host only, without http:// or https://": "3212ea014a43",
+  "write the host only, without a path": "45e4f7b2e58d",
+  "write the host only, without a port": "e6b3da46eb36",
+  "write \"all\" instead of \"*\"": "a67ad53c8e6c",
+  "a * may only start a host, as in *.example.com": "c56fec6e7064",
+  "an access list can have at most %lld rules": "8966fc2fd30b"
 }

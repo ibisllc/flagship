@@ -10,7 +10,7 @@
 
 import { requireOwnerProfile } from "./companionGuard.js";
 
-import { tr } from "./i18n.js";
+import { tr, trn } from "./i18n.js";
 import { accessRequestAppName } from "./appDisplayName.js";
 export const TAG_APP_ACCESS = "flagship/app-access/v1";
 export const MAX_ACCESS_RULES = 200;
@@ -318,7 +318,7 @@ export function hasPendingInternetRequest(app, hasPendingEgress = () => false) {
 
 export function ruleCountText(n) {
   if (!n) return tr("No rules: this app can't reach the internet.");
-  return n === 1 ? "1 rule" : tr("{0} rules", n);
+  return trn(n, "{0} rule", "{0} rules");
 }
 
 export function accessRequestTitle(appName, host) {
