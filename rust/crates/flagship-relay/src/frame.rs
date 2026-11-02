@@ -15,6 +15,14 @@ pub const FRAME_CLOSE_REMOTE: u8 = 0x04;
 pub const FRAME_DRAIN_NOTICE: u8 = 0x05;
 /// Per-stream credit for hub-opened streams (`stream-credit-v1`); not a v1 frame.
 pub const FRAME_STREAM_CREDIT: u8 = 0x06;
+/// Relay mesh (`mesh-v1`, docs/architecture-v2/relay-mesh.md §9.1), stream 0, JSON payload: box → relay
+/// `{attachment, signature}`, relay → box `{ok:true}` or `{ok:false, code}`. Not a v1 frame.
+pub const FRAME_ATTACHMENT: u8 = 0x07;
+/// Relay mesh (`mesh-v1`), stream 0, relay → box: `{hint, signature, target}`. Not a v1 frame.
+pub const FRAME_MOVE_HINT: u8 = 0x08;
+/// The capability a 0.3 box offers in HELLO and a mesh relay echoes in HELLO_ACK; only then do
+/// [`FRAME_ATTACHMENT`] and [`FRAME_MOVE_HINT`] flow (`CAPABILITY_MESH_V1` in `frames.ts`).
+pub const CAPABILITY_MESH_V1: &str = "mesh-v1";
 pub const FRAME_HELLO: u8 = 0x10;
 pub const FRAME_HELLO_ACK: u8 = 0x11;
 pub const FRAME_DOMAIN_GRANTED: u8 = 0x12;
@@ -71,18 +79,22 @@ pub fn is_v1_frame_type(t: u8) -> bool {
 pub struct TypeSet {
     pub drain_notice: bool,
     pub stream_credit: bool,
+    /// `mesh-v1`: accept [`FRAME_ATTACHMENT`] and [`FRAME_MOVE_HINT`] (`DecodeOptions.mesh` in TS).
+    pub mesh: bool,
 }
 
 impl TypeSet {
     pub const V1: Self = Self {
         drain_notice: false,
         stream_credit: false,
+        mesh: false,
     };
 
     pub fn accepts(self, t: u8) -> bool {
         is_v1_frame_type(t)
             || (self.drain_notice && t == FRAME_DRAIN_NOTICE)
             || (self.stream_credit && t == FRAME_STREAM_CREDIT)
+            || (self.mesh && (t == FRAME_ATTACHMENT || t == FRAME_MOVE_HINT))
     }
 }
 
@@ -321,8 +333,40 @@ mod tests {
         assert!(matches!(decode_frame(&bytes), Decoded::Error { .. }));
         let t = TypeSet {
             drain_notice: true,
-            stream_credit: false,
+            ..TypeSet::V1
         };
         assert!(matches!(decode_frame_with(&bytes, t), Decoded::Ok { .. }));
+    }
+
+    #[test]
+    fn mesh_frames_need_negotiation() {
+        for t in [FRAME_ATTACHMENT, FRAME_MOVE_HINT] {
+            let bytes = [0, 0, 0, 0, t, 0, 0, 0, 2, b'{', b'}'];
+            assert!(matches!(decode_frame(&bytes), Decoded::Error { .. }));
+            let drain_only = TypeSet {
+                drain_notice: true,
+                stream_credit: true,
+                mesh: false,
+            };
+            assert!(matches!(
+                decode_frame_with(&bytes, drain_only),
+                Decoded::Error { .. }
+            ));
+            let mesh = TypeSet {
+                mesh: true,
+                ..TypeSet::V1
+            };
+            assert!(matches!(
+                decode_frame_with(&bytes, mesh),
+                Decoded::Ok { .. }
+            ));
+        }
+        assert!(
+            !TypeSet {
+                mesh: true,
+                ..TypeSet::V1
+            }
+            .accepts(FRAME_DRAIN_NOTICE)
+        );
     }
 }

@@ -22,6 +22,7 @@ fuzz_target!(|data: &[u8]| {
         TypeSet {
             drain_notice: true,
             stream_credit: true,
+            mesh: true,
         },
         4096,
     );

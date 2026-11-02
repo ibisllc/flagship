@@ -9,6 +9,7 @@ mod ed25519_strict;
 pub mod entitlements;
 pub mod error;
 pub mod key_id;
+pub mod relay_mesh;
 pub mod release;
 mod rng;
 pub mod seal;

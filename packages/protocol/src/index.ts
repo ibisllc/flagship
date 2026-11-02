@@ -103,3 +103,4 @@ export * from "./archV2Switch.js";
 export * from "./rustOwnership.js";
 export * from "./servingAuthority.js";
 export * from "./phoneRoute.js";
+export * from "./relayMesh.js";

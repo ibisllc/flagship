@@ -106,7 +106,9 @@ flagship/relay-blessing/v1|<relayId>|<relayKey>|<servicesApex>|<tunnelHost>|<rel
 JSON envelope, shaped like `ServiceBlessing`: `{kind:"RelayBlessing", version:1, relayId, relayKey, servicesApex,
 tunnelHost, relayKind, nonce, issuedAt, expiresAt, signedBy, signatures:[{pubkey, sig}]}`. Signed by `.com`'s hot CA
 key. Verified exactly like `verifyCaSignedServiceBlessing` (pin → mandate chain → CA key authorized now → signature →
-TTL), plus `servicesApex` equals the verifier's apex. TTL 26 h, refreshed every 12 h.
+TTL), plus `servicesApex` equals the verifier's apex. TTL 26 h, refreshed every 12 h. `nonce` is 32 lowercase hex,
+`tunnelHost` is exactly `<relayId>.tunnel.<servicesApex>`, and `issuedAt` may be up to 60 s ahead of the verifier's
+clock (relays and boxes run their own clocks).
 
 Issuance: `POST /api/services/relay-blessing` `{relayId, relayKey, servicesApex, issuedAt, signature}` where the
 signature is the relay key over
@@ -125,7 +127,8 @@ flagship/relay-directory/v1|<servicesApex>|<directoryVersion>|<issuedAt>|<expire
 ```
 
 `entriesSha256` = sha256 hex of the entry lines, sorted bytewise, joined by `\n`, one per active relay:
-`<relayId> <relayKey> <tunnelHost> <relayKind> <region> <ipv4 list or -> <ipv6 list or ->`.
+`<relayId> <relayKey> <tunnelHost> <relayKind> <region> <ipv4 list or -> <ipv6 list or ->` (each address list sorted
+bytewise and joined by `,`; `region` is `^[a-z0-9][a-z0-9-]{0,31}$`; a relay id or relay key listed twice is refused).
 JSON: `{kind:"RelayDirectory", version:1, servicesApex, directoryVersion, issuedAt, expiresAt, relays:[{relayId,
 relayKey, tunnelHost, relayKind, region, ipv4:[], ipv6:[]}], signedBy, signatures}`. Signed by the CA hot key, same
 verification as the blessing. `directoryVersion` increases by one on every change; re-minted daily with the same
@@ -207,7 +210,7 @@ Per box, the holder computes `servingDecision` with: `adminKeyFromCom` = the log
 IRK); `adminKeyFromBox` = HELLO `servingAdminKey`; `regGen` from the log; `policies` = the HELLO `servingPolicy` only
 when its sha256 equals the log's policy head for (boxPub, regGen) (no head: the HELLO policy as given); `leases` =
 HELLO `servingLeases` (new, §9.5). A head the box cannot match gives `{control: true, apps: false, reason:
-"policy-stale"}` (a new `ServingReason`): the box gets the policy from its heartbeat and re-HELLOs. Recomputed on HELLO,
+"policy-stale"}` (a new `ServingReason`; TS `ServingInput.policyHead`, Rust `serving_decision_at_head`): the box gets the policy from its heartbeat and re-HELLOs. Recomputed on HELLO,
 on HELLO refresh, on a `policy-head`, `box-revoke`, `renewal-key-revoke` or `account-authority` entry for the box, and at
 `until`, as today.
 
@@ -737,6 +740,48 @@ entry, head, box attachment, legacy attachment, withdraw, bridge-auth, move hint
 like `applyRevocationEntries`); `checkBoxAttachment`, `compareAttachments`, `checkPhoneItem`, `accountHome`,
 `phoneLedgerRanking`, `checkMoveHint` (box side, with its rate-limit state passed in), `rebalanceDecision`; constants
 (§15.8). Tests: vectors byte-identical in TS and Rust; negative vectors for every check.
+
+#### 15.1.1 Decisions taken while building A (2026-11-01)
+
+Where the text above left a detail open, chunk A fixed it as follows (code: `packages/protocol/src/relayMesh.ts`,
+`rust/crates/flagship-crypto/src/relay_mesh.rs`; every rule has vectors in `test-vectors/relay-mesh`).
+
+- **Field shapes.** Log fields are strings: numbers as canonical decimals (no sign, no leading zero, ≤ 2^53 − 1),
+  `account-authority` f2 empty when the account has no admin root, `renewal-key-revoke` f1 a compressed P-256 key,
+  `grantId` and `certId` 64 hex. `nameHash` takes 1–253 printable ASCII characters without `|`. Pod names are
+  `<server>.<user>.<apex>` (two labels), bare names `<user>.<apex>`, all lowercase.
+- **Log state.** `applyRelayLog` returns, on `gap` / `bad-signature` / `malformed`, the state and count applied before
+  the failure (the valid prefix is kept; fetch from `at`). The state remembers the last 1,024 entry hashes, so a head
+  behind the tip can still be matched: `relayLogHeadStatus` → `applied | behind | fork | unknown`; `relayLogFresh`
+  = applied and `issuedAt ≥ now − 60 s`. The newest head is the later `issuedAt`, then the higher sequence. A newer
+  authority or policy head needs a generation at least as high as the one held.
+- **Revocations keyed by box key.** `RevocationState.boxes` (the old revocation log too) is keyed by box key; the
+  four-argument `boxRevoked(state, account, box, regGen)` still works and ignores the account. The TS gate and the
+  Rust gate re-decide the boxes whose key changed.
+- **Directory.** Verifying never fails on expiry (`{ok, expired}`); one issued more than 60 s in the future is refused.
+- **Attachments.** Refusal order: `malformed`, `not-pod-name`, `ttl-too-long`, `future`, `expired`,
+  `not-registered`, `mismatch`, `revoked`, `relay-revoked`, `unknown-relay`, holder checks (`not-this-tunnel`,
+  `not-this-relay`), then `not-full` (legacy only) and `bad-signature`. The frame codes: `future`/`expired` → `clock`,
+  `not-registered`, `revoked`, everything else `mismatch`.
+- **Withdrawals** must name a pod name (`box`) or a bare name (`phone`) and have `at ≤ now + 60 s`.
+- **Bridge auth.** A record whose signer and peer are the same relay is malformed. With `blessing: null` the held copy
+  must name the same relay id. Order: `wrong-peer`, `stale`, `bad-blessing`, `revoked`, `not-in-directory`,
+  `bad-signature`.
+- **Move hints (box).** The directory's key for `toRelayId` must equal the target blessing's; a target that failed in
+  the last hour is ignored for every reason, `retire` included. `recordMoveHint` / `recordMoveTargetFailed` keep the
+  state (`{lastLocalityAt, coLocateAt, failedTargets}`) pure.
+- **Account moves** need a `full`, unrevoked target in the directory and the home's directory key.
+- **Phone items** need both the ledger and the holder to be unrevoked `full` relays in the directory, a grant of at
+  most 60 s, and `issuedAt ≤ now + 60 s`. Equal generation and `issuedAt`: the smaller holder id wins.
+- **Rebalancing** uses integer arithmetic (share ≥ 6/10, lead ≥ 3/10, load < 8/10). `T` is the entry relay with the
+  most bytes other than the home (ties: the smaller id), never one with zero bytes; zero capacity counts as full load.
+- **HELLO / HELLO_ACK fields** live in `frames.ts`: HELLO `servingLeases` (≤ 8), HELLO_ACK `relayId` and
+  `relayBlessing`, written after `capabilities` (key order is part of the byte vectors).
+- **Extra constants**: `LEGACY_ATTACH_WAIT_MS` 10 s, `HEAD_FRESH_MS` 60 s, `DIRECTORY_EXPIRED_UNHEALTHY_MS` 24 h,
+  `BOX_DIRECTORY_MAX_AGE_MS` 24 h, `MESH_PEER_OVER_LIMIT_MS` 60 s / `MESH_PEER_CUT_MS` 10 min,
+  `ACCOUNT_MOVE_HINT_SPACING_MS` 2 s, `REBALANCE_BUCKET_MS` 1 min, `RELAY_LOG_TIP_HISTORY` 1,024.
+- **Confidentiality of the feed** (open owner decision: public, or encrypted to a mesh key sent with blessings) does
+  not touch these records: an encryption layer would wrap the published files (chunk B), not the canonical forms.
 
 ### 15.2 B. `.com` feed, directory and blessing
 

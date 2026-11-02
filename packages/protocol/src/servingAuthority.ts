@@ -14,7 +14,8 @@
  * policy alone authorizes serving: there are no leases. Under a finite one, an admin device signs a lease when the
  * app is opened, never further ahead than the grace, bound to the policy generation (shortening the grace advances
  * it, so an older, longer lease stops counting). A lease is checked against the admin key `.com` publishes AND the
- * key the box pinned; both must be the same key. Revocation is a signed, sequenced log `.com` pushes to the relays.
+ * key the box pinned; both must be the same key. Revocation is a signed, sequenced log `.com` pushes to the relays (in mesh mode
+ * the relay log, relayMesh.ts, whose state reaches `servingDecision` through `relayLogRevocations`).
  *
  * One setting, two enforcers, one deadline (owner, 2026-10-31: the old box-enforced dead-man lock, deadMan.ts, is
  * folded in here). `onLapse` says what happens when the lease runs out: `stop-apps` (the relay stops routing the
@@ -336,10 +337,21 @@ export function routeCollisions(o: { controlNames: readonly string[]; phoneName:
 
 // ── the revocation log a relay keeps ──────────────────────────────────────
 
-export interface RevocationState {
+/**
+ * The revocations `servingDecision` reads, keyed by key alone (box keys are unique, so no account is needed): the
+ * relay log's state hands its own maps over (`relayLogRevocations` in relayMesh.ts), the old revocation log its state.
+ */
+export interface ServingRevocations {
+  /** box key → the highest revoked registration generation (every generation at or below it is revoked). */
+  boxes: ReadonlyMap<string, number>;
+  /** Revoked renewal keys (compressed P-256 hex). */
+  renewalKeys: ReadonlySet<string>;
+}
+
+export interface RevocationState extends ServingRevocations {
   /** The last sequence applied; 0 before any. */
   sequence: number;
-  /** `<account>|<box>` → the lowest revoked generation (every generation at or below it is revoked). */
+  /** box key → the highest revoked generation (every generation at or below it is revoked). */
   boxes: Map<string, number>;
   renewalKeys: Set<string>;
 }
@@ -372,8 +384,7 @@ export function applyRevocationEntries(
     if (entry.sequence !== next.sequence + 1) return { ok: false, reason: "gap", at: next.sequence + 1 };
     if (!verifyServingRecord("revocation-entry", entry, signature, revocationKeyHex)) return { ok: false, reason: "bad-signature", at: entry.sequence };
     if (entry.kind === "box") {
-      const key = `${entry.account}|${entry.subject}`;
-      next.boxes.set(key, Math.max(next.boxes.get(key) ?? 0, entry.generation));
+      next.boxes.set(entry.subject, Math.max(next.boxes.get(entry.subject) ?? 0, entry.generation));
     } else {
       next.renewalKeys.add(entry.subject);
     }
@@ -383,8 +394,15 @@ export function applyRevocationEntries(
   return { ok: true, state: next, applied };
 }
 
-export function boxRevoked(state: RevocationState, account: string, box: string, regGen: number): boolean {
-  return (state.boxes.get(`${account}|${box}`) ?? 0) >= regGen;
+/**
+ * Is this registration generation of the box revoked? Keyed by box key alone; the four-argument form (with the
+ * account, which box keys make redundant) is kept for existing callers and ignores the account.
+ */
+export function boxRevoked(state: ServingRevocations, box: string, regGen: number): boolean;
+export function boxRevoked(state: ServingRevocations, account: string, box: string, regGen: number): boolean;
+export function boxRevoked(state: ServingRevocations, a: string, b: string | number, c?: number): boolean {
+  const [box, regGen] = typeof b === "number" ? [a, b] : [b, c ?? 0];
+  return (state.boxes.get(box) ?? 0) >= regGen;
 }
 
 // ── the relay's decision ──────────────────────────────────────────────────
@@ -409,7 +427,13 @@ export interface ServingInput {
   policies: ReadonlyArray<SignedServingRecord<ServingPolicy>>;
   /** The leases the box presents; the best valid one counts. */
   leases: ReadonlyArray<SignedServingRecord<ServingLease> & { delegation?: SignedServingRecord<RenewalKeyDelegation> }>;
-  revocations: RevocationState;
+  revocations: ServingRevocations;
+  /**
+   * Mesh mode (relay-mesh.md §4.4): the relay log's newest `policy-head` for (box, regGen). When given, only a policy
+   * whose canonical bytes hash to `policySha256` counts; none does → `policy-stale` (the box fetches its policy and
+   * re-HELLOs). Absent or null: every offered policy counts, as before.
+   */
+  policyHead?: { policySha256: string } | null;
   /** The verifier's own clock. */
   now: number;
 }
@@ -418,6 +442,7 @@ export type ServingReason =
   | "admin-keys-differ"
   | "revoked"
   | "policy-signature"
+  | "policy-stale"
   | "no-lease"
   | "lease-expired";
 
@@ -434,17 +459,29 @@ export type ServingDecision =
  */
 export function servingDecision(i: ServingInput): ServingDecision {
   if (!HEX64.test(i.adminKeyFromCom) || i.adminKeyFromCom !== i.adminKeyFromBox) return { control: false, apps: false, reason: "admin-keys-differ", lock: false };
-  if (boxRevoked(i.revocations, i.account, i.box, i.regGen)) return { control: false, apps: false, reason: "revoked", lock: false };
+  if (boxRevoked(i.revocations, i.box, i.regGen)) return { control: false, apps: false, reason: "revoked", lock: false };
   const admin = i.adminKeyFromCom;
+  let offered = i.policies;
+  if (i.policyHead) {
+    const want = i.policyHead.policySha256;
+    offered = offered.filter((c) => {
+      try {
+        return hex(sha256(canonicalServingPolicy(c.record))) === want;
+      } catch {
+        return false;
+      }
+    });
+    if (offered.length === 0) return { control: true, apps: false, reason: "policy-stale", lock: false };
+  }
   let p: ServingPolicy | null = null;
-  for (const c of i.policies) {
+  for (const c of offered) {
     const r = c.record;
     if (r.account !== i.account || r.box !== i.box || r.regGen !== i.regGen) continue;
     if (!verifyServingRecord("serving-policy", r, c.signature, admin)) continue;
     if (!p || r.policyGen > p.policyGen) p = r;
   }
   // A policy was offered but none verified: refuse rather than fall back to the default (no downgrade by forgery).
-  if (!p && i.policies.length > 0) return { control: true, apps: false, reason: "policy-signature", lock: false };
+  if (!p && offered.length > 0) return { control: true, apps: false, reason: "policy-signature", lock: false };
   if (!p) return { control: true, apps: true, until: null, policyGen: 0, onLapse: "stop-apps" };
   if (p.grace === "indefinite") return { control: true, apps: true, until: null, policyGen: p.policyGen, onLapse: p.onLapse };
   const graceMs = GRACE_MS[p.grace];
@@ -468,7 +505,7 @@ function leaseSignedByAdmin(
   l: SignedServingRecord<ServingLease> & { delegation?: SignedServingRecord<RenewalKeyDelegation> },
   admin: string,
   account: string,
-  revocations: RevocationState,
+  revocations: ServingRevocations,
 ): boolean {
   if (verifyServingRecord("serving-lease", l.record, l.signature, admin)) return true;
   const d = l.delegation;

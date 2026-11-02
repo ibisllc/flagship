@@ -472,6 +472,10 @@ pub fn verify_lease_p256(l: &ServingLease, sig_hex: &str, renewal_pub_hex: &str)
     key.verify(canonical.as_bytes(), &sig).is_ok()
 }
 
+fn encode_hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
 fn from_hex(s: &str) -> Option<Vec<u8>> {
     let b = s.as_bytes();
     if !b.len().is_multiple_of(2) {
@@ -560,7 +564,9 @@ pub fn route_collisions<'a>(
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RevocationState {
     pub sequence: u64,
-    /// `<account>|<box>` → the highest revoked registration generation.
+    /// box key → the highest revoked registration generation (box keys are unique: no account needed,
+    /// relay-mesh.md §4.2). The relay log's state hands its own maps over through
+    /// `relay_mesh::relay_log_revocations`.
     pub boxes: BTreeMap<String, u64>,
     pub renewal_keys: BTreeSet<String>,
 }
@@ -610,9 +616,9 @@ pub fn apply_revocation_entries(
         }
         match entry.kind {
             RevocationKind::Box => {
-                let k = format!("{}|{}", entry.account, entry.subject);
-                let had = next.boxes.get(&k).copied().unwrap_or(0);
-                next.boxes.insert(k, had.max(entry.generation));
+                let had = next.boxes.get(&entry.subject).copied().unwrap_or(0);
+                next.boxes
+                    .insert(entry.subject.clone(), had.max(entry.generation));
             }
             RevocationKind::RenewalKey => {
                 next.renewal_keys.insert(entry.subject.clone());
@@ -627,12 +633,24 @@ pub fn apply_revocation_entries(
     }
 }
 
+/// Is this registration generation of the box revoked? Keyed by box key alone; `_account` is kept for existing
+/// callers and ignored (box keys are unique).
 #[must_use]
-pub fn box_revoked(state: &RevocationState, account: &str, box_pub: &str, reg_gen: u64) -> bool {
-    state
-        .boxes
-        .get(&format!("{account}|{box_pub}"))
-        .is_some_and(|g| *g >= reg_gen)
+pub fn box_revoked(state: &RevocationState, _account: &str, box_pub: &str, reg_gen: u64) -> bool {
+    box_key_revoked(state, box_pub, reg_gen)
+}
+
+/// [`box_revoked`] without the account.
+#[must_use]
+pub fn box_key_revoked(state: &RevocationState, box_pub: &str, reg_gen: u64) -> bool {
+    state.boxes.get(box_pub).is_some_and(|g| *g >= reg_gen)
+}
+
+/// The relay log's newest `policy-head` for (box, regGen) in mesh mode (relay-mesh.md §4.4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyHead {
+    /// SHA-256 hex of the policy's canonical bytes.
+    pub policy_sha256: String,
 }
 
 // ── the relay's decision ──────────────────────────────────────────────────
@@ -678,6 +696,17 @@ pub enum ServingDecision {
 /// The relay's whole rule (see the module doc).
 #[must_use]
 pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
+    serving_decision_at_head(i, None)
+}
+
+/// [`serving_decision`] in mesh mode: with `policy_head` (the log's newest head for this box and regGen) only a policy
+/// whose canonical bytes hash to it counts; none does → `policy-stale` (the box fetches its policy and re-HELLOs).
+/// `None` is exactly [`serving_decision`]. The TypeScript twin is `ServingInput.policyHead`.
+#[must_use]
+pub fn serving_decision_at_head(
+    i: &ServingInput<'_>,
+    policy_head: Option<&PolicyHead>,
+) -> ServingDecision {
     let refuse = |control, reason| ServingDecision::Refuse {
         control,
         reason,
@@ -686,12 +715,29 @@ pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
     if !lower_hex(i.admin_key_from_com, 64) || i.admin_key_from_com != i.admin_key_from_box {
         return refuse(false, "admin-keys-differ");
     }
-    if box_revoked(i.revocations, i.account, i.box_pub, i.reg_gen) {
+    if box_key_revoked(i.revocations, i.box_pub, i.reg_gen) {
         return refuse(false, "revoked");
     }
     let admin = i.admin_key_from_com;
+    let offered: Vec<&(ServingPolicy, String)> = match policy_head {
+        None => i.policies.iter().collect(),
+        Some(h) => {
+            let matching: Vec<&(ServingPolicy, String)> = i
+                .policies
+                .iter()
+                .filter(|(r, _)| {
+                    policy_canonical(r)
+                        .is_ok_and(|c| encode_hex(&Sha256::digest(c.as_bytes())) == h.policy_sha256)
+                })
+                .collect();
+            if matching.is_empty() {
+                return refuse(true, "policy-stale");
+            }
+            matching
+        }
+    };
     let mut chosen: Option<&ServingPolicy> = None;
-    for (r, sig) in i.policies {
+    for (r, sig) in offered.iter().copied() {
         if r.account != i.account || r.box_pub != i.box_pub || r.reg_gen != i.reg_gen {
             continue;
         }
@@ -703,7 +749,7 @@ pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
         }
     }
     let Some(p) = chosen else {
-        if i.policies.is_empty() {
+        if offered.is_empty() {
             return ServingDecision::Serve {
                 until: None,
                 policy_gen: 0,

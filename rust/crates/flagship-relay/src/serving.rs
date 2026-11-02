@@ -604,16 +604,16 @@ impl ServingGate {
             .unwrap_or_default()
     }
 
-    /// The feed applied entries: every box of an account it touched decides again.
+    /// The feed applied entries: every box whose key it touched decides again.
     pub fn adopt_revocations(&self, next: RevocationState) {
         let touched: Vec<Arc<ServingBox>> = {
             let Ok(mut s) = self.0.st.lock() else { return };
             let prev = std::mem::replace(&mut s.revocations, next.clone());
-            let accounts: Vec<String> = next
+            let box_keys: Vec<String> = next
                 .boxes
                 .iter()
                 .filter(|(k, g)| prev.boxes.get(*k) != Some(g))
-                .filter_map(|(k, _)| k.split('|').next().map(str::to_owned))
+                .map(|(k, _)| k.clone())
                 .collect();
             let new_keys: Vec<&String> = next
                 .renewal_keys
@@ -625,7 +625,7 @@ impl ServingGate {
                 .flatten()
                 .filter(|b| {
                     let Ok(bs) = b.st.lock() else { return false };
-                    accounts.contains(&bs.hello.username)
+                    box_keys.contains(&bs.hello.box_pub)
                         || (!new_keys.is_empty()
                             && bs.com.as_ref().is_some_and(|c| {
                                 c.leases.iter().any(|l| {

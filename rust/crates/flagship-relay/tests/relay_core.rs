@@ -477,6 +477,7 @@ async fn extensions_are_negotiated_never_assumed() {
         TypeSet {
             stream_credit: true,
             drain_notice: true,
+            mesh: false,
         },
     )
     .await;

@@ -936,6 +936,7 @@ impl Session {
         self.decoder.set_types(TypeSet {
             drain_notice: false,
             stream_credit: negotiated.stream_credit,
+            mesh: false,
         });
         self.registered = Some(pc.clone());
         self.last_issued_at = h.issued_at;

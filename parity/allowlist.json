@@ -398,6 +398,21 @@
     },
     {
       "check": "test-vectors",
+      "key": "swift:relay-mesh",
+      "reason": "Relay mesh records (docs/architecture-v2/relay-mesh.md) are made and checked by relays (TS hub and Rust relay, both replay the vectors) and boxes; the iOS app signs none of them. Its only mesh change is the `grants` field in the phone tunnel's `begin` (chunk F), which carries existing device grants."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:relay-mesh",
+      "reason": "Relay mesh records are made and checked by relays and boxes only; the Android app signs none of them (its only mesh change is the `grants` field in the phone tunnel's `begin`, chunk F)."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:relay-mesh",
+      "reason": "The webapp never talks to a relay's mesh: no attachment, hint, grant or log record is made or checked in a browser. It only stops showing `confirmedByRelays` (chunk F)."
+    },
+    {
+      "check": "test-vectors",
       "key": "web:phone-route",
       "reason": "The bare account name is served by admin phones only (plan H2/H3): a browser cannot hold the relay's raw tunnel or end TLS, so the webapp never builds a route claim, a phone CSR or a phone certificate order."
     },

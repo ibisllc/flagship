@@ -288,16 +288,16 @@ export class ServingGate {
     return this.revocationState;
   }
 
-  /** The feed applied entries (with `applyRevocationEntries`): every box of an account it touched decides again. */
+  /** The feed applied entries (with `applyRevocationEntries`): every box whose key it touched decides again. */
   adoptRevocations(next: RevocationState): void {
     const prev = this.revocationState;
     this.revocationState = next;
-    const accounts = new Set<string>();
-    for (const [key, gen] of next.boxes) if (prev.boxes.get(key) !== gen) accounts.add(key.split("|")[0]!);
+    const boxKeys = new Set<string>();
+    for (const [key, gen] of next.boxes) if (prev.boxes.get(key) !== gen) boxKeys.add(key);
     const newKeys = [...next.renewalKeys].filter((k) => !prev.renewalKeys.has(k));
     for (const set of this.boxes.values()) {
       for (const b of set) {
-        if (accounts.has(b.hello.username) || (newKeys.length > 0 && this.leaseUsesAny(b, newKeys))) this.redecide(b);
+        if (boxKeys.has(b.hello.boxPub) || (newKeys.length > 0 && this.leaseUsesAny(b, newKeys))) this.redecide(b);
       }
     }
   }
