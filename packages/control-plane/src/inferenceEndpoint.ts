@@ -65,6 +65,11 @@ export function parseBlessedInferenceEndpoint(
     return null;
   }
   if (url.protocol !== "https:") return null;
+  // A *.workers.dev address stops answering (Cloudflare "error code: 1042")
+  // as soon as the Worker gains a route and a deploy turns workers.dev off,
+  // which is what happened to the shim: refuse it rather than mint passes
+  // for an address that can go dead without anyone touching this secret.
+  if (url.hostname.toLowerCase().endsWith(".workers.dev")) return null;
   return { baseUrl: m.baseUrl, model: m.model };
 }
 

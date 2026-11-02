@@ -9,6 +9,14 @@ compatibility_flags = ["global_fetch_strictly_public"]
 # FLAGSHIP_INFERENCE_ENDPOINT.baseUrl). Bind a custom domain in the
 # dashboard or uncomment:
 routes = [{ pattern = "inference.flagshipserver.com", custom_domain = true }]
+# Only the custom domain serves the shim. The first deploy (2026-10-14, no
+# routes yet) put it on <name>.<sub>.workers.dev and .com's
+# FLAGSHIP_INFERENCE_ENDPOINT was set to that address; the 2026-10-18 deploy
+# added the route, wrangler then turned workers.dev off by default, and every
+# free-AI build failed with "error code: 1042". Say it explicitly so nobody
+# relies on workers.dev again (.com refuses a workers.dev endpoint).
+workers_dev = false
+preview_urls = false
 
 [vars]
 # Two OpenAI-compatible upstreams, both in the US (a user-selectable US/EU

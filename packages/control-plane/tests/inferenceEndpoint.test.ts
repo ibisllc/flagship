@@ -34,4 +34,15 @@ describe("parseBlessedInferenceEndpoint", () => {
       parseBlessedInferenceEndpoint(JSON.stringify({ baseUrl: "not-a-url", model: "m" })),
     ).toBeNull();
   });
+
+  it("rejects a *.workers.dev baseUrl (it answers error 1042 once the Worker's workers.dev route is off)", () => {
+    expect(
+      parseBlessedInferenceEndpoint(
+        JSON.stringify({ baseUrl: "https://flagship-inference-shim.someone.workers.dev", model: "m" }),
+      ),
+    ).toBeNull();
+    expect(
+      parseBlessedInferenceEndpoint(JSON.stringify({ baseUrl: "https://inference.flagshipserver.com", model: "m" })),
+    ).toEqual({ baseUrl: "https://inference.flagshipserver.com", model: "m" });
+  });
 });

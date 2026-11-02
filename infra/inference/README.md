@@ -81,7 +81,11 @@ day however it's abused.
    #   {"baseUrl":"https://inference.flagshipserver.com","model":"flagship-free"}
    cd ../.. && npx tsc -b && (cd apps/com && npm run deploy)
    ```
-   `model` here is only a label (the shim pins the real one).
+   `model` here is only a label (the shim pins the real one). The `baseUrl`
+   must be the shim's custom domain, never its `*.workers.dev` address: the
+   shim deploys with `workers_dev = false`, so that address answers
+   Cloudflare's `error code: 1042`, and `.com` refuses it (free AI then reads
+   as unavailable instead of minting dead passes).
 4. Check, with a running server on the account: Settings in any app shows
    "This week: 500k of 500k left · Starter reserve: 2M"; a build with no
    saved key runs; Settings then shows less left this week.
