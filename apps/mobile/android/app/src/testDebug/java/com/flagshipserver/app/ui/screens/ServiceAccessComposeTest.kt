@@ -165,7 +165,7 @@ class ServiceAccessComposeTest {
         }
         composeRule.onNodeWithText("Account members (3)").assertIsDisplayed()
         composeRule.onNodeWithText("Pixel 9").assertIsDisplayed()
-        composeRule.onNodeWithText("This device · Admin").assertIsDisplayed()
+        composeRule.onNodeWithText("Admin device · This device").assertIsDisplayed()
         composeRule.onNodeWithText("Kitchen iPad").assertIsDisplayed()
         composeRule.onNodeWithText("Sam's family").assertIsDisplayed()
         composeRule.onNodeWithText("Co-manages this server").assertIsDisplayed()
@@ -211,7 +211,7 @@ class ServiceAccessComposeTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("service-access-mode-members").assertIsNotEnabled()
         composeRule.onNodeWithText("Only an admin device can change who may open this app.").assertIsDisplayed()
-        composeRule.onNodeWithText("This device").assertIsDisplayed()
+        composeRule.onNodeWithText("Device · This device").assertIsDisplayed()
         composeRule.onNodeWithTag("service-access-account-rank-device-$thisDevice")
             .assertIsNotEnabled()
             .assertContentDescriptionEquals("Rank: Manager")

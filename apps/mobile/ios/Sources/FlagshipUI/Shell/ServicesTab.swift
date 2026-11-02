@@ -419,7 +419,7 @@ private struct AppRow: View {
         let running = pill.kind == .online
         return FSListRow(
             leading: .icon(running ? "app.dashed" : "app", color: running ? c.success : c.textMuted),
-            title: app.slug.capitalized,
+            title: app.displayName,
             subtitle: subtitleText,
             detail: shortUrlText
         ) {
@@ -586,7 +586,7 @@ struct ServiceDetailContainer: View {
         .onChange(of: vm?.runsOn?.removedFromPage ?? false) { _, removed in
             // Unticked the server this page talks to: the app is gone here.
             guard removed, let vm else { return }
-            toasts.success(String(localized: "Removed \(vm.detail.value?.app.slug.capitalized ?? vm.serviceId) from \(serverDomain)."))
+            toasts.success(String(localized: "Removed \(vm.detail.value?.app.displayName ?? vm.serviceId) from \(serverDomain)."))
             path.removeAll()
         }
     }
@@ -1087,7 +1087,7 @@ struct ServiceAccessContainer: View {
 
     private var serviceLabel: String {
         if let delim = serviceId.range(of: "--") {
-            return String(serviceId[delim.upperBound...]).capitalized
+            return AppDisplayName.fromSlug(String(serviceId[delim.upperBound...]))
         }
         return serviceId
     }

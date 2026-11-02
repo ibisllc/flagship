@@ -660,7 +660,7 @@ class SharedAppViewModel(
     private val _ui = MutableStateFlow(SharedAppUi())
     val ui: StateFlow<SharedAppUi> = _ui.asStateFlow()
 
-    val appName: String get() = serviceId.substringAfter("--").replaceFirstChar { it.uppercase() }
+    val appName: String get() = com.flagshipserver.app.api.AppDisplayName.fromServiceId(serviceId)
 
     /** The share's member key signs this app's orders (never the account's admin key). */
     suspend fun memberSigner(reason: String) = client.memberSigner(entry, reason)

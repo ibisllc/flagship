@@ -113,7 +113,6 @@
     <string name="joining_an_account_from_this_phone">このスマートフォンからのアカウント参加はまだ利用できません。Web アプリをお使いください。</string>
     <string name="the_server_sent_a_short_piece">サーバーがバックアップの一部を途中までしか送ってきませんでした。もう一度お試しください。ダウンロードは続きから再開されます。</string>
     <string name="the_downloaded_backup_doesnt_match_the">ダウンロードしたバックアップがサーバーのコピーと一致しません。もう一度ダウンロードしてください。</string>
-    <string name="phone_side_backups">スマートフォン側のバックアップ</string>
     <string name="your_server_makes_an_encrypted_backup">サーバーは毎晩、暗号化したバックアップを作成し、このスマートフォンが Wi-Fi 接続中かつ充電中にコピーを保管します。サーバーのアプリは、ここで確保した容量まで使えます。</string>
     <string name="peer_distributed_backups">ピア分散バックアップ</string>
     <string name="encrypted_pieces_of_your_backup_are">バックアップの暗号化された断片は他の Flagship サーバーに保管され、あなたのサーバーも他のサーバーの断片を預かります。アプリが使えるのはこのサーバーのディスクの 3 分の 1 までで、残りは他のサーバーの断片用です。</string>
@@ -121,7 +120,6 @@
     <string name="nothing_is_backed_up_if_this">何もバックアップされません。このサーバーのディスクが故障すると、アプリとデータは失われます。サーバーのページの「今すぐバックアップ」は引き続き使えます。</string>
     <string name="no_backup">バックアップなし</string>
     <string name="nothing_is_saved_off_this_server">このサーバーの外には何も保存されません。ディスクが故障すると、アプリとデータは失われます。</string>
-    <string name="on_my_phone">自分のスマートフォン上</string>
     <string name="your_phone_keeps_an_encrypted_copy">スマートフォンが毎晩のバックアップの暗号化されたコピーを保管します。</string>
     <string name="on_other_servers">他のサーバー上</string>
     <string name="encrypted_pieces_of_your_backup_are_2">バックアップの暗号化された断片は、他の Flagship サーバーに保管されます。</string>
@@ -129,7 +127,6 @@
     <string name="no_backups_yet">バックアップはまだありません。</string>
     <string name="scheduled_backups_are_off">スケジュールされたバックアップはオフです。</string>
     <string name="approve_backups_for_this_server">このサーバーのバックアップを承認</string>
-    <string name="keep_a_copy_on_this_phone">このスマートフォンにコピーを保存</string>
     <string name="only_on_wi_fi_while_charging">Wi-Fi 接続中かつ充電中のみ。</string>
     <string name="delete_this_backup_from_the_server">このバックアップをサーバーから削除しますか？</string>
     <string name="each_backup_is_one_flagship_file">各バックアップは 1 つの .flagship ファイルです。ホームで「バックアップを読み込む」を使うと復元できます。ご自身のデバイスなら、パスコードなしで開けます。</string>
@@ -1451,7 +1448,6 @@
     <string name="download">ダウンロード</string>
     <string name="save_3">保存…</string>
     <string name="downloaded">%1$s をダウンロードしました。</string>
-    <string name="on_this_phone">このスマートフォン：%1$s · %2$s</string>
     <string name="backup_schedule">バックアップのスケジュール</string>
     <string name="daily">毎日</string>
     <string name="weekly">毎週</string>
@@ -3225,4 +3221,11 @@
     <string name="rank_master">マスター</string>
     <string name="invite_active">有効</string>
     <string name="invite_sent_not_opened_yet">招待を送信済み — まだ開かれていません</string>
+    <string name="admin_device">管理者デバイス</string>
+    <string name="device_kind_this_device">%1$s · このデバイス</string>
+    <string name="shared_account">共有アカウント</string>
+    <string name="scheduled_backup">スケジュール済み</string>
+    <string name="keep_a_copy_on_this_device">このデバイスにコピーを保存</string>
+    <string name="on_this_device_copy">このデバイス：%1$s · %2$s</string>
+    <string name="on_my_devices">自分のデバイス上</string>
 </resources>

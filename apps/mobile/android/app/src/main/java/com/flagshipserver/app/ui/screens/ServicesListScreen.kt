@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.api.displayName
+
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.core.FSStrings
@@ -354,7 +356,7 @@ private fun toRow(listed: ServicesListViewModel.Listed, links: AppLinksResponse?
     val api = listed.app
     return AppSummary(
         serviceId = api.serviceId,
-        name = api.slug.replaceFirstChar { it.uppercase() },
+        name = api.displayName,
         creator = api.creator,
         pill = listed.pill,
         podIds = listed.podIds,

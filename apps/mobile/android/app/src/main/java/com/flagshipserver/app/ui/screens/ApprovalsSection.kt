@@ -213,15 +213,22 @@ private fun SecretRequestCard(
                 FirstContactRefusalNotice(stringResource(refusal.resId))
                 return@Column
             }
+            // A server this phone already pinned is asking for a routine start-up; the "is this
+            // the machine in front of you" wording is for first contact only (docs/first-contact.md).
+            val pinned = req.firstLook == null && req.purpose == SecretPurpose.UNLOCK_KEY
             Text(
-                stringResource(R.string.is_this_the_machine_in_front),
+                if (pinned) stringResource(R.string.its_waiting_for_its_disk_to) else stringResource(R.string.is_this_the_machine_in_front),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(FS.space.s1))
             req.firstLook?.let { ServerCodeBox(it) }
             FSPrimaryButton(
-                label = if (inFlight) stringResource(R.string.signing) else stringResource(R.string.yes_this_is_my_server),
+                label = when {
+                    inFlight -> stringResource(R.string.signing)
+                    pinned -> stringResource(R.string.approve)
+                    else -> stringResource(R.string.yes_this_is_my_server)
+                },
                 onClick = onApprove,
                 enabled = !inFlight,
                 block = true,

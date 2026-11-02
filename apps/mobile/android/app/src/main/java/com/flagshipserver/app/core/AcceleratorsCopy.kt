@@ -15,7 +15,7 @@ object AcceleratorsCopy {
     fun appName(appId: String): String {
         if (appId == "flagship-local-ai") return FSStrings.get(R.string.local_ai_title)
         val slug = appId.substringAfterLast("--").ifEmpty { appId }
-        return slug.split("-").joinToString("-") { w -> w.replaceFirstChar { it.uppercaseChar() } }
+        return com.flagshipserver.app.api.AppDisplayName.fromSlug(slug)
     }
 
     fun device(d: AcceleratorDevice): String = FSStrings.get(R.string.accelerators_device, d.id, d.model)

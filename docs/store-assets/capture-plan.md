@@ -28,7 +28,8 @@ them, and the next render picks the files up with no other change.
   or `AppCompatDelegate.setApplicationLocales` in the test.
 * **Appearance** follows the slide's place in the strip: `01` light, `02` dark, `03` light, `04` dark, `05` light,
   `06`/`06b` dark. iOS `XCUIDevice`/`-AppleInterfaceStyle Dark`; Android `adb shell cmd uimode night yes|no`.
-* **Clean status bar:** iOS `xcrun simctl status_bar <udid> override --time 9:41 --batteryState charged
+* **Clean status bar:** iOS `xcrun simctl status_bar <udid> override --time 2026-10-21T09:41:00.000<host offset>` (an ISO time with
+  fractional seconds also fixes the date the iPad's status bar shows; capture-ios.sh computes it) `--batteryState charged
   --batteryLevel 100 --cellularBars 4 --wifiBars 3`; Android demo mode (`adb shell settings put global
   sysui_demo_allowed 1`, then `am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941`, battery 100,
   no notifications).
@@ -86,4 +87,5 @@ Android boots `flagship_api35` headless without saving a snapshot, lifts the AVD
 (`STORE_AVD_PIN`, default 1234) and puts it back. The seam is `-smoke-store-world` (iOS, the world's JSON in the
 `FLAGSHIP_STORE_WORLD` launch environment) and `flagship.smokeStoreWorld` (Android, the JSON as an extra);
 `-smoke-store-waiting` / `flagship.smokeStoreWaiting` has cabin ask to start. Times are relative to the moment of
-capture (the app's clock is not fixed), so absolute dates on the backups slide are the capture day.
+capture (the app's clock is not fixed), so absolute dates on the backups slide are the capture day. The Android phone
+runs at 370 dpi (the AVD's 420 is reset after) so slide 04 holds the Members-only switch and all three members.

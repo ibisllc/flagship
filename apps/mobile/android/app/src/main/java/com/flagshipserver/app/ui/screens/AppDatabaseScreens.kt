@@ -97,7 +97,7 @@ fun appDbTableRoute(serviceId: String, store: String, table: String) =
 fun appDbQueryRoute(serviceId: String, store: String) =
     "app-db/$serviceId/query?store=${android.net.Uri.encode(store)}"
 
-private fun displayName(serviceId: String) = serviceId.substringAfter("--").replaceFirstChar { it.uppercase() }
+private fun displayName(serviceId: String) = com.flagshipserver.app.api.AppDisplayName.fromServiceId(serviceId)
 
 /** The "Database" entry on the app's page: owner only, an app with a Postgres
  *  store, and a box that has the section (a 404 or 403 hides it). */

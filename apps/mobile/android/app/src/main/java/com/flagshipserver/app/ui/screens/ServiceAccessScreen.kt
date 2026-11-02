@@ -125,7 +125,7 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
         // serviceId = "<creator>--<slug>"; show the slug half (split on `--`,
         // docs/service-addressing-double-dash.md).
         val delim = serviceId.indexOf("--")
-        if (delim > 0) serviceId.substring(delim + 2).replaceFirstChar { it.uppercase() } else serviceId
+        if (delim > 0) com.flagshipserver.app.api.AppDisplayName.fromSlug(serviceId.substring(delim + 2)) else serviceId
     }
 
     val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current

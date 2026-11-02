@@ -13,6 +13,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.displayName
+
 import com.flagshipserver.app.R
 import com.flagshipserver.app.api.BrowserGrantAnswerBody
 import com.flagshipserver.app.api.BrowserGrantRequestWire
@@ -198,7 +200,7 @@ class BrowserGrantCenter(
             }
             if (r.requests.isEmpty()) continue
             val names = try {
-                box.client.appsList().apps.associate { it.serviceId to it.slug.replaceFirstChar { c -> c.uppercase() } }
+                box.client.appsList().apps.associate { it.serviceId to it.displayName }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {

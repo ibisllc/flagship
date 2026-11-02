@@ -46,7 +46,7 @@ struct RestoreSourceScreen: View {
     }
 }
 
-/// The copies this phone keeps (the "On my phone" backup policy), by server
+/// The copies this phone keeps (the "On my devices" backup policy), by server
 /// and date; tapping one imports it like a picked file.
 struct PhoneBackupsScreen: View {
     @Environment(\.colorScheme) private var scheme
@@ -73,7 +73,7 @@ struct PhoneBackupsScreen: View {
 
     static func serverName(_ fqdn: String) -> String { fqdn.split(separator: ".").first.map(String.init) ?? fqdn }
 
-    static let emptyLine = String(localized: "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.")
+    static let emptyLine = String(localized: "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.")
 
     var body: some View {
         let c = FSColors.scheme(scheme)

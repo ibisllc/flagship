@@ -340,14 +340,14 @@ public final class ServerBackupsViewModel {
 
     public static func policyName(_ p: String) -> String {
         switch p {
-        case "phone": return String(localized: "On my phone")
+        case "phone": return String(localized: "On my devices")
         case "peer": return String(localized: "On other servers")
         case "none": return String(localized: "No backup")
         default: return String(localized: "Not chosen yet")
         }
     }
 
-    /// "Backup policy: On my phone · up to 32 GB".
+    /// "Backup policy: On my devices · up to 32 GB".
     public var policyLine: String {
         guard let p = policy else { return String(localized: "Backup policy: Not chosen yet") }
         let name = Self.policyName(p.policy.policy)
@@ -431,7 +431,9 @@ public final class ServerBackupsViewModel {
     }
 
     public func rowLine(_ b: SavedBackup) -> String {
-        String(localized: "\(when(b.createdAt)) · \(ServerArchive.formatBytes(b.fileBytes)) · \(b.trigger == "now" ? String(localized: "Back up now") : String(localized: "Scheduled")) · \(b.apps.count) app\(b.apps.count == 1 ? "" : "s")")
+        [when(b.createdAt), ServerArchive.formatBytes(b.fileBytes),
+         b.trigger == "now" ? String(localized: "Back up now") : String(localized: "Scheduled"),
+         String(localized: "\(b.apps.count) apps")].joined(separator: " · ")
     }
 
     public func leftLine(_ b: SavedBackup) -> String? {
@@ -444,7 +446,7 @@ public final class ServerBackupsViewModel {
 
     public var phoneCopyLine: String? {
         guard let c = phoneCopy else { return phoneStore.skipSentence(serverFqdn) }
-        return String(localized: "On this phone: \(when(c.createdAt)) · \(ServerArchive.formatBytes(c.bytes))")
+        return String(localized: "On this device: \(when(c.createdAt)) · \(ServerArchive.formatBytes(c.bytes))")
     }
 
     private func rememberForPhone() {

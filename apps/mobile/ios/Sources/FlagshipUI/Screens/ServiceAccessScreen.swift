@@ -221,7 +221,8 @@ public struct ServiceAccessScreen: View {
                         .font(FS.font.body()).foregroundColor(c.text).lineLimit(1)
                         .accessibilityIdentifier("service-access-account-name-\(a.id)")
                     Text(vm?.accountDetail(a) ?? "")
-                        .font(FS.font.caption()).foregroundColor(c.textMuted).lineLimit(1)
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("service-access-account-detail-\(a.id)")
                 }
                 Spacer(minLength: FS.space.s2)
@@ -515,19 +516,15 @@ public struct ServiceAccessScreen: View {
                         Text(also).font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                     if let by = vm?.invitedBy(for: p) {
-                        HStack(spacing: FS.space.s2) {
-                            Text(by)
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                                .lineLimit(1)
-                                .accessibilityIdentifier("service-access-invited-by-\(p.inviteId)")
-                            if vm?.isAdminDevice == true {
-                                Button("Revoke") { confirmRemove = p }
-                                    .font(FS.font.scaled(13, weight: .semibold))
-                                    .foregroundColor(c.danger)
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Revoke \(p.name)")
-                                    .accessibilityIdentifier("service-access-revoke-\(p.inviteId)")
+                        // Never truncated: beside Revoke when it fits, else Revoke goes under it.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: FS.space.s2) {
+                                invitedByText(by, p, c: c).fixedSize()
+                                revokeButton(p, c: c)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                invitedByText(by, p, c: c).fixedSize(horizontal: false, vertical: true)
+                                revokeButton(p, c: c)
                             }
                         }
                     }
@@ -553,6 +550,26 @@ public struct ServiceAccessScreen: View {
                     .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
                 }
             }
+        }
+    }
+
+    private func invitedByText(_ by: String, _ p: ServiceAccessViewModel.Person, c: FSColors) -> some View {
+        Text(by)
+            .font(FS.font.caption())
+            .foregroundColor(c.textMuted)
+            .accessibilityIdentifier("service-access-invited-by-\(p.inviteId)")
+    }
+
+    @ViewBuilder
+    private func revokeButton(_ p: ServiceAccessViewModel.Person, c: FSColors) -> some View {
+        if vm?.isAdminDevice == true {
+            Button("Revoke") { confirmRemove = p }
+                .font(FS.font.scaled(13, weight: .semibold))
+                .foregroundColor(c.danger)
+                .buttonStyle(.plain)
+                .fixedSize()
+                .accessibilityLabel("Revoke \(p.name)")
+                .accessibilityIdentifier("service-access-revoke-\(p.inviteId)")
         }
     }
 

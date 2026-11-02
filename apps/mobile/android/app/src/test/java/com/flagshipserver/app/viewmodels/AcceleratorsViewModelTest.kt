@@ -31,7 +31,7 @@ class AcceleratorsViewModelTest {
 
     @Test fun theWordsMatchTheOtherApps() {
         assertEquals("Plants", AcceleratorsCopy.appName("alice--plants"))
-        assertEquals("My-Notes", AcceleratorsCopy.appName("alice--my-notes"))
+        assertEquals("My Notes", AcceleratorsCopy.appName("alice--my-notes"))
         assertEquals("Local AI", AcceleratorsCopy.appName("flagship-local-ai"))
         assertEquals("Starting for Wiki", AcceleratorsCopy.holder(AcceleratorHolder("a--wiki", "x", "reserved")))
         assertEquals("Wiki is giving it back", AcceleratorsCopy.holder(AcceleratorHolder("a--wiki", "x", "releasing")))

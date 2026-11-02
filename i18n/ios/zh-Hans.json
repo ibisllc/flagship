@@ -146,8 +146,9 @@
   "Activity": "活动",
   "%lld row rewritten": "改写 %lld 行",
   "%lld rows rewritten": "改写 %lld 行",
-  "%lld app": "%lld 个应用",
-  "%lld apps": "%lld 个应用",
+  "%lld apps": {
+    "other": "%lld 个应用"
+  },
   "View report": "查看报告",
   "expanded": "已展开",
   "collapsed": "已收起",
@@ -1488,7 +1489,6 @@
   "From a file": "从文件",
   "From other servers": "从其他服务器",
   "From this phone": "从这部手机",
-  "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.": "这部手机目前没有保存任何备份。当某台服务器的备份设为“在我的手机上”时，最新的一份会保存在这里。",
   "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.": "选择要恢复的备份。它从这部手机打开；在你选择去向之前不会发送任何内容。",
   "Revoke server %@": "撤销服务器 %@",
   "That server is already gone — nothing to revoke.": "该服务器已经不存在，没有可撤销的内容。",
@@ -1630,7 +1630,6 @@
   "An encrypted copy is kept on this phone.": "加密副本保存在这部手机上。",
   "Encrypted pieces are kept on other Flagship servers, and yours keeps theirs.": "加密分片保存在其他 Flagship 服务器上，你的服务器也保存它们的分片。",
   "No backup": "无备份",
-  "On my phone": "保存在我的手机上",
   "On other servers": "保存在其他服务器上",
   "This phone has %@ free.": "这部手机有 %@ 可用。",
   "Keep %lld GB on this phone": "在这部手机上保留 %lld GB",
@@ -1646,7 +1645,6 @@
   "On this server": "在此服务器上",
   "Save…": "保存…",
   "Download": "下载",
-  "Keep a copy on this phone": "在这部手机上保留一份副本",
   "Only on Wi-Fi while charging.": "仅在 Wi-Fi 且充电时进行。",
   "Backup schedule": "备份计划",
   "Keep": "保留",
@@ -1684,7 +1682,6 @@
   "Next backup: %@": "下次备份：%@",
   "Scheduled": "已计划",
   "Left out: %@": "已排除：%@",
-  "On this phone: %@ · %@": "在这部手机上：%@ · %@",
   "The backup file is damaged.": "备份文件已损坏。",
   "Pairing…": "正在配对…",
   "Pair this server": "配对此服务器",
@@ -2974,5 +2971,9 @@
   "+ Add group": "+ 添加群组",
   "active": "已激活",
   "invite sent — not opened yet": "邀请已发送 — 尚未打开",
-  "1 server": "1 台服务器"
+  "1 server": "1 台服务器",
+  "Keep a copy on this device": "在此设备上保留一份副本",
+  "On this device: %@ · %@": "在此设备上：%@ · %@",
+  "On my devices": "在我的设备上",
+  "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": "此设备目前没有保存任何备份。当某台服务器的备份设为“在我的设备上”时，最新的一份会保存在这里。"
 }

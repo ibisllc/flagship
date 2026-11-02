@@ -113,7 +113,6 @@
     <string name="joining_an_account_from_this_phone">Unirse a una cuenta desde este teléfono aún no está disponible. Usa la app web.</string>
     <string name="the_server_sent_a_short_piece">El servidor envió un fragmento incompleto de la copia de seguridad. Inténtalo de nuevo; la descarga se reanuda.</string>
     <string name="the_downloaded_backup_doesnt_match_the">La copia de seguridad descargada no coincide con la del servidor. Vuelve a descargarla.</string>
-    <string name="phone_side_backups">Copias de seguridad en el teléfono</string>
     <string name="your_server_makes_an_encrypted_backup">Tu servidor hace una copia de seguridad cifrada cada noche y este teléfono guarda una copia, por Wi-Fi y mientras carga. Las apps de tu servidor pueden usar hasta el espacio que reserves aquí.</string>
     <string name="peer_distributed_backups">Copias de seguridad distribuidas entre pares</string>
     <string name="encrypted_pieces_of_your_backup_are">Fragmentos cifrados de tu copia se guardan en otros servidores Flagship, y el tuyo guarda los de ellos. Tus apps pueden usar hasta un tercio del disco de este servidor; el resto guarda fragmentos de otros servidores.</string>
@@ -121,7 +120,6 @@
     <string name="nothing_is_backed_up_if_this">No se guarda ninguna copia. Si falla el disco de este servidor, sus apps y datos se pierden. Aún puedes usar Hacer copia ahora en la página del servidor.</string>
     <string name="no_backup">Sin copia de seguridad</string>
     <string name="nothing_is_saved_off_this_server">No se guarda nada fuera de este servidor. Si falla su disco, sus apps y datos se pierden.</string>
-    <string name="on_my_phone">En mi teléfono</string>
     <string name="your_phone_keeps_an_encrypted_copy">Tu teléfono guarda una copia cifrada de la copia de seguridad de cada noche.</string>
     <string name="on_other_servers">En otros servidores</string>
     <string name="encrypted_pieces_of_your_backup_are_2">Fragmentos cifrados de tu copia se guardan en otros servidores Flagship.</string>
@@ -129,7 +127,6 @@
     <string name="no_backups_yet">Aún no hay copias de seguridad.</string>
     <string name="scheduled_backups_are_off">Las copias programadas están desactivadas.</string>
     <string name="approve_backups_for_this_server">Aprobar copias de seguridad para este servidor</string>
-    <string name="keep_a_copy_on_this_phone">Guardar una copia en este teléfono</string>
     <string name="only_on_wi_fi_while_charging">Solo por Wi-Fi y mientras carga.</string>
     <string name="delete_this_backup_from_the_server">¿Eliminar esta copia de seguridad del servidor?</string>
     <string name="each_backup_is_one_flagship_file">Cada copia de seguridad es un archivo .flagship. Importar una copia en Inicio la restaura. Se abre en tus propios dispositivos sin código.</string>
@@ -1451,7 +1448,6 @@
     <string name="download">Descargar</string>
     <string name="save_3">Guardar…</string>
     <string name="downloaded">%1$s descargado.</string>
-    <string name="on_this_phone">En este teléfono: %1$s · %2$s</string>
     <string name="backup_schedule">Programación de copias de seguridad</string>
     <string name="daily">Diaria</string>
     <string name="weekly">Semanal</string>
@@ -3225,4 +3221,11 @@
     <string name="rank_master">Maestro</string>
     <string name="invite_active">activo</string>
     <string name="invite_sent_not_opened_yet">invitación enviada: aún sin abrir</string>
+    <string name="admin_device">Dispositivo de administrador</string>
+    <string name="device_kind_this_device">%1$s · Este dispositivo</string>
+    <string name="shared_account">Cuenta compartida</string>
+    <string name="scheduled_backup">Programada</string>
+    <string name="keep_a_copy_on_this_device">Guardar una copia en este dispositivo</string>
+    <string name="on_this_device_copy">En este dispositivo: %1$s · %2$s</string>
+    <string name="on_my_devices">En mis dispositivos</string>
 </resources>

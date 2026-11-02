@@ -285,7 +285,7 @@ public final class ServerAppsController {
             let fromList = a.copying.flatMap { Self.isUnderway($0.state) ? $0 : nil }
             let fromCopies = underway[a.serviceId].map { AppCopying(state: $0.state, progress: $0.progress) }
             let copying = fromCopies ?? fromList
-            let name = copying != nil ? (a.name ?? a.slug.capitalized) : a.slug.capitalized
+            let name = copying != nil ? a.displayName : AppDisplayName.fromSlug(a.slug)
             return Row(serviceId: a.serviceId, name: name, address: Self.stripScheme(a.url),
                        state: copying != nil ? .copying : AppServerState(a), copying: copying)
         }
@@ -301,7 +301,7 @@ public final class ServerAppsController {
 
     private static func displayName(_ entry: AppCopyEntry) -> String {
         if entry.appName != entry.serviceId, !entry.appName.isEmpty { return entry.appName }
-        return ServicesSlug.slug(of: entry.serviceId).capitalized
+        return AppDisplayName.fromSlug(ServicesSlug.slug(of: entry.serviceId))
     }
 
     static func stripScheme(_ s: String) -> String {

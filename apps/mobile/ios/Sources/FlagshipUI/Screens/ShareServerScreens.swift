@@ -894,7 +894,7 @@ struct SharedServerScreen: View {
                     ForEach(apps, id: \.serviceId) { app in
                         Button { onOpenApp(app.serviceId) } label: {
                             FSListRow(leading: .icon("app.dashed", color: app.status == "running" ? c.success : c.textMuted),
-                                      title: app.slug.capitalized, subtitle: app.summary ?? app.url,
+                                      title: app.displayName, subtitle: app.summary ?? app.url,
                                       below: {
                                           if app.isMembersOnly {
                                               Text(ServerShareCopy.membersOnlyHint).font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -955,7 +955,7 @@ struct SharedAppScreen: View {
     @State private var table: DbTable?
     @State private var query: DbQuery?
 
-    private var appName: String { ServicesTab.slug(of: serviceId).capitalized }
+    private var appName: String { AppDisplayName.fromSlug(ServicesTab.slug(of: serviceId)) }
 
     var body: some View {
         let c = FSColors.scheme(scheme)

@@ -187,7 +187,7 @@ public final class ServiceDetailViewModel {
 
     private func syncAccess(_ app: FlagshipAPI.AppSummary) async {
         guard app.access != nil else { access = nil; return }
-        let name = app.slug.capitalized
+        let name = app.displayName
         if access == nil {
             access = AppAccessController(serviceId: serviceId, appName: name, client: client,
                                          serverDomain: egressServerDomain, canChange: ordersCanChange,
@@ -207,7 +207,7 @@ public final class ServiceDetailViewModel {
     public var showsApiKeys: Bool { apiKeys.map { !$0.isHidden } ?? false }
 
     private func syncApiKeys(_ app: FlagshipAPI.AppSummary) async {
-        let name = app.slug.capitalized
+        let name = app.displayName
         if apiKeys == nil {
             // Same rules as the access list: signed by the sensitive-order
             // key, for the box the client talks to, read-only when restricted.
@@ -276,7 +276,7 @@ public final class ServiceDetailViewModel {
             runsOn = nil
             return
         }
-        let name = app.slug.capitalized
+        let name = app.displayName
         if runsOn == nil {
             runsOn = AppRunsOnController(
                 serviceId: serviceId, appName: name, pods: allPods, pageFqdn: page, clients: clients,

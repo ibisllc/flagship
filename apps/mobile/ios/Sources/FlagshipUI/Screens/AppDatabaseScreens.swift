@@ -7,7 +7,7 @@ import FlagshipCore
 // gets here (the app page hides the entry) and the box 403s companions.
 
 private func appLabel(_ serviceId: String) -> String {
-    ServicesTab.slug(of: serviceId).capitalized
+    AppDisplayName.fromSlug(ServicesTab.slug(of: serviceId))
 }
 
 // MARK: - Containers

@@ -527,8 +527,14 @@ private struct SidebarRow: View {
             }
             .padding(.horizontal, FS.space.s3)
             .padding(.vertical, FS.space.s2)
-            .background(isSelected ? Color.white.opacity(0.85) : Color.clear)
+            // The raised surface with a hairline reads in both schemes (a fixed white pill
+            // left light text unreadable in dark mode); the teal icon and semibold title mark it.
+            .background(isSelected ? c.surface : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
+                    .strokeBorder(isSelected ? c.border : Color.clear, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

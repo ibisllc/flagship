@@ -278,7 +278,7 @@ public struct ActivityScreen: View {
                     Spacer()
                 }
                 if let r = snap.lastReissue {
-                    Text([r.totalRewritten == 1 ? String(localized: "\(r.totalRewritten) row rewritten") : String(localized: "\(r.totalRewritten) rows rewritten"), r.reattachedCount == 1 ? String(localized: "\(r.reattachedCount) app") : String(localized: "\(r.reattachedCount) apps")].joined(separator: " · "))
+                    Text([r.totalRewritten == 1 ? String(localized: "\(r.totalRewritten) row rewritten") : String(localized: "\(r.totalRewritten) rows rewritten"), String(localized: "\(r.reattachedCount) apps")].joined(separator: " · "))
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
                 }

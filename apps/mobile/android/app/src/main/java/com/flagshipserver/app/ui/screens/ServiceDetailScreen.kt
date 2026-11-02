@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.api.displayName
+
 import com.flagshipserver.app.core.FSStrings
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.core.fsString
@@ -154,7 +156,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     val placementVm = remember(serviceId, podClients, client) {
         com.flagshipserver.app.viewmodels.AppPlacementViewModel(
             serviceId = serviceId,
-            appName = serviceId.substringAfter("--").replaceFirstChar { it.uppercase() },
+            appName = com.flagshipserver.app.api.AppDisplayName.fromServiceId(serviceId),
             pods = { appState.pods.value },
             clientFor = { pod -> podClients.screens(pod) ?: client.takeIf { pod.podId == pagePodState.value?.podId } },
             pagePodId = { pagePodState.value?.podId },
@@ -227,7 +229,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
     val loaded = detail.loadedValue()
     FSScreen(
-        title = loaded?.app?.slug?.replaceFirstChar { it.uppercase() } ?: stringResource(R.string.service),
+        title = loaded?.app?.displayName ?: stringResource(R.string.service),
         onBack = { nav.popBackStack() },
     ) {
         when (val d = detail) {
@@ -263,7 +265,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     InternetAccessSection(
                         nav = nav,
                         serviceId = serviceId,
-                        appName = resp.app.slug.replaceFirstChar { it.uppercase() },
+                        appName = resp.app.displayName,
                         summary = access,
                         restricted = appState.isRestrictedDevice() || !adminDevice,
                         readOnlyNote = if (appState.isRestrictedDevice()) com.flagshipserver.app.viewmodels.AppAccessViewModel.READ_ONLY_NOTE
@@ -353,7 +355,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 )
 
                 // Browser access: the sites the manifest was approved with, then what the app asks now.
-                BrowserAccessSection(serviceId = serviceId, manifest = resp.manifest, appName = resp.app.slug.replaceFirstChar { it.uppercase() })
+                BrowserAccessSection(serviceId = serviceId, manifest = resp.manifest, appName = resp.app.displayName)
 
                 // Browser viewer: only when the daemon reports tabs.
                 if (resp.browserTabs.isNotEmpty()) {
@@ -396,7 +398,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 // API keys (docs/app-apis.md §3); hidden on a box without them.
                 ApiKeysSection(
                     serviceId = serviceId,
-                    appName = resp.app.slug.replaceFirstChar { it.uppercase() },
+                    appName = resp.app.displayName,
                     restricted = appState.isRestrictedDevice() || !adminDevice,
                     readOnlyNote = if (appState.isRestrictedDevice()) com.flagshipserver.app.viewmodels.AppApiKeysViewModel.READ_ONLY_NOTE
                     else com.flagshipserver.app.core.AdminOrderGate.API_KEYS,
@@ -736,7 +738,7 @@ private fun Header(app: AppSummary) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    text = app.slug.replaceFirstChar { it.uppercase() },
+                    text = app.displayName,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f),

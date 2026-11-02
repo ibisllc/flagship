@@ -117,5 +117,7 @@
       "replace": "return minutes == 1 ? String(localized: \"\\(minutes) minute ago\") : String(localized: \"\\(minutes) minutes ago\")"
     }
   ],
-  "plurals": {}
+  "plurals": {
+    "%lld apps": { "one": "%lld app", "other": "%lld apps", "surfaces": ["ios"] }
+  }
 }

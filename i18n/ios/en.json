@@ -783,14 +783,6 @@
     "en": "%lld rows rewritten",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:281"
   },
-  "%lld app": {
-    "en": "%lld app",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:281"
-  },
-  "%lld apps": {
-    "en": "%lld apps",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:281"
-  },
   "View report": {
     "en": "View report",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:285"
@@ -6959,10 +6951,6 @@
     "en": "From this phone",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:27"
   },
-  "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.": {
-    "en": "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:76"
-  },
   "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.": {
     "en": "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:89"
@@ -7534,10 +7522,6 @@
     "en": "No backup",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:37"
   },
-  "On my phone": {
-    "en": "On my phone",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:38"
-  },
   "On other servers": {
     "en": "On other servers",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:41"
@@ -7585,10 +7569,6 @@
   "Save…": {
     "en": "Save…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:327"
-  },
-  "Keep a copy on this phone": {
-    "en": "Keep a copy on this phone",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:355"
   },
   "Only on Wi-Fi while charging.": {
     "en": "Only on Wi-Fi while charging.",
@@ -7734,18 +7714,9 @@
     "en": "Scheduled",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:434"
   },
-  "%@ · %@ · %@ · %lld app%@": {
-    "en": "%@ · %@ · %@ · %lld app%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:434",
-    "translatable": false
-  },
   "Left out: %@": {
     "en": "Left out: %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:438"
-  },
-  "On this phone: %@ · %@": {
-    "en": "On this phone: %@ · %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:447"
   },
   "The backup file is damaged.": {
     "en": "The backup file is damaged.",
@@ -12914,5 +12885,30 @@
   "1 server": {
     "en": "1 server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:483"
+  },
+  "Keep a copy on this device": {
+    "en": "Keep a copy on this device",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:355"
+  },
+  "On this device: %@ · %@": {
+    "en": "On this device: %@ · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:447"
+  },
+  "On my devices": {
+    "en": "On my devices",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:343"
+  },
+  "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": {
+    "en": "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift:76"
+  },
+  "%lld apps": {
+    "en": {
+      "one": "%lld app",
+      "other": "%lld apps"
+    },
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:436",
+    "plural": true,
+    "manual": true
   }
 }

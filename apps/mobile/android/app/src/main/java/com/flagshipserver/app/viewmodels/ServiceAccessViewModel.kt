@@ -240,16 +240,15 @@ class ServiceAccessViewModel(
             m.deviceId?.lowercase()?.let { names?.get(it) }?.takeIf { it.isNotBlank() }
                 ?: FSStrings.get(R.string.device_3, (m.deviceId ?: m.devicePub).orEmpty().take(8))
         } else {
-            m.label?.takeIf { it.isNotBlank() } ?: "Co-manager"
+            m.label?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.shared_account)
         }
 
-    /** "This device · Admin", "Admin", "Co-manages this server", or "". */
+    /** "Admin device · This device", "Admin device", "Device", or "Co-manages this server" (as iOS). */
     fun accountMemberDetail(m: AppAccountMember): String {
         if (!m.isDevice) return FSStrings.get(R.string.co_manages_this_server)
-        val parts = mutableListOf<String>()
-        if (m.devicePub != null && m.devicePub.lowercase() == _selfPub.value?.lowercase()) parts += FSStrings.get(R.string.this_device)
-        if (m.tier == "admin") parts += "Admin"
-        return parts.joinToString(" · ")
+        val kind = if (m.tier == "admin") FSStrings.get(R.string.admin_device) else FSStrings.get(R.string.device_2)
+        val self = m.devicePub != null && m.devicePub.lowercase() == _selfPub.value?.lowercase()
+        return if (self) FSStrings.get(R.string.device_kind_this_device, kind) else kind
     }
 
     private suspend fun resolveDeviceNames() {

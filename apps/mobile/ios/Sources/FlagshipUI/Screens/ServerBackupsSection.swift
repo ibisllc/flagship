@@ -35,7 +35,7 @@ struct BackupPolicyOptions: View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s2) {
             option(.none, String(localized: "No backup"), Self.noneText, c: c)
-            option(.phoneOnly, String(localized: "On my phone"), Self.phoneText, c: c)
+            option(.phoneOnly, String(localized: "On my devices"), Self.phoneText, c: c)
             if policy == .phoneOnly { reservePicker(c) }
             if BackupFeatures.peerBackup || policy == .peer {
                 option(.peer, String(localized: "On other servers"), Self.peerText, c: c)
@@ -352,7 +352,7 @@ struct ServerBackupsCard: View {
             Divider()
             Toggle(isOn: $vm.keepCopyOnPhone) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Keep a copy on this phone").font(FS.font.bodySm()).foregroundColor(c.text)
+                    Text("Keep a copy on this device").font(FS.font.bodySm()).foregroundColor(c.text)
                     Text("Only on Wi-Fi while charging.").font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
             }

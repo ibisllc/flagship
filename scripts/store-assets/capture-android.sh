@@ -84,7 +84,9 @@ IFS=, read -ra langs <<< "$LANGS"
 failed=0
 for dev in "${devs[@]}"; do
   case "$dev" in
-    phone) "$ADB" shell wm size reset; "$ADB" shell wm density reset ;;
+    # The phone at a slightly smaller display size (420 -> 370 dpi): slide 04 then holds the Members-only switch
+    # and all three members, Lea's row included, between the app bar and the navigation bar.
+    phone) "$ADB" shell wm size reset; "$ADB" shell wm density 370 ;;
     tablet-7) "$ADB" shell wm size 1200x1920; "$ADB" shell wm density 320 ;;
     tablet-10) "$ADB" shell wm size 1600x2560; "$ADB" shell wm density 320 ;;
     *) echo "unknown device: $dev" >&2; exit 2 ;;
@@ -94,11 +96,16 @@ for dev in "${devs[@]}"; do
     out="$ROOT/store/captures/android/$lang/$dev"
     echo "== $dev $lang -> ${out#$ROOT/}"
     rm -rf "$out"; mkdir -p "$out"
-    "$ADB" shell input keyevent KEYCODE_WAKEUP
-    "$ADB" shell am instrument -w -e class "$PKG.gym.StoreCaptureTest" -e storeLang "$lang" -e storeWorld "$WORLD" "$RUNNER" \
-      | grep -E "OK \(|FAILURES|Error|Exception" | head -5 || true
-    "$ADB" exec-out run-as "$PKG" tar c -C files store 2>/dev/null | tar x -C "$out" --strip-components 1 2>/dev/null || true
-    n=$(ls "$out"/0*.png 2>/dev/null | wc -l | tr -d ' ')
+    # One retry: a cold emulator now and then misses a 20 s wait on the first run of a language.
+    for attempt in 1 2; do
+      "$ADB" shell input keyevent KEYCODE_WAKEUP
+      "$ADB" shell am instrument -w -e class "$PKG.gym.StoreCaptureTest" -e storeLang "$lang" -e storeWorld "$WORLD" "$RUNNER" \
+        | grep -E "OK \(|FAILURES|Error|Exception" | head -5 || true
+      "$ADB" exec-out run-as "$PKG" tar c -C files store 2>/dev/null | tar x -C "$out" --strip-components 1 2>/dev/null || true
+      n=$(ls "$out"/0*.png 2>/dev/null | wc -l | tr -d ' ')
+      [ "$n" = 5 ] && break
+      [ "$attempt" = 1 ] && { echo "  $n of 5 captures, retrying once" >&2; rm -f "$out"/0*.png; }
+    done
     if [ "$n" != 5 ]; then echo "  only $n of 5 captures" >&2; failed=1; fi
   done
 done

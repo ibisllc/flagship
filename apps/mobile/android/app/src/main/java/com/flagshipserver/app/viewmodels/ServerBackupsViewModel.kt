@@ -87,7 +87,7 @@ class ServerBackupsViewModel(
             val d = async { runCatching { client.serverDetail() } }
             d.await().onSuccess { detail ->
                 storageNotes = com.flagshipserver.app.core.AppStorageText.serverNotes(detail.storage) { id ->
-                    id.substringAfterLast("--").replaceFirstChar { it.uppercase() }
+                    com.flagshipserver.app.api.AppDisplayName.fromServiceId(id)
                 }
             }
             p.await().onSuccess { policy = it }

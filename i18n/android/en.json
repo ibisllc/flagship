@@ -477,10 +477,6 @@
     "en": "The downloaded backup doesn't match the server's copy. Try downloading it again.",
     "ctx": "core/ArchiveDownloader.kt:82 (prose)"
   },
-  "phone_side_backups": {
-    "en": "Phone-side backups",
-    "ctx": "core/BackupsText.kt:41 (prose)"
-  },
   "your_server_makes_an_encrypted_backup": {
     "en": "Your server makes an encrypted backup every night and this phone keeps a copy, over Wi-Fi while charging. Your server's apps can hold up to the space you reserve here.",
     "ctx": "core/BackupsText.kt:43 (prose)"
@@ -509,10 +505,6 @@
     "en": "Nothing is saved off this server. If its disk fails, its apps and data are gone.",
     "ctx": "core/BackupsText.kt:53 (prose)"
   },
-  "on_my_phone": {
-    "en": "On my phone",
-    "ctx": "core/BackupsText.kt:54 (prose)"
-  },
   "your_phone_keeps_an_encrypted_copy": {
     "en": "Your phone keeps an encrypted copy of each night's backup.",
     "ctx": "core/BackupsText.kt:55 (prose)"
@@ -540,10 +532,6 @@
   "approve_backups_for_this_server": {
     "en": "Approve backups for this server",
     "ctx": "core/BackupsText.kt:62 (prose)"
-  },
-  "keep_a_copy_on_this_phone": {
-    "en": "Keep a copy on this phone",
-    "ctx": "core/BackupsText.kt:63 (prose)"
   },
   "only_on_wi_fi_while_charging": {
     "en": "Only on Wi-Fi while charging.",
@@ -6038,11 +6026,6 @@
     "en": "Downloaded %1$s.",
     "ctx": "ui/screens/ServerBackupsSection.kt:242 (arg of Text)",
     "args": 1
-  },
-  "on_this_phone": {
-    "en": "On this phone: %1$s · %2$s",
-    "ctx": "ui/screens/ServerBackupsSection.kt:270 (arg of Text)",
-    "args": 2
   },
   "backup_schedule": {
     "en": "Backup schedule",
@@ -13328,5 +13311,35 @@
   "invite_sent_not_opened_yet": {
     "en": "invite sent — not opened yet",
     "ctx": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceAccessScreen.kt:777"
+  },
+  "admin_device": {
+    "en": "Admin device",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:249 (prose)"
+  },
+  "device_kind_this_device": {
+    "en": "%1$s · This device",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:251 (prose)",
+    "args": 1
+  },
+  "shared_account": {
+    "en": "Shared account",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:243 (prose)"
+  },
+  "scheduled_backup": {
+    "en": "Scheduled",
+    "ctx": "core/BackupsText.kt:159 (prose)"
+  },
+  "keep_a_copy_on_this_device": {
+    "en": "Keep a copy on this device",
+    "ctx": "core/BackupsText.kt:64 (prose)"
+  },
+  "on_this_device_copy": {
+    "en": "On this device: %1$s · %2$s",
+    "ctx": "ui/screens/ServerBackupsSection.kt:274 (arg of Text)",
+    "args": 2
+  },
+  "on_my_devices": {
+    "en": "On my devices",
+    "ctx": "core/BackupsText.kt:42 (prose)"
   }
 }

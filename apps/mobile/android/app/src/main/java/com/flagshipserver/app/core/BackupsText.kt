@@ -39,7 +39,7 @@ object BackupFeatures {
 object BackupsText {
     const val GB: Long = 1024L * 1024 * 1024
 
-    val PHONE_TITLE get() = FSStrings.get(R.string.phone_side_backups)
+    val PHONE_TITLE get() = FSStrings.get(R.string.on_my_devices)
     val PHONE_BODY get() =
         FSStrings.get(R.string.your_server_makes_an_encrypted_backup)
     val PEER_TITLE get() = FSStrings.get(R.string.peer_distributed_backups)
@@ -52,7 +52,7 @@ object BackupsText {
     // Create-server's backup step: short, plain, nothing preselected.
     val CREATE_NONE_TITLE get() = FSStrings.get(R.string.no_backup)
     val CREATE_NONE_BODY get() = FSStrings.get(R.string.nothing_is_saved_off_this_server)
-    val CREATE_PHONE_TITLE get() = FSStrings.get(R.string.on_my_phone)
+    val CREATE_PHONE_TITLE get() = FSStrings.get(R.string.on_my_devices)
     val CREATE_PHONE_BODY get() = FSStrings.get(R.string.your_phone_keeps_an_encrypted_copy)
     val CREATE_PEER_TITLE get() = FSStrings.get(R.string.on_other_servers)
     val CREATE_PEER_BODY get() = FSStrings.get(R.string.encrypted_pieces_of_your_backup_are_2)
@@ -61,7 +61,7 @@ object BackupsText {
     val NO_BACKUPS get() = FSStrings.get(R.string.no_backups_yet)
     val SCHEDULE_OFF get() = FSStrings.get(R.string.scheduled_backups_are_off)
     val APPROVE get() = FSStrings.get(R.string.approve_backups_for_this_server)
-    val KEEP_COPY get() = FSStrings.get(R.string.keep_a_copy_on_this_phone)
+    val KEEP_COPY get() = FSStrings.get(R.string.keep_a_copy_on_this_device)
     val KEEP_COPY_NOTE get() = FSStrings.get(R.string.only_on_wi_fi_while_charging)
     val DELETE_CONFIRM get() = FSStrings.get(R.string.delete_this_backup_from_the_server)
     val LIST_NOTE get() =
@@ -156,7 +156,7 @@ object BackupsText {
     }
 
     fun rowLine(b: SavedBackup): String {
-        val kind = if (b.trigger == "now") FSStrings.get(R.string.back_up_now) else "Scheduled"
+        val kind = if (b.trigger == "now") FSStrings.get(R.string.back_up_now) else FSStrings.get(R.string.scheduled_backup)
         val apps = FSStrings.plural(R.plurals.apps_count, b.apps.size, b.apps.size)
         return "${whenText(b.createdAt)} · ${size(b)} · $kind · $apps"
     }

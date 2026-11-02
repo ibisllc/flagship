@@ -195,15 +195,16 @@ final class ServerBackupsViewModelTests: XCTestCase {
         c.policyCurrent = BackupPolicyCurrent(policy: "phone", phoneReserveBytes: 32 << 30, issuedAt: now - 10)
         let m = vm(c)
         await m.start()
-        XCTAssertEqual(m.policyLine, "Backup policy: On my phone · up to 32.0 GB")
+        XCTAssertEqual(m.policyLine, "Backup policy: On my devices · up to 32.0 GB")
         XCTAssertEqual(m.usageLine, "Apps use 3.2 GB of 32.0 GB")
         XCTAssertTrue(m.phoneCopyShown)
-        let ok = await m.changePolicy(to: .peer, reserveBytes: 32 << 30)
+        // Peer backups are off at GA (BackupFeatures.peerBackup), so the change goes to No backup.
+        let ok = await m.changePolicy(to: .none, reserveBytes: 32 << 30)
         XCTAssertTrue(ok)
         let sent = try XCTUnwrap(c.policyOrders.last)
-        XCTAssertEqual(sent.order, BackupPolicyOrder(serverDomain: fqdn, policy: "peer", phoneReserveBytes: 0, issuedAt: now))
+        XCTAssertEqual(sent.order, BackupPolicyOrder(serverDomain: fqdn, policy: "none", phoneReserveBytes: 0, issuedAt: now))
         XCTAssertTrue(admin.publicKey.isValidSignature(try XCTUnwrap(HexUtil.decode(sent.signatureHex)), for: try sent.order.canonicalBytes()))
-        XCTAssertEqual(m.usageLine, "Apps use 3.2 GB of 120.0 GB (a third of this server's disk)")
+        XCTAssertEqual(m.usageLine, "Apps use 3.2 GB")
         XCTAssertFalse(m.phoneCopyShown)
     }
 

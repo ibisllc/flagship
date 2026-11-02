@@ -19,7 +19,7 @@ public enum AcceleratorsCopy {
     public static func appName(_ appId: String) -> String {
         if appId == "flagship-local-ai" { return String(localized: "Local AI") }
         let slug = appId.components(separatedBy: "--").last ?? appId
-        return slug.isEmpty ? appId : slug.capitalized
+        return slug.isEmpty ? appId : AppDisplayName.fromSlug(slug)
     }
 
     public static func device(_ d: AcceleratorDevice) -> String { String(localized: "GPU \(d.id): \(d.model)") }

@@ -271,7 +271,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                     copies.copies(vm.serverFqdn).firstOrNull()?.let { c ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                fsString(R.string.on_this_phone, BackupsText.whenText(c.meta.createdAt), BackupsText.size(c.meta)),
+                                fsString(R.string.on_this_device_copy, BackupsText.whenText(c.meta.createdAt), BackupsText.size(c.meta)),
                                 color = FS.colors.textMuted,
                                 style = caption,
                                 modifier = Modifier.weight(1f).testTag("sd-backups-phone-copy"),

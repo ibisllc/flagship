@@ -12,6 +12,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.LocaleList
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onFirst
@@ -109,6 +110,9 @@ class StoreCaptureTest : GymBase() {
         // 01 Home: both servers online, home the leader.
         launchStore("home", dark = false)
         waitText("cabin.river-otter.flagship.services", 20_000)
+        // Add / Restore waits for Home's layout to settle before it takes taps: the shot shows it ready.
+        composeRule.mainClock.advanceTimeBy(2_000)
+        composeRule.onNode(hasTestTag("home-add-server")).assertIsEnabled()
         shot("01")
 
         // 02 The start-up request cabin sent, in Activity's Server approvals.
@@ -129,7 +133,7 @@ class StoreCaptureTest : GymBase() {
         tap("service-detail-access-row", 20_000)
         waitUntilExists("service-access-members-title", 15_000)
         waitText("Lea", 15_000, substring = false)
-        bring("service-access-restrict-toggle", 0.12f)
+        bring("service-access-restrict-toggle", 0.105f)
         shot("04")
 
         // 05 home's server page at Backups.

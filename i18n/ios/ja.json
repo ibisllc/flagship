@@ -146,8 +146,9 @@
   "Activity": "アクティビティ",
   "%lld row rewritten": "%lld 行を書き換え",
   "%lld rows rewritten": "%lld 行を書き換え",
-  "%lld app": "アプリ %lld 件",
-  "%lld apps": "アプリ %lld 件",
+  "%lld apps": {
+    "other": "アプリ %lld 件"
+  },
   "View report": "レポートを表示",
   "expanded": "展開済み",
   "collapsed": "折りたたみ済み",
@@ -1488,7 +1489,6 @@
   "From a file": "ファイルから",
   "From other servers": "他のサーバーから",
   "From this phone": "このスマートフォンから",
-  "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.": "このスマートフォンにはまだバックアップがありません。サーバーのバックアップ先を「このスマートフォン」にすると、最新のものがここに保管されます。",
   "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.": "復元するバックアップを選んでください。このスマートフォンから開かれ、送信先を選ぶまで何も送信されません。",
   "Revoke server %@": "サーバー %@ を取り消す",
   "That server is already gone — nothing to revoke.": "そのサーバーはすでに存在しません。取り消す対象がありません。",
@@ -1630,7 +1630,6 @@
   "An encrypted copy is kept on this phone.": "暗号化されたコピーがこのスマートフォンに保管されます。",
   "Encrypted pieces are kept on other Flagship servers, and yours keeps theirs.": "暗号化された断片が他の Flagship サーバーに保管され、あなたのサーバーも他のサーバーの断片を保管します。",
   "No backup": "バックアップなし",
-  "On my phone": "自分のスマートフォン上",
   "On other servers": "他のサーバー上",
   "This phone has %@ free.": "このスマートフォンの空き容量は %@ です。",
   "Keep %lld GB on this phone": "このスマートフォンに %lld GB を保持",
@@ -1646,7 +1645,6 @@
   "On this server": "このサーバー上",
   "Save…": "保存…",
   "Download": "ダウンロード",
-  "Keep a copy on this phone": "このスマートフォンにコピーを保存",
   "Only on Wi-Fi while charging.": "Wi-Fi 接続中かつ充電中のみ。",
   "Backup schedule": "バックアップのスケジュール",
   "Keep": "そのままにする",
@@ -1684,7 +1682,6 @@
   "Next backup: %@": "次のバックアップ：%@",
   "Scheduled": "スケジュール済み",
   "Left out: %@": "対象外：%@",
-  "On this phone: %@ · %@": "このスマートフォン：%@ · %@",
   "The backup file is damaged.": "バックアップファイルが破損しています。",
   "Pairing…": "ペアリング中…",
   "Pair this server": "このサーバーをペアリング",
@@ -2974,5 +2971,9 @@
   "+ Add group": "+ グループを追加",
   "active": "有効",
   "invite sent — not opened yet": "招待を送信済み — まだ開かれていません",
-  "1 server": "1 台のサーバー"
+  "1 server": "1 台のサーバー",
+  "Keep a copy on this device": "このデバイスにコピーを保存",
+  "On this device: %@ · %@": "このデバイス：%@ · %@",
+  "On my devices": "自分のデバイス上",
+  "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": "このデバイスにはまだバックアップがありません。サーバーのバックアップ先を「自分のデバイス上」にすると、最新のものがここに保管されます。"
 }

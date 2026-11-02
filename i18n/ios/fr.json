@@ -146,8 +146,10 @@
   "Activity": "Activité",
   "%lld row rewritten": "%lld ligne réécrite",
   "%lld rows rewritten": "%lld lignes réécrites",
-  "%lld app": "%lld app",
-  "%lld apps": "%lld apps",
+  "%lld apps": {
+    "one": "%lld app",
+    "other": "%lld apps"
+  },
   "View report": "Voir le rapport",
   "expanded": "développé",
   "collapsed": "réduit",
@@ -1488,7 +1490,6 @@
   "From a file": "À partir d’un fichier",
   "From other servers": "À partir d’autres serveurs",
   "From this phone": "À partir de ce téléphone",
-  "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.": "Ce téléphone ne conserve pas encore de sauvegardes. Lorsque les sauvegardes d’un serveur vont sur « Sur mon téléphone », la plus récente est conservée ici.",
   "Pick a backup to restore. It opens from this phone; nothing is sent until you choose where it goes.": "Choisissez une sauvegarde à restaurer. Elle s’ouvre depuis ce téléphone ; rien n’est envoyé tant que vous n’avez pas choisi où elle va.",
   "Revoke server %@": "Révoquer le serveur %@",
   "That server is already gone — nothing to revoke.": "Ce serveur n’existe déjà plus — rien à révoquer.",
@@ -1630,7 +1631,6 @@
   "An encrypted copy is kept on this phone.": "Une copie chiffrée est conservée sur ce téléphone.",
   "Encrypted pieces are kept on other Flagship servers, and yours keeps theirs.": "Des fragments chiffrés sont conservés sur d’autres serveurs Flagship, et le vôtre conserve les leurs.",
   "No backup": "Pas de sauvegarde",
-  "On my phone": "Sur mon téléphone",
   "On other servers": "Sur d’autres serveurs",
   "This phone has %@ free.": "Ce téléphone dispose de %@ libres.",
   "Keep %lld GB on this phone": "Conserver %lld Go sur ce téléphone",
@@ -1646,7 +1646,6 @@
   "On this server": "Sur ce serveur",
   "Save…": "Enregistrer…",
   "Download": "Télécharger",
-  "Keep a copy on this phone": "Garder une copie sur ce téléphone",
   "Only on Wi-Fi while charging.": "Uniquement en Wi-Fi et pendant la charge.",
   "Backup schedule": "Planification des sauvegardes",
   "Keep": "Conserver",
@@ -1684,7 +1683,6 @@
   "Next backup: %@": "Prochaine sauvegarde : %@",
   "Scheduled": "Planifiée",
   "Left out: %@": "Exclu : %@",
-  "On this phone: %@ · %@": "Sur ce téléphone : %@ · %@",
   "The backup file is damaged.": "Le fichier de sauvegarde est endommagé.",
   "Pairing…": "Association…",
   "Pair this server": "Associer ce serveur",
@@ -2974,5 +2972,9 @@
   "+ Add group": "+ Ajouter un groupe",
   "active": "actif",
   "invite sent — not opened yet": "invitation envoyée — pas encore ouverte",
-  "1 server": "1 serveur"
+  "1 server": "1 serveur",
+  "Keep a copy on this device": "Garder une copie sur cet appareil",
+  "On this device: %@ · %@": "Sur cet appareil : %@ · %@",
+  "On my devices": "Sur mes appareils",
+  "This device keeps no backups yet. When a server's backups go to \"On my devices\", its newest one is kept here.": "Cet appareil ne conserve pas encore de sauvegardes. Lorsque les sauvegardes d’un serveur vont sur « Sur mes appareils », la plus récente est conservée ici."
 }

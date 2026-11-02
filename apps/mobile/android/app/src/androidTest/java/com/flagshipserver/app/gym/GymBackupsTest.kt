@@ -217,7 +217,7 @@ class GymBackupsTest : GymBase() {
     @Test
     fun thePolicyChangesAndRefusalsAreTheBoxs() {
         openBackups(adminRoot = true)
-        assertEquals("Backup policy: Phone-side backups · up to 32 GB", textOf("sd-backups-policy"))
+        assertEquals("Backup policy: On my devices · up to 32 GB", textOf("sd-backups-policy"))
         assertEquals("Apps use 3.2 GB of 32 GB", textOf("sd-backups-usage"))
         composeRule.onNodeWithTag("sd-backups-policy-change").performScrollTo().performClick()
         waitUntilExists("sd-backups-policy-none")
@@ -278,7 +278,7 @@ class GymBackupsTest : GymBase() {
         }
         val reserveGb = textOf("sd-backups-policy-reserve").removeSuffix(" GB").trim().toLong()
         composeRule.onNodeWithTag("sd-backups-policy-save").performClick()
-        composeRule.waitUntil(15_000) { textOf("sd-backups-policy").startsWith("Backup policy: Phone-side backups") }
+        composeRule.waitUntil(15_000) { textOf("sd-backups-policy").startsWith("Backup policy: On my devices") }
         val signed = mock.backupPolicyPosts.single().order
         assertEquals("phone", signed.policy)
         assertEquals(reserveGb * BackupsText.GB, signed.phoneReserveBytes)

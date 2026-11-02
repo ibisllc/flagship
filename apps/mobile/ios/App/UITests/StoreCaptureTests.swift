@@ -91,6 +91,17 @@ final class StoreCaptureTests: XCTestCase {
         }
     }
 
+    /// Drags the page up just enough that `element`'s bottom (plus its card's padding) sits above `bar`.
+    private func lift(_ app: XCUIApplication, _ element: XCUIElement, clearOf bar: XCUIElement) {
+        guard element.exists else { return }
+        let limit = bar.exists ? bar.frame.minY : app.windows.firstMatch.frame.height * 0.9
+        let need = element.frame.maxY + 28 - limit
+        guard need > 4 else { return }
+        let from = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+        from.press(forDuration: 0.1, thenDragTo: from.withOffset(CGVector(dx: 0, dy: -need)), withVelocity: .slow,
+                   thenHoldForDuration: 0.6)
+    }
+
     func test_storeCaptures() throws {
         // 01 Home: both servers online, home the leader.
         var app = launch("home", dark: false)
@@ -124,7 +135,10 @@ final class StoreCaptureTests: XCTestCase {
         let members = any(app, "service-access-members-title")
         XCTAssertTrue(members.waitForExistence(timeout: 15))
         XCTAssertTrue(any(app, "service-access-role-inv-lea").waitForExistence(timeout: 15))
-        bring(app, any(app, "service-access-restrict-toggle"), toY: 0.16)
+        // iPhone: the top of the page (the app's header card below the bar), scrolled only as far as Lea's row needs
+        // to clear the tab bar in a language whose rows wrap.
+        if isPad { bring(app, any(app, "service-access-restrict-toggle"), toY: 0.16) }
+        else { lift(app, any(app, "service-access-revoke-inv-lea"), clearOf: app.tabBars.firstMatch) }
         try shot(app, "04")
 
         // 05 home's server page at Backups.
@@ -135,7 +149,9 @@ final class StoreCaptureTests: XCTestCase {
         let backups = any(app, "sd-backups-section")
         for _ in 0..<12 where !(backups.exists && backups.isHittable) { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(any(app, "sd-backups-policy").waitForExistence(timeout: 15))
-        bring(app, backups, toY: 0.14)
+        // The card's top edge meets the navigation bar's bottom: what scrolls under the bar is the section's
+        // gap and label, not the Diagnostics card's text overlapping the title.
+        bring(app, any(app, "sd-backups-policy"), toY: isPad ? 0.10 : 0.15)
         try shot(app, "05")
     }
 }

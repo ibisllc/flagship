@@ -393,9 +393,9 @@ class ServiceAccessViewModelTest {
         vm.load()
         val (me, other, family) = vm.members.value!!.accountMembers
         assertEquals("Device 01234567", vm.accountMemberName(me))
-        assertEquals("This device · Admin", vm.accountMemberDetail(me))
+        assertEquals("Admin device · This device", vm.accountMemberDetail(me))
         assertEquals("Kitchen iPad", vm.accountMemberName(other))
-        assertEquals("Admin", vm.accountMemberDetail(other))
+        assertEquals("Admin device", vm.accountMemberDetail(other))
         assertEquals("Sam's family", vm.accountMemberName(family))
         assertEquals("Co-manages this server", vm.accountMemberDetail(family))
         assertEquals(me, vm.selfMember)

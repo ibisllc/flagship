@@ -314,7 +314,7 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     val appName = remember(serviceId) {
-        serviceId.substringAfter("--").replaceFirstChar { it.uppercase() }
+        com.flagshipserver.app.api.AppDisplayName.fromServiceId(serviceId)
     }
     // An alert from another box switches the current pod first; rebuild on it.
     val podId by appState.currentPodId.collectAsState()

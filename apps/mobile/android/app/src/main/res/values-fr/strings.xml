@@ -113,7 +113,6 @@
     <string name="joining_an_account_from_this_phone">Rejoindre un compte depuis ce téléphone n’est pas encore disponible. Utilisez l’app web.</string>
     <string name="the_server_sent_a_short_piece">Le serveur a envoyé un fragment incomplet de la sauvegarde. Réessayez ; le téléchargement reprend.</string>
     <string name="the_downloaded_backup_doesnt_match_the">La sauvegarde téléchargée ne correspond pas à la copie du serveur. Téléchargez-la de nouveau.</string>
-    <string name="phone_side_backups">Sauvegardes sur le téléphone</string>
     <string name="your_server_makes_an_encrypted_backup">Votre serveur fait une sauvegarde chiffrée chaque nuit et ce téléphone en garde une copie, en Wi-Fi et pendant la charge. Les apps de votre serveur peuvent utiliser jusqu’à l’espace que vous réservez ici.</string>
     <string name="peer_distributed_backups">Sauvegardes distribuées entre pairs</string>
     <string name="encrypted_pieces_of_your_backup_are">Des fragments chiffrés de votre sauvegarde sont conservés sur d’autres serveurs Flagship, et le vôtre conserve les leurs. Vos apps peuvent utiliser jusqu’à un tiers du disque de ce serveur ; le reste contient les fragments d’autres serveurs.</string>
@@ -121,7 +120,6 @@
     <string name="nothing_is_backed_up_if_this">Rien n’est sauvegardé. Si le disque de ce serveur tombe en panne, ses apps et ses données sont perdues. Vous pouvez toujours utiliser Sauvegarder maintenant sur la page du serveur.</string>
     <string name="no_backup">Pas de sauvegarde</string>
     <string name="nothing_is_saved_off_this_server">Rien n’est enregistré en dehors de ce serveur. Si son disque tombe en panne, ses apps et ses données sont perdues.</string>
-    <string name="on_my_phone">Sur mon téléphone</string>
     <string name="your_phone_keeps_an_encrypted_copy">Votre téléphone conserve une copie chiffrée de la sauvegarde de chaque nuit.</string>
     <string name="on_other_servers">Sur d’autres serveurs</string>
     <string name="encrypted_pieces_of_your_backup_are_2">Des fragments chiffrés de votre sauvegarde sont conservés sur d’autres serveurs Flagship.</string>
@@ -129,7 +127,6 @@
     <string name="no_backups_yet">Aucune sauvegarde pour l’instant.</string>
     <string name="scheduled_backups_are_off">Les sauvegardes planifiées sont désactivées.</string>
     <string name="approve_backups_for_this_server">Approuver les sauvegardes pour ce serveur</string>
-    <string name="keep_a_copy_on_this_phone">Garder une copie sur ce téléphone</string>
     <string name="only_on_wi_fi_while_charging">Uniquement en Wi-Fi et pendant la charge.</string>
     <string name="delete_this_backup_from_the_server">Supprimer cette sauvegarde du serveur ?</string>
     <string name="each_backup_is_one_flagship_file">Chaque sauvegarde est un fichier .flagship. Importer une sauvegarde depuis l’accueil la restaure. Elle s’ouvre sur vos propres appareils sans code d’accès.</string>
@@ -1451,7 +1448,6 @@
     <string name="download">Télécharger</string>
     <string name="save_3">Enregistrer…</string>
     <string name="downloaded">%1$s téléchargé.</string>
-    <string name="on_this_phone">Sur ce téléphone : %1$s · %2$s</string>
     <string name="backup_schedule">Planification des sauvegardes</string>
     <string name="daily">Quotidienne</string>
     <string name="weekly">Hebdomadaire</string>
@@ -3225,4 +3221,11 @@
     <string name="rank_master">Maître</string>
     <string name="invite_active">actif</string>
     <string name="invite_sent_not_opened_yet">invitation envoyée — pas encore ouverte</string>
+    <string name="admin_device">Appareil administrateur</string>
+    <string name="device_kind_this_device">%1$s · Cet appareil</string>
+    <string name="shared_account">Compte partagé</string>
+    <string name="scheduled_backup">Planifiée</string>
+    <string name="keep_a_copy_on_this_device">Garder une copie sur cet appareil</string>
+    <string name="on_this_device_copy">Sur cet appareil : %1$s · %2$s</string>
+    <string name="on_my_devices">Sur mes appareils</string>
 </resources>

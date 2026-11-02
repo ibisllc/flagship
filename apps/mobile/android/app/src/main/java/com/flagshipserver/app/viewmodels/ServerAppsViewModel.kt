@@ -75,7 +75,7 @@ class ServerAppsViewModel(private val client: ScreensClient) {
         val CREATE_HERE get() = FSStrings.get(R.string.create_app_here)
         val EMPTY get() = FSStrings.get(R.string.no_apps_on_this_server_yet)
 
-        fun displayName(slug: String): String = slug.replaceFirstChar { it.uppercase() }
+        fun displayName(slug: String): String = com.flagshipserver.app.api.AppDisplayName.fromSlug(slug)
 
         fun rows(apps: List<AppSummary>, copies: List<AppCopyRecord>, seenUnderway: Set<String> = emptySet()): List<Row> {
             val out = apps.map { app ->

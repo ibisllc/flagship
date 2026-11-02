@@ -38,9 +38,13 @@ struct SecretRequestsPanel: View {
                         .accessibilityIdentifier("approvals-empty")
                 } else {
                     let list = VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text(SecretRequestsModel.introText)
-                            .font(FS.font.bodySm())
-                            .foregroundColor(c.textMuted)
+                        // The "finishing setup" intro is for first contact; a server this phone
+                        // already pinned is only asking to start, which the section header says.
+                        if requests.contains(where: { $0.trust != .pinned || $0.purpose != .unlockKey }) {
+                            Text(SecretRequestsModel.introText)
+                                .font(FS.font.bodySm())
+                                .foregroundColor(c.textMuted)
+                        }
                         ForEach(requests) { req in
                             SecretRequestCard(
                                 request: req,
@@ -84,6 +88,9 @@ struct SecretRequestCard: View {
     let isInFlight: Bool
     let onApprove: () async -> Void
 
+    /// A start-up unlock under the key this phone pinned for the server: routine.
+    private var isPinned: Bool { request.trust == .pinned && request.purpose == .unlockKey }
+
     private var purposeLabel: String {
         // On a FIRST boot the unlock approval ALSO deposits the box's entitlement
         // (consent to boot ⇒ consent to serve), so it both unlocks AND authorizes
@@ -118,7 +125,11 @@ struct SecretRequestCard: View {
                     .padding(.top, FS.space.s1)
                 }
 
-                Text("Is this the machine in front of you? Only approve if you recognise it.")
+                // A pinned server asking to start is routine; "is this the machine in front of
+                // you" is first-contact wording (docs/first-contact.md).
+                Text(isPinned
+                     ? String(localized: "It's waiting for its disk key. Unlock it only if you expected it to restart.")
+                     : String(localized: "Is this the machine in front of you? Only approve if you recognise it."))
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
                     .padding(.top, FS.space.s1)
@@ -129,7 +140,8 @@ struct SecretRequestCard: View {
                 }
                 if !request.trust.isRefused {
                     FSPrimaryButton(
-                        isInFlight ? String(localized: "Signing…") : String(localized: "Yes, this is my server"),
+                        isInFlight ? String(localized: "Signing…")
+                            : isPinned ? String(localized: "Unlock") : String(localized: "Yes, this is my server"),
                         enabled: !isInFlight,
                         block: true,
                         large: true

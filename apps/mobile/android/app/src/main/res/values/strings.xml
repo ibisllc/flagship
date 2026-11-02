@@ -115,7 +115,6 @@
     <string name="joining_an_account_from_this_phone">Joining an account from this phone isn\'t available yet. Use the web app.</string>
     <string name="the_server_sent_a_short_piece">The server sent a short piece of the backup. Try again; the download resumes.</string>
     <string name="the_downloaded_backup_doesnt_match_the">The downloaded backup doesn\'t match the server\'s copy. Try downloading it again.</string>
-    <string name="phone_side_backups">Phone-side backups</string>
     <string name="your_server_makes_an_encrypted_backup">Your server makes an encrypted backup every night and this phone keeps a copy, over Wi-Fi while charging. Your server\'s apps can hold up to the space you reserve here.</string>
     <string name="peer_distributed_backups">Peer-distributed backups</string>
     <string name="encrypted_pieces_of_your_backup_are">Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server\'s disk; the rest holds other servers\' pieces.</string>
@@ -123,7 +122,6 @@
     <string name="nothing_is_backed_up_if_this">Nothing is backed up. If this server\'s disk fails, its apps and data are gone. You can still use Back up now on the server page.</string>
     <string name="no_backup">No backup</string>
     <string name="nothing_is_saved_off_this_server">Nothing is saved off this server. If its disk fails, its apps and data are gone.</string>
-    <string name="on_my_phone">On my phone</string>
     <string name="your_phone_keeps_an_encrypted_copy">Your phone keeps an encrypted copy of each night\'s backup.</string>
     <string name="on_other_servers">On other servers</string>
     <string name="encrypted_pieces_of_your_backup_are_2">Encrypted pieces of your backup are kept on other Flagship servers.</string>
@@ -131,7 +129,6 @@
     <string name="no_backups_yet">No backups yet.</string>
     <string name="scheduled_backups_are_off">Scheduled backups are off.</string>
     <string name="approve_backups_for_this_server">Approve backups for this server</string>
-    <string name="keep_a_copy_on_this_phone">Keep a copy on this phone</string>
     <string name="only_on_wi_fi_while_charging">Only on Wi-Fi while charging.</string>
     <string name="delete_this_backup_from_the_server">Delete this backup from the server?</string>
     <string name="each_backup_is_one_flagship_file">Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode.</string>
@@ -1454,7 +1451,6 @@
     <string name="download">Download</string>
     <string name="save_3">Save…</string>
     <string name="downloaded">Downloaded %1$s.</string>
-    <string name="on_this_phone">On this phone: %1$s · %2$s</string>
     <string name="backup_schedule">Backup schedule</string>
     <string name="daily">Daily</string>
     <string name="weekly">Weekly</string>
@@ -3229,4 +3225,11 @@
     <string name="rank_master">Master</string>
     <string name="invite_active">active</string>
     <string name="invite_sent_not_opened_yet">invite sent — not opened yet</string>
+    <string name="admin_device">Admin device</string>
+    <string name="device_kind_this_device">%1$s · This device</string>
+    <string name="shared_account">Shared account</string>
+    <string name="scheduled_backup">Scheduled</string>
+    <string name="keep_a_copy_on_this_device">Keep a copy on this device</string>
+    <string name="on_this_device_copy">On this device: %1$s · %2$s</string>
+    <string name="on_my_devices">On my devices</string>
 </resources>

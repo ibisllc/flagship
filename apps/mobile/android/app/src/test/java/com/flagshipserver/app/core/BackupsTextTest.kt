@@ -99,7 +99,7 @@ class BackupsTextTest {
     }
 
     @Test fun policyAndUsage() {
-        assertEquals("Backup policy: Phone-side backups · up to 32 GB", BackupsText.policyLine(BackupPolicyState("phone", 32 * gb, 1)))
+        assertEquals("Backup policy: On my devices · up to 32 GB", BackupsText.policyLine(BackupPolicyState("phone", 32 * gb, 1)))
         assertEquals("Backup policy: Peer-distributed backups", BackupsText.policyLine(BackupPolicyState("peer", 0, 1)))
         assertEquals("Backup policy: No backups", BackupsText.policyLine(BackupPolicyState("none", 0, 1)))
         assertEquals("Backup policy: Not chosen yet", BackupsText.policyLine(BackupPolicyState()))

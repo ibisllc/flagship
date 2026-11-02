@@ -26,7 +26,7 @@ final class RestoreSourceTests: XCTestCase {
 
     func test_noCopiesMeansNoEntries() {
         XCTAssertTrue(PhoneBackupsScreen.entries(in: store()).isEmpty)
-        XCTAssertTrue(PhoneBackupsScreen.emptyLine.contains("On my phone"))
+        XCTAssertTrue(PhoneBackupsScreen.emptyLine.contains("On my devices"))
     }
 
     func test_entriesAreByServerAndNewestFirst() throws {

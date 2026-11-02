@@ -127,7 +127,7 @@ public struct ServiceDetailScreen: View {
             .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle(vm.detail.value?.app.slug.capitalized ?? String(localized: "Service"))
+        .navigationTitle(vm.detail.value?.app.displayName ?? String(localized: "Service"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -135,7 +135,7 @@ public struct ServiceDetailScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(spacing: FS.space.s2) {
-                    Text(d.slug.capitalized).font(FS.font.h2()).foregroundColor(c.text)
+                    Text(d.displayName).font(FS.font.h2()).foregroundColor(c.text)
                     Spacer()
                     if let pill = AppServerState(d).pill { FSPill(pill.label, kind: pill.fsKind) }
                 }

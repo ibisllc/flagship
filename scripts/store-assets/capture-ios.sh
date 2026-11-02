@@ -51,6 +51,8 @@ simtype() {
   esac
 }
 
+STATUS_TIME="$(date -j -f "%Y-%m-%d %H:%M:%S" "2026-10-21 09:41:00" "+%Y-%m-%dT%H:%M:%S.000%z" | sed -E 's/([+-][0-9]{2})([0-9]{2})$/\1:\2/')"
+
 PROJECT="$ROOT/apps/mobile/ios/App/FlagshipApp.xcodeproj"
 echo "building for testing into $DD"
 xcodebuild build-for-testing -project "$PROJECT" -scheme FlagshipApp -destination "generic/platform=iOS Simulator" \
@@ -82,8 +84,9 @@ for dev in "${devs[@]}"; do
   udid="$(sim "$(simname "$dev")" "$(simtype "$dev")" "$platform")"
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b >/dev/null
-  # The watch has no status bar to override.
-  [ "$dev" = watch-ultra ] || xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 \
+  # The watch has no status bar to override. An ISO time also fixes the date the iPad's status bar shows: 9:41 on
+  # the webapp captures' day, in this Mac's zone for that day (the simulator shows it in the host's zone).
+  [ "$dev" = watch-ultra ] || xcrun simctl status_bar "$udid" override --time "$STATUS_TIME" --batteryState charged --batteryLevel 100 \
     --cellularMode active --cellularBars 4 --wifiBars 3 --operatorName ""
   if [ "$dev" = watch-ultra ]; then watch "$udid"; fi
   for lang in "${langs[@]}"; do
