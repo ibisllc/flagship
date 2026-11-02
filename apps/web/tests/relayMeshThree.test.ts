@@ -56,7 +56,8 @@ import { RelayBlessingProvider } from "../src/tunnel/hubBlessingProvider.js";
 import { wireMeshRelay } from "../src/server.js";
 import { APEX, hex, keypair, MeshFixture, type FixtureRelay } from "./support/meshFixture.js";
 import { lease, policy, type Ed } from "./support/serving.js";
-import { SimPhone } from "../../../tools/live-e2e/lib/phoneSim.js";
+import { connect as tlsConnect } from "node:tls";
+import { SimPhone, isPhoneCert, selfSignedPhoneCert } from "../../../tools/live-e2e/lib/phoneSim.js";
 
 const HOLD_MS = 1_000;
 const REFUSE_NEW_MS = 1_500;
@@ -590,6 +591,36 @@ describe("relay mesh: three relays in one process", () => {
     fx.append({ kind: "device-grant-revoke", grantId: gB.grant.grantId, devicePub: gB.grant.devicePubHex });
     await pb.closed;
     expect(pb.closedWith?.code).toBe(4403);
+  });
+
+  it("a phone that ends TLS itself: a real TLS handshake for its bare name completes through every relay with the phone's own certificate", async () => {
+    // The live gym's relay-mesh group visits the phone this way; the raw sim ClientHello cannot prove a TLS endpoint
+    // (it offers a TLS 1.3-only suite without supported_versions, so a real stack answers handshake_failure).
+    const admin = account("tess");
+    await synced();
+    const seed = crypto.getRandomValues(new Uint8Array(32));
+    const g = adminGrant(seed, "tess", admin, hex(crypto.getRandomValues(new Uint8Array(32))));
+    const bare = `tess.${APEX}`;
+    const cert = selfSignedPhoneCert(bare);
+    const p = await SimPhone.connect(`ws://127.0.0.1:${R("rb").httpPort}/phone-tunnel`, { account: "tess", seed, label: "PT", tls: cert });
+    p.send({ type: "begin", account: "tess", grants: [g] });
+    const ch = await p.next((m) => m.type === "challenge" || m.type === "refused");
+    expect(await p.sendClaim(p.sign(ch))).toMatchObject({ type: "granted" });
+    R("rb").node.flushAnnouncements();
+    await waitFor(() => R("ra").node.store.phoneWinner(bare)?.grant.holderRelayId === "rb" && R("rc").node.store.phoneWinner(bare) !== null, 3_000, "phone announced");
+    const handshake = (relay: Relay) =>
+      new Promise<boolean>((resolve) => {
+        const s = tlsConnect({ host: "127.0.0.1", port: relay.sniPort, servername: bare, rejectUnauthorized: false });
+        const finish = (v: boolean) => {
+          s.destroy();
+          resolve(v);
+        };
+        s.setTimeout(3_000, () => finish(false));
+        s.on("secureConnect", () => finish(isPhoneCert(s.getPeerCertificate()?.fingerprint256, [cert.cert])));
+        s.on("error", () => finish(false));
+      });
+    for (const id of ["ra", "rb", "rc"]) expect(await handshake(R(id)), `TLS through ${id}`).toBe(true);
+    p.close();
   });
 
   it("an old box (no mesh-v1) gets no mesh fields, is announced by its full holder as legacy, and is reachable everywhere", async () => {

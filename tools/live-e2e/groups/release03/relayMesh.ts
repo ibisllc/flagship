@@ -58,7 +58,8 @@ import {
   type GymMesh,
   type GymRelay,
 } from "../../lib/meshSim.js";
-import { SimPhone, selfSignedPhoneCert } from "../../lib/phoneSim.js";
+import { connect as tlsConnect } from "node:tls";
+import { SimPhone, isPhoneCert, selfSignedPhoneCert } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
 
 /** The gym's revocation deadline (relay-mesh.md §12). */
@@ -68,6 +69,33 @@ const HOLD_MS = 4_000;
 /** How long a sim box keeps its old tunnel after a move (the box's 30 s, shortened: the harness, not a box). */
 const MOVE_GRACE_MS = 5_000;
 const REPO = resolve(import.meta.dirname, "../../../..");
+
+/**
+ * Which phone answered a real TLS handshake for `hostname` through the relay at `ip`: the index of the certificate in
+ * `certs` it presented, or null (closed, timed out, or another certificate). The raw sim ClientHello (`visitSim`)
+ * cannot be used for a phone: it offers only a TLS 1.3 suite without supported_versions, so a real TLS endpoint
+ * answers it with a handshake_failure alert, never a handshake record.
+ */
+function phoneAnswering(ip: string, hostname: string, certs: string[], ms = 6_000): Promise<number | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: number | null) => {
+      if (done) return;
+      done = true;
+      s.destroy();
+      resolve(v);
+    };
+    const s = tlsConnect({ host: ip, port: 443, servername: hostname, rejectUnauthorized: false });
+    s.setTimeout(ms, () => finish(null));
+    s.on("secureConnect", () => {
+      const fp = s.getPeerCertificate()?.fingerprint256;
+      const i = certs.findIndex((c) => isPhoneCert(fp, [c]));
+      finish(i >= 0 ? i : null);
+    });
+    s.on("error", () => finish(null));
+    s.on("close", () => finish(null));
+  });
+}
 
 export const relayMesh: Group = {
   name: "relay-mesh",
@@ -276,12 +304,14 @@ export const relayMesh: Group = {
           grants.push(g.json.grantId as string);
         }
         const readHeaders = async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk));
-        const open = async (i: number, relay: GymRelay, tls = true) => {
+        const certs = [selfSignedPhoneCert(bare), selfSignedPhoneCert(bare)];
+        const certPems = certs.map((c) => c.cert);
+        const open = async (i: number, relay: GymRelay) => {
           const opts = {
             account: user,
             seed: seeds[i]!,
             label: `P${i + 1}`,
-            ...(tls ? { tls: selfSignedPhoneCert(bare) } : {}),
+            tls: certs[i]!,
             com: { control: CONTROL, readHeaders },
           } as unknown as Parameters<typeof SimPhone.connect>[1];
           const p = await SimPhone.connect(phoneUrl(relay), opts);
@@ -296,9 +326,9 @@ export const relayMesh: Group = {
         const p1 = await open(0, RB);
         const g1 = await p1.acquire();
         assert(g1.type === "granted", `phone 1 on ${RB.relayId}: ${JSON.stringify(g1)}`);
-        for (const r of M.relays.filter((x) => x !== RB)) {
-          const t = await until(async () => (await visitSim(r.ip, bare, 6_000)).tls, 20_000);
-          assert(t !== null, `a visit to ${bare} through ${r.relayId} never reached the phone on ${RB.relayId}`);
+        for (const r of M.relays) {
+          const t = await until(async () => (await phoneAnswering(r.ip, bare, certPems)) === 0, 20_000);
+          assert(t !== null, `a TLS visit to ${bare} through ${r.relayId} never reached phone 1 on ${RB.relayId}`);
         }
         const p2 = await open(1, second);
         const r2 = await p2.acquire();
@@ -308,8 +338,8 @@ export const relayMesh: Group = {
         await p2.next((m) => m.type === "route-vacant", 30_000);
         const g2 = await p2.acquire();
         assert(g2.type === "granted", `phone 2 after phone 1 left: ${JSON.stringify(g2)}`);
-        const t = await until(async () => (await visitSim(RB.ip, bare, 6_000)).tls, 20_000);
-        assert(t !== null, `after the hand-over, ${bare} through ${RB.relayId} never reached phone 2 on ${second.relayId}`);
+        const t = await until(async () => (await phoneAnswering(RB.ip, bare, certPems)) === 1, 20_000);
+        assert(t !== null, `after the hand-over, a TLS visit to ${bare} through ${RB.relayId} never reached phone 2 on ${second.relayId}`);
         return `ledger ranking ${ranking.join(" > ")}; generation ${String(g1.generation)} on ${RB.relayId} → ${String(g2.generation)} on ${second.relayId}`;
       });
 
