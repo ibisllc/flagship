@@ -3228,4 +3228,6 @@
     <string name="keep_a_copy_on_this_device">このデバイスにコピーを保存</string>
     <string name="on_this_device_copy">このデバイス：%1$s · %2$s</string>
     <string name="on_my_devices">自分のデバイス上</string>
+    <string name="re_attach_finished">再接続が完了しました。</string>
+    <string name="re_attach_in_progress">再接続を実行中です。</string>
 </resources>

@@ -11,6 +11,7 @@ import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.core.BoxEventLabels
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.ui.screens.activityServerTitle
+import com.flagshipserver.app.ui.screens.activityShowsAllServers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -88,6 +89,23 @@ class ActivityAccordionTest {
         assertEquals("Server · Office", activityServerTitle(listOf(home, office), "p2"))
         assertEquals("All servers", activityServerTitle(listOf(home, office), null))
         assertEquals("This server", activityServerTitle(emptyList(), null))
+        // "All servers" is decided from the pods, so it holds in every language.
+        assertTrue(activityShowsAllServers(listOf(home, office), null))
+        assertTrue(activityShowsAllServers(listOf(home, office), "gone"))
+        assertFalse(activityShowsAllServers(listOf(home, office), "p1"))
+        assertFalse(activityShowsAllServers(listOf(home), null))
+    }
+
+    /** The store world shows a fresh account's Activity, as iOS's does: no re-attach report, no log lines. */
+    @Test fun storeWorldActivityHasNoRecoveryOrServerCount() = kotlinx.coroutines.test.runTest {
+        val box = com.flagshipserver.app.api.MockScreensClient(simulatedLatencyMs = 0)
+        box.postRecoveryReported = false
+        box.boxActivityFixture = emptyList()
+        val vm = ActivityViewModel(box, backgroundScope)
+        vm.load().join()
+        val feed = (vm.state.first() as LoadingState.Loaded).value
+        assertTrue(feed.items.none { it is ActivityItem.RecoverySnapshot })
+        assertTrue(feed.items.none { it is ActivityItem.BoxEvent })
     }
 
     private fun title(kind: String) = BoxEventLabels.title(BoxActivityEntry(ts = 1, action = kind, kind = kind))

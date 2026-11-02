@@ -13,6 +13,7 @@ import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl, boxClient } f
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { appDisplayName } from "../lib/appDisplayName.js";
 import { chipRow, searchField, listRow } from "../lib/uikit.js";
 import { packageIcon, flagIcon } from "../lib/icons.js";
 import { controlApex } from "../lib/apex.js";
@@ -53,7 +54,7 @@ export function appsFilterMatches(filter, bucket) {
 export function appsSearchMatches(query, app) {
   const q = String(query ?? "").trim().toLowerCase();
   if (!q) return true;
-  const hay = [app?.slug ?? "", app?.summary ?? "", app?.serviceId ?? ""]
+  const hay = [app?.slug ?? "", app ? appDisplayName(app) : "", app?.summary ?? "", app?.serviceId ?? ""]
     .join(" ")
     .toLowerCase();
   return hay.includes(q);
@@ -167,7 +168,7 @@ function appCardHtml(s) {
       <div class="fs-app-card-head">
         <span class="fs-listrow-icon icon" aria-hidden="true">${packageIcon}</span>
         <div class="fs-app-card-body">
-          <div class="weight-600">${escapeHtml(s.slug)} <span class="pill">${escapeHtml(s.version || "")}</span></div>
+          <div class="weight-600">${escapeHtml(appDisplayName(s))} <span class="pill">${escapeHtml(s.version || "")}</span></div>
           <div class="muted-sm truncate">${escapeHtml(s.summary || "")}</div>
           <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
             ${appStatusPillHtml(s.appStatus ?? combineAppStatus([appServerState(s)]))}

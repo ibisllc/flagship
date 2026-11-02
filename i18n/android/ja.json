@@ -3225,5 +3225,7 @@
   "scheduled_backup": "スケジュール済み",
   "keep_a_copy_on_this_device": "このデバイスにコピーを保存",
   "on_this_device_copy": "このデバイス：%1$s · %2$s",
-  "on_my_devices": "自分のデバイス上"
+  "on_my_devices": "自分のデバイス上",
+  "re_attach_finished": "再接続が完了しました。",
+  "re_attach_in_progress": "再接続を実行中です。"
 }

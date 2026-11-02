@@ -28,6 +28,7 @@ import { accountReadFetch } from "./accountRead.js";
 import { serverIcon } from "./icons.js";
 
 import { tr, trn } from "./i18n.js";
+import { appDisplayName } from "./appDisplayName.js";
 export const TAG_APP_COPY = "flagship/app-copy/v1";
 export const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
 
@@ -520,7 +521,7 @@ export function serverAppRows(apps, copies = []) {
     seen.add(id);
     rows.push({
       serviceId: id,
-      name: a.slug || id,
+      name: appDisplayName(a),
       url: typeof a.url === "string" ? a.url : "",
       status: typeof a.status === "string" ? a.status : "",
       state: appServerState(a),

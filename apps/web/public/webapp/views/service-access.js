@@ -83,6 +83,7 @@ import { RESTORED_COPY, approveRestoredDraft, discardRestoredDraft, fetchRestore
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { appDisplayName } from "../lib/appDisplayName.js";
 import { formatWhen } from "../lib/dateFormat.js";
 
 import { tr } from "../lib/i18n.js";
@@ -214,7 +215,7 @@ export async function renderServiceAccess(service) {
 
   root.innerHTML = `
     <div class="card">
-      <div class="card-title">${escapeHtml(service.slug ?? serviceRef)}</div>
+      <div class="card-title">${escapeHtml(appDisplayName({ serviceId: serviceRef, ...service }))}</div>
       <div class="muted-sm text-xs mt-1">${tr("id: {0}", escapeHtml(serviceRef))}</div>
     </div>
 

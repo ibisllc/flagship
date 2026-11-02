@@ -32,6 +32,7 @@ import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { appDisplayName } from "../lib/appDisplayName.js";
 import { controlApex } from "../lib/apex.js";
 import { pencilIcon, usersIcon } from "../lib/icons.js";
 import { EDIT_ROW_CAPTION, EDIT_ROW_TITLE } from "../lib/editService.js";
@@ -192,7 +193,7 @@ export async function renderServiceDetail(serviceId) {
       : null;
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">${escapeHtml(s.slug)}${appStatePillHtml(appServerState(s))}</div>
+        <div class="card-title">${escapeHtml(appDisplayName(s))}${appStatePillHtml(appServerState(s))}</div>
         <div class="muted-sm text-xs mt-1">${tr("{0}id: {1}", s.version ? `ver: ${escapeHtml(s.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : "", escapeHtml(s.serviceId))}</div>
         <div class="muted-sm mt-2 truncate">${escapeHtml(s.summary || "")}</div>
         <div class="row mt-2">
@@ -476,7 +477,7 @@ async function answerFromPage(app, state, btn) {
     });
     const pending = (next.pending.length > 0 ? next.pending : state.pending).filter((r) => r.host !== host);
     paintAccessSection(app, { ...next, pending });
-    toast(accessAnsweredText(app.slug, host, act), "ok");
+    toast(accessAnsweredText(appDisplayName(app), host, act), "ok");
   } catch (e) {
     toast(e?.status || e?.name === "AccessListError" ? accessErrorMessage(e) : humanError(e), "err");
     row?.querySelectorAll("button").forEach((b) => { b.disabled = false; });
@@ -1019,7 +1020,7 @@ async function toggleRunsOn(state, fqdn, checked) {
     confirmRemove: (row) =>
       inlineConfirm({
         title: REMOVE_CONFIRM_TITLE,
-        message: tr("{0} and its data on {1} are deleted. Your other servers keep their copies.", app.slug, row.name),
+        message: tr("{0} and its data on {1} are deleted. Your other servers keep their copies.", appDisplayName(app), row.name),
         okLabel: tr("Remove"),
         danger: true,
       }),
@@ -1058,7 +1059,7 @@ async function removeAppHere(app, btn) {
   // The last chance to keep the data: "Back up first" leaves the removal and opens the backup section.
   const answer = await inlineConfirmWithExtra({
     title: REMOVE_APP_TITLE,
-    message: removeAppMessage({ slug: app.slug, server: fqdn, otherCopies }),
+    message: removeAppMessage({ slug: appDisplayName(app), server: fqdn, otherCopies }),
     okLabel: REMOVE_APP_LABEL,
     extraLabel: tr("Back up first"),
     danger: true,
@@ -1089,7 +1090,7 @@ async function removeAppHere(app, btn) {
     return;
   }
   runsOn?.stop?.();
-  toast(tr("Removed {0}.", app.slug), "ok");
+  toast(tr("Removed {0}.", appDisplayName(app)), "ok");
   if (backToServer) {
     const { enterServerDetail } = await import("./server-detail.js");
     await enterServerDetail(backToServer);

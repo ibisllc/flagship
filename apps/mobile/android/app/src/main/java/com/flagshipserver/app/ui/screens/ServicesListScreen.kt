@@ -151,7 +151,7 @@ fun ServicesListScreen(nav: NavController) {
     val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
     // Merge the servers' apps lists with the per-service /links fan-out
-    // as iOS AppsTab.AppRow does: slug.capitalized name, the combined
+    // as iOS AppsTab.AppRow does: the app's display name, the combined
     // status pill, short link.
     val allApps: List<AppSummary> = when (val s = state) {
         is LoadingState.Loaded -> s.value.map { toRow(it, linksByServiceId[it.app.serviceId]) }
@@ -350,7 +350,7 @@ private fun stripScheme(s: String): String =
 
 /** Merge one daemon AppSummary + its /links result into the row
  *  display model — faithful to iOS AppsTab.AppRow:
- *  `slug.capitalized` name, status→pill, links.canonicalUrl ?? the
+ *  display name (AppDisplayName), status→pill, links.canonicalUrl ?? the
  *  daemon URL. */
 private fun toRow(listed: ServicesListViewModel.Listed, links: AppLinksResponse?): AppSummary {
     val api = listed.app

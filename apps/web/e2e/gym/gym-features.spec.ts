@@ -350,7 +350,7 @@ test.describe("gym webapp features", () => {
     await expect(approveBtn).toBeVisible();
     await shot(page, testInfo, "inbox-home-card");
     // Tap → the Box Request Inbox renders the STK-verified request card with
-    // the approve affordance ("Yes, this is my box"). We do NOT approve — the
+    // the approve affordance ("Yes, this is my server", first contact). We do NOT approve — the
     // reply path needs a live boot worker (live slice).
     await approveBtn.click();
     await expect(page.locator("#view-activity")).toBeVisible({ timeout: 10_000 });
@@ -358,7 +358,7 @@ test.describe("gym webapp features", () => {
     const card = page.locator(`[data-boot-request-id="${FQDN}#${fixture.nonceHex}"]`);
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card).toContainText(FQDN);
-    await expect(card.locator("[data-approve-id]")).toContainText(/yes, this is my box/i);
+    await expect(card.locator("[data-approve-id]")).toContainText(/yes, this is my server/i);
     await shot(page, testInfo, "inbox-approve-card");
   });
 

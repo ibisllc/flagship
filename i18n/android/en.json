@@ -13341,5 +13341,13 @@
   "on_my_devices": {
     "en": "On my devices",
     "ctx": "core/BackupsText.kt:42 (prose)"
+  },
+  "re_attach_finished": {
+    "en": "Re-attach finished.",
+    "ctx": "viewmodels/ActivityViewModel.kt (Activity post-recovery hint)"
+  },
+  "re_attach_in_progress": {
+    "en": "Re-attach in progress.",
+    "ctx": "viewmodels/ActivityViewModel.kt (Activity post-recovery hint)"
   }
 }

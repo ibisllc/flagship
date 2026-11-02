@@ -130,9 +130,7 @@ public final class ServerBackupsViewModel {
             }
         }
         if let d = try? await c.serverDetail() {
-            storageNotes = AppStorageText.serverNotes(d.storage) { id in
-                String((id.components(separatedBy: "--").last ?? id).prefix(1).uppercased() + (id.components(separatedBy: "--").last ?? id).dropFirst())
-            }
+            storageNotes = AppStorageText.serverNotes(d.storage) { id in AppDisplayName.fromServiceId(id) }
         }
         // An older box has no policy route: the section shows "Not chosen yet".
         if let p = try? await c.backupPolicy() { policy = p }

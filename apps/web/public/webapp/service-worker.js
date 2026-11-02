@@ -436,7 +436,10 @@
 //       signatures, and a "Check it yourself" sheet.
 //  v187: the boot-approval RootEntitlement refuses a separator or control character in its username or server
 //       name before signing (shared vectors `entitlements`).
-const SHELL_VERSION = "v187";
+//  v188: a start-up approval from a server this browser already pinned reads as routine ("It's waiting
+//       for its disk key", Unlock); first contact keeps "Is this the machine in front of you?". Apps are
+//       titled by their name, else their slug in words (precaches lib/appDisplayName.js).
+const SHELL_VERSION = "v188";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -544,6 +547,7 @@ const OPTIONAL_SHELL = [
   "/lib/companionDelegation.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",
+  "/lib/appDisplayName.js",
   "/lib/serverMonitoring.js",
   "/lib/memberRoles.js",
   "/lib/serverShare.js",

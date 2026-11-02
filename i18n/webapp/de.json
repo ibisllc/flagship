@@ -3033,7 +3033,6 @@
   "The move was undone: {0}": "Der Wechsel wurde rückgängig gemacht: {0}",
   "Updated how this server unlocks at start-up": "Entsperren dieses Servers beim Start aktualisiert",
   "Kept the previous start-up unlock": "Bisheriges Entsperren beim Start beibehalten",
-  "Turned off this server's extra sandbox after it kept failing to start": "Zusätzliche Sandbox dieses Servers abgeschaltet, weil er wiederholt nicht startete",
   "This server hasn't reported its setting yet. Update it, then try again.": "Dieser Server hat seine Einstellung noch nicht gemeldet. Aktualisiere ihn und versuche es dann erneut.",
   "if no admin opens Flagship": "wenn kein Admin Flagship öffnet",
   "No time limit": "Keine Zeitgrenze",
@@ -3076,5 +3075,8 @@
   "Computed on this server": "Auf diesem Server berechnet",
   "Official source": "Offizielle Quelle",
   "Check it yourself": "Selbst prüfen",
-  "Run these on any computer to check the same facts without trusting this app.": "Führen Sie diese Befehle auf einem beliebigen Computer aus, um dieselben Angaben zu prüfen, ohne dieser App zu vertrauen."
+  "Run these on any computer to check the same facts without trusting this app.": "Führen Sie diese Befehle auf einem beliebigen Computer aus, um dieselben Angaben zu prüfen, ohne dieser App zu vertrauen.",
+  "Turned off this server's extra sandbox after it kept failing to start": "Zusätzliche Sandbox dieses Servers abgeschaltet, weil er wiederholt nicht startete",
+  "Yes, this is my server": "Ja, das ist mein Server",
+  "It's waiting for its disk key. Unlock it only if you expected it to restart.": "Er wartet auf seinen Datenträgerschlüssel. Entsperre ihn nur, wenn du einen Neustart erwartet hast."
 }

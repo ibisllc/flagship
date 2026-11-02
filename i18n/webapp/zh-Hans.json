@@ -3033,7 +3033,6 @@
   "The move was undone: {0}": "迁移已撤销：{0}",
   "Updated how this server unlocks at start-up": "已更新此服务器启动时的解锁方式",
   "Kept the previous start-up unlock": "保留了之前的启动解锁方式",
-  "Turned off this server's extra sandbox after it kept failing to start": "此服务器多次启动失败，已关闭其额外的隔离保护",
   "This server hasn't reported its setting yet. Update it, then try again.": "此服务器尚未报告其设置。请先更新它，然后重试。",
   "if no admin opens Flagship": "（如果没有管理员打开 Flagship）",
   "No time limit": "无时间限制",
@@ -3076,5 +3075,8 @@
   "Computed on this server": "在此服务器上计算",
   "Official source": "官方来源",
   "Check it yourself": "自行验证",
-  "Run these on any computer to check the same facts without trusting this app.": "在任意电脑上运行这些命令，无需信任此应用即可核对同样的信息。"
+  "Run these on any computer to check the same facts without trusting this app.": "在任意电脑上运行这些命令，无需信任此应用即可核对同样的信息。",
+  "Turned off this server's extra sandbox after it kept failing to start": "此服务器多次启动失败，已关闭其额外的隔离保护",
+  "Yes, this is my server": "是的，这是我的服务器",
+  "It's waiting for its disk key. Unlock it only if you expected it to restart.": "它正在等待其磁盘密钥。只有在你预期它会重启时才解锁。"
 }

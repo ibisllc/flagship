@@ -145,7 +145,7 @@ describe("browser access requests", () => {
     ];
     const all = await fetchBrowserGrantsOnServers(servers);
     expect(all).toHaveLength(1);
-    expect(all[0]).toMatchObject({ serverDomain: "home.alice.flagship.services", appName: "shop" });
+    expect(all[0]).toMatchObject({ serverDomain: "home.alice.flagship.services", appName: "Shop" });
     expect(appNamesOf({ apps: [{ serviceId: "a--b" }] })).toEqual({ "a--b": "a--b" });
   });
 

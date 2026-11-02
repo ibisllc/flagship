@@ -24,6 +24,7 @@ import { podShortName } from "./podSwitcher.js";
 import { toast } from "./toast.js";
 import { humanError } from "./humanError.js";
 import { escapeHtml } from "./util.js";
+import { appDisplayName } from "./appDisplayName.js";
 import { tr } from "./i18n.js";
 
 export const BROWSER_REQUESTS_PATH = "/api/browser/owner/grant-requests";
@@ -114,7 +115,7 @@ export function readGrantRequests(body) {
 export function appNamesOf(appsBody) {
   const out = {};
   for (const a of Array.isArray(appsBody?.apps) ? appsBody.apps : []) {
-    if (a && str(a.serviceId)) out[a.serviceId] = str(a.slug) ? a.slug : a.serviceId;
+    if (a && str(a.serviceId)) out[a.serviceId] = str(a.slug) || str(a.name) ? appDisplayName(a) : a.serviceId;
   }
   return out;
 }
@@ -429,7 +430,7 @@ export async function loadBrowserAccessSection(slot, { app, manifest, client = b
   let grants = [];
   try {
     const all = readGrantRequests(await client.fetch(BROWSER_REQUESTS_PATH));
-    requests = all.filter((r) => r.serviceId === app.serviceId).map((r) => ({ ...r, serverDomain: client.fqdn, appName: app.slug ?? app.serviceId }));
+    requests = all.filter((r) => r.serviceId === app.serviceId).map((r) => ({ ...r, serverDomain: client.fqdn, appName: app.slug || app.name ? appDisplayName(app) : app.serviceId }));
   } catch {
     requests = [];
   }

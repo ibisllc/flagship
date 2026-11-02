@@ -3232,4 +3232,6 @@
     <string name="keep_a_copy_on_this_device">Keep a copy on this device</string>
     <string name="on_this_device_copy">On this device: %1$s · %2$s</string>
     <string name="on_my_devices">On my devices</string>
+    <string name="re_attach_finished">Re-attach finished.</string>
+    <string name="re_attach_in_progress">Re-attach in progress.</string>
 </resources>

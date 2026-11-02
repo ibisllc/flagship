@@ -55,10 +55,19 @@ sealed interface ActivityItem {
             snapshot.lastReissue?.completedAt
                 ?: snapshot.lastReissue?.startedAt
                 ?: 0L,
-        override val title: String = "Recovery: ${snapshot.lastReissue?.status ?: "snapshot"}",
+        override val title: String = FSStrings.get(
+            if (snapshot.lastReissue != null) R.string.re_attach_finished else R.string.re_attach_in_progress,
+        ),
         override val subtitle: String? =
             snapshot.lastReissue?.let { FSStrings.get(R.string.rewrites_reattached, it.totalRewritten, it.reattachedCount) },
-    ) : ActivityItem
+    ) : ActivityItem {
+        companion object {
+            /** Activity lists a re-attach only once one ran or is pending, as iOS does: a box's
+             *  idle watcher state (no swap seen, no report) is not news. */
+            fun shows(snapshot: PostRecoverySnapshot): Boolean =
+                snapshot.lastReissue != null || snapshot.state.lastSeen != null
+        }
+    }
 
     /** Account-level audit event — surfaced alongside install events
      *  in the merged time-sorted feed. eventKind matches the Worker's
@@ -196,7 +205,7 @@ class ActivityViewModel(
             onSuccess = { (recents, snapshot, audit) ->
                 val items = buildList {
                     recents.filter { BoxEventLabels.title(it) != null }.forEach { add(ActivityItem.BoxEvent(it)) }
-                    snapshot?.let { add(ActivityItem.RecoverySnapshot(it)) }
+                    snapshot?.takeIf { ActivityItem.RecoverySnapshot.shows(it) }?.let { add(ActivityItem.RecoverySnapshot(it)) }
                     audit.forEach { add(ActivityItem.AuditEntry(it)) }
                 }.sortedByDescending { it.at }
                 _state.value = LoadingState.Loaded(

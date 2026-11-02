@@ -47,7 +47,12 @@ function infoRow(label, value) {
   `;
 }
 
-function requestCard(req, firstBootMap = {}) {
+/** A start-up unlock under the key this browser pinned for the server: routine, not first contact. */
+export function isRoutineUnlock(req) {
+  return req?.firstContact?.pinState === "pinned" && !req.firstContact.refusal && req.purpose === "unlock-key";
+}
+
+export function requestCard(req, firstBootMap = {}) {
   const info = req.deviceInfo || {};
   // First boot vs established reboot, derived from the cheap /pods directory:
   // unknown ⇒ first-boot (the fuller copy, today's wording).
@@ -57,11 +62,14 @@ function requestCard(req, firstBootMap = {}) {
   const refused = !!req.firstContact?.refusal;
   const actionable = !!BOX_REQUEST_TYPES[req.purpose] && !refused;
   const busy = inFlightId === req.id;
+  // A server this browser already pinned is asking for a routine start-up; "is this the machine in
+  // front of you" is first-contact wording (docs/first-contact.md). Mirrors iOS and Android.
+  const pinned = isRoutineUnlock(req);
   const action = refused
     ? refusalHtml(req.firstContact)
     : actionable
     ? `${codeBoxHtml(req.firstContact)}<button class="primary full-width mt-2" data-approve-id="${escapeHtml(req.id)}" ${busy ? "disabled" : ""}>
-         ${busy ? tr("Working…") : tr("Yes, this is my box")}
+         ${busy ? tr("Working…") : pinned ? tr("Unlock") : tr("Yes, this is my server")}
        </button>`
     : `<p class="faint-sm mt-2">${tr("Approve this request from your phone.")}</p>`;
   return `
@@ -77,7 +85,9 @@ function requestCard(req, firstBootMap = {}) {
              </div>`
           : ""}
       <p class="faint-sm mt-1">
-        ${tr("Is this the machine in front of you? Only approve if you recognise it.")}
+        ${pinned
+          ? tr("It's waiting for its disk key. Unlock it only if you expected it to restart.")
+          : tr("Is this the machine in front of you? Only approve if you recognise it.")}
       </p>
       ${
         req.quantumSafeRequest

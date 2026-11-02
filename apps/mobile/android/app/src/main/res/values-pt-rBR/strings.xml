@@ -3228,4 +3228,6 @@
     <string name="keep_a_copy_on_this_device">Manter uma cópia neste dispositivo</string>
     <string name="on_this_device_copy">Neste dispositivo: %1$s · %2$s</string>
     <string name="on_my_devices">Nos meus dispositivos</string>
+    <string name="re_attach_finished">Reassociação concluída.</string>
+    <string name="re_attach_in_progress">Reassociação em andamento.</string>
 </resources>

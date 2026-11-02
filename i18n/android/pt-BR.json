@@ -3225,5 +3225,7 @@
   "scheduled_backup": "Agendado",
   "keep_a_copy_on_this_device": "Manter uma cópia neste dispositivo",
   "on_this_device_copy": "Neste dispositivo: %1$s · %2$s",
-  "on_my_devices": "Nos meus dispositivos"
+  "on_my_devices": "Nos meus dispositivos",
+  "re_attach_finished": "Reassociação concluída.",
+  "re_attach_in_progress": "Reassociação em andamento."
 }

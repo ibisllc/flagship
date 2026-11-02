@@ -3165,5 +3165,7 @@
   "scheduled_backup": "aced3ec23d8f",
   "keep_a_copy_on_this_device": "a850fb40123b",
   "on_this_device_copy": "1ed45a594c0d",
-  "on_my_devices": "78a1ef5f4ca7"
+  "on_my_devices": "78a1ef5f4ca7",
+  "re_attach_finished": "3e44bbbe357f",
+  "re_attach_in_progress": "40265aab4679"
 }

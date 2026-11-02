@@ -5,6 +5,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { appDisplayName } from "../lib/appDisplayName.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { DELEGATION_COPY, allowCompanionBuild, endCompanionDelegation, listCompanionDelegations } from "../lib/companionDelegation.js";
 import { getSession } from "../lib/state.js";
@@ -78,7 +79,7 @@ async function renderDelegationSlot(slot, sessionId) {
       <div class="card-title">${escapeHtml(DELEGATION_COPY.title)}</div>
       <p class="note">${escapeHtml(DELEGATION_COPY.intro)}</p>
       <label>${tr("App")}</label>
-      <select data-d-app>${apps.map((a) => `<option value="${escapeHtml(a.serviceId)}">${escapeHtml(a.slug ?? a.serviceId)}</option>`).join("")}</select>
+      <select data-d-app>${apps.map((a) => `<option value="${escapeHtml(a.serviceId)}">${escapeHtml(appDisplayName(a))}</option>`).join("")}</select>
       <label class="inline-check mt-1"><input type="checkbox" data-d-op value="build" checked /> ${escapeHtml(DELEGATION_COPY.build)}</label>
       <label class="inline-check"><input type="checkbox" data-d-op value="deploy" /> ${escapeHtml(DELEGATION_COPY.deploy)}</label>
       <label class="mt-1">${tr("For")}</label>

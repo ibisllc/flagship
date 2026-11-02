@@ -150,6 +150,8 @@ class ActivityViewModelTest {
         assertEquals("App redeployed", feed.items[0].title)
         assertTrue(feed.items[1] is ActivityItem.BoxEvent)
         assertTrue(feed.items[2] is ActivityItem.RecoverySnapshot)
+        // The hint is iOS's translated headline, never the box's raw status ("Recovery: complete").
+        assertEquals("Re-attach finished.", feed.items[2].title)
     }
 
     @Test fun toleratesDetailAndRecoveryFailure_yieldsEmptyLoadedFeed() = runTest {
@@ -182,7 +184,8 @@ class ActivityViewModelTest {
         assertEquals(77, snap.at)
     }
 
-    @Test fun activityItem_recoverySnapshot_atIsZeroWhenNoReissueAtAll() = runTest {
+    @Test fun recoverySnapshot_idleWatcherIsNotListed() = runTest {
+        // No swap seen and no report: iOS lists no Post-recovery section, and neither does Android.
         val client = StubScreensClient(
             recoverySnapshot = PostRecoverySnapshot(
                 currentIrkPubHex = "ab", state = WatcherState(lastPolledAt = 0),
@@ -192,9 +195,27 @@ class ActivityViewModelTest {
         val vm = ActivityViewModel(client, backgroundScope)
         vm.load().join()
         val feed = (vm.state.first() as LoadingState.Loaded).value
+        assertTrue(feed.items.isEmpty())
+    }
+
+    @Test fun recoverySnapshot_pendingSwapIsListedInProgressAtZero() = runTest {
+        val client = StubScreensClient(
+            recoverySnapshot = PostRecoverySnapshot(
+                currentIrkPubHex = "ab",
+                state = WatcherState(
+                    lastPolledAt = 0,
+                    lastSeen = com.flagshipserver.app.api.PendingRePair(newIrkPub = "new", oldIrkPub = "old", initiatedAt = 1, completesAt = 2),
+                ),
+                lastReissue = null,
+            ),
+        )
+        val vm = ActivityViewModel(client, backgroundScope)
+        vm.load().join()
+        val feed = (vm.state.first() as LoadingState.Loaded).value
         val snap = feed.items.single() as ActivityItem.RecoverySnapshot
         assertEquals(0L, snap.at)
         assertNull(snap.subtitle)
+        assertEquals("Re-attach in progress.", snap.title)
     }
 
     // ---- ActivityFeedFilter (pure server-filter logic) ------------------

@@ -3033,7 +3033,6 @@
   "The move was undone: {0}": "移行は取り消されました: {0}",
   "Updated how this server unlocks at start-up": "このサーバーの起動時のロック解除を更新しました",
   "Kept the previous start-up unlock": "以前の起動時のロック解除を維持しました",
-  "Turned off this server's extra sandbox after it kept failing to start": "起動に繰り返し失敗したため、このサーバーの追加の保護を無効にしました",
   "This server hasn't reported its setting yet. Update it, then try again.": "このサーバーはまだ設定を報告していません。更新してからもう一度お試しください。",
   "if no admin opens Flagship": "（管理者が Flagship を開かない場合）",
   "No time limit": "期限なし",
@@ -3076,5 +3075,8 @@
   "Computed on this server": "このサーバーで計算",
   "Official source": "公式の配布元",
   "Check it yourself": "自分で確認する",
-  "Run these on any computer to check the same facts without trusting this app.": "任意のコンピューターでこれらを実行すると、このアプリを信頼せずに同じ事実を確認できます。"
+  "Run these on any computer to check the same facts without trusting this app.": "任意のコンピューターでこれらを実行すると、このアプリを信頼せずに同じ事実を確認できます。",
+  "Turned off this server's extra sandbox after it kept failing to start": "起動に繰り返し失敗したため、このサーバーの追加の保護を無効にしました",
+  "Yes, this is my server": "はい、これは私のサーバーです",
+  "It's waiting for its disk key. Unlock it only if you expected it to restart.": "ディスクキーを待っています。再起動を予期していた場合にのみ、ロックを解除してください。"
 }

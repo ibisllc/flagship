@@ -115,6 +115,10 @@ data class StoreWorld(
             box.egressFixture.clear()
             box.appStorageFixture.clear()
             box.servingFixture = null
+            // A fresh account's Activity, as iOS's store world shows it: no re-attach report and no
+            // gym log lines (the mock's defaults), so neither "Post-recovery" nor a server count appears.
+            box.postRecoveryReported = false
+            box.boxActivityFixture = emptyList()
             box.membersFixture[ref] = members
             if (waiting) box.unreachablePodContexts += unlockRequest.server
             if (s.name == backups.server) {

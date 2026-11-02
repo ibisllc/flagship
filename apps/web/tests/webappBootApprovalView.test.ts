@@ -71,7 +71,7 @@ describe("webapp boot-approval relay (parity with iOS SecretRequestsScreen)", ()
     expect(r.body).toContain("export async function enterBootApproval");
     expect(r.body).toContain("export function initBootApprovalView");
     // The "is this my box?" device-info confirm + the one-tap CTA.
-    expect(r.body).toContain("Yes, this is my box");
+    expect(r.body).toContain("Yes, this is my server");
     expect(r.body).toContain("Region");
   });
 

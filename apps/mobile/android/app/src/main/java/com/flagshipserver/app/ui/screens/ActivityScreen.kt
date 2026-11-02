@@ -221,7 +221,8 @@ fun ActivityScreen(
         }
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
-        val allServers = serverTitle == "All servers"
+        // Decided from the pods, not by comparing the (translated) title with English.
+        val allServers = activityShowsAllServers(pods, effectiveServerFilter)
         if (!noServer) when (val s = state) {
             is LoadingState.Loaded -> {
                 val items = s.value.items
@@ -318,12 +319,16 @@ internal class ActivityPane {
 
 internal val LocalActivityPane = androidx.compose.runtime.compositionLocalOf<ActivityPane?> { null }
 
+/** Several servers and none picked: the log is every server's. */
+internal fun activityShowsAllServers(pods: List<com.flagshipserver.app.core.PodInfo>, pickedPodId: String?): Boolean =
+    pods.size > 1 && pods.none { it.podId == pickedPodId }
+
 /** "Server · home2": the server this log belongs to (the one picked in the
  *  switcher, else the only one). With several servers and none picked the log is every
  *  server's, so it says "All servers". */
 internal fun activityServerTitle(pods: List<com.flagshipserver.app.core.PodInfo>, pickedPodId: String?): String {
+    if (activityShowsAllServers(pods, pickedPodId)) return FSStrings.get(R.string.all_servers)
     val pod = pods.firstOrNull { it.podId == pickedPodId } ?: pods.singleOrNull()
-    if (pod == null && pods.size > 1) return FSStrings.get(R.string.all_servers)
     val name = pod?.name?.takeIf { it.isNotEmpty() } ?: return FSStrings.get(R.string.this_server)
     return FSStrings.get(R.string.server, name)
 }

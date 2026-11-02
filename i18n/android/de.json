@@ -3225,5 +3225,7 @@
   "scheduled_backup": "Geplant",
   "keep_a_copy_on_this_device": "Eine Kopie auf diesem Gerät behalten",
   "on_this_device_copy": "Auf diesem Gerät: %1$s · %2$s",
-  "on_my_devices": "Auf meinen Geräten"
+  "on_my_devices": "Auf meinen Geräten",
+  "re_attach_finished": "Neuanbindung abgeschlossen.",
+  "re_attach_in_progress": "Neuanbindung läuft."
 }

@@ -3228,4 +3228,6 @@
     <string name="keep_a_copy_on_this_device">在此设备上保留一份副本</string>
     <string name="on_this_device_copy">在此设备上：%1$s · %2$s</string>
     <string name="on_my_devices">在我的设备上</string>
+    <string name="re_attach_finished">重新关联已完成。</string>
+    <string name="re_attach_in_progress">重新关联进行中。</string>
 </resources>

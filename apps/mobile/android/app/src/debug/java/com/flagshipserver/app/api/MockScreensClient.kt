@@ -1310,8 +1310,13 @@ class MockScreensClient(
         )
     }
 
+    /** False: the box has never seen an account key swap (no report), as iOS's mock defaults to. The store
+     *  world turns it off; the gym's post-recovery scenarios read the finished re-attach below. */
+    var postRecoveryReported: Boolean = true
+
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse {
         tick()
+        if (!postRecoveryReported) return PostRecoveryStatusResponse(report = null)
         val day = 24L * 3600 * 1000
         return PostRecoveryStatusResponse(
             report = PostRecoverySnapshot(
