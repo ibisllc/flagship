@@ -33,6 +33,9 @@ pub struct ComServingRecord {
     /// Mesh mode (relay-mesh.md §4.4): the record comes from the relay log, the policy and leases from the box's own
     /// HELLO; only a policy matching the log's head for (box, regGen) counts.
     pub mesh: Option<MeshRecord>,
+    /// `.com` derives this account's keys itself (a demo account), so a box that pins no admin key (a 0.2 box) is
+    /// judged under `admin_key` instead of keeping only its control name. Never in mesh mode.
+    pub admin_key_held_by_com: bool,
 }
 
 /// The log's part of a mesh-mode record.
@@ -191,6 +194,7 @@ pub fn parse_com_serving_record(body: &Value) -> Option<ComServingRecord> {
         policy,
         leases,
         mesh: None,
+        admin_key_held_by_com: o.get("adminKeyHeldByCom").and_then(Value::as_bool) == Some(true),
     })
 }
 
@@ -867,7 +871,13 @@ impl ServingGate {
             return deny(false, "revoked");
         }
         // `serving_decision` checks the revocation log itself; the paths that stop short of it check it here.
-        let (Some(com_key), Some(box_key)) = (&rec.admin_key, &h.admin_key) else {
+        // A box that pins no key is judged under `.com`'s only where `.com` holds that key anyway (demo accounts).
+        let waived = if rec.admin_key_held_by_com && rec.mesh.is_none() {
+            rec.admin_key.as_ref()
+        } else {
+            None
+        };
+        let (Some(com_key), Some(box_key)) = (&rec.admin_key, h.admin_key.as_ref().or(waived)) else {
             if box_revoked(revs, &h.username, &h.box_pub, rec.reg_gen) {
                 return deny(false, "revoked");
             }

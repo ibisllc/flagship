@@ -535,7 +535,10 @@ export async function tryServingRoute(request: Request, env: ServingEnv, deps: S
     const user = await deps.usernames.get(u);
     const bundle = user ? await servingBundle(db, u, m[2]!.toLowerCase()) : null;
     if (!user || !bundle) return refuse(404, "serving-unknown-box");
-    return json({ adminKey: adminKeyOf(user), ...bundle });
+    // A demo account's keys are derived by this Worker (DEMO_IRK_KEK), so a box's own pin of its admin key guards
+    // nothing `.com` couldn't sign anyway: the relay may judge a demo box that pins no key (a 0.2 box) under this one.
+    const demo = await db.prepare("SELECT 1 AS d FROM demo_users WHERE username = ?").bind(u.toLowerCase()).first<{ d: number }>();
+    return json({ adminKey: adminKeyOf(user), ...bundle, ...(demo ? { adminKeyHeldByCom: true } : {}) });
   }
 
   const accountRoute = SERVING_ACCOUNT_ROUTES.find((re) => re.test(path));

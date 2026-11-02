@@ -338,6 +338,27 @@ describe("the revocation log", () => {
   });
 });
 
+describe("the relay's record for a demo account", () => {
+  it("says .com holds the admin key only for demo accounts (the relay then serves a 0.2 box that pins none)", async () => {
+    const { env, storage, close } = await setup();
+    try {
+      const plain = (await (await internal(env, `/api/internal/serving/bob/${BOX2}`)).json()) as Record<string, unknown>;
+      expect(plain.adminKeyHeldByCom).toBeUndefined();
+      const ins = await storage.demoUsers.insert({
+        username: "bob", idempotencyKey: "k", snapshotId: null, isoR2Key: null, ttlIdleMinutes: 30, region: "de-fra1",
+        size: "1xCPU-2GB", activeServerId: null, activeServerIp: null, image: null, activeServerFqdn: null,
+        lastActivityAt: 1, state: "ready", createdAt: 1,
+      } as Parameters<typeof storage.demoUsers.insert>[0]);
+      expect(ins).toEqual({ ok: true });
+      const demo = (await (await internal(env, `/api/internal/serving/bob/${BOX2}`)).json()) as Record<string, unknown>;
+      expect(demo.adminKeyHeldByCom).toBe(true);
+      expect(demo.adminKey).toBe(hex(irk.publicKey));
+    } finally {
+      close();
+    }
+  });
+});
+
 describe("GET /api/accounts/:u/serving", () => {
   it("needs the account read token and shows the deadline", async () => {
     const { env, storage, close } = await setup();

@@ -124,6 +124,7 @@ impl ServingFetch for MeshServingFetch {
                         policy: None,
                         leases: Vec::new(),
                         mesh: Some(crate::serving::MeshRecord { policy_head: head }),
+                        admin_key_held_by_com: false,
                     }))
                 })
                 .flatten()

@@ -41,6 +41,11 @@ export interface ComServingRecord {
    * hashes to it counts (`policy-stale` otherwise); null: the log has none, so the HELLO policy counts as given.
    */
   policyHead?: { policySha256: string } | null;
+  /**
+   * `.com` derives this account's keys itself (a demo account), so a box that pins no admin key (one from before the
+   * serving authority, 0.2) is judged under `adminKey` instead of keeping only its control name. Never in mesh mode.
+   */
+  adminKeyHeldByCom?: boolean;
 }
 
 /** `.com` answered that the account has no server under this key (deleted, or its name now belongs to another key). */
@@ -123,7 +128,7 @@ export function parseComServingRecord(body: unknown): ComServingRecord | null {
       for (const d of delegations) leases.push({ ...l, delegation: d });
     }
   }
-  return { adminKey, regGen: o.regGen, revoked: o.revoked === true, policy, leases };
+  return { adminKey, regGen: o.regGen, revoked: o.revoked === true, policy, leases, ...(o.adminKeyHeldByCom === true ? { adminKeyHeldByCom: true } : {}) };
 }
 
 /** Reads `.com`'s internal serving record with the services control secret. */
@@ -507,7 +512,9 @@ export class ServingGate {
     const { username, boxPub } = b.hello;
     if (rec.revoked) return { control: false, apps: false, reason: "revoked" };
     // `servingDecision` checks the revocation log itself; the paths that stop short of it check it here.
-    if (!rec.adminKey || !b.hello.adminKey) {
+    // A box that pins no key is judged under `.com`'s only where `.com` holds that key anyway (demo accounts).
+    const pinned = b.hello.adminKey ?? (rec.adminKeyHeldByCom === true && rec.policyHead === undefined ? rec.adminKey : null);
+    if (!rec.adminKey || !pinned) {
       if (boxRevoked(this.revocationState, username, boxPub, rec.regGen)) return { control: false, apps: false, reason: "revoked" };
       if (!rec.adminKey) return { control: true, apps: false, reason: "unavailable" };
       // An older box that pins nothing keeps its control name (recovery stays possible) but serves no app.
@@ -518,7 +525,7 @@ export class ServingGate {
       box: boxPub,
       regGen: rec.regGen,
       adminKeyFromCom: rec.adminKey,
-      adminKeyFromBox: b.hello.adminKey,
+      adminKeyFromBox: pinned,
       policies: [rec.policy, b.hello.policy].filter((p): p is SignedServingRecord<ServingPolicy> => p !== null),
       leases: rec.leases,
       revocations: this.revocationState,

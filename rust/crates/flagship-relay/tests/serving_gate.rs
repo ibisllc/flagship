@@ -128,6 +128,7 @@ fn record(admin: &SigningKey) -> ComServingRecord {
         policy: None,
         leases: Vec::new(),
         mesh: None,
+        admin_key_held_by_com: false,
     }
 }
 
@@ -164,6 +165,33 @@ async fn decisions_follow_the_keys() {
     assert_eq!(b.decision().reason(), "unavailable");
     assert!(b.decision().control() && !b.decision().apps());
     assert_eq!(unknown.stats().apps_stopped, 1);
+}
+
+#[tokio::test]
+async fn a_box_pinning_nothing_serves_only_where_com_holds_the_key() {
+    let admin = key(1);
+    let boxk = key(2);
+    let calls = Arc::new(Calls::default());
+    let demo = ComServingRecord {
+        admin_key_held_by_com: true,
+        ..record(&admin)
+    };
+    let g = gate(Some(demo.clone()), GateConfig::default());
+    let b = g.attach(hello(None, &boxk), calls.clone()).await;
+    assert_eq!(b.decision(), GateDecision::Serve { until: None });
+    b.detach();
+    // A box that pins another key is still refused.
+    let b = g.attach(hello(Some(&key(9)), &boxk), calls.clone()).await;
+    assert!(!b.decision().control());
+    b.detach();
+    // Never from a mesh record.
+    let mesh = ComServingRecord {
+        mesh: Some(flagship_relay::serving::MeshRecord::default()),
+        ..demo
+    };
+    let g = gate(Some(mesh), GateConfig::default());
+    let b = g.attach(hello(None, &boxk), calls.clone()).await;
+    assert_eq!(b.decision().reason(), "admin-keys-differ");
 }
 
 #[tokio::test]

@@ -79,6 +79,36 @@ describe("ServingGate", () => {
     expect(b.decision).toMatchObject({ reason: "admin-keys-differ" });
   });
 
+  it("a 0.2 box of an account whose key .com holds (demo) serves its apps under .com's key, every rule still applied", async () => {
+    const admin = edKey();
+    const box = edKey().pub;
+    const { gate } = rig(async () => comRecord({ adminKey: admin.pub, adminKeyHeldByCom: true }));
+    const b = await gate.attach(hello(box, null), handle().h);
+    expect(b.decision).toEqual({ control: true, apps: true, until: null });
+
+    // A time limit set for it still holds: no lease, no apps.
+    const p = policy({ account: ACCOUNT, box, admin, grace: "7d" });
+    const limited = rig(async () => comRecord({ adminKey: admin.pub, adminKeyHeldByCom: true, policy: p }));
+    const c = await limited.gate.attach(hello(box, null), handle().h);
+    expect(c.decision).toMatchObject({ control: true, apps: false, reason: "no-lease" });
+
+    // Revoked is revoked.
+    const revoked = rig(async () => comRecord({ adminKey: admin.pub, adminKeyHeldByCom: true, revoked: true }));
+    expect((await revoked.gate.attach(hello(box, null), handle().h)).view()).toEqual({ control: false, apps: false });
+
+    // A box that pins a different key is still refused, demo or not.
+    const pinnedOther = rig(async () => comRecord({ adminKey: admin.pub, adminKeyHeldByCom: true }));
+    expect((await pinnedOther.gate.attach(hello(box, edKey().pub), handle().h)).view()).toEqual({ control: false, apps: false });
+  });
+
+  it("the demo waiver never applies to a mesh record (the log, not .com, names the key)", async () => {
+    const admin = edKey();
+    const box = edKey().pub;
+    const { gate } = rig(async () => comRecord({ adminKey: admin.pub, adminKeyHeldByCom: true, policyHead: null }));
+    const b = await gate.attach(hello(box, null), handle().h);
+    expect(b.decision).toMatchObject({ control: true, apps: false, reason: "admin-keys-differ" });
+  });
+
   it("refuses a box whose pinned admin key differs from .com's", async () => {
     const admin = edKey();
     const other = edKey();
@@ -305,5 +335,11 @@ describe("parseComServingRecord", () => {
     // No hint: offered under the admin key and under each delegation.
     expect(r?.leases).toHaveLength(3);
     expect(parseComServingRecord({ adminKey: "b".repeat(64) })).toBeNull();
+  });
+
+  it("keeps adminKeyHeldByCom only when it is exactly true", () => {
+    expect(parseComServingRecord({ adminKey: "b".repeat(64), regGen: 1, adminKeyHeldByCom: true })?.adminKeyHeldByCom).toBe(true);
+    expect(parseComServingRecord({ adminKey: "b".repeat(64), regGen: 1, adminKeyHeldByCom: "yes" })?.adminKeyHeldByCom).toBeUndefined();
+    expect(parseComServingRecord({ adminKey: "b".repeat(64), regGen: 1 })?.adminKeyHeldByCom).toBeUndefined();
   });
 });
