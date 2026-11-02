@@ -15,6 +15,8 @@
 #   scripts/release-studio.sh --setup-keychain # one-time durable credential setup
 #   scripts/release-studio.sh            # build + notarize + stage the DMG locally
 #   scripts/release-studio.sh --publish  # + git add/commit/push + deploy the Worker
+#   scripts/release-studio.sh --local    # build + package the .app only: no signing,
+#                                        # no notarization, nothing staged or uploaded
 #
 # Note: --publish commits the ~2.3 MB DMG into git. That's convenient for a few
 # test builds; if this becomes frequent, move the binary to R2 / a GitHub release
@@ -42,9 +44,20 @@ if [ "${1:-}" = "--setup-keychain" ]; then
   exit 0
 fi
 
-if [ "${1:-}" != "" ] && [ "${1:-}" != "--publish" ]; then
-  echo "usage: scripts/release-studio.sh [--setup-keychain|--publish]" >&2
+if [ "${1:-}" != "" ] && [ "${1:-}" != "--publish" ] && [ "${1:-}" != "--local" ]; then
+  echo "usage: scripts/release-studio.sh [--setup-keychain|--publish|--local]" >&2
   exit 2
+fi
+
+if [ "${1:-}" = "--local" ]; then
+  echo "▸ Building + packaging the app (unsigned; nothing leaves this Mac)…"
+  cd "$mac"
+  make package-app
+  app="$mac/.build/release/Flagship Studio.app"
+  test -s "$app/Contents/Resources/preseed-engine.js" \
+    || { echo "✗ preseed-engine.js missing from $app/Contents/Resources" >&2; exit 1; }
+  echo "✓ Local build: $app"
+  exit 0
 fi
 
 echo "▸ Building + signing + notarizing (uploads to Apple, waits a few minutes)…"

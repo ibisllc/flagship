@@ -27,7 +27,11 @@ BIN = FlagshipStudio
 APP_NAME = Flagship Studio
 BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
-PRESEED_ENGINE = $(BUILD_DIR)/FlagshipBuilder_FlagshipBuilderCore.bundle/preseed-engine.js
+# SwiftPM's resource bundle for FlagshipBuilderCore. Xcode 27's Swift Build makes it
+# a real macOS bundle (Contents/Resources/...); older toolchains left the file flat.
+# Recursive `=` so the wildcard runs after build-release, not when make parses this.
+CORE_BUNDLE = $(BUILD_DIR)/FlagshipBuilder_FlagshipBuilderCore.bundle
+PRESEED_ENGINE = $(firstword $(wildcard $(CORE_BUNDLE)/Contents/Resources/preseed-engine.js $(CORE_BUNDLE)/preseed-engine.js))
 # The Studio release number comes from release/version.json (the one product
 # version; scripts/check-versions.mjs fails on drift). The committed Info.plist
 # carries it too, and package-app re-stamps it so a release can never ship stale.
@@ -74,7 +78,10 @@ package-app: build-release
 	mkdir -p "$(APP_BUNDLE)/Contents/Library/LaunchDaemons"
 	cp "$(BUILD_DIR)/$(BIN_SRC)" "$(APP_BUNDLE)/Contents/MacOS/$(BIN)"
 	cp "$(BUILD_DIR)/FlagshipBuilderHelper" "$(APP_BUNDLE)/Contents/MacOS/FlagshipBuilderHelper"
+	@test -n "$(PRESEED_ENGINE)" || (echo "✗ preseed-engine.js not found in $(CORE_BUNDLE)"; exit 1)
 	cp "$(PRESEED_ENGINE)" "$(APP_BUNDLE)/Contents/Resources/preseed-engine.js"
+	cmp -s "$(APP_BUNDLE)/Contents/Resources/preseed-engine.js" Sources/FlagshipBuilderCore/Resources/preseed-engine.js \
+	    || (echo "✗ packaged preseed-engine.js differs from Sources/FlagshipBuilderCore/Resources/preseed-engine.js"; exit 1)
 	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(STUDIO_VERSION)" "$(APP_BUNDLE)/Contents/Info.plist"
 	cp HelperDaemon.plist "$(APP_BUNDLE)/Contents/Library/LaunchDaemons/com.flagshipserver.Builder.helper.plist"
