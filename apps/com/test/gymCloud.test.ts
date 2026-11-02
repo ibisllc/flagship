@@ -5,6 +5,7 @@ import { createUpCloudClient, parseUpCloudLabels } from "../src/upcloud.js";
 const GYM_A = "00000000-0000-4000-8000-00000000000a";
 const GYM_B = "00000000-0000-4000-8000-00000000000b";
 const PROD = "00000000-0000-4000-8000-0000000000ff";
+const RELAY = "00000000-0000-4000-8000-0000000000c0";
 
 function fakeCloud(): GymCloudClient & { destroyed: string[] } {
   const labels: Record<string, Record<string, string>> = {
@@ -42,6 +43,23 @@ describe("handleGymTeardown", () => {
     const r = await handleGymTeardown(deps(cloud), { all: true });
     expect(r.status).toBe(200);
     expect(cloud.destroyed.sort()).toEqual([GYM_A, GYM_B]);
+  });
+
+  it("all: keeps the gym relay mesh's relay VMs unless includeRelays", async () => {
+    const withRelay = (): ReturnType<typeof fakeCloud> => {
+      const c = fakeCloud();
+      const list = c.listServersByLabel.bind(c);
+      c.listServersByLabel = async (k, v) => [...(await list(k, v)), { serverId: RELAY, title: "gym-relay-c", state: "started", labels: { "flagship-env": "gym" } }];
+      return c;
+    };
+    const kept = withRelay();
+    const dry = await handleGymTeardown(deps(kept), { all: true, dryRun: true });
+    expect((dry.body.servers as Array<{ title: string }>).map((s) => s.title)).not.toContain("gym-relay-c");
+    await handleGymTeardown(deps(kept), { all: true });
+    expect(kept.destroyed.sort()).toEqual([GYM_A, GYM_B]);
+    const reaped = withRelay();
+    await handleGymTeardown(deps(reaped), { all: true, includeRelays: true });
+    expect(reaped.destroyed.sort()).toEqual([GYM_A, GYM_B, RELAY].sort());
   });
 
   it("refuses a server that lacks the gym label", async () => {

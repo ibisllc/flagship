@@ -36,7 +36,11 @@ export interface GymTeardownBody {
   serverDomains?: unknown;
   /** Gym usernames whose whole user zone (`<user>.<apex>` and below) is reaped. */
   usernames?: unknown;
+  /** Also take the gym relay mesh's own relay VMs (`gym-relay-*`), which every run needs and a sweep keeps. */
+  includeRelays?: unknown;
 }
+
+const GYM_RELAY_TITLE = /^gym-relay-/;
 
 export interface GymTeardownResult {
   status: number;
@@ -75,7 +79,8 @@ export async function handleGymTeardown(
     return { status: 400, body: { error: "usernames must be DNS labels" } };
   }
 
-  const listed = await deps.cloud.listServersByLabel(deps.label.key, deps.label.value);
+  const everyGymServer = await deps.cloud.listServersByLabel(deps.label.key, deps.label.value);
+  const listed = body?.includeRelays === true ? everyGymServer : everyGymServer.filter((s) => !GYM_RELAY_TITLE.test(s.title));
   const targets: Array<{ serverId: string; title: string }> = [];
   const refused: string[] = [];
   if (all) targets.push(...listed.map((s) => ({ serverId: s.serverId, title: s.title })));

@@ -391,11 +391,12 @@ export async function teardown(accounts: Account[]): Promise<TeardownReport> {
 }
 
 /** Lists (dryRun) or destroys every gym-labelled server still on the provider. */
-export async function sweep(destroy: boolean): Promise<{ status: number; body: any }> {
+/** Every gym-labelled server and gym DNS record; the relay mesh's own relay VMs (`gym-relay-*`) only with includeRelays. */
+export async function sweep(destroy: boolean, includeRelays = false): Promise<{ status: number; body: any }> {
   const r = await http(`https://${CONTROL}/api/gym/teardown`, {
     method: "POST",
     headers: { "content-type": "application/json", ...adminHeaders() },
-    body: JSON.stringify(destroy ? { all: true } : { all: true, dryRun: true }),
+    body: JSON.stringify({ all: true, ...(destroy ? {} : { dryRun: true }), ...(includeRelays ? { includeRelays: true } : {}) }),
   }, 300_000);
   return { status: r.status, body: r.json ?? r.text };
 }

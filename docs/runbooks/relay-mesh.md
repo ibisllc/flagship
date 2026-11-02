@@ -215,9 +215,9 @@ FLAGSHIP_BASE_URL=$GYM npm run relays -- retire gym-0sim
 - `GYM_RELAY_STATS_SECRET` is the gym relays' `USAGE_REPORT_SECRET` (`/api/stats`, header `x-usage-secret`).
 - `GYM_MESH_RELAY_C_CONTROL=1` lets the group run `bash scripts/gym-relay-c.sh drain|start`; `GYM_MESH_REBALANCE=1`
   says the relays run the shortened rebalance (`FLAGSHIP_MESH_REBALANCE_MS=60000`, set in every gym mesh profile).
-- The gym sweep (`sweep-cli.ts --destroy`) reaps every gym-labelled UpCloud server, gym-c's VM included (so it never
-  leaks), but leaves every record under `tunnel.gym.flagship.services`. After a sweep that took gym-c, run
-  `bash scripts/gym-relay-c.sh down` (clears its state and DNS) and `up` again.
+- The gym sweep (`sweep-cli.ts --destroy`, and every run's leftover check) keeps gym-c's VM (`gym-relay-*`) and every
+  record under `tunnel.gym.flagship.services`, so a run neither refuses to start nor tears the mesh down. To reap it
+  too: `sweep-cli.ts --destroy --include-relays`, then `bash scripts/gym-relay-c.sh down` (clears its state and DNS).
 
 ### Tear down (reverse order)
 

@@ -3,8 +3,8 @@
  * The gym relay mesh's third relay, `gym-c`: the Rust relay on an UpCloud VM (docs/architecture-v2/relay-mesh.md
  * §14.1, docs/runbooks/relay-mesh.md "Gym"). Wrapped by scripts/gym-relay-c.sh; see there for the commands.
  *
- * The VM carries the gym label (flagship-env=gym), so the fleet sweep (`npx tsx tools/live-e2e/sweep-cli.ts
- * --destroy`) reaps it if `down` never ran. Layout on the VM:
+ * The VM carries the gym label (flagship-env=gym); the fleet sweep keeps it (title `gym-relay-c`) unless
+ * `npx tsx tools/live-e2e/sweep-cli.ts --destroy --include-relays`, so gym runs don't tear the mesh down. Layout on the VM:
  *   :443   raw TCP straight to the relay's SNI router (no PROXY header, as on Fly)
  *   :8443  Caddy, TLS for gym-c.tunnel.<apex> and tunnel.<apex> (Cloudflare DNS-01) → the relay hub on 127.0.0.1:3000
  *   :8444  Caddy layer4, TLS → PROXY v2 → the relay's address echo on 127.0.0.1:3001 (Fly's proxy_proto twin)
