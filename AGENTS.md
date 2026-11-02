@@ -149,6 +149,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   lead server distributes signed changes box to box in server order; every
   box verifies every entry itself; nothing about members goes through
   `.com`. Separate per-server lists are a later Pro option (branch only).
+- **No hard-coded English user strings** (owner rule, 2026-11-02, from 0.3 on).
+  Every user-visible text on every surface (voi.ci site, `.com` pages and
+  refusal sentences, webapp, iOS, Android, Wear/watch, Studios, box pages,
+  pushes, store listings) comes from `i18n/<surface>/*.json` through the build
+  tools (`docs/i18n.md`); `npm run i18n` is the gate. Logs, ids and protocol
+  reason codes are not user strings. Never hand-edit `.xcstrings` or
+  `values-*/strings.xml`.
 - **Accounts are never bulk-wiped after GA** (owner rule, 2026-10-18; git
   history keeps the script). No tool that deletes every account may exist;
   `scripts/release-guard.sh` fails any build that has `scripts/wipe-all-users*`.
