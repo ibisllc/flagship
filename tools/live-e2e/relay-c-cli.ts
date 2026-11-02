@@ -262,7 +262,7 @@ async function provision(vm: Vm, src: string): Promise<string> {
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage, { recursive: true, mode: 0o700 });
   try {
-    const tar = await run("tar", ["--exclude=rust/target", "-czf", join(stage, "relay-src.tgz"), "-C", src, "rust", "rust-toolchain.toml", ".maintainers"]);
+    const tar = await run("tar", ["--exclude=rust/target", "-czf", join(stage, "relay-src.tgz"), "-C", src, "rust", ".maintainers"]);
     if (tar.code !== 0) throw new Error(`tar: ${tar.stderr.slice(0, 200)}`);
     writeFileSync(join(stage, "relay.env"), env, { mode: 0o600 });
     writeFileSync(join(stage, "caddy.env"), `CF_API_TOKEN=${cfToken}\n`, { mode: 0o600 });
