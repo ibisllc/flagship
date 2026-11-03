@@ -16,7 +16,8 @@
 //! | `gpu.started` / `gpu.heartbeat` | the workload runs |
 //! | `gpu.release` | drain, settle (proof or quarantine), give VFIO groups back |
 //! | `gpu.settle` | retry a settle that was held |
-//! | `gpu.revokeApp` | the approval was withdrawn or the app removed |
+//! | `gpu.revokeApp` | the app was removed or updated |
+//! | `gpu.withdrawApproval` | the owner's signed withdrawal: raise gpud's own floor, stop the app's GPU work |
 //! | `gpu.reconcile` | re-inventory, regenerate CDI, reconcile |
 //! | `gpu.quarantine.clear` | maintenance only |
 //! | `gpu.mig.profiles` / `gpu.mig.apply` | MIG layout, maintenance only |
@@ -53,7 +54,8 @@ use crate::mig::{apply as mig_apply, parse_lgip, plan as mig_plan};
 use crate::numerics::{VectorAddReport, verify_vector_add};
 use crate::observe::ObserverRoots;
 use crate::owner_approval::{
-    ApprovalProof, OwnerAnchorSource, box_local, verify as verify_approval,
+    ApprovalFloors, ApprovalProof, OwnerAnchorSource, Withdrawal, box_local,
+    verify as verify_approval, verify_withdrawal,
 };
 use crate::policy::{AllocationId, PolicyKind};
 use crate::provider::{DeviceProvider, IsolationProfile, Tool, ToolRunner};
@@ -303,6 +305,7 @@ pub struct GpuService {
     maintenance: Option<DriverMaintenance<SharedPackages>>,
     /// Allocations stopped at start because their kept terms were missing or unreadable.
     stopped_at_start: Vec<(AllocationId, String)>,
+    floors: ApprovalFloors,
 }
 
 impl std::fmt::Debug for GpuService {
@@ -365,6 +368,10 @@ impl GpuService {
             Arc::clone(&parts.sysfs_writer),
         );
         let ledger = CoopLedger::new(config.coop_window_ms);
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+        let floors = ApprovalFloors::open(config.state_dir.join("approval-floors.json"), now_ms)?;
         let maintenance = match &parts.packages {
             Some(p) => Some(DriverMaintenance::new(
                 MaintenanceStore::open(&config.state_dir.join("maintenance.db"))
@@ -393,6 +400,7 @@ impl GpuService {
             last_tick_ms: None,
             maintenance,
             stopped_at_start: Vec::new(),
+            floors,
         };
         if let Some(m) = &s.maintenance {
             s.manager
@@ -673,6 +681,7 @@ impl GpuService {
                 }
                 Ok(json!({"revoked": out}))
             }
+            "gpu.withdrawApproval" => self.withdraw_approval(a),
             "gpu.reconcile" => {
                 self.refresh()?;
                 let actions = self
@@ -881,6 +890,20 @@ impl GpuService {
                     format!("the owner's GPU approval does not verify: {why}"),
                 )
             })?;
+            self.floors
+                .admits(&x.approval.app, proof.issued_at)
+                .map_err(|why| err("forbidden", why))?;
+            let a = &x.approval;
+            if a.container.as_deref() != Some(x.container.as_str())
+                || a.userspace != x.userspace
+                || a.max_runtime_ms != x.max_runtime_ms
+                || a.share != x.share
+            {
+                return Err(err(
+                    "forbidden",
+                    "the claim's container, userspace, run-time limit or share is not what the owner approved",
+                ));
+            }
         }
         let mut req =
             GpuRequest::from_manifest(x.app, &x.operation_id, &x.requirement, &x.approval);
@@ -943,6 +966,40 @@ impl GpuService {
             "state": rec.state.as_str(),
             "queuePosition": position,
         }))
+    }
+
+    /// The owner's signed withdrawal: gpud's floor rises (it never falls), so no approval of that
+    /// installation signed before it is admitted again, and the app's GPU work stops.
+    fn withdraw_approval(&mut self, a: &Value) -> Result<Value, ServiceError> {
+        let w: Withdrawal = args(a)?;
+        let anchor = self.config.owner_anchor.load().map_err(|why| {
+            err(
+                "forbidden",
+                format!("there is no owner key to check a GPU withdrawal against: {why}"),
+            )
+        })?;
+        verify_withdrawal(&anchor, &w).map_err(|why| {
+            err(
+                "forbidden",
+                format!("the owner's GPU withdrawal does not verify: {why}"),
+            )
+        })?;
+        let raised = self
+            .floors
+            .raise(&w.app_id, &w.installation_id, w.issued_at)
+            .map_err(|why| err("failed", why))?;
+        let mut out = Vec::new();
+        if raised {
+            let ids = self
+                .manager
+                .revoke_app(&w.app_id, self.parts.runtime.as_ref())
+                .map_err(from_manager)?;
+            for id in ids {
+                let s = self.settle(&id).unwrap_or_else(|e| e.message);
+                out.push(json!({"allocationId": id.as_str(), "settle": s}));
+            }
+        }
+        Ok(json!({"raised": raised, "revoked": out}))
     }
 
     fn share_fits(&self, rec: &AllocationRecord) -> Option<Result<(), &'static str>> {

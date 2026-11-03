@@ -125,9 +125,10 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // Storage: encrypted (LVM-on-LUKS) is the locked default; the unencrypted
   // escape hatch reproduces a plain regular install for bisecting a boot
   // failure (NOT exposed in CLI/GUI), mirroring userdata.ts encryptRoot:false.
+  const chooseDisk = resolveTargetDisk(beaconSerial, opts.targetDisk);
   const storageBlock = encryptRoot
-    ? debianCryptoStorageBlock(partitionBeacon, installingDrop)
-    : debianPlainStorageBlock(partitionBeacon, installingDrop);
+    ? debianCryptoStorageBlock(partitionBeacon, installingDrop, chooseDisk)
+    : debianPlainStorageBlock(partitionBeacon, installingDrop, chooseDisk);
   // The install-time LUKS passphrase was generated inside the installer (see
   // luksBurnKeyCommand) and lives in d-i RAM only: hand it to the bootstrap as a
   // file on the target, which is already the freshly formatted LUKS volume.
@@ -491,29 +492,68 @@ d-i preseed/early_command string \\
  * so it can never abort the install; dmsetup/dd/blockdev all exist in the d-i env.
  */
 /**
- * Resolve the install TARGET disk to the LARGEST NON-REMOVABLE block device,
- * run inside partman/early_command BEFORE the wipe/partition. The naive
- * `list-devices disk | head -n1` picked the first-ENUMERATED device, which on
- * any box with a USB installer stick + an internal disk is the WRONG one: the
- * USB device commonly sorts first (e.g. the Mac VZHost attaches the virtio main
- * disk as vda and the USB ISO as sda — sda sorts before vda), so partman tried
- * to partition the ~755 MB installer stick and aborted ("failed to partition:
- * too small"). Bare-metal with a USB stick + an internal disk hits the identical
- * trap. Selecting the largest FIXED disk is robust for both: the installer
- * medium is tiny relative to a real disk, and removable media is excluded
- * outright. `/sys/block/<name>/removable` is 1 for removable media; `/size` is
- * in 512-byte sectors. Falls back to the old first-enumerated pick only if the
- * scan finds nothing (degenerate single-disk case).
+ * Choose the install TARGET disk, inside partman/early_command BEFORE the wipe/partition, and never
+ * guess between two disks (B2 OPEN #9: it used to wipe the largest fixed disk without asking).
+ *
+ * Candidates are the disks `list-devices disk` lists minus the installer's own medium (the disk
+ * holding what d-i mounted at /cdrom: the USB stick or the Studio VM's attached ISO). With no
+ * `targetDisk` burn option, a candidate must also be fixed (`/sys/block/<n>/removable` 0), not an
+ * eMMC boot/RPMB area, and at least 8 GiB (`/size` is in 512-byte sectors): exactly one such disk is
+ * used (the Studio hosted VM and the common one-disk box), none or several STOP the install. With
+ * `targetDisk` ("by-id:<name under /dev/disk/by-id>", "serial:<serial>", "size:<bytes>") exactly one
+ * disk must match, else STOP. Stopping erases nothing: it reports the canonical `error` phase with a
+ * sentence on the owner's install timeline (the order-status beacon every installer failure uses),
+ * prints the disks on the console, and holds there (the preseed would otherwise power off as if done).
+ *
+ * The first-enumerated pick (`list-devices disk | head -n1`) is gone for good: on a box with a USB
+ * installer and an internal disk the stick often sorts first (the Mac VZHost's sda(USB)/vda(main)).
  */
-const resolveTargetDisk =
-  `DISK=""; _best=0; ` +
-  `for _d in $(list-devices disk); do ` +
-  `_n=\${_d##*/}; ` +
-  `[ "$(cat /sys/block/$_n/removable 2>/dev/null || echo 0)" = 1 ] && continue; ` +
-  `_s=$(cat /sys/block/$_n/size 2>/dev/null || echo 0); ` +
-  `[ "$_s" -gt "$_best" ] && { _best=$_s; DISK=$_d; }; ` +
-  `done; ` +
-  `[ -n "$DISK" ] || DISK=$(list-devices disk | head -n1)`;
+export const TARGET_DISK_PATTERN = /^(by-id:[A-Za-z0-9._:+@-]{1,200}|serial:[A-Za-z0-9._-]{1,100}|size:[1-9][0-9]{0,19})$/;
+/** 8 GiB in 512-byte sectors: smaller disks are never chosen without being named. */
+export const TARGET_DISK_MIN_SECTORS = 16777216;
+
+function resolveTargetDisk(serial: string, targetDisk: string | undefined): string {
+  if (targetDisk !== undefined && !TARGET_DISK_PATTERN.test(targetDisk)) {
+    throw new Error(`targetDisk must be by-id:<name>, serial:<serial> or size:<bytes>, not ${JSON.stringify(targetDisk)}`);
+  }
+  const t = targetDisk ?? "";
+  const match =
+    t.startsWith("by-id:")
+      ? `[ "$(readlink -f /dev/disk/by-id/${t.slice(6)} 2>/dev/null)" = "$_d" ] && _hit=1; `
+      : t.startsWith("serial:")
+        ? `for _l in /dev/disk/by-id/*_${t.slice(7)}; do [ "$(readlink -f "$_l" 2>/dev/null)" = "$_d" ] && _hit=1; done; `
+        : t.startsWith("size:")
+          ? `[ "$((_s * 512))" = "${t.slice(5)}" ] && _hit=1; `
+          : `[ "$(cat /sys/block/$_n/removable 2>/dev/null || echo 0)" = 1 ] || _hit=1; ` +
+            `case "$_n" in *boot[0-9]|*rpmb) _hit=0;; esac; ` +
+            `[ "$_s" -ge ${TARGET_DISK_MIN_SECTORS} ] || _hit=0; `;
+  const why = t
+    ? `"The disk this installer was made for (${t}) $( [ "$_nc" = 0 ] && echo 'is not in this machine' || echo 'matches more than one disk'). Nothing was erased."`
+    : `"$( [ "$_nc" = 0 ] && echo 'This machine has no fixed disk of 8 GB or more to install on' || echo "This machine has $_nc disks that could be erased ($_list)"). Nothing was erased. Name the disk to install on and make the installer again."`;
+  return (
+    `DISK=""; _nc=0; _list=""; _inst=""; ` +
+    `_m=$(awk '$2 == "/cdrom" { print $1; exit }' /proc/mounts 2>/dev/null); _m=\${_m##*/}; ` +
+    `if [ -n "$_m" ]; then if [ -e /sys/class/block/$_m/partition ]; then _inst=$(basename "$(readlink -f /sys/class/block/$_m/..)"); else _inst=$_m; fi; fi; ` +
+    `for _d in $(list-devices disk); do ` +
+    `_n=\${_d##*/}; ` +
+    `[ "$_n" = "$_inst" ] && continue; ` +
+    `_s=$(cat /sys/block/$_n/size 2>/dev/null || echo 0); ` +
+    `_hit=0; ${match}` +
+    `[ "$_hit" = 1 ] || continue; ` +
+    `_nc=$((_nc + 1)); DISK=$_d; ` +
+    `_ids=""; for _l in /dev/disk/by-id/*; do [ "$(readlink -f "$_l" 2>/dev/null)" = "$_d" ] && _ids="$_ids \${_l##*/}"; done; ` +
+    `_list="\${_list:+$_list, }$((_s / 1953125)) GB"; ` +
+    `echo "flagship: candidate disk $_d, $((_s / 1953125)) GB, by-id:$_ids" >> /dev/console 2>&1; ` +
+    `done; ` +
+    `if [ "$_nc" != 1 ]; then ` +
+    `_why=${why}; ` +
+    `echo "*** FLAGSHIP INSTALL STOPPED: $_why ***" >> /dev/console 2>&1; ` +
+    `( printf '{"phase":"error","detail":"%s"}' "$_why" > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 https://flagshipserver.com/api/order/${serial}/status ) >/dev/null 2>&1 || true; ` +
+    `while :; do sleep 3600; done; ` +
+    `fi`
+  );
+}
 
 const wipeTargetDisk =
   `dmsetup remove_all 2>/dev/null || true; ` +
@@ -535,10 +575,11 @@ function partmanEarlyCommand(
   partitionBeacon: string,
   installingDrop: string,
   withBurnKey: boolean,
+  chooseDisk: string,
 ): string {
   return (
     `d-i partman/early_command string \\\n` +
-    `  ${resolveTargetDisk}; debconf-set partman-auto/disk "$DISK"; debconf-set grub-installer/bootdev "$DISK"; \\\n` +
+    `  ${chooseDisk}; debconf-set partman-auto/disk "$DISK"; debconf-set grub-installer/bootdev "$DISK"; \\\n` +
     (withBurnKey ? `  ${luksBurnKeyCommand}; \\\n` : "") +
     `  ${partitionBeacon}; \\\n` +
     `  ${wipeTargetDisk}; \\\n` +
@@ -646,13 +687,13 @@ done
  * in a local QEMU d-i run (2026-05-24): plain recipe clears partman, builds the
  * LUKS volume, and proceeds to base install.
  */
-function debianCryptoStorageBlock(partitionBeacon: string, installingDrop: string): string {
+function debianCryptoStorageBlock(partitionBeacon: string, installingDrop: string, chooseDisk: string): string {
   return `### Partitioning — EXPERIMENTAL LVM-on-LUKS (the locked encrypted default).
 # partman-crypto only reliably preseeds LVM-on-LUKS: unencrypted ESP + /boot,
 # then a LUKS container holding one VG (flagship) with a single root LV.
 d-i partman-auto/method string crypto
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-${partmanEarlyCommand(partitionBeacon, installingDrop, true)}
+${partmanEarlyCommand(partitionBeacon, installingDrop, true, chooseDisk)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto-lvm/new_vg_name string flagship
@@ -709,12 +750,12 @@ d-i partman-auto-crypto/erase_disks boolean false`;
  * userdata.ts's plain path. Still forces the removable-media GRUB so the NVRAM
  * fix is exercised independently of the LUKS work.
  */
-function debianPlainStorageBlock(partitionBeacon: string, installingDrop: string): string {
+function debianPlainStorageBlock(partitionBeacon: string, installingDrop: string, chooseDisk: string): string {
   return `### Partitioning — DEBUG ESCAPE: plain (unencrypted) ESP + /boot + ext4 root.
 # Not exposed in the CLI/GUI; reproduces a known-good non-LUKS baseline.
 d-i partman-auto/method string regular
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-${partmanEarlyCommand(partitionBeacon, installingDrop, false)}
+${partmanEarlyCommand(partitionBeacon, installingDrop, false, chooseDisk)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto/choose_recipe select flagship-plain

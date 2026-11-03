@@ -5,9 +5,9 @@ using Jint;
 namespace Flagship.Builder;
 public sealed class NativePreseedEngine
 {
- public sealed record BurnOptions(bool? EncryptRoot=null,string? WifiSSID=null,string? WifiPassword=null,string? InstallerGitRef=null,string? FlagshipRepoUrl=null,string? BootHost=null)
+ public sealed record BurnOptions(bool? EncryptRoot=null,string? WifiSSID=null,string? WifiPassword=null,string? InstallerGitRef=null,string? FlagshipRepoUrl=null,string? BootHost=null,string? TargetDisk=null)
  {
-  internal string ToJson(){var d=new Dictionary<string,object>();if(EncryptRoot is not null)d["encryptRoot"]=EncryptRoot.Value;if(!string.IsNullOrWhiteSpace(WifiSSID))d["wifiSSID"]=WifiSSID;if(!string.IsNullOrEmpty(WifiPassword))d["wifiPassword"]=WifiPassword;if(!string.IsNullOrEmpty(InstallerGitRef))d["installerGitRef"]=InstallerGitRef;if(!string.IsNullOrEmpty(FlagshipRepoUrl))d["flagshipRepoUrl"]=FlagshipRepoUrl;if(!string.IsNullOrEmpty(BootHost))d["bootHost"]=BootHost;return JsonSerializer.Serialize(d);}
+  internal string ToJson(){var d=new Dictionary<string,object>();if(EncryptRoot is not null)d["encryptRoot"]=EncryptRoot.Value;if(!string.IsNullOrWhiteSpace(WifiSSID))d["wifiSSID"]=WifiSSID;if(!string.IsNullOrEmpty(WifiPassword))d["wifiPassword"]=WifiPassword;if(!string.IsNullOrEmpty(InstallerGitRef))d["installerGitRef"]=InstallerGitRef;if(!string.IsNullOrEmpty(FlagshipRepoUrl))d["flagshipRepoUrl"]=FlagshipRepoUrl;if(!string.IsNullOrEmpty(BootHost))d["bootHost"]=BootHost;if(!string.IsNullOrWhiteSpace(TargetDisk))d["targetDisk"]=TargetDisk.Trim();return JsonSerializer.Serialize(d);}
  }
  readonly Engine engine;
  public NativePreseedEngine():this(LoadResource("Flagship.Builder.Resources.preseed-engine.js")){}

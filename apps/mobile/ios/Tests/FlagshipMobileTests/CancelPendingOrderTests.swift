@@ -103,5 +103,13 @@ final class CancelPendingOrderTests: XCTestCase {
         XCTAssertTrue(text.contains("Cancel this order"))
         XCTAssertFalse(SetupStoppedCard.explanation(step: nil, canCancel: false).contains("Cancel this order"))
     }
+
+    func test_aDiskStopAsksForANewInstallerNotACancel() {
+        let step = ProvisionProgress.failureDetail("This machine has 2 disks that could be erased (500 GB, 2000 GB). Nothing was erased. Name the disk to install on and make the installer again.")
+        let text = SetupStoppedCard.explanation(step: step, canCancel: true)
+        XCTAssertTrue(text.contains("This computer has 2 disks the installer could erase (500 GB, 2000 GB)"), text)
+        XCTAssertTrue(text.hasSuffix(InstallDiskStop.advice), text)
+        XCTAssertFalse(text.contains("Cancel this order"))
+    }
 }
 

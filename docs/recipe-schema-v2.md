@@ -82,6 +82,17 @@ phone signature is the sole trust root. `.com`'s only involvement in the
 recipe→install pipeline is the daemon's POST to `/api/server/register`
 after first boot.
 
+## Not in the recipe: burn options
+
+What depends on the machine the installer runs on is chosen at burn time, unsigned, and passed to the
+generator next to the recipe (`EngineBurnOptions`, `packages/flagship-builder/src/preseedEngine.ts`):
+Wi-Fi, and `targetDisk`, the one disk to erase on a machine with more than one
+(`by-id:<name under /dev/disk/by-id>`, `serial:<serial>` or `size:<bytes>`; CLI `--target-disk`).
+Without it a machine with more than one fixed disk of 8 GiB or more stops before erasing anything,
+lists its disks on the console and reports the `error` phase on the install timeline. It is not a
+recipe field because the phone that signs the recipe can't see the target's disks, and a wrong pin
+only stops the install.
+
 ## Where each implementation lives
 
 | Component | Path |

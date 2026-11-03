@@ -3438,4 +3438,20 @@
     <string name="add_fingerprint_for_stronger_approvals">Adding a fingerprint in your phone\'s settings makes your approvals stronger on this Android version.</string>
     <string name="add_a_fingerprint">Add a fingerprint</string>
     <string name="recipe_made_by_older_app">This recipe was made by an older version of the Flagship app. Update the Flagship app, then create the server again.</string>
+    <string name="add_your_fingerprint_again_to_open_account_key">Add your fingerprint again in Android Settings to open your Flagship account key on this phone.</string>
+    <string name="account_key_unreadable_short">This phone can no longer open your account key. Restore your account to keep using it here.</string>
+    <string name="account_key_lost_title">This phone can\'t open your account key</string>
+    <string name="account_key_lost_body">The screen lock on this phone was removed or reset, so Android deleted the key that protected your Flagship account key here. Your account and your servers are not affected.</string>
+    <string name="account_key_lost_hint">To use your account here again, restore it: choose \"Connect to an existing account\", then sign in with your recovery passkey or a saved account key file, or join from another device that is signed in.</string>
+    <string name="account_key_lost_restore">Restore my account</string>
+    <string name="burn_target_disk_label">Disk to install on (optional)</string>
+    <string name="burn_target_disk_placeholder" translatable="false">serial:S64ANS0T123456</string>
+    <string name="burn_target_disk_help">Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk\'s serial number, or size: and its exact size in bytes.</string>
+    <string name="burn_target_disk_invalid">Start with by-id:, serial: or size:, followed by the disk\'s name, serial number or size in bytes, with no spaces.</string>
+    <string name="install_disk_stop_several">This computer has %1$s disks the installer could erase (%2$s), so it stopped. Nothing was erased.</string>
+    <string name="install_disk_stop_none">This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.</string>
+    <string name="install_disk_stop_missing">The disk this installer was made for (%1$s) isn\'t in this computer. Nothing was erased.</string>
+    <string name="install_disk_stop_ambiguous">The disk this installer was made for (%1$s) matches more than one disk in this computer. Nothing was erased.</string>
+    <string name="install_disk_stop_advice">Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.</string>
+    <string name="setup_stopped_cancel_or_contact">Cancel this order to free the name and create the server again, or contact us and we\'ll look at it.</string>
 </resources>

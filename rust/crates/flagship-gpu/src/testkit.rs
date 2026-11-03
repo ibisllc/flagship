@@ -307,6 +307,10 @@ pub fn approval(
         secrecy,
         trust_domain: domain.map(str::to_owned),
         owner_consent: domain.map(|d| format!("consent-{d}")),
+        container: None,
+        userspace: None,
+        max_runtime_ms: None,
+        share: None,
     }
 }
 
@@ -353,9 +357,49 @@ impl TestOwner {
         }
     }
 
+    /// `gpu.withdrawApproval`'s arguments: the owner withdraws `app` on [`TEST_SERVER`].
+    pub fn withdraw(&self, app: &AppInstallation, issued_at: u64) -> serde_json::Value {
+        let signature = owner_approval::withdraw_canonical(
+            TEST_SERVER,
+            &app.app_id,
+            &app.installation_id,
+            app.generation,
+            issued_at,
+        )
+        .map(|m| hex(&self.key.sign(m.as_bytes()).to_bytes()))
+        .unwrap_or_default();
+        serde_json::json!({
+            "appId": app.app_id,
+            "installationId": app.installation_id,
+            "generation": app.generation,
+            "issuedAt": issued_at,
+            "signature": signature,
+        })
+    }
+
     /// `claim` with `approvalProof` set from its own `approval`.
     pub fn sign_claim(&self, claim: &serde_json::Value) -> serde_json::Value {
+        self.sign_claim_at(claim, 1_800_000_000_000)
+    }
+
+    /// The owner signs the claim's container, userspace, run-time limit and share with it.
+    pub fn sign_claim_at(&self, claim: &serde_json::Value, issued_at: u64) -> serde_json::Value {
         let mut c = claim.clone();
+        if let Some(m) = c.as_object_mut() {
+            let bound: Vec<(&str, serde_json::Value)> =
+                ["container", "userspace", "maxRuntimeMs", "share"]
+                    .into_iter()
+                    .filter_map(|k| m.get(k).cloned().map(|v| (k, v)))
+                    .collect();
+            if let Some(a) = m
+                .get_mut("approval")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                for (k, v) in bound {
+                    a.insert(k.to_owned(), v);
+                }
+            }
+        }
         if let Some(a) = c
             .get("approval")
             .and_then(|a| serde_json::from_value::<GpuApproval>(a.clone()).ok())
@@ -363,7 +407,7 @@ impl TestOwner {
         {
             m.insert(
                 "approvalProof".into(),
-                serde_json::to_value(self.prove(&a, 1_800_000_000_000)).unwrap_or_default(),
+                serde_json::to_value(self.prove(&a, issued_at)).unwrap_or_default(),
             );
         }
         c

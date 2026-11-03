@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { hexToBytes } from "@noble/hashes/utils";
 import { ed, openSealedSecretResponse, signSecretRequest, verifyRootEntitlement, type SecretRequest } from "@flagship/protocol";
-import { BOOT_FACTS_SCRIPT, MAKE_CHAIN_STALE, STALE_CHAIN_LINE, parseBootFacts, parseUnlockLog, splitFacts } from "../lib/bootFacts.js";
+import {
+  BOOT_FACTS_SCRIPT,
+  BOOT_UNENDORSED_ONCE,
+  CLEAR_UNENDORSED,
+  MAKE_CHAIN_STALE,
+  STALE_CHAIN_LINE,
+  parseBootFacts,
+  parseCustody,
+  parseUnlockLog,
+  sealCoversGrub,
+  splitFacts,
+} from "../lib/bootFacts.js";
 import { entitlementCarrierHex, requestIsSigned, sealedUnlockReply } from "../lib/bootApprover.js";
 
 const kp = (n: number) => {
@@ -43,6 +54,15 @@ const OUT = [
   STALE_CHAIN_LINE,
   "@@flagship-fact:luks",
   "/dev/vda3",
+  "@@flagship-fact:custody",
+  "tpm sha256:0,2,4,7,8,9",
+  "@@flagship-fact:policy",
+  "compat",
+  "@@flagship-fact:uuids",
+  "initrd-boot 11112222-3333-4444-5555-666677778888",
+  "initrd-luks 0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0",
+  "disk-boot 11112222-3333-4444-5555-666677778888",
+  "disk-luks ",
   "@@flagship-fact:end",
 ].join("\n");
 
@@ -69,6 +89,24 @@ describe("boot facts (B0 / boot-chain lane)", () => {
     expect(f.premountLastLine).toBe(STALE_CHAIN_LINE);
     expect(f.luksDevice).toBe("/dev/vda3");
     expect(f.bootId).toMatch(/^5f0c1c2e/);
+    expect(f.custody).toEqual({ kind: "tpm", pcrs: [0, 2, 4, 7, 8, 9] });
+    expect(sealCoversGrub(f.custody)).toBe(true);
+    expect(f.unlockPolicy).toBe("compat");
+    expect(f.uuids).toEqual({ initrdBoot: "11112222-3333-4444-5555-666677778888", initrdLuks: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", diskBoot: "11112222-3333-4444-5555-666677778888", diskLuks: null });
+  });
+
+  it("B2 #7: tells a seal that covers GRUB from one that does not, and reads the TPM refusal and a trial boot from the log", () => {
+    expect(parseCustody("software")).toEqual({ kind: "software", pcrs: [] });
+    expect(parseCustody("")).toEqual({ kind: "none", pcrs: [] });
+    expect(sealCoversGrub(parseCustody("tpm sha256:0,2,4,7"))).toBe(false);
+    expect(sealCoversGrub(parseCustody("software"))).toBe(false);
+    const l = parseUnlockLog(
+      "flagship [up=2s] premount start (domain=x mode=auto lock-once=no)\nflagship [up=2s] start-up check boot (trial 0a1b)\nflagship [up=5s] the TPM did not release the lease key (boot chain or machine changed?) or the lease was refused",
+    );
+    expect(l).toMatchObject({ tpmRefused: true, trialBoot: true, unlockedBy: null });
+    expect(BOOT_UNENDORSED_ONCE).toContain("grub-reboot gym-unendorsed-chain");
+    expect(BOOT_UNENDORSED_ONCE).toContain("gym.unendorsed=1");
+    expect(CLEAR_UNENDORSED).toContain("rm -f /boot/grub/custom.cfg");
   });
 
   it("tells missing facts apart and refuses output with none", () => {

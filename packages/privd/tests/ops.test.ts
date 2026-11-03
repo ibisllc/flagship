@@ -223,6 +223,9 @@ describe("releases, wipes and root steps", () => {
       refused(() => copyInFiles({ file: "/bin/true", args: [], timeoutMs: 1, copyIn: [{ from: join(dir, "link"), to: join(to, "l") }] } as Exec, me));
       refused(() => copyInFiles({ file: "/bin/true", args: [], timeoutMs: 1, copyIn: [{ from: join(dir, "a.tar.gz"), to: join(to, "o") }] } as Exec, { uid: me.uid + 1, gid: me.gid }), /daemon's own/);
       refused(() => copyInFiles({ file: "/bin/true", args: [], timeoutMs: 1, copyIn: [{ from: "/etc/hosts", to: join(to, "h") }] } as Exec, me));
+      copyInFiles({ file: "/bin/true", args: [], timeoutMs: 1, copyIn: [{ from: join(dir, "a.tar.gz"), to: join(to, "cap/ok"), maxBytes: 7 }] } as Exec, me);
+      refused(() => copyInFiles({ file: "/bin/true", args: [], timeoutMs: 1, copyIn: [{ from: join(dir, "a.tar.gz"), to: join(to, "cap/big"), maxBytes: 6 }] } as Exec, me), /larger/);
+      expect(existsSync(join(to, "cap/big"))).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
       await rm(to, { recursive: true, force: true });

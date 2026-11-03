@@ -598,6 +598,7 @@ function buildVectors(): Vector[] {
     serverId: "home.harry.flagship.services",
     unit: "flagship-daemon",
     lines: 200,
+    nonce: "0123456789abcdef0123456789abcdef",
     issuedAt: ISSUED_AT,
   };
   vectors.push(
@@ -1163,7 +1164,7 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
     case "order-power-off-restart":
       return enc(["flagship/order/power-off/v1", i.serverId, "restart", i.issuedAt].join("|"));
     case "journal-read":
-      return enc(["flagship/journal-read/v1", i.serverId, i.unit, String(i.lines), String(i.issuedAt)].join("|"));
+      return enc(["flagship/journal-read/v2", i.serverId, i.unit, String(i.lines), i.nonce, String(i.issuedAt)].join("|"));
     case "watch-delegate-key": {
       const order = ["boot-approval"];
       const idx = (s: string) => order.indexOf(s);

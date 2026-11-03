@@ -3431,5 +3431,20 @@
   "couldnt_check_box_release": "No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo.",
   "add_fingerprint_for_stronger_approvals": "Añadir una huella en los ajustes del teléfono hace que tus aprobaciones sean más seguras en esta versión de Android.",
   "add_a_fingerprint": "Añadir una huella",
-  "recipe_made_by_older_app": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship y vuelve a crear el servidor."
+  "recipe_made_by_older_app": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship y vuelve a crear el servidor.",
+  "add_your_fingerprint_again_to_open_account_key": "Vuelve a añadir tu huella en los ajustes de Android para abrir la clave de tu cuenta de Flagship en este teléfono.",
+  "account_key_unreadable_short": "Este teléfono ya no puede abrir la clave de tu cuenta. Restaura tu cuenta para seguir usándola aquí.",
+  "account_key_lost_title": "Este teléfono no puede abrir la clave de tu cuenta",
+  "account_key_lost_body": "El bloqueo de pantalla de este teléfono se quitó o se restableció, así que Android borró la clave que protegía aquí la clave de tu cuenta de Flagship. Tu cuenta y tus servidores no se ven afectados.",
+  "account_key_lost_hint": "Para volver a usar tu cuenta aquí, restáurala: elige «Conectar con una cuenta existente» e inicia sesión con tu llave de acceso de recuperación o con un archivo de clave de cuenta guardado, o únete desde otro dispositivo que tenga la sesión iniciada.",
+  "account_key_lost_restore": "Restaurar mi cuenta",
+  "burn_target_disk_label": "Disco donde instalar (opcional)",
+  "burn_target_disk_help": "Solo hace falta si el ordenador tiene más de un disco. Sin esto, el instalador se detiene en ese ordenador, no borra nada y muestra sus discos en la pantalla. Escribe by-id: y un nombre de esa lista, serial: y el número de serie del disco, o size: y su tamaño exacto en bytes.",
+  "burn_target_disk_invalid": "Empieza por by-id:, serial: o size:, seguido del nombre, el número de serie o el tamaño en bytes del disco, sin espacios.",
+  "install_disk_stop_several": "Este ordenador tiene %1$s discos que el instalador podría borrar (%2$s), así que se detuvo. No se borró nada.",
+  "install_disk_stop_none": "Este ordenador no tiene un disco interno de 8 GB o más donde instalar, así que el instalador se detuvo. No se borró nada.",
+  "install_disk_stop_missing": "El disco para el que se creó este instalador (%1$s) no está en este ordenador. No se borró nada.",
+  "install_disk_stop_ambiguous": "El disco para el que se creó este instalador (%1$s) coincide con más de un disco de este ordenador. No se borró nada.",
+  "install_disk_stop_advice": "Vuelve a crear el instalador con la misma receta, rellena «Disco donde instalar» con uno de los discos que el ordenador mostró en su pantalla y arranca el ordenador desde él.",
+  "setup_stopped_cancel_or_contact": "Cancela este pedido para liberar el nombre y volver a crear el servidor, o escríbenos y lo revisaremos."
 }

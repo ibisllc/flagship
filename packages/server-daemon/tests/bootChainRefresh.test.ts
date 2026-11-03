@@ -18,6 +18,7 @@ import {
   BOOT_CHAIN_STATE_DIR,
   TRIAL_ENTRY_ID,
   TRIAL_INITRD_NAME,
+  TRIAL_UNANSWERED_NAME,
   compareKernels,
   missingFromInitrd,
   parseInitrdListing,
@@ -38,7 +39,7 @@ const KERNEL = "6.12.48+deb13-amd64";
 const CMDLINE = `BOOT_IMAGE=/vmlinuz-${KERNEL} root=/dev/mapper/flagship-root ro quiet`;
 const NEW_HELPER = enc.encode("\x7fELF new unseal helper");
 const OLD_HELPER = enc.encode("\x7fELF old helper");
-const FIXED_INITRD = ["bin/openssl", "bin/curl", "bin/xxd", "sbin/cryptsetup", "etc/ssl/certs/ca-certificates.crt", "boot/flagship-boot-key.pem", "boot/server-domain", "boot/flagship-boot-host"];
+const FIXED_INITRD = ["bin/openssl", "bin/curl", "bin/xxd", "sbin/cryptsetup", "etc/ssl/certs/ca-certificates.crt", "boot/flagship-boot-key.pem", "boot/server-domain", "boot/flagship-boot-host", "boot/flagship-boot-fs-uuid", "boot/flagship-luks-uuid"];
 
 interface FakeFile {
   data: Uint8Array;
@@ -314,6 +315,26 @@ describe("boot chain refresh", () => {
     expect(box.files.get(`/boot/initrd.img-${KERNEL}`)!.data).toEqual(oldInitrd);
     expect(await run(box)).toEqual({ action: "none", reason: "failed-before" });
     expect(box.calls.filter((c) => c.startsWith("mkinitramfs"))).toHaveLength(1);
+  });
+
+  it("drops a trial that waited for an unanswered phone without blaming the release, and stages it again", async () => {
+    const box = new FakeBox();
+    box.installOld({ premount: OLD_PREMOUNT });
+    expect((await run(box)).action).toBe("staged");
+    // The trial boot's premount gave up on the phone (an auto box whose TPM-sealed lease key the
+    // trial's GRUB entry can't open), wrote the token on FLAGSHIP_BOOT and restarted into the default.
+    box.put(`/boot/${TRIAL_UNANSWERED_NAME}`, enc.encode(`${box.token}\n`), 0o600);
+    box.reboot(false);
+    const r = await run(box);
+    expect(r).toMatchObject({ action: "rolled-back", reason: "trial-unanswered" });
+    expect(box.state().failed).toBeUndefined();
+    expect(box.files.has(`/boot/${TRIAL_UNANSWERED_NAME}`)).toBe(false);
+    expect(box.text(UNLOCK_PREMOUNT_PATH)).toBe(OLD_PREMOUNT);
+    expect((await run(box)).action).toBe("staged");
+    // A marker for another trial's token is not an excuse.
+    box.put(`/boot/${TRIAL_UNANSWERED_NAME}`, enc.encode("not-this-trial\n"), 0o600);
+    box.reboot(false);
+    expect(await run(box)).toMatchObject({ action: "rolled-back", reason: "trial-boot-failed" });
   });
 
   it("keeps the old pieces when the built initrd fails its check", async () => {

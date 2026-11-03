@@ -124,6 +124,11 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     return unhex(this.#client.call("sign.identity", { msg: hex(msg), ...ev }).sig);
   }
 
+  /** An owner-signed revocation or rank order for keyd's own record (identityAssertion.ts noteRevocation). */
+  noteEvidence(n: { statement: string; signatureHex: string; grantStatement?: string; grantSignatureHex?: string }): boolean {
+    return this.#client.call("evidence.note", { ...n }).changed === true;
+  }
+
   /** Hybrid-sign (STK AND its ML-DSA key) under the same purpose list as `signAsBox`. */
   signHybridAsBox(msg: Bytes): Bytes {
     return unhex(this.#client.call("sign.hybrid", { msg: hex(msg) }).sig);

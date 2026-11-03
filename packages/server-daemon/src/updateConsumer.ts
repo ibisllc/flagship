@@ -154,7 +154,11 @@ function parseUsedNonces(text: string): UsedNonces {
  * it is set aside and every order issued before that moment counts as used
  * (the owner sends a fresh one), never as unused.
  */
-export function fileUsedNonceStore(path: string, now: () => number = () => Date.now()): UsedNonceStore {
+export function fileUsedNonceStore(
+  path: string,
+  now: () => number = () => Date.now(),
+  lostNote = "Update orders sent before now are refused; send the update again.",
+): UsedNonceStore {
   async function current(): Promise<UsedNonces> {
     const read = await readStateFile(path);
     if (read.kind === "missing") return { nonces: [] };
@@ -163,7 +167,7 @@ export function fileUsedNonceStore(path: string, now: () => number = () => Date.
       return parseUsedNonces(read.text);
     } catch (e) {
       const closed: UsedNonces = { nonces: [], refuseIssuedBefore: now() };
-      await keepCorruptAside(path, e, "Update orders sent before now are refused; send the update again.");
+      await keepCorruptAside(path, e, lostNote);
       await writeFileDurable(path, JSON.stringify(closed));
       return closed;
     }

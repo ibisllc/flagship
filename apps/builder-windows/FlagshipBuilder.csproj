@@ -57,6 +57,7 @@
     <Compile Include="src\NativePairingCrypto.cs" />
     <Compile Include="src\NativeIsoRemaster.cs" />
     <Compile Include="src\NativePreseedEngine.cs" />
+    <Compile Include="src\TargetDisk.cs" />
     <Compile Include="src\NativeBuildPipeline.cs" />
     <Compile Include="src\BuildLog.cs" />
     <Compile Include="src\VM\HostResources.cs" />

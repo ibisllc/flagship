@@ -130025,6 +130025,211 @@
           }
         }
       }
+    },
+    "This computer has %@ disks the installer could erase (%@), so it stopped. Nothing was erased.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este ordenador tiene %@ discos que el instalador podría borrar (%@), así que se detuvo. No se ha borrado nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet ordinateur a %@ disques que l'installateur pourrait effacer (%@), il s'est donc arrêté. Rien n'a été effacé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Computer hat %@ Festplatten, die das Installationsprogramm löschen könnte (%@), daher hat es angehalten. Es wurde nichts gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este computador tem %@ discos que o instalador poderia apagar (%@), então ele parou. Nada foi apagado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このコンピューターにはインストーラーが消去できるディスクが %@ 台あるため (%@)、インストーラーは停止しました。何も消去されていません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台电脑有 %@ 块安装程序可以擦除的磁盘（%@），因此安装程序已停止。没有擦除任何内容。"
+          }
+        }
+      }
+    },
+    "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este ordenador no tiene un disco interno de 8 GB o más donde instalar, así que el instalador se detuvo. No se ha borrado nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet ordinateur n'a aucun disque interne de 8 Go ou plus sur lequel installer, l'installateur s'est donc arrêté. Rien n'a été effacé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Computer hat keine eingebaute Festplatte mit mindestens 8 GB für die Installation, daher hat das Installationsprogramm angehalten. Es wurde nichts gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este computador não tem um disco interno de 8 GB ou mais para instalar, então o instalador parou. Nada foi apagado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このコンピューターにはインストール先となる 8 GB 以上の内蔵ディスクがないため、インストーラーは停止しました。何も消去されていません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台电脑没有可供安装的 8 GB 或以上的内置磁盘，因此安装程序已停止。没有擦除任何内容。"
+          }
+        }
+      }
+    },
+    "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El disco para el que se creó este instalador (%@) no está en este ordenador. No se ha borrado nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le disque pour lequel cet installateur a été créé (%@) n'est pas dans cet ordinateur. Rien n'a été effacé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Festplatte, für die dieses Installationsprogramm erstellt wurde (%@), ist nicht in diesem Computer. Es wurde nichts gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O disco para o qual este instalador foi criado (%@) não está neste computador. Nada foi apagado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このインストーラーの作成時に指定したディスク (%@) はこのコンピューターにありません。何も消去されていません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此安装程序所针对的磁盘（%@）不在这台电脑中。没有擦除任何内容。"
+          }
+        }
+      }
+    },
+    "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El disco para el que se creó este instalador (%@) coincide con más de un disco de este ordenador. No se ha borrado nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le disque pour lequel cet installateur a été créé (%@) correspond à plusieurs disques de cet ordinateur. Rien n'a été effacé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Festplatte, für die dieses Installationsprogramm erstellt wurde (%@), passt auf mehr als eine Festplatte in diesem Computer. Es wurde nichts gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O disco para o qual este instalador foi criado (%@) corresponde a mais de um disco neste computador. Nada foi apagado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このインストーラーの作成時に指定したディスク (%@) は、このコンピューターの複数のディスクに一致します。何も消去されていません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此安装程序所针对的磁盘（%@）与这台电脑中的多块磁盘相符。没有擦除任何内容。"
+          }
+        }
+      }
+    },
+    "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a crear el instalador con la misma receta, indica en «Disco donde instalar» uno de los discos que el ordenador mostró en su pantalla y arranca el ordenador desde él."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recréez l'installateur avec la même recette, indiquez dans « Disque où installer » l'un des disques que l'ordinateur a affichés à l'écran, puis démarrez l'ordinateur dessus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstelle das Installationsprogramm mit demselben Rezept neu, trage unter „Datenträger für die Installation“ eine der Festplatten ein, die der Computer auf seinem Bildschirm angezeigt hat, und starte den Computer damit."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crie o instalador de novo com a mesma receita, preencha \"Disco onde instalar\" com um dos discos que o computador mostrou na tela e inicie o computador por ele."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同じレシピでインストーラーを作り直し、「インストール先のディスク」にコンピューターの画面に表示されたディスクのいずれかを入力してから、そのインストーラーでコンピューターを起動してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请使用同一份配方重新制作安装程序，在“安装到的磁盘”中填写电脑屏幕上列出的某块磁盘，然后用它启动电脑。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -9,6 +9,8 @@ import {
   encryptChunk,
   hybridSign,
   hybridSigKeygen,
+  normalizeHeldRevocations,
+  noteRevocation,
   openLlmPayload,
   openGossip,
   openSealedFromEd25519Recipient,
@@ -23,9 +25,10 @@ import { BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, checkSign, isPairi
 import { AcmeAccount, type AcmeRequest } from "./acme.js";
 import { ArchiveKeys } from "./archive.js";
 import { accountZoneOf, namesFor } from "./migrate.js";
-import { renameSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { TLS_SLOTS, TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage, type TlsSlot } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
+import type { HeldRevocationsState } from "@flagship/protocol";
 
 const GOSSIP_TAG = "flagship/gossip/v2|";
 const ACCESS_SYNC_TAG = "flagship/access-sync/v1|";
@@ -64,6 +67,8 @@ export interface KeydServiceInit {
   policyPath?: string;
   /** Where the server-archive account keys an admin device deposited are kept (`archive-keks.json`); absent keeps them in memory. */
   archivePoolPath?: string;
+  /** Where keyd keeps the owner's revocations and rank orders it was handed (`revocations.json`); absent keeps them in memory. */
+  revocationsPath?: string;
   now?: () => number;
 }
 
@@ -89,6 +94,9 @@ export class KeydService {
   #ceremony: { token: Uint8Array; notAfter: number } | null;
   readonly #now: () => number;
   readonly #archive: ArchiveKeys;
+  readonly #revocationsPath: string | null;
+  /** Null when `revocations.json` is unreadable: every master assertion is refused rather than forgetting a revocation. */
+  #held: HeldRevocationsState | null;
 
   constructor(init: KeydServiceInit) {
     if (init.identitySeed.length !== 32) throw new Error("keyd: identity seed must be 32 bytes");
@@ -116,6 +124,8 @@ export class KeydService {
     this.#policyPath = init.policyPath ?? null;
     this.#now = init.now ?? Date.now;
     this.#archive = new ArchiveKeys(init.archivePoolPath ?? null, this.#now);
+    this.#revocationsPath = init.revocationsPath ?? null;
+    this.#held = loadHeld(this.#revocationsPath);
   }
 
   get publicKeyHex(): string {
@@ -177,16 +187,34 @@ export class KeydService {
           { irkPubHex: toHex(this.#owner.irkPub), adminRootPubHex: this.#owner.adminRootPubHex },
           this.#now(),
           (app, pub) => deriveServiceMemberStableId(deriveServiceSecret(swk, app), pub),
-          (sig, m, pub) => {
-            try {
-              return ed.verify(Buffer.from(sig, "hex"), m, Buffer.from(pub, "hex"));
-            } catch {
-              return false;
-            }
-          },
+          verifyHex,
+          this.#heldOrThrow(),
         );
         if (refused) throw new KeydError("forbidden", `master needs the owner's evidence for this key (${refused})`);
         return { result: { sig: toHex(ed.sign(msg, this.#seed)) }, purpose };
+      }
+      case "evidence.note": {
+        // An owner-signed device revocation or rank order the daemon accepted (identityAssertion.ts
+        // noteRevocation): kept on keyd's own disk, so the daemon can't later present evidence the
+        // owner took back, nor make keyd forget it.
+        noExtraArgs(a, ["statement", "signatureHex", "grantStatement", "grantSignatureHex"]);
+        if (!this.#owner) throw new KeydError("forbidden", "no owner key is pinned for this box");
+        const note = {
+          statement: strArg(a, "statement", 4096),
+          signatureHex: strArg(a, "signatureHex", 128),
+          ...(a.grantStatement !== undefined ? { grantStatement: strArg(a, "grantStatement", 4096) } : {}),
+          ...(a.grantSignatureHex !== undefined ? { grantSignatureHex: strArg(a, "grantSignatureHex", 128) } : {}),
+        };
+        const r = noteRevocation(this.#heldOrThrow(), note, { irkPubHex: toHex(this.#owner.irkPub), adminRootPubHex: this.#owner.adminRootPubHex }, this.#now(), verifyHex);
+        if (typeof r === "string") throw new KeydError("forbidden", `keyd keeps only the owner's own revocations and rank orders (${r})`);
+        if (r.changed) {
+          if (this.#revocationsPath) {
+            writeFileSync(`${this.#revocationsPath}.tmp`, JSON.stringify(r.held), { mode: 0o600 });
+            renameSync(`${this.#revocationsPath}.tmp`, this.#revocationsPath);
+          }
+          this.#held = r.held;
+        }
+        return { result: { changed: r.changed } };
       }
       case "pq.status":
         noExtraArgs(a, []);
@@ -550,6 +578,11 @@ export class KeydService {
     return this.#tls;
   }
 
+  #heldOrThrow(): HeldRevocationsState {
+    if (!this.#held) throw new KeydError("failed", "keyd's revocations file is damaged, so it signs no master assertion");
+    return this.#held;
+  }
+
   #swkOrThrow(): Uint8Array {
     if (!this.#swk) throw new KeydError("not-provisioned", "no SWK provisioned");
     return this.#swk;
@@ -557,5 +590,43 @@ export class KeydService {
   #cgkOrThrow(): Uint8Array {
     if (!this.#cgk) throw new KeydError("not-provisioned", "no CGK provisioned");
     return this.#cgk;
+  }
+}
+
+function verifyHex(sig: string, m: Uint8Array, pub: string): boolean {
+  try {
+    return ed.verify(Buffer.from(sig, "hex"), m, Buffer.from(pub, "hex"));
+  } catch {
+    return false;
+  }
+}
+
+/** keyd's `revocations.json`: empty when missing, null when unreadable. */
+function loadHeld(path: string | null): HeldRevocationsState | null {
+  if (!path) return normalizeHeldRevocations({});
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ENOENT" ? normalizeHeldRevocations({}) : null;
+  }
+  try {
+    const v = JSON.parse(text) as unknown;
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+    const o = v as Record<string, unknown>;
+    const strs = (x: unknown) => (x === undefined ? [] : Array.isArray(x) && x.every((y) => typeof y === "string") ? (x as string[]) : null);
+    const grants = strs(o.grants);
+    const keys = strs(o.keys);
+    const ranksRaw = o.ranks ?? {};
+    if (!grants || !keys || typeof ranksRaw !== "object" || ranksRaw === null || Array.isArray(ranksRaw)) return null;
+    const ranks: HeldRevocationsState["ranks"] = {};
+    for (const [k, r] of Object.entries(ranksRaw as Record<string, unknown>)) {
+      const x = r as { issuedAt?: unknown; rank?: unknown } | null;
+      if (!x || typeof x.issuedAt !== "number" || !Number.isSafeInteger(x.issuedAt) || x.issuedAt < 0 || typeof x.rank !== "string") return null;
+      ranks[k] = { issuedAt: x.issuedAt, rank: x.rank };
+    }
+    return normalizeHeldRevocations({ grants, keys, ranks });
+  } catch {
+    return null;
   }
 }

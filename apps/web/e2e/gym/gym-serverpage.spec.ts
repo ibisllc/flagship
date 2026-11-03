@@ -761,9 +761,11 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(page.locator("#journal-status")).toHaveText("2 lines from flagship-data-services.");
     const post = m.last(`${HOME}/api/journal`)!;
     expect(post.body.request).toMatchObject({ serverId: HOME, unit: "flagship-data-services", lines: 50 });
+    // Each read is single-use: a fresh nonce in the signed bytes (journal-read/v2).
+    expect(post.body.request.nonce).toMatch(/^[0-9a-f]{32}$/);
     // An admin-pinned box takes a journal read only under the admin root (the IRK only unpinned).
-    const canon = (r: { serverId: string; unit: string; lines: number; issuedAt: number }) =>
-      `flagship/journal-read/v1|${r.serverId}|${r.unit}|${r.lines}|${r.issuedAt}`;
+    const canon = (r: { serverId: string; unit: string; lines: number; nonce: string; issuedAt: number }) =>
+      `flagship/journal-read/v2|${r.serverId}|${r.unit}|${r.lines}|${r.nonce}|${r.issuedAt}`;
     expect(await signer(page, keys, canon, post.body.request, post.body.signature)).toBe("admin");
     await shot(page, testInfo, "journal-read");
   });

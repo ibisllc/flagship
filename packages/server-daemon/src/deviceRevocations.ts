@@ -24,7 +24,18 @@ export interface DeviceRevocationsOptions {
   username: string;
   /** The pinned admin root, read on every call (a rotation may change it). Undefined: nothing can be revoked here. */
   adminRootPub: () => Uint8Array | undefined;
+  /** The revoked device's own signed grant, while the device book still holds it (keyd then also refuses its key). */
+  grantOf?: (grantId: string) => { statement: string; signatureHex: string } | null;
   now?: () => number;
+}
+
+/** A revocation as the admin root signed it, with the revoked grant when it was known: what keyd is handed. */
+export interface SignedRevocation {
+  grantId: string;
+  statement: string;
+  signatureHex: string;
+  grantStatement?: string;
+  grantSignatureHex?: string;
 }
 
 const REASONS = new Set(["lost", "stolen", "decommissioned", "replaced"]);
@@ -32,9 +43,20 @@ const GRANT_ID = /^[0-9a-zA-Z-]{8,64}$/;
 const SKEW_MS = 5 * 60_000;
 
 export class DeviceRevocations {
-  private revoked = new Map<string, { at: number; reason: string }>();
+  private revoked = new Map<string, { at: number; reason: string; signed?: Omit<SignedRevocation, "grantId"> }>();
   private readonly now: () => number;
   private readonly listeners: Array<(grantId: string) => void> = [];
+  private readonly signedListeners: Array<(r: SignedRevocation) => void> = [];
+
+  /** Told of every revocation that verifies, a re-sent one included (keyd keeps its own record). */
+  subscribeSigned(fn: (r: SignedRevocation) => void): void {
+    this.signedListeners.push(fn);
+  }
+
+  /** Every revocation held with its signature, to hand keyd again at start. */
+  signedRevocations(): SignedRevocation[] {
+    return [...this.revoked].flatMap(([grantId, v]) => (v.signed ? [{ grantId, ...v.signed }] : []));
+  }
 
   /** Told once per newly recorded grant (the device book and open rescue sessions drop it). */
   subscribe(fn: (grantId: string) => void): void {
@@ -50,9 +72,11 @@ export class DeviceRevocations {
     if (read.kind === "missing") return;
     try {
       if (read.kind === "unreadable") throw read.error;
-      const raw = JSON.parse(read.text) as { revoked?: Record<string, { at?: unknown; reason?: unknown }> };
+      const raw = JSON.parse(read.text) as { revoked?: Record<string, { at?: unknown; reason?: unknown; signed?: unknown }> };
       for (const [id, v] of Object.entries(raw.revoked ?? {})) {
-        if (GRANT_ID.test(id)) this.revoked.set(id, { at: typeof v.at === "number" ? v.at : 0, reason: String(v.reason ?? "") });
+        if (!GRANT_ID.test(id)) continue;
+        const signed = parseSigned(v.signed);
+        this.revoked.set(id, { at: typeof v.at === "number" ? v.at : 0, reason: String(v.reason ?? ""), ...(signed ? { signed } : {}) });
       }
     } catch (e) {
       // Losing tombstones would bring revoked devices back: keep the file, say so, and start empty
@@ -81,8 +105,28 @@ export class DeviceRevocations {
     }
     if (!Number.isSafeInteger(r.issuedAt) || r.issuedAt > this.now() + SKEW_MS) return "that revocation is dated in the future";
     if (!verifyRevokeDeviceCapabilityGrant(r, sig, root)) return "that revocation isn't signed by this account's admin key";
-    if (this.revoked.has(r.grantId)) return null;
-    this.revoked.set(r.grantId, { at: this.now(), reason: r.reason });
+    const prev = this.revoked.get(r.grantId);
+    const grant = prev?.signed?.grantStatement ? null : (this.opts.grantOf?.(r.grantId) ?? null);
+    const signed: Omit<SignedRevocation, "grantId"> = prev?.signed ?? {
+      statement: `flagship/revoke-device-capability-grant/v1|${r.grantId}|${r.username}|${r.reason}|${r.issuedAt}`,
+      signatureHex: Buffer.from(sig).toString("hex"),
+    };
+    if (grant) Object.assign(signed, { grantStatement: grant.statement, grantSignatureHex: grant.signatureHex });
+    for (const fn of this.signedListeners) {
+      try {
+        fn({ grantId: r.grantId, ...signed });
+      } catch {
+        /* keyd's record is best effort here: it is handed every held revocation again at start */
+      }
+    }
+    if (prev) {
+      if (!prev.signed || grant) {
+        prev.signed = signed;
+        await this.persist();
+      }
+      return null;
+    }
+    this.revoked.set(r.grantId, { at: this.now(), reason: r.reason, signed });
     await this.persist();
     for (const fn of this.listeners) {
       try {
@@ -97,4 +141,17 @@ export class DeviceRevocations {
   private async persist(): Promise<void> {
     await writeFileDurable(this.opts.path, JSON.stringify({ revoked: Object.fromEntries(this.revoked) }, null, 2));
   }
+}
+
+const SIG_HEX = /^[0-9a-f]{128}$/;
+
+function parseSigned(v: unknown): Omit<SignedRevocation, "grantId"> | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.statement !== "string" || typeof o.signatureHex !== "string" || !SIG_HEX.test(o.signatureHex)) return null;
+  const grant =
+    typeof o.grantStatement === "string" && typeof o.grantSignatureHex === "string" && SIG_HEX.test(o.grantSignatureHex)
+      ? { grantStatement: o.grantStatement, grantSignatureHex: o.grantSignatureHex }
+      : {};
+  return { statement: o.statement, signatureHex: o.signatureHex, ...grant };
 }

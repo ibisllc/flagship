@@ -103,7 +103,7 @@ pub const MAX_SIGN_BYTES: usize = 256 * 1024;
 pub const RELAY_ATTACHMENT_MAX_MS: u64 = 30 * 60_000;
 
 /// A canonical decimal (`^(?:0|[1-9][0-9]{0,15})$`), as the TS policy reads relay-attachment times.
-fn canonical_decimal(s: &str) -> Option<u64> {
+pub(crate) fn canonical_decimal(s: &str) -> Option<u64> {
     let b = s.as_bytes();
     let ok = match b {
         [b'0'] => true,
@@ -254,7 +254,7 @@ fn check_sign_inner(
         let parts: Vec<&str> = text.split('|').collect();
         let issued = parts.get(6).and_then(|s| canonical_decimal(s));
         let not_after = parts.get(7).and_then(|s| canonical_decimal(s));
-        let span_ok = matches!((issued, not_after), (Some(i), Some(n)) if n > i && n - i <= RELAY_ATTACHMENT_MAX_MS);
+        let span_ok = matches!((issued, not_after), (Some(i), Some(n)) if n > i && n.checked_sub(i).is_some_and(|d| d <= RELAY_ATTACHMENT_MAX_MS));
         if parts.len() != 8 || parts.get(2).copied() != Some(public_key_hex) || !span_ok {
             return Err(KeydError::forbidden(
                 "the box attaches only itself, for at most 30 minutes",
@@ -362,6 +362,7 @@ pub struct MasterEvidence<'a> {
 }
 
 /// `checkMasterEvidence` (identityAssertion.ts), same codes in the same order.
+#[allow(clippy::too_many_arguments)]
 pub fn check_master_evidence(
     text: &str,
     ev: &MasterEvidence<'_>,
@@ -370,6 +371,7 @@ pub fn check_master_evidence(
     now: i64,
     stable_id_of: &dyn Fn(&str, &[u8; 32]) -> String,
     verify: &dyn Fn(&str, &[u8], &str) -> bool,
+    held: &crate::revocations::HeldRevocations,
 ) -> Option<&'static str> {
     let Some((app, user, role)) = asserted_identity(text) else {
         return Some("not-master");
@@ -402,7 +404,13 @@ pub fn check_master_evidence(
     let signer = root.unwrap_or(irk_pub_hex);
     let p: Vec<&str> = ev.statement.split('|').collect();
     let part = |i: usize| p.get(i).copied().unwrap_or_default();
-    match part(0) {
+    let skewed = |at: u64| {
+        i64::try_from(at).map_or(true, |a| {
+            a > now.saturating_add(crate::revocations::SKEW_MS)
+        })
+    };
+    let is_grant = part(0) == "flagship/device-capability-grant/v2";
+    let (target, issued_at) = match part(0) {
         "flagship/device-capability-grant/v2" => {
             if p.len() != 8 {
                 return Some("bad-evidence");
@@ -413,14 +421,16 @@ pub fn check_master_evidence(
             if root.is_some() && !part(5).split(',').any(|x| x == "admin") {
                 return Some("not-admin");
             }
-            let exp = part(7);
-            let ok_num = !exp.is_empty()
-                && exp.len() <= 16
-                && exp.bytes().all(|c| c.is_ascii_digit())
-                && !(exp.len() > 1 && exp.starts_with('0'));
-            if !ok_num || exp.parse::<i64>().map_or(true, |e| e <= now) {
+            if canonical_decimal(part(7)).is_none_or(|e| i64::try_from(e).is_ok_and(|e| e <= now)) {
                 return Some("expired");
             }
+            let Some(issued) = canonical_decimal(part(6)) else {
+                return Some("bad-evidence");
+            };
+            if skewed(issued) {
+                return Some("future");
+            }
+            (format!("device:{key}"), None)
         }
         "flagship/app-rank/v1" => {
             if p.len() != 5 {
@@ -438,10 +448,29 @@ pub fn check_master_evidence(
             if part(3) != "master" {
                 return Some("not-admin");
             }
+            let Some(issued) = canonical_decimal(part(4)) else {
+                return Some("bad-evidence");
+            };
+            if skewed(issued) {
+                return Some("future");
+            }
+            (part(2).to_owned(), Some(issued))
         }
         _ => return Some("bad-evidence"),
+    };
+    if !verify(ev.signature_hex, ev.statement.as_bytes(), signer) {
+        return Some("bad-signature");
     }
-    (!verify(ev.signature_hex, ev.statement.as_bytes(), signer)).then_some("bad-signature")
+    let target_key = target.split_once(':').map_or("", |(_, k)| k);
+    if (is_grant && held.grant_revoked(part(1))) || held.key_revoked(target_key) {
+        return Some("revoked");
+    }
+    let (latest_at, latest_rank) = held.latest(ev.app_id, &target)?;
+    let superseded = match issued_at {
+        None => latest_rank != "master",
+        Some(at) => *latest_at > at || (*latest_at == at && latest_rank != "master"),
+    };
+    superseded.then_some("superseded")
 }
 
 pub fn identity_assertion_refusal(text: &str) -> Option<&'static str> {
@@ -1077,6 +1106,10 @@ mod tests {
                 signature_hex: &sig,
             };
             let root = c["anchors"]["adminRootPubHex"].as_str();
+            let held = c
+                .get("held")
+                .map(|h| crate::revocations::HeldRevocations::from_value(h).unwrap())
+                .unwrap_or_default();
             let got = check_master_evidence(
                 &s(&c["msg"]),
                 &e,
@@ -1085,6 +1118,7 @@ mod tests {
                 now,
                 &stable,
                 &verify,
+                &held,
             );
             assert_eq!(
                 got.unwrap_or("ok"),

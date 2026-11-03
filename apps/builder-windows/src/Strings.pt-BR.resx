@@ -577,6 +577,15 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="optionalWiFiForAServer" xml:space="preserve">
     <value>Wi-Fi opcional para um servidor sem Ethernet. É gravado neste instalador de uso único e lembrado neste PC apenas para a sua conta.</value>
   </data>
+  <data name="diskToInstallOnOptional" xml:space="preserve">
+    <value>Disco onde instalar (opcional)</value>
+  </data>
+  <data name="diskToInstallOnHelp" xml:space="preserve">
+    <value>Só é necessário quando o computador tem mais de um disco. Sem isso, o instalador para nesse computador, não apaga nada e lista os discos na tela. Digite by-id: e um nome dessa lista, serial: e o número de série do disco, ou size: e o tamanho exato em bytes.</value>
+  </data>
+  <data name="diskToInstallOnInvalid" xml:space="preserve">
+    <value>Comece com by-id:, serial: ou size:, seguido do nome, do número de série ou do tamanho em bytes do disco, sem espaços.</value>
+  </data>
   <data name="readyToBoot" xml:space="preserve">
     <value>Pronto para iniciar</value>
   </data>

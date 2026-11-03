@@ -149,7 +149,7 @@ describe("Stop", () => {
   });
 });
 
-describe("GPU approvals (flagship/gpu-approval/v1)", () => {
+describe("GPU approvals (flagship/gpu-approval/v2)", () => {
   const V = JSON.parse(
     readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/gpu-approval/vectors.json"), "utf8"),
   ) as {
@@ -171,6 +171,10 @@ describe("GPU approvals (flagship/gpu-approval/v1)", () => {
     secrecy: a.secrecy,
     trustDomain: a.trustDomain,
     ownerConsent: a.ownerConsent,
+    container: a.container,
+    userspace: a.userspace,
+    maxRuntimeMs: a.maxRuntimeMs,
+    share: a.share,
   });
 
   it("matches the shared vectors: canonical bytes, the admin root's signatures, every tampered case refused", async () => {
@@ -196,7 +200,7 @@ describe("GPU approvals (flagship/gpu-approval/v1)", () => {
   it("refuses what gpud could not read back, and names a trust domain and consent for sharing", async () => {
     const G = await load("lib/gpuApproval.js");
     const r = listed(V.cases[0]!.approval);
-    for (const bad of [{ ...r, appId: "a|b" }, { ...r, maxCount: 17 }, { ...r, caps: [] }, { ...r, backend: "cuda" }, { ...r, trustDomain: "a b" }]) {
+    for (const bad of [{ ...r, appId: "a|b" }, { ...r, maxCount: 17 }, { ...r, caps: [] }, { ...r, backend: "cuda" }, { ...r, trustDomain: "a b" }, { ...r, container: undefined }, { ...r, container: "a|b" }, { ...r, maxRuntimeMs: 0 }, { ...r, share: { computePercent: 101, memoryMib: 1 } }]) {
       expect(() => G.gpuApprovalCanonical(V.anchor.server, bad, 1)).toThrow();
     }
     expect(() => G.gpuApprovalCanonical("Home.alice", r, 1)).toThrow();
@@ -209,11 +213,11 @@ describe("GPU approvals (flagship/gpu-approval/v1)", () => {
     const view: any = {
       ...fixture(),
       pendingApprovals: [
-        { server, appId: "smoketest--render", installationId: "inst-7f3a", generation: 3, backend: "nvidia-cuda", maxCount: 1, caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: null, ownerConsent: null },
-        { server, appId: "smoketest--stream", installationId: "inst-5", generation: 2, backend: "nvidia-cuda", maxCount: 1, caps: ["video-encode"], policies: ["cooperative"], isolation: "gvisor-nvproxy", secrecy: false, trustDomain: null, ownerConsent: null },
+        { server, appId: "smoketest--render", installationId: "inst-7f3a", generation: 3, backend: "nvidia-cuda", maxCount: 1, caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: null, ownerConsent: null, container: "flagship-smoketest--render", userspace: null, maxRuntimeMs: null, share: null },
+        { server, appId: "smoketest--stream", installationId: "inst-5", generation: 2, backend: "nvidia-cuda", maxCount: 1, caps: ["video-encode"], policies: ["cooperative"], isolation: "gvisor-nvproxy", secrecy: false, trustDomain: null, ownerConsent: null, container: "flagship-smoketest--stream", userspace: null, maxRuntimeMs: null, share: null },
       ],
       approvals: [
-        { server, appId: "smoketest--photos", installationId: "inst-01", generation: 1, backend: "nvidia-cuda", maxCount: 1, caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: null, ownerConsent: null, issuedAt: 1 },
+        { server, appId: "smoketest--photos", installationId: "inst-01", generation: 1, backend: "nvidia-cuda", maxCount: 1, caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: null, ownerConsent: null, container: "flagship-smoketest--photos", userspace: null, maxRuntimeMs: null, share: null, issuedAt: 1 },
       ],
     };
     const posts: Array<{ path: string; body: any }> = [];
@@ -250,7 +254,7 @@ describe("GPU approvals (flagship/gpu-approval/v1)", () => {
     expect(await w.approve("smoketest--render|inst-7f3a|3")).toBe(true);
     const a = b.posts[0]!;
     expect(a.path).toBe("/api/screens/accelerators/approvals");
-    expect(a.body).toMatchObject({ server, appId: "smoketest--render", issuedAt: 1_800_000_000_000, trustDomain: null, ownerConsent: null });
+    expect(a.body).toMatchObject({ server, appId: "smoketest--render", issuedAt: 1_800_000_000_000, trustDomain: null, ownerConsent: null, container: "flagship-smoketest--render", userspace: null, maxRuntimeMs: null, share: null });
     const bytes = G.gpuApprovalCanonical(server, a.body, a.body.issuedAt);
     expect(ed25519.verify(hex(a.body.signature), bytes, ed25519.getPublicKey(ADMIN))).toBe(true);
     expect(w.state.notice).toBe("Render can use the GPU.");

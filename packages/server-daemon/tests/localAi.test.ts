@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ed, signLocalAiAppGrant, signLocalAiTrainOrder, type LocalAiAppGrant, type LocalAiTrainOrder } from "@flagship/protocol";
-import { LOCAL_AI_IMAGES as PRIVD_IMAGES, validateRequest, PrivdError } from "@flagship/privd";
+import { LOCAL_AI_IMAGES as PRIVD_IMAGES, LOCAL_AI_MODEL_PINS as PRIVD_MODEL_PINS, validateRequest, PrivdError } from "@flagship/privd";
 import { AcceleratorBroker } from "../src/gpu/broker.js";
 import { ALL_LOCAL_AI_IMAGES, LOCAL_MODELS, localModel, registryHostAllowed, type LocalModel } from "../src/localAi/catalog.js";
 import { checkLocalAiRunArgs, datasetMount, serviceRunArgs, trainRunArgs } from "../src/localAi/containers.js";
@@ -217,10 +217,18 @@ describe("the container shapes pass both the daemon's tripwire and the privilege
     expect(() => checkLocalAiRunArgs(base.map((a) => (a.startsWith("127.0.0.1:") ? "0.0.0.0:41234:8080" : a)))).toThrow(/loopback/);
   });
 
-  it("root's model install checks the digest on its own copy", () => {
-    const e = validateRequest("host", { file: "localai", argv: ["model-install", "b".repeat(64), "/var/lib/docker/volumes/flagship-models/_data"] }, BROKER_CTX);
-    expect(e.copyIn?.[0]?.from).toBe(`/var/flagship/data/local-ai/incoming/sha256-${"b".repeat(64)}.gguf`);
+  it("root's model install checks the digest on its own copy, for a catalog digest only, capped at its size", () => {
+    const m = LOCAL_MODELS[0]!;
+    const e = validateRequest("host", { file: "localai", argv: ["model-install", m.sha256, "/var/lib/docker/volumes/flagship-models/_data"] }, BROKER_CTX);
+    expect(e.copyIn?.[0]?.from).toBe(`/var/flagship/data/local-ai/incoming/sha256-${m.sha256}.gguf`);
+    expect(e.copyIn?.[0]?.maxBytes).toBe(m.sizeBytes);
     expect(e.args[1]).toMatch(/sha256sum -c/);
+    // A digest the daemon computed over a file of its own choosing is not a model root installs.
+    expect(() => validateRequest("host", { file: "localai", argv: ["model-install", "b".repeat(64), "/var/lib/docker/volumes/flagship-models/_data"] }, BROKER_CTX)).toThrow(PrivdError);
+  });
+
+  it("both brokers pin exactly the catalog's models (digest and size)", () => {
+    expect(Object.fromEntries(Object.entries(PRIVD_MODEL_PINS).sort())).toEqual(Object.fromEntries(LOCAL_MODELS.map((m) => [m.sha256, m.sizeBytes]).sort()));
   });
 });
 

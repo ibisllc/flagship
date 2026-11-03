@@ -202,7 +202,20 @@ interface Setup {
   ownerKey?: string | null;
   caBundle?: boolean;
   env?: Record<string, string>;
+  /**
+   * The disks blkid sees (bootFsMount.ts pins both by the UUIDs the hook recorded): "pinned" = exactly
+   * one LUKS volume with the recorded UUID; "missing" = no UUID recorded in the initrd; "duplicate" =
+   * two devices claim it; "wrong-type" = the UUID is an ext4 filesystem. `bootFs` also pins and
+   * "mounts" FLAGSHIP_BOOT (the mount stub succeeds; the mount point stays the scratch directory).
+   */
+  luks?: "pinned" | "missing" | "duplicate" | "wrong-type";
+  bootFs?: boolean;
+  /** /proc/cmdline (a boot-chain trial carries flagship.bootchain=<token>). */
+  cmdline?: string;
 }
+
+const LUKS_UUID = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
+const BOOT_UUID = "11112222-3333-4444-5555-666677778888";
 
 function stage(s: Setup): string {
   const R = mkdtempSync(join(work, "root-"));
@@ -225,8 +238,29 @@ function stage(s: Setup): string {
   stub("curl", `echo "$@" >> "${R}/run/curl-argv.log"\nfirst="$1"; shift\nexec /usr/bin/curl "$first" --connect-to boot.flagshipserver.com:443:127.0.0.1:${port} "$@"`);
   stub("openssl", `exec "${opensslBin}" "$@"`);
   stub("cryptsetup", `cat > "${R}/run/cryptsetup-stdin"\necho "$@" > "${R}/run/cryptsetup-argv"\ncmp -s "${R}/run/cryptsetup-stdin" "${R}/run/expected-key" || exit 2`);
-  stub("blkid", "echo /dev/fake4");
-  stub("mount", "exit 1");
+  const luks = s.luks ?? "pinned";
+  if (luks !== "missing") writeFileSync(join(R, "boot/flagship-luks-uuid"), `${LUKS_UUID}\n`);
+  if (s.bootFs) writeFileSync(join(R, "boot/flagship-boot-fs-uuid"), `${BOOT_UUID}\n`);
+  // Any other query (a label, TYPE=crypto_LUKS) finds a stranger's disk: the premount must never ask it.
+  stub(
+    "blkid",
+    [
+      `echo "$@" >> "${R}/run/blkid-argv.log"`,
+      'case "$*" in',
+      `  "-t UUID=${LUKS_UUID} -o device") echo /dev/fake4${luks === "duplicate" ? "; echo /dev/sdz2" : ""};;`,
+      `  "-s TYPE -o value /dev/fake4") echo ${luks === "wrong-type" ? "ext4" : "crypto_LUKS"};;`,
+      `  "-t UUID=${BOOT_UUID} -o device") echo /dev/fake2;;`,
+      '  "-s TYPE -o value /dev/fake2") echo ext4;;',
+      "  *) echo /dev/sdz1;;",
+      "esac",
+    ].join("\n"),
+  );
+  stub("mount", s.bootFs ? `echo "$@" >> "${R}/run/mount-argv.log"` : "exit 1");
+  stub("modprobe", "exit 0");
+  if (s.cmdline !== undefined) {
+    mkdirSync(join(R, "proc"), { recursive: true });
+    writeFileSync(join(R, "proc/cmdline"), `${s.cmdline}\n`);
+  }
   stub("umount", "exit 0");
   stub("ip", "echo 'default via 10.0.0.1 dev eth0'");
   stub("lvm", "exit 0");
@@ -380,6 +414,49 @@ describe("the generated premount, end to end", () => {
       expect(requests).toEqual([]);
     }, 30_000);
   }
+
+  it("opens only the LUKS volume whose UUID the hook recorded, and mounts FLAGSHIP_BOOT by its UUID", async () => {
+    reset();
+    await depositLease(owner);
+    const R = stage({ bootFs: true });
+    const r = await run(R);
+    expect(r.out).toContain("unlocked from the auto-unlock lease");
+    expect(readFileSync(join(R, "run/cryptsetup-argv"), "utf8").trim()).toBe("luksOpen --key-file - /dev/fake4 sda4_crypt");
+    expect(readFileSync(join(R, "run/mount-argv.log"), "utf8").trim()).toBe(`-t ext4 /dev/fake2 ${R}/run/flagship-lockmnt`);
+    const asked = readFileSync(join(R, "run/blkid-argv.log"), "utf8");
+    expect(asked).not.toContain("TYPE=crypto_LUKS");
+    expect(asked).not.toContain("LABEL");
+  }, 60_000);
+
+  for (const [luks, why] of [
+    ["missing", "the initramfs has no recorded LUKS UUID"],
+    ["duplicate", "more than one disk claims the encrypted root's UUID"],
+    ["wrong-type", "the device with UUID 0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0 is not a LUKS volume"],
+  ] as const) {
+    it(`refuses to open any disk when the pinned LUKS volume is ${luks}`, async () => {
+      reset();
+      await depositLease(owner);
+      const R = stage({ luks });
+      const r = await run(R);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain(`FATAL: ${why}`);
+      expect(existsSync(join(R, "run/cryptsetup-argv"))).toBe(false);
+    }, 30_000);
+  }
+
+  it("a start-up check (trial) boot of an auto box the lease can't open asks the phone for a bounded time, then restarts and says nobody answered", async () => {
+    reset();
+    answerRelay = false;
+    const R = stage({ bootFs: true, cmdline: "BOOT_IMAGE=/vmlinuz root=/dev/mapper/x ro panic=30 flagship.bootchain=0a1b2c3d4e5f" });
+    const r = await run(R, { FLAGSHIP_TRIAL_RELAY_SECS: "3", FLAGSHIP_RELAY_REQUEST_SECS: "2" });
+    expect(r.out).toContain("start-up check boot (trial 0a1b2c3d4e5f)");
+    expect(r.out).toContain("asking the phone for at most 3s");
+    expect(r.out).toContain("no phone reply within 3s");
+    expect(existsSync(join(R, "run/rebooted"))).toBe(true);
+    expect(readFileSync(join(R, "run/flagship-lockmnt/flagship-trial-unanswered"), "utf8").trim()).toBe("0a1b2c3d4e5f");
+    // An ordinary boot (and an approve box's trial) still waits the full window.
+    expect(buildUnlockPremountScript()).toContain('if [ -n "$TRIAL_TOKEN" ] && [ "$EFFECTIVE_MODE" = "auto" ]');
+  }, 60_000);
 
   it("fails loudly without the CA bundle", async () => {
     reset();

@@ -3167,5 +3167,10 @@
   "Needs an update": "bd6af9f6333a",
   "This server needs an update to keep working with Flagship 0.3": "d034c377354d",
   "Its certificate can't be renewed and runs out on %@. Update it before then.": "850c6ae93372",
-  "Its certificate can't be renewed until it is updated.": "1756fe6e8116"
+  "Its certificate can't be renewed until it is updated.": "1756fe6e8116",
+  "This computer has %@ disks the installer could erase (%@), so it stopped. Nothing was erased.": "621e2ffe6ec0",
+  "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "b1dfce81846a",
+  "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": "26421ceafbe7",
+  "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": "f4cf42bc75d1",
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "8e999256567e"
 }

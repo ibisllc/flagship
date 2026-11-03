@@ -173,6 +173,35 @@ export function answerFor(a: Announcement, questions: Question[]): Buffer | null
   return Buffer.concat([header, ...answers, ...extra]);
 }
 
+/** One of the box's own IPv4 links: an interface address and its netmask. */
+export interface LanLink {
+  address: string;
+  netmask: string;
+}
+
+function ipv4Number(a: string): number | null {
+  const p = a.split(".");
+  if (p.length !== 4 || !p.every((x) => /^\d{1,3}$/.test(x) && Number(x) <= 255)) return null;
+  return p.reduce((n, x) => n * 256 + Number(x), 0);
+}
+
+/**
+ * Whether a query's sender sits on one of the box's own links (RFC 6762 §11: answer only
+ * on-link askers). A private address on another subnet came through a router, and its source
+ * may be spoofed; answering it would make the box a reflector.
+ */
+export function onLinkSource(address: string, links: readonly LanLink[]): boolean {
+  if (!isLanAddress(address)) return false;
+  const a = ipv4Number(address);
+  if (a === null) return false;
+  return links.some((l) => {
+    const i = ipv4Number(l.address);
+    const m = ipv4Number(l.netmask);
+    if (i === null || m === null || m === 0 || !isLanAddress(l.address)) return false;
+    return (a & m) >>> 0 === (i & m) >>> 0;
+  });
+}
+
 export interface LanDiscovery {
   /** Resolves with the bound port once the socket is listening (rejects if it could not bind). */
   listening: Promise<number>;
@@ -186,8 +215,12 @@ export interface LanDiscoveryOptions {
   interfaces?: () => string[];
   /** 0 binds an ephemeral port and joins nothing (tests). Default 5353. */
   port?: number;
-  /** Accept queries from any source (tests). Default: LAN sources only. */
+  /** Accept queries from any source (tests). Default: senders on the box's own links only. */
   anySource?: boolean;
+  /** The box's own links (default: its LAN interfaces), for the on-link check. */
+  links?: () => LanLink[];
+  /** At most this many answers a second, whoever asks. Default 20. */
+  maxRepliesPerSecond?: number;
   log?: (m: string) => void;
 }
 
@@ -211,13 +244,24 @@ export function startLanDiscovery(o: LanDiscoveryOptions): LanDiscovery | null {
     failBind(e);
     log(`socket error (${(e as NodeJS.ErrnoException).code ?? e.message}); not announcing`);
   });
+  const links = o.links ?? lanLinks;
+  const cap = o.maxRepliesPerSecond ?? 20;
+  let windowStart = 0;
+  let sent = 0;
   sock.on("message", (msg, rinfo) => {
     try {
-      if (!o.anySource && !isLanAddress(rinfo.address)) return;
+      if (!o.anySource && !onLinkSource(rinfo.address, links())) return;
       const qs = parseQuestions(msg);
       if (!qs) return;
       const res = answerFor({ id: o.id, endpoints: o.endpoints() }, qs);
       if (!res) return;
+      const now = Date.now();
+      if (now - windowStart >= 1000) {
+        windowStart = now;
+        sent = 0;
+      }
+      if (sent >= cap) return;
+      sent++;
       const unicast = qs.some((q) => q.unicast) || rinfo.port !== MDNS_PORT;
       if (unicast) sock.send(res, rinfo.port, rinfo.address);
       else sock.send(res, MDNS_PORT, MDNS_GROUP);
@@ -255,13 +299,17 @@ export function startLanDiscovery(o: LanDiscoveryOptions): LanDiscovery | null {
   };
 }
 
-function lanInterfaceAddresses(): string[] {
-  const out: string[] = [];
+function lanLinks(): LanLink[] {
+  const out: LanLink[] = [];
   for (const [name, infos] of Object.entries(os.networkInterfaces())) {
     if (/^(docker|br-|fs-|veth|virbr|vnet|vmnet|cni|flannel|cali|lxc|lxd|podman|tailscale|wg|tun|tap|zt|utun)/i.test(name)) continue;
-    for (const i of infos ?? []) if (!i.internal && i.family === "IPv4" && isLanAddress(i.address)) out.push(i.address);
+    for (const i of infos ?? []) if (!i.internal && i.family === "IPv4" && isLanAddress(i.address)) out.push({ address: i.address, netmask: i.netmask });
   }
   return out;
+}
+
+function lanInterfaceAddresses(): string[] {
+  return lanLinks().map((l) => l.address);
 }
 
 /** The address of `a` in the bytes of a response, for tests and the phone's own parser. */

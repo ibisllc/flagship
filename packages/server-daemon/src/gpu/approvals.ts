@@ -1,7 +1,8 @@
 /**
  * The owner's GPU approvals on this box (gpu.md §5). An app whose manifest asks for an accelerator
- * gets one only with the owner's signed `flagship/gpu-approval/v1` for exactly its installation and
- * generation; flagship-gpud checks that signature again itself before it hands out a device.
+ * gets one only with the owner's signed `flagship/gpu-approval/v2` for exactly its installation and
+ * generation, and for the container, userspace, run-time limit and share its claim carries;
+ * flagship-gpud checks that signature again itself before it hands out a device.
  *
  * - Each app that asks gets an installation here: a random id, and a generation that moves whenever
  *   its capability digest does (an update that changes what it asks for), so a new generation always
@@ -12,7 +13,9 @@
  *   manifest allows that.
  * - A grant must be fresh, newer than any withdrawal of that generation, match what the app asks for,
  *   and be signed by the admin root on a box that pins one (else the IRK). A withdrawal is signed the
- *   same way (`flagship/gpu-approval-withdraw/v1`), drops the approval and stops the app's GPU work.
+ *   same way (`flagship/gpu-approval-withdraw/v1`), drops the approval and is handed to gpud, which
+ *   raises its own floor (no approval signed before it counts again, whatever this daemon presents)
+ *   and stops the app's GPU work. One gpud missed (not running) is handed over before the next claim.
  *
  * Kept in `<dataDir>/gpu-approvals.json` (durable writes). An unreadable file is set aside and the
  * box starts with no approvals: every GPU app waits for the owner again.
@@ -50,6 +53,10 @@ export interface PendingGpuApproval {
   secrecy: boolean;
   trustDomain: string | null;
   ownerConsent: string | null;
+  container: string;
+  userspace: string | null;
+  maxRuntimeMs: number | null;
+  share: GpuApprovalTerms["share"];
 }
 
 export interface GrantedGpuApproval extends PendingGpuApproval {
@@ -85,12 +92,16 @@ interface Stored {
   signature: string;
 }
 
+export type SignedGpuApprovalWithdraw = GpuApprovalWithdraw & { signature: string };
+
 interface State {
-  v: 1;
+  v: 2;
   installations: Record<string, Installation>;
   approvals: Record<string, Stored>;
   /** The newest withdrawal per `<appId>|<installationId>|<generation>`: nothing signed before it counts. */
   floors: Record<string, number>;
+  /** Signed withdrawals gpud has not taken yet. */
+  withdrawals: SignedGpuApprovalWithdraw[];
 }
 
 export interface GpuApprovalsDeps {
@@ -106,7 +117,8 @@ export interface GpuApprovalsDeps {
 
 export type GpuApprovalResult = { ok: true; approval: GrantedGpuApproval | null } | { ok: false; status: number; error: string; code: string };
 
-const empty = (): State => ({ v: 1, installations: {}, approvals: {}, floors: {} });
+const empty = (): State => ({ v: 2, installations: {}, approvals: {}, floors: {}, withdrawals: [] });
+const MAX_UNDELIVERED = 64;
 const refuse = (status: number, code: string, error: string): GpuApprovalResult => ({ ok: false, status, code, error });
 const floorKey = (a: { appId: string; installationId: string; generation: number }) => `${a.appId}|${a.installationId}|${a.generation}`;
 const sorted = (xs: readonly string[]) => [...new Set(xs)].sort();
@@ -120,14 +132,23 @@ function onlyKeys(o: Record<string, unknown>, keys: readonly string[]): boolean 
   return Object.keys(o).every((k) => keys.includes(k));
 }
 
+/** A v1 file's approvals bound no container, so they go; installations and floors stay. */
+function upgraded(v: unknown): unknown {
+  if (!isObj(v) || v.v !== 1) return v;
+  return { ...v, v: 2, approvals: {}, withdrawals: [] };
+}
+
 function wellFormed(v: unknown): v is State {
-  if (!isObj(v) || v.v !== 1 || !isObj(v.installations) || !isObj(v.approvals) || !isObj(v.floors)) return false;
+  if (!isObj(v) || v.v !== 2 || !isObj(v.installations) || !isObj(v.approvals) || !isObj(v.floors) || !Array.isArray(v.withdrawals)) return false;
+  for (const w of v.withdrawals) {
+    if (!isObj(w) || typeof w.appId !== "string" || typeof w.installationId !== "string" || !intAt(w.generation) || !intAt(w.issuedAt) || typeof w.signature !== "string" || !SIG.test(w.signature)) return false;
+  }
   for (const i of Object.values(v.installations)) {
     if (!isObj(i) || typeof i.installationId !== "string" || !intAt(i.generation) || typeof i.capabilityDigest !== "string" || !isObj(i.accelerator) || typeof i.isolation !== "string" || !intAt(i.alerted)) return false;
     if (i.previous !== undefined && (!isObj(i.previous) || !intAt(i.previous.generation) || typeof i.previous.capabilityDigest !== "string" || !isObj(i.previous.accelerator) || (i.previous.approval !== null && !isObj(i.previous.approval)))) return false;
   }
   for (const a of Object.values(v.approvals)) {
-    if (!isObj(a) || !isObj(a.terms) || !intAt(a.issuedAt) || typeof a.signature !== "string" || !SIG.test(a.signature)) return false;
+    if (!isObj(a) || !isObj(a.terms) || typeof a.terms.container !== "string" || !intAt(a.issuedAt) || typeof a.signature !== "string" || !SIG.test(a.signature)) return false;
   }
   return Object.values(v.floors).every(intAt);
 }
@@ -139,7 +160,7 @@ export class GpuApprovalStore {
   private sinks: () => GpuApprovalSinks = () => ({});
   private pushes: number[] = [];
   private granted: ((serviceId: string) => void) | null = null;
-  private revoker: ((appId: string) => Promise<void>) | null = null;
+  private withdrawer: ((w: SignedGpuApprovalWithdraw) => Promise<void>) | null = null;
   private readonly now: () => number;
 
   constructor(private readonly d: GpuApprovalsDeps) {
@@ -155,7 +176,7 @@ export class GpuApprovalStore {
     let error: unknown = null;
     if (r.kind === "ok") {
       try {
-        parsed = JSON.parse(r.text);
+        parsed = upgraded(JSON.parse(r.text));
       } catch (e) {
         error = e;
       }
@@ -186,10 +207,28 @@ export class GpuApprovalStore {
     }
   }
 
-  /** After a grant (start the app again so it gets its GPU), and on a withdrawal (gpud's revokeApp). */
-  setEffects(e: { granted?: (serviceId: string) => void; revoke?: (appId: string) => Promise<void> }): void {
+  /** After a grant (start the app again so it gets its GPU), and on a withdrawal (gpud's withdrawApproval). */
+  setEffects(e: { granted?: (serviceId: string) => void; withdraw?: (w: SignedGpuApprovalWithdraw) => Promise<void> }): void {
     if (e.granted) this.granted = e.granted;
-    if (e.revoke) this.revoker = e.revoke;
+    if (e.withdraw) this.withdrawer = e.withdraw;
+  }
+
+  /** Hand gpud every signed withdrawal it hasn't taken; one it can't take now waits for the next try. */
+  private async deliver(): Promise<void> {
+    const give = this.withdrawer;
+    if (!give || this.state.withdrawals.length === 0) return;
+    const left: SignedGpuApprovalWithdraw[] = [];
+    for (const w of this.state.withdrawals) {
+      try {
+        await give(w);
+      } catch (e) {
+        left.push(w);
+        this.d.log?.(`[gpu] gpud has not taken ${w.appId}'s GPU withdrawal yet: ${(e as Error).message}`);
+      }
+    }
+    if (left.length === this.state.withdrawals.length) return;
+    this.state.withdrawals = left;
+    await this.save().catch(() => {});
   }
 
   /** The app is gone: its installation and approval go with it (withdrawal floors stay). */
@@ -222,6 +261,10 @@ export class GpuApprovalStore {
       secrecy: !cooperative,
       trustDomain: null,
       ownerConsent: null,
+      container: `flagship-${appId}`,
+      userspace: null,
+      maxRuntimeMs: null,
+      share: null,
     };
   }
 
@@ -239,6 +282,10 @@ export class GpuApprovalStore {
       secrecy: t.secrecy,
       trustDomain: t.trustDomain,
       ownerConsent: t.ownerConsent,
+      container: t.container,
+      userspace: t.userspace,
+      maxRuntimeMs: t.maxRuntimeMs,
+      share: t.share,
     };
   }
 
@@ -270,6 +317,7 @@ export class GpuApprovalStore {
       if (this.state.installations[serviceId] || this.state.approvals[serviceId]) await this.forget(serviceId);
       return undefined;
     }
+    await this.deliver();
     let i = this.state.installations[serviceId];
     if (!i) {
       i = { installationId: randomBytes(8).toString("hex"), generation: 1, capabilityDigest: app.capabilityDigest, accelerator: acc, isolation: app.isolation, alerted: 0 };
@@ -338,14 +386,16 @@ export class GpuApprovalStore {
   /** `POST …/approvals`: the owner's signed grant for one app installation and generation. */
   async grant(body: unknown): Promise<GpuApprovalResult> {
     await this.ready;
-    const keys = ["server", "appId", "installationId", "generation", "backend", "maxCount", "caps", "policies", "isolation", "secrecy", "trustDomain", "ownerConsent", "issuedAt", "signature"] as const;
+    const keys = ["server", "appId", "installationId", "generation", "backend", "maxCount", "caps", "policies", "isolation", "secrecy", "trustDomain", "ownerConsent", "container", "userspace", "maxRuntimeMs", "share", "issuedAt", "signature"] as const;
     if (!isObj(body) || !onlyKeys(body, keys)) return refuse(400, "bad-request", "The approval has missing or unknown fields.");
+    const shareOk = (v: unknown) => v === null || (isObj(v) && onlyKeys(v, ["computePercent", "memoryMib"]) && intAt(v.computePercent) && intAt(v.memoryMib));
     const b = body;
     if (
       typeof b.server !== "string" || typeof b.appId !== "string" || typeof b.installationId !== "string" || !intAt(b.generation) ||
       typeof b.backend !== "string" || !intAt(b.maxCount) || !Array.isArray(b.caps) || !b.caps.every((x) => typeof x === "string") ||
       !Array.isArray(b.policies) || !b.policies.every((x) => typeof x === "string") || typeof b.isolation !== "string" ||
-      typeof b.secrecy !== "boolean" || !strOrNull(b.trustDomain) || !strOrNull(b.ownerConsent) || !intAt(b.issuedAt) ||
+      typeof b.secrecy !== "boolean" || !strOrNull(b.trustDomain) || !strOrNull(b.ownerConsent) || typeof b.container !== "string" ||
+      !strOrNull(b.userspace) || !(b.maxRuntimeMs === null || intAt(b.maxRuntimeMs)) || !shareOk(b.share) || !intAt(b.issuedAt) ||
       typeof b.signature !== "string" || !SIG.test(b.signature)
     ) {
       return refuse(400, "bad-request", "The approval has missing or unknown fields.");
@@ -367,8 +417,15 @@ export class GpuApprovalStore {
       secrecy: b.secrecy,
       trustDomain: b.trustDomain as string | null,
       ownerConsent: b.ownerConsent as string | null,
+      container: b.container,
+      userspace: b.userspace as string | null,
+      maxRuntimeMs: b.maxRuntimeMs as number | null,
+      share: b.share as GpuApprovalTerms["share"],
     };
-    if (terms.backend !== want.backend || terms.maxCount !== want.maxCount || terms.isolation !== want.isolation || !sameSet(terms.capabilities, want.capabilities) || !sameSet(terms.policies, want.policies)) {
+    if (
+      terms.backend !== want.backend || terms.maxCount !== want.maxCount || terms.isolation !== want.isolation || !sameSet(terms.capabilities, want.capabilities) || !sameSet(terms.policies, want.policies) ||
+      terms.container !== want.container || terms.userspace !== want.userspace || terms.maxRuntimeMs !== want.maxRuntimeMs || JSON.stringify(terms.share) !== JSON.stringify(want.share)
+    ) {
       return refuse(409, "terms-mismatch", "This approval doesn't match what the app asks for.");
     }
     if (terms.policies.includes("cooperative") && (!terms.trustDomain || !terms.ownerConsent)) {
@@ -434,9 +491,10 @@ export class GpuApprovalStore {
     delete this.state.approvals[w.appId];
     if (i.previous) this.state.installations[w.appId] = { ...i, previous: { ...i.previous, approval: null } };
     this.state.floors[key] = w.issuedAt;
+    this.state.withdrawals = [...this.state.withdrawals, { ...w, signature: b.signature }].slice(-MAX_UNDELIVERED);
     await this.save();
     this.d.note?.("gpu.approval.withdrawn", "You withdrew an app's use of a GPU; its GPU work was stopped.", { ok: true, target: w.appId });
-    await this.revoker?.(w.appId).catch((e: Error) => this.d.log?.(`[gpu] stopping ${w.appId}'s GPU work failed: ${e.message}`));
+    await this.deliver();
     return { ok: true, approval: null };
   }
 }
@@ -462,7 +520,7 @@ export async function acceleratorRequestFor(serviceId: string, app: NormalizedAp
     return {
       installation: { appId: serviceId, installationId: "unregistered", generation: 0 },
       requirement: requirementFromManifest(app.accelerator),
-      approval: { app: { appId: serviceId, installationId: "unregistered", generation: 0 }, backend: app.accelerator.backend, maxCount: app.accelerator.count, capabilities: [...app.accelerator.capabilities], policies: [app.accelerator.sharing], isolation: "vm-passthrough", secrecy: true, trustDomain: null, ownerConsent: null },
+      approval: { app: { appId: serviceId, installationId: "unregistered", generation: 0 }, backend: app.accelerator.backend, maxCount: app.accelerator.count, capabilities: [...app.accelerator.capabilities], policies: [app.accelerator.sharing], isolation: "vm-passthrough", secrecy: true, trustDomain: null, ownerConsent: null, container: `flagship-${serviceId}`, userspace: null, maxRuntimeMs: null, share: null },
       pendingReason: "This server can't check GPU approvals yet.",
     };
   }

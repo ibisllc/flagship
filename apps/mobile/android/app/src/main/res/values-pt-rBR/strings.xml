@@ -3434,4 +3434,19 @@
     <string name="add_fingerprint_for_stronger_approvals">Adicionar uma digital nas configurações do celular deixa suas aprovações mais seguras nesta versão do Android.</string>
     <string name="add_a_fingerprint">Adicionar uma digital</string>
     <string name="recipe_made_by_older_app">Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship e crie o servidor de novo.</string>
+    <string name="add_your_fingerprint_again_to_open_account_key">Adicione sua digital de novo nas configurações do Android para abrir a chave da sua conta do Flagship neste celular.</string>
+    <string name="account_key_unreadable_short">Este celular não consegue mais abrir a chave da sua conta. Restaure sua conta para continuar usando-a aqui.</string>
+    <string name="account_key_lost_title">Este celular não consegue abrir a chave da sua conta</string>
+    <string name="account_key_lost_body">O bloqueio de tela deste celular foi removido ou redefinido, então o Android apagou a chave que protegia aqui a chave da sua conta do Flagship. Sua conta e seus servidores não foram afetados.</string>
+    <string name="account_key_lost_hint">Para usar sua conta aqui de novo, restaure-a: escolha “Conectar a uma conta existente” e entre com sua chave de acesso de recuperação ou um arquivo de chave da conta salvo, ou entre a partir de outro dispositivo conectado.</string>
+    <string name="account_key_lost_restore">Restaurar minha conta</string>
+    <string name="burn_target_disk_label">Disco onde instalar (opcional)</string>
+    <string name="burn_target_disk_help">Só é necessário quando o computador tem mais de um disco. Sem isso, o instalador para nesse computador, não apaga nada e lista os discos na tela. Digite by-id: e um nome dessa lista, serial: e o número de série do disco, ou size: e o tamanho exato em bytes.</string>
+    <string name="burn_target_disk_invalid">Comece com by-id:, serial: ou size:, seguido do nome, do número de série ou do tamanho do disco em bytes, sem espaços.</string>
+    <string name="install_disk_stop_several">Este computador tem %1$s discos que o instalador poderia apagar (%2$s), então ele parou. Nada foi apagado.</string>
+    <string name="install_disk_stop_none">Este computador não tem um disco interno de 8 GB ou mais para instalar, então o instalador parou. Nada foi apagado.</string>
+    <string name="install_disk_stop_missing">O disco para o qual este instalador foi criado (%1$s) não está neste computador. Nada foi apagado.</string>
+    <string name="install_disk_stop_ambiguous">O disco para o qual este instalador foi criado (%1$s) corresponde a mais de um disco neste computador. Nada foi apagado.</string>
+    <string name="install_disk_stop_advice">Crie o instalador de novo com a mesma receita, preencha \"Disco onde instalar\" com um dos discos que o computador listou na tela e inicie o computador por ele.</string>
+    <string name="setup_stopped_cancel_or_contact">Cancele este pedido para liberar o nome e criar o servidor de novo, ou fale conosco e vamos verificar.</string>
 </resources>

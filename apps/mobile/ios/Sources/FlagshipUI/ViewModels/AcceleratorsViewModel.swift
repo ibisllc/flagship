@@ -56,7 +56,7 @@ public enum AcceleratorsCopy {
 
     public static func stopped(_ h: AcceleratorHolder) -> String { String(localized: "\(appName(h.appId)) no longer has the GPU.") }
 
-    // MARK: Approvals (flagship/gpu-approval/v1)
+    // MARK: Approvals (flagship/gpu-approval/v2)
 
     public static let approve = String(localized: "Approve")
     public static let decline = String(localized: "Decline")
@@ -168,7 +168,7 @@ public final class AcceleratorsViewModel {
         }
     }
 
-    /// Approve: the admin root (one Face ID) signs `flagship/gpu-approval/v1` over the terms the box listed.
+    /// Approve: the admin root (one Face ID) signs `flagship/gpu-approval/v2` over the terms the box listed.
     public func approve(_ r: GpuApprovalRequest) async {
         await sign(r, reason: AcceleratorsCopy.signApprove, done: AcceleratorsCopy.approved(r)) { server, at, key in
             let terms = GpuApprovalOrder.ownerTerms(r, issuedAt: at)

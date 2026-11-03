@@ -1,19 +1,28 @@
 //! The owner's signature on a GPU approval, checked by gpud itself.
 //!
 //! An app's approval (`GpuApproval`: backend, device count, capabilities, sharing policies,
-//! isolation, secrecy, trust domain and consent) arrives from the daemon, which runs without root.
+//! isolation, secrecy, trust domain and consent, and what the claim itself carries: container,
+//! userspace image, run-time limit and share) arrives from the daemon, which runs without root.
 //! gpud admits it only when the owner signed exactly it for this box:
 //!
 //! ```text
-//! flagship/gpu-approval/v1|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
+//! flagship/gpu-approval/v2|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
 //!   |<capabilities, sorted, comma-joined>|<policies, sorted, comma-joined>|<isolation>
-//!   |<secrecy 1|0>|<trustDomain or empty>|<ownerConsent or empty>|<issuedAt ms>
+//!   |<secrecy 1|0>|<trustDomain or empty>|<ownerConsent or empty>|<container>
+//!   |<userspace or empty>|<maxRuntimeMs or empty>|<computePercent:memoryMib or empty>|<issuedAt ms>
 //! ```
 //!
 //! (one line; TS `packages/protocol/src/gpuApproval.ts`, vectors `test-vectors/gpu-approval/`).
 //! The signer is the sensitive-order key keyd's root-written `owner.json` pins: the admin root
 //! when the account has one, else the owner IRK. `<server>` is keyd's `policy.json` name for the
-//! box, so an approval signed for one box is refused on another.
+//! box, so an approval signed for one box is refused on another. A claim must ask for exactly the
+//! container, userspace, run-time limit and share its approval names.
+//!
+//! A withdrawal, `flagship/gpu-approval-withdraw/v1|<server>|<appId>|<installationId>|<generation>
+//! |<issuedAt>` signed by the same key, raises a floor gpud keeps in its own root-owned state
+//! ([`ApprovalFloors`]): from then on no approval of that installation signed at or before the
+//! withdrawal is admitted, whichever generation it names and whatever the daemon re-presents. The
+//! floor only rises. There is no maximum age: an app's approval is used at every start.
 //!
 //! The one unsigned shape is the box's own local AI (`flagship-local-ai`, installation `box`):
 //! one device, compute only, exclusive and secret, in a `flagship-localai-`/`flagship-aitrain-`
@@ -23,8 +32,10 @@
 //! This is the minimal verifiable form of the "signed GPU capability" the plan gives the core's
 //! capability issuer (R02, not built): when that exists, its short-lived capability replaces this.
 //! Not covered here: the strict-mode PQ half (the gate runs under the legacy policy, as keyd's
-//! master evidence does), and revocation, which still comes from the daemon (`gpu.revokeApp`).
+//! master evidence does).
 
+use std::collections::BTreeMap;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use flagship_crypto::trust::{Envelope, PolicyState, verify_critical_signature};
@@ -33,9 +44,10 @@ use serde::{Deserialize, Serialize};
 use crate::device::Capability;
 use crate::policy::PolicyKind;
 use crate::provider::IsolationProfile;
-use crate::request::GpuApproval;
+use crate::request::{AppInstallation, GpuApproval};
 
-pub const GPU_APPROVAL_TAG: &str = "flagship/gpu-approval/v1";
+pub const GPU_APPROVAL_TAG: &str = "flagship/gpu-approval/v2";
+pub const GPU_APPROVAL_WITHDRAW_TAG: &str = "flagship/gpu-approval-withdraw/v1";
 /// How the daemon's local AI appears to gpud (`localAi/devices.ts` `LOCAL_AI_APP`).
 pub const LOCAL_AI_APP: &str = "flagship-local-ai";
 pub const LOCAL_AI_INSTALLATION: &str = "box";
@@ -177,20 +189,89 @@ pub fn canonical(server: &str, a: &GpuApproval, issued_at: u64) -> Result<String
         if a.secrecy { "1" } else { "0" }.to_owned(),
         opt(&a.trust_domain)?,
         opt(&a.owner_consent)?,
+        a.container
+            .clone()
+            .filter(|c| container_ok(c))
+            .ok_or("the approval names no valid container")?,
+        match &a.userspace {
+            None => String::new(),
+            Some(u) if field_ok(u) => u.clone(),
+            Some(_) => return Err("bad userspace".into()),
+        },
+        match a.max_runtime_ms {
+            None => String::new(),
+            Some(ms) if (1..=MAX_SAFE).contains(&ms) => ms.to_string(),
+            Some(_) => return Err("a number out of range".into()),
+        },
+        match a.share {
+            None => String::new(),
+            Some(sh) => {
+                sh.check()?;
+                if sh.memory_mib > MAX_SAFE {
+                    return Err("a number out of range".into());
+                }
+                format!("{}:{}", sh.compute_percent, sh.memory_mib)
+            }
+        },
         issued_at.to_string(),
     ]
     .join("|"))
 }
 
-/// The owner signed exactly this approval for this box.
-pub fn verify(anchor: &OwnerAnchor, a: &GpuApproval, proof: &ApprovalProof) -> Result<(), String> {
-    let msg = canonical(&anchor.server, a, proof.issued_at)?;
+/// gpud's own container-name rule (`service.rs`).
+fn container_ok(c: &str) -> bool {
+    c.len() <= 128
+        && c.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
+        && c.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b))
+}
+
+/// The owner's withdrawal of an approval, as the daemon forwards it (`gpu.withdrawApproval`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Withdrawal {
+    pub app_id: String,
+    pub installation_id: String,
+    pub generation: u64,
+    pub issued_at: u64,
+    /// Ed25519, 128 lowercase hex.
+    pub signature: String,
+}
+
+pub fn withdraw_canonical(
+    server: &str,
+    app_id: &str,
+    installation_id: &str,
+    generation: u64,
+    issued_at: u64,
+) -> Result<String, String> {
+    if !server_ok(server) {
+        return Err("bad server name".into());
+    }
+    if !field_ok(app_id) || !field_ok(installation_id) {
+        return Err("bad app installation".into());
+    }
+    if generation > MAX_SAFE || issued_at > MAX_SAFE {
+        return Err("a number out of range".into());
+    }
+    Ok([
+        GPU_APPROVAL_WITHDRAW_TAG,
+        server,
+        app_id,
+        installation_id,
+        &generation.to_string(),
+        &issued_at.to_string(),
+    ]
+    .join("|"))
+}
+
+fn verify_signed(anchor: &OwnerAnchor, msg: &str, tag: &str, sig: &str) -> Result<(), String> {
     verify_critical_signature(
         msg.as_bytes(),
-        GPU_APPROVAL_TAG,
+        tag,
         Envelope {
             suite: "ed25519/v1",
-            signature_hex: &proof.signature,
+            signature_hex: sig,
         },
         &anchor.signer_hex,
         None,
@@ -198,6 +279,143 @@ pub fn verify(anchor: &OwnerAnchor, a: &GpuApproval, proof: &ApprovalProof) -> R
     )
     .map(|_| ())
     .map_err(|e| e.to_string())
+}
+
+/// The owner signed this withdrawal for this box.
+pub fn verify_withdrawal(anchor: &OwnerAnchor, w: &Withdrawal) -> Result<(), String> {
+    let msg = withdraw_canonical(
+        &anchor.server,
+        &w.app_id,
+        &w.installation_id,
+        w.generation,
+        w.issued_at,
+    )?;
+    verify_signed(anchor, &msg, GPU_APPROVAL_WITHDRAW_TAG, &w.signature)
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FloorsFile {
+    v: u32,
+    /// Nothing signed at or before this counts (set when a damaged file was found).
+    all: u64,
+    /// `<appId>|<installationId>` to the newest withdrawal's `issuedAt`.
+    floors: BTreeMap<String, u64>,
+}
+
+/// The newest withdrawal per app installation, kept in gpud's state directory, which only root
+/// writes. It only rises, so a daemon can neither undo a withdrawal nor re-present an approval
+/// signed before one.
+#[derive(Debug)]
+pub struct ApprovalFloors {
+    path: PathBuf,
+    file: FloorsFile,
+}
+
+fn floor_key(app_id: &str, installation_id: &str) -> String {
+    format!("{app_id}|{installation_id}")
+}
+
+impl ApprovalFloors {
+    /// A damaged file is set aside and every approval signed before `now_ms` is refused, so the
+    /// owner approves again rather than a withdrawn approval coming back.
+    pub fn open(path: PathBuf, now_ms: u64) -> Result<Self, String> {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self {
+                    path,
+                    file: FloorsFile {
+                        v: 1,
+                        ..FloorsFile::default()
+                    },
+                });
+            }
+            Err(e) => return Err(format!("approval floors: {}", e.kind())),
+        };
+        match serde_json::from_str::<FloorsFile>(&text) {
+            Ok(file) if file.v == 1 => Ok(Self { path, file }),
+            _ => {
+                let mut aside = path.clone().into_os_string();
+                aside.push(format!(".corrupt-{now_ms}"));
+                std::fs::rename(&path, &aside)
+                    .map_err(|e| format!("approval floors: {}", e.kind()))?;
+                let mut f = Self {
+                    path,
+                    file: FloorsFile {
+                        v: 1,
+                        all: now_ms,
+                        floors: BTreeMap::new(),
+                    },
+                };
+                f.save()?;
+                Ok(f)
+            }
+        }
+    }
+
+    /// Why an approval of `app` signed at `issued_at` no longer counts, if it doesn't.
+    pub fn admits(&self, app: &AppInstallation, issued_at: u64) -> Result<(), String> {
+        let floor = self
+            .file
+            .floors
+            .get(&floor_key(&app.app_id, &app.installation_id))
+            .copied()
+            .unwrap_or(0)
+            .max(self.file.all);
+        if issued_at <= floor {
+            return Err("the owner withdrew this approval; it needs a new one".into());
+        }
+        Ok(())
+    }
+
+    /// Raise the floor to `issued_at`; false when it was already there or higher.
+    pub fn raise(
+        &mut self,
+        app_id: &str,
+        installation_id: &str,
+        issued_at: u64,
+    ) -> Result<bool, String> {
+        let key = floor_key(app_id, installation_id);
+        if self.file.floors.get(&key).is_some_and(|f| *f >= issued_at) {
+            return Ok(false);
+        }
+        let before = self.file.floors.insert(key.clone(), issued_at);
+        if let Err(e) = self.save() {
+            match before {
+                Some(b) => self.file.floors.insert(key, b),
+                None => self.file.floors.remove(&key),
+            };
+            return Err(e);
+        }
+        Ok(true)
+    }
+
+    fn save(&mut self) -> Result<(), String> {
+        let err = |e: std::io::Error| format!("approval floors: {}", e.kind());
+        let text = serde_json::to_vec(&self.file).map_err(|e| e.to_string())?;
+        if let Some(d) = self.path.parent() {
+            std::fs::create_dir_all(d).map_err(err)?;
+        }
+        let mut tmp = self.path.clone().into_os_string();
+        tmp.push(".tmp");
+        let mut f = std::fs::File::create(&tmp).map_err(err)?;
+        f.write_all(&text).map_err(err)?;
+        f.sync_all().map_err(err)?;
+        std::fs::rename(&tmp, &self.path).map_err(err)?;
+        if let Some(d) = self.path.parent() {
+            std::fs::File::open(d)
+                .and_then(|d| d.sync_all())
+                .map_err(err)?;
+        }
+        Ok(())
+    }
+}
+
+/// The owner signed exactly this approval for this box.
+pub fn verify(anchor: &OwnerAnchor, a: &GpuApproval, proof: &ApprovalProof) -> Result<(), String> {
+    let msg = canonical(&anchor.server, a, proof.issued_at)?;
+    verify_signed(anchor, &msg, GPU_APPROVAL_TAG, &proof.signature)
 }
 
 fn local_ai_container(c: &str) -> bool {

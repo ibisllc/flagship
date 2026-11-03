@@ -48,11 +48,12 @@ class JournalViewModelTest {
         assertEquals("flagship-data-services", body.request.unit)
         assertEquals(JournalUnits.DEFAULT_LINES, body.request.lines)
         assertEquals(1700L, body.request.issuedAt)
+        assertTrue(Regex("^[0-9a-f]{32}$").matches(body.request.nonce))
 
         val sig = HexUtil.decode(body.signature)!!
         Ed25519Verify(kp.publicKey).verify(
             sig,
-            JournalRequest.canonicalBytes(server, "flagship-data-services", JournalUnits.DEFAULT_LINES, 1700L),
+            JournalRequest.canonicalBytes(server, "flagship-data-services", JournalUnits.DEFAULT_LINES, body.request.nonce, 1700L),
         )
     }
 

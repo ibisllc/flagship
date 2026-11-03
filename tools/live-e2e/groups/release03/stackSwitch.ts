@@ -86,9 +86,33 @@ export const stackSwitch: Group = {
       return "403";
     });
 
-    const switched = await rec.check("the admin-signed order is accepted and the box ends up on arch-v2 (Podman) within 25 min", async () => {
-      const r = await call("/api/stack/switch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(order("arch-v2")) });
+    const toV2 = order("arch-v2");
+    const sent = await rec.check("the admin-signed order to arch-v2 is accepted (202)", async () => {
+      const r = await call("/api/stack/switch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(toV2) });
       assert(r.status === 202, `${r.status}: ${short(r.text, 300)}`);
+      return "202";
+    });
+    if (!sent) return;
+
+    // Review 2026-10-25 #15: the box keeps the nonces it took, so the same signed order is refused inside
+    // its 5-minute window too (dry run included). The box is restarting meanwhile: retry until it answers.
+    await rec.check("the same signed order sent again inside its window is refused as already used, dry run included", async () => {
+      const until = toV2.order.issuedAt + 4 * 60_000;
+      let last = "";
+      for (const body of [toV2, { ...toV2, dryRun: true }]) {
+        for (;;) {
+          const r = await call("/api/stack/switch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+          if (r?.status === 409 && r.json?.code === "replayed") break;
+          last = r ? `${r.status}: ${short(r.text, 200)}` : "no answer";
+          if (r && r.status !== 502 && r.status !== 503 && r.status !== 0) throw new Error(`the replay was not refused as used: ${last}`);
+          if (Date.now() > until) return `skipped: the box did not answer inside the order's window (${last})`;
+          await sleep(10_000);
+        }
+      }
+      return "409 replayed";
+    });
+
+    const switched = await rec.check("the box ends up on arch-v2 (Podman) within 25 min", async () => {
       const deadline = Date.now() + 25 * 60_000;
       let last = "";
       while (Date.now() < deadline) {
@@ -104,8 +128,8 @@ export const stackSwitch: Group = {
 
     await rec.check("the app that ran before runs again on Podman, through the endpoint resolver", async () => served("served on Podman", 15));
 
-    // The trial keeps the switch by itself once the box is healthy and every app is back (archV2Switch.ts
-    // settle, up to 20 min); until then another order is refused as in-progress, by design.
+    // The trial keeps the switch once the daemon is healthy and root sees every app back (archV2Switch.ts
+    // settleSwitchAsRoot, from root's own evidence); until then another order is refused as in-progress, by design.
     const settled = await rec.check("the switch's trial settles to done, and the box still answers its owner", async () => {
       const r = await call("/api/screens/server-detail");
       assert(r.status === 200, `${r.status}: ${short(r.text)}`);

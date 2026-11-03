@@ -1088,9 +1088,18 @@ cross-checked): the member id is the per-app id keyd derives from the SWK and th
 the owner's device grant for that key with the `admin` scope (under the admin root `owner.json`
 pins from the box's config; the IRK on a box without one), unexpired, or an admin order raising
 that key to master in this app. Plain `sign` refuses master. The daemon passes the device book's
-grant for an admin device and asserts manager when it has no evidence or keyd refuses. Left open:
-keyd sees no later demotion order or revoked grant, and an admin-root rotation after the boot
-ceremony leaves `owner.json` on the seed root until keyd's next start.
+grant for an admin device and asserts manager when it has no evidence or keyd refuses. keyd also
+refuses evidence the owner took back (2026-11 review finding 6): the daemon hands keyd every
+admin-root-signed device revocation (with the revoked grant, so the key is refused too) and every
+rank order it is offered (`evidence.note`, `noteRevocation`); keyd verifies each under `owner.json`
+and keeps them in its own `revocations.json` (latest order per app and target), then refuses a
+revoked grant or key (`revoked`), a grant whose device a later order demoted or refused, or an
+order a later one replaced (`superseded`), and anything dated over 5 minutes ahead (`future`).
+keyd learns these only from the daemon: a compromised daemon can withhold one it has not handed
+over yet, but cannot forge one or make keyd forget one. Rank orders stay standing (no age limit),
+as on the box. Left open: an order signed by a delegated admin device (not the root) is not kept,
+and an admin-root rotation after the boot ceremony leaves `owner.json` on the seed root until
+keyd's next start.
 
 ### 19.6 Open questions for the Q01 reviewer (additions)
 

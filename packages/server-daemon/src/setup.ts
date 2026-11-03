@@ -14,6 +14,7 @@ import { parseDebugAccessGrant, verifyDebugAccessGrant, DEBUG_ACCESS_MAX_MS, typ
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { applyRotationChain, fetchRotationChain } from "./adminRootRotationConsumer.js";
 import { applySwitchAsRoot, ownerSwitchAuthorizer, realSwitchFiles, settleSwitchAsRoot, type RootSwitchDeps } from "./archV2Switch.js";
+import { rootTrialProbes } from "./archV2SwitchProbes.js";
 import { ensureGvisor, gvisorMirrorBases } from "./appSandbox/gvisor.js";
 import { refreshBootChainAsRoot } from "./bootChainRefresh.js";
 import { loadConfig } from "./config.js";
@@ -128,6 +129,7 @@ async function switchDeps(): Promise<RootSwitchDeps> {
   const cfg = await loadConfig(env.FLAGSHIP_CONFIG ?? "/etc/flagship/config.json");
   const base = env.FLAGSHIP_CONTROL_PLANE_BASE_URL;
   return {
+    ...rootTrialProbes({ cmd, log }),
     files: realSwitchFiles,
     run,
     serverDomain: env.FLAGSHIP_SUBDOMAIN ?? "",

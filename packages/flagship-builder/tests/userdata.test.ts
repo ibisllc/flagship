@@ -711,7 +711,9 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("copy_exec /sbin/cryptsetup");
     expect(b).toContain("copy_exec /boot/flagship-unseal /bin/flagship-unseal");
     // luksOpen the raw LUKS container, activate the VG, then pivot.
-    expect(b).toContain('ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device 2>/dev/null | head -n1)"');
+    // The LUKS volume is the one whose UUID the hook recorded (bootFsMount.ts), never the first one.
+    expect(b).toContain('ROOT_LUKS_PART="$(device_by_uuid "$LUKS_UUID" crypto_LUKS 30)" || _lrc=$?');
+    expect(b).toContain("flagship_record_disk_uuids /etc/fstab /etc/crypttab");
     expect(b).toContain('| cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(b).toContain("lvm vgchange -ay");
     // The key never lands in a file and no seed is passed on a command line.
@@ -1148,10 +1150,10 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     expect(startLog).toBeGreaterThan(0);
     expect(mountAt).toBeGreaterThan(0);
     expect(startLog).toBeLessThan(mountAt);
-    // Bounded wait for udev to settle the by-label symlink before mounting.
-    // ext4 is not loaded at init-premount, so it is loaded and named (packages/boot-chain bootFsMount.ts).
-    expect(b).toContain("while [ ! -e \"$_bnode\" ]; do");
-    expect(b).toContain("FLAGSHIP_BOOT_WAIT_SECS:-10");
+    // The boot fs is the one whose UUID the hook recorded, waited for (bounded) by that UUID; ext4 is
+    // not loaded at init-premount, so it is loaded and named (packages/boot-chain bootFsMount.ts).
+    expect(b).toContain('_bnode="$(device_by_uuid "$_buuid" ext4 10)" || return 1');
+    expect(b).toContain("FLAGSHIP_BOOT_WAIT_SECS:-$3");
     expect(b).toContain("modprobe ext4");
     expect(b).toContain('mount -t ext4 "$_bnode" "$1"');
     // The mount RESULT is logged either way, and the /run prefix is seeded in.
@@ -1184,7 +1186,8 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // Every native builder runs the bundled engine, so this one pin covers them.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "cc48321058213d513fa86648678b3cc001ce2330ce2756acb1fa4120d47475e5",
+      // Re-pinned 2026-11-02: the Wi-Fi premount mounts FLAGSHIP_BOOT by the UUID recorded at install (bootFsMount.ts).
+      "e8adecde2dd1cd97e2eb0f558f194bf7f93faf08e1fc12e43324eef61eef3e0c",
     );
   });
 });
@@ -1319,7 +1322,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "721e5a2c68fcead7220e8bb140c0a369fd2be8ee23220a28c1cd884339911275",
+      "5d5dbbb1d47d64db72199fec2b5da85032e5845e287830725668882753a0b675",
     );
   });
 

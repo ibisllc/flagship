@@ -13217,5 +13217,29 @@
   "Its certificate can't be renewed until it is updated.": {
     "en": "Its certificate can't be renewed until it is updated.",
     "ctx": "webapp/lib/updateRequired.js: banner line when the date is unknown"
+  },
+  "This computer has {0} disks the installer could erase ({1}), so it stopped. Nothing was erased.": {
+    "en": "This computer has {0} disks the installer could erase ({1}), so it stopped. Nothing was erased.",
+    "ctx": "webapp/lib/provisionProgress.js:126"
+  },
+  "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": {
+    "en": "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.",
+    "ctx": "webapp/lib/provisionProgress.js:128"
+  },
+  "The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.": {
+    "en": "The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.",
+    "ctx": "webapp/lib/provisionProgress.js:130"
+  },
+  "The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.": {
+    "en": "The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.",
+    "ctx": "webapp/lib/provisionProgress.js:132"
+  },
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": {
+    "en": "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.",
+    "ctx": "webapp/lib/provisionProgress.js:137"
+  },
+  "This server didn't finish installing.": {
+    "en": "This server didn't finish installing.",
+    "ctx": "webapp/lib/provisionProgress.js:339"
   }
 }

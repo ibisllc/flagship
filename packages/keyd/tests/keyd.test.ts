@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -512,11 +513,16 @@ describe("sign.identity: master only with the owner's evidence", () => {
   const MV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/identity-assertion/master-evidence.json"), "utf8"));
   it("matches every vector, and plain sign refuses master", async () => {
     const { KeydService } = await import("../src/service.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-held-"));
     for (const c of MV.cases) {
+      const revocationsPath = join(dir, "revocations.json");
+      if (c.held) writeFileSync(revocationsPath, JSON.stringify(c.held));
+      else rmSync(revocationsPath, { force: true });
       const svc = new KeydService({
         identitySeed: SEED,
         swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
         owner: { irkPubHex: c.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: c.anchors.adminRootPubHex ?? null },
+        revocationsPath,
         now: () => MV.now,
       });
       const msg = Buffer.from(c.msg).toString("hex");
@@ -531,5 +537,80 @@ describe("sign.identity: master only with the owner's evidence", () => {
         expect(run, c.name).toThrow(`(${c.expect})`);
       }
     }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("evidence.note keeps what verifies, the same as every shared note vector, on keyd's own disk", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-note-"));
+    for (const n of MV.notes) {
+      const revocationsPath = join(dir, "revocations.json");
+      writeFileSync(revocationsPath, JSON.stringify(n.held));
+      const svc = new KeydService({
+        identitySeed: SEED,
+        owner: { irkPubHex: n.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: n.anchors.adminRootPubHex ?? null },
+        revocationsPath,
+        now: () => MV.now,
+      });
+      const run = () => svc.handle({ op: "evidence.note", args: n.note } as never);
+      if (n.expect !== "ok") {
+        expect(run, n.name).toThrow(`(${n.expect})`);
+        continue;
+      }
+      expect(run().result, n.name).toEqual({ changed: n.changed });
+      expect(JSON.parse(readFileSync(revocationsPath, "utf8")), n.name).toEqual(n.changed ? n.heldAfter : n.held);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("a demotion or revocation handed over later stops master for good, across a restart", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-demote-"));
+    const revocationsPath = join(dir, "revocations.json");
+    const ok = MV.cases.find((c: { name: string }) => c.name === "admin device grant under the admin root");
+    const rankOk = MV.cases.find((c: { name: string }) => c.name === "admin order raising the device");
+    const demote = MV.notes.find((n: { name: string }) => n.name === "a demotion by the admin root");
+    const revoke = MV.notes.find((n: { name: string }) => n.name === "a revocation by the admin root");
+    const make = () =>
+      new KeydService({
+        identitySeed: SEED,
+        swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
+        owner: { irkPubHex: ok.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: ok.anchors.adminRootPubHex },
+        revocationsPath,
+        now: () => MV.now,
+      });
+    const sign = (svc: InstanceType<typeof KeydService>, c: { msg: string; ev: object }) =>
+      svc.handle({ op: "sign.identity", args: { msg: Buffer.from(c.msg).toString("hex"), ...c.ev } } as never);
+    let svc = make();
+    expect(() => sign(svc, ok)).not.toThrow();
+    expect(() => sign(svc, rankOk)).not.toThrow();
+    svc.handle({ op: "evidence.note", args: demote.note } as never);
+    expect(() => sign(svc, ok)).toThrow("(superseded)");
+    expect(() => sign(svc, rankOk)).toThrow("(superseded)");
+    svc = make();
+    expect(() => sign(svc, rankOk)).toThrow("(superseded)");
+    rmSync(revocationsPath);
+    svc = make();
+    svc.handle({ op: "evidence.note", args: revoke.note } as never);
+    expect(() => sign(svc, ok)).toThrow("(revoked)");
+    expect(() => make().handle({ op: "sign.identity", args: { msg: Buffer.from(ok.msg).toString("hex"), ...ok.ev } } as never)).toThrow("(revoked)");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("a damaged revocations file refuses every master assertion instead of forgetting", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-bad-"));
+    const revocationsPath = join(dir, "revocations.json");
+    writeFileSync(revocationsPath, "{not json");
+    const ok = MV.cases.find((c: { name: string }) => c.name === "admin device grant under the admin root");
+    const svc = new KeydService({
+      identitySeed: SEED,
+      swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
+      owner: { irkPubHex: ok.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: ok.anchors.adminRootPubHex },
+      revocationsPath,
+      now: () => MV.now,
+    });
+    expect(() => svc.handle({ op: "sign.identity", args: { msg: Buffer.from(ok.msg).toString("hex"), ...ok.ev } } as never)).toThrow("revocations");
+    rmSync(dir, { recursive: true, force: true });
   });
 });

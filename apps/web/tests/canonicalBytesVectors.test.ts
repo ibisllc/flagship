@@ -101,6 +101,7 @@ const WEBAPP_ENCODERS: Record<string, (i: Record<string, unknown>) => Uint8Array
       serverId: i.serverId as string,
       unit: i.unit as string,
       lines: i.lines as number,
+      nonce: i.nonce as string,
       issuedAt: i.issuedAt as number,
     }),
   "push-token-revoke": (i) =>

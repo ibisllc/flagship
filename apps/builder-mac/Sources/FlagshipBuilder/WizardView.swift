@@ -26,7 +26,8 @@ struct WizardView: View {
     /// ring drawn over the log (a stale first-responder artifact).
     @FocusState private var wifiFocus: WifiField?
 
-    private enum WifiField: Hashable { case ssid, password }
+    private enum WifiField: Hashable { case ssid, password, targetDisk }
+    @State private var targetDiskShown = false
     // "" = follow the system appearance until the user picks a side (chosen from
     // the menu bar: View → Appearance → Auto / Light / Dark).
     @AppStorage("builder.theme") private var theme = ""
@@ -355,6 +356,7 @@ struct WizardView: View {
             }
             diskRow
             wifiRow
+            targetDiskRow
             Spacer(minLength: FB.Spacing.s2)
             bakeRow
         }
@@ -815,6 +817,44 @@ struct WizardView: View {
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
                 .padding(.leading, 16 + FB.Spacing.s2)
+        }
+        .padding(.horizontal, FB.Spacing.s1)
+    }
+
+    /// Optional: the one disk the installer may erase on a computer with more than one. Without it
+    /// such a computer stops before erasing anything (B2 #9). USB burns only; a hosted VM has one disk.
+    private var targetDiskRow: some View {
+        let invalid = model.targetDiskCheck == .invalid
+        let active = !model.targetDisk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // Collapsed by default: most computers have one disk, and the window doesn't scroll.
+        return DisclosureGroup(isExpanded: Binding(get: { targetDiskShown || active || invalid },
+                                                   set: { targetDiskShown = $0 })) {
+            VStack(alignment: .leading, spacing: 3) {
+                TextField(TargetDisk.label, text: $model.targetDisk, prompt: Text(verbatim: "serial:S64ANS0T123456"))
+                    .textFieldStyle(.roundedBorder)
+                    .focused($wifiFocus, equals: .targetDisk)
+                    .autocorrectionDisabled()
+                    .disabled(model.isRunning)
+                    .accessibilityLabel(TargetDisk.label)
+                    .accessibilityIdentifier("studio-target-disk")
+                Text(invalid ? TargetDisk.invalidMessage : TargetDisk.help)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(invalid ? FB.Colors.warning : FB.Colors.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("studio-target-disk-help")
+            }
+            .padding(.leading, 16 + FB.Spacing.s2)
+            .padding(.top, 2)
+        } label: {
+            HStack(spacing: FB.Spacing.s2) {
+                Image(systemName: "internaldrive")
+                    .foregroundStyle(invalid ? FB.Colors.warning : (active ? FB.Colors.success : FB.Colors.textMuted))
+                    .imageScale(.small)
+                    .frame(width: 16)
+                Text(TargetDisk.label)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
         }
         .padding(.horizontal, FB.Spacing.s1)
     }

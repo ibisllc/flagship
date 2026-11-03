@@ -102,12 +102,49 @@ export function renderStuckAdvice() {
   return `<p class="note mt-2" id="provision-stuck-advice">${esc(PROVISION_QUIET_COPY.stuckAdvice)}</p>`;
 }
 
+/** The USB installer stops before erasing anything when it can't tell which
+ *  disk to erase (preseed.ts resolveTargetDisk) and posts one of four English
+ *  sentences; vectors in test-vectors/install-disk-stop.json.
+ *  @param {string|null|undefined} detail
+ *  @returns {{kind:"several",count:string,sizes:string}|{kind:"none"}|{kind:"missing"|"ambiguous",pin:string}|null} */
+export function parseDiskStop(detail) {
+  const t = String(detail ?? "").trim();
+  let m = /^This machine has (\d+) disks that could be erased \((.*)\)\. Nothing was erased\./.exec(t);
+  if (m) return { kind: "several", count: m[1], sizes: m[2] };
+  if (/^This machine has no fixed disk of 8 GB or more to install on\. Nothing was erased\./.test(t)) return { kind: "none" };
+  m = /^The disk this installer was made for \((.+)\) is not in this machine\. Nothing was erased\./.exec(t);
+  if (m) return { kind: "missing", pin: m[1] };
+  m = /^The disk this installer was made for \((.+)\) matches more than one disk\. Nothing was erased\./.exec(t);
+  if (m) return { kind: "ambiguous", pin: m[1] };
+  return null;
+}
+
+/** @param {NonNullable<ReturnType<typeof parseDiskStop>>} stop */
+function diskStopSentence(stop) {
+  switch (stop.kind) {
+    case "several":
+      return tr("This computer has {0} disks the installer could erase ({1}), so it stopped. Nothing was erased.", stop.count, stop.sizes);
+    case "none":
+      return tr("This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.");
+    case "missing":
+      return tr("The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.", stop.pin);
+    default:
+      return tr("The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.", stop.pin);
+  }
+}
+
+function diskStopAdvice() {
+  return tr("Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.");
+}
+
 /** The box's failure text for a person: "Setup stopped while Expanding the
  *  disk (line 66)" loses the shell line number; empty becomes the title.
  *  MIRRORS: Android ProvisionProgress.failureDetail.
  *  @param {string|null|undefined} lastError
  *  @returns {string} */
 export function failureDetail(lastError) {
+  const stop = parseDiskStop(lastError);
+  if (stop) return `${diskStopSentence(stop)} ${diskStopAdvice()}`;
   const stripped = String(lastError ?? "")
     .replace(/\s*[(\[]?\b(?:at )?lines? ?\d+[)\]]?/gi, "")
     .replace(/\s{2,}/g, " ")
@@ -296,7 +333,12 @@ export function renderProgressDetail(block) {
  *  @returns {string} */
 export function renderSetupStopped({ serial, step } = {}) {
   const where = failureDetail(step);
-  const note = where === PROVISION_PHASE_TITLES.error ? "" : `. ${where.replace(/[.!?]+$/, "")}`;
+  // A disk stop erased nothing and the same order resumes once the installer is
+  // made again naming the disk, so the advice replaces "cancel this order".
+  const explanation = parseDiskStop(step)
+    ? `${tr("This server didn't finish installing.")} ${where}`
+    : null;
+  const note =where === PROVISION_PHASE_TITLES.error ? "" : `. ${where.replace(/[.!?]+$/, "")}`;
   const body =
     tr("My server's setup stopped. Order: {0} Step: {1}", serial || "unknown", step ? failureDetail(step) : "") + " ";
   const mailto =
@@ -305,7 +347,7 @@ export function renderSetupStopped({ serial, step } = {}) {
   return (
     `<div class="card" id="setup-stopped">` +
     `<h3>${tr("Setup stopped")}</h3>` +
-    `<p class="note mt-2">${esc(tr("This server didn't finish installing{0}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.", note))}</p>` +
+    `<p class="note mt-2">${esc(explanation ?? tr("This server didn't finish installing{0}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.", note))}</p>` +
     `<div class="row-2 mt-2">` +
     `<button class="danger" id="setup-stopped-start-again">${tr("Cancel order and start again")}</button>` +
     `<a class="secondary" id="setup-stopped-contact" href="${esc(mailto)}">${tr("Contact us")}</a>` +

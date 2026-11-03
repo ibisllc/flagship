@@ -161,7 +161,7 @@ export const realAccount: Group = {
       return `IRK 403, admin root ${ok.status}`;
     });
     await rec.check("R's box (registered under the admin-approved code) pins R's admin root: its journal takes the admin root, not the IRK", async () => {
-      const req: JournalRequest = { serverId: b.fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };
+      const req: JournalRequest = { serverId: b.fqdn, unit: "flagship-daemon", lines: 5, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
       const r = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, adminRoot)) });
       assert(r.status === 200, `journal ${r.status}: ${short(r.text)}`);
       const byIrk = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, irk)) });

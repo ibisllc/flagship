@@ -71,6 +71,8 @@ data class JournalInner(
     /** systemd unit (daemon allowlists it). */
     val unit: String,
     val lines: Long,
+    /** Single use (journal-read/v2): the box refuses a nonce it already took. */
+    val nonce: String,
     val issuedAt: Long,
 )
 

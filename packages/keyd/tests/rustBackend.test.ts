@@ -820,7 +820,8 @@ describe.skipIf(!HAVE_BIN)("master evidence in the Rust keyd", () => {
     const dir = stateDir({ owner: false });
     writeFileSync(join(dir, "owner.json"), JSON.stringify({ irkPubHex: OWNER_PUB_HEX, adminRootPubHex: rootHex }), { mode: 0o400 });
     const k = await spawnRust(dir);
-    const ts = new KeydService({ identitySeed: SEED, swk: SWK, owner: { irkPubHex: OWNER_PUB_HEX, serverFqdn: FQDN, adminRootPubHex: rootHex } });
+    const tsDir = mkdtempSync(join(tmpdir(), "tkeyd-held-"));
+    const ts = new KeydService({ identitySeed: SEED, swk: SWK, owner: { irkPubHex: OWNER_PUB_HEX, serverFqdn: FQDN, adminRootPubHex: rootHex }, revocationsPath: join(tsDir, "revocations.json") });
     try {
       const c = await client(k.sock);
       const msgOk = hex(enc(`flagship/inject/v1|${app}|${me}|master|${Date.now()}`));
@@ -849,9 +850,33 @@ describe.skipIf(!HAVE_BIN)("master evidence in the Rust keyd", () => {
         expect(await rsAnswer(op, args), `${op} ${JSON.stringify(args).slice(0, 60)}`).toEqual(tsAnswer(op, args));
       }
       expect((await rsAnswer("sign.identity", { msg: msgOk, ...ev })).ok).toBeDefined();
+
+      // The owner later demotes the device in this app, then revokes it: both backends keep the
+      // same thing on their own disk and refuse the old evidence with the same answer.
+      const signed = (st: string, key = root) => ({ statement: st, signatureHex: Buffer.from(ed.sign(enc(st), key)).toString("hex") });
+      const demote = signed(`flagship/app-rank/v1|${app}|device:${dev}|member|${Date.now() - 1000}`);
+      const revoke = signed(`flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|alice|lost|${Date.now() - 1000}`);
+      const steps: Array<[string, Record<string, unknown>]> = [
+        ["evidence.note", signed(`flagship/app-rank/v1|${app}|device:${dev}|member|${Date.now() - 1000}`, new Uint8Array(32).fill(0x26))],
+        ["evidence.note", { ...demote, extra: 1 }],
+        ["evidence.note", { statement: "flagship/other/v1|x", signatureHex: demote.signatureHex }],
+        ["sign.identity", { msg: msgOk, ...ev }],
+        ["evidence.note", demote],
+        ["evidence.note", demote],
+        ["sign.identity", { msg: msgOk, ...ev }],
+        ["evidence.note", { ...revoke, grantStatement: grant, grantSignatureHex: ev.signatureHex }],
+        ["sign.identity", { msg: msgOk, ...ev }],
+      ];
+      for (const [op, args] of steps) {
+        expect(await rsAnswer(op, args), `${op} ${JSON.stringify(args).slice(0, 80)}`).toEqual(tsAnswer(op, args));
+      }
+      expect(tsAnswer("sign.identity", { msg: msgOk, ...ev }).err).toContain("(revoked)");
+      expect(readFileSync(join(dir, "revocations.json"), "utf8")).toBe(readFileSync(join(tsDir, "revocations.json"), "utf8"));
+      expect(statSync(join(dir, "revocations.json")).mode & 0o777).toBe(0o600);
     } finally {
       await k.stop();
       rmSync(dir, { recursive: true, force: true });
+      rmSync(tsDir, { recursive: true, force: true });
     }
   });
 });

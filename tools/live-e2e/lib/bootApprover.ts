@@ -16,8 +16,10 @@
 import { randomBytes } from "node:crypto";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import {
+  buildAutoUnlockLeaseV2,
   buildSealedSecretResponse,
   openSealedFromEd25519Recipient,
+  signAutoUnlockLeaseV2,
   signBootAuth,
   signDeviceEndpointClaim,
   signRootEntitlement,
@@ -111,6 +113,10 @@ export class BootApprover {
   private running = false;
   private loop: Promise<void> | null = null;
   private deposited = false;
+  /** While paused the phone is out of reach: unlock requests are seen (recorded "skipped") but not answered. */
+  private paused = false;
+  /** The key the box's last start-up request was signed with (its boot key on a LUKS box). */
+  lastRequestKey: string | null = null;
 
   constructor(private readonly acct: Account, private readonly serverDomain: string, private readonly log: (s: string) => void = () => undefined) {}
 
@@ -128,6 +134,32 @@ export class BootApprover {
   async stop(): Promise<void> {
     this.running = false;
     await this.loop;
+  }
+
+  /** The owner's phone goes out of reach (true) or comes back (false). */
+  setPaused(p: boolean): void {
+    this.paused = p;
+  }
+
+  /** Unlock requests the box made since `t` (ms) that a paused phone did not answer. */
+  unansweredSince(t: number): ApproverEvent[] {
+    return this.events.filter((e) => e.at >= t && e.purpose === "unlock-key" && e.outcome === "skipped" && e.detail === "phone out of reach");
+  }
+
+  /**
+   * The owner turns on auto-unlock: an IRK-signed box-sealed lease (v2, the disk key sealed to the boot key
+   * the box's start-up requests are signed with) deposited on `.com`, as the apps' "Unlock by itself" does.
+   */
+  async depositLease(bootPubHex: string, hours = 6): Promise<string> {
+    const now = Date.now();
+    const leaseId = randomBytes(16).toString("hex");
+    const lease = buildAutoUnlockLeaseV2({ serverDomain: this.serverDomain, stkPub: hexToBytes(bootPubHex), leaseId, luksKey: await this.diskKey(), issuedAt: now, expiresAt: now + hours * 3_600_000 });
+    const r = await postJson(`https://${CONTROL}/api/server/${encodeURIComponent(this.serverDomain)}/unlock-key/lease-v2`, {
+      lease: { serverDomain: this.serverDomain, stkPub: bootPubHex, leaseId, sealedKey: bytesToHex(lease.sealedKey), issuedAt: lease.issuedAt, expiresAt: lease.expiresAt },
+      signature: bytesToHex(signAutoUnlockLeaseV2(lease, this.acct.keys.irk)),
+    });
+    assert(r.status === 200, `lease-v2 deposit ${r.status}: ${short(r.text)}`);
+    return leaseId;
   }
 
   /** Unlocks answered since `t` (ms). */
@@ -149,6 +181,12 @@ export class BootApprover {
       };
       if (!requestIsSigned(req)) {
         ev("refused", "not signed by the key it names");
+        continue;
+      }
+      if (req.purpose === "unlock-key") this.lastRequestKey = String(req.stkPub).toLowerCase();
+      if (this.paused && req.purpose === "unlock-key") {
+        this.seen.delete(key); // answered once the phone is back
+        if (!this.events.some((e) => e.nonce === req.requestNonceHex && e.detail === "phone out of reach")) ev("skipped", "phone out of reach");
         continue;
       }
       try {

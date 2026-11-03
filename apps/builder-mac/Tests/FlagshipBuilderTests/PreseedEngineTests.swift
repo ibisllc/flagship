@@ -100,5 +100,19 @@ final class PreseedEngineTests: XCTestCase {
                                                      wifiPassword: "p@ss w0rd")
             XCTAssertEqual(preseed, wifi.expectedPreseed, "façade preseed diverged for wifi vector")
         }
+
+        // target-disk vector — the façade marshals targetDisk into burnOpts.
+        let pinned = try XCTUnwrap(golden.vectors.first(where: { $0.name == "target-disk" }))
+        let preseed = try UserData.debianPreseed(recipeJSON: Data(pinned.recipeJson.utf8),
+                                                 installerGitRef: "",
+                                                 targetDisk: "serial:S64ANS0T123456")
+        XCTAssertEqual(preseed, pinned.expectedPreseed, "façade preseed diverged for target-disk vector")
+    }
+
+    func testBurnOptionsCarryTargetDiskOnlyWhenSet() {
+        XCTAssertFalse(PreseedEngine.BurnOptions().json().contains("targetDisk"))
+        XCTAssertFalse(PreseedEngine.BurnOptions(targetDisk: "").json().contains("targetDisk"))
+        XCTAssertTrue(PreseedEngine.BurnOptions(targetDisk: "size:512110190592").json()
+            .contains("\"targetDisk\":\"size:512110190592\""))
     }
 }

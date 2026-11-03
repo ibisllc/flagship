@@ -6,7 +6,7 @@
 // sees the request or the journal. Canonical bytes mirror
 // @flagship/protocol's canonicalJournalRequest byte-for-byte.
 
-export const TAG_JOURNAL_READ = "flagship/journal-read/v1";
+export const TAG_JOURNAL_READ = "flagship/journal-read/v2";
 
 /** Units the daemon allows + the default. Mirrors journalHttp.ts. */
 export const JOURNAL_UNITS = ["flagship-daemon", "flagship-data-services"];
@@ -32,12 +32,18 @@ function podBase(baseUrl) {
   return b;
 }
 
-/** flagship/journal-read/v1|<serverId>|<unit>|<lines>|<issuedAt> */
-export function canonicalJournalBytes({ serverId, unit, lines, issuedAt }) {
+/** A single-use nonce: 16 random bytes as 32 lowercase hex (the box refuses one it took). */
+export function newJournalNonce() {
+  return defaultBytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+/** flagship/journal-read/v2|<serverId>|<unit>|<lines>|<nonce>|<issuedAt> */
+export function canonicalJournalBytes({ serverId, unit, lines, nonce, issuedAt }) {
   if (typeof unit !== "string" || unit.includes("|")) {
     throw err(`invalid journal unit: ${String(unit)}`, "400");
   }
-  return new TextEncoder().encode([TAG_JOURNAL_READ, serverId, unit, String(lines), String(issuedAt)].join("|"));
+  if (typeof nonce !== "string" || !/^[0-9a-f]{32}$/.test(nonce)) throw err("journal-read: nonce must be 32 lowercase hex", "400");
+  return new TextEncoder().encode([TAG_JOURNAL_READ, serverId, unit, String(lines), nonce, String(issuedAt)].join("|"));
 }
 
 /**
@@ -49,7 +55,7 @@ export function canonicalJournalBytes({ serverId, unit, lines, issuedAt }) {
  * @param {number} [args.lines]  trailing lines to fetch (clamped to JOURNAL_MAX_LINES)
  * @param {Uint8Array} args.umk
  * @param {(umk: Uint8Array, bytes: Uint8Array) => Promise<Uint8Array>} args.signWithIrk
- * @param {{ fetch?, bytesToHex?, now? }} [deps]
+ * @param {{ fetch?, bytesToHex?, now?, nonce? }} [deps]
  * @returns {Promise<{ ok: true, unit: string, lines: string[] }>}
  */
 export async function fetchJournal(args, deps = {}) {
@@ -62,10 +68,11 @@ export async function fetchJournal(args, deps = {}) {
   const base = podBase(baseUrl);
   const serverId = new URL(base).host;
   const issuedAt = (deps.now || Date.now)();
+  const nonce = (deps.nonce || newJournalNonce)();
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const f = deps.fetch || fetch;
-  const sig = await signWithIrk(umk, canonicalJournalBytes({ serverId, unit, lines, issuedAt }));
-  const request = { serverId, unit, lines, issuedAt };
+  const sig = await signWithIrk(umk, canonicalJournalBytes({ serverId, unit, lines, nonce, issuedAt }));
+  const request = { serverId, unit, lines, nonce, issuedAt };
   let resp;
   try {
     resp = await f(`${base}/api/journal`, {

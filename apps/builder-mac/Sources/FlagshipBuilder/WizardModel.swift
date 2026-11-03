@@ -48,6 +48,12 @@ final class WizardModel: ObservableObject {
         }
     }
 
+    /// The one disk to erase on a computer with more than one (`TargetDisk`): a burn-time input for
+    /// that computer only, so it is neither persisted nor ever given to a hosted VM (one disk).
+    @Published var targetDisk = ""
+
+    var targetDiskCheck: TargetDisk.Check { TargetDisk.check(targetDisk) }
+
     /// Set while we prefill the fields on launch so the loaded values don't
     /// immediately round-trip back through `didSet` into the store.
     private var suppressWifiPersist = false
@@ -417,6 +423,7 @@ final class WizardModel: ObservableObject {
         guard selectedDisk != nil else { return false }
         if effectiveRequiresUserISO && iso == nil { return false }
         if mode.requiresRecipe && recipe == nil { return false }
+        if targetDiskCheck == .invalid { return false }
         return true
     }
 
@@ -530,8 +537,22 @@ final class WizardModel: ObservableObject {
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: hostedVM || wifiSSID.isEmpty ? nil : wifiSSID,
-                                                 wifiPassword: hostedVM || wifiPassword.isEmpty ? nil : wifiPassword)
+                                                 wifiPassword: hostedVM || wifiPassword.isEmpty ? nil : wifiPassword,
+                                                 targetDisk: try burnTargetDisk(hostedVM: hostedVM))
         return preseed
+    }
+
+    private func burnTargetDisk(hostedVM: Bool) throws -> String? {
+        if hostedVM { return nil }
+        switch targetDiskCheck {
+        case .none: return nil
+        case .valid(let v): return v
+        case .invalid: throw TargetDiskError()
+        }
+    }
+
+    private struct TargetDiskError: LocalizedError {
+        var errorDescription: String? { TargetDisk.invalidMessage }
     }
 
     /// Simple mode: ask the server which Debian base ISO to hold, download +

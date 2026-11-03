@@ -36,6 +36,7 @@ public sealed class Wizard : INotifyPropertyChanged
     private bool _useSystemIso;
     private string _wifiSsid = string.Empty;
     private string _wifiPassword = string.Empty;
+    private string _targetDisk = string.Empty;
     private double? _progress;
     private string? _phase;
     private Recipe? _parsedRecipe;
@@ -694,6 +695,12 @@ public sealed class Wizard : INotifyPropertyChanged
     public bool UseSystemIso { get => _useSystemIso; set { if (_useSystemIso != value) { _useSystemIso = value; FireBag(); } } }
     public string WifiSsid { get => _wifiSsid; set { if (_wifiSsid != value) { _wifiSsid = value; SaveWifi(); FireBag(); } } }
     public string WifiPassword { get => _wifiPassword; set { if (_wifiPassword != value) { _wifiPassword = value; SaveWifi(); FireBag(); } } }
+    /// <summary>"Disk to install on" (B2 #9): only for a USB installer on a machine with more than one disk. Not
+    /// remembered, since it names one machine's disk; never passed to a hosted VM.</summary>
+    public string TargetDiskText { get => _targetDisk; set { if (_targetDisk != value) { _targetDisk = value; FireBag(); } } }
+    public bool TargetDiskValid => TargetDisk.IsValid(_targetDisk);
+    public bool ShowTargetDiskError => !TargetDiskValid;
+    private string? TargetDiskOption => TargetDisk.Normalize(_targetDisk);
 
     private readonly WifiCredentialStore _wifiStore = new();
 
@@ -759,7 +766,7 @@ public sealed class Wizard : INotifyPropertyChanged
     public bool CanBake =>
         HasRecipe
         && (!EffectiveRequiresUserIso || HasIso)
-        && SelectedDisk != null && !IsRunning && !IsFinished;
+        && SelectedDisk != null && TargetDiskValid && !IsRunning && !IsFinished;
 
     public bool ShowReadiness => !IsFinished && !IsRunning;
 
@@ -1035,7 +1042,7 @@ public sealed class Wizard : INotifyPropertyChanged
             // A USB box is amd64.
             if (!await BoxReleaseIsPublishedAsync("amd64", _cts.Token)) return;
             DidRemasterForTest = true; Phase = "remaster"; FireBag();
-            await _nativeBuild.WriteAsync(recipe, iso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true;
+            await _nativeBuild.WriteAsync(recipe, iso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token, TargetDiskOption); IsFinished = true;
         }
         catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
@@ -1095,7 +1102,7 @@ public sealed class Wizard : INotifyPropertyChanged
         Progress = null;
         FireBag();
         var recipe = _recipePath!;
-        try { await _nativeBuild.WriteAsync(recipe, baseIso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true; }
+        try { await _nativeBuild.WriteAsync(recipe, baseIso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token, TargetDiskOption); IsFinished = true; }
         catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         FinishSimple();
@@ -1129,13 +1136,14 @@ public sealed class Wizard : INotifyPropertyChanged
         var dir = Path.GetDirectoryName(iso) ?? Environment.CurrentDirectory;
         var stem = Path.GetFileNameWithoutExtension(iso);
         var outIso = Path.Combine(dir, stem + ".flagship.iso");
+        if (!TargetDiskValid) return;
         _outIsoPath = outIso;
         FireBag();
         if (IsRunning) return; IsRunning = true; _cts = new CancellationTokenSource();
         try
         {
             if (!await BoxReleaseIsPublishedAsync("amd64", _cts.Token)) return;
-            await _nativeBuild.PrepareAsync(recipe, iso, outIso, WifiSsid, WifiPassword, _cts.Token); IsFinished = true;
+            await _nativeBuild.PrepareAsync(recipe, iso, outIso, WifiSsid, WifiPassword, _cts.Token, TargetDiskOption); IsFinished = true;
         }
         catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
@@ -1230,7 +1238,7 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(DiskStatusGlyph), nameof(DiskStatusBrush), nameof(DiskIconBg),
         nameof(DiskRowTag),
         nameof(DoneServerDomain), nameof(DoneOutputPath),
-        nameof(Mode), nameof(IsSimpleMode), nameof(IsAdvancedMode), nameof(UseSystemIso), nameof(IsoPickerEnabled), nameof(WifiSsid), nameof(WifiPassword),
+        nameof(Mode), nameof(IsSimpleMode), nameof(IsAdvancedMode), nameof(UseSystemIso), nameof(IsoPickerEnabled), nameof(WifiSsid), nameof(WifiPassword), nameof(TargetDiskText), nameof(TargetDiskValid), nameof(ShowTargetDiskError),
         nameof(Progress), nameof(Phase),
         nameof(BaseDownloadStarted), nameof(BaseDownloadUrl),
         nameof(ShowIsoRow),

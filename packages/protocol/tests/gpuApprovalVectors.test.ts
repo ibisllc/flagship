@@ -60,6 +60,14 @@ describe("gpu-approval vectors (gpud checks the owner's signature itself)", () =
       { ...a, policies: ["shared"] },
       { ...a, trustDomain: "fam,ily" },
       { ...a, backend: "cuda" },
+      { ...a, container: "" },
+      { ...a, container: "-flagship" },
+      { ...a, container: "flagship|x" },
+      { ...a, userspace: "cuda|12" },
+      { ...a, maxRuntimeMs: 0 },
+      { ...a, share: { computePercent: 0, memoryMib: 1 } },
+      { ...a, share: { computePercent: 101, memoryMib: 1 } },
+      { ...a, share: { computePercent: 50, memoryMib: 0 } },
     ] as GpuApprovalTerms[]) {
       expect(() => gpuApprovalCanonicalBytes(V.anchor.server, bad, 1)).toThrow(/gpu-approval/);
     }

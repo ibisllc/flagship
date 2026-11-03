@@ -14,7 +14,7 @@ public struct AcceleratorsView: Codable, Equatable, Sendable {
     public let devices: [AcceleratorDevice]
     public let queue: [AcceleratorQueueEntry]
     /// Apps asking to use a GPU: gpud refuses their claims until the owner signs
-    /// `flagship/gpu-approval/v1` for these exact terms. Absent on older boxes.
+    /// `flagship/gpu-approval/v2` for these exact terms. Absent on older boxes.
     public let pendingApprovals: [GpuApprovalRequest]
     /// The approvals in force.
     public let approvals: [GpuApprovalRequest]
@@ -50,8 +50,15 @@ public struct AcceleratorsView: Codable, Equatable, Sendable {
     }
 }
 
+/// Cooperative sharing's limits on one device, as the owner signs them.
+public struct GpuShareLimits: Codable, Equatable, Sendable {
+    public let computePercent: Int
+    public let memoryMib: Int64
+    public init(computePercent: Int, memoryMib: Int64) { self.computePercent = computePercent; self.memoryMib = memoryMib }
+}
+
 /// One app installation's GPU terms as the box lists them: what the owner approves (signing
-/// `flagship/gpu-approval/v1`) or withdraws (`flagship/gpu-approval-withdraw/v1`).
+/// `flagship/gpu-approval/v2`) or withdraws (`flagship/gpu-approval-withdraw/v1`).
 public struct GpuApprovalRequest: Codable, Equatable, Sendable, Identifiable {
     public let server: String
     public let appId: String
@@ -69,6 +76,12 @@ public struct GpuApprovalRequest: Codable, Equatable, Sendable, Identifiable {
     public let secrecy: Bool
     public let trustDomain: String?
     public let ownerConsent: String?
+    /// The one container its GPU claim may run in, and the claim's userspace image, run-time limit
+    /// and share: gpud refuses a claim asking for anything other than what the owner signed.
+    public let container: String?
+    public let userspace: String?
+    public let maxRuntimeMs: Int64?
+    public let share: GpuShareLimits?
     /// When the owner signed it (granted approvals only).
     public let issuedAt: Int64?
 
@@ -76,17 +89,20 @@ public struct GpuApprovalRequest: Codable, Equatable, Sendable, Identifiable {
 
     public init(server: String, appId: String, installationId: String, generation: Int64, backend: String, maxCount: Int,
                 caps: [String], policies: [String], isolation: String, secrecy: Bool,
-                trustDomain: String? = nil, ownerConsent: String? = nil, issuedAt: Int64? = nil) {
+                trustDomain: String? = nil, ownerConsent: String? = nil, container: String? = nil, userspace: String? = nil,
+                maxRuntimeMs: Int64? = nil, share: GpuShareLimits? = nil, issuedAt: Int64? = nil) {
         self.server = server; self.appId = appId; self.installationId = installationId; self.generation = generation
         self.backend = backend; self.maxCount = maxCount; self.caps = caps; self.policies = policies
         self.isolation = isolation; self.secrecy = secrecy; self.trustDomain = trustDomain
-        self.ownerConsent = ownerConsent; self.issuedAt = issuedAt
+        self.ownerConsent = ownerConsent; self.container = container ?? "flagship-\(appId)"; self.userspace = userspace
+        self.maxRuntimeMs = maxRuntimeMs; self.share = share; self.issuedAt = issuedAt
     }
 
     public func with(server: String? = nil, issuedAt: Int64?? = nil) -> GpuApprovalRequest {
         GpuApprovalRequest(server: server ?? self.server, appId: appId, installationId: installationId, generation: generation,
                            backend: backend, maxCount: maxCount, caps: caps, policies: policies, isolation: isolation,
-                           secrecy: secrecy, trustDomain: trustDomain, ownerConsent: ownerConsent, issuedAt: issuedAt ?? self.issuedAt)
+                           secrecy: secrecy, trustDomain: trustDomain, ownerConsent: ownerConsent, container: container,
+                           userspace: userspace, maxRuntimeMs: maxRuntimeMs, share: share, issuedAt: issuedAt ?? self.issuedAt)
     }
 
     /// The same terms (what a signature covers), whatever `issuedAt` says.

@@ -178,20 +178,20 @@ describe("the AppRunner hook", () => {
     setAcceleratorHook(new AppAccelerators(new AcceleratorBroker(gpudClient(sock, 5000), { engine: "docker" }), join(dir, "held.json")));
     const ran: string[][] = [];
     const runner = new AppRunner({ run: async (_c, a) => void ran.push(a) });
-    await expect(runner.deploy({ serviceId: "s", image: "img:1", accelerator: appReq() })).rejects.toThrow(/no GPU/);
+    await expect(runner.deploy({ serviceId: "alice-llm", image: "img:1", accelerator: appReq() })).rejects.toThrow(/no GPU/);
     expect(ran).toEqual([]);
     const cpu = appReq({ requirement: { ...requirementFromManifest(ACC), fallback: "cpu-if-supported" } });
-    await runner.deploy({ serviceId: "s", image: "img:1", accelerator: cpu });
+    await runner.deploy({ serviceId: "alice-llm", image: "img:1", accelerator: cpu });
     expect(ran[0]!.some((a) => a.includes("nvidia"))).toBe(false);
   });
 
   it("refuses without a GPU service at all, and when the approval doesn't cover the claim", async () => {
-    await expect(new AppRunner({ run: async () => {} }).deploy({ serviceId: "s", image: "i", accelerator: appReq() })).rejects.toThrow(/no GPU service/);
+    await expect(new AppRunner({ run: async () => {} }).deploy({ serviceId: "alice-llm", image: "i", accelerator: appReq() })).rejects.toThrow(/no GPU service/);
     const sock = fakeGpud((op) =>
       op === "gpu.inventory" ? { ok: true, result: inventory(true) } : { ok: false, code: "forbidden", message: "graphics is not approved" },
     );
     setAcceleratorHook(new AppAccelerators(new AcceleratorBroker(gpudClient(sock, 5000), { engine: "docker" }), join(dir, "held.json")));
-    await expect(new AppRunner({ run: async () => {} }).deploy({ serviceId: "s", image: "i", accelerator: appReq() })).rejects.toThrow(/isn't approved/);
+    await expect(new AppRunner({ run: async () => {} }).deploy({ serviceId: "alice-llm", image: "i", accelerator: appReq() })).rejects.toThrow(/isn't approved/);
   });
 
   it("gives up a queued claim after its wait and releases it", async () => {
@@ -206,7 +206,7 @@ describe("the AppRunner hook", () => {
     let t = 0;
     const broker = new AcceleratorBroker(gpudClient(sock, 5000), { engine: "docker", now: () => t, sleep: async () => void (t += 1000), pollMs: 1 });
     const apps = new AppAccelerators(broker, join(dir, "held.json"));
-    const r = await apps.beforeRun("s", appReq({ queueWaitMs: 3000 }));
+    const r = await apps.beforeRun("alice-llm", appReq({ queueWaitMs: 3000 }));
     expect(r).toEqual({ kind: "refused", reason: expect.stringMatching(/busy/) });
     expect(calls).toContain("gpu.release");
   });

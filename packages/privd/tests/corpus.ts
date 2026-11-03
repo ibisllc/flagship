@@ -509,13 +509,14 @@ for (const bad of [
 gpuDocker(aiServe({ image: IMG, runtime: ["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=0", "--label", `flagship.gpu.allocation=localai-${AI_HEX}`] }), AI_GPU); // any image on the GPU under the unsigned local-AI claim
 gpuDocker(aiServe({ image: AI_SERVER_CUDA, runtime: ["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=1", "--label", `flagship.gpu.allocation=localai-${AI_HEX}`] }), AI_GPU); // a device it doesn't hold
 const MODELS_DIR = "/var/lib/docker/volumes/flagship-models/_data";
-const SHA = "b".repeat(64);
+const SHA = "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c";
 host("localai", ["model-install", SHA, MODELS_DIR]);
+host("localai", ["model-install", "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d", MODELS_DIR]);
 host("localai", ["model-install", SHA, "/var/lib/containers/storage/volumes/flagship-models/_data"]);
 host("localai", ["model-remove", SHA, MODELS_DIR]);
 host("localai", ["out-prepare", AI_HEX, `/var/lib/docker/volumes/flagship-aitrain-${AI_HEX}/_data`]);
 for (const bad of [
-  ["model-install", "B".repeat(64), MODELS_DIR], ["model-install", SHA.slice(1), MODELS_DIR], ["model-install", `${SHA}/../x`, MODELS_DIR],
+  ["model-install", "b".repeat(64), MODELS_DIR], ["model-install", "B".repeat(64), MODELS_DIR], ["model-install", SHA.slice(1), MODELS_DIR], ["model-install", `${SHA}/../x`, MODELS_DIR],
   ["model-install", SHA, "/var/lib/docker/volumes/flagship-files-alice--chess/_data"], ["model-install", SHA, "/etc"], ["model-install", SHA, `${MODELS_DIR}/..`],
   ["model-remove", SHA, "/"], ["model-remove", "*", MODELS_DIR], ["out-prepare", AI_HEX, `/var/lib/docker/volumes/flagship-aitrain-${"f".repeat(16)}/_data`],
   ["out-prepare", AI_HEX, "/var/flagship"], ["out-prepare", "../x", "/var/lib/docker/volumes/flagship-aitrain-../_data"], ["model-install", SHA], ["serve", SHA, MODELS_DIR],

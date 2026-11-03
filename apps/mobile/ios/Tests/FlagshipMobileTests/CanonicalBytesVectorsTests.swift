@@ -146,6 +146,7 @@ final class CanonicalBytesVectorsTests: XCTestCase {
                 serverId: i["serverId"] as! String,
                 unit: i["unit"] as! String,
                 lines: i64(i, "lines"),
+                nonce: i["nonce"] as! String,
                 issuedAt: i64(i, "issuedAt")
             ).canonicalBytes()
         case "watch-delegate-key":

@@ -9,7 +9,9 @@ import {
   type Keypair,
   type PolicyState,
 } from "@flagship/protocol";
+import { randomBytes } from "node:crypto";
 import { buildJournalHttp, type JournalReader } from "../src/journalHttp.js";
+import type { UsedNonceStore } from "../src/updateConsumer.js";
 import { setPqAuthority } from "../src/pqAuthority.js";
 
 const SERVER = "home.alice.flagship.services";
@@ -68,19 +70,26 @@ function recordingReader(lines = ["line a", "line b"]) {
   return { calls, reader };
 }
 
+function memNonces(): UsedNonceStore & { used: string[] } {
+  const used: string[] = [];
+  return { used, has: async (n) => used.includes(n), mark: async (n) => void used.push(n) };
+}
+
 function mkHandler(reader: JournalReader, extra?: Partial<Parameters<typeof buildJournalHttp>[0]>) {
   return buildJournalHttp({
     serverId: SERVER,
     ownerIrkPub: IRK.publicKey,
     reader,
+    usedNonces: memNonces(),
     now: () => NOW,
     maxLines: 500,
     ...extra,
   });
 }
 
+const nonce = () => randomBytes(16).toString("hex");
 function journalReq(unit: string, lines: number): JournalRequest {
-  return { serverId: SERVER, unit, lines, issuedAt: NOW };
+  return { serverId: SERVER, unit, lines, nonce: nonce(), issuedAt: NOW };
 }
 
 describe("buildJournalHttp", () => {
@@ -131,7 +140,7 @@ describe("buildJournalHttp", () => {
   it("rejects a stale issuedAt with 403 (no read)", async () => {
     const { reader, calls } = recordingReader();
     const handle = mkHandler(reader);
-    const order: JournalRequest = { serverId: SERVER, unit: "flagship-daemon", lines: 50, issuedAt: NOW - 10 * 60_000 };
+    const order: JournalRequest = { serverId: SERVER, unit: "flagship-daemon", lines: 50, nonce: nonce(), issuedAt: NOW - 10 * 60_000 };
     const res = await handle(
       req({ request: { ...order }, signature: bytesToHex(signJournalRequest(order, IRK)) }),
     );
@@ -165,7 +174,7 @@ describe("buildJournalHttp", () => {
   it("rejects a serverId mismatch with 403", async () => {
     const { reader } = recordingReader();
     const handle = mkHandler(reader);
-    const order: JournalRequest = { serverId: "evil.bob.flagship.services", unit: "flagship-daemon", lines: 50, issuedAt: NOW };
+    const order: JournalRequest = { serverId: "evil.bob.flagship.services", unit: "flagship-daemon", lines: 50, nonce: nonce(), issuedAt: NOW };
     const res = await handle(
       req({ request: { ...order }, signature: bytesToHex(signJournalRequest(order, IRK)) }),
     );
@@ -271,5 +280,40 @@ describe("buildJournalHttp: admin root and units", () => {
     for (const unit of ["ssh", "sshd", "flagship-keyd.service ", "docker"]) {
       expect((await handle(signed(journalReq(unit, 10), IRK)))!.status).toBe(403);
     }
+  });
+});
+
+describe("buildJournalHttp: single-use nonce (review 2026-10-25 #15)", () => {
+  it("reads once per signed request: a replay inside the window is refused, and the nonce is kept in the store", async () => {
+    const { reader, calls } = recordingReader();
+    const store = memNonces();
+    const handle = mkHandler(reader, { usedNonces: store });
+    const r = journalReq("flagship-daemon", 10);
+    const body = { request: r, signature: bytesToHex(signJournalRequest(r, IRK)) };
+    expect((await handle(req(body)))!.status).toBe(200);
+    const again = await handle(req(body));
+    expect(again!.status).toBe(409);
+    expect(JSON.parse(String(again!.body)).error).toBe("this request was already used");
+    expect(store.used).toEqual([r.nonce]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("burns no nonce for a request that fails its signature, and refuses one without a nonce (the v1 shape)", async () => {
+    const { reader, calls } = recordingReader();
+    const store = memNonces();
+    const handle = mkHandler(reader, { usedNonces: store });
+    const r = journalReq("flagship-daemon", 10);
+    expect((await handle(req({ request: r, signature: bytesToHex(signJournalRequest(r, makeKey(99))) })))!.status).toBe(403);
+    expect(store.used).toEqual([]);
+    const { nonce: _n, ...v1 } = r;
+    const old = await handle(req({ request: v1, signature: "00".repeat(64) }));
+    expect(old!.status).toBe(400);
+    // A 0.2 app (journal-read/v1, no nonce) hears one sentence telling the person to update (F9).
+    expect(JSON.parse(String(old!.body))).toEqual({
+      error: "Reading this server's log needs the newest version of Flagship. Update the app, then try again.",
+      code: "app-update-required",
+    });
+    expect((await handle(req({ request: { ...r, nonce: "XYZ" }, signature: "00".repeat(64) })))!.status).toBe(400);
+    expect(calls).toHaveLength(0);
   });
 });

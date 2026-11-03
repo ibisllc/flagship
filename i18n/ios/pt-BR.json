@@ -3170,5 +3170,10 @@
   "Needs an update": "Precisa de atualização",
   "This server needs an update to keep working with Flagship 0.3": "Este servidor precisa de uma atualização para continuar funcionando com o Flagship 0.3",
   "Its certificate can't be renewed and runs out on %@. Update it before then.": "O certificado dele não pode ser renovado e expira em %@. Atualize-o antes disso.",
-  "Its certificate can't be renewed until it is updated.": "O certificado dele não pode ser renovado até que ele seja atualizado."
+  "Its certificate can't be renewed until it is updated.": "O certificado dele não pode ser renovado até que ele seja atualizado.",
+  "This computer has %@ disks the installer could erase (%@), so it stopped. Nothing was erased.": "Este computador tem %@ discos que o instalador poderia apagar (%@), então ele parou. Nada foi apagado.",
+  "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "Este computador não tem um disco interno de 8 GB ou mais para instalar, então o instalador parou. Nada foi apagado.",
+  "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": "O disco para o qual este instalador foi criado (%@) não está neste computador. Nada foi apagado.",
+  "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": "O disco para o qual este instalador foi criado (%@) corresponde a mais de um disco neste computador. Nada foi apagado.",
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Crie o instalador de novo com a mesma receita, preencha \"Disco onde instalar\" com um dos discos que o computador mostrou na tela e inicie o computador por ele."
 }

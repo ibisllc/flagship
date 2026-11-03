@@ -250,8 +250,14 @@ fn spec_for(name: &str) -> Option<(&'static str, Vec<K>)> {
             vec![S("serverId"), S("mode"), U("issuedAt")],
         ),
         "journal-read" => (
-            "flagship/journal-read/v1",
-            vec![S("serverId"), S("unit"), U("lines"), U("issuedAt")],
+            "flagship/journal-read/v2",
+            vec![
+                S("serverId"),
+                S("unit"),
+                U("lines"),
+                Hex("nonce"),
+                U("issuedAt"),
+            ],
         ),
         "watch-delegate-key" => (
             "flagship/watch-delegate-key/v1",

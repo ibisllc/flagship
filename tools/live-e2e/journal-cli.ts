@@ -3,6 +3,7 @@
  * Reads a gym box's daemon journal with the account's demo owner IRK:
  *   npx tsx tools/live-e2e/journal-cli.ts <user> <serverName> [lines] [regex]
  */
+import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signJournalRequest, type JournalRequest } from "@flagship/protocol";
 import { Account } from "./lib/fleet.js";
@@ -14,7 +15,7 @@ if (!user || !serverName) {
   process.exit(2);
 }
 const fqdn = `${serverName}.${user}.${SERVICES}`;
-const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: Number(linesArg ?? 300), issuedAt: Date.now() };
+const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: Number(linesArg ?? 300), nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
 const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, new Account(user).keys.adminRoot)) });
 const lines: string[] = r.json?.lines ?? r.json?.log ?? [];
 const re = pattern ? new RegExp(pattern, "i") : null;

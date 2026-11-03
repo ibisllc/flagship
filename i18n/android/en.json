@@ -14172,5 +14172,73 @@
   "recipe_made_by_older_app": {
     "en": "This recipe was made by an older version of the Flagship app. Update the Flagship app, then create the server again.",
     "ctx": "builder/iso/OlderAppRecipe.kt (prose; refusal when a recipe from an app older than 0.3 is loaded for a USB burn)"
+  },
+  "add_your_fingerprint_again_to_open_account_key": {
+    "en": "Add your fingerprint again in Android Settings to open your Flagship account key on this phone.",
+    "ctx": "keystore/Keystore.kt (prose: the account key opens only with a fingerprint on Android 10 and none is enrolled)"
+  },
+  "account_key_unreadable_short": {
+    "en": "This phone can no longer open your account key. Restore your account to keep using it here.",
+    "ctx": "keystore/SeedVault.kt (prose)"
+  },
+  "account_key_lost_title": {
+    "en": "This phone can't open your account key",
+    "ctx": "ui/shell/AccountKeyLostScreen.kt (title)"
+  },
+  "account_key_lost_body": {
+    "en": "The screen lock on this phone was removed or reset, so Android deleted the key that protected your Flagship account key here. Your account and your servers are not affected.",
+    "ctx": "ui/shell/AccountKeyLostScreen.kt (prose)"
+  },
+  "account_key_lost_hint": {
+    "en": "To use your account here again, restore it: choose \"Connect to an existing account\", then sign in with your recovery passkey or a saved account key file, or join from another device that is signed in.",
+    "ctx": "ui/shell/AccountKeyLostScreen.kt (prose; quotes the welcome screen button connect_to_an_existing_account)"
+  },
+  "account_key_lost_restore": {
+    "en": "Restore my account",
+    "ctx": "ui/shell/AccountKeyLostScreen.kt (button)"
+  },
+  "burn_target_disk_label": {
+    "en": "Disk to install on (optional)",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt (field label)"
+  },
+  "burn_target_disk_placeholder": {
+    "en": "serial:S64ANS0T123456",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt (field placeholder, an example value)",
+    "translatable": false
+  },
+  "burn_target_disk_help": {
+    "en": "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt (field help; keep by-id:, serial:, size: as written)"
+  },
+  "burn_target_disk_invalid": {
+    "en": "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.",
+    "ctx": "builder/BuilderOnDeviceViewModel.kt (field error; keep by-id:, serial:, size: as written)"
+  },
+  "install_disk_stop_several": {
+    "en": "This computer has %1$s disks the installer could erase (%2$s), so it stopped. Nothing was erased.",
+    "ctx": "core/InstallDiskStop.kt (install timeline; %1$s = number of disks, %2$s = their sizes like \"500 GB, 2000 GB\")",
+    "args": 2
+  },
+  "install_disk_stop_none": {
+    "en": "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.",
+    "ctx": "core/InstallDiskStop.kt (install timeline)"
+  },
+  "install_disk_stop_missing": {
+    "en": "The disk this installer was made for (%1$s) isn't in this computer. Nothing was erased.",
+    "ctx": "core/InstallDiskStop.kt (install timeline; %1$s = a by-id:/serial:/size: value)",
+    "args": 1
+  },
+  "install_disk_stop_ambiguous": {
+    "en": "The disk this installer was made for (%1$s) matches more than one disk in this computer. Nothing was erased.",
+    "ctx": "core/InstallDiskStop.kt (install timeline; %1$s = a by-id:/serial:/size: value)",
+    "args": 1
+  },
+  "install_disk_stop_advice": {
+    "en": "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.",
+    "ctx": "core/InstallDiskStop.kt (install timeline; \"Disk to install on\" is the burn field label)"
+  },
+  "setup_stopped_cancel_or_contact": {
+    "en": "Cancel this order to free the name and create the server again, or contact us and we'll look at it.",
+    "ctx": "ui/screens/InstallProgressScreen.kt SetupStoppedCard (prose)"
   }
 }

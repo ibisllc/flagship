@@ -37,26 +37,33 @@ function fixedKey() {
 
 describe("journal — canonical-bytes parity with @flagship/protocol", () => {
   it("uses the protocol tag", () => {
-    expect(TAG_JOURNAL_READ).toBe("flagship/journal-read/v1");
+    expect(TAG_JOURNAL_READ).toBe("flagship/journal-read/v2");
   });
 
   it("composes the exact byte string and verifies under verifyJournalRequest", () => {
     const issuedAt = 1700000000000;
     const unit = "flagship-daemon";
     const lines = 200;
-    const got = new TextDecoder().decode(canonicalJournalBytes({ serverId: SERVER_ID, unit, lines, issuedAt }));
-    expect(got).toBe(`flagship/journal-read/v1|${SERVER_ID}|${unit}|${lines}|${issuedAt}`);
+    const nonce = "ab".repeat(16);
+    const got = new TextDecoder().decode(canonicalJournalBytes({ serverId: SERVER_ID, unit, lines, nonce, issuedAt }));
+    expect(got).toBe(`flagship/journal-read/v2|${SERVER_ID}|${unit}|${lines}|${nonce}|${issuedAt}`);
 
     const { priv, pub } = fixedKey();
-    const req: JournalRequest = { serverId: SERVER_ID, unit, lines, issuedAt };
+    const req: JournalRequest = { serverId: SERVER_ID, unit, lines, nonce, issuedAt };
     const sig = signJournalRequest(req, { privateKey: priv, publicKey: pub });
     // The webapp's canonical bytes MUST verify under the protocol signer.
-    expect(ed.verify(sig, canonicalJournalBytes({ serverId: SERVER_ID, unit, lines, issuedAt }), pub)).toBe(true);
+    expect(ed.verify(sig, canonicalJournalBytes({ serverId: SERVER_ID, unit, lines, nonce, issuedAt }), pub)).toBe(true);
     expect(verifyJournalRequest(req, sig, pub)).toBe(true);
   });
 
   it("rejects a unit containing the canonical separator", () => {
-    expect(() => canonicalJournalBytes({ serverId: SERVER_ID, unit: "a|b", lines: 1, issuedAt: 1 })).toThrow();
+    expect(() => canonicalJournalBytes({ serverId: SERVER_ID, unit: "a|b", lines: 1, nonce: "ab".repeat(16), issuedAt: 1 })).toThrow();
+  });
+
+  it("refuses a missing or malformed nonce (review 2026-10-25 #15: each read is single-use)", () => {
+    for (const nonce of [undefined, "", "AB".repeat(16), "ab"]) {
+      expect(() => canonicalJournalBytes({ serverId: SERVER_ID, unit: "flagship-daemon", lines: 1, nonce, issuedAt: 1 })).toThrow(/nonce/);
+    }
   });
 });
 
@@ -73,7 +80,7 @@ describe("fetchJournal — POST shape + signing", () => {
 
     const res = await fetchJournal(
       { baseUrl: POD, umk: new Uint8Array(32), signWithIrk },
-      { fetch: fakeFetch as any, now: () => 1700000000000 },
+      { fetch: fakeFetch as any, now: () => 1700000000000, nonce: () => "cd".repeat(16) },
     );
 
     expect(res.lines).toEqual(["boot", "cert minted"]);
@@ -82,10 +89,21 @@ describe("fetchJournal — POST shape + signing", () => {
     expect(url).toBe(`${POD}/api/journal`);
     expect(opts.method).toBe("POST");
     const body = JSON.parse(opts.body);
-    expect(body.request).toEqual({ serverId: SERVER_ID, unit: "flagship-daemon", lines: 200, issuedAt: 1700000000000 });
+    expect(body.request).toEqual({ serverId: SERVER_ID, unit: "flagship-daemon", lines: 200, nonce: "cd".repeat(16), issuedAt: 1700000000000 });
     expect(typeof body.signature).toBe("string");
     // The posted signature verifies the posted request under the protocol verifier.
     expect(verifyJournalRequest(body.request, hexToBytesLocal(body.signature), pub)).toBe(true);
+  });
+
+  it("signs a fresh random nonce for each read", async () => {
+    const { priv } = fixedKey();
+    const fakeFetch = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, unit: "flagship-daemon", lines: [] }) }));
+    const signWithIrk = async (_umk: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, priv);
+    for (let i = 0; i < 2; i++) await fetchJournal({ baseUrl: POD, umk: new Uint8Array(32), signWithIrk }, { fetch: fakeFetch as any, now: () => 1 });
+    const [a, b] = fakeFetch.mock.calls.map((c: any) => JSON.parse(c[1].body).request.nonce);
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(b).toMatch(/^[0-9a-f]{32}$/);
+    expect(a).not.toBe(b);
   });
 
   it("clamps lines to JOURNAL_MAX_LINES", async () => {

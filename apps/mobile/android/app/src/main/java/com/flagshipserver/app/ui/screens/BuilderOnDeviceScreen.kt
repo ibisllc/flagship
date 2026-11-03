@@ -57,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -144,6 +145,10 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
                         onClear = { vm.setLocalSeed(null, null) },
                     )
                 }
+                if (state.phase == BuilderOnDeviceViewModel.Phase.Ready || state.phase == BuilderOnDeviceViewModel.Phase.NeedPermission) {
+                    Spacer(Modifier.height(FS.space.s4))
+                    TargetDiskField(state, onChange = { vm.setTargetDisk(it) })
+                }
                 Spacer(Modifier.height(FS.space.s4))
                 when (state.phase) {
                     BuilderOnDeviceViewModel.Phase.NeedPermission -> {
@@ -206,6 +211,25 @@ private fun DrivePicker(
     }
     Spacer(Modifier.height(FS.space.s2))
     FSSecondaryButton(label = stringResource(R.string.rescan), onClick = onRefresh)
+}
+
+/**
+ * The burn option `targetDisk`: only needed when the computer being installed has more than one disk,
+ * where the installer otherwise stops without erasing anything and lists the disks on its screen.
+ */
+@Composable
+private fun TargetDiskField(state: BuilderOnDeviceViewModel.State, onChange: (String) -> Unit) {
+    com.flagshipserver.app.ui.components.FSField(
+        value = state.targetDisk,
+        onValueChange = onChange,
+        label = stringResource(R.string.burn_target_disk_label),
+        placeholder = stringResource(R.string.burn_target_disk_placeholder),
+        helper = stringResource(R.string.burn_target_disk_help),
+        error = state.targetDiskError,
+        keyboardType = androidx.compose.ui.text.input.KeyboardType.Ascii,
+        modifier = Modifier.testTag("builder-target-disk"),
+        fieldTag = "builder-target-disk-field",
+    )
 }
 
 /**

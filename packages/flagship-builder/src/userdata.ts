@@ -108,6 +108,13 @@ export interface UserDataOptions {
   wifiSSID?: string;
   wifiPassword?: string;
   /**
+   * The one disk the installer may erase, for a machine with more than one: "by-id:<name under
+   * /dev/disk/by-id>", "serial:<serial>" or "size:<bytes>" (preseed.ts TARGET_DISK_PATTERN). A
+   * burn-time local input like Wi-Fi, never part of the signed recipe. Absent ⇒ the one fixed disk
+   * of 8 GiB or more, and the install stops (nothing erased) when there are several.
+   */
+  targetDisk?: string;
+  /**
    * OFFLINE secret-free pairing (advanced/embed mode): the owner-IRK-signed
    * `add-paired-session` order embedded in PLAINTEXT (`{request, signature}`
    * JSON). The daemon reads it at first boot, verifies the owner-IRK signature,

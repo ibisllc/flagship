@@ -37,6 +37,8 @@ export interface EngineBurnOptions {
   installerGitRef?: string;
   flagshipRepoUrl?: string;
   bootHost?: string;
+  /** The disk to erase on a machine with more than one (UserDataOptions.targetDisk). */
+  targetDisk?: string;
 }
 
 /** Parse a recipe JSON (envelope or flattened) into generator options, WITHOUT
@@ -73,6 +75,7 @@ export function optionsFromRecipeJson(recipeJson: string, burn: EngineBurnOption
     ...(burn.installerGitRef ? { installerGitRef: burn.installerGitRef } : {}),
     ...(burn.flagshipRepoUrl ? { flagshipRepoUrl: burn.flagshipRepoUrl } : {}),
     ...(burn.bootHost ? { bootHost: burn.bootHost } : {}),
+    ...(burn.targetDisk ? { targetDisk: burn.targetDisk } : {}),
   };
 }
 

@@ -2,6 +2,7 @@
 // directory, the box's unauthenticated + owner-signed API, a paired session,
 // git import, MCP, the vibe-code gate, server management under the admin-root
 // model, and a full image-app lifecycle.
+import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
   signInstallService,
@@ -150,18 +151,21 @@ export const core: Group = {
       return "adminRootPub = the demo admin root";
     });
 
-    await rec.check("POST /api/journal (admin-root signed) returns daemon log lines; the IRK is refused", async () => {
-      const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 25, issuedAt: Date.now() };
-      const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, adminRoot)) });
+    await rec.check("POST /api/journal (admin-root signed) returns daemon log lines once per nonce; the IRK and a replay are refused", async () => {
+      const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 25, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
+      const body = { request: req, signature: bytesToHex(signJournalRequest(req, adminRoot)) };
+      const r = await postJson(`https://${fqdn}/api/journal`, body);
       assert(r.status === 200, `got ${r.status}: ${short(r.text)}`);
       const lines = r.json?.lines ?? r.json?.log ?? [];
       assert(Array.isArray(lines) && lines.length > 0, "no lines");
+      const replay = await postJson(`https://${fqdn}/api/journal`, body);
+      assert(replay.status === 409 && !Array.isArray(replay.json?.lines), `the same signed read again: ${replay.status}`);
       const byIrk = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, irk)) });
       assert(byIrk.status === 403, `IRK-signed read: ${byIrk.status}`);
-      return `${lines.length} lines, IRK ${byIrk.status}`;
+      return `${lines.length} lines, replay ${replay.status}, IRK ${byIrk.status}`;
     });
     await rec.check("POST /api/journal rejects a forged signature", async () => {
-      const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };
+      const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
       const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: "00".repeat(64) });
       assert(r.status === 401 || r.status === 403, `expected 401/403, got ${r.status}`);
       return `rejected ${r.status}`;

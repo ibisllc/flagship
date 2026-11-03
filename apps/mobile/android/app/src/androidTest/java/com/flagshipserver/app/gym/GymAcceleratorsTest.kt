@@ -70,7 +70,7 @@ class GymAcceleratorsTest : GymBase() {
         return mock.defaultAccelerators().copy(pendingApprovals = pending, approvals = granted)
     }
 
-    /** android-gpus-approve: Render's request with its exact terms; Approve signs flagship/gpu-approval/v1 with the
+    /** android-gpus-approve: Render's request with its exact terms; Approve signs flagship/gpu-approval/v2 with the
      *  admin root; Decline on Train hides it and sends nothing; Stream's sharing request is approved with a trust
      *  domain and consent; Withdraw on Photos signs flagship/gpu-approval-withdraw/v1. */
     @Test

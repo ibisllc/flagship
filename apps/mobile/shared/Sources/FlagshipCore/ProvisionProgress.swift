@@ -83,11 +83,13 @@ public enum ProvisionProgress {
     /// stays, minus the shell line number ("Setup stopped while Expanding the
     /// disk (line 66)"); a runtime artefact (an HTTP status, a Cloudflare code,
     /// a JSON body) becomes a sentence, and an empty report becomes the phase
-    /// title.
+    /// title. The installer's disk stop becomes its sentence in the owner's language plus how to fix
+    /// it (`InstallDiskStop`).
     public static func failureDetail(_ lastError: String?) -> String? {
         let t = (lastError ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let title = phaseTitles["error"]
         if t.isEmpty { return title }
+        if let stop = InstallDiskStop.parse(t) { return stop.message }
         if UserErrorText.isRawArtefact(t) { return UserErrorText.ofRaw(t, fallback: title) }
         let stripped = UserErrorText.stripInternals(t)
         return stripped.isEmpty ? title : stripped

@@ -17,6 +17,8 @@ pub type Args = Map<String, Value>;
 pub struct CopyIn {
     pub from: String,
     pub to: String,
+    /// The most the copy may hold (privd's `copyIn[].maxBytes`); None: unbounded.
+    pub max_bytes: Option<u64>,
 }
 
 /// `Exec`: one fixed binary, its argv, a time limit, and what goes to and comes from it.
@@ -2019,6 +2021,39 @@ pub const LOCAL_AI_INCOMING: &str = "/var/flagship/data/local-ai/incoming";
 /// privd's `LOCAL_AI_INSTALL_SCRIPT`, byte for byte.
 pub const LOCAL_AI_INSTALL_SCRIPT: &str = r#"set -eu; printf '%s  %s\n' "$1" "$2" | sha256sum -c --status -; install -m 0444 -o root -g root -- "$2" "$3/sha256-$1.gguf.partial"; mv -f -- "$3/sha256-$1.gguf.partial" "$3/sha256-$1.gguf""#;
 
+/// privd's `LOCAL_AI_MODEL_PINS`: the catalog models root may install, by SHA-256 and exact size
+/// (the shared vectors keep the two lists equal). Without it the daemon could hash any file it
+/// wrote and have root install it.
+pub const LOCAL_AI_MODEL_PINS: &[(&str, u64)] = &[
+    (
+        "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+        4_683_073_536,
+    ),
+    (
+        "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+        1_117_320_736,
+    ),
+    (
+        "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        491_400_032,
+    ),
+    (
+        "61b50d457809a5194818fd22e6724b456cd7bb9a6264c52c8110684c53f3704a",
+        98_357_920,
+    ),
+    (
+        "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d",
+        1_185_376,
+    ),
+];
+
+fn pinned_model_size(sha: &str) -> Option<u64> {
+    LOCAL_AI_MODEL_PINS
+        .iter()
+        .find(|(d, _)| *d == sha)
+        .map(|(_, n)| *n)
+}
+
 /// `localAiHostExec`: install or remove one model, or hand a fine-tuning job its output volume.
 fn local_ai_host(a: &[String]) -> Option<PrivExec> {
     let [verb, id, dir] = a else {
@@ -2026,11 +2061,13 @@ fn local_ai_host(a: &[String]) -> Option<PrivExec> {
     };
     match verb.as_str() {
         "model-install" if is_hex(id, 64) && MODELS_VOLUME_DATA.is_match(dir) => {
+            let max = pinned_model_size(id)?;
             let staged = format!("{PRIVD_STATE_DIR}/local-ai/sha256-{id}.gguf");
             Some(PrivExec {
                 copy_in: vec![CopyIn {
                     from: format!("{LOCAL_AI_INCOMING}/sha256-{id}.gguf"),
                     to: staged.clone(),
+                    max_bytes: Some(max),
                 }],
                 ..exec(
                     "/bin/sh",
@@ -2335,16 +2372,19 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
             CopyIn {
                 from: format!("{dir}/{name}.manifest.json"),
                 to: manifest,
+                max_bytes: None,
             },
             CopyIn {
                 from: format!("{dir}/{name}.tar.gz"),
                 to: artifact,
+                max_bytes: None,
             },
         ]
         .into_iter()
         .chain(with_runtime.then(|| CopyIn {
             from: format!("{dir}/{RUNTIME_MANIFEST_FILE}"),
             to: runtime_staged,
+            max_bytes: None,
         }))
         .collect(),
         ..exec("/bin/sh", argv, 30 * 60_000)

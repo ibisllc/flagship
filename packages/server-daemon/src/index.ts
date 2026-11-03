@@ -9,6 +9,7 @@ import { hostname as osHostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import { X509Certificate } from "node:crypto";
 import {
+  appRankCanonicalBytes,
   derivePeerBackupKey,
   BOX_RELEASE,
   composeServiceId,
@@ -39,7 +40,7 @@ import { buildSignedLanHint, hostAddresses, lanPortFromEnv, leafCertSha256 } fro
 import { buildRescue } from "./rescue/rescue.js";
 import { buildRescueAuthorize } from "./rescue/authority.js";
 import { exportNotice } from "./rescue/exportNotice.js";
-import { DeviceRevocations } from "./deviceRevocations.js";
+import { DeviceRevocations, type SignedRevocation } from "./deviceRevocations.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
 import { buildOwnerWake } from "./ownerWake.js";
@@ -148,6 +149,7 @@ import {
   settleSwitchAsRoot,
   type RootSwitchDeps,
 } from "./archV2Switch.js";
+import { rootTrialProbes } from "./archV2SwitchProbes.js";
 import { activeEngine, loadArchV2Config } from "./engine/engine.js";
 import { installGpudAsRoot, installGpudFromRelease, startAccelerators, startGpuApprovals } from "./gpu/wire.js";
 import { gpuApprovals } from "./gpu/approvals.js";
@@ -388,7 +390,7 @@ import { AccessWrites, type AccessAnchors } from "./accessWrites.js";
 import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
 import { setPqAuthority } from "./pqAuthority.js";
 import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard, siblingChainRefusal } from "./pqChannel.js";
-import { AccessJournal } from "./accessJournal.js";
+import { AccessJournal, type AccessEntry } from "./accessJournal.js";
 import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers, peerSiblings, type PodsPeers } from "./accessPeers.js";
 import { BoxReadToken, ownDepositFetch } from "./boxReadToken.js";
@@ -822,6 +824,7 @@ async function main(): Promise<void> {
   const rootSwitchDeps = (): RootSwitchDeps => {
     if (!cfg) throw new Error("this server has no owner configuration");
     return {
+      ...rootTrialProbes({ cmd: realCommandRunnerStatic as Required<CommandRunner>, log: (m) => console.log(m) }),
       files: realSwitchFiles,
       run: (c, a) => realUpdateCommandRunner(c, a),
       serverDomain: env.serverFqdn ?? "",
@@ -837,8 +840,7 @@ async function main(): Promise<void> {
       log: (m) => console.log(m),
     };
   };
-  const archV2SwitchHooks: { runningApps: () => Promise<string[]>; note: (kind: string, detail: string, ok: boolean) => void } = {
-    runningApps: async () => [],
+  const archV2SwitchHooks: { note: (kind: string, detail: string, ok: boolean) => void } = {
     note: () => {},
   };
   const archV2Switcher = new ArchV2Switcher({
@@ -848,7 +850,6 @@ async function main(): Promise<void> {
     engine: () => activeEngine(),
     repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
     disk: () => diskAt("/var/lib"),
-    runningApps: () => archV2SwitchHooks.runningApps(),
     root: runsUnprivileged()
       ? { apply: () => runSetupStep("arch-v2-switch"), settle: () => runSetupStep("arch-v2-settle") }
       : { apply: () => applySwitchAsRoot(rootSwitchDeps()), settle: () => settleSwitchAsRoot(rootSwitchDeps()) },
@@ -1712,8 +1713,22 @@ async function main(): Promise<void> {
       path: `${dataDir}/data/flagship-access/device-revocations.json`,
       username: cfg.userId,
       adminRootPub: () => cfg?.adminRootPub,
+      grantOf: (grantId) => accessPrincipals.book?.grantStatementById(grantId) ?? null,
     });
     await revocations.load();
+    // keyd keeps its own record of every revocation, so it refuses a revoked device's master evidence
+    // whatever this process later presents (identityAssertion.ts noteRevocation).
+    if (custodian instanceof KeydCustodian) {
+      const toKeyd = ({ grantId: _id, ...n }: SignedRevocation) => {
+        try {
+          custodian.noteEvidence(n);
+        } catch (e) {
+          console.warn(`[keyd] a device revocation was not kept: ${(e as Error).message}`);
+        }
+      };
+      revocations.subscribeSigned(toKeyd);
+      for (const r of revocations.signedRevocations()) toKeyd(r);
+    }
     revocations.subscribe((grantId) => void accessPrincipals.book?.dropGrant(grantId));
     accessPrincipals.revocations = revocations;
   }
@@ -2427,12 +2442,6 @@ async function main(): Promise<void> {
 
   // ---- The owner's switch between the classic stack and arch-v2 (archV2Switch.ts) ----
   // An app counts as back when its own container runs again.
-  archV2SwitchHooks.runningApps = async () => {
-    const platform = runtime.servicePlatform;
-    if (!platform) return [];
-    const names = new Set((await realCommandRunnerStatic.capture!("docker", ["ps", "--format", "{{.Names}}"])).stdout.split("\n").map((n) => n.trim()));
-    return platform.list().map((s) => `flagship-${s.serviceId}`).filter((n) => names.has(n));
-  };
   if (cfg && env.serverFqdn) {
     runtime.addHandler(
       buildArchV2SwitchHttp({
@@ -2444,6 +2453,7 @@ async function main(): Promise<void> {
         activeGrants: () => accessPrincipals.book?.adminGrants() ?? [],
         gate: ownerOnlyGate(pairedSessions, pairedSessions),
         switcher: archV2Switcher,
+        usedNonces: fileUsedNonceStore(`${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/arch-v2-used-nonces.json`, undefined, "Stack switch orders sent before now are refused; send the switch again."),
         config: () => loadArchV2Config(),
         engine: () => activeEngine(),
         requestRestart: () => {
@@ -5113,6 +5123,7 @@ async function wireOwnerHandlers(deps: {
       username: cfg.userId,
       activeGrants: () => deps.accessPrincipals.book?.adminGrants() ?? [],
       reader: new JournalctlReader(),
+      usedNonces: fileUsedNonceStore(`${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/journal-used-nonces.json`, undefined, "Journal reads sent before now are refused; read it again."),
     }),
   );
   // Per-service access gating (docs/service-access-gating.md): the owner-IRK
@@ -5382,6 +5393,21 @@ async function wireOwnerHandlers(deps: {
     // One access list per app across the account's servers (box to box only).
     const journal = new AccessJournal(`${accessDataDir}/data/flagship-access/access-journal.json`);
     await journal.load();
+    // keyd keeps the latest admin rank order per app and target, so it refuses master evidence a later
+    // demotion or refusal took back (identityAssertion.ts noteRevocation); handed every held order at start.
+    const keydCustodian = deps.custodian instanceof KeydCustodian ? deps.custodian : null;
+    if (keydCustodian) {
+      const toKeyd = (_ref: string, e: AccessEntry) => {
+        if (e.kind !== "rank") return;
+        try {
+          keydCustodian.noteEvidence({ statement: new TextDecoder().decode(appRankCanonicalBytes(e.order)), signatureHex: e.signature.toLowerCase() });
+        } catch (err) {
+          if (!/\((bad-signature|no-admin-root)\)/.test((err as Error).message)) console.warn(`[keyd] a rank order was not kept: ${(err as Error).message}`);
+        }
+      };
+      for (const ref of journal.apps()) for (const e of journal.entries(ref)) toKeyd(ref, e);
+      journal.subscribe(toKeyd);
+    }
     const installedIds = () => (deps.servicePlatformRef.current?.list() ?? []).map((a) => a.serviceId);
     const appFacts = (ref: string) => ({
       installed: installedIds().includes(ref),

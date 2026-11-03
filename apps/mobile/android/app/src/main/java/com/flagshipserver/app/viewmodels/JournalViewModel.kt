@@ -51,9 +51,10 @@ class JournalViewModel(
         }
         val clamped = lines.coerceIn(1L, JournalUnits.MAX_LINES)
         val issuedAt = now()
+        val nonce = JournalRequest.newNonce()
         val signature: ByteArray
         try {
-            signature = irk.sign(JournalRequest.canonicalBytes(serverDomain, unit, clamped, issuedAt))
+            signature = irk.sign(JournalRequest.canonicalBytes(serverDomain, unit, clamped, nonce, issuedAt))
         } catch (e: Throwable) {
             _phase.value = JournalPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
@@ -67,6 +68,7 @@ class JournalViewModel(
                         serverId = serverDomain,
                         unit = unit,
                         lines = clamped,
+                        nonce = nonce,
                         issuedAt = issuedAt,
                     ),
                     signature = HexUtil.encode(signature),

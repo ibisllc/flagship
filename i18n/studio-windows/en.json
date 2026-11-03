@@ -755,6 +755,23 @@
     "en": "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only.",
     "ctx": "MainWindow.xaml Text"
   },
+  "diskToInstallOnOptional": {
+    "en": "Disk to install on (optional)",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "diskToInstallOnExample": {
+    "en": "serial:S64ANS0T123456",
+    "ctx": "MainWindow.xaml ToolTip (an example value, not translated)",
+    "translatable": false
+  },
+  "diskToInstallOnHelp": {
+    "en": "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "diskToInstallOnInvalid": {
+    "en": "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.",
+    "ctx": "MainWindow.xaml Text"
+  },
   "readyToBoot": {
     "en": "Ready to boot",
     "ctx": "MainWindow.xaml Text"

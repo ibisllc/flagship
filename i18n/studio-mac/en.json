@@ -1041,5 +1041,17 @@
   "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": {
     "en": "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/OlderAppRecipe.swift:10"
+  },
+  "Disk to install on (optional)": {
+    "en": "Disk to install on (optional)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/TargetDisk.swift"
+  },
+  "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.": {
+    "en": "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/TargetDisk.swift"
+  },
+  "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.": {
+    "en": "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/TargetDisk.swift"
   }
 }

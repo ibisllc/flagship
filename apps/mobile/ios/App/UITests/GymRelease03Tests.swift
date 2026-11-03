@@ -490,7 +490,7 @@ final class GymRelease03Tests: GymSweepCase {
         shot(app, "accelerators-none")
     }
 
-    // MARK: - GPU approvals (flagship/gpu-approval/v1)
+    // MARK: - GPU approvals (flagship/gpu-approval/v2)
 
     private func tapRevealed(_ app: XCUIApplication, _ el: XCUIElement) {
         XCTAssertTrue(reveal(app, el, tries: 20), "\(el) is on the page.")

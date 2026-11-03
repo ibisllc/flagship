@@ -38,7 +38,8 @@ import java.io.File
 class BuilderOnDeviceViewModel(
     app: Application,
     private val recipeJson: String,
-    private val injector: IsoInjector = SeedInjector(AssetPreseedSource(app)),
+    /** Tests replace the whole injection; null = the real generator with this screen's burn options. */
+    injectorOverride: IsoInjector? = null,
     /** Whether the box release the recipe installs is published (tests fake it). */
     private val preflight: suspend (ParsedRecipe) -> ArtifactPreflight.Verdict = { r ->
         ArtifactPreflight.check(com.flagshipserver.app.core.Endpoints.controlBaseUrl, r.installerGitRef, "amd64")
@@ -60,10 +61,24 @@ class BuilderOnDeviceViewModel(
         val bytesWritten: Long = 0,
         /** Dev-only: a locally-picked seed replacing the manifest download; null = managed. */
         val localSeedLabel: String? = null,
+        /** "Disk to install on" as typed (burn option `targetDisk`; empty = none). */
+        val targetDisk: String = "",
+        /** Why [targetDisk] can't be used, shown under the field; null when it can. */
+        val targetDiskError: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
+
+    private val injector: IsoInjector = injectorOverride
+        ?: SeedInjector(AssetPreseedSource(app, targetDisk = { TargetDisk.normalized(_state.value.targetDisk) }))
+
+    /** The field is checked as typed only once it was refused; the burn checks it again. */
+    fun setTargetDisk(raw: String) {
+        val cur = _state.value
+        val err = if (cur.targetDiskError != null && !TargetDisk.isValid(raw)) cur.targetDiskError else null
+        _state.value = cur.copy(targetDisk = raw, targetDiskError = err)
+    }
 
     private val usb: UsbManager = UsbHost.manager(app)
 
@@ -145,6 +160,10 @@ class BuilderOnDeviceViewModel(
         val recipe = s.recipe ?: return
         if (OlderAppRecipe.isFromOlderApp(recipe.installerGitRef)) return
         if (s.phase in setOf(Phase.Downloading, Phase.Verifying, Phase.Injecting, Phase.Writing, Phase.Finalizing)) return
+        if (!TargetDisk.isValid(s.targetDisk)) {
+            _state.value = s.copy(targetDiskError = FSStrings.get(R.string.burn_target_disk_invalid))
+            return
+        }
         if (!UsbHost.hasPermission(usb, target.device)) {
             _state.value = s.copy(phase = Phase.NeedPermission)
             return
@@ -295,15 +314,23 @@ class BuilderOnDeviceViewModel(
  */
 class AssetPreseedSource(
     context: android.content.Context,
-    // The boot worker the installed disk asks for its unlock follows the backend this app talks to (the gym
-    // in a gym-pointed debug build), as the Studios' burns do; in production it is the engine's own default.
-    private val burnOptsJson: String = kotlinx.serialization.json.buildJsonObject {
-        put("bootHost", kotlinx.serialization.json.JsonPrimitive(com.flagshipserver.app.core.Endpoints.bootBaseUrl))
-    }.toString(),
+    /** The burn option `targetDisk` at the moment of the burn (null = none). */
+    private val targetDisk: () -> String? = { null },
 ) : PreseedSource {
     private val appContext = context.applicationContext
     private val engine by lazy { PreseedEngine.fromAssets(appContext) }
 
     override fun preseedFor(recipe: ParsedRecipe, recipeJson: String): String =
-        engine.buildPreseedFromRecipe(recipeJson, burnOptsJson)
+        engine.buildPreseedFromRecipe(recipeJson, burnOptsJson(com.flagshipserver.app.core.Endpoints.bootBaseUrl, targetDisk()))
+
+    companion object {
+        /**
+         * The generator's burn options. The boot worker the installed disk asks for its unlock follows the
+         * backend this app talks to (the gym in a gym-pointed debug build), as the Studios' burns do.
+         */
+        fun burnOptsJson(bootHost: String, targetDisk: String?): String = kotlinx.serialization.json.buildJsonObject {
+            put("bootHost", kotlinx.serialization.json.JsonPrimitive(bootHost))
+            if (targetDisk != null) put("targetDisk", kotlinx.serialization.json.JsonPrimitive(targetDisk))
+        }.toString()
+    }
 }

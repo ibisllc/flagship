@@ -12,7 +12,8 @@ use flagship_gpu::catalog::VerifiedCatalog;
 use flagship_gpu::catalog_trust::{CatalogTrust, ReleaseKeyVerifier};
 use flagship_gpu::device::{Backend, Capability};
 use flagship_gpu::owner_approval::{
-    ApprovalProof, OwnerAnchor, OwnerAnchorSource, box_local, canonical, verify,
+    ApprovalProof, OwnerAnchor, OwnerAnchorSource, Withdrawal, box_local, canonical, verify,
+    verify_withdrawal, withdraw_canonical,
 };
 use flagship_gpu::provider::IsolationProfile;
 use flagship_gpu::request::GpuApproval;
@@ -55,6 +56,31 @@ fn the_shared_vectors_give_the_ts_verdicts() {
             c["expect"].as_bool().unwrap(),
             "{name}: {:?}",
             verify(&anchor, &a, &p)
+        );
+    }
+    for c in v["withdraw"].as_array().unwrap() {
+        let name = c["name"].as_str().unwrap();
+        let mut w = c["withdraw"].clone();
+        w["signature"] = c["signature"].clone();
+        let w: Withdrawal = serde_json::from_value(w).unwrap();
+        if let Some(text) = c["canonical"].as_str() {
+            assert_eq!(
+                withdraw_canonical(
+                    &anchor.server,
+                    &w.app_id,
+                    &w.installation_id,
+                    w.generation,
+                    w.issued_at
+                )
+                .unwrap(),
+                text,
+                "{name}"
+            );
+        }
+        assert_eq!(
+            verify_withdrawal(&anchor, &w).is_ok(),
+            c["expect"].as_bool().unwrap(),
+            "{name}"
         );
     }
     let irk = OwnerAnchor {
@@ -151,6 +177,12 @@ fn keyds_pins_are_the_anchor() {
 
 fn service(dir: &std::path::Path, anchor: OwnerAnchorSource) -> (SimHost, GpuService) {
     let host = SimHost::new(dir.join("h"), vec![SimGpu::rtx4090(1)]).unwrap();
+    let svc = reopen(&host, dir, anchor);
+    (host, svc)
+}
+
+/// gpud again on the same host and state directory, as after a restart.
+fn reopen(host: &SimHost, dir: &std::path::Path, anchor: OwnerAnchorSource) -> GpuService {
     let d = host.drivers();
     let s = TestSigner::new(5).unwrap();
     let e = envelope(&sim_payload(2, &d, &[]), &[&s], false, NOW).unwrap();
@@ -175,8 +207,7 @@ fn service(dir: &std::path::Path, anchor: OwnerAnchorSource) -> (SimHost, GpuSer
     c.enforce_root_owned_cdi = false;
     c.run_claims_path = dir.join("run-claims.json");
     c.owner_anchor = anchor;
-    let svc = GpuService::new(c, parts).unwrap();
-    (host, svc)
+    GpuService::new(c, parts).unwrap()
 }
 
 fn claim(id: &str, a: &GpuApproval, container: &str, sharing: &str) -> Value {
@@ -360,5 +391,185 @@ fn a_claim_checks_keyds_current_pins() {
         ),
     )
     .unwrap();
+    assert_eq!(code(&mut s, &signed), "reserved");
+}
+
+fn exclusive_app() -> GpuApproval {
+    approval(
+        app("app", 1),
+        Backend::NvidiaCuda,
+        IsolationProfile::GvisorNvproxy,
+        &[Capability::Compute],
+        true,
+        None,
+    )
+}
+
+fn release(s: &mut GpuService, id: &str) {
+    s.handle("gpu.release", &json!({"allocationId": id}))
+        .unwrap();
+}
+
+#[test]
+fn a_withdrawn_approval_stays_withdrawn_whatever_the_daemon_presents() {
+    let dir = tempfile::tempdir().unwrap();
+    let owner = TestOwner::new(0x0a);
+    let anchor = || OwnerAnchorSource::Fixed(owner.anchor());
+    let (host, mut s) = service(dir.path(), anchor());
+    let a = exclusive_app();
+    let old = owner.sign_claim_at(&claim("a", &a, "flagship-app", "exclusive"), NOW);
+    assert_eq!(code(&mut s, &old), "reserved");
+    release(&mut s, "a");
+
+    let stranger = TestOwner::new(0x0b);
+    assert!(
+        s.handle(
+            "gpu.withdrawApproval",
+            &stranger.withdraw(&a.app, NOW + 60_000)
+        )
+        .is_err(),
+        "a withdrawal someone else signed"
+    );
+    let mut forged = owner.withdraw(&a.app, NOW + 60_000);
+    forged["issuedAt"] = json!(NOW + 120_000);
+    assert!(
+        s.handle("gpu.withdrawApproval", &forged).is_err(),
+        "a withdrawal whose time was changed after signing"
+    );
+    let mut replay = old.clone();
+    replay["allocationId"] = json!("b");
+    assert_eq!(code(&mut s, &replay), "reserved", "nothing withdrawn yet");
+    release(&mut s, "b");
+
+    s.handle(
+        "gpu.withdrawApproval",
+        &owner.withdraw(&a.app, NOW + 60_000),
+    )
+    .unwrap();
+    replay["allocationId"] = json!("c");
+    assert_eq!(
+        code(&mut s, &replay),
+        "forbidden",
+        "the daemon re-presents the approval the owner withdrew"
+    );
+    let mut next_gen = a.clone();
+    next_gen.app.generation = 2;
+    let mut older_gen = owner.sign_claim_at(
+        &claim("d", &next_gen, "flagship-app", "exclusive"),
+        NOW + 30_000,
+    );
+    older_gen["app"]["generation"] = json!(2);
+    assert_eq!(
+        code(&mut s, &older_gen),
+        "forbidden",
+        "an approval of another generation signed before the withdrawal"
+    );
+
+    s.handle(
+        "gpu.withdrawApproval",
+        &owner.withdraw(&a.app, NOW + 10_000),
+    )
+    .unwrap();
+    drop(s);
+    let mut s = reopen(&host, dir.path(), anchor());
+    replay["allocationId"] = json!("e");
+    assert_eq!(
+        code(&mut s, &replay),
+        "forbidden",
+        "after a restart, and after an older withdrawal tried to lower the floor"
+    );
+
+    let fresh = owner.sign_claim_at(&claim("f", &a, "flagship-app", "exclusive"), NOW + 120_000);
+    assert_eq!(code(&mut s, &fresh), "reserved", "the owner approves again");
+}
+
+#[test]
+fn a_damaged_floor_file_refuses_every_earlier_approval() {
+    let dir = tempfile::tempdir().unwrap();
+    let owner = TestOwner::new(0x0a);
+    let anchor = || OwnerAnchorSource::Fixed(owner.anchor());
+    let (host, s) = service(dir.path(), anchor());
+    drop(s);
+    std::fs::write(dir.path().join("state/approval-floors.json"), "{not json").unwrap();
+    let mut s = reopen(&host, dir.path(), anchor());
+    let a = exclusive_app();
+    let before = 1_700_000_000_000;
+    assert_eq!(
+        code(
+            &mut s,
+            &owner.sign_claim_at(&claim("a", &a, "flagship-app", "exclusive"), before)
+        ),
+        "forbidden",
+        "signed before the damaged file was found"
+    );
+    assert_eq!(
+        code(
+            &mut s,
+            &owner.sign_claim_at(&claim("b", &a, "flagship-app", "exclusive"), NOW)
+        ),
+        "reserved",
+        "an approval signed since"
+    );
+    assert!(
+        std::fs::read_dir(dir.path().join("state"))
+            .unwrap()
+            .any(|e| e
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("approval-floors.json.corrupt-")),
+        "the damaged file is kept aside"
+    );
+}
+
+#[test]
+fn the_claims_container_image_run_time_and_share_are_what_the_owner_signed() {
+    let dir = tempfile::tempdir().unwrap();
+    let owner = TestOwner::new(0x0a);
+    let (_h, mut s) = service(dir.path(), OwnerAnchorSource::Fixed(owner.anchor()));
+    let a = exclusive_app();
+    let signed = owner.sign_claim(&claim("a", &a, "flagship-app", "exclusive"));
+    assert_eq!(
+        signed["approval"]["container"], "flagship-app",
+        "the owner signs the container"
+    );
+    let changes: [(&str, Value); 5] = [
+        ("container", json!("flagship-bob--bank")),
+        ("userspace", json!("cuda-12.9-runtime")),
+        ("maxRuntimeMs", json!(1)),
+        ("share", json!({"computePercent": 100, "memoryMib": 24_000})),
+        ("container", json!("flagship-app2")),
+    ];
+    for (i, (field, value)) in changes.into_iter().enumerate() {
+        let mut c = signed.clone();
+        c["allocationId"] = json!(format!("x{i}"));
+        c[field] = value;
+        assert_eq!(
+            code(&mut s, &c),
+            "forbidden",
+            "{field} chosen after the owner signed"
+        );
+    }
+    let mut unbound = claim("u", &a, "flagship-app", "exclusive");
+    unbound["approvalProof"] = serde_json::to_value(owner.prove(&a, NOW)).unwrap();
+    assert_eq!(
+        code(&mut s, &unbound),
+        "forbidden",
+        "an approval that names no container"
+    );
+
+    let mut limited = claim("l", &a, "flagship-app", "exclusive");
+    limited["maxRuntimeMs"] = json!(3_600_000);
+    let limited = owner.sign_claim(&limited);
+    assert_eq!(limited["approval"]["maxRuntimeMs"], 3_600_000);
+    let mut stretched = limited.clone();
+    stretched["allocationId"] = json!("l2");
+    stretched["approval"]["maxRuntimeMs"] = json!(7_200_000);
+    stretched["maxRuntimeMs"] = json!(7_200_000);
+    assert_eq!(
+        code(&mut s, &stretched),
+        "forbidden",
+        "a longer run than signed"
+    );
     assert_eq!(code(&mut s, &signed), "reserved");
 }

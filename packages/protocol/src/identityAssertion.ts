@@ -88,7 +88,11 @@ export function checkIdentityAssertion(msg: Uint8Array | string): IdentityAssert
 //     (`flagship/device-capability-grant/v2|…`, with the `admin` scope under the admin root; under
 //     the IRK on a box with no admin root), unexpired, or an admin order raising that key to master
 //     in this app (`flagship/app-rank/v1|<appId>|device:<key>|master|…` or `aid:<key>`).
-// What keyd still cannot see: a later demotion order or a revoked grant (no journal in keyd).
+// keyd also refuses evidence the owner has since taken back, from what it keeps itself of the
+// owner's signed revocations and rank orders (`held`, keyd's revocations.json): a revoked grant or
+// device key, or a later order for the same target in this app. keyd learns those only when the
+// daemon hands them over, so a daemon can withhold one it has not passed on yet, but never forge
+// one or roll back one keyd holds. A statement dated more than the clock skew ahead is refused.
 
 export type MasterEvidenceRefusal =
   | "not-master"
@@ -98,7 +102,22 @@ export type MasterEvidenceRefusal =
   | "wrong-key"
   | "not-admin"
   | "expired"
-  | "bad-signature";
+  | "future"
+  | "bad-signature"
+  | "revoked"
+  | "superseded";
+
+/**
+ * What keyd keeps of the owner's revocations and rank orders: revoked grant ids, revoked device
+ * keys, and the latest rank order per `<appId>|<target>` (a tie keeps the one that is not master).
+ */
+export interface HeldRevocations {
+  grants?: readonly string[];
+  keys?: readonly string[];
+  ranks?: Readonly<Record<string, { issuedAt: number; rank: string }>>;
+}
+
+export const MASTER_EVIDENCE_SKEW_MS = 5 * 60_000;
 
 export interface MasterEvidence {
   appId: string;
@@ -130,6 +149,7 @@ export function checkMasterEvidence(
   now: number,
   stableIdOf: (appId: string, identityPub: Uint8Array) => string,
   verify: (sigHex: string, msg: Uint8Array, pubHex: string) => boolean,
+  held: HeldRevocations = {},
 ): MasterEvidenceRefusal | null {
   const a = assertedIdentity(text);
   if (!a || a.role !== "master") return "not-master";
@@ -144,18 +164,128 @@ export function checkMasterEvidence(
   const root = anchors.adminRootPubHex && HEX32.test(anchors.adminRootPubHex) ? anchors.adminRootPubHex : null;
   const signer = root ?? anchors.irkPubHex;
   const p = ev.statement.split("|");
+  let target: string;
+  let issuedAt: number | null = null;
   if (p[0] === "flagship/device-capability-grant/v2") {
     if (p.length !== 8) return "bad-evidence";
     if (p[4] !== key) return "wrong-key";
     if (root && !p[5]!.split(",").includes("admin")) return "not-admin";
-    if (!/^(0|[1-9][0-9]{0,15})$/.test(p[7]!) || Number(p[7]) <= now) return "expired";
+    if (!TIME.test(p[7]!) || Number(p[7]) <= now) return "expired";
+    if (!TIME.test(p[6]!)) return "bad-evidence";
+    if (Number(p[6]) > now + MASTER_EVIDENCE_SKEW_MS) return "future";
+    target = `device:${key}`;
   } else if (p[0] === "flagship/app-rank/v1") {
     if (p.length !== 5) return "bad-evidence";
     if (p[1] !== ev.appId) return "wrong-app";
     if (p[2] !== `device:${key}` && p[2] !== `aid:${key}` && p[2] !== `aid:${ev.identityPubHex}`) return "wrong-key";
     if (p[3] !== "master") return "not-admin";
+    if (!TIME.test(p[4]!)) return "bad-evidence";
+    issuedAt = Number(p[4]);
+    if (issuedAt > now + MASTER_EVIDENCE_SKEW_MS) return "future";
+    target = p[2]!;
   } else {
     return "bad-evidence";
   }
-  return verify(ev.signatureHex, new TextEncoder().encode(ev.statement), signer) ? null : "bad-signature";
+  if (!verify(ev.signatureHex, new TextEncoder().encode(ev.statement), signer)) return "bad-signature";
+  const targetKey = target.slice(target.indexOf(":") + 1);
+  if ((p[0] === "flagship/device-capability-grant/v2" && held.grants?.includes(p[1]!)) || held.keys?.includes(targetKey)) return "revoked";
+  const latest = Object.prototype.hasOwnProperty.call(held.ranks ?? {}, `${ev.appId}|${target}`) ? held.ranks![`${ev.appId}|${target}`]! : null;
+  if (!latest) return null;
+  if (issuedAt === null) return latest.rank === "master" ? null : "superseded";
+  return latest.issuedAt > issuedAt || (latest.issuedAt === issuedAt && latest.rank !== "master") ? "superseded" : null;
+}
+
+// ── what keyd keeps of the owner's revocations and rank orders ─────────────────────────────────
+//
+// keyd's `evidence.note`: the daemon hands keyd each owner-signed revocation and rank order it
+// accepts, and keyd keeps the ones that verify under the anchors in owner.json. A revocation
+// (`flagship/revoke-device-capability-grant/v1`) must be the admin root's, as on the box
+// (deviceRevocations.ts); with the revoked grant beside it (verified under the admin root or the
+// IRK) keyd also keeps the device key. A rank order (`flagship/app-rank/v1`) must be the admin
+// root's (the IRK's where none is pinned); keyd keeps the latest per app and target.
+
+export type RevocationNoteRefusal = "bad-statement" | "no-admin-root" | "future" | "bad-signature" | "wrong-grant" | "full";
+
+export interface RevocationNote {
+  statement: string;
+  signatureHex: string;
+  grantStatement?: string;
+  grantSignatureHex?: string;
+}
+
+export interface HeldRevocationsState {
+  grants: string[];
+  keys: string[];
+  ranks: Record<string, { issuedAt: number; rank: string }>;
+}
+
+export const HELD_REVOCATIONS_MAX = { grants: 4096, keys: 4096, ranks: 16384 } as const;
+
+const GRANT_ID = /^[0-9a-zA-Z-]{8,64}$/;
+const REVOKE_REASONS = new Set(["lost", "stolen", "decommissioned", "replaced"]);
+const RANK_TARGET = /^(device:[0-9a-f]{64}|aid:[0-9a-f]{64}|share:[0-9a-f]{32}|invite:[A-Za-z0-9._-]{1,128}|grant:[A-Za-z0-9._-]{1,128}\/[0-9a-f]{64})$/;
+const RANKS = new Set(["member", "manager", "master", "refused"]);
+const SIG = /^[0-9a-f]{128}$/;
+
+/** The held state in its one stored form: sorted ids and keys, ranks by sorted key. */
+export function normalizeHeldRevocations(h: HeldRevocations): HeldRevocationsState {
+  const ranks: HeldRevocationsState["ranks"] = {};
+  for (const k of Object.keys(h.ranks ?? {}).sort()) ranks[k] = { issuedAt: h.ranks![k]!.issuedAt, rank: h.ranks![k]!.rank };
+  return { grants: [...new Set(h.grants ?? [])].sort(), keys: [...new Set(h.keys ?? [])].sort(), ranks };
+}
+
+/**
+ * Take one owner-signed revocation or rank order into `held`: the new state and whether it
+ * changed, or why not. Never throws.
+ */
+export function noteRevocation(
+  held: HeldRevocations,
+  note: RevocationNote,
+  anchors: { irkPubHex: string; adminRootPubHex?: string | null },
+  now: number,
+  verify: (sigHex: string, msg: Uint8Array, pubHex: string) => boolean,
+): { held: HeldRevocationsState; changed: boolean } | RevocationNoteRefusal {
+  const st = note.statement;
+  if (typeof st !== "string" || st.length > 4096 || typeof note.signatureHex !== "string" || !SIG.test(note.signatureHex)) return "bad-statement";
+  const withGrant = note.grantStatement !== undefined || note.grantSignatureHex !== undefined;
+  if (withGrant && (typeof note.grantStatement !== "string" || note.grantStatement.length > 4096 || typeof note.grantSignatureHex !== "string" || !SIG.test(note.grantSignatureHex))) {
+    return "bad-statement";
+  }
+  const root = anchors.adminRootPubHex && HEX32.test(anchors.adminRootPubHex) ? anchors.adminRootPubHex : null;
+  const enc = (t: string) => new TextEncoder().encode(t);
+  const out = normalizeHeldRevocations(held);
+  const p = st.split("|");
+  if (p[0] === "flagship/revoke-device-capability-grant/v1") {
+    if (p.length !== 5 || !GRANT_ID.test(p[1]!) || !p[2] || !REVOKE_REASONS.has(p[3]!) || !TIME.test(p[4]!)) return "bad-statement";
+    if (Number(p[4]) > now + MASTER_EVIDENCE_SKEW_MS) return "future";
+    if (!root) return "no-admin-root";
+    if (!verify(note.signatureHex, enc(st), root)) return "bad-signature";
+    let key: string | null = null;
+    if (withGrant) {
+      const g = note.grantStatement!.split("|");
+      if (g[0] !== "flagship/device-capability-grant/v2" || g.length !== 8 || !HEX32.test(g[4]!)) return "bad-statement";
+      if (g[1] !== p[1]) return "wrong-grant";
+      if (!verify(note.grantSignatureHex!, enc(note.grantStatement!), root) && !verify(note.grantSignatureHex!, enc(note.grantStatement!), anchors.irkPubHex)) return "bad-signature";
+      key = g[4]!;
+    }
+    const newGrant = !out.grants.includes(p[1]!);
+    const newKey = key !== null && !out.keys.includes(key);
+    if ((newGrant && out.grants.length >= HELD_REVOCATIONS_MAX.grants) || (newKey && out.keys.length >= HELD_REVOCATIONS_MAX.keys)) return "full";
+    if (newGrant) out.grants = [...out.grants, p[1]!].sort();
+    if (newKey) out.keys = [...out.keys, key!].sort();
+    return { held: out, changed: newGrant || newKey };
+  }
+  if (p[0] === "flagship/app-rank/v1") {
+    if (p.length !== 5 || !FIELD.test(p[1]!) || !RANK_TARGET.test(p[2]!) || !RANKS.has(p[3]!) || !TIME.test(p[4]!)) return "bad-statement";
+    const at = Number(p[4]);
+    if (at > now + MASTER_EVIDENCE_SKEW_MS) return "future";
+    if (!verify(note.signatureHex, enc(st), root ?? anchors.irkPubHex)) return "bad-signature";
+    const k = `${p[1]}|${p[2]}`;
+    const cur = Object.prototype.hasOwnProperty.call(out.ranks, k) ? out.ranks[k]! : null;
+    if (cur && (cur.issuedAt > at || (cur.issuedAt === at && (cur.rank !== "master" || p[3] === "master")))) return { held: out, changed: false };
+    if (!cur && Object.keys(out.ranks).length >= HELD_REVOCATIONS_MAX.ranks) return "full";
+    out.ranks[k] = { issuedAt: at, rank: p[3]! };
+    return { held: normalizeHeldRevocations(out), changed: true };
+  }
+  return "bad-statement";
 }

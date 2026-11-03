@@ -66,14 +66,15 @@ function acceleratorCore(dataDir: string): { broker: AcceleratorBroker; apps: Ap
 
 /**
  * Once per daemon, before any app is deployed: the owner's GPU approvals (gpu/approvals.ts) in
- * `<dataDir>/gpu-approvals.json`; a withdrawal stops the app's GPU work through gpud.
+ * `<dataDir>/gpu-approvals.json`; a withdrawal goes to gpud, which keeps its own floor and stops the
+ * app's GPU work.
  */
 export function startGpuApprovals(o: { dataDir: string } & Omit<GpuApprovalsDeps, "path">): GpuApprovalStore {
   const existing = gpuApprovals();
   if (existing) return existing;
   const { broker } = acceleratorCore(o.dataDir);
   const store = new GpuApprovalStore({ ...o, path: join(o.dataDir, "gpu-approvals.json") });
-  store.setEffects({ revoke: (appId) => broker.revokeApp(appId) });
+  store.setEffects({ withdraw: (w) => broker.withdrawApproval(w) });
   setGpuApprovals(store);
   return store;
 }

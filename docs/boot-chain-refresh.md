@@ -128,6 +128,60 @@ boot from the one that staged it.
 panic instead of waiting at a shell, so a trial whose initramfs fails returns to the default entry
 by itself.
 
+## Auto-unlock and the TPM seal (B2 #7)
+
+On a box with a TPM, the lease key's seed is sealed under the measured PCRs among 0, 2, 4, 7, 8, 9
+(`bootPqTpm.ts`, docs/architecture-v2/pq-suites.md §19.4). Where GRUB measures (its `tpm` module
+loaded, as Debian's signed UEFI GRUB does), PCR 8 holds every GRUB command it ran, the kernel command
+line included, and PCR 9 every file it read (`grub.cfg`, `custom.cfg`, the kernel, the initrd). The
+trial changes all three: a different menu entry from `custom.cfg`, `next_entry` taken (different
+commands in `00_header`), `panic=30 flagship.bootchain=<token>` on the command line and a different
+initrd. So, by design:
+
+- **The trial boot is never unlocked by the TPM-sealed lease**: the TPM refuses (the premount logs
+  "the TPM did not release the lease key"), and the box asks the phone. Nothing unlocks under a chain
+  the seal does not cover; there is no prediction of the trial's PCRs, so the seal can't be wrong in
+  the permissive direction.
+- **An auto box's trial waits for the phone 15 minutes only** (`FLAGSHIP_TRIAL_RELAY_SECS`, default
+  900; an ordinary boot waits up to 7 days). Then the premount writes the trial's token to
+  `flagship-trial-unanswered` on the boot partition and restarts; GRUB already cleared `next_entry`,
+  so the box starts on the default entry, whose chain the seal covers, and unlocks by itself. The
+  refresh sees the token, drops the trial **without** recording the release as failed (Activity
+  `server.bootchain.rolled-back`, reason `trial-unanswered`) and stages it again for a later restart.
+  An approve box, or a trial forced to the phone by the lock-once marker, waits as long as any boot.
+- **After a phone-approved boot the daemon reseals** the same escrowed seed under that boot's PCRs
+  (`ensureLeaseCustody`). A trial the owner approved therefore reseals to the trial's chain; the first
+  default boot after promotion (another entry, a rebuilt initrd) is refused by the TPM again and needs
+  the phone once more; after that the seal follows the promoted default and auto-unlock is back. A
+  kernel or initramfs update costs one phone approval the same way.
+- **Software custody** (no TPM, or nothing measured) binds nothing: the lease key is a 0600 file on
+  `/boot` and a lease opens under any chain, the trial's included. Where only firmware PCRs are
+  measured (0, 2, 4, 7, GRUB measuring nothing), GRUB entries and the initrd are not covered either.
+- Known limit: the reseal trusts the owner's approval of whatever chain booted. An owner who approves
+  a boot of a chain someone else changed (an evil-maid edit of the unencrypted `/boot`) gives that
+  boot the disk, as any approval does, and the reseal then lets that chain auto-unlock later too.
+
+The live lane proves the parts it can: a plain restart of the promoted default unlocks from the lease
+with the phone out of reach, and, where the seal covers PCR 8 or 9, a one-time GRUB entry with one more
+command-line argument does not unlock until the phone approves (`tools/live-e2e/lanes/boot-chain-refresh.ts`
+steps 7-8; skipped with the reason on software custody). The bounded trial wait and the blame-free drop
+are covered by `tools/unseal-crosscheck/tests/premount.test.ts` and
+`packages/server-daemon/tests/bootChainRefresh.test.ts`.
+
+## The box's own disks (B2 #8)
+
+The unlock hook records, in every initrd it builds, the UUID of the filesystem `/etc/fstab` mounts at
+`/boot` (`boot/flagship-boot-fs-uuid`) and of the volume `/etc/crypttab`'s entry opens
+(`boot/flagship-luks-uuid`), and fails the build when it can't (`DISK_UUID_RECORD_SH`). Both premounts
+use exactly those devices (`BOOT_FS_MOUNT_SH`): the boot partition only by its UUID and only as ext4,
+the encrypted root only by its LUKS UUID and only when it is a LUKS volume. A stick labelled
+FLAGSHIP_BOOT, a second LUKS disk, or two devices claiming the recorded UUID are refused (the root:
+FATAL, no unlock; the boot partition: not mounted, so no unlock log and no lock-once marker that boot).
+The initrd check (`initrdExpectations`) requires both files, so a trial without them is never promoted.
+Installed boxes get the pins with the first refresh after an update to this release (the hook runs on
+the box and reads the box's own fstab and crypttab); until then their initrd keeps the old by-label /
+first-LUKS lookup. VM appliances get them at specialisation (its `update-initramfs` runs the hook).
+
 ## Failure modes
 
 | What goes wrong | What happens |
@@ -145,6 +199,8 @@ by itself.
 | `custom.cfg` holds someone else's entries, `grub.cfg` lacks `41_custom` or `next_entry`, the command line has a character GRUB can't carry, `/boot` is short of space, a tool is missing | No trial; reported once; the box keeps its chain. |
 | A release removes a host from the default list | The box keeps it (it can't tell a removed default from a host it was installed with). |
 | Kernel package updates between refreshes | They rebuild with the scripts in `/etc`, which only ever hold a chain that passed its trial. |
+| An auto box's trial whose lease key the TPM won't release (PCR 8/9 changed) and nobody answers the phone | After 15 minutes the premount notes `flagship-trial-unanswered` and restarts; the default entry unlocks from the lease; the trial is dropped without blame and staged again. |
+| The fstab or crypttab can't name the box's `/boot` or encrypted root by UUID | The hook fails the build (`flagship-unlock hook: no UUID for ...`): no trial, or the install fails while still recoverable. |
 
 ## Activity
 

@@ -15,7 +15,7 @@ data class AcceleratorsView(
     val catalog: AcceleratorCatalog = AcceleratorCatalog(),
     val devices: List<AcceleratorDevice> = emptyList(),
     val queue: List<AcceleratorQueueEntry> = emptyList(),
-    /** Apps asking to use a GPU: gpud refuses their claims until the owner signs flagship/gpu-approval/v1. */
+    /** Apps asking to use a GPU: gpud refuses their claims until the owner signs flagship/gpu-approval/v2. */
     val pendingApprovals: List<GpuApprovalRequest> = emptyList(),
     /** The approvals in force. */
     val approvals: List<GpuApprovalRequest> = emptyList(),
@@ -40,9 +40,21 @@ data class GpuApprovalRequest(
     val ownerConsent: String? = null,
     /** When the owner signed it (granted approvals only). */
     val issuedAt: Long? = null,
+    /**
+     * The one container its GPU claim may run in, and the claim's userspace image, run-time limit and
+     * share: gpud refuses a claim asking for anything other than what the owner signed.
+     */
+    val container: String? = "flagship-$appId",
+    val userspace: String? = null,
+    val maxRuntimeMs: Long? = null,
+    val share: GpuShareLimits? = null,
 ) {
     val key: String get() = "$appId|$installationId|$generation"
 }
+
+/** Cooperative sharing's limits on one device, as the owner signs them. */
+@Serializable
+data class GpuShareLimits(val computePercent: Int, val memoryMib: Long)
 
 /** `POST /api/screens/accelerators/approvals`: the listed terms, issuedAt and the signature. */
 @Serializable
@@ -59,6 +71,10 @@ data class GpuApprovalBody(
     val secrecy: Boolean,
     val trustDomain: String?,
     val ownerConsent: String?,
+    val container: String?,
+    val userspace: String?,
+    val maxRuntimeMs: Long?,
+    val share: GpuShareLimits?,
     val issuedAt: Long,
     val signature: String,
 )

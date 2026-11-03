@@ -139,7 +139,7 @@ class CanonicalBytesVectorsTest {
             PowerOffOrder.canonicalBytes(i.str("serverId"), powerMode(i.str("mode")), i.long("issuedAt"))
         },
         "journal-read" to { i ->
-            JournalRequest.canonicalBytes(i.str("serverId"), i.str("unit"), i.long("lines"), i.long("issuedAt"))
+            JournalRequest.canonicalBytes(i.str("serverId"), i.str("unit"), i.long("lines"), i.str("nonce"), i.long("issuedAt"))
         },
         "watch-delegate-key" to { i ->
             WatchDelegateKey.canonicalBytes(

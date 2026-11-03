@@ -15,6 +15,7 @@ import {
   signGpuApproval,
   signGpuApprovalWithdraw,
   verifyGpuApproval,
+  verifyGpuApprovalWithdraw,
   type GpuApprovalTerms,
   type NormalizedApp,
 } from "@flagship/protocol";
@@ -52,12 +53,20 @@ let events: GpuApprovalRequestEvent[];
 let pushes: number;
 let notes: string[];
 let revoked: string[];
+let gpudDown: boolean;
 let restarted: string[];
 
 function store(keys: { irkPub: Uint8Array | null; adminRootPub: Uint8Array | null } = { irkPub: IRK.publicKey, adminRootPub: ADMIN.publicKey }): GpuApprovalStore {
   const s = new GpuApprovalStore({ path: join(dir, "gpu-approvals.json"), serverDomain: () => SERVER, keys: () => keys, note: (k) => notes.push(k), now: () => t });
   s.setSinks(() => ({ emit: (e) => events.push(e), push: () => void pushes++ }));
-  s.setEffects({ granted: (id) => restarted.push(id), revoke: async (id) => void revoked.push(id) });
+  s.setEffects({
+    granted: (id) => restarted.push(id),
+    withdraw: async (w) => {
+      if (gpudDown) throw new Error("gpud is not running");
+      expect(verifyGpuApprovalWithdraw(SERVER, w, Buffer.from(w.signature, "hex"), ADMIN.publicKey)).toBe(true);
+      revoked.push(w.appId);
+    },
+  });
   return s;
 }
 
@@ -72,6 +81,10 @@ function terms(p: PendingGpuApproval, over: Partial<GpuApprovalTerms> = {}): Gpu
     secrecy: p.secrecy,
     trustDomain: p.trustDomain,
     ownerConsent: p.ownerConsent,
+    container: p.container,
+    userspace: p.userspace,
+    maxRuntimeMs: p.maxRuntimeMs,
+    share: p.share,
     ...over,
   };
 }
@@ -93,6 +106,10 @@ function grantBody(p: PendingGpuApproval, by = ADMIN, o: { server?: string; issu
     secrecy: tm.secrecy,
     trustDomain: tm.trustDomain,
     ownerConsent: tm.ownerConsent,
+    container: tm.container,
+    userspace: tm.userspace,
+    maxRuntimeMs: tm.maxRuntimeMs,
+    share: tm.share,
     issuedAt,
     signature: Buffer.from(signGpuApproval(server, tm, issuedAt, by)).toString("hex"),
   };
@@ -118,6 +135,7 @@ beforeEach(async () => {
   pushes = 0;
   notes = [];
   revoked = [];
+  gpudDown = false;
   restarted = [];
 });
 
@@ -138,6 +156,10 @@ describe("an app that asks for a GPU", () => {
       secrecy: true,
       trustDomain: null,
       ownerConsent: null,
+      container: "flagship-alice-render",
+      userspace: null,
+      maxRuntimeMs: null,
+      share: null,
     });
     expect(events).toEqual([{ type: "gpu-approval-request", appId: "alice-render" }]);
     expect(pushes).toBe(1);
@@ -182,6 +204,15 @@ describe("an app that asks for a GPU", () => {
     const claim = seen[0]!;
     expect(claim.approvalProof).toEqual({ issuedAt: NOW, signature: grantBody(p).signature });
     expect(claim.app).toEqual({ appId: "alice-render", installationId: p.installationId, generation: 1 });
+    expect(claim.container).toBe("flagship-alice-render");
+    expect((claim.approval as GpuApprovalTerms).container).toBe("flagship-alice-render");
+    expect(claim).not.toHaveProperty("userspace");
+    expect(claim).not.toHaveProperty("maxRuntimeMs");
+    expect(claim).not.toHaveProperty("share");
+    seen.length = 0;
+    const elsewhere = await new AppAccelerators(broker, join(dir, "held2.json")).beforeRun("alice-render", req, "flagship-alice-render.worker");
+    expect(elsewhere.kind).toBe("refused");
+    expect(seen).toEqual([]);
     const proof = claim.approvalProof as { issuedAt: number; signature: string };
     expect(verifyGpuApproval(SERVER, claim.approval as GpuApprovalTerms, proof.issuedAt, Buffer.from(proof.signature, "hex"), ADMIN.publicKey)).toBe(true);
 
@@ -202,13 +233,19 @@ describe("an app that asks for a GPU", () => {
     expect(await code(grantBody(p, ADMIN, { server: "home2.alice.flagship.services" }))).toBe("bad-signature");
     expect(await code({ ...grantBody(p), server: "home2.alice.flagship.services" })).toBe("other-server");
     const forBob = grantBody(p);
-    expect(await code({ ...forBob, appId: q.appId, installationId: q.installationId })).toBe("bad-signature");
+    expect(await code({ ...forBob, appId: q.appId, installationId: q.installationId, container: q.container })).toBe("bad-signature");
     expect(await code(grantBody(p, ADMIN, { terms: { app: { appId: p.appId, installationId: "0".repeat(16), generation: 1 } } }))).toBe("stale-installation");
     expect(await code(grantBody(p, ADMIN, { terms: { app: { appId: p.appId, installationId: p.installationId, generation: 2 } } }))).toBe("stale-installation");
     expect(await code(grantBody(p, ADMIN, { terms: { maxCount: 4 } }))).toBe("terms-mismatch");
     expect(await code(grantBody(p, ADMIN, { terms: { capabilities: ["compute", "graphics"] } }))).toBe("terms-mismatch");
     expect(await code(grantBody(p, ADMIN, { terms: { policies: ["exclusive", "cooperative"] } }))).toBe("terms-mismatch");
     expect(await code(grantBody(p, ADMIN, { terms: { isolation: "vm-passthrough" } }))).toBe("terms-mismatch");
+    expect(await code(grantBody(p, ADMIN, { terms: { container: "flagship-bob-bank" } }))).toBe("terms-mismatch");
+    expect(await code(grantBody(p, ADMIN, { terms: { userspace: "cuda-12.9-runtime" } }))).toBe("terms-mismatch");
+    expect(await code(grantBody(p, ADMIN, { terms: { maxRuntimeMs: 60_000 } }))).toBe("terms-mismatch");
+    expect(await code(grantBody(p, ADMIN, { terms: { share: { computePercent: 100, memoryMib: 24_000 } } }))).toBe("terms-mismatch");
+    const { container: _c, ...noContainer } = grantBody(p);
+    expect(await code(noContainer)).toBe("bad-request");
     expect(await code(grantBody(p, ADMIN, { issuedAt: NOW - 11 * 60_000 }))).toBe("stale");
     expect(await code({ ...grantBody(p), approved: true })).toBe("bad-request");
     expect(await code({ ...grantBody(p), signature: "AB".repeat(64) })).toBe("bad-request");
@@ -268,13 +305,42 @@ describe("an app that asks for a GPU", () => {
     expect((await s.lists()).approvals.length).toBe(1);
   });
 
+  it("a withdrawal gpud missed is handed to it before the app's next claim", async () => {
+    const s = store();
+    const p = await pendingOf(s);
+    expect((await s.grant(grantBody(p))).ok).toBe(true);
+    t += 1000;
+    gpudDown = true;
+    expect(await s.withdraw(withdrawBody(p))).toEqual({ ok: true, approval: null });
+    expect(revoked).toEqual([]);
+    gpudDown = false;
+    const again = store();
+    await again.requestFor("alice-render", app());
+    expect(revoked).toEqual(["alice-render"]);
+    await again.requestFor("alice-render", app());
+    expect(revoked).toEqual(["alice-render"]);
+  });
+
+  it("an approval kept before v2 counts no more: the app waits for the owner again", async () => {
+    const s = store();
+    const p = await pendingOf(s);
+    expect((await s.grant(grantBody(p))).ok).toBe(true);
+    const file = JSON.parse(await readFile(join(dir, "gpu-approvals.json"), "utf8"));
+    const old = { ...file, v: 1, approvals: { "alice-render": { ...file.approvals["alice-render"], terms: { ...file.approvals["alice-render"].terms, container: undefined } } } };
+    delete old.withdrawals;
+    await writeFile(join(dir, "gpu-approvals.json"), JSON.stringify(old));
+    const again = store();
+    expect((await again.requestFor("alice-render", app()))?.approvalProof).toBeUndefined();
+    expect((await again.lists()).pendingApprovals.map((x) => x.installationId)).toEqual([p.installationId]);
+  });
+
   it("an unreadable state file is set aside and every GPU app waits for the owner again", async () => {
     const s = store();
     const p = await pendingOf(s);
     expect((await s.grant(grantBody(p))).ok).toBe(true);
     const reports: string[] = [];
     onCorruptState((r) => reports.push(r.effect));
-    for (const bad of ["{not json", JSON.stringify({ v: 1, installations: {}, approvals: { x: { terms: {}, issuedAt: 1, signature: "zz" } }, floors: {} }), JSON.stringify({ v: 2 })]) {
+    for (const bad of ["{not json", JSON.stringify({ v: 2, installations: {}, approvals: { x: { terms: {}, issuedAt: 1, signature: "zz" } }, floors: {}, withdrawals: [] }), JSON.stringify({ v: 3 })]) {
       await writeFile(join(dir, "gpu-approvals.json"), bad);
       const again = store();
       expect((await again.requestFor("alice-render", app()))?.approvalProof).toBeUndefined();

@@ -73,7 +73,7 @@ class AcceleratorsViewModel(
         }
     }
 
-    /** Approve [r]: the sensitive-order key signs flagship/gpu-approval/v1 over the terms the box listed. */
+    /** Approve [r]: the sensitive-order key signs flagship/gpu-approval/v2 over the terms the box listed. */
     suspend fun approve(r: GpuApprovalRequest): Boolean =
         sign(r, FSStrings.get(R.string.gpu_approval_sign_approve), AcceleratorsCopy.approved(r)) { server, at, key ->
             client.approveGpu(GpuApprovalOrders.sign(server, GpuApprovalOrders.ownerTerms(r, at), at, key))

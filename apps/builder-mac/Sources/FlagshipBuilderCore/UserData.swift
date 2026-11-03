@@ -28,15 +28,16 @@ public enum UserData {
                                      bootHost: String = ControlPlane.bootHost(),
                                      wifiSSID: String? = nil,
                                      wifiPassword: String? = nil,
+                                     targetDisk: String? = nil,
                                      debugMode: Bool = false) throws -> String {
-        try PreseedEngine.shared.buildPreseed(
-            recipeJSON: recipeJSON,
-            burnOpts: burnOptions(installerGitRef: installerGitRef,
-                                  repoURL: repoURL,
-                                  encryptRoot: encryptRoot,
-                                  bootHost: bootHost,
-                                  wifiSSID: wifiSSID,
-                                  wifiPassword: wifiPassword))
+        var opts = burnOptions(installerGitRef: installerGitRef,
+                               repoURL: repoURL,
+                               encryptRoot: encryptRoot,
+                               bootHost: bootHost,
+                               wifiSSID: wifiSSID,
+                               wifiPassword: wifiPassword)
+        opts.targetDisk = targetDisk
+        return try PreseedEngine.shared.buildPreseed(recipeJSON: recipeJSON, burnOpts: opts)
     }
 
     public static func applianceBootstrap(recipeJSON: Data,

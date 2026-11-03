@@ -197,6 +197,31 @@ describe("runWriteCommand — happy path + device gates", () => {
     await expect(stat(recipePath)).rejects.toThrow();
   });
 
+  it("passes --target-disk into the installer's disk choice", async () => {
+    const recipePath = await makeFakeRecipe();
+    let preseed = "";
+    const r = await runWriteCommand({
+      recipePath,
+      isoPath: "/tmp/ignored.iso",
+      device: "/dev/sdb",
+      yes: true,
+      keepRecipe: true,
+      targetDisk: "by-id:ata-WDC_WD20_WD-XYZ",
+      isRoot: () => true,
+      remaster: async (a) => {
+        preseed = a.preseedCfg;
+        await stubRemaster(a);
+      },
+      family: "debian",
+      writeBytesToDevice: async () => ({ bytesWritten: 1 }),
+      enumerateOpts: makeLsblkRun([
+        { name: "sdb", size: 16 * 1024 * 1024 * 1024, type: "disk", rm: true, tran: "usb", model: "Test USB" },
+      ]),
+    });
+    expect(r.ok).toBe(true);
+    expect(preseed).toContain("/dev/disk/by-id/ata-WDC_WD20_WD-XYZ");
+  });
+
   it("--keep-recipe preserves the recipe file on success", async () => {
     const recipePath = await makeFakeRecipe();
     const r = await runWriteCommand({

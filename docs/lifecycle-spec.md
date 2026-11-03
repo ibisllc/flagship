@@ -239,7 +239,8 @@ User plugs the USB in, powers on the box. From this moment:
    `ibisllc/flagship` at the trailer's pinned `installerGitRef`
    over HTTPS.
 3. install.sh runs (~5 min):
-   - Picks a target disk (largest non-removable >8GiB).
+   - Picks a target disk: the one fixed disk of 8 GiB or more, or the one the burn named
+     (`targetDisk`); it stops, erasing nothing, when that is not exactly one (preseed.ts).
    - Generates a 64-byte LUKS unlock key, formats `cryptsetup luksFormat`.
    - Generates STK (Ed25519) → writes priv/pub hex + boot PEM.
    - **Seals the LUKS unlock key** against the phone's delegated

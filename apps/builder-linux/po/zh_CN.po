@@ -279,6 +279,18 @@ msgstr "Wi-Fi 密码"
 msgid "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only."
 msgstr "为没有网线的服务器提供的可选 Wi-Fi。会被写入这个一次性安装程序，并仅为你的账户记忆在这台电脑上。"
 
+#: wizard.py:1762 (prose)
+msgid "Disk to install on (optional)"
+msgstr "安装到的磁盘（可选）"
+
+#: wizard.py:1770 (prose)
+msgid "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes."
+msgstr "仅当这台电脑有多个磁盘时才需要。不填写时，安装程序会在这样的电脑上停止，不清除任何内容，并在屏幕上列出它的磁盘。请输入 by-id: 加该列表中的名称、serial: 加磁盘序列号，或 size: 加以字节为单位的确切大小。"
+
+#: wizard.py:1780 (prose)
+msgid "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces."
+msgstr "请以 by-id:、serial: 或 size: 开头，后接磁盘的名称、序列号或以字节为单位的大小，不要有空格。"
+
 #: wizard.py:1655 (label=)
 msgid "Flash to USB"
 msgstr "写入 U 盘"

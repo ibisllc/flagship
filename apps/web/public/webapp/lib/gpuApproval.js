@@ -3,14 +3,15 @@
 // without one). Wire parity with packages/protocol/src/gpuApproval.ts; pinned by
 // packages/protocol/test-vectors/gpu-approval/vectors.json.
 //
-//   flagship/gpu-approval/v1|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
+//   flagship/gpu-approval/v2|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
 //     |<caps sorted, comma-joined>|<policies sorted, comma-joined>|<isolation>|<secrecy 1|0>
-//     |<trustDomain or empty>|<ownerConsent or empty>|<issuedAt>
+//     |<trustDomain or empty>|<ownerConsent or empty>|<container>|<userspace or empty>
+//     |<maxRuntimeMs or empty>|<computePercent:memoryMib or empty>|<issuedAt>
 //   flagship/gpu-approval-withdraw/v1|<server>|<appId>|<installationId>|<generation>|<issuedAt>
 //
 // MIRRORS: iOS GpuApprovalOrders.swift, Android GpuApprovalOrders.kt.
 
-export const TAG_GPU_APPROVAL = "flagship/gpu-approval/v1";
+export const TAG_GPU_APPROVAL = "flagship/gpu-approval/v2";
 export const TAG_GPU_APPROVAL_WITHDRAW = "flagship/gpu-approval-withdraw/v1";
 
 export const GPU_BACKENDS = ["nvidia-cuda", "amd-rocm", "intel-level-zero"];
@@ -23,6 +24,7 @@ export const COOPERATIVE_TRUST_DOMAIN = "owner-apps";
 const SERVER = /^[a-z0-9.-]{1,253}$/;
 const FIELD = /^[A-Za-z0-9._:-]{1,128}$/;
 const MAX_GANG = 16;
+const CONTAINER = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const enc = new TextEncoder();
 const toHex = (sig) => Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -37,6 +39,24 @@ function ids(server, appId, installationId, generation, issuedAt) {
   if (!FIELD.test(appId) || !FIELD.test(installationId)) throw new Error("gpu-approval: bad app installation");
   if (!Number.isSafeInteger(generation) || generation < 0) throw new Error("gpu-approval: bad generation");
   if (!Number.isSafeInteger(issuedAt) || issuedAt < 0) throw new Error("gpu-approval: bad issuedAt");
+}
+
+function container(c) {
+  if (typeof c !== "string" || !CONTAINER.test(c)) throw new Error("gpu-approval: bad container");
+  return c;
+}
+
+function maxRuntime(ms) {
+  if (ms == null) return "";
+  if (!Number.isSafeInteger(ms) || ms < 1) throw new Error("gpu-approval: bad maxRuntimeMs");
+  return String(ms);
+}
+
+function share(s) {
+  if (s == null) return "";
+  if (!Number.isSafeInteger(s.computePercent) || s.computePercent < 1 || s.computePercent > 100) throw new Error("gpu-approval: a compute share is 1 to 100 percent");
+  if (!Number.isSafeInteger(s.memoryMib) || s.memoryMib < 1) throw new Error("gpu-approval: bad share memory");
+  return `${s.computePercent}:${s.memoryMib}`;
 }
 
 /** The bytes the owner signs to approve request `r` (the box's listing shape) on `server`. */
@@ -65,6 +85,10 @@ export function gpuApprovalCanonical(server, r, issuedAt) {
       r.secrecy ? "1" : "0",
       opt(r.trustDomain, "trust domain"),
       opt(r.ownerConsent, "consent"),
+      container(r.container),
+      opt(r.userspace, "userspace"),
+      maxRuntime(r.maxRuntimeMs),
+      share(r.share),
       String(issuedAt),
     ].join("|"),
   );
@@ -102,6 +126,10 @@ export async function gpuApprovalBody(server, request, issuedAt, sign) {
     secrecy: r.secrecy,
     trustDomain: r.trustDomain ?? null,
     ownerConsent: r.ownerConsent ?? null,
+    container: r.container,
+    userspace: r.userspace ?? null,
+    maxRuntimeMs: r.maxRuntimeMs ?? null,
+    share: r.share ?? null,
     issuedAt,
     signature: toHex(sig),
   };

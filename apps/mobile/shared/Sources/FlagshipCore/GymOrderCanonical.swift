@@ -80,9 +80,9 @@ public enum GymOrderCanonical {
         }
         signers.registerCanonical("journal") { p in
             guard let r = p as? [String: Any], let server = r["serverId"] as? String, let unit = r["unit"] as? String,
-                  let lines = int64(r["lines"]), let at = int64(r["issuedAt"])
+                  let lines = int64(r["lines"]), let nonce = r["nonce"] as? String, let at = int64(r["issuedAt"])
             else { return nil }
-            return JournalRequest(serverId: server, unit: unit, lines: lines, issuedAt: at).canonicalBytes()
+            return JournalRequest(serverId: server, unit: unit, lines: lines, nonce: nonce, issuedAt: at).canonicalBytes()
         }
         signers.registerCanonical("power-off") { p in
             guard let r = p as? [String: Any], let server = r["serverId"] as? String,

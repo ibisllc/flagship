@@ -226,5 +226,8 @@
   "Unlocking…": "ロック解除中…",
   "This server can't be installed yet: its software package isn't published on %@. Update Flagship Studio and the Flagship app, or try again later.": "このサーバーはまだインストールできません。ソフトウェアパッケージが %@ で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
   "Couldn't check that this server's software package is published on %@. Check your internet connection and try again.": "このサーバーのソフトウェアパッケージが %@ で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
-  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"
+  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。",
+  "Disk to install on (optional)": "インストール先のディスク（任意）",
+  "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.": "コンピューターに複数のディスクがある場合にだけ必要です。指定しないと、インストーラーはそのようなコンピューターで停止し、何も消去せずに画面にディスクの一覧を表示します。by-id: とその一覧の名前、serial: とディスクのシリアル番号、または size: と正確なサイズ（バイト）を入力してください。",
+  "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.": "by-id:、serial:、size: のいずれかで始め、続けてディスクの名前、シリアル番号、またはバイト単位のサイズを空白なしで入力してください。"
 }

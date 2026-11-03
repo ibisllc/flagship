@@ -17332,7 +17332,7 @@
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
      "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
@@ -17344,15 +17344,16 @@
       "-c",
       "set -eu; printf '%s  %s\\n' \"$1\" \"$2\" | sha256sum -c --status -; install -m 0444 -o root -g root -- \"$2\" \"$3/sha256-$1.gguf.partial\"; mv -f -- \"$3/sha256-$1.gguf.partial\" \"$3/sha256-$1.gguf\"",
       "_",
-      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
+      "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+      "/var/lib/flagship-privd/local-ai/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf",
       "/var/lib/docker/volumes/flagship-models/_data"
      ],
      "timeoutMs": 1800000,
      "copyIn": [
       {
-       "from": "/var/flagship/data/local-ai/incoming/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
-       "to": "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf"
+       "from": "/var/flagship/data/local-ai/incoming/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf",
+       "to": "/var/lib/flagship-privd/local-ai/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf",
+       "maxBytes": 4683073536
       }
      ]
     }
@@ -17365,8 +17366,8 @@
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-     "/var/lib/containers/storage/volumes/flagship-models/_data"
+     "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d",
+     "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
    "expect": {
@@ -17377,15 +17378,16 @@
       "-c",
       "set -eu; printf '%s  %s\\n' \"$1\" \"$2\" | sha256sum -c --status -; install -m 0444 -o root -g root -- \"$2\" \"$3/sha256-$1.gguf.partial\"; mv -f -- \"$3/sha256-$1.gguf.partial\" \"$3/sha256-$1.gguf\"",
       "_",
-      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
-      "/var/lib/containers/storage/volumes/flagship-models/_data"
+      "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d",
+      "/var/lib/flagship-privd/local-ai/sha256-270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d.gguf",
+      "/var/lib/docker/volumes/flagship-models/_data"
      ],
      "timeoutMs": 1800000,
      "copyIn": [
       {
-       "from": "/var/flagship/data/local-ai/incoming/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
-       "to": "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf"
+       "from": "/var/flagship/data/local-ai/incoming/sha256-270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d.gguf",
+       "to": "/var/lib/flagship-privd/local-ai/sha256-270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d.gguf",
+       "maxBytes": 1185376
       }
      ]
     }
@@ -17397,8 +17399,42 @@
    "args": {
     "file": "localai",
     "argv": [
+     "model-install",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+     "/var/lib/containers/storage/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/bin/sh",
+     "args": [
+      "-c",
+      "set -eu; printf '%s  %s\\n' \"$1\" \"$2\" | sha256sum -c --status -; install -m 0444 -o root -g root -- \"$2\" \"$3/sha256-$1.gguf.partial\"; mv -f -- \"$3/sha256-$1.gguf.partial\" \"$3/sha256-$1.gguf\"",
+      "_",
+      "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+      "/var/lib/flagship-privd/local-ai/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf",
+      "/var/lib/containers/storage/volumes/flagship-models/_data"
+     ],
+     "timeoutMs": 1800000,
+     "copyIn": [
+      {
+       "from": "/var/flagship/data/local-ai/incoming/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf",
+       "to": "/var/lib/flagship-privd/local-ai/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf",
+       "maxBytes": 4683073536
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "host-692",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
      "model-remove",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
      "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
@@ -17409,14 +17445,14 @@
      "args": [
       "-f",
       "--",
-      "/var/lib/docker/volumes/flagship-models/_data/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf"
+      "/var/lib/docker/volumes/flagship-models/_data/sha256-509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c.gguf"
      ],
      "timeoutMs": 60000
     }
    }
   },
   {
-   "name": "host-692",
+   "name": "host-693",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17440,30 +17476,13 @@
    }
   },
   {
-   "name": "host-693",
-   "op": "host",
-   "args": {
-    "file": "localai",
-    "argv": [
-     "model-install",
-     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-     "/var/lib/docker/volumes/flagship-models/_data"
-    ]
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "localai with those arguments is not allowed"
-   }
-  },
-  {
    "name": "host-694",
    "op": "host",
    "args": {
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
      "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
@@ -17480,7 +17499,7 @@
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/../x",
+     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
      "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
@@ -17497,8 +17516,8 @@
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-     "/var/lib/docker/volumes/flagship-files-alice--chess/_data"
+     "09287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+     "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
    "expect": {
@@ -17514,8 +17533,8 @@
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-     "/etc"
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c/../x",
+     "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
    "expect": {
@@ -17531,8 +17550,8 @@
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-     "/var/lib/docker/volumes/flagship-models/_data/.."
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+     "/var/lib/docker/volumes/flagship-files-alice--chess/_data"
     ]
    },
    "expect": {
@@ -17547,9 +17566,9 @@
    "args": {
     "file": "localai",
     "argv": [
-     "model-remove",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-     "/"
+     "model-install",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+     "/etc"
     ]
    },
    "expect": {
@@ -17560,6 +17579,40 @@
   },
   {
    "name": "host-700",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+     "/var/lib/docker/volumes/flagship-models/_data/.."
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-701",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-remove",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+     "/"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-702",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17576,7 +17629,7 @@
    }
   },
   {
-   "name": "host-701",
+   "name": "host-703",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17593,7 +17646,7 @@
    }
   },
   {
-   "name": "host-702",
+   "name": "host-704",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17610,7 +17663,7 @@
    }
   },
   {
-   "name": "host-703",
+   "name": "host-705",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17627,13 +17680,13 @@
    }
   },
   {
-   "name": "host-704",
+   "name": "host-706",
    "op": "host",
    "args": {
     "file": "localai",
     "argv": [
      "model-install",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c"
     ]
    },
    "expect": {
@@ -17643,13 +17696,13 @@
    }
   },
   {
-   "name": "host-705",
+   "name": "host-707",
    "op": "host",
    "args": {
     "file": "localai",
     "argv": [
      "serve",
-     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
      "/var/lib/docker/volumes/flagship-models/_data"
     ]
    },
@@ -17660,7 +17713,7 @@
    }
   },
   {
-   "name": "wasi.logs-706",
+   "name": "wasi.logs-708",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17684,7 +17737,7 @@
    }
   },
   {
-   "name": "wasi.logs-707",
+   "name": "wasi.logs-709",
    "op": "wasi.logs",
    "args": {
     "instance": "fedcba9876543210",
@@ -17708,7 +17761,7 @@
    }
   },
   {
-   "name": "wasi.logs-708",
+   "name": "wasi.logs-710",
    "op": "wasi.logs",
    "args": {
     "lines": 1,
@@ -17732,7 +17785,7 @@
    }
   },
   {
-   "name": "wasi.logs-709",
+   "name": "wasi.logs-711",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17745,7 +17798,7 @@
    }
   },
   {
-   "name": "wasi.logs-710",
+   "name": "wasi.logs-712",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17758,7 +17811,7 @@
    }
   },
   {
-   "name": "wasi.logs-711",
+   "name": "wasi.logs-713",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17771,7 +17824,7 @@
    }
   },
   {
-   "name": "wasi.logs-712",
+   "name": "wasi.logs-714",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17784,7 +17837,7 @@
    }
   },
   {
-   "name": "wasi.logs-713",
+   "name": "wasi.logs-715",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17797,7 +17850,7 @@
    }
   },
   {
-   "name": "wasi.logs-714",
+   "name": "wasi.logs-716",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17810,7 +17863,7 @@
    }
   },
   {
-   "name": "wasi.logs-715",
+   "name": "wasi.logs-717",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef"
@@ -17822,7 +17875,7 @@
    }
   },
   {
-   "name": "wasi.logs-716",
+   "name": "wasi.logs-718",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789ABCDEF",
@@ -17835,7 +17888,7 @@
    }
   },
   {
-   "name": "wasi.logs-717",
+   "name": "wasi.logs-719",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcde",
@@ -17848,7 +17901,7 @@
    }
   },
   {
-   "name": "wasi.logs-718",
+   "name": "wasi.logs-720",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef0",
@@ -17861,7 +17914,7 @@
    }
   },
   {
-   "name": "wasi.logs-719",
+   "name": "wasi.logs-721",
    "op": "wasi.logs",
    "args": {
     "instance": "../../../var/log",
@@ -17874,7 +17927,7 @@
    }
   },
   {
-   "name": "wasi.logs-720",
+   "name": "wasi.logs-722",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef\n",
@@ -17887,7 +17940,7 @@
    }
   },
   {
-   "name": "wasi.logs-721",
+   "name": "wasi.logs-723",
    "op": "wasi.logs",
    "args": {
     "instance": "flagship-daemon",
@@ -17900,7 +17953,7 @@
    }
   },
   {
-   "name": "wasi.logs-722",
+   "name": "wasi.logs-724",
    "op": "wasi.logs",
    "args": {
     "instance": 5,
@@ -17913,7 +17966,7 @@
    }
   },
   {
-   "name": "wasi.logs-723",
+   "name": "wasi.logs-725",
    "op": "wasi.logs",
    "args": {
     "lines": 15
@@ -17925,7 +17978,7 @@
    }
   },
   {
-   "name": "wasi.logs-724",
+   "name": "wasi.logs-726",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17939,7 +17992,7 @@
    }
   },
   {
-   "name": "wasi.logs-725",
+   "name": "wasi.logs-727",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17956,7 +18009,7 @@
    }
   },
   {
-   "name": "wasi.logs-726",
+   "name": "wasi.logs-728",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17970,7 +18023,7 @@
    }
   },
   {
-   "name": "wasi.logs-727",
+   "name": "wasi.logs-729",
    "op": "wasi.logs",
    "args": {},
    "expect": {
@@ -17980,7 +18033,7 @@
    }
   },
   {
-   "name": "wasi.logs-728",
+   "name": "wasi.logs-730",
    "op": "wasi.logs",
    "args": {
     "__proto__": {
@@ -17995,7 +18048,7 @@
    }
   },
   {
-   "name": "setup-729",
+   "name": "setup-731",
    "op": "setup",
    "args": {
     "step": "boot-chain"
@@ -18013,7 +18066,7 @@
    }
   },
   {
-   "name": "setup-730",
+   "name": "setup-732",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -18026,7 +18079,7 @@
    }
   },
   {
-   "name": "setup-731",
+   "name": "setup-733",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -18039,7 +18092,7 @@
    }
   },
   {
-   "name": "setup-732",
+   "name": "setup-734",
    "op": "setup",
    "args": {
     "step": "boot-chain-confirm"
@@ -18051,7 +18104,7 @@
    }
   },
   {
-   "name": "setup-733",
+   "name": "setup-735",
    "op": "setup",
    "args": {
     "step": "Boot-Chain"
@@ -18063,7 +18116,7 @@
    }
   },
   {
-   "name": "setup-734",
+   "name": "setup-736",
    "op": "setup",
    "args": {
     "step": "boot-chain\u0000"
@@ -18075,7 +18128,7 @@
    }
   },
   {
-   "name": "setup-735",
+   "name": "setup-737",
    "op": "setup",
    "args": {
     "step": [

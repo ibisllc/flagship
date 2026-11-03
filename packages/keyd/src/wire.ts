@@ -18,6 +18,7 @@ export const OPS = [
   "sign",
   "sign.hybrid",
   "sign.identity",
+  "evidence.note",
   "pq.status",
   "unseal",
   "swk.hkdf",

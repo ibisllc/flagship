@@ -1,5 +1,5 @@
 // The server page's "GPUs" (packages/server-daemon/src/gpu/http.ts): apps asking to use a GPU
-// (Approve signs flagship/gpu-approval/v1 with the sensitive-order key; Decline hides the ask on this
+// (Approve signs flagship/gpu-approval/v2 with the sensitive-order key; Decline hides the ask on this
 // device) and the approvals in force (Withdraw signs flagship/gpu-approval-withdraw/v1), each GPU with
 // its model, memory and state, the app holding it (with Stop, which asks first), and the apps waiting.
 // Stop is POST /api/screens/accelerators/stop from this device's session: the box takes no signed

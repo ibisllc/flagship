@@ -1,5 +1,6 @@
 // Helpers the 0.3 groups share: removing an app, approving an app's egress to a host, reading a box's
 // daemon journal, and waiting on a condition.
+import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
   accessListSha256,
@@ -37,7 +38,7 @@ export async function allowEgress(acct: Account, box: Box, session: string, serv
 
 /** The box's daemon journal lines, read with the admin root. */
 export async function journal(acct: Account, box: Box, lines = 3000, unit = "flagship-daemon"): Promise<string[]> {
-  const req: JournalRequest = { serverId: box.fqdn, unit, lines, issuedAt: Date.now() };
+  const req: JournalRequest = { serverId: box.fqdn, unit, lines, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
   const r = await postJson(`https://${box.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, acct.keys.adminRoot)) });
   assert(r.status === 200, `journal ${r.status}: ${short(r.text)}`);
   return (r.json?.lines ?? r.json?.log ?? []) as string[];

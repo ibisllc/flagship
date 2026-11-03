@@ -3434,4 +3434,19 @@
     <string name="add_fingerprint_for_stronger_approvals">Ajouter une empreinte dans les réglages du téléphone renforce vos approbations sur cette version d’Android.</string>
     <string name="add_a_fingerprint">Ajouter une empreinte</string>
     <string name="recipe_made_by_older_app">Cette recette a été créée par une ancienne version de l’app Flagship. Mettez à jour l’app Flagship, puis recréez le serveur.</string>
+    <string name="add_your_fingerprint_again_to_open_account_key">Ajoutez à nouveau votre empreinte dans les paramètres d’Android pour ouvrir la clé de votre compte Flagship sur ce téléphone.</string>
+    <string name="account_key_unreadable_short">Ce téléphone ne peut plus ouvrir la clé de votre compte. Restaurez votre compte pour continuer à l’utiliser ici.</string>
+    <string name="account_key_lost_title">Ce téléphone ne peut pas ouvrir la clé de votre compte</string>
+    <string name="account_key_lost_body">Le verrouillage d’écran de ce téléphone a été supprimé ou réinitialisé : Android a donc effacé la clé qui protégeait ici la clé de votre compte Flagship. Votre compte et vos serveurs ne sont pas touchés.</string>
+    <string name="account_key_lost_hint">Pour utiliser à nouveau votre compte ici, restaurez-le : choisissez « Se connecter à un compte existant », puis connectez-vous avec votre clé d’accès de récupération ou un fichier de clé de compte enregistré, ou rejoignez-le depuis un autre appareil déjà connecté.</string>
+    <string name="account_key_lost_restore">Restaurer mon compte</string>
+    <string name="burn_target_disk_label">Disque où installer (facultatif)</string>
+    <string name="burn_target_disk_help">Utile seulement si l\'ordinateur a plus d\'un disque. Sans cela, l\'installateur s\'arrête sur un tel ordinateur, n\'efface rien et affiche ses disques à l\'écran. Saisissez by-id: et un nom de cette liste, serial: et le numéro de série du disque, ou size: et sa taille exacte en octets.</string>
+    <string name="burn_target_disk_invalid">Commencez par by-id:, serial: ou size:, suivi du nom, du numéro de série ou de la taille en octets du disque, sans espaces.</string>
+    <string name="install_disk_stop_several">Cet ordinateur a %1$s disques que l\'installateur pourrait effacer (%2$s), il s\'est donc arrêté. Rien n\'a été effacé.</string>
+    <string name="install_disk_stop_none">Cet ordinateur n\'a pas de disque interne de 8 Go ou plus où installer, l\'installateur s\'est donc arrêté. Rien n\'a été effacé.</string>
+    <string name="install_disk_stop_missing">Le disque pour lequel cet installateur a été créé (%1$s) n\'est pas dans cet ordinateur. Rien n\'a été effacé.</string>
+    <string name="install_disk_stop_ambiguous">Le disque pour lequel cet installateur a été créé (%1$s) correspond à plusieurs disques de cet ordinateur. Rien n\'a été effacé.</string>
+    <string name="install_disk_stop_advice">Recréez l\'installateur avec la même recette, remplissez « Disque où installer » avec l\'un des disques que l\'ordinateur a affichés à l\'écran, puis démarrez l\'ordinateur dessus.</string>
+    <string name="setup_stopped_cancel_or_contact">Annulez cette commande pour libérer le nom et recréer le serveur, ou contactez-nous et nous regarderons.</string>
 </resources>

@@ -48,4 +48,6 @@ FlagshipPreseed.buildInstallBlobJsonFromRecipe(recipeJson: string): string
 
 `recipeJson` = the signed recipe (the builder has already verified the phone's
 signature natively — the engine does NOT re-verify). `burnOptsJson` =
-`{encryptRoot?, wifiSSID?, wifiPassword?, installerGitRef?, flagshipRepoUrl?, bootHost?}`.
+`{encryptRoot?, wifiSSID?, wifiPassword?, installerGitRef?, flagshipRepoUrl?, bootHost?, targetDisk?}`
+(`targetDisk`: `by-id:<name>` / `serial:<serial>` / `size:<bytes>`, the one disk to erase on a machine
+with more than one; without it such a machine stops before erasing anything).

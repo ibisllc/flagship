@@ -269,6 +269,18 @@
     "en": "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only.",
     "ctx": "wizard.py:1646 (label=)"
   },
+  "Disk to install on (optional)": {
+    "en": "Disk to install on (optional)",
+    "ctx": "wizard.py:1762 (prose)"
+  },
+  "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.": {
+    "en": "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.",
+    "ctx": "wizard.py:1770 (prose)"
+  },
+  "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.": {
+    "en": "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.",
+    "ctx": "wizard.py:1780 (prose)"
+  },
   "Flash to USB": {
     "en": "Flash to USB",
     "ctx": "wizard.py:1655 (label=)"

@@ -223,6 +223,12 @@ export class AccountDeviceBook {
     }
   }
 
+  /** The same signed grant by its id (handed to keyd beside a revocation of it). */
+  grantStatementById(grantId: string): { statement: string; signatureHex: string } | null {
+    for (const d of this.byPub.values()) if (d.grant.grantId === grantId) return this.grantStatementFor(d.pub);
+    return null;
+  }
+
   devices(): Extract<Principal, { kind: "device" }>[] {
     return [...this.byPub.values()].map((d) => ({
       kind: "device" as const,

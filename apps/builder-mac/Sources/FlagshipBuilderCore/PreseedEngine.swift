@@ -21,7 +21,7 @@ public final class PreseedEngine {
     /// Burn-time inputs the engine layers on top of the signed recipe. Mirrors
     /// the engine's `burnOptsJson` schema
     /// (`{encryptRoot?, wifiSSID?, wifiPassword?, installerGitRef?,
-    /// flagshipRepoUrl?, bootHost?}`). Keys are emitted verbatim — note the
+    /// flagshipRepoUrl?, bootHost?, targetDisk?}`). Keys are emitted verbatim — note the
     /// engine reads `wifiSSID` (capital SSID) and `flagshipRepoUrl`.
     public struct BurnOptions: Sendable {
         public var encryptRoot: Bool?
@@ -30,19 +30,23 @@ public final class PreseedEngine {
         public var installerGitRef: String?
         public var flagshipRepoUrl: String?
         public var bootHost: String?
+        /// The one disk to erase on a machine with more than one (`TargetDisk`).
+        public var targetDisk: String?
 
         public init(encryptRoot: Bool? = nil,
                     wifiSSID: String? = nil,
                     wifiPassword: String? = nil,
                     installerGitRef: String? = nil,
                     flagshipRepoUrl: String? = nil,
-                    bootHost: String? = nil) {
+                    bootHost: String? = nil,
+                    targetDisk: String? = nil) {
             self.encryptRoot = encryptRoot
             self.wifiSSID = wifiSSID
             self.wifiPassword = wifiPassword
             self.installerGitRef = installerGitRef
             self.flagshipRepoUrl = flagshipRepoUrl
             self.bootHost = bootHost
+            self.targetDisk = targetDisk
         }
 
         /// JSON the engine's `parseBurn` consumes. Only set keys are emitted,
@@ -59,6 +63,7 @@ public final class PreseedEngine {
             if let v = installerGitRef, !v.isEmpty { o["installerGitRef"] = v }
             if let v = flagshipRepoUrl, !v.isEmpty { o["flagshipRepoUrl"] = v }
             if let v = bootHost, !v.isEmpty { o["bootHost"] = v }
+            if let v = targetDisk, !v.isEmpty { o["targetDisk"] = v }
             guard let data = try? JSONSerialization.data(withJSONObject: o),
                   let s = String(data: data, encoding: .utf8) else { return "{}" }
             return s

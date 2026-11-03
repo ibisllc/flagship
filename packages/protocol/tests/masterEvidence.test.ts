@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { checkMasterEvidence, deriveServiceMemberStableId, deriveServiceSecret } from "../src/index.js";
+import { checkMasterEvidence, deriveServiceMemberStableId, deriveServiceSecret, noteRevocation } from "../src/index.js";
 
 const V = JSON.parse(readFileSync(resolve(import.meta.dirname, "../test-vectors/identity-assertion/master-evidence.json"), "utf8"));
 const swk = Uint8Array.from(Buffer.from(V.swk, "hex"));
@@ -13,8 +13,25 @@ describe("master needs the owner's evidence", () => {
     for (const c of V.cases) {
       const got = checkMasterEvidence(c.msg, c.ev, c.anchors, V.now, (a, p) => deriveServiceMemberStableId(deriveServiceSecret(swk, a), p), (sig, m, p) =>
         ed25519.verify(Buffer.from(sig, "hex"), m, Buffer.from(p, "hex")),
+        c.held,
       );
       expect(got ?? "ok", c.name).toBe(c.expect);
+    }
+  });
+});
+
+describe("what keyd keeps of the owner's revocations and rank orders", () => {
+  it("every note", () => {
+    const verify = (sig: string, m: Uint8Array, p: string) => ed25519.verify(Buffer.from(sig, "hex"), m, Buffer.from(p, "hex"));
+    expect(V.notes.length).toBeGreaterThan(15);
+    for (const n of V.notes) {
+      const r = noteRevocation(n.held, n.note, n.anchors, V.now, verify);
+      if (n.expect !== "ok") {
+        expect(r, n.name).toBe(n.expect);
+        continue;
+      }
+      expect(typeof r, n.name).toBe("object");
+      expect(r, n.name).toEqual({ held: n.heldAfter, changed: n.changed });
     }
   });
 });

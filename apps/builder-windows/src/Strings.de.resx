@@ -577,6 +577,15 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="optionalWiFiForAServer" xml:space="preserve">
     <value>Optionales WLAN für einen Server ohne Ethernet. Wird in diesen einmalig verwendbaren Installer eingebrannt und auf diesem PC nur für dein Konto gespeichert.</value>
   </data>
+  <data name="diskToInstallOnOptional" xml:space="preserve">
+    <value>Datenträger für die Installation (optional)</value>
+  </data>
+  <data name="diskToInstallOnHelp" xml:space="preserve">
+    <value>Nur nötig, wenn der Computer mehr als einen Datenträger hat. Ohne diese Angabe hält das Installationsprogramm auf einem solchen Computer an, löscht nichts und listet seine Datenträger auf dem Bildschirm auf. Gib by-id: und einen Namen aus dieser Liste ein, serial: und die Seriennummer des Datenträgers oder size: und seine genaue Größe in Byte.</value>
+  </data>
+  <data name="diskToInstallOnInvalid" xml:space="preserve">
+    <value>Beginne mit by-id:, serial: oder size:, gefolgt vom Namen, der Seriennummer oder der Größe des Datenträgers in Byte, ohne Leerzeichen.</value>
+  </data>
   <data name="readyToBoot" xml:space="preserve">
     <value>Bereit zum Starten</value>
   </data>

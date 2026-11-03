@@ -3229,5 +3229,11 @@
   "Needs an update": "需要更新",
   "This server needs an update to keep working with Flagship 0.3": "此服务器需要更新才能继续与 Flagship 0.3 配合使用",
   "Its certificate can't be renewed and runs out on {0}. Update it before then.": "其证书无法续期，将于 {0} 到期。请在此之前更新此服务器。",
-  "Its certificate can't be renewed until it is updated.": "在此服务器更新之前，其证书无法续期。"
+  "Its certificate can't be renewed until it is updated.": "在此服务器更新之前，其证书无法续期。",
+  "This computer has {0} disks the installer could erase ({1}), so it stopped. Nothing was erased.": "这台电脑有 {0} 块安装程序可以擦除的磁盘（{1}），因此安装程序已停止。没有擦除任何内容。",
+  "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "这台电脑没有可供安装的 8 GB 或以上的内置磁盘，因此安装程序已停止。没有擦除任何内容。",
+  "The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.": "此安装程序所针对的磁盘（{0}）不在这台电脑中。没有擦除任何内容。",
+  "The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.": "此安装程序所针对的磁盘（{0}）与这台电脑中的多块磁盘相符。没有擦除任何内容。",
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "请使用同一份配方重新制作安装程序，在“安装到的磁盘”中填写电脑屏幕上列出的某块磁盘，然后用它启动电脑。",
+  "This server didn't finish installing.": "此服务器未完成安装。"
 }

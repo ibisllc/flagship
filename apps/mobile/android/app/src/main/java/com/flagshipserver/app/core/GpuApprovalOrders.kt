@@ -11,13 +11,14 @@ import com.google.crypto.tink.subtle.Ed25519Sign
  * without one). Wire parity with packages/protocol/src/gpuApproval.ts; pinned by
  * packages/protocol/test-vectors/gpu-approval/vectors.json.
  *
- *   flagship/gpu-approval/v1|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
+ *   flagship/gpu-approval/v2|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
  *     |<caps sorted, comma-joined>|<policies sorted, comma-joined>|<isolation>|<secrecy 1|0>
- *     |<trustDomain or empty>|<ownerConsent or empty>|<issuedAt>
+ *     |<trustDomain or empty>|<ownerConsent or empty>|<container>|<userspace or empty>
+ *     |<maxRuntimeMs or empty>|<computePercent:memoryMib or empty>|<issuedAt>
  *   flagship/gpu-approval-withdraw/v1|<server>|<appId>|<installationId>|<generation>|<issuedAt>
  */
 object GpuApprovalOrders {
-    const val TAG = "flagship/gpu-approval/v1"
+    const val TAG = "flagship/gpu-approval/v2"
     const val WITHDRAW_TAG = "flagship/gpu-approval-withdraw/v1"
 
     val BACKENDS = listOf("nvidia-cuda", "amd-rocm", "intel-level-zero")
@@ -28,6 +29,8 @@ object GpuApprovalOrders {
 
     private val SERVER = Regex("^[a-z0-9.-]{1,253}$")
     private val FIELD = Regex("^[A-Za-z0-9._:-]{1,128}$")
+    private val CONTAINER = Regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+    private const val MAX_SAFE = (1L shl 53) - 1
 
     private fun sortedSet(items: List<String>, allowed: List<String>, what: String): String {
         require(items.isNotEmpty()) { "gpu-approval: no $what" }
@@ -52,10 +55,22 @@ object GpuApprovalOrders {
             require(FIELD.matches(v)) { "gpu-approval: bad $what" }
             return v
         }
+        val container = r.container
+        require(container != null && CONTAINER.matches(container)) { "gpu-approval: bad container" }
+        val runtime = r.maxRuntimeMs?.let {
+            require(it in 1..MAX_SAFE) { "gpu-approval: bad maxRuntimeMs" }
+            it.toString()
+        } ?: ""
+        val share = r.share?.let {
+            require(it.computePercent in 1..100) { "gpu-approval: a compute share is 1 to 100 percent" }
+            require(it.memoryMib in 1..MAX_SAFE) { "gpu-approval: bad share memory" }
+            "${it.computePercent}:${it.memoryMib}"
+        } ?: ""
         return listOf(
             TAG, server, r.appId, r.installationId, r.generation.toString(), r.backend, r.maxCount.toString(),
             sortedSet(r.caps, CAPABILITIES, "capability"), sortedSet(r.policies, POLICIES, "policy"), r.isolation,
-            if (r.secrecy) "1" else "0", opt(r.trustDomain, "trust domain"), opt(r.ownerConsent, "consent"), issuedAt.toString(),
+            if (r.secrecy) "1" else "0", opt(r.trustDomain, "trust domain"), opt(r.ownerConsent, "consent"),
+            container, opt(r.userspace, "userspace"), runtime, share, issuedAt.toString(),
         ).joinToString("|").toByteArray(Charsets.UTF_8)
     }
 
@@ -80,7 +95,8 @@ object GpuApprovalOrders {
     fun sign(server: String, r: GpuApprovalRequest, issuedAt: Long, signer: Ed25519Sign): GpuApprovalBody =
         GpuApprovalBody(
             server, r.appId, r.installationId, r.generation, r.backend, r.maxCount, r.caps, r.policies, r.isolation, r.secrecy,
-            r.trustDomain, r.ownerConsent, issuedAt, HexUtil.encode(signer.sign(canonical(server, r, issuedAt))),
+            r.trustDomain, r.ownerConsent, r.container, r.userspace, r.maxRuntimeMs, r.share, issuedAt,
+            HexUtil.encode(signer.sign(canonical(server, r, issuedAt))),
         )
 
     fun signWithdraw(server: String, r: GpuApprovalRequest, issuedAt: Long, signer: Ed25519Sign): GpuApprovalWithdrawBody =
@@ -92,5 +108,6 @@ object GpuApprovalOrders {
     /** The request an approval body describes (the mock box reads bodies back). */
     fun request(b: GpuApprovalBody): GpuApprovalRequest =
         GpuApprovalRequest(b.server, b.appId, b.installationId, b.generation, b.backend, b.maxCount, b.caps, b.policies, b.isolation,
-            b.secrecy, b.trustDomain, b.ownerConsent)
+            b.secrecy, b.trustDomain, b.ownerConsent, container = b.container, userspace = b.userspace, maxRuntimeMs = b.maxRuntimeMs,
+            share = b.share)
 }

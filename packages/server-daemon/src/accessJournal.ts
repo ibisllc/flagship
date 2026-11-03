@@ -176,6 +176,12 @@ interface AppJournal {
 export class AccessJournal {
   private byApp = new Map<string, AppJournal>();
   private lost = false;
+  private readonly offered: Array<(serviceRef: string, e: AccessEntry) => void> = [];
+
+  /** Told of every entry offered to the journal, kept or not (keyd keeps its own record of rank orders). */
+  subscribe(fn: (serviceRef: string, e: AccessEntry) => void): void {
+    this.offered.push(fn);
+  }
 
   constructor(private readonly path: string) {}
 
@@ -222,6 +228,13 @@ export class AccessJournal {
    * supersedes). A join or withdraw already held under its key is kept as is.
    */
   async add(serviceRef: string, e: AccessEntry): Promise<boolean> {
+    for (const fn of this.offered) {
+      try {
+        fn(serviceRef, e);
+      } catch {
+        /* a listener never stops an entry */
+      }
+    }
     const w = this.writes;
     if (w?.writes.mode === "rust") {
       // Rust verifies the entry's proof against the box's own people before it keeps it, and writes the file.

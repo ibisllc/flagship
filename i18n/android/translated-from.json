@@ -3371,5 +3371,20 @@
   "couldnt_check_box_release": "a0fb0fc42f6d",
   "add_fingerprint_for_stronger_approvals": "bcb550d4d5a9",
   "add_a_fingerprint": "4447168070a8",
-  "recipe_made_by_older_app": "e3522de4a748"
+  "recipe_made_by_older_app": "e3522de4a748",
+  "add_your_fingerprint_again_to_open_account_key": "d45f4b7bc5eb",
+  "account_key_unreadable_short": "1ba287a66920",
+  "account_key_lost_title": "f53a649d7a83",
+  "account_key_lost_body": "ab5d0052beca",
+  "account_key_lost_hint": "26ac7b269e82",
+  "account_key_lost_restore": "22d84c39f15e",
+  "burn_target_disk_label": "536787fb9140",
+  "burn_target_disk_help": "17804273e372",
+  "burn_target_disk_invalid": "0c83a9faa922",
+  "install_disk_stop_several": "60a91c074bda",
+  "install_disk_stop_none": "b1dfce81846a",
+  "install_disk_stop_missing": "f30272a6fd4b",
+  "install_disk_stop_ambiguous": "2dac857ce719",
+  "install_disk_stop_advice": "8e999256567e",
+  "setup_stopped_cancel_or_contact": "e4ec1d5b2ed0"
 }

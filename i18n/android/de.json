@@ -3431,5 +3431,20 @@
   "couldnt_check_box_release": "Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.",
   "add_fingerprint_for_stronger_approvals": "Wenn du in den Telefoneinstellungen einen Fingerabdruck hinzufügst, werden deine Genehmigungen auf dieser Android-Version sicherer.",
   "add_a_fingerprint": "Fingerabdruck hinzufügen",
-  "recipe_made_by_older_app": "Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App und erstelle den Server dann erneut."
+  "recipe_made_by_older_app": "Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App und erstelle den Server dann erneut.",
+  "add_your_fingerprint_again_to_open_account_key": "Füge deinen Fingerabdruck in den Android-Einstellungen wieder hinzu, um deinen Flagship-Kontoschlüssel auf diesem Telefon zu öffnen.",
+  "account_key_unreadable_short": "Dieses Telefon kann deinen Kontoschlüssel nicht mehr öffnen. Stelle dein Konto wieder her, um es hier weiter zu nutzen.",
+  "account_key_lost_title": "Dieses Telefon kann deinen Kontoschlüssel nicht öffnen",
+  "account_key_lost_body": "Die Bildschirmsperre dieses Telefons wurde entfernt oder zurückgesetzt, deshalb hat Android den Schlüssel gelöscht, der hier deinen Flagship-Kontoschlüssel geschützt hat. Dein Konto und deine Server sind nicht betroffen.",
+  "account_key_lost_hint": "Um dein Konto hier wieder zu nutzen, stelle es wieder her: Wähle „Mit einem bestehenden Konto verbinden“ und melde dich mit deinem Wiederherstellungs-Passkey oder einer gespeicherten Kontoschlüssel-Datei an, oder tritt von einem anderen angemeldeten Gerät aus bei.",
+  "account_key_lost_restore": "Mein Konto wiederherstellen",
+  "burn_target_disk_label": "Datenträger für die Installation (optional)",
+  "burn_target_disk_help": "Nur nötig, wenn der Computer mehr als einen Datenträger hat. Ohne diese Angabe hält der Installer auf so einem Computer an, löscht nichts und listet seine Datenträger auf dem Bildschirm auf. Gib by-id: und einen Namen aus dieser Liste ein, serial: und die Seriennummer des Datenträgers oder size: und seine genaue Größe in Byte.",
+  "burn_target_disk_invalid": "Beginne mit by-id:, serial: oder size:, gefolgt vom Namen, der Seriennummer oder der Größe des Datenträgers in Byte, ohne Leerzeichen.",
+  "install_disk_stop_several": "Dieser Computer hat %1$s Datenträger, die der Installer löschen könnte (%2$s), deshalb hat er angehalten. Es wurde nichts gelöscht.",
+  "install_disk_stop_none": "Dieser Computer hat keinen eingebauten Datenträger mit 8 GB oder mehr für die Installation, deshalb hat der Installer angehalten. Es wurde nichts gelöscht.",
+  "install_disk_stop_missing": "Der Datenträger, für den dieser Installer erstellt wurde (%1$s), ist nicht in diesem Computer. Es wurde nichts gelöscht.",
+  "install_disk_stop_ambiguous": "Der Datenträger, für den dieser Installer erstellt wurde (%1$s), passt auf mehr als einen Datenträger in diesem Computer. Es wurde nichts gelöscht.",
+  "install_disk_stop_advice": "Erstelle den Installer mit demselben Rezept neu, trage unter „Datenträger für die Installation“ einen der Datenträger ein, die der Computer auf dem Bildschirm angezeigt hat, und starte den Computer dann davon.",
+  "setup_stopped_cancel_or_contact": "Storniere diese Bestellung, um den Namen freizugeben und den Server neu zu erstellen, oder schreib uns, dann sehen wir es uns an."
 }

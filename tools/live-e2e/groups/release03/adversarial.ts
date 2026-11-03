@@ -96,7 +96,7 @@ export const adversarial: Group = {
     try {
       // ── signed routes on the real box ───────────────────────────────────
       await rec.check("AT-LIVE-02 journal (/api/journal, admin root): the account's IRK, forged, foreign, other-box and unlisted-unit requests are refused and return no lines — catches a log read without the owner's key or outside the unit allowlist", async () => {
-        const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };
+        const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
         const send = (body: Record<string, unknown>) => postJson(`https://${fqdn}/api/journal`, body);
         const variants = signatureVariants(hex(signJournalRequest(req, adminRoot)), {
           "the account's own IRK": hex(signJournalRequest(req, irk)),
@@ -111,7 +111,7 @@ export const adversarial: Group = {
         const unit: JournalRequest = { ...req, unit: "ssh" };
         const r2 = await send({ request: unit, signature: hex(signJournalRequest(unit, adminRoot)) });
         assert(r2.status === 403 && !Array.isArray(r2.json?.lines), `unit outside the allowlist: ${r2.status} ${short(r2.text)}`);
-        const stale: JournalRequest = { ...req, issuedAt: Date.now() - 3_600_000 };
+        const stale: JournalRequest = { ...req, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() - 3_600_000 };
         const r3 = await send({ request: stale, signature: hex(signJournalRequest(stale, adminRoot)) });
         assert(isRefusal(r3.status), `an hour-old request: ${r3.status}`);
         return `${seen}; other box ${r1.status}, unit ${r2.status}, stale ${r3.status}`;
@@ -411,7 +411,7 @@ export const adversarial: Group = {
       });
       await rec.check("AT-LIVE-19 privd's audit of a refused operation is readable to the owner — catches refusals nobody can see", async () => {
         if (!archV2) throw new SkipError("privd runs only on the arch-v2 stack");
-        const req: JournalRequest = { serverId: fqdn, unit: "flagship-privd", lines: 200, issuedAt: Date.now() };
+        const req: JournalRequest = { serverId: fqdn, unit: "flagship-privd", lines: 200, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
         const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: hex(signJournalRequest(req, adminRoot)) });
         if (r.status === 403 && /unit not allowed/.test(r.text)) {
           throw new SkipError("the signed journal reads only flagship-daemon and flagship-data-services, so privd's audit cannot be read from outside (an operator reads it with journalctl -u flagship-privd)");

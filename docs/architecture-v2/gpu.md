@@ -65,7 +65,8 @@ gpud ops (`service.rs`), all JSON, unknown fields refused:
 |---|---|---|
 | `gpu.inventory` | | devices (local id, vendor, backend, model, memory, capabilities, display, partitions, qualified profiles or reasons, passthrough verdict, quarantine, holders), unavailable backends, topology links, generation, admission pause, catalog status, CDI status |
 | `gpu.status` | | open allocations, the fair queue per app, admission pause, `stoppedAtStart` (allocations a restart stopped because their kept terms were missing or unreadable) |
-| `gpu.claim` | `allocationId, app{appId,installationId,generation}, operationId, container` (the one container it may run in), `requirement` (manifest `accelerator`), `approval`, `approvalProof{issuedAt, signature}` (the owner's `flagship/gpu-approval/v1`, §5), optional `maxRuntimeMs, share{computePercent,memoryMib}, userspace` | `state` (`reserved` or `admitted` = queued), queue position |
+| `gpu.claim` | `allocationId, app{appId,installationId,generation}, operationId, container` (the one container it may run in), `requirement` (manifest `accelerator`), `approval`, `approvalProof{issuedAt, signature}` (the owner's `flagship/gpu-approval/v2`, §5), optional `maxRuntimeMs, share{computePercent,memoryMib}, userspace`; for a signed approval, `container`, `userspace`, `maxRuntimeMs` and `share` must equal the approval's (refused `forbidden` otherwise) |
+| `gpu.withdrawApproval` | `appId, installationId, generation, issuedAt, signature` (the owner's `flagship/gpu-approval-withdraw/v1`) | `raised`, `revoked[]` (gpud's own floor in `<state>/approval-floors.json` rises for that installation, never falls) |
 | `gpu.attach` | `allocationId, engine` | `{allocation, args, cdiSpecDigest, image}` |
 | `gpu.started` / `gpu.heartbeat` | `allocationId, nowMs` | |
 | `gpu.release` | `allocationId[, reason]` | settle: `released`, `quarantined: …`, `held: …` |
@@ -99,13 +100,14 @@ Daemon side (`packages/server-daemon/src/gpu/`):
   the owner's approval for exactly that installation and generation the AppRunner hook never claims
   (CPU only if the manifest allows it), and the app is listed:
   `GET /api/screens/accelerators` adds `pendingApprovals: [{server, appId, installationId,
-  generation, backend, maxCount, caps, policies, isolation, secrecy, trustDomain, ownerConsent}]`
+  generation, backend, maxCount, caps, policies, isolation, secrecy, trustDomain, ownerConsent,
+  container, userspace, maxRuntimeMs, share}]` (`container` is `flagship-<appId>`; the rest null today)
   (what the owner signs, minus `issuedAt`; `secrecy`, `trustDomain` and `ownerConsent` are the owner's
   to set when signing, cooperative needs both) and `approvals` (the same plus `issuedAt`). A new
   pending generation is announced once: screens event `{type: "gpu-approval-request", appId}`,
   Activity `gpu.approval.pending`, a content-free `generic` push (owner's alerts switch, 5 an hour).
   `POST /api/screens/accelerators/approvals` takes those fields plus `issuedAt` and `signature`
-  (`flagship/gpu-approval/v1`); `POST /api/screens/accelerators/approvals/withdraw` takes
+  (`flagship/gpu-approval/v2`); `POST /api/screens/accelerators/approvals/withdraw` takes
   `{appId, installationId, generation, issuedAt, signature}`
   (`flagship/gpu-approval-withdraw/v1|<server>|<appId>|<installationId>|<generation>|<issuedAt>`).
   Both: signed by the admin root on a box that pins one, else the IRK; at most 10 minutes old; newer
@@ -113,7 +115,8 @@ Daemon side (`packages/server-daemon/src/gpu/`):
   withdrawal newer than the grant it removes). Refusals are `{error, code}` with codes `bad-request`,
   `other-server`, `stale-installation`, `terms-mismatch`, `needs-trust-domain`, `no-safe-isolation`,
   `stale`, `replayed`, `admin-only`, `bad-signature`, `no-owner-key`, `not-approved`. A grant restarts
-  the app onto its GPU; a withdrawal calls `gpu.revokeApp`. Kept in `<dataDir>/gpu-approvals.json`;
+  the app onto its GPU; a withdrawal is handed to gpud (`gpu.withdrawApproval`), kept and handed over
+  again before the next claim if gpud did not take it. Kept in `<dataDir>/gpu-approvals.json`;
   an unreadable file is set aside (Activity `server.state.corrupt`) and every GPU app waits again.
 - `installGpud`: on a box with an NVIDIA/AMD/Intel display or accelerator function, copies the
   release's `installer/rust/flagship-gpud` when its SHA-256 equals PINS.json's, writes
@@ -203,9 +206,10 @@ gym group `gpu-real` runs them over SSH on a GPU host (`GYM_GPU_SSH`) or an UpCl
 ## 5. What is still open (software)
 
 - **Approvals (2026-10-25):** gpud no longer takes the daemon's word. An app's `GpuApproval` must
-  come with the owner's Ed25519 signature over `flagship/gpu-approval/v1|<server>|<appId>|
+  come with the owner's Ed25519 signature over `flagship/gpu-approval/v2|<server>|<appId>|
   <installationId>|<generation>|<backend>|<maxCount>|<capabilities>|<policies>|<isolation>|
-  <secrecy>|<trustDomain>|<ownerConsent>|<issuedAt>` (`owner_approval.rs`; TS
+  <secrecy>|<trustDomain>|<ownerConsent>|<container>|<userspace>|<maxRuntimeMs>|<computePercent:memoryMib>|<issuedAt>`
+  (2026-11-02: v2 binds the claim's container, userspace, run-time limit and share; v1 is refused) (`owner_approval.rs`; TS
   `packages/protocol/src/gpuApproval.ts`; vectors `test-vectors/gpu-approval/`, both ports), checked
   through `flagship-crypto`'s critical-signature gate against the key keyd's root-written
   `owner.json` pins (the admin root, else the IRK) for the box `policy.json` names, re-read on every
@@ -216,8 +220,11 @@ gym group `gpu-real` runs them over SSH on a GPU host (`GYM_GPU_SSH`) or an UpCl
   the box takes and stores the owner's signed approvals (§2, daemon side), and the clients' approval
   screens are being built against that contract; the
   strict-mode PQ half is not required (the gate runs under the legacy policy, as keyd's master
-  evidence does); withdrawal still comes from the daemon (`gpu.revokeApp`), so a daemon that
-  withholds it keeps a signed approval usable for that app generation; maintenance orders
+  evidence does); a withdrawal reaches gpud through the daemon, so one a daemon withholds at the
+  time it is made is not enforced (once gpud has it, its root-owned floor refuses every approval of
+  that installation signed before it, whatever a later daemon presents); there is no maximum age
+  (an app's approval is used at every start); cooperative app claims carry no share yet (the box
+  lists `share: null`, so gpud refuses them); maintenance orders
   (`maintenanceRef`) are still the daemon's word.
 - **Owner UI:** the screen API exists; no client renders it yet (the AI02 job UI is the natural
   home). Strings will need `tr()` / `String(localized:)` / `i18n/android` like every screen.

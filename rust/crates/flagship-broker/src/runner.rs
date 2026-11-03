@@ -207,14 +207,40 @@ pub fn copy_in_files(e: &PrivExec, account: Option<DaemonAccount>) -> Result<(),
             Err(e) => return Err(e.to_string()),
         }
         let src = open_daemon_file(&c.from, account, "copies")?;
+        let too_big = || refuse("that file is larger than the broker accepts for it");
+        if let Some(max) = c.max_bytes
+            && fstat(&src).map_err(|e| e.to_string())?.st_size as u64 > max
+        {
+            return Err(too_big());
+        }
         let dst = rustix::fs::open(
             to,
             OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
             Mode::from_raw_mode(0o600),
         )
         .map_err(|e| e.to_string())?;
-        std::io::copy(&mut std::fs::File::from(src), &mut std::fs::File::from(dst))
-            .map_err(|e| e.to_string())?;
+        let mut dst = std::fs::File::from(dst);
+        let copied = match c.max_bytes {
+            // The daemon still owns the file and can grow it after the stat.
+            Some(max) => std::io::copy(
+                &mut std::io::Read::take(std::fs::File::from(src), max.saturating_add(1)),
+                &mut dst,
+            ),
+            None => std::io::copy(&mut std::fs::File::from(src), &mut dst),
+        };
+        let copied = match copied {
+            Ok(n) => n,
+            Err(e) => {
+                drop(dst);
+                let _ = std::fs::remove_file(to);
+                return Err(e.to_string());
+            }
+        };
+        if c.max_bytes.is_some_and(|max| copied > max) {
+            drop(dst);
+            let _ = std::fs::remove_file(to);
+            return Err(too_big());
+        }
     }
     Ok(())
 }
@@ -522,6 +548,7 @@ mod tests {
             copy_in: vec![CopyIn {
                 from: from.to_string_lossy().into_owned(),
                 to: to.to_string_lossy().into_owned(),
+                max_bytes: None,
             }],
             ..PrivExec::default()
         };
@@ -549,6 +576,18 @@ mod tests {
         std::os::unix::fs::symlink(&stage, dir.join("out")).unwrap();
         std::fs::write(stage.join("mine"), "x").unwrap();
         assert!(copy_in_files(&ex(&dir.join("out/mine"), &stage.join("m")), Some(me)).is_err());
+        let capped = |to: &Path, max: u64| PrivExec {
+            copy_in: vec![CopyIn {
+                from: dir.join("a.tar.gz").to_string_lossy().into_owned(),
+                to: to.to_string_lossy().into_owned(),
+                max_bytes: Some(max),
+            }],
+            ..PrivExec::default()
+        };
+        copy_in_files(&capped(&stage.join("cap/ok"), 7), Some(me)).unwrap();
+        let e = copy_in_files(&capped(&stage.join("cap/big"), 6), Some(me)).unwrap_err();
+        assert!(e.contains("larger"), "{e}");
+        assert!(!stage.join("cap/big").exists());
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&stage);
     }

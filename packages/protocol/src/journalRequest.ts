@@ -1,9 +1,11 @@
 /**
- * Owner-authenticated journal read (diagnostics) — `flagship/journal-read/v1`.
+ * Owner-authenticated journal read (diagnostics) — `flagship/journal-read/v2`.
  *
- * Extracted verbatim from the original monolithic `auth.ts`; tag, field order,
- * and guards are unchanged, so canonical bytes and signatures remain
- * byte-identical.
+ *   flagship/journal-read/v2|<serverId>|<unit>|<lines>|<nonce>|<issuedAt>
+ *
+ * v2 (review 2026-10-25 #15) adds a single-use nonce (32 lowercase hex) to the
+ * signed bytes, so the box can refuse a replay inside the 5-minute window. v1
+ * (no nonce) is gone: no box takes it.
  */
 import { ed } from "./edSync.js";
 import { legacyFieldGuard } from "./canonicalBase.js";
@@ -25,16 +27,20 @@ export interface JournalRequest {
   unit: string;
   /** trailing lines requested; the daemon clamps the max. */
   lines: number;
+  /** Single use: 16 random bytes as 32 lowercase hex; the box keeps the ones it took. */
+  nonce: string;
   issuedAt: number;
 }
 
-const TAG_JOURNAL_READ = "flagship/journal-read/v1";
+export const TAG_JOURNAL_READ = "flagship/journal-read/v2";
+export const JOURNAL_NONCE_RE = /^[0-9a-f]{32}$/;
 
 export function canonicalJournalRequest(r: JournalRequest): Bytes {
   legacyFieldGuard("serverId", r.serverId);
   legacyFieldGuard("unit", r.unit);
+  if (typeof r.nonce !== "string" || !JOURNAL_NONCE_RE.test(r.nonce)) throw new Error("journal-read: nonce must be 32 lowercase hex");
   return new TextEncoder().encode(
-    [TAG_JOURNAL_READ, r.serverId, r.unit, String(r.lines), String(r.issuedAt)].join("|"),
+    [TAG_JOURNAL_READ, r.serverId, r.unit, String(r.lines), r.nonce, String(r.issuedAt)].join("|"),
   );
 }
 

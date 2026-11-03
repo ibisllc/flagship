@@ -279,6 +279,18 @@ msgstr "WLAN-Passwort"
 msgid "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only."
 msgstr "Optionales WLAN für einen Server ohne Ethernet. Wird in diesen einmalig verwendbaren Installer eingebrannt und auf diesem PC nur für dein Konto gespeichert."
 
+#: wizard.py:1762 (prose)
+msgid "Disk to install on (optional)"
+msgstr "Datenträger für die Installation (optional)"
+
+#: wizard.py:1770 (prose)
+msgid "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes."
+msgstr "Nur nötig, wenn der Computer mehr als einen Datenträger hat. Ohne diese Angabe hält das Installationsprogramm auf einem solchen Computer an, löscht nichts und listet seine Datenträger auf dem Bildschirm auf. Gib by-id: und einen Namen aus dieser Liste ein, serial: und die Seriennummer des Datenträgers oder size: und seine genaue Größe in Byte."
+
+#: wizard.py:1780 (prose)
+msgid "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces."
+msgstr "Beginne mit by-id:, serial: oder size:, gefolgt vom Namen, der Seriennummer oder der Größe des Datenträgers in Byte, ohne Leerzeichen."
+
 #: wizard.py:1655 (label=)
 msgid "Flash to USB"
 msgstr "Auf USB schreiben"

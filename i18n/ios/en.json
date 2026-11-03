@@ -13683,5 +13683,25 @@
   "Its certificate can't be renewed until it is updated.": {
     "en": "Its certificate can't be renewed until it is updated.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpdateRequiredBanner.swift: banner line when the date is unknown"
+  },
+  "This computer has %@ disks the installer could erase (%@), so it stopped. Nothing was erased.": {
+    "en": "This computer has %@ disks the installer could erase (%@), so it stopped. Nothing was erased.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift"
+  },
+  "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": {
+    "en": "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift"
+  },
+  "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": {
+    "en": "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift"
+  },
+  "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": {
+    "en": "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift"
+  },
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": {
+    "en": "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift"
   }
 }

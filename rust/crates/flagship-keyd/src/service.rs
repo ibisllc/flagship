@@ -60,6 +60,10 @@ pub struct KeydService {
     clock: Clock,
     /// Server-archive keys (archive.rs): the deposited account keys and the open content keys.
     archive: crate::archive::ArchiveKeys,
+    /// What keyd keeps of the owner's revocations and rank orders; `None` when `revocations.json`
+    /// is unreadable (every master assertion is then refused rather than forgetting one).
+    held: Option<crate::revocations::HeldRevocations>,
+    held_path: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for KeydService {
@@ -131,7 +135,23 @@ impl KeydService {
             state_dir: None,
             clock: system_clock(),
             archive: crate::archive::ArchiveKeys::load(None),
+            held: Some(crate::revocations::HeldRevocations::default()),
+            held_path: None,
         }
+    }
+
+    /// Where keyd keeps the owner's revocations and rank orders (`revocations.json` in keyd's state).
+    #[must_use]
+    pub fn with_revocations(mut self, path: PathBuf) -> Self {
+        self.held = crate::revocations::HeldRevocations::load(Some(&path));
+        self.held_path = Some(path);
+        self
+    }
+
+    fn held(&self) -> KeydResult<&crate::revocations::HeldRevocations> {
+        self.held.as_ref().ok_or_else(|| {
+            KeydError::failed("keyd's revocations file is damaged, so it signs no master assertion")
+        })
     }
 
     /// The owner key root a sealed SWK/CGK delivery must be signed by (TS `owner`). An
@@ -368,6 +388,7 @@ impl KeydService {
                     (self.clock)(),
                     &stable,
                     &verify,
+                    self.held()?,
                 ) {
                     return Err(KeydError::forbidden(format!(
                         "master needs the owner's evidence for this key ({code})"
@@ -378,6 +399,63 @@ impl KeydService {
                     result: obj! { "sig" => to_hex(&sig.to_bytes()) },
                     purpose: Some(purpose),
                 })
+            }
+            "evidence.note" => {
+                // An owner-signed device revocation or rank order the daemon accepted (TS
+                // evidence.note), kept on keyd's own disk.
+                no_extra_args(
+                    a,
+                    &[
+                        "statement",
+                        "signatureHex",
+                        "grantStatement",
+                        "grantSignatureHex",
+                    ],
+                )?;
+                let Some((irk, _)) = &self.owner else {
+                    return Err(KeydError::forbidden("no owner key is pinned for this box"));
+                };
+                let irk_hex = to_hex(irk.as_bytes());
+                let statement = str_arg(a, "statement", 4096)?;
+                let signature_hex = str_arg(a, "signatureHex", 128)?;
+                let grant_statement = if a.get("grantStatement").is_some() {
+                    Some(str_arg(a, "grantStatement", 4096)?)
+                } else {
+                    None
+                };
+                let grant_signature_hex = if a.get("grantSignatureHex").is_some() {
+                    Some(str_arg(a, "grantSignatureHex", 128)?)
+                } else {
+                    None
+                };
+                let note = crate::revocations::Note {
+                    statement,
+                    signature_hex,
+                    grant_statement,
+                    grant_signature_hex,
+                };
+                let (after, changed) = self
+                    .held()?
+                    .note(
+                        &note,
+                        &irk_hex,
+                        self.admin_root_hex.as_deref(),
+                        (self.clock)(),
+                        &verify_hex,
+                    )
+                    .map_err(|code| {
+                        KeydError::forbidden(format!(
+                            "keyd keeps only the owner's own revocations and rank orders ({code})"
+                        ))
+                    })?;
+                if changed {
+                    if let Some(p) = &self.held_path {
+                        crate::files::write_atomic(p, after.to_json().as_bytes(), 0o600)
+                            .map_err(|_| KeydError::failed("could not keep the revocation"))?;
+                    }
+                    self.held = Some(after);
+                }
+                done(obj! { "changed" => changed })
             }
             "pq.status" => {
                 no_extra_args(a, &[])?;
@@ -850,6 +928,19 @@ impl KeydService {
             }
             _ => Err(KeydError::new(ErrorCode::UnknownOp, "unknown operation")),
         }
+    }
+}
+
+fn verify_hex(sig_hex: &str, m: &[u8], pub_hex: &str) -> bool {
+    let k = crate::crypto::from_hex(pub_hex)
+        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+        .and_then(|b| ed25519_dalek::VerifyingKey::from_bytes(&b).ok());
+    let s = crate::crypto::from_hex(sig_hex).and_then(|b| <[u8; 64]>::try_from(b.as_slice()).ok());
+    match (k, s) {
+        (Some(k), Some(s)) => k
+            .verify_strict(m, &ed25519_dalek::Signature::from_bytes(&s))
+            .is_ok(),
+        _ => false,
     }
 }
 

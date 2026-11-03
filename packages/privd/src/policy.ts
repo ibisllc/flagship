@@ -23,7 +23,7 @@ export interface Exec {
    * Daemon files the broker copies into its own folder before the command starts, so what the
    * command checks is what it then uses (a release the daemon downloaded).
    */
-  copyIn?: Array<{ from: string; to: string }>;
+  copyIn?: Array<{ from: string; to: string; maxBytes?: number }>;
 }
 
 /** The broker's own folder: root only. */
@@ -1058,20 +1058,35 @@ export const LOCAL_AI_INSTALL_SCRIPT =
   'set -eu; printf \'%s  %s\\n\' "$1" "$2" | sha256sum -c --status -; install -m 0444 -o root -g root -- "$2" "$3/sha256-$1.gguf.partial"; mv -f -- "$3/sha256-$1.gguf.partial" "$3/sha256-$1.gguf"';
 
 /**
+ * The models root may install, by SHA-256 and exact size: the release's catalog
+ * (packages/server-daemon/src/localAi/catalog.ts `LOCAL_MODELS`; a test keeps them equal, and the
+ * Rust broker's `LOCAL_AI_MODEL_PINS` through the shared vectors). The daemon names the digest, so
+ * without this list it could hash any file it wrote and have root install it.
+ */
+export const LOCAL_AI_MODEL_PINS: Readonly<Record<string, number>> = Object.freeze({
+  "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c": 4_683_073_536,
+  "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e": 1_117_320_736,
+  "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db": 491_400_032,
+  "61b50d457809a5194818fd22e6724b456cd7bb9a6264c52c8110684c53f3704a": 98_357_920,
+  "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d": 1_185_376,
+});
+
+/**
  * Local AI's root steps (packages/server-daemon/src/localAi/containers.ts):
- *  - `model-install <sha256> <models dir>`: copy the daemon's checked download into the broker's folder,
- *    check its digest there, install it 0444 root into the models volume;
+ *  - `model-install <sha256> <models dir>`: a catalog model only (`LOCAL_AI_MODEL_PINS`): copy the
+ *    daemon's checked download into the broker's folder (at most the pinned size), check its digest
+ *    there, install it 0444 root into the models volume;
  *  - `model-remove <sha256> <models dir>`: delete that one model file;
  *  - `out-prepare <job> <job dir>`: hand a fine-tuning job's own output volume to the container user.
  */
 function localAiHostExec(a: readonly string[]): Exec {
   const [verb, id, dir] = a;
-  if (a.length === 3 && verb === "model-install" && /^[0-9a-f]{64}$/.test(id!) && MODELS_VOLUME_DATA.test(dir!)) {
+  if (a.length === 3 && verb === "model-install" && /^[0-9a-f]{64}$/.test(id!) && MODELS_VOLUME_DATA.test(dir!) && Object.hasOwn(LOCAL_AI_MODEL_PINS, id!)) {
     const staged = `${PRIVD_STATE_DIR}/local-ai/sha256-${id}.gguf`;
     return {
       file: "/bin/sh",
       args: ["-c", LOCAL_AI_INSTALL_SCRIPT, "_", id!, staged, dir!],
-      copyIn: [{ from: `${LOCAL_AI_INCOMING}/sha256-${id}.gguf`, to: staged }],
+      copyIn: [{ from: `${LOCAL_AI_INCOMING}/sha256-${id}.gguf`, to: staged, maxBytes: LOCAL_AI_MODEL_PINS[id!]! }],
       timeoutMs: 30 * 60_000,
     };
   }

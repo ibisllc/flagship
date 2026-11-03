@@ -3431,5 +3431,20 @@
   "couldnt_check_box_release": "无法确认此服务器的软件包是否已在 flagshipserver.com 上发布。请检查网络连接后重试。",
   "add_fingerprint_for_stronger_approvals": "在手机设置中添加指纹，可以让此 Android 版本上的批准更安全。",
   "add_a_fingerprint": "添加指纹",
-  "recipe_made_by_older_app": "此配方由旧版 Flagship 应用创建。请更新 Flagship 应用，然后重新创建服务器。"
+  "recipe_made_by_older_app": "此配方由旧版 Flagship 应用创建。请更新 Flagship 应用，然后重新创建服务器。",
+  "add_your_fingerprint_again_to_open_account_key": "请在 Android 设置中重新添加指纹，才能在这部手机上打开你的 Flagship 账户密钥。",
+  "account_key_unreadable_short": "这部手机已无法打开你的账户密钥。请恢复你的账户，以便继续在这里使用。",
+  "account_key_lost_title": "这部手机无法打开你的账户密钥",
+  "account_key_lost_body": "这部手机的屏幕锁已被移除或重置，因此 Android 删除了在此保护你的 Flagship 账户密钥的密钥。你的账户和服务器不受影响。",
+  "account_key_lost_hint": "要在这里重新使用你的账户，请恢复它：选择“连接到现有账户”，然后用你的恢复通行密钥或已保存的账户密钥文件登录，或从另一台已登录的设备加入。",
+  "account_key_lost_restore": "恢复我的账户",
+  "burn_target_disk_label": "安装到的磁盘(可选)",
+  "burn_target_disk_help": "仅当电脑有多块磁盘时才需要。不填写时,安装程序会在这样的电脑上停止,不擦除任何内容,并在屏幕上列出它的磁盘。请输入 by-id: 加上列表中的名称、serial: 加上磁盘序列号,或 size: 加上以字节为单位的准确大小。",
+  "burn_target_disk_invalid": "请以 by-id:、serial: 或 size: 开头,后接磁盘的名称、序列号或以字节为单位的大小,不要有空格。",
+  "install_disk_stop_several": "这台电脑有 %1$s 块安装程序可以擦除的磁盘(%2$s),所以安装程序已停止。没有擦除任何内容。",
+  "install_disk_stop_none": "这台电脑没有 8 GB 或以上的内置磁盘可供安装,所以安装程序已停止。没有擦除任何内容。",
+  "install_disk_stop_missing": "此安装程序所针对的磁盘(%1$s)不在这台电脑中。没有擦除任何内容。",
+  "install_disk_stop_ambiguous": "此安装程序所针对的磁盘(%1$s)与这台电脑中的多块磁盘相符。没有擦除任何内容。",
+  "install_disk_stop_advice": "请用同一份配方重新制作安装程序,在“安装到的磁盘”中填写电脑屏幕上列出的某块磁盘,然后用它启动电脑。",
+  "setup_stopped_cancel_or_contact": "取消此订单即可释放名称并重新创建服务器,或联系我们,我们会帮你查看。"
 }

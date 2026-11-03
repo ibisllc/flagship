@@ -112,6 +112,7 @@ object ProvisionProgress {
     /** The box's failure text for a person: "Setup stopped while Expanding the
      *  disk (line 66)" loses the shell line number; empty becomes the title. */
     fun failureDetail(lastError: String?): String? {
+        InstallDiskStop.parse(lastError)?.let { return it.text() }
         val stripped = lastError?.let { UserErrorText.stripInternals(it) }
         return if (stripped.isNullOrEmpty()) phaseTitles["error"] else stripped
     }

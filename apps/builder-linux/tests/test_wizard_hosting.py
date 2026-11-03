@@ -203,6 +203,8 @@ def test_run_host_here_creates_remasters_shreds_and_installs(tmp_path, monkeypat
     m.state.recipe_path = recipe
     verified(m)
     m.set_destination(ServerDestination.HOST_HERE)
+    # A hosted VM has one disk: a typed "Disk to install on" never reaches its installer.
+    m.state.target_disk = "serial:S64ANS0T123456"
 
     ran: dict = {}
 
@@ -223,6 +225,7 @@ def test_run_host_here_creates_remasters_shreds_and_installs(tmp_path, monkeypat
     assert ran["args"][4] == vm.installer_iso_path("home.harry.flagship.services")
     assert "--keep-recipe" in ran["args"]
     assert not recipe.exists()  # shredded, single-use
+    assert "--target-disk" not in ran["args"]
     (s,) = vm.servers
     assert s.record.state.kind == VMStateKind.INSTALLING
     assert host.started == [("home.harry.flagship.services", True)]

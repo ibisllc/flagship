@@ -10,6 +10,10 @@
  */
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync, chmodSync, readFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   signAuthCode,
   signInstallBlob,
@@ -164,7 +168,7 @@ describe("buildDebianPreseed — THE NVRAM/removable-path fix (the whole point)"
 });
 
 describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)", () => {
-  function cfg(opts: { encryptRoot?: boolean } = {}): string {
+  function cfg(opts: { encryptRoot?: boolean; targetDisk?: string } = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
     return buildDebianPreseed({ blob, blobSignatureHex, ...opts });
   }
@@ -279,23 +283,11 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
       const c = cfg({ encryptRoot });
       // The wipe runs from partman/early_command after DISK is resolved.
       expect(c, `encryptRoot=${encryptRoot}`).toContain("d-i partman/early_command string");
-      // DISK is resolved to the LARGEST NON-REMOVABLE block device — never the
-      // first-enumerated / removable installer stick (the ~755MB "too small"
-      // partition trap on any box with a USB installer + an internal disk, incl.
-      // the Mac VZHost's sda(USB)/vda(main) ordering). The scanning loop is the
-      // PRIMARY selector; first-enumerated survives ONLY as the degenerate
-      // fallback, gated behind `[ -n "$DISK" ] ||`.
+      // DISK is chosen by the disk-choice loop (behaviour pinned in "the target disk" below); the
+      // first-enumerated pick is gone, not even as a fallback.
       expect(c).toContain("for _d in $(list-devices disk); do");
-      expect(c).toContain('[ "$(cat /sys/block/$_n/removable 2>/dev/null || echo 0)" = 1 ] && continue');
-      expect(c).toContain("_s=$(cat /sys/block/$_n/size 2>/dev/null || echo 0)");
-      expect(c).toContain('[ "$_s" -gt "$_best" ] && { _best=$_s; DISK=$_d; }');
-      // The scanning loop must precede debconf-set; head -n1 appears ONLY as the
-      // guarded fallback (never as the primary, unguarded selector).
-      expect(c.indexOf("for _d in $(list-devices disk)")).toBeLessThan(
-        c.indexOf('debconf-set partman-auto/disk "$DISK"'),
-      );
-      expect(c).toContain('[ -n "$DISK" ] || DISK=$(list-devices disk | head -n1)');
-      expect(c).not.toMatch(/string \\\n\s*DISK=\$\(list-devices disk \| head -n1\)/);
+      expect(c.indexOf("for _d in $(list-devices disk)")).toBeLessThan(c.indexOf('debconf-set partman-auto/disk "$DISK"'));
+      expect(c).not.toContain("list-devices disk | head -n1");
       expect(c).toContain('debconf-set partman-auto/disk "$DISK"');
       expect(c).toContain('debconf-set grub-installer/bootdev "$DISK"');
       // dmsetup clears stale mappings; dd zeroes the front GPT; rereadpt re-reads.
@@ -740,5 +732,123 @@ describe("buildDebianPreseed — input validation ", () => {
     expect(() =>
       buildDebianPreseed({ blob, blobSignatureHex, bootHost: "http://insecure.example" }),
     ).toThrow(/bootHost must be https/);
+  });
+});
+
+/**
+ * B2 OPEN #9: the installer used to wipe the largest fixed disk without asking. Runs the generated
+ * disk choice (the partman/early_command up to `debconf-set`) under /bin/sh against a fake machine:
+ * /sys, /proc/mounts and /dev/disk/by-id are moved under a scratch root, list-devices and wget are
+ * stubs, and the endless hold after a stop becomes `exit 7` so the test can see it.
+ */
+describe("buildDebianPreseed — the target disk", () => {
+  interface Disk {
+    name: string;
+    gb: number;
+    removable?: boolean;
+    ids?: string[];
+    /** Holds the installer (what d-i mounted at /cdrom); "part" = its first partition is mounted. */
+    installer?: "whole" | "part";
+  }
+  function preseed(targetDisk?: string): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return buildDebianPreseed({ blob, blobSignatureHex, ...(targetDisk !== undefined ? { targetDisk } : {}) });
+  }
+  function choose(disks: Disk[], targetDisk?: string): { code: number; disk: string | null; console: string; beacon: string | null } {
+    const T = realpathSync(mkdtempSync(join(tmpdir(), "flagship-disks-")));
+    try {
+      for (const d of ["sys/block", "sys/class/block", "sys/devices", "dev/disk/by-id", "proc", "bin", "tmp"]) mkdirSync(join(T, d), { recursive: true });
+      let mounts = "";
+      for (const d of disks) {
+        writeFileSync(join(T, "dev", d.name), "");
+        mkdirSync(join(T, "sys/block", d.name));
+        writeFileSync(join(T, "sys/block", d.name, "size"), `${Math.round((d.gb * 1e9) / 512)}\n`);
+        writeFileSync(join(T, "sys/block", d.name, "removable"), d.removable ? "1\n" : "0\n");
+        mkdirSync(join(T, "sys/devices", d.name, `${d.name}1`), { recursive: true });
+        writeFileSync(join(T, "sys/devices", d.name, `${d.name}1`, "partition"), "1\n");
+        symlinkSync(join(T, "sys/devices", d.name), join(T, "sys/class/block", d.name));
+        symlinkSync(join(T, "sys/devices", d.name, `${d.name}1`), join(T, "sys/class/block", `${d.name}1`));
+        for (const id of d.ids ?? []) symlinkSync(join(T, "dev", d.name), join(T, "dev/disk/by-id", id));
+        if (d.installer) mounts += `/dev/${d.installer === "part" ? `${d.name}1` : d.name} /cdrom iso9660 ro 0 0\n`;
+      }
+      writeFileSync(join(T, "proc/mounts"), `proc /proc proc rw 0 0\n${mounts}`);
+      const stub = (n: string, body: string) => {
+        writeFileSync(join(T, "bin", n), `#!/bin/sh\n${body}\n`);
+        chmodSync(join(T, "bin", n), 0o755);
+      };
+      stub("list-devices", `for d in ${disks.map((d) => join(T, "dev", d.name)).join(" ")}; do echo "$d"; done`);
+      stub("wget", `cp ${join(T, "tmp/flagship-beacon.json")} ${join(T, "beacon.json")}`);
+      const line = preseed(targetDisk).replace(/\\\n/g, " ").split("\n").find((l) => l.startsWith("d-i partman/early_command string "))!;
+      let cmd = line.slice("d-i partman/early_command string ".length);
+      cmd = cmd.slice(0, cmd.indexOf('debconf-set partman-auto/disk "$DISK"'));
+      expect(cmd).toContain("while :; do sleep 3600; done;");
+      cmd = cmd
+        .replace("while :; do sleep 3600; done;", "exit 7;")
+        .split("/sys/").join(`${T}/sys/`)
+        .split("/proc/mounts").join(`${T}/proc/mounts`)
+        .split("/dev/disk/by-id").join(`${T}/dev/disk/by-id`)
+        .split("/tmp/flagship-beacon.json").join(`${T}/tmp/flagship-beacon.json`)
+        .split("/dev/console").join(`${T}/console`);
+      let code = 0;
+      let out = "";
+      try {
+        out = execFileSync("/bin/sh", ["-c", `${cmd} echo "DISK=$DISK"`], { env: { PATH: `${join(T, "bin")}:/usr/bin:/bin` }, encoding: "utf8", stdio: "pipe" });
+      } catch (e) {
+        code = (e as { status: number }).status;
+      }
+      const disk = /DISK=(.*)/.exec(out)?.[1]?.replace(`${T}/dev/`, "") ?? null;
+      const beacon = existsSync(join(T, "beacon.json")) ? readFileSync(join(T, "beacon.json"), "utf8") : null;
+      const consoleOut = existsSync(join(T, "console")) ? readFileSync(join(T, "console"), "utf8") : "";
+      return { code, disk, console: consoleOut, beacon };
+    } finally {
+      rmSync(T, { recursive: true, force: true });
+    }
+  }
+
+  it("one fixed disk (Studio's hosted VM, the common box): installs there, the installer medium never counts", () => {
+    // The Mac VZHost: USB ISO as sda (not marked removable), the virtio main disk as vda.
+    expect(choose([{ name: "sda", gb: 0.8, installer: "whole" }, { name: "vda", gb: 64 }])).toMatchObject({ code: 0, disk: "vda" });
+    // A big USB SSD that holds the installer, marked fixed, next to a smaller internal disk.
+    expect(choose([{ name: "sda", gb: 1000, installer: "part" }, { name: "nvme0n1", gb: 256 }])).toMatchObject({ code: 0, disk: "nvme0n1" });
+    // A removable card reader and eMMC boot areas never count.
+    expect(choose([{ name: "mmcblk0", gb: 32 }, { name: "mmcblk0boot0", gb: 0.004 }, { name: "sdc", gb: 64, removable: true }])).toMatchObject({ code: 0, disk: "mmcblk0" });
+  });
+
+  it("two fixed disks: stops before erasing anything, on the console and on the install timeline", () => {
+    const r = choose([{ name: "sda", gb: 0.8, installer: "whole" }, { name: "nvme0n1", gb: 500, ids: ["nvme-Samsung_SSD_980_S64ANS0T1"] }, { name: "sdb", gb: 2000, ids: ["ata-WDC_WD20_WD-XYZ"] }]);
+    expect(r.code).toBe(7);
+    expect(r.disk).toBeNull();
+    expect(r.console).toContain("FLAGSHIP INSTALL STOPPED: This machine has 2 disks that could be erased (500 GB, 2000 GB). Nothing was erased.");
+    expect(r.console).toContain("by-id: nvme-Samsung_SSD_980_S64ANS0T1");
+    const beacon = JSON.parse(r.beacon!) as { phase: string; detail: string };
+    expect(beacon.phase).toBe("error");
+    expect(beacon.detail).toContain("2 disks that could be erased");
+    expect(beacon.detail).not.toContain("Samsung");
+  });
+
+  it("no disk to install on: stops, and never falls back to the first-enumerated device", () => {
+    const r = choose([{ name: "sda", gb: 16, removable: true }, { name: "sdb", gb: 4 }]);
+    expect(r.code).toBe(7);
+    expect(JSON.parse(r.beacon!).detail).toContain("no fixed disk of 8 GB or more");
+  });
+
+  it("a named target disk: exactly that one, by id, serial or size; a name that matches none or several stops", () => {
+    const disks: Disk[] = [{ name: "sda", gb: 0.8, installer: "whole" }, { name: "nvme0n1", gb: 500, ids: ["nvme-Samsung_SSD_980_S64ANS0T1"] }, { name: "sdb", gb: 2000, ids: ["ata-WDC_WD20_WD-XYZ"] }];
+    expect(choose(disks, "by-id:ata-WDC_WD20_WD-XYZ")).toMatchObject({ code: 0, disk: "sdb" });
+    expect(choose(disks, "serial:S64ANS0T1")).toMatchObject({ code: 0, disk: "nvme0n1" });
+    expect(choose(disks, `size:${Math.round(500e9 / 512) * 512}`)).toMatchObject({ code: 0, disk: "nvme0n1" });
+    const missing = choose(disks, "serial:NOPE");
+    expect(missing.code).toBe(7);
+    expect(JSON.parse(missing.beacon!).detail).toBe("The disk this installer was made for (serial:NOPE) is not in this machine. Nothing was erased.");
+    // The installer medium can't be named.
+    expect(choose(disks, `size:${Math.round(0.8e9 / 512) * 512}`).code).toBe(7);
+    const twins: Disk[] = [{ name: "sda", gb: 500 }, { name: "sdb", gb: 500 }];
+    expect(choose(twins, `size:${Math.round(500e9 / 512) * 512}`).code).toBe(7);
+  });
+
+  it("refuses a target disk name it can't carry safely into the installer's shell", () => {
+    for (const bad of ["sda", "by-id:a b", "serial:x;reboot", "size:0", "by-id:$(id)", "serial:"]) {
+      expect(() => preseed(bad), bad).toThrow(/targetDisk/);
+    }
   });
 });

@@ -11,10 +11,15 @@
  *     the order again against its own copy of the owner's keys, installs Podman from Debian,
  *     and writes the box switch; it keeps the switch's record where the daemon can't write;
  *   - the next start does the move itself (archV2Boot.ts: engine/migrate.ts, the Rust units);
- *   - the trial: the switch stands only once the box is healthy and every app that ran before
- *     runs again. A failed move, three starts that never get there, or no health within the
- *     window put the switch back (setup.js `arch-v2-settle`); a revert is refused once the
- *     switch was kept or its window ended, so a daemon can't undo the owner's choice later.
+ *   - the trial is root's (setup.js `arch-v2-settle`), decided from root's own evidence kept in
+ *     its own record, never from a file the daemon writes: the apps root itself listed before
+ *     the switch, the daemon's starts as systemd numbers them, and root's own attempt to put
+ *     the box on the target's engine. Root keeps the switch only when the daemon asks (it found
+ *     itself healthy) AND root sees every app back on the new engine; it puts the switch back
+ *     only when its own engine attempt fails or the box was started more than three times
+ *     without being kept. A daemon alone can neither undo the owner's choice (a revert needs
+ *     root's evidence, and none is taken once the switch was kept or its window ended) nor keep
+ *     a switch whose apps root doesn't see running (review 2026-10-25 #5).
  * Docker's data is never deleted (engine/migrate.ts), so going back finds the apps as they were.
  */
 import { existsSync } from "node:fs";
@@ -37,9 +42,12 @@ import { hybridOrderSignature } from "./pqAuthority.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { RustComponentStatuses } from "./rustStack/componentStatus.js";
 import type { CommandRunner } from "./serviceRunner.js";
+import type { UsedNonceStore } from "./updateConsumer.js";
 
 export const SWITCH_ORDER_FILE = "/var/flagship/arch-v2-order.json";
+/** The daemon's "I am healthy, keep it": root keeps a switch only if its own checks agree, and never reverts on it. */
 export const SWITCH_VERDICT_FILE = "/var/flagship/arch-v2-verdict.json";
+/** The daemon's old trial file: never read (root keeps the trial's evidence in SWITCH_RECORD). */
 export const SWITCH_TRIAL_FILE = "/var/flagship/arch-v2-trial.json";
 export const SWITCH_RECORD = "/var/lib/flagship/arch-v2-switch.json";
 export const RUST_PINS_IN_RELEASE = "installer/rust/PINS.json";
@@ -61,6 +69,20 @@ compose_warning_logs = false
 
 export type SwitchState = "installing" | "trial" | "done" | "reverted";
 
+/** What root looks at itself to decide a trial (archV2SwitchProbes.ts on a box). */
+export interface RootTrialProbes {
+  /** systemd's id for the daemon's current run (InvocationID): each start has a new one, which the daemon can't choose. */
+  daemonStart(): Promise<string | null>;
+  /** The live app containers running on an engine, as root lists them. */
+  listApps(engine: EngineKind): Promise<string[]>;
+  /** The engine the box runs now, from root's own record. */
+  activeEngine(): Promise<EngineKind>;
+  /** Root's own attempt to put the box on an engine (safe to repeat): the move to Podman, or back to Docker. */
+  ensureEngine(engine: EngineKind): Promise<{ ok: boolean; reason?: string }>;
+  /** What root sees wrong with the target stack's own parts (the Rust units on arch-v2); empty: nothing. */
+  stackProblems(target: BoxStackTarget): Promise<string[]>;
+}
+
 export interface SwitchRecord {
   version: 1;
   nonce: string;
@@ -75,6 +97,12 @@ export interface SwitchRecord {
   finishedAt?: number;
   reason?: string;
   usedNonces: string[];
+  /** Root's own trial evidence: the apps root listed before the switch... */
+  appsBefore: string[];
+  /** ...the daemon run that handed the order over (not a start on the new stack)... */
+  applyStart: string | null;
+  /** ...and every daemon run root has seen since (systemd's ids). */
+  starts: string[];
 }
 
 export interface SwitchFiles {
@@ -108,7 +136,15 @@ export function parseSwitchRecord(text: string | null): SwitchRecord | null {
   if (!r || r.version !== 1 || typeof r.nonce !== "string" || !["installing", "trial", "done", "reverted"].includes(r.state as string)) return null;
   const order = parseArchV2SwitchOrder(r.order);
   if (!order || order.nonce !== r.nonce) return null;
-  return { ...(r as SwitchRecord), order, usedNonces: Array.isArray(r.usedNonces) ? r.usedNonces.filter((n) => typeof n === "string") : [] };
+  const strings = (a: unknown): string[] => (Array.isArray(a) ? a.filter((n): n is string => typeof n === "string") : []);
+  return {
+    ...(r as SwitchRecord),
+    order,
+    usedNonces: strings(r.usedNonces),
+    appsBefore: strings(r.appsBefore),
+    applyStart: typeof r.applyStart === "string" ? r.applyStart : null,
+    starts: strings(r.starts),
+  };
 }
 
 const HEX_SIG = /^[0-9a-f]{128}$/;
@@ -128,7 +164,7 @@ export function stackOf(c: ArchV2Config): BoxStackTarget {
 
 // ── root ──────────────────────────────────────────────────────────────────
 
-export interface RootSwitchDeps {
+export interface RootSwitchDeps extends RootTrialProbes {
   files: SwitchFiles;
   run: (cmd: string, args: string[]) => Promise<unknown>;
   /** The box's own name, from root's copy of the daemon's environment. */
@@ -195,7 +231,7 @@ export async function applySwitchAsRoot(d: RootSwitchDeps): Promise<{ state: Swi
   if (rec?.nonce === order.nonce && rec.state === "trial") return { state: "trial", target: rec.target };
   const resuming = rec?.nonce === order.nonce && rec.state === "installing";
   if (!resuming) {
-    if (rec && (rec.state === "installing" || rec.state === "trial")) throw new SwitchRefused("another switch is under way on this server");
+    if (rec && underWay(rec, d.now())) throw new SwitchRefused("another switch is under way on this server");
     if (rec && (rec.nonce === order.nonce || rec.usedNonces.includes(order.nonce))) throw new SwitchRefused("this switch order was already used");
     if (Math.abs(d.now() - order.issuedAt) > ROOT_ORDER_MAX_AGE_MS) throw new SwitchRefused("the switch order is too old");
   }
@@ -205,6 +241,9 @@ export async function applySwitchAsRoot(d: RootSwitchDeps): Promise<{ state: Swi
   if (order.target === "classic" && !files.exists("/usr/bin/docker")) throw new SwitchRefused("this server has no Docker to go back to");
 
   const previousText = resuming ? rec!.previousText : await files.read(configPath);
+  // Root's own evidence for the trial: what runs now, as root lists it, and which daemon run asked.
+  const appsBefore = resuming ? rec!.appsBefore : (await d.listApps(await d.activeEngine().catch(() => "docker" as const)).catch(() => [] as string[])).sort();
+  const applyStart = resuming ? rec!.applyStart : await d.daemonStart().catch(() => null);
   const record: SwitchRecord = {
     version: 1,
     nonce: order.nonce,
@@ -215,6 +254,9 @@ export async function applySwitchAsRoot(d: RootSwitchDeps): Promise<{ state: Swi
     state: "installing",
     startedAt: resuming ? rec!.startedAt : d.now(),
     usedNonces: [...(rec?.usedNonces ?? []), ...(rec && rec.nonce !== order.nonce ? [rec.nonce] : [])].slice(-64),
+    appsBefore,
+    applyStart,
+    starts: [],
   };
   await files.write(recordPath, `${JSON.stringify(record, null, 2)}\n`, 0o644);
 
@@ -242,33 +284,64 @@ export async function applySwitchAsRoot(d: RootSwitchDeps): Promise<{ state: Swi
   return { state: "trial", target: order.target };
 }
 
-/** Root's half of ending a trial: keep the switch, or put the switch file back as it was. */
-export async function settleSwitchAsRoot(d: RootSwitchDeps): Promise<{ state: SwitchState }> {
+/** A switch still in hand: installing, or on trial inside its window (one past its window waits for the owner's next order). */
+export function underWay(rec: SwitchRecord, now: number): boolean {
+  return rec.state === "installing" || (rec.state === "trial" && !(rec.trialUntil !== undefined && now > rec.trialUntil));
+}
+
+export interface SettleResult {
+  state: SwitchState;
+  /** Why the switch was put back, or what still keeps it from being kept. */
+  reason?: string;
+}
+
+/**
+ * Root's half of a trial, run at every daemon start and when the daemon asks to keep the switch.
+ * Every fact it acts on is its own (RootTrialProbes); the daemon's verdict file is read only as
+ * "the daemon found itself healthy", which can keep a switch root also sees working, never put
+ * one back.
+ */
+export async function settleSwitchAsRoot(d: RootSwitchDeps): Promise<SettleResult> {
   const files = d.files;
   const recordPath = d.recordPath ?? SWITCH_RECORD;
-  const v = parseJson(await files.read(d.verdictPath ?? SWITCH_VERDICT_FILE)) as { nonce?: unknown; verdict?: unknown; reason?: unknown } | null;
+  const save = (r: SwitchRecord) => files.write(recordPath, `${JSON.stringify(r, null, 2)}\n`, 0o644);
   const rec = parseSwitchRecord(await files.read(recordPath));
-  if (!rec || typeof v?.nonce !== "string" || rec.nonce !== v.nonce) throw new SwitchRefused("no switch is on trial");
-  if (rec.state === "done" || rec.state === "reverted") {
-    if ((v.verdict === "commit" && rec.state === "done") || (v.verdict === "revert" && rec.state === "reverted")) return { state: rec.state };
-    throw new SwitchRefused("this switch is already settled");
+  if (!rec) throw new SwitchRefused("no switch is on trial");
+  if (rec.state === "done" || rec.state === "reverted") return { state: rec.state };
+  if (rec.state !== "trial") throw new SwitchRefused("the switch hasn't been set yet");
+
+  let r = rec;
+  const id = await d.daemonStart().catch(() => null);
+  if (id && id !== r.applyStart && !r.starts.includes(id)) {
+    r = { ...r, starts: [...r.starts, id].slice(-16) };
+    await save(r);
   }
-  if (v.verdict === "commit") {
-    if (rec.state !== "trial") throw new SwitchRefused("the switch hasn't been set yet");
-    await files.write(recordPath, `${JSON.stringify({ ...rec, state: "done", finishedAt: d.now() }, null, 2)}\n`, 0o644);
-    return { state: "done" };
-  }
-  if (v.verdict !== "revert") throw new SwitchRefused("unknown verdict");
-  if (rec.state === "trial" && rec.trialUntil !== undefined && d.now() > rec.trialUntil) {
-    throw new SwitchRefused("the switch's trial has ended; going back needs the owner's order");
-  }
-  const configPath = d.configPath ?? ARCH_V2_CONFIG;
-  if (rec.previousText === null) await files.remove(configPath);
-  else await files.write(configPath, rec.previousText, 0o644);
-  const reason = typeof v.reason === "string" ? oneLine(v.reason) : "";
-  await files.write(recordPath, `${JSON.stringify({ ...rec, state: "reverted", finishedAt: d.now(), ...(reason ? { reason } : {}) }, null, 2)}\n`, 0o644);
-  d.log?.(`[arch-v2-switch] switched back: ${reason}`);
-  return { state: "reverted" };
+  const revert = async (why: string): Promise<SettleResult> => {
+    const reason = oneLine(why);
+    if (r.trialUntil !== undefined && d.now() > r.trialUntil) return { state: "trial", reason: `${reason}; the switch's trial has ended, so going back needs the owner's order` };
+    const configPath = d.configPath ?? ARCH_V2_CONFIG;
+    if (r.previousText === null) await files.remove(configPath);
+    else await files.write(configPath, r.previousText, 0o644);
+    await save({ ...r, state: "reverted", finishedAt: d.now(), reason });
+    d.log?.(`[arch-v2-switch] switched back: ${reason}`);
+    return { state: "reverted", reason };
+  };
+  // Nothing to judge before the box has started on the new stack.
+  if (r.starts.length === 0) return { state: "trial" };
+  if (r.starts.length > TRIAL_MAX_BOOTS) return revert(`the server didn't come up on the new stack in ${TRIAL_MAX_BOOTS} starts`);
+  const want: EngineKind = r.target === "arch-v2" ? "podman" : "docker";
+  const engine = await d.ensureEngine(want).catch((e: Error) => ({ ok: false, reason: e.message }));
+  if (!engine.ok) return revert(engine.reason ?? `the apps didn't move to ${want === "podman" ? "Podman" : "Docker"}`);
+
+  const v = parseJson(await files.read(d.verdictPath ?? SWITCH_VERDICT_FILE)) as { nonce?: unknown; verdict?: unknown } | null;
+  if (v?.nonce !== r.nonce || v.verdict !== "commit") return { state: "trial" };
+  const running = new Set(await d.listApps(want).catch(() => [] as string[]));
+  const missing = r.appsBefore.filter((a) => !running.has(a));
+  if (missing.length > 0) return { state: "trial", reason: oneLine(`${missing.length} app(s) aren't back yet: ${missing.slice(0, 5).join(", ")}`) };
+  const problems = await d.stackProblems(r.target).catch((e: Error) => [e.message]);
+  if (problems.length > 0) return { state: "trial", reason: oneLine(problems[0]!) };
+  await save({ ...r, state: "done", finishedAt: d.now() });
+  return { state: "done" };
 }
 
 // ── daemon ────────────────────────────────────────────────────────────────
@@ -299,8 +372,6 @@ export interface SwitchDaemonDeps {
   repoPath: string;
   /** Free and total bytes where Podman keeps its images (/var/lib). */
   disk?: () => Promise<{ freeBytes: number; totalBytes: number }>;
-  /** The flagship-* app containers that run now (their names). */
-  runningApps: () => Promise<string[]>;
   root: { apply(): Promise<unknown>; settle(): Promise<unknown> };
   note?: (kind: string, detail: string, ok: boolean) => void;
   now?: () => number;
@@ -308,14 +379,7 @@ export interface SwitchDaemonDeps {
   recordPath?: string;
   orderPath?: string;
   verdictPath?: string;
-  trialPath?: string;
   updatePendingPath?: string;
-}
-
-interface TrialFile {
-  nonce: string;
-  boots: number;
-  appsBefore: string[];
 }
 
 export async function diskAt(path: string): Promise<{ freeBytes: number; totalBytes: number }> {
@@ -332,16 +396,6 @@ export class ArchV2Switcher {
 
   async record(): Promise<SwitchRecord | null> {
     return parseSwitchRecord(await this.d.files.read(this.d.recordPath ?? SWITCH_RECORD));
-  }
-
-  private async trial(): Promise<TrialFile | null> {
-    const t = parseJson(await this.d.files.read(this.d.trialPath ?? SWITCH_TRIAL_FILE)) as Partial<TrialFile> | null;
-    if (!t || typeof t.nonce !== "string" || typeof t.boots !== "number" || !Array.isArray(t.appsBefore)) return null;
-    return { nonce: t.nonce, boots: t.boots, appsBefore: t.appsBefore.filter((a): a is string => typeof a === "string") };
-  }
-
-  private async writeTrial(t: TrialFile): Promise<void> {
-    await this.d.files.write(this.d.trialPath ?? SWITCH_TRIAL_FILE, `${JSON.stringify(t)}\n`, 0o600);
   }
 
   private async dockerImages(): Promise<{ count: number; bytes: number; largest: number }> {
@@ -363,7 +417,7 @@ export class ArchV2Switcher {
       blockers.push({ code: "already", error: target === "arch-v2" ? "This server already runs the new stack." : "This server already runs the classic stack." });
     }
     const rec = await this.record();
-    if (rec && (rec.state === "installing" || rec.state === "trial")) {
+    if (rec && underWay(rec, this.now())) {
       blockers.push({ code: "in-progress", error: "A switch is already under way on this server. Wait until it has finished." });
     }
     if (this.d.files.exists(this.d.updatePendingPath ?? "/var/flagship/update-pending.json")) {
@@ -407,36 +461,34 @@ export class ArchV2Switcher {
   async start(order: ArchV2SwitchOrder, signatureHex: string): Promise<{ ok: true; plan: SwitchPlan } | { ok: false; plan: SwitchPlan }> {
     const plan = await this.plan(order.target);
     if (plan.blockers.length > 0) return { ok: false, plan };
-    const appsBefore = (await this.d.runningApps()).sort();
-    await this.writeTrial({ nonce: order.nonce, boots: 0, appsBefore });
+    await this.d.files.remove(this.d.verdictPath ?? SWITCH_VERDICT_FILE).catch(() => {});
     await this.d.files.write(this.d.orderPath ?? SWITCH_ORDER_FILE, `${JSON.stringify({ order, signatureHex })}\n`, 0o600);
-    try {
-      await this.d.root.apply();
-    } catch (e) {
-      await this.d.files.remove(this.d.trialPath ?? SWITCH_TRIAL_FILE).catch(() => {});
-      throw e;
-    }
+    await this.d.root.apply();
     this.d.note?.("server.stack.switch-started", order.target === "arch-v2" ? "Moving this server to the new stack." : "Moving this server back to the classic stack.", true);
     return { ok: true, plan };
   }
 
-  private async revert(nonce: string, reason: string): Promise<boolean> {
-    await this.d.files.write(this.d.verdictPath ?? SWITCH_VERDICT_FILE, `${JSON.stringify({ nonce, verdict: "revert", reason })}\n`, 0o600);
+  /** Root's turn on the trial; answers the record as root left it (null: root couldn't be asked). */
+  private async askRoot(): Promise<SwitchRecord | null> {
     try {
       await this.d.root.settle();
     } catch (e) {
-      this.d.log?.(`[arch-v2-switch] could not switch back: ${(e as Error).message}`);
-      return false;
+      this.d.log?.(`[arch-v2-switch] root couldn't settle the trial: ${(e as Error).message}`);
+      return null;
     }
-    await this.d.files.remove(this.d.trialPath ?? SWITCH_TRIAL_FILE).catch(() => {});
-    this.d.note?.("server.stack.switch-reverted", `The switch was undone: ${reason}`, false);
+    return this.record();
+  }
+
+  private reverted(rec: SwitchRecord | null): boolean {
+    if (rec?.state !== "reverted") return false;
+    this.d.note?.("server.stack.switch-reverted", `The switch was undone: ${rec.reason ?? "the server didn't come up on the new stack"}`, false);
     return true;
   }
 
   /**
    * At the start of every boot, before the engine is chosen: finishes an install a restart cut
-   * short, and puts back a switch that hasn't reached health in three starts. True when the
-   * switch file changed (the caller reads it again).
+   * short, and lets root count this start (root puts back a switch started more than three times
+   * without being kept, or whose engine move fails). True when the switch file changed.
    */
   async beforeEngine(): Promise<boolean> {
     let rec = await this.record();
@@ -448,68 +500,64 @@ export class ArchV2Switcher {
       } catch (e) {
         this.d.log?.(`[arch-v2-switch] the switch was not finished: ${(e as Error).message}`);
         this.d.note?.("server.stack.switch-reverted", `The switch was undone: ${(e as Error).message}`, false);
-        await this.d.files.remove(this.d.trialPath ?? SWITCH_TRIAL_FILE).catch(() => {});
         return true;
       }
       rec = await this.record();
       resumed = true;
     }
     if (!rec || rec.state !== "trial") return resumed;
-    const t = (await this.trial()) ?? { nonce: rec.nonce, boots: 0, appsBefore: [] };
-    if (t.nonce !== rec.nonce) return resumed;
-    const boots = t.boots + 1;
-    await this.writeTrial({ ...t, boots });
-    if (boots <= TRIAL_MAX_BOOTS) return resumed;
-    return this.revert(rec.nonce, `the server didn't come up healthy in ${TRIAL_MAX_BOOTS} starts on the new stack`);
+    return this.reverted(await this.askRoot()) || resumed;
   }
 
-  /** Once the engine is chosen: a move to Podman that failed is undone at once. */
+  /** Once the engine is chosen: a move that failed goes to root, which tries the move itself and puts the switch back if it fails too. */
   async afterEngine(engine: EngineKind, engineNote?: string): Promise<boolean> {
     const rec = await this.record();
     if (!rec || rec.state !== "trial") return false;
     const want: EngineKind = rec.target === "arch-v2" ? "podman" : "docker";
     if (engine === want) return false;
-    return this.revert(rec.nonce, engineNote ?? `the apps didn't move to ${want === "podman" ? "Podman" : "Docker"}`);
+    this.d.log?.(`[arch-v2-switch] the apps didn't move to ${want}: ${engineNote ?? "no reason given"}`);
+    return this.reverted(await this.askRoot());
   }
 
   /**
-   * After the boot: keep the switch once the box is healthy and every app that ran before the
-   * order runs again; otherwise put it back and restart. Returns what it did.
+   * After the boot: once the daemon finds itself healthy it asks root to keep the switch, which
+   * root does only when it sees every app back on the new engine. Otherwise the daemon restarts
+   * for another try; root puts the switch back after three starts. Returns what happened.
    */
-  async settle(o: { awaitHealthy: () => Promise<boolean>; requestRestart: () => void; pollMs?: number; appsBackMs?: number }): Promise<"none" | "kept" | "reverted" | "unsettled"> {
+  async settle(o: { awaitHealthy: () => Promise<boolean>; requestRestart: () => void; pollMs?: number; appsBackMs?: number }): Promise<"none" | "kept" | "reverted" | "restarting" | "unsettled"> {
     const rec = await this.record();
     if (!rec || rec.state !== "trial") return "none";
-    const t = await this.trial();
-    const missing = async (): Promise<string[]> => {
-      const running = new Set(await this.d.runningApps().catch(() => [] as string[]));
-      return (t?.nonce === rec.nonce ? t.appsBefore : []).filter((a) => !running.has(a));
-    };
-    let reason = "";
-    if (!(await o.awaitHealthy().catch(() => false))) reason = "the server didn't report healthy on the new stack";
-    else {
+    const verdictPath = this.d.verdictPath ?? SWITCH_VERDICT_FILE;
+    let reason = "the server didn't report healthy on the new stack";
+    if (await o.awaitHealthy().catch(() => false)) {
+      await this.d.files.write(verdictPath, `${JSON.stringify({ nonce: rec.nonce, verdict: "commit" })}\n`, 0o600);
       const deadline = this.now() + (o.appsBackMs ?? APPS_BACK_MS);
-      let left = await missing();
-      while (left.length > 0 && this.now() < deadline) {
-        await new Promise((r) => setTimeout(r, o.pollMs ?? 30_000));
-        left = await missing();
+      for (;;) {
+        const after = await this.askRoot();
+        if (!after) return "unsettled";
+        if (after.state === "done") {
+          await this.d.files.remove(verdictPath).catch(() => {});
+          this.d.note?.("server.stack.switched", rec.target === "arch-v2" ? "This server now runs the new stack." : "This server runs the classic stack again.", true);
+          return "kept";
+        }
+        if (this.reverted(after)) {
+          o.requestRestart();
+          return "reverted";
+        }
+        if (this.now() >= deadline) {
+          reason = "the apps didn't all come back on the new stack";
+          break;
+        }
+        await new Promise((r) => setTimeout(r, o.pollMs ?? 60_000));
       }
-      if (left.length > 0) reason = `${left.length} app(s) didn't come back: ${left.slice(0, 5).join(", ")}`;
     }
-    if (!reason) {
-      await this.d.files.write(this.d.verdictPath ?? SWITCH_VERDICT_FILE, `${JSON.stringify({ nonce: rec.nonce, verdict: "commit" })}\n`, 0o600);
-      try {
-        await this.d.root.settle();
-      } catch (e) {
-        this.d.log?.(`[arch-v2-switch] could not keep the switch: ${(e as Error).message}`);
-        return "unsettled";
-      }
-      await this.d.files.remove(this.d.trialPath ?? SWITCH_TRIAL_FILE).catch(() => {});
-      this.d.note?.("server.stack.switched", rec.target === "arch-v2" ? "This server now runs the new stack." : "This server runs the classic stack again.", true);
-      return "kept";
+    if (rec.trialUntil !== undefined && this.now() > rec.trialUntil) {
+      this.d.log?.(`[arch-v2-switch] ${reason}; the trial has ended, so the switch stays until the owner orders again`);
+      return "unsettled";
     }
-    if (!(await this.revert(rec.nonce, reason))) return "unsettled";
+    this.d.log?.(`[arch-v2-switch] ${reason}; restarting for another try`);
     o.requestRestart();
-    return "reverted";
+    return "restarting";
   }
 }
 
@@ -533,16 +581,21 @@ export interface ArchV2SwitchHttpOptions {
   now?: () => number;
   /** Which implementation each Rust-path component runs (rustStack/componentStatus.ts); absent: not shown. */
   components?: () => Promise<RustComponentStatuses>;
+  /** The switch orders this box already took (persisted: `arch-v2-used-nonces.json`), refused inside the window too. */
+  usedNonces: UsedNonceStore;
 }
 
 /**
  * `GET /api/stack` (owner sessions): the stack, the switch's record, the plan for the other stack and,
  * where the box can read them, which implementation each Rust-path component runs (`components`).
  * `POST /api/stack/switch` `{ order, signature, pqSignature?, dryRun? }`: the owner's signed
- * order; a dry run answers with the plan and changes nothing.
+ * order; a dry run answers with the plan and changes nothing. Each order is taken once: its nonce
+ * is kept once it reached root, and a used one is refused, dry runs included. A dry run burns
+ * nothing, since it only reads the plan and the apps send the order they dry-ran.
  */
 export function buildArchV2SwitchHttp(o: ArchV2SwitchHttpOptions) {
   const now = o.now ?? (() => Date.now());
+  let starting = false;
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     if (req.path === "/api/stack") {
       if (req.method !== "GET") return json(405, { error: "method not allowed" });
@@ -583,14 +636,25 @@ export function buildArchV2SwitchHttp(o: ArchV2SwitchHttpOptions) {
       hybrid: hybridOrderSignature(canonicalArchV2SwitchOrder(order), env.pqSignature),
     });
     if (!authorized) return json(403, { error: "invalid signature" });
+    const rec = await o.switcher.record().catch(() => null);
+    if ((await o.usedNonces.has(order.nonce, order.issuedAt)) || rec?.nonce === order.nonce || rec?.usedNonces.includes(order.nonce)) {
+      return json(409, { error: "This switch order was already used. Send it again.", code: "replayed" });
+    }
     if (env.dryRun === true) return json(200, { ok: true, dryRun: true, plan: await o.switcher.plan(order.target) });
+    if (starting) return json(409, { error: "A switch is already being started on this server.", code: "in-progress" });
+    starting = true;
+    const spend = () => o.usedNonces.mark(order.nonce).catch(() => {});
     let r: Awaited<ReturnType<ArchV2Switcher["start"]>>;
     try {
       r = await o.switcher.start(order, env.signature);
     } catch (e) {
+      await spend();
       return json(409, { error: `The switch couldn't start: ${(e as Error).message}`, code: "switch-failed" });
+    } finally {
+      starting = false;
     }
     if (!r.ok) return json(409, { error: r.plan.blockers[0]!.error, code: r.plan.blockers[0]!.code, plan: r.plan });
+    await spend();
     setTimeout(() => o.requestRestart(), 500).unref?.();
     return json(202, { ok: true, state: "restarting", plan: r.plan });
   };

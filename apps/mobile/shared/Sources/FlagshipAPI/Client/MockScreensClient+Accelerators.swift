@@ -138,8 +138,14 @@ func GpuApprovalOrder_request(_ o: [String: Any]) -> GpuApprovalRequest? {
           let gen = i64(o["generation"]), let backend = o["backend"] as? String, let n = i64(o["maxCount"]),
           let caps = o["caps"] as? [String], let pol = o["policies"] as? [String], let iso = o["isolation"] as? String,
           let secrecy = o["secrecy"] as? Bool else { return nil }
+    var share: GpuShareLimits?
+    if let sh = o["share"] as? [String: Any], let pct = i64(sh["computePercent"]), let mem = i64(sh["memoryMib"]) {
+        share = GpuShareLimits(computePercent: Int(pct), memoryMib: mem)
+    }
     return GpuApprovalRequest(server: server, appId: appId, installationId: inst, generation: gen, backend: backend, maxCount: Int(n),
                               caps: caps, policies: pol, isolation: iso, secrecy: secrecy,
-                              trustDomain: o["trustDomain"] as? String, ownerConsent: o["ownerConsent"] as? String)
+                              trustDomain: o["trustDomain"] as? String, ownerConsent: o["ownerConsent"] as? String,
+                              container: o["container"] as? String, userspace: o["userspace"] as? String,
+                              maxRuntimeMs: i64(o["maxRuntimeMs"]), share: share)
 }
 #endif

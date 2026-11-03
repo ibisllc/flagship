@@ -577,6 +577,15 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="optionalWiFiForAServer" xml:space="preserve">
     <value>Wi-Fi facultatif pour un serveur sans Ethernet. Intégré à cet installateur à usage unique et mémorisé sur ce PC pour votre compte uniquement.</value>
   </data>
+  <data name="diskToInstallOnOptional" xml:space="preserve">
+    <value>Disque où installer (facultatif)</value>
+  </data>
+  <data name="diskToInstallOnHelp" xml:space="preserve">
+    <value>Nécessaire seulement si l'ordinateur a plus d'un disque. Sans cela, l'installateur s'arrête sur cet ordinateur, n'efface rien et affiche ses disques à l'écran. Saisissez by-id: suivi d'un nom de cette liste, serial: suivi du numéro de série du disque, ou size: suivi de sa taille exacte en octets.</value>
+  </data>
+  <data name="diskToInstallOnInvalid" xml:space="preserve">
+    <value>Commencez par by-id:, serial: ou size:, suivi du nom, du numéro de série ou de la taille en octets du disque, sans espaces.</value>
+  </data>
   <data name="readyToBoot" xml:space="preserve">
     <value>Prêt à démarrer</value>
   </data>

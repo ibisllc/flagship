@@ -75,6 +75,7 @@ async function main(): Promise<void> {
     identitySeed: identity, pqSeed, swk, cgk, store: fileKeyStore(STATE), ...(tls ? { tls } : {}), ...(acme ? { acme } : {}),
     policyPath: join(STATE, "policy.json"),
     archivePoolPath: join(STATE, "archive-keks.json"),
+    revocationsPath: join(STATE, "revocations.json"),
     owner: owner && policy ? { irkPubHex: owner.irkPubHex, serverFqdn: policy.serverFqdn, adminRootPubHex: owner.adminRootPubHex ?? null } : null,
     ceremony,
   });

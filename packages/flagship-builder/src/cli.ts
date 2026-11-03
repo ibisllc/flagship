@@ -171,6 +171,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: await resolveWifiPassword(rest),
     bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
+    targetDisk: extractFlagValue(rest, "--target-disk"),
   };
   // Emit the Debian d-i preseed.cfg (this command is for inspection;
   // `prepare`/`write` bake it into the ISO).
@@ -229,6 +230,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: await resolveWifiPassword(rest),
     bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
+    targetDisk: extractFlagValue(rest, "--target-disk"),
   };
   // Bake the d-i preseed into the ISO; anything but a Debian installer is
   // refused. --family debian skips the detection (tests / overrides).
@@ -445,6 +447,7 @@ async function cmdWrite(rest: string[]): Promise<void> {
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: await resolveWifiPassword(rest),
+    targetDisk: extractFlagValue(rest, "--target-disk"),
   });
   if (!result.ok) {
     console.error(`write failed: ${result.reason}`);
@@ -587,6 +590,11 @@ Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:
   --wifi-ssid <name> --wifi-password <pass>   bake netplan Wi-Fi into the image
   --wifi-password-file <path>                 the password from a file (keeps it out of ps)
   (a burn-time local input; NEVER part of the signed recipe)
+
+Target disk (a machine with more than one disk) — pass to user-data/prepare/write:
+  --target-disk by-id:<name> | serial:<serial> | size:<bytes>
+  The installer erases exactly the one disk this names. Without it, a machine with
+  more than one fixed disk stops before erasing anything and lists its disks.
 
 Debug remote-access image (bring-up / diagnosis only) — pass to user-data/prepare:
   --debug-ssh-key-file <path> | --debug-ssh-key "<pubkey>"

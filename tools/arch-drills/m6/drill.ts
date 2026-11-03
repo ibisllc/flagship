@@ -269,8 +269,10 @@ function stage(name: string, o: { mode: "auto" | "approve"; policy: "strict" | "
   stub("curl", `first="$1"; shift\nexec /usr/bin/curl "$first" --connect-to boot.flagshipserver.com:443:127.0.0.1:${port} "$@"`);
   stub("mount", "exit 1");
   stub("reboot", `touch "${R}/run/rebooted"`);
-  // blkid: the drill's own loop volume (the VM's root is not LUKS).
-  stub("blkid", `echo ${S.loop}`);
+  // blkid: the drill's own loop volume (the VM's root is not LUKS), pinned by the UUID the hook
+  // would have recorded (bootFsMount.ts): one device, of type crypto_LUKS.
+  writeFileSync(join(R, "boot/flagship-luks-uuid"), "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0\n");
+  stub("blkid", `case "$1" in -s) echo crypto_LUKS;; *) echo ${S.loop};; esac`);
   writeFileSync(join(R, "premount.sh"), buildUnlockPremountScript());
   return R;
 }

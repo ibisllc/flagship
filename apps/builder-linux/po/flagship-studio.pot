@@ -278,6 +278,18 @@ msgstr ""
 msgid "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only."
 msgstr ""
 
+#: wizard.py:1762 (prose)
+msgid "Disk to install on (optional)"
+msgstr ""
+
+#: wizard.py:1770 (prose)
+msgid "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes."
+msgstr ""
+
+#: wizard.py:1780 (prose)
+msgid "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces."
+msgstr ""
+
 #: wizard.py:1655 (label=)
 msgid "Flash to USB"
 msgstr ""

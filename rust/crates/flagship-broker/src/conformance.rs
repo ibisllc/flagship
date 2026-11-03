@@ -43,7 +43,10 @@ pub fn exec_json(e: &PrivExec) -> Value {
         let c: Vec<Value> = e
             .copy_in
             .iter()
-            .map(|c| json!({ "from": c.from, "to": c.to }))
+            .map(|c| match c.max_bytes {
+                Some(n) => json!({ "from": c.from, "to": c.to, "maxBytes": n }),
+                None => json!({ "from": c.from, "to": c.to }),
+            })
             .collect();
         m.insert("copyIn".into(), Value::from(c));
     }

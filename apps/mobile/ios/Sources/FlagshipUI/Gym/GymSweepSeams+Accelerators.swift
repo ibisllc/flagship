@@ -20,7 +20,7 @@ extension GymSweepSeams {
                                    catalog: v.catalog, devices: v.devices, queue: v.queue)
                 : v
         }
-        // Render and Train ask to use a GPU; Photos may already (flagship/gpu-approval/v1).
+        // Render and Train ask to use a GPU; Photos may already (flagship/gpu-approval/v2).
         if args.contains("-smoke-gpu-approvals") {
             let a = MockAccelerators.approvalsFixture()
             m.view = (m.view ?? MockAccelerators.fixture()).with(pendingApprovals: a.pending, approvals: a.granted)

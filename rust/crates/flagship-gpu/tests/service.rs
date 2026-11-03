@@ -221,6 +221,7 @@ fn max_runtime_is_enforced_by_the_ticker() {
     );
     let mut a = claim_args("a", "app");
     a["maxRuntimeMs"] = json!(1000);
+    let a = owner().sign_claim(&a);
     assert_eq!(s.handle("gpu.claim", &a).unwrap()["state"], "reserved");
     let att = s
         .handle(
@@ -853,6 +854,7 @@ fn a_restarted_gpud_still_ends_a_job_at_its_maximum_runtime() {
     let (h, _r, mut s) = svc(dir.path(), vec![SimGpu::rtx4090(1)], cat());
     let mut a = claim_args("a", "app");
     a["maxRuntimeMs"] = json!(1000);
+    let a = owner().sign_claim(&a);
     s.handle("gpu.claim", &a).unwrap();
     run(&mut s, &h, "a", 10_000);
     drop(s);

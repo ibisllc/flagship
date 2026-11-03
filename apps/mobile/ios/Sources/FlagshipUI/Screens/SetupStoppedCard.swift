@@ -57,6 +57,8 @@ struct SetupStoppedCard: View {
     static func explanation(step: String?, canCancel: Bool) -> String {
         var text = String(localized: "This server didn't finish installing.")
         if let step, !step.isEmpty { text += " " + (step.hasSuffix(".") ? step : step + ".") }
+        // Nothing was erased and the order still stands: making the installer again is the fix.
+        if step?.hasSuffix(InstallDiskStop.advice) == true { return text }
         text += canCancel
             ? " Cancel this order to free the name and create the server again, or contact us and we'll look at it."
             : " Contact us and we'll look at it."

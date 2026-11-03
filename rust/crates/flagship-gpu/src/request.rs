@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::coop::ShareLimits;
 use crate::device::{Backend, Capability};
 use crate::policy::{AllocationPolicy, PolicyKind};
 use crate::provider::IsolationProfile;
@@ -76,6 +77,17 @@ pub struct GpuApproval {
     /// of the owner's signed consent.
     pub trust_domain: Option<String>,
     pub owner_consent: Option<String>,
+    /// What the claim carrying this approval must ask for exactly: the owner signs these too
+    /// (`owner_approval.rs`), so the daemon can't move a device to another container, pick another
+    /// userspace image, lift the run-time limit or widen a share.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub userspace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_runtime_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<ShareLimits>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

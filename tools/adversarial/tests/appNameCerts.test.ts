@@ -171,6 +171,8 @@ describe("app-name certificate grant", () => {
       serverDomain: SERVER,
       stkPubHex: hex(POD.publicKey),
       authority: () => ({ username: "alice", ownerIrkPub: IRK.publicKey, adminRootPub: ADMIN.publicKey }) as never,
+      // grantWire's fixed issuedAt: a grant is kept for 180 days (serverWildcardGrantInDate).
+      now: () => 1_760_000_000_000 + 60_000,
     });
     const make = (signer: { privateKey: Uint8Array }, over: Partial<{ serverDomain: string; stk: Uint8Array }> = {}) => {
       const w = grantWire({ signer, ...(over.serverDomain ? { serverDomain: over.serverDomain } : {}), ...(over.stk ? { stk: over.stk } : {}) }, POD.publicKey);

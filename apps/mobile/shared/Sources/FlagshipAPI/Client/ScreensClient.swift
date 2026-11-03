@@ -195,7 +195,7 @@ public protocol ScreensClient: Sendable {
     func accelerators() async throws -> AcceleratorsView
     /// `POST /api/screens/accelerators/stop {allocationId}`: take a GPU back from the app holding it.
     func stopAccelerator(allocationId: String) async throws
-    /// `POST /api/screens/accelerators/approvals`: the owner's signed `flagship/gpu-approval/v1` for one app installation.
+    /// `POST /api/screens/accelerators/approvals`: the owner's signed `flagship/gpu-approval/v2` for one app installation.
     func approveGpu(body: [String: Any]) async throws
     /// `POST /api/screens/accelerators/approvals/withdraw`: the signed `flagship/gpu-approval-withdraw/v1`.
     func withdrawGpuApproval(body: [String: Any]) async throws

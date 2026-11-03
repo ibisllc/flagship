@@ -221,8 +221,11 @@ internal fun SetupStoppedCard(
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(stringResource(R.string.setup_stopped), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
             Text(
-                stringResource(R.string.this_server_didnt_finish_installing) + (step?.takeIf { it.isNotBlank() }?.let { ". $it" } ?: "") + ". " +
-                    "Cancel this order to free the name and create the server again, or contact us and we'll look at it.",
+                com.flagshipserver.app.core.InstallDiskStop.setupStoppedExplanation(
+                    stringResource(R.string.this_server_didnt_finish_installing),
+                    step,
+                    stringResource(R.string.setup_stopped_cancel_or_contact),
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )

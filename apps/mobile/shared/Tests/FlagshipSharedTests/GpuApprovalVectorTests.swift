@@ -25,7 +25,12 @@ final class GpuApprovalVectorTests: XCTestCase {
                                   generation: (app["generation"] as! NSNumber).int64Value, backend: a["backend"] as! String,
                                   maxCount: (a["maxCount"] as! NSNumber).intValue, caps: a["capabilities"] as! [String],
                                   policies: a["policies"] as! [String], isolation: a["isolation"] as! String,
-                                  secrecy: a["secrecy"] as! Bool, trustDomain: a["trustDomain"] as? String, ownerConsent: a["ownerConsent"] as? String)
+                                  secrecy: a["secrecy"] as! Bool, trustDomain: a["trustDomain"] as? String, ownerConsent: a["ownerConsent"] as? String,
+                                  container: a["container"] as? String, userspace: a["userspace"] as? String,
+                                  maxRuntimeMs: (a["maxRuntimeMs"] as? NSNumber)?.int64Value,
+                                  share: (a["share"] as? [String: Any]).map {
+                                      GpuShareLimits(computePercent: ($0["computePercent"] as! NSNumber).intValue, memoryMib: ($0["memoryMib"] as! NSNumber).int64Value)
+                                  })
     }
 
     func testEveryCase() throws {
@@ -75,6 +80,21 @@ final class GpuApprovalVectorTests: XCTestCase {
                                caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true))
         bad(GpuApprovalRequest(server: s, appId: "a", installationId: "i", generation: 1, backend: "nvidia-cuda", maxCount: 1,
                                caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: "a b"))
+        func with(container: String? = nil, userspace: String? = nil, maxRuntimeMs: Int64? = nil, share: GpuShareLimits? = nil) -> GpuApprovalRequest {
+            GpuApprovalRequest(server: s, appId: "a", installationId: "i", generation: 1, backend: "nvidia-cuda", maxCount: 1,
+                               caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true,
+                               container: container, userspace: userspace, maxRuntimeMs: maxRuntimeMs, share: share)
+        }
+        XCTAssertEqual(String(decoding: try GpuApprovalOrder.canonical(server: s, with(), issuedAt: 1), as: UTF8.self),
+                       "flagship/gpu-approval/v2|home.alice.flagship.services|a|i|1|nvidia-cuda|1|compute|exclusive|gvisor-nvproxy|1|||flagship-a||||1")
+        bad(with(container: ""))
+        bad(with(container: "-flagship"))
+        bad(with(container: "flagship|x"))
+        bad(with(userspace: "cuda|12"))
+        bad(with(maxRuntimeMs: 0))
+        bad(with(share: GpuShareLimits(computePercent: 0, memoryMib: 1)))
+        bad(with(share: GpuShareLimits(computePercent: 101, memoryMib: 1)))
+        bad(with(share: GpuShareLimits(computePercent: 50, memoryMib: 0)))
     }
 
     func testWithdrawVectors() throws {

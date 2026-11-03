@@ -53,10 +53,15 @@ export interface GpuApprovalWire {
   /** Cooperative sharing only: the owner's trust domain and signed consent. */
   trustDomain: string | null;
   ownerConsent: string | null;
+  /** What the claim must carry exactly; the owner signs these too (`flagship/gpu-approval/v2`). */
+  container?: string;
+  userspace?: string | null;
+  maxRuntimeMs?: number | null;
+  share?: ShareLimits | null;
 }
 
 /**
- * The owner's signature over the approval (`flagship/gpu-approval/v1`, @flagship/protocol
+ * The owner's signature over the approval (`flagship/gpu-approval/v2`, @flagship/protocol
  * gpuApproval.ts), which gpud checks itself against keyd's pinned owner key. Only the box's own
  * local AI, exclusive and secret, is admitted without one.
  */
@@ -180,6 +185,10 @@ export function approvalForApp(
     secrecy: owner.secrecy,
     trustDomain: owner.trustDomain ?? null,
     ownerConsent: owner.ownerConsent ?? null,
+    container: `flagship-${app.appId}`,
+    userspace: null,
+    maxRuntimeMs: null,
+    share: null,
   };
 }
 
@@ -283,6 +292,12 @@ export class AcceleratorBroker {
     await this.call("gpu.revokeApp", { appId });
   }
 
+  /** The owner's signed withdrawal: gpud raises its own floor and stops the app's GPU work. */
+  async withdrawApproval(w: { appId: string; installationId: string; generation: number; issuedAt: number; signature: string }): Promise<void> {
+    const { appId, installationId, generation, issuedAt, signature } = w;
+    await this.call("gpu.withdrawApproval", { appId, installationId, generation, issuedAt, signature });
+  }
+
   async selfTest(): Promise<unknown> {
     return await this.call("gpu.selftest");
   }
@@ -296,7 +311,6 @@ export interface AppAcceleratorRequest {
   approvalProof?: GpuApprovalProof;
   /** Why there is no proof yet (gpu/approvals.ts): the deploy never claims without one. */
   pendingReason?: string;
-  share?: ShareLimits;
   /** How long a deploy waits in the queue before it gives up. */
   queueWaitMs?: number;
 }
@@ -345,6 +359,8 @@ export class AppAccelerators {
     if (!inv.available || !inv.devices.some((d) => d.backend === req.requirement.backend && !d.displayOwned)) {
       return cpu("This server has no GPU this app can use.");
     }
+    const a = req.approval;
+    if (a.container !== container) return { kind: "refused", reason: "This app's GPU approval is for another container; approve it again on this server's page." };
     const allocationId = `app-${serviceId}-${this.now().toString(36)}`.slice(0, 128);
     let claim: ClaimResult;
     try {
@@ -356,7 +372,9 @@ export class AppAccelerators {
         requirement: req.requirement,
         approval: req.approval,
         ...(req.approvalProof ? { approvalProof: req.approvalProof } : {}),
-        ...(req.share ? { share: req.share } : {}),
+        ...(a.userspace ? { userspace: a.userspace } : {}),
+        ...(a.maxRuntimeMs ? { maxRuntimeMs: a.maxRuntimeMs } : {}),
+        ...(a.share ? { share: a.share } : {}),
       });
     } catch (e) {
       if (e instanceof GpudError && e.code === "forbidden") return { kind: "refused", reason: "This app's GPU use isn't approved for what it asks." };

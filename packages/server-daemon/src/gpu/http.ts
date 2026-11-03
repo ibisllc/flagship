@@ -9,7 +9,7 @@
  *   POST /api/screens/accelerators/self-test
  *   POST /api/screens/accelerators/approvals     { server, appId, installationId, generation, backend, maxCount,
  *                                                  caps, policies, isolation, secrecy, trustDomain, ownerConsent,
- *                                                  issuedAt, signature }   (`flagship/gpu-approval/v1`)
+ *                                                  issuedAt, signature }   (`flagship/gpu-approval/v2`)
  *   POST /api/screens/accelerators/approvals/withdraw
  *                                                { appId, installationId, generation, issuedAt, signature }
  *                                                  (`flagship/gpu-approval-withdraw/v1`)

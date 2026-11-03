@@ -1,6 +1,7 @@
 package com.flagshipserver.app.core.pq
 
 import com.flagshipserver.app.api.GpuApprovalRequest
+import com.flagshipserver.app.api.GpuShareLimits
 import com.flagshipserver.app.core.GpuApprovalOrders
 import com.flagshipserver.app.core.HexUtil
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -34,6 +35,10 @@ class GpuApprovalVectorsTest {
             a["maxCount"]!!.jsonPrimitive.int, a["capabilities"]!!.jsonArray.map { it.jsonPrimitive.content },
             a["policies"]!!.jsonArray.map { it.jsonPrimitive.content }, a.s("isolation"), a["secrecy"]!!.jsonPrimitive.boolean,
             a.opt("trustDomain"), a.opt("ownerConsent"),
+            container = a.opt("container"), userspace = a.opt("userspace"), maxRuntimeMs = a.opt("maxRuntimeMs")?.toLong(),
+            share = a["share"]?.takeIf { it !is JsonNull }?.jsonObject?.let {
+                GpuShareLimits(it["computePercent"]!!.jsonPrimitive.int, it["memoryMib"]!!.jsonPrimitive.long)
+            },
         )
     }
 
@@ -68,7 +73,13 @@ class GpuApprovalVectorsTest {
         val bad = listOf(
             r.copy(appId = "alice|render"), r.copy(installationId = ""), r.copy(maxCount = 17), r.copy(maxCount = 0),
             r.copy(caps = emptyList()), r.copy(policies = listOf("shared")), r.copy(backend = "cuda"), r.copy(isolation = "none"),
-            r.copy(trustDomain = "a b"), r.copy(generation = -1),
+            r.copy(trustDomain = "a b"), r.copy(generation = -1), r.copy(container = null), r.copy(container = ""),
+            r.copy(container = "-flagship"), r.copy(container = "flagship|x"), r.copy(userspace = "cuda|12"), r.copy(maxRuntimeMs = 0),
+            r.copy(share = GpuShareLimits(0, 1)), r.copy(share = GpuShareLimits(101, 1)), r.copy(share = GpuShareLimits(50, 0)),
+        )
+        assertEquals(
+            "flagship/gpu-approval/v2|home.alice.flagship.services|alice--render|inst-7f3a|3|nvidia-cuda|1|compute|exclusive|gvisor-nvproxy|1|||flagship-alice--render||||1",
+            String(GpuApprovalOrders.canonical(s, r, 1), Charsets.UTF_8),
         )
         for (b in bad) assertThrows(IllegalArgumentException::class.java) { GpuApprovalOrders.canonical(s, b, 1) }
         assertThrows(IllegalArgumentException::class.java) { GpuApprovalOrders.canonical("Home.alice", r, 1) }

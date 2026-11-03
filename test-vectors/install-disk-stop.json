@@ -1,0 +1,69 @@
+{
+  "comment": "The burn option targetDisk and the install-timeline stop the USB/ISO installer posts when it can't tell which disk to erase (B2 #9; packages/flagship-builder/src/preseed.ts resolveTargetDisk). Every Studio and Android's USB burn validate the field with targetDiskPattern after trimming (empty = no option); iOS, Android and the webapp turn each stop detail into their own sentence plus the re-burn advice. kind: several | none | missing | ambiguous, or null for any other failure (shown as the box's own words).",
+  "targetDiskPattern": "^(by-id:[A-Za-z0-9._:+@-]{1,200}|serial:[A-Za-z0-9._-]{1,100}|size:[1-9][0-9]{0,19})$",
+  "targetDisk": {
+    "valid": [
+      "by-id:nvme-Samsung_SSD_980_1TB_S64ANS0T123456",
+      "by-id:ata-WDC_WD20EZAZ-00L9GB0_WD-WX12A3456789",
+      "by-id:wwn-0x5002538e40a1b2c3",
+      "by-id:usb-Generic_Flash_Disk_1234:0",
+      "serial:S64ANS0T123456",
+      "serial:WD-WX12A3456789",
+      "size:512110190592",
+      "size:1"
+    ],
+    "invalid": [
+      "sda",
+      "/dev/sda",
+      "disk:sda",
+      "by-id:",
+      "by-id:a b",
+      "by-id:../../sda/x",
+      "by-id:$(id)",
+      "serial:",
+      "serial:x;reboot",
+      "serial:a/b",
+      "size:0",
+      "size:01",
+      "size:12GB",
+      "size:123456789012345678901",
+      "SERIAL:ABC"
+    ]
+  },
+  "stops": [
+    {
+      "detail": "This machine has 2 disks that could be erased (500 GB, 2000 GB). Nothing was erased. Name the disk to install on and make the installer again.",
+      "kind": "several",
+      "count": "2",
+      "sizes": "500 GB, 2000 GB"
+    },
+    {
+      "detail": "This machine has 3 disks that could be erased (256 GB, 1000 GB, 1000 GB). Nothing was erased. Name the disk to install on and make the installer again.",
+      "kind": "several",
+      "count": "3",
+      "sizes": "256 GB, 1000 GB, 1000 GB"
+    },
+    {
+      "detail": "This machine has no fixed disk of 8 GB or more to install on. Nothing was erased. Name the disk to install on and make the installer again.",
+      "kind": "none"
+    },
+    {
+      "detail": "The disk this installer was made for (serial:NOPE) is not in this machine. Nothing was erased.",
+      "kind": "missing",
+      "pin": "serial:NOPE"
+    },
+    {
+      "detail": "The disk this installer was made for (size:500000000000) matches more than one disk. Nothing was erased.",
+      "kind": "ambiguous",
+      "pin": "size:500000000000"
+    },
+    {
+      "detail": "Setup stopped while Expanding the disk to 68 GB (line 66)",
+      "kind": null
+    },
+    {
+      "detail": "Disk full",
+      "kind": null
+    }
+  ]
+}

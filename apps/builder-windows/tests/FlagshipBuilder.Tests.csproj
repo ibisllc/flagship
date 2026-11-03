@@ -45,6 +45,7 @@
     <Compile Include="..\src\NativePairingCrypto.cs" />
     <Compile Include="..\src\NativeIsoRemaster.cs" />
     <Compile Include="..\src\NativePreseedEngine.cs" />
+    <Compile Include="..\src\TargetDisk.cs" />
     <Compile Include="..\src\NativeBuildPipeline.cs" />
     <!-- The pure VM core (mirrors apps/builder-mac FlagshipBuilderCore/VM) is
          WPF-free by design; pinned against the shared golden vectors. -->
@@ -77,6 +78,7 @@
     <Compile Include="..\src\WindowsSupport.cs" />
     <Compile Include="DiskEnumeratorTests.cs" />
     <Compile Include="WindowsSupportTests.cs" />
+    <Compile Include="TargetDiskTests.cs" />
     <Compile Include="VerifyResultTests.cs" />
     <Compile Include="WizardStateMachineTests.cs" />
     <Compile Include="Ed25519VerifyTests.cs" />

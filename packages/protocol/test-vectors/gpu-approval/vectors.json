@@ -1,5 +1,5 @@
 {
-  "about": "flagship/gpu-approval/v1: the owner's GPU approval for one app installation on one box, signed by the admin root (else the IRK); flagship-gpud verifies it against keyd's owner.json and policy.json.",
+  "about": "flagship/gpu-approval/v2: the owner's GPU approval for one app installation on one box, with the container, userspace, run-time limit and share its claim must carry, signed by the admin root (else the IRK); flagship-gpud verifies it against keyd's owner.json and policy.json, and refuses one signed at or before the owner's withdrawal (flagship/gpu-approval-withdraw/v1).",
   "anchor": {
     "server": "home.alice.flagship.services",
     "signerHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
@@ -29,13 +29,17 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
-      "canonical": "flagship/gpu-approval/v1|home.alice.flagship.services|alice--render|inst-7f3a|3|nvidia-cuda|1|compute|exclusive|gvisor-nvproxy|1|||1800000000000",
+      "canonical": "flagship/gpu-approval/v2|home.alice.flagship.services|alice--render|inst-7f3a|3|nvidia-cuda|1|compute|exclusive|gvisor-nvproxy|1|||flagship-alice--render||||1800000000000",
       "expect": true
     },
     {
@@ -60,13 +64,20 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": false,
         "trustDomain": "family",
-        "ownerConsent": "consent-2026-10-25"
+        "ownerConsent": "consent-2026-10-25",
+        "container": "flagship-alice--photos",
+        "userspace": "cuda-12.9-runtime",
+        "maxRuntimeMs": null,
+        "share": {
+          "computePercent": 50,
+          "memoryMib": 8000
+        }
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "adec13d8f2db662af853fdfd24c4dafa8d3f71e532329f1ad004af7476cf90484b2dd5a868dcbc8bfaf014282776595a197481fa4fa00680e60683e0fd951604"
+        "signature": "a21743c0e9301e399756d5512249596fae913806adeb3e78ca006e774e508d1ba59b5494406f7fab7e64783f9dfc2a0e5639b9424ce6f8bcb47bf2b4c4042201"
       },
-      "canonical": "flagship/gpu-approval/v1|home.alice.flagship.services|alice--photos|inst-01|1|nvidia-cuda|1|compute,video-encode|cooperative,exclusive|gvisor-nvproxy|0|family|consent-2026-10-25|1800000000000",
+      "canonical": "flagship/gpu-approval/v2|home.alice.flagship.services|alice--photos|inst-01|1|nvidia-cuda|1|compute,video-encode|cooperative,exclusive|gvisor-nvproxy|0|family|consent-2026-10-25|flagship-alice--photos|cuda-12.9-runtime||50:8000|1800000000000",
       "expect": true
     },
     {
@@ -89,13 +100,17 @@
         "isolation": "vm-passthrough",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-aitrain-0123456789abcdef",
+        "userspace": null,
+        "maxRuntimeMs": 3600000,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "e92768df1853663c1b63b6e84c0bfb90a8457bb72cda3e9ee71d2b3f85af7fffb42563372f7f7b6b42bc8f0c63738b19fa1218042a35061761e5f59cff95eb06"
+        "signature": "2abe7a3d7e3d819c915a869f380b053e85aef6eb184c1c61356364f1742ed8560c70cc7c9ac7f6c564720f77ef9ed09b01a1bec9a534242880ea93c3d261be0d"
       },
-      "canonical": "flagship/gpu-approval/v1|home.alice.flagship.services|alice--train|inst-9|12|amd-rocm|4|compute,graphics|exclusive|vm-passthrough|1|||1800000000000",
+      "canonical": "flagship/gpu-approval/v2|home.alice.flagship.services|alice--train|inst-9|12|amd-rocm|4|compute,graphics|exclusive|vm-passthrough|1|||flagship-aitrain-0123456789abcdef||3600000||1800000000000",
       "expect": true
     },
     {
@@ -117,11 +132,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "23d846ba5ff5c74c9eed63364ec2fc6aaa3a1f3a8cae3a55efb5b6bb7e0d60d9306b9dd7dda263b7155696c22ab58914748b7d64247aa2771bd6f0e0d3e4050b"
+        "signature": "b9cfc63fd14a58104b0c68eaf8d114ea7c7c6c28170adeb42d176c900e8d1692f3ffb9bf404dc7c7049820bc57241f01e4857d62fbbb435dbd9f30bb425fd002"
       },
       "expect": false
     },
@@ -144,11 +163,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "e5381d46fdc5fec332f1e3473ff270b538cd54c36e2d06e662202ad8c39bdb073806c83151ea3b3338648795b24b678f062621ce14b3460c20c2de86178b2d0b"
+        "signature": "334c7184fb149f00613a57da213654831664f5d26aef2d41e7c413212a86e136dd27069ed65f8a1b10560ed5a73a48f37f13e72e707e68ccccfb7f813d6f7d06"
       },
       "expect": false
     },
@@ -171,11 +194,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "24c277d554ba5a31789d1b142d07bf230763498fe766a062511deeca1ab5a42c1569c051b8b9dcd85179a2233aa4d0762a96e0d65ad489a35468d13a3146cf02"
+        "signature": "6ffb17be2aaf0457f68403802a998b17ec214fc3dea1982410286b13e7b8451ec667415be4b5bd875f8c624f2c1577722df727e9f6a64e2572afbea69bf0f305"
       },
       "expect": false
     },
@@ -198,11 +225,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": false,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -226,11 +257,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -254,11 +289,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -281,11 +320,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -311,11 +354,18 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": false,
         "trustDomain": "work",
-        "ownerConsent": "consent-2026-10-25"
+        "ownerConsent": "consent-2026-10-25",
+        "container": "flagship-alice--photos",
+        "userspace": "cuda-12.9-runtime",
+        "maxRuntimeMs": null,
+        "share": {
+          "computePercent": 50,
+          "memoryMib": 8000
+        }
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "adec13d8f2db662af853fdfd24c4dafa8d3f71e532329f1ad004af7476cf90484b2dd5a868dcbc8bfaf014282776595a197481fa4fa00680e60683e0fd951604"
+        "signature": "a21743c0e9301e399756d5512249596fae913806adeb3e78ca006e774e508d1ba59b5494406f7fab7e64783f9dfc2a0e5639b9424ce6f8bcb47bf2b4c4042201"
       },
       "expect": false
     },
@@ -338,11 +388,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -365,11 +419,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -392,7 +450,239 @@
         "isolation": "vm-passthrough",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
+      },
+      "expect": false
+    },
+    {
+      "name": "another container after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null,
+        "container": "flagship-bob--bank",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
+      },
+      "expect": false
+    },
+    {
+      "name": "a userspace image picked after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": "cuda-12.9-runtime",
+        "maxRuntimeMs": null,
+        "share": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
+      },
+      "expect": false
+    },
+    {
+      "name": "the run-time limit lifted after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--train",
+          "installationId": "inst-9",
+          "generation": 12
+        },
+        "backend": "amd-rocm",
+        "maxCount": 4,
+        "capabilities": [
+          "compute",
+          "graphics"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "vm-passthrough",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null,
+        "container": "flagship-aitrain-0123456789abcdef",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "2abe7a3d7e3d819c915a869f380b053e85aef6eb184c1c61356364f1742ed8560c70cc7c9ac7f6c564720f77ef9ed09b01a1bec9a534242880ea93c3d261be0d"
+      },
+      "expect": false
+    },
+    {
+      "name": "a run-time limit stretched after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--train",
+          "installationId": "inst-9",
+          "generation": 12
+        },
+        "backend": "amd-rocm",
+        "maxCount": 4,
+        "capabilities": [
+          "compute",
+          "graphics"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "vm-passthrough",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null,
+        "container": "flagship-aitrain-0123456789abcdef",
+        "userspace": null,
+        "maxRuntimeMs": 7200000,
+        "share": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "2abe7a3d7e3d819c915a869f380b053e85aef6eb184c1c61356364f1742ed8560c70cc7c9ac7f6c564720f77ef9ed09b01a1bec9a534242880ea93c3d261be0d"
+      },
+      "expect": false
+    },
+    {
+      "name": "a bigger share after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--photos",
+          "installationId": "inst-01",
+          "generation": 1
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "video-encode",
+          "compute",
+          "compute"
+        ],
+        "policies": [
+          "cooperative",
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": false,
+        "trustDomain": "family",
+        "ownerConsent": "consent-2026-10-25",
+        "container": "flagship-alice--photos",
+        "userspace": "cuda-12.9-runtime",
+        "maxRuntimeMs": null,
+        "share": {
+          "computePercent": 100,
+          "memoryMib": 8000
+        }
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "a21743c0e9301e399756d5512249596fae913806adeb3e78ca006e774e508d1ba59b5494406f7fab7e64783f9dfc2a0e5639b9424ce6f8bcb47bf2b4c4042201"
+      },
+      "expect": false
+    },
+    {
+      "name": "the share dropped after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--photos",
+          "installationId": "inst-01",
+          "generation": 1
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "video-encode",
+          "compute",
+          "compute"
+        ],
+        "policies": [
+          "cooperative",
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": false,
+        "trustDomain": "family",
+        "ownerConsent": "consent-2026-10-25",
+        "container": "flagship-alice--photos",
+        "userspace": "cuda-12.9-runtime",
+        "maxRuntimeMs": null,
+        "share": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "a21743c0e9301e399756d5512249596fae913806adeb3e78ca006e774e508d1ba59b5494406f7fab7e64783f9dfc2a0e5639b9424ce6f8bcb47bf2b4c4042201"
+      },
+      "expect": false
+    },
+    {
+      "name": "a v1 signature over the same terms",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
@@ -419,11 +709,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000001,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd09"
       },
       "expect": false
     },
@@ -446,11 +740,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3A0508D53709AC60043DC274497DD6CB820E30E90CD14DF10F89C2EAF876652760436650F351A0E193D2E996AC19D420451EE9D0B0A1FC039740211CC499D20C"
+        "signature": "CF3B574A544A1306BAC181983FE4FCECE6EEB8DF85C3CE83E459E2B9D76274E1B22C8101943367A76C91874E3B057F20BA54CC4C95328D807D3CC1EDA129BD09"
       },
       "expect": false
     },
@@ -473,11 +771,15 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,
-        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d2"
+        "signature": "cf3b574a544a1306bac181983fe4fcece6eeb8df85c3ce83e459e2b9d76274e1b22c8101943367a76c91874e3b057f20ba54cc4c95328d807d3cc1eda129bd"
       },
       "expect": false
     },
@@ -500,7 +802,11 @@
         "isolation": "gvisor-nvproxy",
         "secrecy": true,
         "trustDomain": null,
-        "ownerConsent": null
+        "ownerConsent": null,
+        "container": "flagship-alice--render",
+        "userspace": null,
+        "maxRuntimeMs": null,
+        "share": null
       },
       "proof": {
         "issuedAt": 1800000000000,

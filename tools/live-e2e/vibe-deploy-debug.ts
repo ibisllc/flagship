@@ -48,7 +48,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function journalGrep(re: RegExp, lines = 250): Promise<string[]> {
   const adminRoot = deriveDemoAdminRoot(hexToBytes(KEK), user);
-  const jr: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines, issuedAt: Date.now() };
+  const jr: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
   const js = bytesToHex(signJournalRequest(jr, adminRoot));
   const j = await http(`https://${fqdn}/api/journal`, {
     method: "POST", headers: { "content-type": "application/json" },

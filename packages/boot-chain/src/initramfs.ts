@@ -5,7 +5,7 @@
  * chain refresh (server-daemon bootChainRefresh.ts) both write exactly what
  * these functions return, so a box's boot chain can follow its release.
  */
-import { BOOT_FS_MOUNT_SH } from "./bootFsMount.js";
+import { BOOT_FS_MOUNT_SH, BOOT_FS_UUID_FILE, DISK_UUID_RECORD_SH, LUKS_UUID_FILE } from "./bootFsMount.js";
 import { APPROVED_BOOT_HOSTS, buildUnlockPremountScript, isBootHostName } from "./unlockPremount.js";
 
 export const UNLOCK_HOOK_PATH = "/etc/initramfs-tools/hooks/flagship-unlock";
@@ -135,7 +135,7 @@ export function initrdExpectations(scripts: readonly BootChainScript[], helperSi
     if (s.path === WIFI_PREMOUNT_PATH) out.push({ path: "scripts/init-premount/flagship-wifi", size: bytes(s.content) });
   }
   out.push({ path: "bin/flagship-unseal", size: helperSize });
-  for (const p of ["bin/openssl", "bin/curl", "bin/xxd", "sbin/cryptsetup", "etc/ssl/certs/ca-certificates.crt", "boot/flagship-boot-key.pem", "boot/server-domain", "boot/flagship-boot-host"]) {
+  for (const p of ["bin/openssl", "bin/curl", "bin/xxd", "sbin/cryptsetup", "etc/ssl/certs/ca-certificates.crt", "boot/flagship-boot-key.pem", "boot/server-domain", "boot/flagship-boot-host", BOOT_FS_UUID_FILE, LUKS_UUID_FILE]) {
     out.push({ path: p });
   }
   return out;
@@ -182,6 +182,10 @@ for _f in flagship-boot-key.pem server-domain flagship-boot-host flagship-boot-u
   cp "/boot/$_f" "\${DESTDIR}/boot/$_f"
 done
 chmod 600 "\${DESTDIR}/boot/flagship-boot-key.pem"
+# Pin this system's own boot partition and encrypted root by UUID (bootFsMount.ts): the premounts
+# use exactly these and refuse any other FLAGSHIP_BOOT-labelled or LUKS disk.
+${DISK_UUID_RECORD_SH}
+_uuid_err="$(flagship_record_disk_uuids /etc/fstab /etc/crypttab "\${DESTDIR}" 2>&1)" || fail "\${_uuid_err:-cannot record the disk UUIDs}"
 # Boot unlock v2 (pq-suites.md §19): the boot key's ML-DSA half, the owner's
 # hybrid key, the unlock policy and the lease key (a file, or a TPM-sealed
 # object plus the tpm2-tools and TCTI to open it). All optional: a box without
@@ -202,7 +206,7 @@ for _tm in tpm_crb tpm_tis tpm_tis_core; do
 done
 cp /boot/control-plane-url "\${DESTDIR}/boot/control-plane-url" 2>/dev/null || true
 [ ! -f /boot/flagship-debug-mode ] || cp /boot/flagship-debug-mode "\${DESTDIR}/boot/flagship-debug-mode"
-for _f in bin/flagship-unseal bin/openssl bin/curl bin/xxd etc/ssl/certs/ca-certificates.crt boot/flagship-boot-key.pem; do
+for _f in bin/flagship-unseal bin/openssl bin/curl bin/xxd etc/ssl/certs/ca-certificates.crt boot/flagship-boot-key.pem ${BOOT_FS_UUID_FILE} ${LUKS_UUID_FILE}; do
   [ -s "\${DESTDIR}/$_f" ] || fail "the initramfs lacks /$_f"
 done
 `;
@@ -326,7 +330,7 @@ export function buildWifiPremountScript(ssid: string, psk: string): string {
 #
 # OBSERVABILITY (no logic change): every stage tees a timestamped line to BOTH a
 # /run accumulator AND a PERSISTENT log on the unencrypted /boot partition
-# (/dev/disk/by-label/FLAGSHIP_BOOT → /flagship-wifi.log) so a box that hangs at
+# (FLAGSHIP_BOOT, pinned by its install UUID → /flagship-wifi.log) so a box that hangs at
 # the LUKS prompt is diagnosable after a recovery-passphrase hand-unlock (the
 # no-network case). After DHCP we also best-effort POST the accumulator home (the
 # network-up-but-unlock-still-failed case). Both are \`|| true\`, never block boot.
@@ -339,7 +343,7 @@ WIFI_PSK=${shSingleQuote(psk)}
 
 # OBSERVABILITY: persistent bring-up log on the unencrypted /boot partition.
 # /boot here is the initrd ramdisk (lost on pivot), so mount the REAL boot fs
-# (label FLAGSHIP_BOOT) read-write once. Every \`log_stage\` line is timestamped
+# (FLAGSHIP_BOOT, by the UUID recorded at install) read-write once. Every \`log_stage\` line is timestamped
 # (uptime seconds + wall-clock when available) and tee'd to the persistent log
 # AND a /run accumulator the post-DHCP beacon posts. Fully best-effort.
 FLAGSHIP_WIFI_LOG=/run/flagship-wifi.log
@@ -356,7 +360,7 @@ log_stage() {
 }
 log_stage "premount start (ssid baked)"
 
-# The boot fs is found by label and needs ext4 loaded: see mount_boot_fs. Lines logged
+# The boot fs is found by its recorded UUID and needs ext4 loaded: see mount_boot_fs. Lines logged
 # before the mount accumulate in /run; the cat seeds them into the persistent log once
 # mounted, so the first line is never lost — an EMPTY persistent log can only mean the
 # premount never ran.

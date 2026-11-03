@@ -424,6 +424,10 @@ pub fn approval_for(req: &GpuRequest, secrecy: bool) -> GpuApproval {
         secrecy,
         trust_domain: domain,
         owner_consent: consent,
+        container: None,
+        userspace: None,
+        max_runtime_ms: None,
+        share: None,
     }
 }
 

@@ -1,7 +1,7 @@
 import dgram from "node:dgram";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { answerFor, describeResponse, parseQuestions, startLanDiscovery, DISCOVERY_SERVICE_TYPE, type LanDiscovery } from "../src/lanDiscovery.js";
+import { answerFor, describeResponse, onLinkSource, parseQuestions, startLanDiscovery, DISCOVERY_SERVICE_TYPE, type LanDiscovery } from "../src/lanDiscovery.js";
 
 const ID = "0123456789abcdef";
 const ann = { id: ID, endpoints: [{ address: "192.168.1.20", port: 443 }, { address: "fd12:3456::7", port: 443 }] };
@@ -138,6 +138,47 @@ describe("startLanDiscovery over a real socket", () => {
     });
     asker.send(query(DISCOVERY_SERVICE_TYPE, 12), port, "127.0.0.1");
     expect(await got).toBeNull(); // loopback is not a LAN address
+    asker.close();
+  });
+
+  it("answers only a sender on one of the box's own links, never a routed private address", () => {
+    const links = [{ address: "192.168.1.10", netmask: "255.255.255.0" }, { address: "10.4.0.2", netmask: "255.255.0.0" }];
+    expect(onLinkSource("192.168.1.77", links)).toBe(true);
+    expect(onLinkSource("10.4.200.9", links)).toBe(true);
+    expect(onLinkSource("192.168.2.77", links)).toBe(false);
+    expect(onLinkSource("10.5.0.1", links)).toBe(false);
+    expect(onLinkSource("172.16.0.1", links)).toBe(false);
+    expect(onLinkSource("8.8.8.8", [{ address: "8.8.8.1", netmask: "255.255.255.0" }])).toBe(false);
+    expect(onLinkSource("not-an-ip", links)).toBe(false);
+  });
+
+  it("stays quiet for a sender off the box's links, even a private one", async () => {
+    d = startLanDiscovery({ id: ID, endpoints: () => ann.endpoints, port: 0, links: () => [{ address: "192.168.1.10", netmask: "255.255.255.0" }], log: () => {} });
+    const port = await d.listening;
+    const asker = dgram.createSocket("udp4");
+    await new Promise<void>((r) => asker.bind(0, "127.0.0.1", () => r()));
+    const got = new Promise<Buffer | null>((resolve) => {
+      const t = setTimeout(() => resolve(null), 200);
+      asker.once("message", (m) => {
+        clearTimeout(t);
+        resolve(m);
+      });
+    });
+    asker.send(query(DISCOVERY_SERVICE_TYPE, 12), port, "127.0.0.1");
+    expect(await got).toBeNull();
+    asker.close();
+  });
+
+  it("caps how many answers it sends a second, so it can't be used to flood a neighbour", async () => {
+    d = startLanDiscovery({ id: ID, endpoints: () => ann.endpoints, port: 0, anySource: true, maxRepliesPerSecond: 3, log: () => {} });
+    const port = await d.listening;
+    const asker = dgram.createSocket("udp4");
+    await new Promise<void>((r) => asker.bind(0, "127.0.0.1", () => r()));
+    let n = 0;
+    asker.on("message", () => n++);
+    for (let i = 0; i < 8; i++) asker.send(query(DISCOVERY_SERVICE_TYPE, 12), port, "127.0.0.1");
+    await new Promise((r) => setTimeout(r, 250));
+    expect(n).toBe(3);
     asker.close();
   });
 

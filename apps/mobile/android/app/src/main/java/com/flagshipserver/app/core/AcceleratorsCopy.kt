@@ -49,7 +49,7 @@ object AcceleratorsCopy {
 
     fun stopped(h: AcceleratorHolder): String = FSStrings.get(R.string.accelerators_stopped, appName(h.appId))
 
-    // ---- Approvals (flagship/gpu-approval/v1) ----
+    // ---- Approvals (flagship/gpu-approval/v2) ----
 
     private fun vendor(backend: String) = when (backend) {
         "nvidia-cuda" -> "NVIDIA"

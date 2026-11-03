@@ -6,12 +6,13 @@ import FlagshipAPI
 /// an account without one). Wire parity with packages/protocol/src/gpuApproval.ts; pinned by
 /// packages/protocol/test-vectors/gpu-approval/vectors.json.
 ///
-///   flagship/gpu-approval/v1|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
+///   flagship/gpu-approval/v2|<server>|<appId>|<installationId>|<generation>|<backend>|<maxCount>
 ///     |<caps sorted, comma-joined>|<policies sorted, comma-joined>|<isolation>|<secrecy 1|0>
-///     |<trustDomain or empty>|<ownerConsent or empty>|<issuedAt>
+///     |<trustDomain or empty>|<ownerConsent or empty>|<container>|<userspace or empty>
+///     |<maxRuntimeMs or empty>|<computePercent:memoryMib or empty>|<issuedAt>
 ///   flagship/gpu-approval-withdraw/v1|<server>|<appId>|<installationId>|<generation>|<issuedAt>
 public enum GpuApprovalOrder {
-    public static let tag = "flagship/gpu-approval/v1"
+    public static let tag = "flagship/gpu-approval/v2"
     public static let withdrawTag = "flagship/gpu-approval-withdraw/v1"
 
     public static let backends = ["nvidia-cuda", "amd-rocm", "intel-level-zero"]
@@ -31,6 +32,14 @@ public enum GpuApprovalOrder {
             ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0) || $0 == "." || $0 == "_" || $0 == ":" || $0 == "-"
         }
     }
+
+    static func containerOk(_ s: String) -> Bool {
+        guard let first = s.unicodeScalars.first, (1...128).contains(s.utf8.count) else { return false }
+        func alnum(_ c: Unicode.Scalar) -> Bool { ("a"..."z").contains(c) || ("A"..."Z").contains(c) || ("0"..."9").contains(c) }
+        return alnum(first) && s.unicodeScalars.allSatisfy { alnum($0) || $0 == "_" || $0 == "." || $0 == "-" }
+    }
+
+    static let maxSafe: Int64 = (1 << 53) - 1
 
     static func sortedSet(_ items: [String], _ allowed: [String], _ what: String) throws -> String {
         guard !items.isEmpty else { throw Invalid(reason: "no \(what)") }
@@ -56,10 +65,22 @@ public enum GpuApprovalOrder {
             guard fieldOk(v) else { throw Invalid(reason: what) }
             return v
         }
+        guard let container = r.container, containerOk(container) else { throw Invalid(reason: "container") }
+        var runtime = ""
+        if let ms = r.maxRuntimeMs {
+            guard (1...maxSafe).contains(ms) else { throw Invalid(reason: "maxRuntimeMs") }
+            runtime = String(ms)
+        }
+        var share = ""
+        if let sh = r.share {
+            guard (1...100).contains(sh.computePercent), (1...maxSafe).contains(sh.memoryMib) else { throw Invalid(reason: "share") }
+            share = "\(sh.computePercent):\(sh.memoryMib)"
+        }
         let parts = [
             tag, server, r.appId, r.installationId, String(r.generation), r.backend, String(r.maxCount),
             try sortedSet(r.caps, capabilities, "capability"), try sortedSet(r.policies, policies, "policy"),
-            r.isolation, r.secrecy ? "1" : "0", try opt(r.trustDomain, "trust domain"), try opt(r.ownerConsent, "consent"), String(issuedAt),
+            r.isolation, r.secrecy ? "1" : "0", try opt(r.trustDomain, "trust domain"), try opt(r.ownerConsent, "consent"),
+            container, try opt(r.userspace, "userspace"), runtime, share, String(issuedAt),
         ]
         return Data(parts.joined(separator: "|").utf8)
     }
@@ -77,7 +98,8 @@ public enum GpuApprovalOrder {
         return GpuApprovalRequest(server: r.server, appId: r.appId, installationId: r.installationId, generation: r.generation,
                                   backend: r.backend, maxCount: r.maxCount, caps: r.caps, policies: r.policies, isolation: r.isolation,
                                   secrecy: r.secrecy, trustDomain: r.trustDomain ?? cooperativeTrustDomain,
-                                  ownerConsent: r.ownerConsent ?? "owner-consent-\(issuedAt)", issuedAt: r.issuedAt)
+                                  ownerConsent: r.ownerConsent ?? "owner-consent-\(issuedAt)", container: r.container,
+                                  userspace: r.userspace, maxRuntimeMs: r.maxRuntimeMs, share: r.share, issuedAt: r.issuedAt)
     }
 
     /// The trust domain an owner's approval of cooperative sharing names: the account's own apps.
@@ -89,7 +111,10 @@ public enum GpuApprovalOrder {
             "server": server, "appId": r.appId, "installationId": r.installationId, "generation": r.generation,
             "backend": r.backend, "maxCount": r.maxCount, "caps": r.caps, "policies": r.policies, "isolation": r.isolation,
             "secrecy": r.secrecy, "trustDomain": r.trustDomain.map { $0 as Any } ?? NSNull(),
-            "ownerConsent": r.ownerConsent.map { $0 as Any } ?? NSNull(), "issuedAt": issuedAt, "signature": signatureHex,
+            "ownerConsent": r.ownerConsent.map { $0 as Any } ?? NSNull(), "container": r.container.map { $0 as Any } ?? NSNull(),
+            "userspace": r.userspace.map { $0 as Any } ?? NSNull(), "maxRuntimeMs": r.maxRuntimeMs.map { $0 as Any } ?? NSNull(),
+            "share": r.share.map { ["computePercent": $0.computePercent, "memoryMib": $0.memoryMib] as Any } ?? NSNull(),
+            "issuedAt": issuedAt, "signature": signatureHex,
         ]
     }
 
@@ -105,8 +130,14 @@ public enum GpuApprovalOrder {
               let gen = i64(o["generation"]), let backend = o["backend"] as? String, let n = i64(o["maxCount"]),
               let caps = o["caps"] as? [String], let pol = o["policies"] as? [String], let iso = o["isolation"] as? String,
               let secrecy = o["secrecy"] as? Bool else { return nil }
+        var share: GpuShareLimits?
+        if let sh = o["share"] as? [String: Any], let pct = i64(sh["computePercent"]), let mem = i64(sh["memoryMib"]) {
+            share = GpuShareLimits(computePercent: Int(pct), memoryMib: mem)
+        }
         return GpuApprovalRequest(server: server, appId: appId, installationId: inst, generation: gen, backend: backend, maxCount: Int(n),
                                   caps: caps, policies: pol, isolation: iso, secrecy: secrecy,
-                                  trustDomain: o["trustDomain"] as? String, ownerConsent: o["ownerConsent"] as? String)
+                                  trustDomain: o["trustDomain"] as? String, ownerConsent: o["ownerConsent"] as? String,
+                                  container: o["container"] as? String, userspace: o["userspace"] as? String,
+                                  maxRuntimeMs: i64(o["maxRuntimeMs"]), share: share)
     }
 }

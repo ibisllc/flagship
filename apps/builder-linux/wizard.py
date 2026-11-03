@@ -24,6 +24,7 @@ from i18n import tr
 
 import contextlib
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -85,6 +86,25 @@ DEBUG_ACCESS_HINT = (
 
 # Reported to /api/iso-manifest as `builderVersion`; stamped at release.
 BUILDER_VERSION = VERSION
+
+
+# The generator's pattern (packages/flagship-builder/src/preseed.ts TARGET_DISK_PATTERN), pinned by
+# test-vectors/install-disk-stop.json.
+TARGET_DISK_PATTERN = re.compile(
+    r"^(by-id:[A-Za-z0-9._:+@-]{1,200}|serial:[A-Za-z0-9._-]{1,100}|size:[1-9][0-9]{0,19})$"
+)
+
+
+def normalize_target_disk(text: Optional[str]) -> Optional[str]:
+    """The trimmed "Disk to install on" value, or None when blank (no option)."""
+    t = (text or "").strip()
+    return t or None
+
+
+def target_disk_is_valid(text: Optional[str]) -> bool:
+    """Blank, or by-id:<name> / serial:<serial> / size:<bytes>."""
+    t = normalize_target_disk(text)
+    return t is None or TARGET_DISK_PATTERN.fullmatch(t) is not None
 
 
 def locate_flasher() -> str:
@@ -254,6 +274,13 @@ class WizardState:
     # Optional Wi-Fi baked into a USB installer (never part of the recipe).
     wifi_ssid: str = ""
     wifi_password: str = ""
+    # "Disk to install on" (B2 #9): the one disk a USB installer erases on a
+    # machine with more than one. Not remembered; never given to a hosted VM.
+    target_disk: str = ""
+
+    @property
+    def target_disk_valid(self) -> bool:
+        return target_disk_is_valid(self.target_disk)
 
     @property
     def requires_user_iso(self) -> bool:
@@ -265,7 +292,7 @@ class WizardState:
             return False
         if self.requires_user_iso and self.iso_path is None:
             return False
-        return True
+        return self.target_disk_valid
 
     @property
     def readiness_summary(self) -> str:
@@ -674,7 +701,7 @@ class WizardModel:
                         device=disk.device_path,
                         yes=True,
                         keep_recipe=False,
-                    ) + wifi
+                    ) + wifi + self._target_disk_flags()
 
                 self._run_cli_core(build, on_success=self._on_bake_ok, use_pkexec=True)
         finally:
@@ -696,7 +723,7 @@ class WizardModel:
                     device=disk.device_path,
                     yes=True,
                     keep_recipe=False,
-                ) + wifi
+                ) + wifi + self._target_disk_flags()
             self._run_cli(build, on_success=self._on_bake_ok, use_pkexec=True)
 
     def set_wifi(self, ssid: str, password: str) -> None:
@@ -709,6 +736,19 @@ class WizardModel:
             self._wifi_store.save(ssid, password)
         except OSError as e:
             self._append_log("stderr", tr("Couldn't remember the Wi-Fi details: {0}").format(e))
+
+    def set_target_disk(self, text: str) -> None:
+        """The "Disk to install on" field, as typed (checked by can_flash)."""
+        if text == self.state.target_disk:
+            return
+        self.state.target_disk = text
+        self._notify()
+
+    def _target_disk_flags(self) -> list[str]:
+        """CLI flags for a USB installer's target disk. Hosted VMs never call
+        this: they have one disk."""
+        value = normalize_target_disk(self.state.target_disk)
+        return ["--target-disk", value] if value else []
 
     @contextlib.contextmanager
     def _wifi_flags(self):
@@ -755,6 +795,8 @@ class WizardModel:
             return
         recipe = self.state.recipe_path
         iso = self.state.iso_path
+        if not self.state.target_disk_valid:
+            return
         if not self._box_release_is_published(recipe, host_arch.ARCH_AMD64):
             return
         out = derive_out_iso_path(iso)
@@ -762,7 +804,7 @@ class WizardModel:
         self._notify()
         with self._wifi_flags() as wifi:
             def build(entry: str) -> list[str]:
-                return args_prepare(entry, str(recipe), str(iso), str(out), keep_recipe=True) + wifi
+                return args_prepare(entry, str(recipe), str(iso), str(out), keep_recipe=True) + wifi + self._target_disk_flags()
             self._run_cli(build, on_success=self._on_prepare_ok)
 
     def _on_prepare_ok(self, _stdout_text: str) -> None:
@@ -1715,6 +1757,34 @@ def build_window(application, model: Optional[WizardModel] = None):
     wifi_caption.set_wrap(True)
     wifi_caption.add_css_class("dim-label")
     step4["body"].append(wifi_caption)
+
+    # "Disk to install on" (B2 #9): USB installer only, never a hosted VM.
+    target_disk_label = Gtk.Label(label=tr("Disk to install on (optional)"), xalign=0.0)
+    step4["body"].append(target_disk_label)
+    target_disk_entry = Gtk.Entry()
+    target_disk_entry.set_placeholder_text("serial:S64ANS0T123456")
+    target_disk_entry.set_text(wizard_model.state.target_disk)
+    target_disk_entry.connect("changed", lambda e: wizard_model.set_target_disk(e.get_text()))
+    step4["body"].append(target_disk_entry)
+    target_disk_help = Gtk.Label(
+        label=tr("Only needed when the computer has more than one disk. Without it, the installer "
+        "stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: "
+        "and a name from that list, serial: and the disk's serial number, or size: and its exact "
+        "size in bytes."),
+        xalign=0.0,
+    )
+    target_disk_help.set_wrap(True)
+    target_disk_help.add_css_class("dim-label")
+    step4["body"].append(target_disk_help)
+    target_disk_error = Gtk.Label(
+        label=tr("Start with by-id:, serial: or size:, followed by the disk's name, serial number "
+        "or size in bytes, with no spaces."),
+        xalign=0.0,
+    )
+    target_disk_error.set_wrap(True)
+    target_disk_error.add_css_class("error")
+    target_disk_error.set_visible(False)
+    step4["body"].append(target_disk_error)
     usb_advisory = Gtk.Label(xalign=0.0)
     usb_advisory.set_wrap(True)
     usb_advisory.add_css_class("warning")
@@ -2345,9 +2415,10 @@ def build_window(application, model: Optional[WizardModel] = None):
         usb_advisory.set_text(advisory or "")
         usb_advisory.set_visible(advisory is not None)
         bake_btn.set_sensitive(s.can_flash and not s.is_running)
+        target_disk_error.set_visible(not s.target_disk_valid)
         prep_btn.set_sensitive(
             s.recipe_path is not None and s.iso_path is not None
-            and not s.is_running
+            and s.target_disk_valid and not s.is_running
         )
         verify_btn.set_sensitive(s.recipe_path is not None and not s.is_running)
         pair_btn.set_sensitive(not s.is_running and not s.is_pairing)

@@ -51,6 +51,12 @@ export const TRIAL_INITRD_NAME = "flagship-initrd-trial.img";
 export const TRIAL_ENTRY_ID = "flagship-bootchain-trial";
 /** A trial whose initramfs fails reboots after this many seconds, into the default entry. */
 export const TRIAL_PANIC_SECS = 30;
+/**
+ * Written to the boot partition by the premount (unlockPremount.ts) when a trial boot gave up waiting
+ * for the owner's phone and restarted into the default entry. It holds the trial's token: that trial
+ * is dropped without blaming the release (the chain may be fine; nobody answered), and staged again.
+ */
+export const TRIAL_UNANSWERED_NAME = "flagship-trial-unanswered";
 const CUSTOM_CFG_MARK = "# Flagship boot chain trial (bootChainRefresh.ts): removed once the trial is decided.";
 const HOOK_FAILED = "flagship-unlock hook:";
 
@@ -423,7 +429,18 @@ class BootChainRun {
         this.sys.log("[boot-chain] booted a trial the release has moved past; dropping it");
         await this.dropTrial();
       } else if (t.bootId !== bootId) {
+        const unansweredPath = join(this.bootDir, TRIAL_UNANSWERED_NAME);
+        const unanswered = await this.sys.read(unansweredPath).catch(() => null);
+        if (unanswered) await this.sys.remove(unansweredPath).catch(() => {});
         await this.dropTrial();
+        if (unanswered && dec.decode(unanswered).trim() === t.token) {
+          return {
+            action: "rolled-back",
+            reason: "trial-unanswered",
+            detail: "The start-up check waited for your phone and nobody answered, so this server started with its previous start-up unlock. It tries again at a later restart.",
+            digest: t.digest,
+          };
+        }
         if (t.kernel === kernel) {
           this.state.failed = { digest: t.digest, reason: "trial-boot-failed", at: this.sys.now() };
           await this.save();

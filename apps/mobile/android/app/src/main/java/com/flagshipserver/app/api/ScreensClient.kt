@@ -297,7 +297,7 @@ interface ScreensClient {
     /** `POST /api/screens/accelerators/stop {allocationId}`: take a GPU back from the app holding it. */
     suspend fun stopAccelerator(allocationId: String): Unit = throw ScreensError.NotImplemented("accelerators")
 
-    /** `POST /api/screens/accelerators/approvals`: the owner's signed flagship/gpu-approval/v1. */
+    /** `POST /api/screens/accelerators/approvals`: the owner's signed flagship/gpu-approval/v2. */
     suspend fun approveGpu(body: GpuApprovalBody): Unit = throw ScreensError.NotImplemented("accelerators")
 
     /** `POST /api/screens/accelerators/approvals/withdraw`: the signed flagship/gpu-approval-withdraw/v1. */

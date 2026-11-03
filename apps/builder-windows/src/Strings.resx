@@ -766,6 +766,18 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only.</value>
     <comment>MainWindow.xaml Text</comment>
   </data>
+  <data name="diskToInstallOnOptional" xml:space="preserve">
+    <value>Disk to install on (optional)</value>
+    <comment>MainWindow.xaml Text</comment>
+  </data>
+  <data name="diskToInstallOnHelp" xml:space="preserve">
+    <value>Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes.</value>
+    <comment>MainWindow.xaml Text</comment>
+  </data>
+  <data name="diskToInstallOnInvalid" xml:space="preserve">
+    <value>Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.</value>
+    <comment>MainWindow.xaml Text</comment>
+  </data>
   <data name="readyToBoot" xml:space="preserve">
     <value>Ready to boot</value>
     <comment>MainWindow.xaml Text</comment>

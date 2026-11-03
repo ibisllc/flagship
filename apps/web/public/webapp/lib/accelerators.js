@@ -71,7 +71,7 @@ export function waitingLine(q) {
 export const stopTitle = (h) => tr("Stop {0} using the GPU?", appName(h?.appId));
 export const stoppedLine = (h) => tr("{0} no longer has the GPU.", appName(h?.appId));
 
-// ---- Approvals (flagship/gpu-approval/v1) ----
+// ---- Approvals (flagship/gpu-approval/v2) ----
 
 export const APPROVALS_PATH = "/api/screens/accelerators/approvals";
 export const APPROVALS_WITHDRAW_PATH = "/api/screens/accelerators/approvals/withdraw";

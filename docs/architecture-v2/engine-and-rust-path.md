@@ -115,12 +115,20 @@ signature covers them). Reproducibility across two clean builders is not yet sho
   compose drop-in, enables `podman.socket`, and writes the switch file last. Its record,
   `/var/lib/flagship/arch-v2-switch.json`, is where the daemon can't write.
 - **Move.** The daemon restarts; the next start runs §4's move and puts the Rust units on (§2).
-- **Trial.** Kept once the boot is healthy (tunnel and heartbeat, no Rust component on its
-  fallback) and every app container that ran when the order came runs again within 20 minutes.
-  Otherwise put back (setup step `arch-v2-settle`) with the reason in Activity: a failed move at
-  once, three starts that never got healthy, an app that doesn't come back. Going back restores the
-  switch file as it was, and §4's rollback brings Docker up on its own data. A revert is refused
-  once the switch was kept or after 24 hours, so the daemon alone can't undo the owner's choice.
+- **Trial.** Root decides it (setup step `arch-v2-settle`, run at every daemon start and when the
+  daemon asks to keep the switch) from evidence in its own record, never from a file the daemon
+  writes (review 2026-10-25 #5): the live app containers root itself listed when it took the order,
+  the daemon's starts as systemd numbers them (`InvocationID`; the run that sent the order doesn't
+  count), and root's own attempt to put the box on the target's engine. Kept only when the daemon
+  found itself healthy (tunnel and heartbeat, no Rust component on its fallback) AND root sees every
+  app it listed running on the new engine and no Rust regression; the daemon asks again for 20
+  minutes, then restarts for another try. Put back, with the reason in Activity, only when root's own
+  engine attempt fails or the daemon was started a fourth time without the switch being kept. Going
+  back restores the switch file as it was, and §4's rollback brings Docker up on its own data. No
+  revert once the switch was kept or after 24 hours (a new owner order is then taken), so the daemon
+  alone can't undo the owner's choice; it also can't keep a switch whose apps root doesn't see.
+  What is left: a daemon re-compromised on each of four starts inside the window can still have the
+  switch put back (to root a box that keeps dying looks the same).
 - **Resume.** A restart during the install finishes it from the same order at the next start; an
   install that fails leaves the switch file untouched and records why.
 

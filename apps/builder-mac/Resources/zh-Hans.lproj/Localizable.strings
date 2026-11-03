@@ -227,3 +227,6 @@
 "This server can't be installed yet: its software package isn't published on %@. Update Flagship Studio and the Flagship app, or try again later." = "此服务器暂时无法安装：它的软件包尚未在 %@ 上发布。请更新 Flagship Studio 和 Flagship 应用，或稍后重试。";
 "Couldn't check that this server's software package is published on %@. Check your internet connection and try again." = "无法确认此服务器的软件包是否已在 %@ 上发布。请检查网络连接后重试。";
 "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again." = "此配方由旧版 Flagship 应用创建。请在手机上更新 Flagship 应用，然后重新创建服务器。";
+"Disk to install on (optional)" = "安装到的磁盘（可选）";
+"Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes." = "仅当这台电脑有多个磁盘时才需要。不填写时，安装程序会在这样的电脑上停止，不清除任何内容，并在屏幕上列出它的磁盘。请输入 by-id: 加该列表中的名称、serial: 加磁盘序列号，或 size: 加以字节为单位的确切大小。";
+"Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces." = "请以 by-id:、serial: 或 size: 开头，后接磁盘的名称、序列号或以字节为单位的大小，不要有空格。";

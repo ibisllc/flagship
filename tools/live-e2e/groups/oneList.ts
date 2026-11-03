@@ -72,7 +72,7 @@ export const oneList: Group = {
       const out: Record<string, unknown> = {};
       for (const b of [b1, b2]) {
         const leads = await tryHttp(`https://${b.fqdn}/api/leads`, {}, 15_000).catch(() => null);
-        const req: JournalRequest = { serverId: b.fqdn, unit: "flagship-daemon", lines: 2000, issuedAt: Date.now() };
+        const req: JournalRequest = { serverId: b.fqdn, unit: "flagship-daemon", lines: 2000, nonce: randomBytes(16).toString("hex"), issuedAt: Date.now() };
         const j = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, A.keys.adminRoot)) }).catch(() => null);
         const lines = ((j?.json?.lines ?? []) as string[]).filter((l) => /gossip|access-sync|cgk|device-book/i.test(String(l)));
         out[b.serverName] = { leads: leads?.json ?? leads?.status, log: lines.slice(-80) };

@@ -88,6 +88,11 @@ export interface BoxSigner {
    * identityAssertion.ts checkMasterEvidence). Absent: the custodian has no separate key holder.
    */
   signMasterIdentity?(msg: Bytes, evidence: { appId: string; identityPubHex: string; signInPubHex?: string; statement: string; signatureHex: string }): Bytes;
+  /**
+   * Hand the key holder an owner-signed device revocation or rank order (keyd verifies and keeps it,
+   * then refuses master evidence the owner took back). Returns whether keyd's record changed.
+   */
+  noteEvidence?(n: { statement: string; signatureHex: string; grantStatement?: string; grantSignatureHex?: string }): boolean;
   /** Tell the key holder the owner moved this box to another name in its account (keyd verifies the owner's signed entitlement). */
   moveToName?(e: { username: string; podCanonical: string; issuedAt: number }, signature: Bytes): void;
   /** Open a blob sealed TO the box identity (X25519 via the birational map). */

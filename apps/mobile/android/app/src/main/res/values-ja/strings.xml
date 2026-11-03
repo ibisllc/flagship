@@ -3434,4 +3434,19 @@
     <string name="add_fingerprint_for_stronger_approvals">スマートフォンの設定で指紋を追加すると、このバージョンの Android では承認がより安全になります。</string>
     <string name="add_a_fingerprint">指紋を追加</string>
     <string name="recipe_made_by_older_app">このレシピは古いバージョンの Flagship アプリで作成されました。Flagship アプリをアップデートしてから、サーバーを作り直してください。</string>
+    <string name="add_your_fingerprint_again_to_open_account_key">このスマートフォンで Flagship のアカウントキーを開くには、Android の設定で指紋をもう一度登録してください。</string>
+    <string name="account_key_unreadable_short">このスマートフォンではアカウントキーを開けなくなりました。ここで引き続き使うには、アカウントを復元してください。</string>
+    <string name="account_key_lost_title">このスマートフォンではアカウントキーを開けません</string>
+    <string name="account_key_lost_body">このスマートフォンの画面ロックが解除またはリセットされたため、Android はここで Flagship のアカウントキーを保護していた鍵を削除しました。アカウントとサーバーには影響ありません。</string>
+    <string name="account_key_lost_hint">ここでアカウントを再び使うには復元してください。「既存のアカウントに接続」を選び、復元用のパスキーまたは保存したアカウントキーファイルでサインインするか、サインイン済みの別のデバイスから参加してください。</string>
+    <string name="account_key_lost_restore">アカウントを復元</string>
+    <string name="burn_target_disk_label">インストール先のディスク(任意)</string>
+    <string name="burn_target_disk_help">コンピューターにディスクが2台以上ある場合にだけ必要です。指定しないと、インストーラーはそのコンピューターで停止し、何も消去せずにディスクの一覧を画面に表示します。by-id: とその一覧の名前、serial: とディスクのシリアル番号、または size: と正確なサイズ(バイト)を入力してください。</string>
+    <string name="burn_target_disk_invalid">by-id:、serial:、size: のいずれかで始め、続けてディスクの名前、シリアル番号、またはサイズ(バイト)を空白なしで入力してください。</string>
+    <string name="install_disk_stop_several">このコンピューターにはインストーラーが消去できるディスクが %1$s 台あるため(%2$s)、インストーラーは停止しました。何も消去されていません。</string>
+    <string name="install_disk_stop_none">このコンピューターにはインストール先となる 8 GB 以上の内蔵ディスクがないため、インストーラーは停止しました。何も消去されていません。</string>
+    <string name="install_disk_stop_missing">このインストーラーの対象ディスク(%1$s)はこのコンピューターにありません。何も消去されていません。</string>
+    <string name="install_disk_stop_ambiguous">このインストーラーの対象ディスク(%1$s)は、このコンピューターの複数のディスクに一致します。何も消去されていません。</string>
+    <string name="install_disk_stop_advice">同じレシピでインストーラーを作り直し、「インストール先のディスク」にコンピューターが画面に表示したディスクのいずれかを入力してから、そのインストーラーでコンピューターを起動してください。</string>
+    <string name="setup_stopped_cancel_or_contact">この注文をキャンセルすると名前が解放され、サーバーを作り直せます。または、お問い合わせいただければ確認します。</string>
 </resources>

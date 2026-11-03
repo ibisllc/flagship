@@ -577,6 +577,15 @@ https://flagshipserver.com</value>
   <data name="optionalWiFiForAServer" xml:space="preserve">
     <value>为没有网线的服务器提供的可选 Wi-Fi。会被写入这个一次性安装程序，并仅为你的账户记忆在这台电脑上。</value>
   </data>
+  <data name="diskToInstallOnOptional" xml:space="preserve">
+    <value>安装到的磁盘（可选）</value>
+  </data>
+  <data name="diskToInstallOnHelp" xml:space="preserve">
+    <value>仅当这台电脑有多个磁盘时才需要。不填写时，安装程序会在这样的电脑上停止，不清除任何内容，并在屏幕上列出它的磁盘。请输入 by-id: 加该列表中的名称、serial: 加磁盘序列号，或 size: 加以字节为单位的确切大小。</value>
+  </data>
+  <data name="diskToInstallOnInvalid" xml:space="preserve">
+    <value>请以 by-id:、serial: 或 size: 开头，后接磁盘的名称、序列号或以字节为单位的大小，不要有空格。</value>
+  </data>
   <data name="readyToBoot" xml:space="preserve">
     <value>可以启动了</value>
   </data>

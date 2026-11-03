@@ -1,5 +1,5 @@
 {
-  "about": "keyd signs a master identity assertion only with this evidence (identityAssertion.ts checkMasterEvidence).",
+  "about": "keyd signs a master identity assertion only with this evidence (identityAssertion.ts checkMasterEvidence); `held` is what keyd keeps of the owner's revocations and rank orders (revocations.json).",
   "now": 1790000000000,
   "swk": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
   "stableIds": [
@@ -248,6 +248,817 @@
         "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
       },
       "expect": "bad-evidence"
+    },
+    {
+      "name": "a grant issued in the future",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1790000600000|1790086400000",
+        "signatureHex": "856a469b94c1be7f8b29370c2f8a3ba8bf1d96f49abc80390310a9bb49b10e08bb7f307efbac128241b04244b3639279f3e659f9087dc810f2cbfb0d081c1102"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "expect": "future"
+    },
+    {
+      "name": "a grant issued within the clock skew",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1790000060000|1790086400000",
+        "signatureHex": "49724341bb02893ffb08ed24b606f89eaedcaba7ad83e669a40aead6a3d730ee467185d95aa45ed68d0a71f1121a55f1cb08b1ec2397ee1aeaf4191152c2ef0d"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a revoked grant",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000001"
+        ]
+      },
+      "expect": "revoked"
+    },
+    {
+      "name": "a grant of a revoked device key",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "keys": [
+          "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c"
+        ]
+      },
+      "expect": "revoked"
+    },
+    {
+      "name": "another grant's revocation does not matter",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000002"
+        ],
+        "keys": [
+          "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1"
+        ]
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "an admin later demoted the device in this app",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "member"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "an admin refused the device in this app",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "refused"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "an admin order to master leaves the grant standing",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "master"
+          }
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a demotion in another app does not matter",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "signatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--notes|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "member"
+          }
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a master order later demoted",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "manager"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "a master order later refused",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "refused"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "the master order keyd holds as the latest",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "master"
+          }
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "an older demotion does not void a newer master order",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999980,
+            "rank": "member"
+          }
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a demotion at the same time wins",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "member"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "a newer master order replaced this one",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "master"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "a master order for a revoked device",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "keys": [
+          "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c"
+        ]
+      },
+      "expect": "revoked"
+    },
+    {
+      "name": "a master order for an AID later demoted",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|aid:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05f01f16e82040f8d23d9652bed3e0acee795e7eecde838c1593f8032abcc5401a0cb8d8dc707a70c0c4af87f36ef97c7c8a59ddc7fd6991cd1ad2fcff04d504"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|aid:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "member"
+          }
+        }
+      },
+      "expect": "superseded"
+    },
+    {
+      "name": "a master order dated in the future",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1790000600000",
+        "signatureHex": "224eb15b4fc2bba6dca18eea89f0a43f5877e1b3db1add79b8d2fd14fb7e65ef59858fad9df68c9650b59a0f3751a46970d3729fa2409cc92354080e53c92e0c"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "expect": "future"
+    },
+    {
+      "name": "a master order with a padded time",
+      "msg": "flagship/inject/v1|john--chess|7017bccc7a3dcc705f832bc918f2b61c|master|1790000000000",
+      "ev": {
+        "appId": "john--chess",
+        "identityPubHex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|01789999999990",
+        "signatureHex": "6141b1f0f0bb76f9416ce8326982b56c5deff8e108de411c96a42b30a8c83385165a40bc81ae3d193f37fb921ada63de61e277ce533eb7bda3bc0383abc43c08"
+      },
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "expect": "bad-evidence"
+    }
+  ],
+  "notes": [
+    {
+      "name": "a revocation by the admin root",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "581c1193349ad798bbf256137f2555cc2ef2b6607fc4a6d4dff3d9d350ea99169ef42b7a65c2e84fe9a18375b5db398de93327982396b8cd563442eb54532003"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000001"
+        ],
+        "keys": [],
+        "ranks": {}
+      }
+    },
+    {
+      "name": "a revocation with the revoked admin grant",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "581c1193349ad798bbf256137f2555cc2ef2b6607fc4a6d4dff3d9d350ea99169ef42b7a65c2e84fe9a18375b5db398de93327982396b8cd563442eb54532003",
+        "grantStatement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "grantSignatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000001"
+        ],
+        "keys": [
+          "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c"
+        ],
+        "ranks": {}
+      }
+    },
+    {
+      "name": "a revocation with an IRK-signed member grant",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "581c1193349ad798bbf256137f2555cc2ef2b6607fc4a6d4dff3d9d350ea99169ef42b7a65c2e84fe9a18375b5db398de93327982396b8cd563442eb54532003",
+        "grantStatement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|apps|1789999999000|1790000001000",
+        "grantSignatureHex": "049b5e046def163863bad4c4c6e5d0dfb0b57ed4cb037c4c422a7b1735fc25972a4ff7c2dc59f2f88a0162be9ceca4bab6e2a9ee6d2a92f6d68e7582eed53300"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000001"
+        ],
+        "keys": [
+          "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c"
+        ],
+        "ranks": {}
+      }
+    },
+    {
+      "name": "a revocation already held",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000001"
+        ]
+      },
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "581c1193349ad798bbf256137f2555cc2ef2b6607fc4a6d4dff3d9d350ea99169ef42b7a65c2e84fe9a18375b5db398de93327982396b8cd563442eb54532003"
+      },
+      "expect": "ok",
+      "changed": false,
+      "heldAfter": {
+        "grants": [
+          "0b6f2d3e-0000-4000-8000-000000000001"
+        ],
+        "keys": [],
+        "ranks": {}
+      }
+    },
+    {
+      "name": "a revocation signed by the IRK where an admin root is pinned",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "e27c546c09303a231ed8c18b1b9ca10021e866ecb45237cc48a1f0a10ab409c95c6b0870bb71cac21df21b96e39714697e1a34534820dc2c1351107014501106"
+      },
+      "expect": "bad-signature"
+    },
+    {
+      "name": "a revocation where no admin root is pinned",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "e27c546c09303a231ed8c18b1b9ca10021e866ecb45237cc48a1f0a10ab409c95c6b0870bb71cac21df21b96e39714697e1a34534820dc2c1351107014501106"
+      },
+      "expect": "no-admin-root"
+    },
+    {
+      "name": "a revocation with another grant",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000002|john|lost|1789999999999",
+        "signatureHex": "125ecbfb7ca1b0824d9a1950b98ea4fef34e25c43a9dc03d6659aad6fcbd1979c7822e45949177b03802a06f8b60a8e482903c1c8cbe88c820475d390309e305",
+        "grantStatement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "grantSignatureHex": "b193915325efc86164edbf230463b4de2baa4599a3f13a4717d68bfb0f947557fbb694b5369ac280f79a5aa53e909a8d448eb06589393a85749818267e103b04"
+      },
+      "expect": "wrong-grant"
+    },
+    {
+      "name": "a revocation with a stranger's grant",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "581c1193349ad798bbf256137f2555cc2ef2b6607fc4a6d4dff3d9d350ea99169ef42b7a65c2e84fe9a18375b5db398de93327982396b8cd563442eb54532003",
+        "grantStatement": "flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|john|dev-1|ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|admin,apps|1789999999000|1790086400000",
+        "grantSignatureHex": "de47458689b0ad0cd9fc082aae008876cb5e51767a2d517eb88dbca0667a367e2290dc03fb8cb54157f4b08cea9fda7a2411f8bb9217b3df248f33744da0420b"
+      },
+      "expect": "bad-signature"
+    },
+    {
+      "name": "a revocation dated in the future",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1790000600000",
+        "signatureHex": "bbc3a81074a709e58cf8818f750729b5f4cb0b6186256924c5e18af62fb7e3fe19bca6e77c5d91010bb99914e2e33fe7466611a85ed64dee4f8cfdc272fbfc0a"
+      },
+      "expect": "future"
+    },
+    {
+      "name": "a revocation with an unknown reason",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|bored|1789999999999",
+        "signatureHex": "22890c69e530ddccfdc46f7aa08643b9dcee8ee614b345cb835ce33e023f858779ac38675d972d2cb2e76ee5b5c2469e2c13682e59c2312758eda4da6530f706"
+      },
+      "expect": "bad-statement"
+    },
+    {
+      "name": "a demotion by the admin root",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|member|1789999999995",
+        "signatureHex": "b2f27c1034fb7b6f6b3ab9a9f8efd6ba4b839d1928974f427570b8e152785ce106dcffc5860886cb90b15cd2d7e3f4cdf16308e72c83cc7348e8c94d8f9ec605"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [],
+        "keys": [],
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "member"
+          }
+        }
+      }
+    },
+    {
+      "name": "a demotion signed by the IRK where an admin root is pinned",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|member|1789999999995",
+        "signatureHex": "98431c4ab9a6846ef29a2dd553d4d7292e2e0d8d685bd6e2a4dcf30703fb808069787b31930737c3dcab58cb38e18923910ad93f7e173762a5f56bd60ea65f06"
+      },
+      "expect": "bad-signature"
+    },
+    {
+      "name": "a demotion by the IRK where no admin root is pinned",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|refused|1789999999995",
+        "signatureHex": "fdd628902f2d2107d582d0462e0afc696917e12bee27f59649c7c379dde5abbba930023262c73070473c1e2858255b7be8e7f82a7d9c3b9fbc6323394391640e"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [],
+        "keys": [],
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "refused"
+          }
+        }
+      }
+    },
+    {
+      "name": "an order older than the one held changes nothing",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "member"
+          }
+        }
+      },
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "expect": "ok",
+      "changed": false,
+      "heldAfter": {
+        "grants": [],
+        "keys": [],
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "member"
+          }
+        }
+      }
+    },
+    {
+      "name": "a newer order replaces the one held",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "master"
+          }
+        }
+      },
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|manager|1789999999995",
+        "signatureHex": "1b84d2fe5266f677bdd5620b0b1a8eceb65b6e8bfa627d5073de4e1f0c4923d517853e411c47f1df854b74987fabd22dc5a7aacb44b34156a363208237eea504"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [],
+        "keys": [],
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999995,
+            "rank": "manager"
+          }
+        }
+      }
+    },
+    {
+      "name": "at the same time a demotion replaces master",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "master"
+          }
+        }
+      },
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|member|1789999999990",
+        "signatureHex": "e810c2f43ce9400dc9779cd53874fe2d1d432c56e543f70f76bd88578a3458aaeada311cb3f2917fe1adb76b43df95c872dc42a73f213477a22e1f7484cef30c"
+      },
+      "expect": "ok",
+      "changed": true,
+      "heldAfter": {
+        "grants": [],
+        "keys": [],
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "member"
+          }
+        }
+      }
+    },
+    {
+      "name": "at the same time master does not replace a demotion",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "member"
+          }
+        }
+      },
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|master|1789999999990",
+        "signatureHex": "05a57c4edf01965cba7a972ce7f8e6ce9cdac42fcb1c8be7fb95bcd1fc831b10ca01d8369085a845d1bcaa6675b4bc97524c594705abf15e00946982876f5409"
+      },
+      "expect": "ok",
+      "changed": false,
+      "heldAfter": {
+        "grants": [],
+        "keys": [],
+        "ranks": {
+          "john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c": {
+            "issuedAt": 1789999999990,
+            "rank": "member"
+          }
+        }
+      }
+    },
+    {
+      "name": "an order dated in the future",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c|member|1790000600000",
+        "signatureHex": "f348dee9dd327354f4d9a3b7ab7572c7704b8ab445efc5001da4fba8e11b298a8912a393973e247c09ff77e0579ff98e021be94f614dfd0a3430a34f2c5bdf0c"
+      },
+      "expect": "future"
+    },
+    {
+      "name": "an order with a bad target",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/app-rank/v1|john--chess|device:zz|member|1789999999995",
+        "signatureHex": "117f24f07ef7ce7abcf0b45a07972d47b30950ad54ac0cc98f3aff70c6bea566c13c5d2ea8cc1b06981b8dd443405a8705be1b6a68ae17371ae1a91d5e24f903"
+      },
+      "expect": "bad-statement"
+    },
+    {
+      "name": "an unknown statement",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/other/v1|x",
+        "signatureHex": "989bd9879272e282a37b32136c8954a65252fb91af1c46ea09694d8c437df4edbfc1891526b134013efe0f4fe98aa4b04f7bc4485836049d2fd56e5b2bd6530b"
+      },
+      "expect": "bad-statement"
+    },
+    {
+      "name": "a malformed signature",
+      "anchors": {
+        "irkPubHex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminRootPubHex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+      },
+      "held": {},
+      "note": {
+        "statement": "flagship/revoke-device-capability-grant/v1|0b6f2d3e-0000-4000-8000-000000000001|john|lost|1789999999999",
+        "signatureHex": "zz"
+      },
+      "expect": "bad-statement"
     }
   ]
 }

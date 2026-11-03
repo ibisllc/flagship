@@ -126,7 +126,7 @@ export function openTransferFds(e: Exec, account: DaemonAccount | null): { stdin
 export function copyInFiles(e: Exec, account: DaemonAccount | null): void {
   if (!e.copyIn?.length) return;
   if (!account) throw new PrivdError("failed", "the daemon's account does not exist");
-  for (const { from, to } of e.copyIn) {
+  for (const { from, to, maxBytes } of e.copyIn) {
     mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
     rmSync(to, { force: true });
     let src: number;
@@ -139,13 +139,24 @@ export function copyInFiles(e: Exec, account: DaemonAccount | null): void {
     try {
       const st = fstatSync(src);
       if (!st.isFile() || st.uid !== account.uid) throw new PrivdError("forbidden", "the broker copies only the daemon's own regular files");
+      const tooBig = () => new PrivdError("forbidden", "that file is larger than the broker accepts for it");
+      if (maxBytes !== undefined && st.size > maxBytes) throw tooBig();
       const dst = openSync(to, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       try {
         const buf = Buffer.alloc(1 << 20);
-        for (let n; (n = readSync(src, buf, 0, buf.length, null)) > 0; ) writeSync(dst, buf, 0, n);
-      } finally {
+        let total = 0;
+        for (let n; (n = readSync(src, buf, 0, buf.length, null)) > 0; ) {
+          total += n;
+          // The daemon still owns the file and can grow it after the stat.
+          if (maxBytes !== undefined && total > maxBytes) throw tooBig();
+          writeSync(dst, buf, 0, n);
+        }
+      } catch (err) {
         closeSync(dst);
+        rmSync(to, { force: true });
+        throw err;
       }
+      closeSync(dst);
     } finally {
       closeSync(src);
     }

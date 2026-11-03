@@ -2,7 +2,7 @@
  * The server page's GPUs (packages/server-daemon/src/gpu/http.ts) with no backend: each GPU with its
  * model, memory and state, the app holding it, the apps waiting; Stop asks first, Cancel sends
  * nothing, Stop posts the allocation and the next app waiting gets the GPU; a box with no GPU (or
- * without the GPU screen) shows no card. Apps asking to use a GPU: Approve signs flagship/gpu-approval/v1
+ * without the GPU screen) shows no card. Apps asking to use a GPU: Approve signs flagship/gpu-approval/v2
  * under the admin root (gymKit `sensitive`), Decline sends nothing, Withdraw signs
  * flagship/gpu-approval-withdraw/v1; a device without the admin root sees them read-only.
  */
@@ -46,11 +46,11 @@ function fixture(): Record<string, any> {
 
 const sorted = (xs: string[]) => [...new Set(xs)].sort().join(",");
 const approvalCanon = (b: any) =>
-  ["flagship/gpu-approval/v1", b.server, b.appId, b.installationId, b.generation, b.backend, b.maxCount, sorted(b.caps), sorted(b.policies), b.isolation, b.secrecy ? "1" : "0", b.trustDomain ?? "", b.ownerConsent ?? "", b.issuedAt].join("|");
+  ["flagship/gpu-approval/v2", b.server, b.appId, b.installationId, b.generation, b.backend, b.maxCount, sorted(b.caps), sorted(b.policies), b.isolation, b.secrecy ? "1" : "0", b.trustDomain ?? "", b.ownerConsent ?? "", b.container, b.userspace ?? "", b.maxRuntimeMs ?? "", b.share ? `${b.share.computePercent}:${b.share.memoryMib}` : "", b.issuedAt].join("|");
 const withdrawCanon = (b: any) => ["flagship/gpu-approval-withdraw/v1", HOME, b.appId, b.installationId, b.generation, b.issuedAt].join("|");
 
 function request(appId: string, installationId: string, generation: number, extra: Record<string, unknown> = {}) {
-  return { server: HOME, appId, installationId, generation, backend: "nvidia-cuda", maxCount: 1, caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: null, ownerConsent: null, ...extra };
+  return { server: HOME, appId, installationId, generation, backend: "nvidia-cuda", maxCount: 1, caps: ["compute"], policies: ["exclusive"], isolation: "gvisor-nvproxy", secrecy: true, trustDomain: null, ownerConsent: null, container: `flagship-${appId}`, userspace: null, maxRuntimeMs: null, share: null, ...extra };
 }
 
 /** The box's approval routes, answered as an admin-pinned box does. */

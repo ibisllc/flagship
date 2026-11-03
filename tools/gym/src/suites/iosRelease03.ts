@@ -290,7 +290,7 @@ export const IOS_RELEASE03: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-gpus-approve",
-    "Apps asking to use a GPU show their exact terms; Approve signs flagship/gpu-approval/v1 with the admin root; Decline hides the ask and sends nothing; a sharing request is approved with a trust domain and consent; Withdraw signs flagship/gpu-approval-withdraw/v1.",
+    "Apps asking to use a GPU show their exact terms; Approve signs flagship/gpu-approval/v2 with the admin root; Decline hides the ask and sends nothing; a sharing request is approved with a trust domain and consent; Withdraw signs flagship/gpu-approval-withdraw/v1.",
     N + "test_gpuApprovalApproveDeclineWithdraw",
     {
       steps: [

@@ -58,7 +58,14 @@ const signed = (o: ArchV2SwitchOrder, k = ADMIN) => ({ order: o, signatureHex: h
 
 function root(files: ReturnType<typeof memFiles>, over: Partial<RootSwitchDeps> = {}) {
   const ran: string[] = [];
+  // Root's own view of the box: systemd's id for the daemon's run, and the apps it lists.
+  const box = { run: "inv-apply", apps: ["flagship-alice--shop"], engineOk: true };
   const d: RootSwitchDeps = {
+    daemonStart: async () => box.run,
+    listApps: async () => [...box.apps],
+    activeEngine: async () => "docker",
+    ensureEngine: async () => (box.engineOk ? { ok: true } : { ok: false, reason: "podman is not installed or does not run" }),
+    stackProblems: async () => [],
     files,
     run: async (c, a) => void ran.push(`${c} ${a.join(" ")}`),
     serverDomain: SERVER,
@@ -67,7 +74,7 @@ function root(files: ReturnType<typeof memFiles>, over: Partial<RootSwitchDeps> 
     now: () => T + 1000,
     ...over,
   };
-  return { d, ran };
+  return { d, ran, box };
 }
 
 const PINS = `${REPO}/installer/rust/PINS.json`;
@@ -127,13 +134,14 @@ describe("root's half of a switch", () => {
 
   it("uses an order once, refuses a second switch while one is under way, and resumes an install a restart cut short", async () => {
     const files = withRelease({ [SWITCH_ORDER_FILE]: JSON.stringify(signed(order())) });
-    const { d } = root(files);
+    const { d, box } = root(files);
     await applySwitchAsRoot(d);
     files.m.set(SWITCH_ORDER_FILE, JSON.stringify(signed(order({ nonce: "b2".repeat(16) }))));
     await expect(applySwitchAsRoot(d)).rejects.toThrow(/another switch is under way/);
     // Settled: the old order can't be replayed.
     files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "commit" }));
-    await settleSwitchAsRoot(d);
+    box.run = "inv-1";
+    expect(await settleSwitchAsRoot(d)).toEqual({ state: "done" });
     files.m.set(SWITCH_ORDER_FILE, JSON.stringify(signed(order())));
     await expect(applySwitchAsRoot({ ...d, now: () => T + 2000 })).rejects.toThrow(/already used/);
 
@@ -165,28 +173,28 @@ describe("root's half of a switch", () => {
     await expect(applySwitchAsRoot(root(noDocker).d)).rejects.toThrow(/no Docker to go back to/);
   });
 
-  it("puts the switch file back on a revert, keeps it on a commit, and refuses a revert once kept or after the trial", async () => {
+  it("puts the switch file back when root's own engine attempt fails, keeps it on a commit root agrees with, and refuses a revert once kept or after the trial", async () => {
     const before = JSON.stringify({ version: 1, rust: "off", engine: "docker" });
     const files = withRelease({ [SWITCH_ORDER_FILE]: JSON.stringify(signed(order())), [ARCH_V2_CONFIG]: before });
-    const { d } = root(files);
+    const { d, box } = root(files);
     await applySwitchAsRoot(d);
-    files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "ff".repeat(16), verdict: "revert" }));
-    await expect(settleSwitchAsRoot(d)).rejects.toThrow(/no switch is on trial/);
-    files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "drop-tables" }));
-    await expect(settleSwitchAsRoot(d)).rejects.toThrow(/unknown verdict/);
-    files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "revert", reason: "apps\nmissing" }));
-    await expect(settleSwitchAsRoot({ ...d, now: () => T + TRIAL_MS + 5000 })).rejects.toThrow(/trial has ended/);
-    expect(await settleSwitchAsRoot(d)).toEqual({ state: "reverted" });
+    box.run = "inv-1";
+    box.engineOk = false;
+    // Past the window nothing goes back on its own.
+    expect(await settleSwitchAsRoot({ ...d, now: () => T + TRIAL_MS + 5000 })).toMatchObject({ state: "trial", reason: expect.stringMatching(/trial has ended/) });
+    expect(await settleSwitchAsRoot(d)).toEqual({ state: "reverted", reason: "podman is not installed or does not run" });
     expect(files.m.get(ARCH_V2_CONFIG)).toBe(before);
-    expect(parseSwitchRecord(files.m.get(SWITCH_RECORD)!)!.reason).toBe("apps missing");
+    expect(parseSwitchRecord(files.m.get(SWITCH_RECORD)!)!.reason).toBe("podman is not installed or does not run");
 
     const kept = withRelease({ [SWITCH_ORDER_FILE]: JSON.stringify(signed(order())) });
     const k = root(kept);
     await applySwitchAsRoot(k.d);
+    k.box.run = "inv-1";
     kept.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "commit" }));
     expect(await settleSwitchAsRoot(k.d)).toEqual({ state: "done" });
-    kept.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "revert" }));
-    await expect(settleSwitchAsRoot(k.d)).rejects.toThrow(/already settled/);
+    k.box.engineOk = false;
+    k.box.run = "inv-9";
+    expect(await settleSwitchAsRoot(k.d)).toEqual({ state: "done" });
     expect(parseArchV2Config(kept.m.get(ARCH_V2_CONFIG)!).engine).toBe("podman");
   });
 
@@ -205,7 +213,7 @@ function daemon(o: { files?: ReturnType<typeof memFiles>; config?: ArchV2Config;
   const engine = o.engine ?? "docker";
   const notes: string[] = [];
   const appsSeq = [...(o.apps ?? [["flagship-alice--shop"]])];
-  const rootDeps = root(files, { now: () => T + 1000 });
+  const rootDeps = root(files, { now: () => T + 1000, listApps: async () => (appsSeq.length > 1 ? appsSeq.shift()! : appsSeq[0]!) });
   const s = new ArchV2Switcher({
     files,
     cmd: {
@@ -222,7 +230,6 @@ function daemon(o: { files?: ReturnType<typeof memFiles>; config?: ArchV2Config;
     engine: () => engine,
     repoPath: REPO,
     disk: async () => ({ freeBytes: o.free ?? 50 * 1024 ** 3, totalBytes: 100 * 1024 ** 3 }),
-    runningApps: async () => (appsSeq.length > 1 ? appsSeq.shift()! : appsSeq[0]!),
     root: {
       apply: async () => {
         if (o.rootFails) throw new Error("apt-get exited with code 100");
@@ -266,56 +273,68 @@ describe("the plan", () => {
 });
 
 describe("the trial", () => {
-  it("starts with the apps that run now, and drops its trial when root refuses", async () => {
+  it("starts with root's own list of the apps that run now and writes no trial file of its own", async () => {
     const d = daemon();
     expect((await d.s.start(order(), signed(order()).signatureHex)).ok).toBe(true);
-    expect(JSON.parse(d.files.m.get(SWITCH_TRIAL_FILE)!)).toEqual({ nonce: "a1".repeat(16), boots: 0, appsBefore: ["flagship-alice--shop"] });
+    expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)).toMatchObject({ appsBefore: ["flagship-alice--shop"], applyStart: "inv-apply", starts: [] });
+    expect(d.files.m.has(SWITCH_TRIAL_FILE)).toBe(false);
     expect(d.notes).toEqual(["server.stack.switch-started"]);
     const f = daemon({ rootFails: true });
     await expect(f.s.start(order(), signed(order()).signatureHex)).rejects.toThrow(/apt-get/);
-    expect(f.files.m.has(SWITCH_TRIAL_FILE)).toBe(false);
+    expect(f.files.m.has(SWITCH_RECORD)).toBe(false);
   });
 
-  it("is kept once healthy with every app back", async () => {
+  it("is kept once healthy and root sees every app back", async () => {
     const d = daemon({ apps: [["flagship-alice--shop"], [], ["flagship-alice--shop"]] });
     await d.s.start(order(), signed(order()).signatureHex);
+    d.rootDeps.box.run = "inv-1";
     let restarted = false;
     expect(await d.s.settle({ awaitHealthy: async () => true, requestRestart: () => (restarted = true), pollMs: 1 })).toBe("kept");
     expect(restarted).toBe(false);
     expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)!.state).toBe("done");
+    expect(d.files.m.has(SWITCH_VERDICT_FILE)).toBe(false);
     expect(d.config().engine).toBe("podman");
     expect(d.notes).toContain("server.stack.switched");
   });
 
-  it("is put back, with a restart, when the box isn't healthy or an app doesn't come back", async () => {
-    for (const [healthy, apps, why] of [
-      [false, [["flagship-alice--shop"]], /didn't report healthy/],
-      [true, [["flagship-alice--shop"], []], /1 app\(s\) didn't come back: flagship-alice--shop/],
+  it("restarts for another try, putting nothing back itself, when the box isn't healthy or an app doesn't come back", async () => {
+    for (const [healthy, apps] of [
+      [false, [["flagship-alice--shop"]]],
+      [true, [["flagship-alice--shop"], []]],
     ] as const) {
       const d = daemon({ apps: apps.map((a) => [...a]) });
       await d.s.start(order(), signed(order()).signatureHex);
+      d.rootDeps.box.run = "inv-1";
       let restarted = false;
-      expect(await d.s.settle({ awaitHealthy: async () => healthy, requestRestart: () => (restarted = true), pollMs: 1, appsBackMs: 0 })).toBe("reverted");
+      expect(await d.s.settle({ awaitHealthy: async () => healthy, requestRestart: () => (restarted = true), pollMs: 1, appsBackMs: 0 })).toBe("restarting");
       expect(restarted).toBe(true);
-      expect(d.files.m.has(ARCH_V2_CONFIG)).toBe(false);
-      expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)!.reason).toMatch(why);
-      expect(d.notes).toContain("server.stack.switch-reverted");
+      expect(d.config().engine).toBe("podman");
+      expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)!.state).toBe("trial");
     }
   });
 
-  it("counts starts and puts the switch back after three that never got healthy", async () => {
+  it("root puts the switch back after three starts that were never kept", async () => {
     const d = daemon();
     await d.s.start(order(), signed(order()).signatureHex);
-    for (let i = 0; i < 3; i++) expect(await d.s.beforeEngine()).toBe(false);
+    for (let i = 1; i <= 3; i++) {
+      d.rootDeps.box.run = `inv-${i}`;
+      expect(await d.s.beforeEngine()).toBe(false);
+    }
+    d.rootDeps.box.run = "inv-4";
     expect(await d.s.beforeEngine()).toBe(true);
     expect(d.files.m.has(ARCH_V2_CONFIG)).toBe(false);
     expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)!.reason).toMatch(/3 starts/);
+    expect(d.notes).toContain("server.stack.switch-reverted");
   });
 
-  it("undoes a move to Podman that failed at once, and leaves a good one alone", async () => {
+  it("hands a failed move to root, which puts the switch back only when its own attempt fails too", async () => {
     const d = daemon();
     await d.s.start(order(), signed(order()).signatureHex);
+    d.rootDeps.box.run = "inv-1";
     expect(await d.s.afterEngine("podman")).toBe(false);
+    expect(await d.s.afterEngine("docker", "podman is not installed or does not run")).toBe(false);
+    expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)!.state).toBe("trial");
+    d.rootDeps.box.engineOk = false;
     expect(await d.s.afterEngine("docker", "podman is not installed or does not run")).toBe(true);
     expect(parseSwitchRecord(d.files.m.get(SWITCH_RECORD)!)!.reason).toBe("podman is not installed or does not run");
   });
@@ -365,6 +384,7 @@ function http(over: { adminRootPub?: Uint8Array | null; gateDenies?: boolean; co
     engine: () => "docker",
     requestRestart: () => void restarts++,
     now: () => T + 1000,
+    usedNonces: { has: async () => false, mark: async () => {} },
     ...(over.components ? { components: over.components } : {}),
   });
   const post = (body: unknown) => handle({ method: "POST", path: "/api/stack/switch", headers: {}, body: Buffer.from(JSON.stringify(body)) });
@@ -444,5 +464,126 @@ describe("POST /api/stack/switch", () => {
     expect((await http({ gateDenies: true }).handle({ method: "GET", path: "/api/stack", headers: {}, body: Buffer.alloc(0) }))!.status).toBe(401);
     const r = await http().handle({ method: "GET", path: "/api/stack", headers: {}, body: Buffer.alloc(0) });
     expect(JSON.parse(String(r!.body))).toMatchObject({ stack: "classic", engine: "docker", switch: null, plan: { target: "arch-v2" } });
+  });
+});
+
+// ── review 2026-10-25 #5: root decides the trial from its own evidence ───────
+
+describe("root keeps its own trial evidence (a daemon can't force a revert or commit)", () => {
+  function probes(o: { apps?: () => string[]; engineOk?: () => boolean; startId?: () => string | null } = {}) {
+    let id = "inv-apply";
+    const p = {
+      daemonStart: async () => (o.startId ? o.startId() : id),
+      listApps: async () => (o.apps ? o.apps() : ["flagship-alice--shop"]),
+      activeEngine: async () => "docker" as EngineKind,
+      ensureEngine: async () => (o.engineOk && !o.engineOk() ? { ok: false, reason: "podman is not installed or does not run" } : { ok: true }),
+      stackProblems: async () => [] as string[],
+    };
+    return { p, restart: (n: string) => void (id = n) };
+  }
+  const started = async (o: Parameters<typeof probes>[0] = {}) => {
+    const files = withRelease({ [SWITCH_ORDER_FILE]: JSON.stringify(signed(order())) });
+    const pr = probes(o);
+    const { d } = root(files, pr.p);
+    await applySwitchAsRoot(d);
+    return { files, d, pr };
+  };
+
+  it("captures the apps that ran before from root's own listing, not the daemon's", async () => {
+    const { files } = await started();
+    expect(parseSwitchRecord(files.m.get(SWITCH_RECORD)!)).toMatchObject({ appsBefore: ["flagship-alice--shop"], applyStart: "inv-apply", starts: [] });
+  });
+
+  it("ignores a revert the daemon writes while the new stack is up", async () => {
+    const { files, d, pr } = await started();
+    pr.restart("inv-1");
+    files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "revert", reason: "trust me" }));
+    expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    expect(parseArchV2Config(files.m.get(ARCH_V2_CONFIG)!).engine).toBe("podman");
+  });
+
+  it("ignores a start count the daemon writes, and counts starts itself by systemd's run id", async () => {
+    const { files, d, pr } = await started();
+    files.m.set(SWITCH_TRIAL_FILE, JSON.stringify({ nonce: "a1".repeat(16), boots: 99, appsBefore: ["flagship-ghost"] }));
+    // The same run asking again and again is one start.
+    pr.restart("inv-1");
+    for (let i = 0; i < 6; i++) expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    pr.restart("inv-2");
+    await settleSwitchAsRoot(d);
+    pr.restart("inv-3");
+    expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    pr.restart("inv-4");
+    const r = await settleSwitchAsRoot(d);
+    expect(r.state).toBe("reverted");
+    expect(files.m.has(ARCH_V2_CONFIG)).toBe(false);
+    expect(parseSwitchRecord(files.m.get(SWITCH_RECORD)!)!.reason).toMatch(/3 starts/);
+  });
+
+  it("doesn't count the run that sent the order, and never reverts once the trial window is over", async () => {
+    const { d, pr } = await started();
+    for (let i = 0; i < 5; i++) expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    for (const n of ["a", "b", "c", "d"]) {
+      pr.restart(n);
+      expect((await settleSwitchAsRoot({ ...d, now: () => T + TRIAL_MS + 5000 })).state).toBe("trial");
+    }
+  });
+
+  it("reverts when its own attempt to put the box on the target's engine fails", async () => {
+    let ok = true;
+    const { files, d, pr } = await started({ engineOk: () => ok });
+    pr.restart("inv-1");
+    expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    ok = false;
+    expect((await settleSwitchAsRoot(d)).state).toBe("reverted");
+    expect(parseSwitchRecord(files.m.get(SWITCH_RECORD)!)!.reason).toMatch(/podman is not installed/);
+  });
+
+  it("keeps the switch only when the daemon asks AND root sees every app back on the new engine", async () => {
+    let apps = ["flagship-alice--shop"];
+    const { files, d, pr } = await started({ apps: () => apps });
+    // Before any start on the new stack, nothing is kept.
+    files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "commit" }));
+    expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    pr.restart("inv-1");
+    apps = [];
+    const waiting = await settleSwitchAsRoot(d);
+    expect(waiting).toMatchObject({ state: "trial", reason: expect.stringMatching(/flagship-alice--shop/) });
+    apps = ["flagship-alice--shop"];
+    files.m.delete(SWITCH_VERDICT_FILE);
+    expect((await settleSwitchAsRoot(d)).state).toBe("trial");
+    files.m.set(SWITCH_VERDICT_FILE, JSON.stringify({ nonce: "a1".repeat(16), verdict: "commit" }));
+    expect((await settleSwitchAsRoot(d)).state).toBe("done");
+  });
+});
+
+describe("POST /api/stack/switch: single-use nonce (review 2026-10-25 #15)", () => {
+  it("refuses an order whose nonce the box already took, even inside the 5-minute window; a dry run burns nothing", async () => {
+    const used: string[] = [];
+    const d = daemon();
+    const handle = buildArchV2SwitchHttp({
+      serverId: SERVER,
+      ownerIrkPub: IRK.pub,
+      adminRootPub: ADMIN.pub,
+      username: "alice",
+      gate: { check: () => null },
+      switcher: d.s,
+      config: d.config,
+      engine: () => "docker",
+      requestRestart: () => {},
+      now: () => T + 1000,
+      usedNonces: { has: async (n) => used.includes(n), mark: async (n) => void used.push(n) },
+    });
+    const post = (body: unknown) => handle({ method: "POST", path: "/api/stack/switch", headers: {}, body: Buffer.from(JSON.stringify(body)) });
+    const body = { order: order(), signature: signed(order()).signatureHex };
+    expect((await post({ ...body, dryRun: true }))!.status).toBe(200);
+    expect(used).toEqual([]);
+    expect((await post(body))!.status).toBe(202);
+    expect(used).toEqual(["a1".repeat(16)]);
+    // The record is settled and cleared (as after a revert): the box's own list still refuses it.
+    d.files.m.delete(SWITCH_RECORD);
+    const again = await post(body);
+    expect(again!.status).toBe(409);
+    expect(JSON.parse(String(again!.body))).toMatchObject({ code: "replayed" });
+    expect((await post({ ...body, dryRun: true }))!.status).toBe(409);
   });
 });

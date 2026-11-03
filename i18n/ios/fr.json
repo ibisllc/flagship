@@ -3170,5 +3170,10 @@
   "Needs an update": "Mise à jour requise",
   "This server needs an update to keep working with Flagship 0.3": "Ce serveur doit être mis à jour pour continuer à fonctionner avec Flagship 0.3",
   "Its certificate can't be renewed and runs out on %@. Update it before then.": "Son certificat ne peut pas être renouvelé et expire le %@. Mettez-le à jour avant cette date.",
-  "Its certificate can't be renewed until it is updated.": "Son certificat ne pourra pas être renouvelé tant qu’il n’est pas mis à jour."
+  "Its certificate can't be renewed until it is updated.": "Son certificat ne pourra pas être renouvelé tant qu’il n’est pas mis à jour.",
+  "This computer has %@ disks the installer could erase (%@), so it stopped. Nothing was erased.": "Cet ordinateur a %@ disques que l'installateur pourrait effacer (%@), il s'est donc arrêté. Rien n'a été effacé.",
+  "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "Cet ordinateur n'a aucun disque interne de 8 Go ou plus sur lequel installer, l'installateur s'est donc arrêté. Rien n'a été effacé.",
+  "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": "Le disque pour lequel cet installateur a été créé (%@) n'est pas dans cet ordinateur. Rien n'a été effacé.",
+  "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": "Le disque pour lequel cet installateur a été créé (%@) correspond à plusieurs disques de cet ordinateur. Rien n'a été effacé.",
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Recréez l'installateur avec la même recette, indiquez dans « Disque où installer » l'un des disques que l'ordinateur a affichés à l'écran, puis démarrez l'ordinateur dessus."
 }

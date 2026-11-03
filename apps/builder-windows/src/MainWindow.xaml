@@ -315,6 +315,12 @@
                                 <PasswordBox x:Name="WifiPasswordBox" Grid.Column="1" PasswordChanged="WifiPassword_Changed" ToolTip="{local:Str wiFiPasswordOptional}"/>
                             </Grid>
                             <TextBlock Text="{local:Str optionalWiFiForAServer}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                            <!-- B2 #9: the one disk to erase on a machine with more than one. USB/ISO only, never a hosted VM. -->
+                            <TextBlock Text="{local:Str diskToInstallOnOptional}" Margin="0,10,0,4"/>
+                            <TextBox Text="{Binding TargetDiskText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{local:Str diskToInstallOnExample}" AutomationProperties.Name="{local:Str diskToInstallOnOptional}"/>
+                            <TextBlock Text="{local:Str diskToInstallOnHelp}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            <TextBlock Text="{local:Str diskToInstallOnInvalid}" Style="{StaticResource Caption}" TextWrapping="Wrap" Foreground="{StaticResource FB.Danger}" Margin="0,4,0,0"
+                                       Visibility="{Binding ShowTargetDiskError, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                         <!-- Bake button -->
                         <StackPanel Margin="0,18,0,12" HorizontalAlignment="Center">

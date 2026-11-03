@@ -279,6 +279,18 @@ msgstr "Wi-Fi パスワード"
 msgid "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only."
 msgstr "イーサネットのないサーバー向けのオプションの Wi-Fi です。この一度限りのインストーラーに組み込まれ、この PC ではお使いのアカウントに対してのみ記憶されます。"
 
+#: wizard.py:1762 (prose)
+msgid "Disk to install on (optional)"
+msgstr "インストール先のディスク（任意）"
+
+#: wizard.py:1770 (prose)
+msgid "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes."
+msgstr "コンピューターに複数のディスクがある場合にだけ必要です。指定しないと、インストーラーはそのようなコンピューターで停止し、何も消去せずに画面にディスクの一覧を表示します。by-id: とその一覧の名前、serial: とディスクのシリアル番号、または size: と正確なサイズ（バイト）を入力してください。"
+
+#: wizard.py:1780 (prose)
+msgid "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces."
+msgstr "by-id:、serial:、size: のいずれかで始め、続けてディスクの名前、シリアル番号、またはバイト単位のサイズを空白なしで入力してください。"
+
 #: wizard.py:1655 (label=)
 msgid "Flash to USB"
 msgstr "USB に書き込む"

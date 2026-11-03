@@ -9,7 +9,7 @@
 /** Boot workers a box may be told to talk to (the host of /boot/flagship-boot-host). */
 export const APPROVED_BOOT_HOSTS: readonly string[] = ["boot.flagshipserver.com", "boot.gym.flagshipserver.com"];
 
-import { BOOT_FS_MOUNT_SH } from "./bootFsMount.js";
+import { BOOT_FS_MOUNT_SH, LUKS_UUID_FILE } from "./bootFsMount.js";
 
 const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
@@ -133,14 +133,31 @@ case "$BOOT_UNLOCK_MODE_RAW" in
     *) BOOT_UNLOCK_MODE=approve; log_line "boot-unlock mode file unreadable or unknown; asking the phone";;
 esac
 
+# A boot-chain trial (server-daemon bootChainRefresh.ts, docs/boot-chain-refresh.md) boots once with
+# flagship.bootchain=<token>. Its GRUB entry and initrd differ from the default's, so a lease key
+# sealed to the TPM under PCR 8/9 is not released on it: on an auto box the default entry would
+# unlock by itself where the trial has to ask the phone.
+TRIAL_TOKEN="$(sed -n 's/.*flagship\\.bootchain=\\([A-Za-z0-9]*\\).*/\\1/p' "$R/proc/cmdline" 2>/dev/null | head -n1 || true)"
+TRIAL_RELAY_SECS="$(bounded "\${FLAGSHIP_TRIAL_RELAY_SECS:-}" 900 1 "$RELAY_MAX_SECS")"
+
 # The 'manual' console fallback exists only on a debug burn, as before.
 DEBUG_BURN=no
 [ -f "$R/boot/flagship-debug-mode" ] && DEBUG_BURN=yes
 
 log_line "premount start (domain=$SERVER_DOMAIN mode=$BOOT_UNLOCK_MODE lock-once=$LOCK_ONCE)"
+[ -z "$TRIAL_TOKEN" ] || log_line "start-up check boot (trial $TRIAL_TOKEN)"
 
-ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device 2>/dev/null | head -n1)"
-[ -n "$ROOT_LUKS_PART" ] || fatal "no crypto_LUKS partition"
+# The encrypted root is the device whose LUKS UUID the hook recorded at install, never just the
+# first LUKS disk: a second encrypted disk or a stick claiming the same UUID is refused.
+LUKS_UUID="$(pinned_uuid "$R/${LUKS_UUID_FILE}")" || fatal "the initramfs has no recorded LUKS UUID (/${LUKS_UUID_FILE})"
+_lrc=0
+ROOT_LUKS_PART="$(device_by_uuid "$LUKS_UUID" crypto_LUKS 30)" || _lrc=$?
+case "$_lrc" in
+    0) ;;
+    2) fatal "more than one disk claims the encrypted root's UUID $LUKS_UUID; refusing to choose";;
+    3) fatal "the device with UUID $LUKS_UUID is not a LUKS volume";;
+    *) fatal "the encrypted root (LUKS UUID $LUKS_UUID) is not attached";;
+esac
 # Open under the crypttab target name: cryptroot runs after us and skips an
 # already-active target only under its own name.
 CRYPT_NAME="$(sed -n 's/^[[:space:]]*\\([^#][^[:space:]]*\\)[[:space:]].*/\\1/p' "$R/cryptroot/crypttab" 2>/dev/null | head -n1)"
@@ -442,11 +459,22 @@ if [ "$EFFECTIVE_MODE" = "auto" ] && unlock_via_box_lease; then
     UNLOCKED=yes
 fi
 if [ "$UNLOCKED" = no ]; then
+    # An auto box's trial that the lease did not open: the previous start-up (the default entry, which
+    # GRUB boots next whatever happens) may well unlock by itself, so ask the phone for a bounded time.
+    if [ -n "$TRIAL_TOKEN" ] && [ "$EFFECTIVE_MODE" = "auto" ] && [ "$TRIAL_RELAY_SECS" -lt "$RELAY_WINDOW_SECS" ]; then
+        RELAY_WINDOW_SECS="$TRIAL_RELAY_SECS"
+        log_line "start-up check: the lease did not unlock it; asking the phone for at most \${RELAY_WINDOW_SECS}s, then restarting into the previous start-up"
+    fi
     RELAY_RC=0
     unlock_via_relay || RELAY_RC=$?
     if [ "$RELAY_RC" = 0 ]; then
         UNLOCKED=yes
     elif [ "$RELAY_RC" = 2 ]; then
+        # Tell the refresh that nobody answered, so it does not blame the new chain.
+        if [ -n "$TRIAL_TOKEN" ] && [ -n "$LOCK_ONCE_MOUNT" ]; then
+            echo "$TRIAL_TOKEN" > "$LOCK_ONCE_MOUNT/flagship-trial-unanswered" 2>/dev/null || true
+            sync 2>/dev/null || true
+        fi
         log_line "restarting to ask again"
         [ -n "$LOCK_ONCE_MOUNT" ] && umount "$LOCK_ONCE_MOUNT" 2>/dev/null || true
         reboot -f

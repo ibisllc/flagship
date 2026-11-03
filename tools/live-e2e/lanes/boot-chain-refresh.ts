@@ -17,7 +17,15 @@
  *      FLAGSHIP_BOOT says `lock-once=yes` and "consumed the one-shot lock marker", the marker is gone (B0),
  *      /proc/cmdline carried the trial token, and the daemon promoted it (no trial left, the installed
  *      premount is the release's again, Activity `server.bootchain.refreshed`);
- *   6. one more restart on the promoted default: unlocks, serves, no trial token.
+ *   6. one more restart on the promoted default: unlocks, serves, no trial token;
+ *   7. B2 #8: the promoted initrd pins the box's own /boot filesystem and LUKS volume by UUID;
+ *   8. B2 #7: the owner deposits an auto-unlock lease and the phone goes out of reach; a plain restart of
+ *      the promoted default unlocks from the lease (the seal holds: the box resealed the lease key to the
+ *      default chain after the last phone-approved boot); then, only where the lease key is sealed to the
+ *      TPM under PCR 8 or 9, a one-time GRUB entry with one more command-line argument (an unendorsed
+ *      chain change) must NOT unlock: the box waits for the phone, the premount logs the TPM's refusal,
+ *      and the phone's approval brings it up. Software custody or an unmeasured GRUB skip that half
+ *      (docs/boot-chain-refresh.md "Auto-unlock and the TPM seal").
  *
  * If the update target can't be published (not built by this refresh), step 3's update is SKIPPED and the
  * refresh is started by a daemon restart instead (it runs on every start): the chain is still proven, the
@@ -43,7 +51,17 @@ import { fileURLToPath } from "node:url";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signPhoneOrder, signUpdateOrder, type PhoneOrder, type UpdateOrder } from "@flagship/protocol";
 import { BootApprover } from "../lib/bootApprover.js";
-import { MAKE_CHAIN_STALE, BOOT_FACTS_SCRIPT, STALE_CHAIN_LINE, parseBootFacts, type BootFacts } from "../lib/bootFacts.js";
+import {
+  BOOT_FACTS_SCRIPT,
+  BOOT_UNENDORSED_ONCE,
+  CLEAR_UNENDORSED,
+  MAKE_CHAIN_STALE,
+  PLAIN_REBOOT,
+  STALE_CHAIN_LINE,
+  parseBootFacts,
+  sealCoversGrub,
+  type BootFacts,
+} from "../lib/bootFacts.js";
 import { debugGrantSibling, debugKey, sudoScript, type DebugKey } from "../lib/debugSsh.js";
 import { createRealAccount, pair, waitOnline, type Account, type Box } from "../lib/fleet.js";
 import { takeGymLock } from "../lib/gymLock.js";
@@ -313,6 +331,83 @@ async function lane(rec: Recorder): Promise<void> {
       assert(!f.state.trial && !f.customCfgPresent, `a trial again: ${short(f.state)}`);
       return `boot ${f.bootId.slice(0, 8)}, unlocked by ${f.unlockLog.unlockedBy}`;
     });
+
+    // ── B2 #8: the initrd pins this box's own disks ────────────────────────────────────────────────
+    const pinned = await rec.check("B2 #8: the promoted initrd pins this box's own boot partition and LUKS volume by UUID", async () => {
+      const f = await facts("uuids");
+      const u = f.uuids;
+      assert(u.initrdBoot && u.initrdBoot === u.diskBoot, `the initrd pins boot ${u.initrdBoot ?? "nothing"}, /boot is ${u.diskBoot ?? "?"}`);
+      assert(u.initrdLuks && u.initrdLuks === u.diskLuks, `the initrd pins LUKS ${u.initrdLuks ?? "nothing"}, the volume is ${u.diskLuks ?? "?"}`);
+      return `boot ${u.initrdBoot.slice(0, 8)}, LUKS ${u.initrdLuks.slice(0, 8)}`;
+    });
+    if (!pinned) return;
+
+    // ── B2 #7: the TPM-sealed lease key across the chain (docs/boot-chain-refresh.md "Auto-unlock and the
+    // TPM seal"). The owner turns auto-unlock on, then the phone goes out of reach. ────────────────────
+    const custodyFacts = await facts("custody");
+    const custody = custodyFacts.custody;
+    log(`lease key custody: ${custody.kind}${custody.pcrs.length ? ` (PCRs ${custody.pcrs.join(",")})` : ""}, unlock policy ${custodyFacts.unlockPolicy}`);
+    const leased = custodyFacts.unlockPolicy === "strict"
+      ? (rec.skip("the owner deposits an auto-unlock lease", "the box's unlock policy is strict: this lane deposits only a classical (v2) lease"), false)
+      : await rec.check("the owner deposits an auto-unlock lease sealed to the box's boot key", async () => {
+          assert(appr.lastRequestKey, "no start-up request seen: the boot key is unknown");
+          return `lease ${(await appr.depositLease(appr.lastRequestKey)).slice(0, 8)}`;
+        });
+    if (!leased) return;
+    appr.setPaused(true);
+
+    const t3 = Date.now();
+    const held = await rec.check("the seal holds: a plain restart of the promoted default unlocks from the lease with the phone out of reach (≤ 20 min)", async () => {
+      const r = await sudoScript(b.ipv4!, key, PLAIN_REBOOT);
+      assert(r.code === 0, `reboot: ${r.code} ${short(r.stderr, 200)}`);
+      b.online = false;
+      b.session = undefined;
+      await sleep(60_000);
+      await waitOnline(b, 20, log);
+      assert(appr.unlocksSince(t3).length === 0, "the phone answered: the box was not unlocked by its lease");
+      const f = await facts("lease-boot");
+      assert(f.unlockLog.unlockedBy === "lease", `unlocked by ${f.unlockLog.unlockedBy}: ${short(f.unlockLog.lines.slice(-4), 300)}`);
+      assert(!f.unlockLog.tpmRefused, "the TPM refused the boot chain it sealed to after the last approved boot");
+      return `custody ${custody.kind}; ${appr.unansweredSince(t3).length} unanswered request(s)`;
+    });
+    if (!held) return;
+
+    if (!sealCoversGrub(custody)) {
+      rec.skip(
+        "an unendorsed boot-chain change (one more GRUB command-line argument) does not auto-unlock",
+        custody.kind === "tpm"
+          ? `the seal covers PCRs ${custody.pcrs.join(",")}: GRUB measures nothing on this box, so no PCR covers its entries (documented)`
+          : `${custody.kind} custody: the lease key is a file on /boot and nothing binds it to the boot chain (documented)`,
+      );
+    } else {
+      const t4 = Date.now();
+      await rec.check("an unendorsed boot-chain change (one more GRUB command-line argument) does not auto-unlock: the box waits for the phone (8 min)", async () => {
+        const r = await sudoScript(b.ipv4!, key, BOOT_UNENDORSED_ONCE);
+        assert(r.code === 0, `unendorsed entry: ${r.code} ${short(r.stderr || r.stdout, 300)}`);
+        b.online = false;
+        b.session = undefined;
+        const deadline = Date.now() + 8 * 60_000;
+        while (Date.now() < deadline) {
+          await sleep(20_000);
+          const up = await tryHttp(`https://${b.fqdn}/api/front-page`, {}, 8_000);
+          assert(up.status !== 200 || Date.now() - t4 < 30_000, "the box came up on a chain its seal does not cover, with nobody answering");
+        }
+        assert(appr.unansweredSince(t4).length >= 1, "the box never asked the phone");
+        return `${appr.unansweredSince(t4).length} unanswered request(s), still locked after 8 min`;
+      });
+      appr.setPaused(false);
+      await rec.check("the phone comes back and approves; the premount logged that the TPM refused the changed chain", async () => {
+        await waitOnline(b, 20, log);
+        assert(appr.unlocksSince(t4).length >= 1, "online without the phone");
+        const f = await facts("unendorsed-boot");
+        assert(/(^|\s)gym\.unendorsed=1(\s|$)/.test(f.cmdline), `not the unendorsed entry: ${f.cmdline}`);
+        assert(f.unlockLog.tpmRefused, `no TPM refusal in the unlock log: ${short(f.unlockLog.lines, 300)}`);
+        assert(f.unlockLog.unlockedBy === "phone", `unlocked by ${f.unlockLog.unlockedBy}`);
+        await sudoScript(b.ipv4!, key, CLEAR_UNENDORSED);
+        return "TPM refused, phone approved";
+      });
+    }
+    appr.setPaused(false);
     return;
   } catch (e) {
     rec.results.push({ name: "boot-chain lane crashed", ok: false, detail: e instanceof Error ? (e.stack ?? e.message) : String(e), ms: 0 });

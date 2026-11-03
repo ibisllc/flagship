@@ -374,19 +374,17 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
     }
 
     /// Record a signed hello (`GET /` with the presence headers): a device of the account, this account's bare name,
-    /// fresh, signed by the key.
+    /// fresh, signed by the key. Called from `respond`, which holds `lock` (NSLock is not recursive).
     private func hello(_ head: HttpHead) -> Bool {
         guard let device = head.header("x-flagship-presence-device")?.lowercased(),
-              lock.withLock({ accountDevices.contains(device) }),
+              accountDevices.contains(device),
               let at = Int64(head.header("x-flagship-presence-at") ?? ""),
               let sig = head.header("x-flagship-presence-sig"), abs(at - now()) <= PhoneRoute.claimSkewMs,
               let bytes = try? PhoneRoute.canonicalPresence(account: account, devicePub: device, hostname: hostname, issuedAt: at),
               ServingAuthority.verifyEd25519(bytes, signatureHex: sig, publicKeyHex: device) else { return false }
         let t = now()
-        lock.withLock {
-            if seen.count >= 32, seen[device] == nil, let oldest = seen.min(by: { $0.value < $1.value })?.key { seen[oldest] = nil }
-            seen[device] = t
-        }
+        if seen.count >= 32, seen[device] == nil, let oldest = seen.min(by: { $0.value < $1.value })?.key { seen[oldest] = nil }
+        seen[device] = t
         return true
     }
 

@@ -416,7 +416,7 @@
 //       (signed flagship/local-ai-app-grant/v1); the build menu and the AI-key step offer "On this server".
 //  v180: GPUs on the server page (views/accelerators.js, lib/accelerators.js): each GPU, the app that holds
 //       it with Stop (asks first, POST /api/screens/accelerators/stop), and the apps waiting for one; apps
-//       asking to use a GPU with Approve (signed flagship/gpu-approval/v1, lib/gpuApproval.js) and Decline,
+//       asking to use a GPU with Approve (a signed GPU approval, lib/gpuApproval.js; v2 since v196) and Decline,
 //       and the approvals in force with Withdraw (signed flagship/gpu-approval-withdraw/v1). Container stack
 //       (views/stack-switch.js, lib/stackSwitch.js, admin devices): a signed flagship/arch-v2-switch/v1
 //       dry run shows the box's plan, Move now sends it, the card follows the move. Journal reads and
@@ -460,7 +460,13 @@
 //  v195: a server from before 0.3 (`/pods` `updateRequired`) reads "Needs an update" on Home, and its page opens with
 //       "This server needs an update to keep working with Flagship 0.3" above the Software update card
 //       (lib/updateRequired.js, precached).
-const SHELL_VERSION = "v195";
+//  v196: GPU approvals sign flagship/gpu-approval/v2, which binds the container, userspace image, run-time limit and
+//       share the box's claim carries (lib/gpuApproval.js); journal reads sign flagship/journal-read/v2 with a
+//       single-use nonce the box keeps (lib/journal.js; review 2026-10-25 #4, #15).
+//  v197: an install the USB installer stopped because it couldn't tell which disk to erase (several disks, none, or
+//       the named one missing) reads as that, in the app's language, with the advice to make the installer again
+//       naming the disk (lib/provisionProgress.js parseDiskStop; test-vectors/install-disk-stop.json).
+const SHELL_VERSION = "v197";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

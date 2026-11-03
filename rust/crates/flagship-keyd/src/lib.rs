@@ -12,6 +12,7 @@ pub mod der;
 pub mod files;
 pub mod hardening;
 pub mod policy;
+pub mod revocations;
 pub mod server;
 pub mod service;
 pub mod tls;

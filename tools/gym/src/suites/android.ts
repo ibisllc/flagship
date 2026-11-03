@@ -1372,7 +1372,7 @@ const GPUS_SWEEP: readonly Scenario[] = [
     ["accelerator-stop-<allocation>", "accelerator-stop-cancel", "accelerator-stop-confirm"], ["accelerators-notice", "the mock box saw accelerator stop"], ["gpus-stop-ask", "gpus-stopped"]),
   gpus("gpus-none", "A box with no GPU, or an older box without the GPU screen, shows no GPUs card.", "noGpuShowsNoCard",
     ["Living-room mini-PC"], ["no accelerators-card"], ["gpus-none"]),
-  gpus("gpus-approve", "Approve signs flagship/gpu-approval/v1 with the admin root; Decline hides the ask and sends nothing; a sharing request carries a trust domain and consent; Withdraw signs flagship/gpu-approval-withdraw/v1.", "gpuApprovalApproveDeclineWithdraw",
+  gpus("gpus-approve", "Approve signs flagship/gpu-approval/v2 with the admin root; Decline hides the ask and sends nothing; a sharing request carries a trust domain and consent; Withdraw signs flagship/gpu-approval-withdraw/v1.", "gpuApprovalApproveDeclineWithdraw",
     ["gpu-approval-approve-alice--render", "gpu-approval-decline-alice--train", "gpu-approval-approve-alice--stream", "gpu-approval-withdraw-alice--photos"], ["gpu-approval:admin", "gpu-approval-withdraw:admin"], ["gpu-approval-pending", "gpu-approval-answered"]),
   gpus("gpus-approve-read-only", "Without the admin root GPU requests show read-only with the admin-only line.", "gpuApprovalReadOnlyOnANonAdminDevice",
     ["Living-room mini-PC"], ["gpu-approval-admin-only"], ["gpu-approval-read-only"]),

@@ -61,6 +61,8 @@ export interface WriteCommandOpts {
   /** Optional Wi-Fi for a box with no Ethernet (burn-time local input). See userdata.ts. */
   wifiSSID?: string;
   wifiPassword?: string;
+  /** The one disk the installer erases on a machine with more than one (UserDataOptions.targetDisk). */
+  targetDisk?: string;
   /** Injected for tests. Defaults to real spawn. */
   enumerateOpts?: EnumerateOpts;
   /** Injected for tests. Defaults to real stdin/stdout readline. */
@@ -140,6 +142,7 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     encryptRoot: opts.encryptRoot !== false,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    ...(opts.targetDisk ? { targetDisk: opts.targetDisk } : {}),
     // Carry the UNSIGNED recipe siblings into install-blob.json — the direct
     // `write` path dropped these (the GUI's prepare path threads them). Absent
     // ⇒ byte-identical.

@@ -1,18 +1,21 @@
 import { execFile } from "node:child_process";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import { canonicalJournalRequest, verifyJournalRequest, type AdminGrantView, type JournalRequest } from "@flagship/protocol";
+import { JOURNAL_NONCE_RE, canonicalJournalRequest, verifyJournalRequest, type AdminGrantView, type JournalRequest } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { hybridOrderSignature } from "./pqAuthority.js";
+import type { UsedNonceStore } from "./updateConsumer.js";
 
 /**
  * Diagnostics surface — `POST /api/journal`. Rides the same daemon HTTP plane
  * as `/api/power`. Body is an `{ request, signature }` envelope where `request`
- * is a `JournalRequest` `{ serverId, unit, lines, issuedAt }`. Where the box
+ * is a `JournalRequest` `{ serverId, unit, lines, nonce, issuedAt }`
+ * (`flagship/journal-read/v2`). Where the box
  * pins an admin root, a request signed by that root (as rotated: the daemon
  * passes the re-pinned root) or by a delegated admin device passes the same
  * gate as the other owner routes (`authorizeSensitiveOrder`); the IRK is
  * refused there, as for every admin-only order. A box that pins no admin root
- * still takes the IRK. Within the replay window it returns the trailing
+ * still takes the IRK. Within the 5-minute window, and once per nonce (the box
+ * keeps the nonces it took, review 2026-10-25 #15), it returns the trailing
  * `lines` of the unit's systemd journal as a JSON string array.
  *
  * Privacy: this is served by the daemon over the box's OWN pinned pipe
@@ -71,7 +74,11 @@ export interface JournalHttpOptions {
   now?: () => number;
   /** Replay window for `issuedAt`. Default 5 min — mirrors `/api/power`. */
   maxAgeMs?: number;
+  /** The nonces this box already took (persisted: `journal-used-nonces.json`). */
+  usedNonces: UsedNonceStore;
 }
+
+const JOURNAL_UPDATE_APP = "Reading this server's log needs the newest version of Flagship. Update the app, then try again.";
 
 const DEFAULT_ALLOWED_UNITS = ["flagship-daemon", "flagship-data-services", "flagship-keyd", "flagship-privd", "flagship-broker"];
 
@@ -105,6 +112,11 @@ export function buildJournalHttp(opts: JournalHttpOptions) {
     if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "stale request" }) };
     }
+    if (r.nonce === undefined) {
+      // A 0.2 app signs journal-read/v1, which has no nonce: it can't be taken once only, so it is refused
+      // with the sentence the 0.2 apps show (control-plane clientUpdate.ts, owner rule F9).
+      return { status: 400, headers: H, body: JSON.stringify({ error: JOURNAL_UPDATE_APP, code: "app-update-required" }) };
+    }
     const parsed = parseJournalRequest(r);
     if (!parsed) {
       return { status: 400, headers: H, body: JSON.stringify({ error: "malformed journal request" }) };
@@ -134,6 +146,10 @@ export function buildJournalHttp(opts: JournalHttpOptions) {
     if (!allowed.includes(parsed.unit)) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "unit not allowed" }) };
     }
+    if (await opts.usedNonces.has(parsed.nonce, parsed.issuedAt)) {
+      return { status: 409, headers: H, body: JSON.stringify({ error: "this request was already used", code: "replayed" }) };
+    }
+    await opts.usedNonces.mark(parsed.nonce);
     const lines = Math.max(1, Math.min(maxLines, Math.floor(parsed.lines)));
     let out: string[];
     try {
@@ -150,11 +166,13 @@ function parseJournalRequest(r: Record<string, unknown>): JournalRequest | null 
     typeof r.serverId !== "string" ||
     typeof r.unit !== "string" ||
     typeof r.lines !== "number" ||
+    typeof r.nonce !== "string" ||
+    !JOURNAL_NONCE_RE.test(r.nonce) ||
     typeof r.issuedAt !== "number"
   ) {
     return null;
   }
-  return { serverId: r.serverId, unit: r.unit, lines: r.lines, issuedAt: r.issuedAt };
+  return { serverId: r.serverId, unit: r.unit, lines: r.lines, nonce: r.nonce, issuedAt: r.issuedAt };
 }
 
 function hexToBytes(hex: string): Uint8Array {
