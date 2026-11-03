@@ -776,12 +776,12 @@ test.describe("gym webapp members and app pages", () => {
     );
     await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "ACCESS_REQUESTS" } })));
     const sheet = page.locator(".modal-overlay", { has: page.locator("[data-access-sheet]") });
-    await expect(sheet.locator("[data-access-sheet]")).toHaveText("notes wants to reach api.openai.com", { timeout: 10_000 });
+    await expect(sheet.locator("[data-access-sheet]")).toHaveText("Notes wants to reach api.openai.com", { timeout: 10_000 });
     await expect(sheet).toContainText("It tried to connect 3 times.");
     await shot(page, testInfo, "access-alert");
     await sheet.locator('[data-choice="allow"]').click();
     const answered = page.locator("[data-access-answered]");
-    await expect(answered).toHaveText("notes can now reach api.openai.com", { timeout: 10_000 });
+    await expect(answered).toHaveText("Notes can now reach api.openai.com", { timeout: 10_000 });
     const post = m.last(onHome(svc("/access")))!;
     expect(post.body.list).toBe("allow api.openai.com\nallow api.github.com\n");
     expect(await signer(page, keys, CANON.access, post.body.grant, post.body.signature)).toBe("admin");
@@ -817,21 +817,21 @@ test.describe("gym webapp members and app pages", () => {
     await force();
 
     // The suggestion comes first: Not now.
-    await expect(page.locator("[data-access-draft-sheet]")).toHaveText("notes suggests an access list", { timeout: 10_000 });
+    await expect(page.locator("[data-access-draft-sheet]")).toHaveText("Notes suggests an access list", { timeout: 10_000 });
     await expect(page.locator(".modal-overlay")).toContainText("Payments");
     await shot(page, testInfo, "access-draft-alert");
     await page.locator('.modal-overlay [data-choice="later"]').click();
     // a: Not now. b: Escape.
-    await expect(page.locator("[data-access-sheet]")).toHaveText("notes wants to reach a.example.com", { timeout: 10_000 });
+    await expect(page.locator("[data-access-sheet]")).toHaveText("Notes wants to reach a.example.com", { timeout: 10_000 });
     await expect(page.locator(".modal-overlay")).toContainText("It asked for this when it was installed.");
     await page.locator('.modal-overlay [data-choice="later"]').click();
-    await expect(page.locator("[data-access-sheet]")).toHaveText("notes wants to reach b.example.com", { timeout: 10_000 });
+    await expect(page.locator("[data-access-sheet]")).toHaveText("Notes wants to reach b.example.com", { timeout: 10_000 });
     await page.keyboard.press("Escape");
     // c: Deny, then Close.
-    await expect(page.locator("[data-access-sheet]")).toHaveText("notes wants to reach c.example.com", { timeout: 10_000 });
+    await expect(page.locator("[data-access-sheet]")).toHaveText("Notes wants to reach c.example.com", { timeout: 10_000 });
     expect(m.sent(onHome(svc("/access")))).toHaveLength(0);
     await page.locator('.modal-overlay [data-choice="deny"]').click();
-    await expect(page.locator("[data-access-answered]")).toHaveText("notes won't reach c.example.com", { timeout: 10_000 });
+    await expect(page.locator("[data-access-answered]")).toHaveText("Notes won't reach c.example.com", { timeout: 10_000 });
     const deny = m.last(onHome(svc("/access")))!;
     expect(deny.body.list).toBe("deny c.example.com\n");
     expect(await signer(page, keys, CANON.access, deny.body.grant, deny.body.signature)).toBe("admin");

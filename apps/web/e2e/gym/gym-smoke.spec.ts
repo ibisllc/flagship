@@ -286,8 +286,8 @@ test.describe("gym webapp", () => {
     await page.fill("#bootstrap-username", "AB"); // too short once lowercased
     await page.click("#bootstrap-continue");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
-    await expect(page.getByTestId("connect-name-error")).toContainText(/lowercase/i);
-    await expect(page.locator("#toast")).toContainText(/lowercase/i, { timeout: 6_000 });
+    await expect(page.getByTestId("connect-name-error")).toHaveText("At least 3 characters");
+    await expect(page.locator("#toast")).toContainText("At least 3 characters", { timeout: 6_000 });
     await shot(page, testInfo, "username-invalid");
   });
 

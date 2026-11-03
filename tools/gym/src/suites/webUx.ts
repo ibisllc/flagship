@@ -140,7 +140,7 @@ export const WEB_UX: readonly Scenario[] = [
   ),
   webTotal(
     "web-ux-named-link-set",
-    "The service page shows Your link with the random code; local and .com checks speak (At least 4 characters, Letters…, Reserved, Available); Save sends a signed set order and the field shows the name with Use default.",
+    "The service page shows Your link with the random code; local and .com checks speak (At least 3 characters, Letters…, Taken or too similar to an existing name, Available); Save sends a signed set order and the field shows the name with Use default.",
     "gym ux named links the service page shows Your link and an admin sets a name with a signed order",
     {
       steps: [

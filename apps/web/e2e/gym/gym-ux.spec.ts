@@ -317,11 +317,11 @@ test.describe("gym ux named links", () => {
     answerChecks(m, { admin: { status: "reserved" } });
     // Local checks first, then .com's.
     await field(page).fill("ab");
-    await expect(fieldMsg(page)).toHaveText("At least 4 characters");
+    await expect(fieldMsg(page)).toHaveText("At least 3 characters");
     await field(page).fill("bad_name");
     await expect(fieldMsg(page)).toHaveText("Letters, numbers and hyphens only");
     await field(page).fill("admin");
-    await expect(fieldMsg(page)).toHaveText("Reserved", { timeout: 10_000 });
+    await expect(fieldMsg(page)).toHaveText("Taken or too similar to an existing name", { timeout: 10_000 });
 
     m.post(
       `/api/users/smoketest/apps/${SERVICE_ID}/voici-name`,
@@ -373,8 +373,8 @@ test.describe("gym ux named links", () => {
     m.post(`/api/users/smoketest/apps/${SERVICE_ID}/voici-name`, (c: Call) => refusals[c.body?.order?.name] ?? { status: 500, json: { error: "gym: unexpected" } });
     const nextText = await page.evaluate(async (t) => (await import("/lib/dateFormat.js")).formatWhen(t), next);
     const expected: Record<string, string> = {
-      "gym-taken": "Taken",
-      "gym-reserved": "Reserved",
+      "gym-taken": "Taken or too similar to an existing name",
+      "gym-reserved": "Taken or too similar to an existing name",
       "halloweenparty": "Reserved for the owner of halloweenparty.com",
       "gym-limit": `Next change ${nextText}`,
       "gym-names": "All 5 names in use",

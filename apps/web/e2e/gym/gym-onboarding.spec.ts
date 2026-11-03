@@ -424,7 +424,7 @@ test.describe("gym webapp onboarding", () => {
 
     await page.fill("#wizard-username-input", "AB");
     await page.click("#wizard-go-username");
-    await sawToast(page, "Username must be 3–30 lowercase letters");
+    await sawToast(page, "At least 3 characters");
     expect(open.bodies).toHaveLength(0);
 
     await page.fill("#wizard-username-input", "taken");
@@ -463,9 +463,7 @@ test.describe("gym webapp onboarding", () => {
     await page.fill("#bootstrap-username", "AB");
     await page.press("#bootstrap-username", "Enter");
     // The sentence shows under the field.
-    await expect(page.locator("#connect-name-error")).toHaveText(
-      "Account names are 3 to 30 lowercase letters and digits, with single dashes inside.",
-    );
+    await expect(page.locator("#connect-name-error")).toHaveText("At least 3 characters");
     expect(m.sent("/api/account/resolve", "GET")).toHaveLength(0);
 
     await signIn(page, "nobodyhere");
