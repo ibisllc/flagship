@@ -617,6 +617,7 @@ final class WizardModel: ObservableObject {
         let outURL = iso.deletingLastPathComponent()
             .appendingPathComponent(iso.deletingPathExtension().lastPathComponent + ".flagship.iso")
         outIsoPath = outURL
+        guard await boxReleaseIsPublished(recipe: recipe, arch: .amd64) else { return }
         do {
             let preseed = try installerPreseed(forRecipe: recipe)
             appendLog(stream: .stdout, text: String(localized: "+ remaster \(iso.lastPathComponent) → \(outURL.lastPathComponent)"))
@@ -662,6 +663,9 @@ final class WizardModel: ObservableObject {
         defer { if let p = preparedToCleanup { try? FileManager.default.removeItem(at: p) } }
 
         guard let recipe = recipe else { return }
+
+        // A USB box is amd64, the same arch ensureBaseISO() fetches.
+        guard await boxReleaseIsPublished(recipe: recipe, arch: .amd64) else { return }
 
         // The ISO to remaster: fetch the server-named Debian base when we own the
         // ISO (Simple, or Advanced + "Use system-provided ISO"); otherwise use
@@ -870,6 +874,8 @@ final class WizardModel: ObservableObject {
         // native-arch guests only), whereas a burn always targets amd64
         // boxes. Advanced BYO-ISO hosting uses the user's ISO unchanged —
         // that's the escape hatch while the server has no arm64 manifest.
+        // The installer downloads the box release; a prebuilt appliance above already carries it.
+        guard await boxReleaseIsPublished(recipe: recipe, arch: HostArch.current()) else { return }
         let srcISO: URL
         if fetchesBaseISO {
             phase = "download"
@@ -924,6 +930,24 @@ final class WizardModel: ObservableObject {
     private final class Box<T> {
         var value: T
         init(_ value: T) { self.value = value }
+    }
+
+    /// Refuse, creating nothing, when the box release the recipe installs isn't published where the
+    /// bootstrap will download it (ArtifactPreflight). true = go ahead. `arch` is the guest's.
+    private func boxReleaseIsPublished(recipe: URL, arch: IsoArch) async -> Bool {
+        let commit: String
+        do {
+            commit = try RecipeLoader.load(contentsOf: recipe).installerGitRef
+        } catch {
+            reportOperationFailure(error)
+            return false
+        }
+        let verdict = await ArtifactPreflight.check(commit: commit, arch: arch)
+        if let refusal = ArtifactPreflight.message(for: verdict) {
+            reportOperationFailure(refusal)
+            return false
+        }
+        return true
     }
 
     private func reportOperationFailure(_ error: Error) {

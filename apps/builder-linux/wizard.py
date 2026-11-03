@@ -59,7 +59,7 @@ from pair_session import PairEvent, PairSession
 from pairing_watch import PairingWatch, timer_schedule
 from version import VERSION, display_version
 from wifi_store import WifiStore, default_backend
-from vm import host_arch, recipe_info, resource_plan, ssh_launch
+from vm import artifact_preflight, host_arch, recipe_info, resource_plan, ssh_launch
 from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
 from vm.config import VMConfig, VMProvisioningMode
 from vm.host_resources import HostResources
@@ -325,6 +325,14 @@ def _live_ensure_appliance(installer_git_ref: str, *, arch: str, progress, cance
     )
 
 
+def _live_artifact_preflight(recipe: Path, arch: str) -> str:
+    """Whether the box release the recipe installs is published where the
+    bootstrap downloads it (vm/artifact_preflight.py). Raises OSError /
+    ValueError when the recipe can't be read."""
+    fields = recipe_info.read_recipe_fields(Path(recipe).read_bytes())
+    return artifact_preflight.check(fields.installer_git_ref, arch)
+
+
 XORRISO_MISSING_MESSAGE = (
     tr("Building the installer needs xorriso, which isn't installed. Install it "
     "(Debian/Ubuntu: sudo apt install xorriso; Fedora: sudo dnf install "
@@ -386,6 +394,9 @@ class WizardModel:
         schedule: Callable[[float, Callable[[], None]], Callable[[], None]] = timer_schedule,
         wifi_store: Optional[WifiStore] = None,
         xorriso_missing_fn: Callable[[], bool] = lambda: xorriso_missing(),
+        # Checks the box release is published before anything is made (tests
+        # pass a fake; production asks the control plane).
+        artifact_preflight_fn: Optional[Callable[[Path, str], str]] = None,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -399,6 +410,7 @@ class WizardModel:
         self._ensure_appliance = ensure_appliance_fn or _live_ensure_appliance
         self._appliance_failed = False
         self._xorriso_missing = xorriso_missing_fn
+        self._artifact_preflight = artifact_preflight_fn
         self._wifi_store = wifi_store or WifiStore(keyring=default_backend())
         self.state.wifi_ssid, self.state.wifi_password = self._wifi_store.load()
         self._auto_pair = auto_pair
@@ -525,6 +537,22 @@ class WizardModel:
             return False
         return True
 
+    def _box_release_is_published(self, recipe: Path, arch: str) -> bool:
+        """Refuse, creating nothing, when the box release the recipe installs
+        isn't published where the bootstrap will download it. True = go
+        ahead. `arch` is the guest's."""
+        preflight = self._artifact_preflight or _live_artifact_preflight
+        try:
+            verdict = preflight(recipe, arch)
+        except (OSError, ValueError) as e:
+            self._append_log("stderr", tr('Cannot read the recipe: {0}').format(e))
+            return False
+        refusal = artifact_preflight.message(verdict)
+        if refusal is not None:
+            self._append_log("stderr", refusal)
+            return False
+        return True
+
     @property
     def usb_burn_advisory(self) -> Optional[str]:
         """Non-None when a USB burn is likely to fail on this machine: inside
@@ -560,6 +588,9 @@ class WizardModel:
         iso = self.state.iso_path
         disk = self.state.selected_disk
         assert recipe is not None and iso is not None and disk is not None
+        # A USB box is amd64.
+        if not self._box_release_is_published(recipe, host_arch.ARCH_AMD64):
+            return
         self.state.phase = "remaster"
         self.state.progress = None
         self._notify()
@@ -603,6 +634,9 @@ class WizardModel:
             self._notify()
 
         try:
+            # A USB box is amd64, the arch the base ISO is fetched for.
+            if not self._box_release_is_published(recipe, host_arch.ARCH_AMD64):
+                return
             try:
                 base = self._ensure_base(
                     self._builder_version,
@@ -714,6 +748,8 @@ class WizardModel:
             return
         recipe = self.state.recipe_path
         iso = self.state.iso_path
+        if not self._box_release_is_published(recipe, host_arch.ARCH_AMD64):
+            return
         out = derive_out_iso_path(iso)
         self.state.out_iso_path = out
         self._notify()
@@ -960,6 +996,10 @@ class WizardModel:
                 return
 
             if not self._require_xorriso():
+                return
+            # The installer downloads the box release; a prebuilt appliance
+            # above already carries it.
+            if not self._box_release_is_published(recipe, guest_arch):
                 return
             # Same Simple-mode base ISO fetch as the USB path (HOST arch — the
             # guest must match this machine); Advanced mode may bring its own

@@ -36,6 +36,16 @@ def _no_published_appliance(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _box_release_published(monkeypatch):
+    """No test asks the control plane whether a box release is published:
+    by default it is. Preflight tests inject their own answer."""
+    import wizard
+    from vm import artifact_preflight
+
+    monkeypatch.setattr(wizard, "_live_artifact_preflight", lambda *_a, **_k: artifact_preflight.PUBLISHED)
+
+
+@pytest.fixture(autouse=True)
 def _plenty_of_free_memory(monkeypatch):
     """A CI runner's free RAM must not decide whether a fake VM may start."""
     from vm import qemu_failure

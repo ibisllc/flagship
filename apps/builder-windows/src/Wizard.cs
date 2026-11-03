@@ -520,6 +520,8 @@ public sealed class Wizard : INotifyPropertyChanged
                 return;
             }
 
+            // The installer downloads the box release; a prebuilt appliance above already carries it.
+            if (!await BoxReleaseIsPublishedAsync(ApplianceHosting.Arch, _cts.Token)) return;
             var config = VMConfig.Plan(parsed, rawRecipe, VM.HostResources.Current(),
                                        provisioningMode: VMProvisioningMode.InstallerISO);
             // Same Simple-mode base ISO fetch as the USB path; Advanced mode
@@ -1017,8 +1019,14 @@ public sealed class Wizard : INotifyPropertyChanged
         var recipe = _recipePath!;
         var iso = _isoPath!;
         var disk = SelectedDisk!;
-        DidRemasterForTest = true; Phase = "remaster"; IsRunning = true; _cts = new CancellationTokenSource();
-        try { await _nativeBuild.WriteAsync(recipe, iso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true; }
+        IsRunning = true; _cts = new CancellationTokenSource(); FireBag();
+        try
+        {
+            // A USB box is amd64.
+            if (!await BoxReleaseIsPublishedAsync("amd64", _cts.Token)) return;
+            DidRemasterForTest = true; Phase = "remaster"; FireBag();
+            await _nativeBuild.WriteAsync(recipe, iso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true;
+        }
         catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         finally { IsRunning = false; Phase = null; Progress = null; _cts.Dispose(); _cts = null; FireBag(); }
@@ -1043,6 +1051,12 @@ public sealed class Wizard : INotifyPropertyChanged
         Phase = "download";
         IsRunning = true;
         FireBag();
+        // A USB box is amd64, the arch _baseCache fetches.
+        if (!await BoxReleaseIsPublishedAsync("amd64", _cts.Token))
+        {
+            FinishSimple();
+            return;
+        }
 
         string baseIso;
         try
@@ -1108,10 +1122,43 @@ public sealed class Wizard : INotifyPropertyChanged
         _outIsoPath = outIso;
         FireBag();
         if (IsRunning) return; IsRunning = true; _cts = new CancellationTokenSource();
-        try { await _nativeBuild.PrepareAsync(recipe, iso, outIso, WifiSsid, WifiPassword, _cts.Token); IsFinished = true; }
+        try
+        {
+            if (!await BoxReleaseIsPublishedAsync("amd64", _cts.Token)) return;
+            await _nativeBuild.PrepareAsync(recipe, iso, outIso, WifiSsid, WifiPassword, _cts.Token); IsFinished = true;
+        }
         catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         finally { IsRunning = false; _cts.Dispose(); _cts = null; FireBag(); }
+    }
+
+    /// <summary>Refuse, creating nothing, when the box release the recipe installs isn't published where the
+    /// bootstrap will download it (ArtifactPreflight). true = go ahead. <paramref name="arch"/> is the guest's.</summary>
+    private async Task<bool> BoxReleaseIsPublishedAsync(string arch, CancellationToken ct)
+    {
+        var recipe = _parsedRecipe;
+        if (recipe is null)
+        {
+            try { recipe = await Task.Run(() => RecipeLoader.Load(_recipePath!)); }
+            catch (Exception e)
+            {
+                AppendLog(LogStream.Stderr, e.Message);
+                return false;
+            }
+        }
+        ArtifactPreflight.Verdict verdict;
+        try { verdict = await ArtifactPreflight.CheckAsync(recipe.InstallerGitRef.Trim(), arch, ct); }
+        catch (OperationCanceledException)
+        {
+            AppendLog(LogStream.Stderr, Strings.T("cancelled"));
+            return false;
+        }
+        if (ArtifactPreflight.Message(verdict) is string refusal)
+        {
+            AppendLog(LogStream.Stderr, refusal);
+            return false;
+        }
+        return true;
     }
 
     private void AppendLog(LogStream stream, string text)

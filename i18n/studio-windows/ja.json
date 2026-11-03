@@ -229,5 +229,7 @@
   "wiFiNetworkNameOptional": "Wi-Fi ネットワーク名（任意）",
   "wiFiPasswordOptional": "Wi-Fi パスワード（任意）",
   "actions": "操作",
-  "Beta": "ベータ"
+  "Beta": "ベータ",
+  "softwarePackageNotPublished": "このサーバーはまだインストールできません。ソフトウェアパッケージが flagshipserver.com で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
+  "couldntCheckSoftwarePackage": "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。"
 }

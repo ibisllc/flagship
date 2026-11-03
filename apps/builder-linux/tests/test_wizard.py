@@ -287,6 +287,47 @@ def test_simple_bake_surfaces_cache_error(tmp_path):
     assert model.state.is_running is False
 
 
+@pytest.mark.parametrize("verdict", ["missing", "unreachable"])
+def test_simple_bake_refuses_before_anything_when_the_box_release_is_not_published(tmp_path, verdict):
+    from vm import artifact_preflight
+
+    asked: list = []
+    locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
+    model = WizardModel(
+        locate_fn=locate_fn,
+        ensure_base_fn=lambda *a, **k: pytest.fail("must not fetch the base ISO"),
+        artifact_preflight_fn=lambda recipe, arch: asked.append((recipe, arch)) or verdict,
+    )
+    model.state.recipe_path = tmp_path / "r.json"
+    model.state.selected_disk = _make_disk("/dev/sdb")
+    model._run_cli_core = lambda *a, **k: pytest.fail("must not burn")
+
+    model._run_simple_bake_sync()
+
+    assert asked == [(tmp_path / "r.json", "amd64")]
+    assert model.state.log_lines[-1].stream == "stderr"
+    assert model.state.log_lines[-1].text == artifact_preflight.message(verdict)
+    assert model.state.is_running is False
+    assert model.state.phase is None
+
+
+def test_prepare_refuses_when_the_box_release_is_not_published(tmp_path):
+    from vm import artifact_preflight
+
+    model = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        artifact_preflight_fn=lambda recipe, arch: artifact_preflight.MISSING,
+    )
+    model.state.recipe_path = tmp_path / "r.json"
+    model.state.iso_path = tmp_path / "debian.iso"
+    model._run_cli = lambda *a, **k: pytest.fail("must not remaster")
+
+    model._run_prepare_sync()
+
+    assert model.state.out_iso_path is None
+    assert model.state.log_lines[-1].text == artifact_preflight.missing_message()
+
+
 def test_cancel_trips_the_download_cancel_event(tmp_path):
     import iso_base_cache
 

@@ -703,4 +703,10 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="Beta" xml:space="preserve">
     <value>Beta</value>
   </data>
+  <data name="softwarePackageNotPublished" xml:space="preserve">
+    <value>Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em flagshipserver.com. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde.</value>
+  </data>
+  <data name="couldntCheckSoftwarePackage" xml:space="preserve">
+    <value>Não foi possível verificar se o pacote de software deste servidor está publicado em flagshipserver.com. Verifique sua conexão com a internet e tente novamente.</value>
+  </data>
 </root>

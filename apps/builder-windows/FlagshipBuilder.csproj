@@ -39,6 +39,7 @@
     <Compile Include="src\TaskbarProgress.cs" />
     <Compile Include="src\HostPower.cs" />
     <Compile Include="src\QuitGate.cs" />
+    <Compile Include="src\ArtifactPreflight.cs" />
     <Compile Include="src\Wizard.cs" />
     <Compile Include="src\DiskEnumerator.cs" />
     <Compile Include="src\VerifyResult.cs" />

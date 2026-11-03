@@ -229,5 +229,7 @@
   "wiFiNetworkNameOptional": "Nombre de la red Wi-Fi (opcional)",
   "wiFiPasswordOptional": "Contraseña de Wi-Fi (opcional)",
   "actions": "Acciones",
-  "Beta": "Beta"
+  "Beta": "Beta",
+  "softwarePackageNotPublished": "Este servidor aún no se puede instalar: su paquete de software no está publicado en flagshipserver.com. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde.",
+  "couldntCheckSoftwarePackage": "No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo."
 }

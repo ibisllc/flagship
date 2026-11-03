@@ -703,4 +703,10 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="Beta" xml:space="preserve">
     <value>ベータ</value>
   </data>
+  <data name="softwarePackageNotPublished" xml:space="preserve">
+    <value>このサーバーはまだインストールできません。ソフトウェアパッケージが flagshipserver.com で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。</value>
+  </data>
+  <data name="couldntCheckSoftwarePackage" xml:space="preserve">
+    <value>このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。</value>
+  </data>
 </root>

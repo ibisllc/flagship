@@ -703,4 +703,10 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="Beta" xml:space="preserve">
     <value>Beta</value>
   </data>
+  <data name="softwarePackageNotPublished" xml:space="preserve">
+    <value>Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf flagshipserver.com nicht veröffentlicht. Aktualisiere Flagship Studio und die Flagship-App oder versuche es später erneut.</value>
+  </data>
+  <data name="couldntCheckSoftwarePackage" xml:space="preserve">
+    <value>Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.</value>
+  </data>
 </root>

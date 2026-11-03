@@ -71,6 +71,7 @@
     <Compile Include="..\src\VM\PendingStops.cs" />
     <Compile Include="..\src\VM\ServerCodeSeen.cs" />
     <Compile Include="..\src\QuitGate.cs" />
+    <Compile Include="..\src\ArtifactPreflight.cs" />
     <Compile Include="DiskEnumeratorTests.cs" />
     <Compile Include="VerifyResultTests.cs" />
     <Compile Include="WizardStateMachineTests.cs" />

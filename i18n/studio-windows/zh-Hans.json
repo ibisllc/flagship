@@ -229,5 +229,7 @@
   "wiFiNetworkNameOptional": "Wi-Fi 网络名称（可选）",
   "wiFiPasswordOptional": "Wi-Fi 密码（可选）",
   "actions": "操作",
-  "Beta": "Beta"
+  "Beta": "Beta",
+  "softwarePackageNotPublished": "此服务器暂时无法安装：它的软件包尚未在 flagshipserver.com 上发布。请更新 Flagship Studio 和 Flagship 应用，或稍后重试。",
+  "couldntCheckSoftwarePackage": "无法确认此服务器的软件包是否已在 flagshipserver.com 上发布。请检查网络连接后重试。"
 }

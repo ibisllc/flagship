@@ -250,3 +250,50 @@ def test_qemu_failure_matches_vectors():
             assert got == qemu_failure.not_enough_memory_message(c["needBytes"]), c["name"]
     for c in section["describeCases"]:
         assert qemu_failure.describe_exit(c["exitCode"], c["stderr"], c["memoryBytes"]) == c["text"], c["name"]
+
+
+# ---------------------------------------------------------------------------
+# artifactPreflight — the box release must be published before Studio makes
+# anything.
+# ---------------------------------------------------------------------------
+
+from vm import artifact_preflight  # noqa: E402
+
+PREFLIGHT = VECTORS["artifactPreflight"]
+
+
+def test_artifact_preflight_method_and_timeout():
+    assert PREFLIGHT["method"] == "HEAD"
+    assert artifact_preflight.TIMEOUT_SECONDS == PREFLIGHT["timeoutSeconds"]
+
+
+@pytest.mark.parametrize("case", PREFLIGHT["urlCases"], ids=lambda c: c["name"])
+def test_artifact_preflight_url(case):
+    assert artifact_preflight.manifest_url(case["controlHost"], case["commit"], case["arch"]) == case["url"]
+
+
+@pytest.mark.parametrize("case", PREFLIGHT["verdictCases"], ids=lambda c: str(c["status"]))
+def test_artifact_preflight_verdict(case):
+    assert artifact_preflight.verdict_for(case["status"]) == case["verdict"]
+
+
+def test_artifact_preflight_messages():
+    assert artifact_preflight.message(artifact_preflight.MISSING) == PREFLIGHT["messages"]["missing"]
+    assert artifact_preflight.message(artifact_preflight.UNREACHABLE) == PREFLIGHT["messages"]["unreachable"]
+    assert artifact_preflight.message(artifact_preflight.PUBLISHED) is None
+
+
+def test_artifact_preflight_check_asks_the_control_plane_studio_follows():
+    commit = "386e29c84899283c167c9ce983d2dc2acbaa4f11"
+    seen: list = []
+
+    def head(url):
+        seen.append(url)
+        return 404
+
+    env = {"FLAGSHIP_CONTROL_HOST": "gym.flagshipserver.com"}
+    assert artifact_preflight.check(commit, "arm64", env=env, head=head) == artifact_preflight.MISSING
+    assert seen == ["https://gym.flagshipserver.com/build/iso/flagship-box-386e29c84899-arm64.manifest.json"]
+    assert artifact_preflight.check(commit, "amd64", env={}, head=lambda _u: None) == artifact_preflight.UNREACHABLE
+    assert artifact_preflight.check(commit, "amd64", env={}, head=lambda _u: 200) == artifact_preflight.PUBLISHED
+    assert artifact_preflight.check("main", "amd64", env={}, head=lambda _u: pytest.fail("no request")) == artifact_preflight.MISSING

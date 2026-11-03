@@ -271,6 +271,36 @@ final class VMCoreVectorTests: XCTestCase {
         XCTAssertEqual(VMState.awaitingPhoneUnlock.label, section["label"] as? String)
     }
 
+    // MARK: - Box release preflight
+
+    func testArtifactPreflightMatchesVectors() async throws {
+        let section = try loadVectors()["artifactPreflight"] as! [String: Any]
+        XCTAssertEqual(section["method"] as? String, "HEAD")
+        XCTAssertEqual(ArtifactPreflight.timeoutSeconds, section["timeoutSeconds"] as? TimeInterval)
+        let urlCases = section["urlCases"] as! [[String: Any]]
+        XCTAssertFalse(urlCases.isEmpty)
+        for c in urlCases {
+            let url = ArtifactPreflight.manifestURL(controlHost: c["controlHost"] as! String,
+                                                    commit: c["commit"] as! String,
+                                                    arch: c["arch"] as! String)
+            XCTAssertEqual(url?.absoluteString, c["url"] as? String, c["name"] as? String ?? "")
+        }
+        let verdictCases = section["verdictCases"] as! [[String: Any]]
+        XCTAssertFalse(verdictCases.isEmpty)
+        for c in verdictCases {
+            let status = c["status"] as? Int
+            XCTAssertEqual(ArtifactPreflight.verdict(httpStatus: status).rawValue, c["verdict"] as? String,
+                           status.map(String.init) ?? "no answer")
+        }
+        let messages = section["messages"] as! [String: String]
+        XCTAssertEqual(ArtifactPreflight.message(for: .missing), messages["missing"])
+        XCTAssertEqual(ArtifactPreflight.message(for: .unreachable), messages["unreachable"])
+        XCTAssertNil(ArtifactPreflight.message(for: .published))
+        // No exact commit: refused without a request (the bootstrap would refuse it too).
+        let verdict = await ArtifactPreflight.check(commit: "main", arch: .amd64, environment: [:])
+        XCTAssertEqual(verdict, .missing)
+    }
+
     func testSealedBootSetUpMatchesVectors() throws {
         let section = try loadVectors()["sealedBootSetUp"] as! [String: Any]
         XCTAssertEqual(VMRecord.neverSetUpPhases, Set(section["neverSetUpPhases"] as! [String]))

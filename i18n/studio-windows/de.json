@@ -229,5 +229,7 @@
   "wiFiNetworkNameOptional": "WLAN-Netzwerkname (optional)",
   "wiFiPasswordOptional": "WLAN-Passwort (optional)",
   "actions": "Aktionen",
-  "Beta": "Beta"
+  "Beta": "Beta",
+  "softwarePackageNotPublished": "Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf flagshipserver.com nicht veröffentlicht. Aktualisiere Flagship Studio und die Flagship-App oder versuche es später erneut.",
+  "couldntCheckSoftwarePackage": "Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut."
 }

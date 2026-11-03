@@ -3426,5 +3426,7 @@
   "android_version_no_longer_gets_updates": "A versão do Android deste celular não recebe mais atualizações de segurança. Seu celular guarda a chave da sua conta e dos seus servidores: atualizar o Android, ou trocar por um celular mais novo, os mantém mais seguros.",
   "check_for_android_updates": "Verificar atualizações",
   "android_security_updates": "Atualizações de segurança do Android",
-  "android_version_no_longer_gets_updates_detail": "O Android %1$s não recebe mais atualizações de segurança. Seu celular guarda a chave da sua conta e dos seus servidores: atualizar o Android, ou trocar por um celular mais novo, os mantém mais seguros. Tudo no Flagship continua funcionando."
+  "android_version_no_longer_gets_updates_detail": "O Android %1$s não recebe mais atualizações de segurança. Seu celular guarda a chave da sua conta e dos seus servidores: atualizar o Android, ou trocar por um celular mais novo, os mantém mais seguros. Tudo no Flagship continua funcionando.",
+  "box_release_not_published": "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em flagshipserver.com. Atualize o app Flagship ou tente novamente mais tarde.",
+  "couldnt_check_box_release": "Não foi possível verificar se o pacote de software deste servidor está publicado em flagshipserver.com. Verifique sua conexão com a internet e tente novamente."
 }

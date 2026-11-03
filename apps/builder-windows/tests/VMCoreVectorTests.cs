@@ -247,6 +247,62 @@ public class VMCoreVectorTests
     }
 
     [Fact]
+    public async Task ArtifactPreflightMatchesVectors()
+    {
+        var section = Vectors.GetProperty("artifactPreflight");
+        Assert.Equal("HEAD", section.GetProperty("method").GetString());
+        Assert.Equal(section.GetProperty("timeoutSeconds").GetDouble(), ArtifactPreflight.Timeout.TotalSeconds);
+        int urls = 0;
+        foreach (var c in section.GetProperty("urlCases").EnumerateArray())
+        {
+            var want = c.GetProperty("url").ValueKind == JsonValueKind.Null ? null : c.GetProperty("url").GetString();
+            Assert.True(want == ArtifactPreflight.ManifestUrl(c.GetProperty("controlHost").GetString()!,
+                c.GetProperty("commit").GetString(), c.GetProperty("arch").GetString()!), c.GetProperty("name").GetString());
+            urls++;
+        }
+        Assert.True(urls > 0);
+        int verdicts = 0;
+        foreach (var c in section.GetProperty("verdictCases").EnumerateArray())
+        {
+            int? status = c.GetProperty("status").ValueKind == JsonValueKind.Null ? null : c.GetProperty("status").GetInt32();
+            Assert.Equal(c.GetProperty("verdict").GetString(), ArtifactPreflight.VerdictFor(status).ToString().ToLowerInvariant());
+            verdicts++;
+        }
+        Assert.True(verdicts > 0);
+        var messages = section.GetProperty("messages");
+        Assert.Equal(messages.GetProperty("missing").GetString(), ArtifactPreflight.Message(ArtifactPreflight.Verdict.Missing));
+        Assert.Equal(messages.GetProperty("unreachable").GetString(), ArtifactPreflight.Message(ArtifactPreflight.Verdict.Unreachable));
+        Assert.Null(ArtifactPreflight.Message(ArtifactPreflight.Verdict.Published));
+
+        // One HEAD for the manifest; the status decides.
+        var commit = "386e29c84899283c167c9ce983d2dc2acbaa4f11";
+        foreach (var (code, want) in new[] { (200, ArtifactPreflight.Verdict.Published), (404, ArtifactPreflight.Verdict.Missing), (502, ArtifactPreflight.Verdict.Unreachable) })
+        {
+            var handler = new PreflightHandler(_ => new System.Net.Http.HttpResponseMessage((System.Net.HttpStatusCode)code));
+            Assert.Equal(want, await ArtifactPreflight.CheckAsync(commit, "amd64", handler: handler, controlHost: "flagshipserver.com"));
+            Assert.Equal(System.Net.Http.HttpMethod.Head, handler.Seen!.Method);
+            Assert.Equal("https://flagshipserver.com/build/iso/flagship-box-386e29c84899-amd64.manifest.json", handler.Seen.RequestUri!.ToString());
+        }
+        var offline = new PreflightHandler(_ => throw new System.Net.Http.HttpRequestException("no route to host"));
+        Assert.Equal(ArtifactPreflight.Verdict.Unreachable, await ArtifactPreflight.CheckAsync(commit, "amd64", handler: offline, controlHost: "flagshipserver.com"));
+        var never = new PreflightHandler(_ => throw new InvalidOperationException("no request expected"));
+        Assert.Equal(ArtifactPreflight.Verdict.Missing, await ArtifactPreflight.CheckAsync("main", "amd64", handler: never, controlHost: "flagshipserver.com"));
+        Assert.Null(never.Seen);
+    }
+
+    private sealed class PreflightHandler : System.Net.Http.HttpMessageHandler
+    {
+        private readonly Func<System.Net.Http.HttpRequestMessage, System.Net.Http.HttpResponseMessage> _answer;
+        public System.Net.Http.HttpRequestMessage? Seen;
+        public PreflightHandler(Func<System.Net.Http.HttpRequestMessage, System.Net.Http.HttpResponseMessage> answer) => _answer = answer;
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken ct)
+        {
+            Seen = request;
+            return Task.FromResult(_answer(request));
+        }
+    }
+
+    [Fact]
     public void SealedBootSetUpMatchesVectors()
     {
         var section = Vectors.GetProperty("sealedBootSetUp");

@@ -229,5 +229,7 @@
   "wiFiNetworkNameOptional": "03d0fcab545d",
   "wiFiPasswordOptional": "69178de8cbb0",
   "actions": "aa6d82bdb3cc",
-  "Beta": "45dcef5400c6"
+  "Beta": "45dcef5400c6",
+  "softwarePackageNotPublished": "578d78fe5dc2",
+  "couldntCheckSoftwarePackage": "a0fb0fc42f6d"
 }

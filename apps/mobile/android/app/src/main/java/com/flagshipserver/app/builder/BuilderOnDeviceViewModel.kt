@@ -12,6 +12,7 @@ import android.app.Application
 import android.hardware.usb.UsbManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.flagshipserver.app.builder.iso.ArtifactPreflight
 import com.flagshipserver.app.builder.iso.IsoBaseCache
 import com.flagshipserver.app.builder.iso.IsoInjector
 import com.flagshipserver.app.builder.iso.IsoManifestClient
@@ -37,6 +38,10 @@ class BuilderOnDeviceViewModel(
     app: Application,
     private val recipeJson: String,
     private val injector: IsoInjector = SeedInjector(AssetPreseedSource(app)),
+    /** Whether the box release the recipe installs is published (tests fake it). */
+    private val preflight: suspend (ParsedRecipe) -> ArtifactPreflight.Verdict = { r ->
+        ArtifactPreflight.check(com.flagshipserver.app.core.Endpoints.controlBaseUrl, r.installerGitRef, "amd64")
+    },
 ) : AndroidViewModel(app) {
 
     enum class Phase { Idle, NoUsb, NeedPermission, Ready, Downloading, Verifying, Injecting, Writing, Finalizing, Done, Error }
@@ -101,9 +106,11 @@ class BuilderOnDeviceViewModel(
         }
     }
 
-    /** Re-scan attached USB mass-storage devices. */
+    /** Re-scan attached USB mass-storage devices; after a failed burn this is "Try again". */
     fun refreshDevices() {
-        if (_state.value.phase == Phase.Error) return
+        // Only a recipe that can never burn (unreadable, expired) stays on its error.
+        val recipe = _state.value.recipe
+        if (recipe == null || recipe.expired) return
         val devices = UsbHost.enumerate(usb)
         val selected = _state.value.selected?.let { prev ->
             devices.firstOrNull { it.device.deviceId == prev.device.deviceId }
@@ -140,6 +147,14 @@ class BuilderOnDeviceViewModel(
 
         viewModelScope.launch {
             try {
+                // 0. The box release this recipe installs must be published where the
+                //    installer downloads it, or the box could never finish (a USB box is amd64).
+                set(Phase.Downloading, status = FSStrings.get(R.string.preparing_the_operating_system_image))
+                ArtifactPreflight.message(preflight(recipe))?.let { refusal ->
+                    _state.value = _state.value.copy(phase = Phase.Error, error = refusal)
+                    return@launch
+                }
+
                 // 1. Obtain the seed ISO: a dev-only local file, or the
                 //    manifest-driven, sha-pinned download (production default).
                 set(Phase.Downloading, status = FSStrings.get(R.string.preparing_the_operating_system_image))

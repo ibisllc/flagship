@@ -3429,4 +3429,6 @@
     <string name="check_for_android_updates">Nach Updates suchen</string>
     <string name="android_security_updates">Android-Sicherheitsupdates</string>
     <string name="android_version_no_longer_gets_updates_detail">Android %1$s bekommt keine Sicherheitsupdates mehr. Dein Telefon hält den Schlüssel zu deinem Konto und deinen Servern: Ein Android-Update oder ein neueres Telefon schützt sie besser. In Flagship funktioniert weiterhin alles.</string>
+    <string name="box_release_not_published">Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf flagshipserver.com nicht veröffentlicht. Aktualisiere die Flagship-App oder versuche es später erneut.</string>
+    <string name="couldnt_check_box_release">Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.</string>
 </resources>

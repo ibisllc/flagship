@@ -703,4 +703,10 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="Beta" xml:space="preserve">
     <value>Bêta</value>
   </data>
+  <data name="softwarePackageNotPublished" xml:space="preserve">
+    <value>Ce serveur ne peut pas encore être installé : son paquet logiciel n’est pas publié sur flagshipserver.com. Mettez à jour Flagship Studio et l’app Flagship, ou réessayez plus tard.</value>
+  </data>
+  <data name="couldntCheckSoftwarePackage" xml:space="preserve">
+    <value>Impossible de vérifier que le paquet logiciel de ce serveur est publié sur flagshipserver.com. Vérifiez votre connexion Internet et réessayez.</value>
+  </data>
 </root>

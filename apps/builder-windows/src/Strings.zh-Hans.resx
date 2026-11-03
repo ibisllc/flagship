@@ -703,4 +703,10 @@ https://flagshipserver.com</value>
   <data name="Beta" xml:space="preserve">
     <value>Beta</value>
   </data>
+  <data name="softwarePackageNotPublished" xml:space="preserve">
+    <value>此服务器暂时无法安装：它的软件包尚未在 flagshipserver.com 上发布。请更新 Flagship Studio 和 Flagship 应用，或稍后重试。</value>
+  </data>
+  <data name="couldntCheckSoftwarePackage" xml:space="preserve">
+    <value>无法确认此服务器的软件包是否已在 flagshipserver.com 上发布。请检查网络连接后重试。</value>
+  </data>
 </root>

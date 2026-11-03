@@ -25,6 +25,8 @@ data class ParsedRecipe(
     val blobSignatureHex: String,
     /** The expiry from authCode.expiresAt (epoch ms), or null if absent. */
     val expiresAt: Long?,
+    /** The box release the recipe installs (an exact commit; the bootstrap refuses anything else). */
+    val installerGitRef: String? = null,
 ) {
     val expired: Boolean get() = expiresAt != null && System.currentTimeMillis() > expiresAt
 }
@@ -72,6 +74,7 @@ object RecipeParse {
             username = username,
             blobSignatureHex = sig,
             expiresAt = expiresAt,
+            installerGitRef = str(obj, "installerGitRef"),
         )
     }
 

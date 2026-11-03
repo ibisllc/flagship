@@ -811,5 +811,13 @@
   "Beta": {
     "en": "Beta",
     "ctx": "version.py (LABEL, looked up at run time)"
+  },
+  "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later.": {
+    "en": "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later.",
+    "ctx": "vm/artifact_preflight.py:33 (prose)"
+  },
+  "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.": {
+    "en": "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.",
+    "ctx": "vm/artifact_preflight.py:37 (prose)"
   }
 }

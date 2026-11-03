@@ -311,6 +311,44 @@ def test_run_host_here_falls_back_to_the_installer_when_no_image_fits(tmp_path, 
     assert any("Using the Debian installer instead" in ll.text for ll in m.state.log_lines)
 
 
+@pytest.mark.parametrize("verdict", ["missing", "unreachable"])
+def test_run_host_here_creates_nothing_when_the_box_release_is_not_published(tmp_path, monkeypatch, verdict):
+    from vm import artifact_preflight
+
+    vm = make_vm(tmp_path)
+    asked: list = []
+    m = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        vm_manager=vm,
+        ensure_base_fn=lambda *_a, **_k: pytest.fail("must not fetch the installer ISO"),
+        artifact_preflight_fn=lambda recipe, arch: asked.append(arch) or verdict,
+        handoff_seconds=0,
+    )
+    recipe = _write_recipe(tmp_path)
+    m.state.recipe_path = recipe
+    verified(m)
+    monkeypatch.setattr(m, "_run_cli_core", lambda *a, **k: pytest.fail("must not remaster"))
+    m._run_host_here_sync()
+
+    assert asked == ["amd64"]
+    assert vm.servers == []
+    assert recipe.exists()  # kept: the owner can try again
+    assert m.state.log_lines[-1].text == artifact_preflight.message(verdict)
+    assert m.state.is_running is False
+
+
+def test_run_host_here_from_the_appliance_needs_no_preflight(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path)
+    base = tmp_path / "Appliances" / "base.qcow2"
+    m = _appliance_model(tmp_path, vm, lambda *_a, **_k: str(base))
+    m._artifact_preflight = lambda *_a: pytest.fail("the appliance already carries the release")
+    m.state.recipe_path = _write_recipe(tmp_path)
+    verified(m)
+    monkeypatch.setattr(m, "_run_cli_core", lambda build_args, on_success, use_pkexec=False: on_success(""))
+    m._run_host_here_sync()
+    assert len(vm.servers) == 1
+
+
 def test_run_host_here_stops_on_a_corrupt_image(tmp_path, monkeypatch):
     vm = make_vm(tmp_path)
 

@@ -3366,5 +3366,7 @@
   "android_version_no_longer_gets_updates": "f123caae6681",
   "check_for_android_updates": "31eaced1f83b",
   "android_security_updates": "60a77206a77b",
-  "android_version_no_longer_gets_updates_detail": "c933cd023bcd"
+  "android_version_no_longer_gets_updates_detail": "c933cd023bcd",
+  "box_release_not_published": "20ecfa46b70d",
+  "couldnt_check_box_release": "a0fb0fc42f6d"
 }

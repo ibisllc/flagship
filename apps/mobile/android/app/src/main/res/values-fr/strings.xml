@@ -3429,4 +3429,6 @@
     <string name="check_for_android_updates">Rechercher des mises à jour</string>
     <string name="android_security_updates">Mises à jour de sécurité Android</string>
     <string name="android_version_no_longer_gets_updates_detail">Android %1$s ne reçoit plus de mises à jour de sécurité. Votre téléphone détient la clé de votre compte et de vos serveurs : mettre à jour Android, ou passer à un téléphone plus récent, les protège mieux. Tout fonctionne toujours dans Flagship.</string>
+    <string name="box_release_not_published">Ce serveur ne peut pas encore être installé : son paquet logiciel n’est pas publié sur flagshipserver.com. Mettez à jour l’app Flagship ou réessayez plus tard.</string>
+    <string name="couldnt_check_box_release">Impossible de vérifier que le paquet logiciel de ce serveur est publié sur flagshipserver.com. Vérifiez votre connexion Internet et réessayez.</string>
 </resources>

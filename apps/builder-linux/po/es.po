@@ -754,3 +754,11 @@ msgstr "No hay suficiente espacio libre en disco para la imagen del servidor: ne
 #: version.py (LABEL, looked up at run time)
 msgid "Beta"
 msgstr "Beta"
+
+#: vm/artifact_preflight.py:33 (prose)
+msgid "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later."
+msgstr "Este servidor aún no se puede instalar: su paquete de software no está publicado en flagshipserver.com. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde."
+
+#: vm/artifact_preflight.py:37 (prose)
+msgid "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
+msgstr "No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo."
