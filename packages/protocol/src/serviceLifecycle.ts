@@ -1,5 +1,5 @@
 /**
- * Service lifecycle domain — rename / custom-domain attach / voi.ci shorten,
+ * Service lifecycle domain — rename / custom-domain attach,
  * install + uninstall, the update-pack pull request (env vars: serviceEnvChange.ts),
  * and the single-use service-access invite + acceptance (#79).
  *
@@ -13,7 +13,6 @@ import type { Bytes, Keypair, ServerId } from "./types.js";
 
 const TAG_SERVICE_RENAME = "flagship/service-rename/v1";
 const TAG_SET_CUSTOM_DOMAIN = "flagship/custom-domain/v1";
-const TAG_VOICI_SHORTEN = "flagship/voici-shorten/v1";
 const TAG_INSTALL_SERVICE = "flagship/install-service/v1";
 const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
 const TAG_UPDATE_PULL = "flagship/update-pull/v1";
@@ -88,42 +87,6 @@ export function signSetCustomDomain(r: SetCustomDomain, irk: Keypair): Bytes {
 export function verifySetCustomDomain(r: SetCustomDomain, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalSetCustomDomain(r), irkPub);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * voi.ci short-link mint. The phone never signs this directly —
- * Worker mints internally during AppRename. But surfacing the
- * canonical-bytes type keeps the protocol layer's contract visible
- * to anyone reading the package, and a future "mint a custom short
- * link" UX (signed by IRK) can reuse the same envelope.
- */
-export interface VoiciShorten {
-  username: string;
-  /** Optional binding to an serviceId — when omitted, the link is a
-   *  one-off (no cascade on rename). */
-  serviceId?: string;
-  targetUrl: string;
-  issuedAt: number;
-}
-
-function canonicalVoiciShorten(r: VoiciShorten): Bytes {
-  legacyFieldGuard("username", r.username);
-  if (r.serviceId !== undefined) legacyFieldGuard("serviceId", r.serviceId);
-  legacyFieldGuard("targetUrl", r.targetUrl);
-  return new TextEncoder().encode(
-    [TAG_VOICI_SHORTEN, r.username, r.serviceId ?? "", r.targetUrl, r.issuedAt].join("|"),
-  );
-}
-
-export function signVoiciShorten(r: VoiciShorten, irk: Keypair): Bytes {
-  return ed.sign(canonicalVoiciShorten(r), irk.privateKey);
-}
-export function verifyVoiciShorten(r: VoiciShorten, sig: Bytes, irkPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalVoiciShorten(r), irkPub);
   } catch {
     return false;
   }

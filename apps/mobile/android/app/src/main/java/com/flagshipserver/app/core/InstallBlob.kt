@@ -218,25 +218,6 @@ object ServiceRenameClaim {
     ).joinToString("|").toByteArray()
 }
 
-/** V3 — voi.ci one-off short link envelope. Signed by IRK. Optional
- *  serviceId binds the link to a specific service so a rename can
- *  cascade-delete it. Mirrors TAG_VOICI_SHORTEN. */
-object VoiciShortenClaim {
-    const val CANONICAL_TAG = "flagship/voici-shorten/v1"
-    fun canonicalBytes(
-        username: String,
-        serviceId: String?,
-        targetUrl: String,
-        issuedAt: Long,
-    ): ByteArray = listOf(
-        CANONICAL_TAG,
-        username,
-        serviceId ?: "",
-        targetUrl,
-        issuedAt.toString(),
-    ).joinToString("|").toByteArray()
-}
-
 /** C7 — Re-pair initiate envelope. Signed by the NEW IRK. Mirrors
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE. */
 object RePairInitiateClaim {

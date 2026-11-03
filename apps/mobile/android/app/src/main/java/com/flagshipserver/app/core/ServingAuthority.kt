@@ -71,7 +71,7 @@ data class RenewalKeyDelegation(
 
     companion object {
         /** The longest a delegation lasts. */
-        const val MAX_LIFETIME_MS: Long = 90L * 86_400_000
+        const val MAX_LIFETIME_MS: Long = 30L * 86_400_000
         /** A delegation this close to its end is signed again at the next admin-root signature. */
         const val RENEW_BEFORE_MS: Long = 14L * 86_400_000
     }
@@ -138,7 +138,7 @@ object ServingAuthority {
         int("issuedAt", d.issuedAt, 0)
         int("expiresAt", d.expiresAt, 0)
         require(d.expiresAt > d.issuedAt) { "expiresAt must be after issuedAt" }
-        require(d.expiresAt - d.issuedAt <= RenewalKeyDelegation.MAX_LIFETIME_MS) { "a delegation lasts at most 90 days" }
+        require(d.expiresAt - d.issuedAt <= RenewalKeyDelegation.MAX_LIFETIME_MS) { "a delegation lasts at most 30 days" }
         return join(TAG_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt, d.expiresAt)
     }
 

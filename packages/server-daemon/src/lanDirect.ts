@@ -34,6 +34,7 @@ import {
   type LanEndpoint,
   type LanHint,
 } from "@flagship/protocol";
+import type { LanIngressPorts } from "./lanIngress.js";
 
 /** Interfaces that look private but aren't the user's LAN (`fs-` = the box's own sandbox bridges, egress/policy.ts). */
 const VIRTUAL_IFACE = /^(docker|br-|fs-|veth|virbr|vnet|vmnet|cni|flannel|cali|lxc|lxd|podman|tailscale|wg|tun|tap|zt|utun)/i;
@@ -126,6 +127,8 @@ export interface LanListenerOptions {
   headerTimeoutMs?: number;
   idleTimeoutMs?: number;
   log?: (msg: string) => void;
+  /** Where each connection to the TLS server is recorded while it lives, so the box can tell LAN from relay. */
+  lanPorts?: LanIngressPorts;
 }
 
 export interface LanListener {
@@ -225,7 +228,10 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
       client.on("data", () => {
         if (boxAnswered) progressed = true;
       });
+      let forget: (() => void) | null = null;
       const upstream = net.connect(o.backendPort, "127.0.0.1", () => {
+        // Recorded before the first byte reaches the TLS server, so the server never sees this connection unmarked.
+        if (o.lanPorts && typeof upstream.localPort === "number") forget = o.lanPorts.add(upstream.localPort);
         upstream.on("data", () => {
           boxAnswered = true;
         });
@@ -237,7 +243,10 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
       });
       upstream.on("error", () => client.destroy());
       client.once("close", () => upstream.destroy());
-      upstream.once("close", () => client.destroy());
+      upstream.once("close", () => {
+        forget?.();
+        client.destroy();
+      });
     };
     client.on("data", onData);
   };

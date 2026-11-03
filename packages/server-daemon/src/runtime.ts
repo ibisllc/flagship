@@ -39,6 +39,7 @@ import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import { listenForFrontend } from "./tlsUpstream.js";
+import { cameViaLan, LanIngressPorts, refuseRescueOffLan } from "./lanIngress.js";
 import type { OpaqueTlsKeyd } from "./acme/opaqueIssuer.js";
 import {
   DataProvisioner,
@@ -1039,6 +1040,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           cb(null, ctx);
         },
       });
+  const lanPorts = new LanIngressPorts();
   const onSecureConnection = (socket: TLSSocket) => {
     if (socket.alpnProtocol === "acme-tls/1") {
       socket.end();
@@ -1083,7 +1085,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // sibling-handshake upgrade (N0e-2): peers reach us via the FQDN
     // they're trying to talk to, so the WS path needs to work on every
     // SNI we serve.
+    const viaLan = cameViaLan(socket, lanPorts);
     handleHttpConnection(socket, async (req) => {
+      const offLan = refuseRescueOffLan(req, viaLan);
+      if (offLan) return offLan;
       // Default fallback when not handled by upgrade or extras.
       const ownFqdn = opts.serverFqdn.toLowerCase();
       const isOwnHost = sni === ownFqdn;
@@ -1189,6 +1194,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           port: opts.lanDirect.port,
           backendPort: tlsPort,
           zone: opts.serverFqdn,
+          lanPorts,
         })
         .catch((e: Error) => {
           console.warn(`[lan-direct] could not start (${e.message}); relay only`);

@@ -54,19 +54,4 @@ class ServiceRenameCanonicalBytesTest {
             String(bytes, Charsets.UTF_8),
         )
     }
-
-    @Test fun voiciShortenWithoutServiceId_usesEmptyString() {
-        // VoiciShortenClaim uses "" in the serviceId slot when null is
-        // passed — the Worker's canonicalVoiciShorten does the same.
-        val bytes = VoiciShortenClaim.canonicalBytes(
-            username = "alice",
-            serviceId = null,
-            targetUrl = "https://example.com/",
-            issuedAt = 1L,
-        )
-        assertEquals(
-            "flagship/voici-shorten/v1|alice||https://example.com/|1",
-            String(bytes, Charsets.UTF_8),
-        )
-    }
 }

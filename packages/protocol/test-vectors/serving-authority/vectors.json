@@ -61,12 +61,12 @@
         "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
         "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
         "issuedAt": 1800000000000,
-        "expiresAt": 1807776000000
+        "expiresAt": 1802592000000
       },
-      "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08",
+      "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e",
       "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "alg": "ed25519",
-      "canonical": "flagship/renewal-key-delegation/v2|alice|p256|02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|1800000000000|1807776000000"
+      "canonical": "flagship/renewal-key-delegation/v2|alice|p256|02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|1800000000000|1802592000000"
     },
     {
       "kind": "serving-lease",
@@ -246,9 +246,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -456,9 +456,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -548,9 +548,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -606,9 +606,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -664,9 +664,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -722,9 +722,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -827,9 +827,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "f174ed48bf206ab5b3cb77e41eddf410a5ee18f5848fe08ccee801e016c63567c85b8747a4d927cdc6c1606d493f5b08a8044a10e47b38e4a8e567fadd55cf08"
+              "signature": "2a7b278b0d9102cda08ea5fde5b4a65a376f5920e3917fe1937f5415365ab7a710d32ce2644b3d54e238a2e00f415a65393d00fbe81bc21b28105b9c700a1b06"
             }
           }
         ],
@@ -885,9 +885,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -944,9 +944,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -1002,9 +1002,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],
@@ -1072,9 +1072,9 @@
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
                 "issuedAt": 1800000000000,
-                "expiresAt": 1807776000000
+                "expiresAt": 1802592000000
               },
-              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
+              "signature": "97d762232c20d600f1b10899bf4737a9a63124bcb2bd65878428d1baacce0f4f21da287df9f8c7c57356922db8a6494402b25ea99f9909cade6070ca43ce660e"
             }
           }
         ],

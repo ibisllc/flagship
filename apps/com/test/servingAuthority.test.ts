@@ -91,7 +91,7 @@ function signedPolicy(p: ServingPolicy, key = ADMIN) {
 }
 function delegation(o: Partial<RenewalKeyDelegation> = {}): RenewalKeyDelegation {
   const now = Date.now();
-  return { account: "alice", alg: "p256", renewalPub: RENEWAL_PUB, deviceId: DEVICE_PUB, issuedAt: now, expiresAt: now + 90 * 86_400_000, ...o };
+  return { account: "alice", alg: "p256", renewalPub: RENEWAL_PUB, deviceId: DEVICE_PUB, issuedAt: now, expiresAt: now + 30 * 86_400_000, ...o };
 }
 const leaseId = (n: number) => n.toString(16).padStart(32, "0");
 
@@ -315,7 +315,7 @@ describe("a renewal key counts only while it is delegated and its device is an a
     try {
       const p = await withPolicy(env);
       const now = Date.now();
-      expect((await post(env, delegation({ issuedAt: now - 90 * 86_400_000, expiresAt: now - 1 }))).status).toBe(400);
+      expect((await post(env, delegation({ issuedAt: now - 30 * 86_400_000, expiresAt: now - 1 }))).status).toBe(400);
       expect((await post(env, delegation({ issuedAt: now - 60_000, expiresAt: now + 1_000 }))).status).toBe(200);
       const clock = vi.spyOn(Date, "now").mockReturnValue(now + 2_000);
       try {

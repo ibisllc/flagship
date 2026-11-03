@@ -420,12 +420,19 @@ async fn serves_tls_with_the_key_in_keyd_and_forwards_plaintext() {
         conn.negotiated_key_exchange_group().unwrap().name(),
         NamedGroup::X25519MLKEM768
     );
+    let port = c.get_ref().0.local_addr().unwrap().port();
     assert_eq!(echo(&mut c, REQ).await, REQ);
     let (h, raw) = up.headers.recv().await.unwrap();
-    assert_eq!(h, json!({"sni": CHESS, "alpn": "http/1.1", "tls": "1.3"}));
+    // `peer`: the loopback port the client connected from, so the daemon can tell its LAN listener's
+    // connections (`/api/rescue` is LAN-only) from the relay tunnel's.
+    assert_eq!(
+        h,
+        json!({"sni": CHESS, "alpn": "http/1.1", "tls": "1.3", "peer": port})
+    );
     assert_eq!(
         raw,
-        format!("{{\"sni\":\"{CHESS}\",\"alpn\":\"http/1.1\",\"tls\":\"1.3\"}}\n").into_bytes()
+        format!("{{\"sni\":\"{CHESS}\",\"alpn\":\"http/1.1\",\"tls\":\"1.3\",\"peer\":{port}}}\n")
+            .into_bytes()
     );
     assert!(kd.signs() > 0, "the handshake was not signed by keyd");
 }

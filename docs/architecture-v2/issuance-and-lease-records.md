@@ -34,7 +34,8 @@ flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse
     <onLapse> = stop-apps | lock-server    (lock-server needs a finite grace)
 
 flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>
-    <expiresAt> at most 90 days after <issuedAt>; a lease the key signed ends no later than it. The key counts only
+    <expiresAt> at most 30 days after <issuedAt> (owner, 2026-11-03; was 90); a device signs a new one at its next
+    admin-root unlock once 14 days or fewer remain; a lease the key signed ends no later than it. The key counts only
     while <deviceId> holds a live admin-root-signed `admin` grant (losing it, or the device, revokes the key). No
     <policyGen>: one delegation serves every box of the account, each with its own policy generation; the lease binds it.
 

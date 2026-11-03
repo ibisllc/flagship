@@ -49,7 +49,7 @@ app traffic itself (the app proxy below); everywhere else the Go frontend is unc
 | Names | only names the leaf covers; no SNI refused | same | `refuses_a_name_the_certificate_does_not_cover` |
 | Renewal | `tls.active` re-read every 5 s, no dropped connections | same on a timer, plus on demand (SIGHUP / empty cache) | `picks_up_a_renewal_on_the_timer_…`, `reloads_on_demand`, `no_certificate_yet_…` |
 | keyd briefly down | keeps the cached cert; signing fails, so handshakes fail closed | same | `fails_closed_when_keyd_is_down` |
-| Upstream | dial Unix socket (3 s), write `{"sni":…,"alpn":…,"tls":…}\n`, copy both ways with half-close | identical bytes and field order; SNI lowercased; same half-close | `serves_tls_…` (asserts raw line), `server::tests` |
+| Upstream | dial Unix socket (3 s), write `{"sni":…,"alpn":…,"tls":…}\n`, copy both ways with half-close | same field order plus `"peer":<port>` for a loopback peer (the daemon's LAN-direct test, `/api/rescue` is LAN-only); SNI lowercased; same half-close | `serves_tls_…` (asserts raw line), `server::tests` |
 | Client bytes | forwarded verbatim | forwarded verbatim | `client_bytes_reach_the_daemon_verbatim` |
 | Connection cap | over the cap: closed at once | same | `handshake_deadline_and_connection_cap` |
 | Handshake deadline | 10 s | 10 s, also covers ClientHello reading | same test |
@@ -82,8 +82,11 @@ forwarding headers to be discarded. Today:
   client `X-Flagship-*` header (`docs/app-apis.md` §5). On the app proxy path (below) the ingress is the one
   HTTP interpretation of a proxied request (the daemon sees only the parsed head, never a second copy of the
   bytes) and strips them itself.
-- The negotiated key-exchange group is not in the header line (the field set is identical to Go's); adding a
-  `kx` field is a façade/compatibility-policy decision.
+- `peer` is the loopback port the connection came from. The daemon's LAN-direct listener records the ports it
+  connects from, so the daemon serves `/api/rescue` only to LAN connections (`lanIngress.ts`); a daemon given no
+  `peer` treats the connection as not LAN.
+- The negotiated key-exchange group is not in the header line; adding a `kx` field is a façade/compatibility-policy
+  decision.
 
 ## The app proxy (G4/R3, `--proxy-decide`)
 

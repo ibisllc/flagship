@@ -109,7 +109,7 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
     const w = await world();
     await w.claim("plucky-avocet");
     for (let i = 0; i < 10_000; i++) {
-      const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, now: () => NOW }, { username: "plucky-avocet", targetUrl: "https://example.com/" });
+      const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, now: () => NOW }, { username: "plucky-avocet", serviceId: "plucky-avocet--app", targetUrl: "https://app.plucky-avocet.flagship.services" });
       if (!("code" in r)) throw new Error(r.error);
       expect(r.code).toHaveLength(VOICI_CODE_LENGTH);
       expect(r.code).toMatch(/^[0-9][0-9a-z]{5}$/);
@@ -127,7 +127,7 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
       const next = draws.shift() ?? [1];
       return Uint8Array.from({ length: n }, (_, i) => next[i % next.length]!);
     };
-    const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, random }, { username: "plucky-avocet", targetUrl: "https://example.com/" });
+    const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, random }, { username: "plucky-avocet", serviceId: "plucky-avocet--app", targetUrl: "https://app.plucky-avocet.flagship.services" });
     expect(r).toMatchObject({ code: "1aaaaa" });
     expect(voiciNameKey((r as { code: string }).code)).not.toBe(voiciNameKey("50cent"));
   });
@@ -155,7 +155,7 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
     // A minter that keeps drawing the retired code first must skip it.
     let calls = 0;
     const random = (n: number) => Uint8Array.from({ length: n }, () => (calls++ < 6 ? [1, 10, 10, 10, 10, 10][calls - 1]! : 2));
-    const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, random }, { username: "plucky-avocet", targetUrl: "https://example.com/" });
+    const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, random }, { username: "plucky-avocet", serviceId: "plucky-avocet--app", targetUrl: "https://app.plucky-avocet.flagship.services" });
     expect((r as { code: string }).code).not.toBe("1aaaaa");
     expect((await w.s.voiciLinks.get("1aaaaa"))?.retiredAt).toBe(2);
   });
@@ -226,8 +226,8 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
   it("T20: after CODE_LENGTH grows from 6 to 7 an old code still redirects and a new one has 7 characters", async () => {
     const w = await world();
     await w.claim("plucky-avocet");
-    await w.s.voiciLinks.insert({ code: "7old66", username: "plucky-avocet", targetUrl: "https://example.com/old", createdAt: 1 });
-    const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, codeLength: 7 }, { username: "plucky-avocet", targetUrl: "https://example.com/new" });
+    await w.s.voiciLinks.insert({ code: "7old66", username: "plucky-avocet", serviceId: "plucky-avocet--old", targetUrl: "https://example.com/old", createdAt: 1 });
+    const r = await mintShortLink({ usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, codeLength: 7 }, { username: "plucky-avocet", serviceId: "plucky-avocet--app", targetUrl: "https://app.plucky-avocet.flagship.services" });
     expect((r as { code: string }).code).toMatch(/^[0-9][0-9a-z]{6}$/);
     expect(await w.resolve("/7old66")).toEqual({ kind: "link", target: "https://example.com/old" });
   });

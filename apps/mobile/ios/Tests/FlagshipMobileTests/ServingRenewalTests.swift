@@ -51,7 +51,7 @@ final class ServingRenewalTests: XCTestCase {
 
     func testAnExpiringDelegationIsSignedAgainAndAnExpiredOneSignsNothing() async throws {
         let old = RenewalKeyDelegation(account: user, renewalPub: renewalSigner.publicKeyHex, deviceId: device,
-                                       issuedAt: now - 89 * 86_400_000, expiresAt: now - 1)
+                                       issuedAt: now - 29 * 86_400_000, expiresAt: now - 1)
         delegations[user] = SignedServingRecord(record: old, signature: try ServingAuthority.signEd25519(old.canonicalBytes(), key: admin))
         let mailbox = MockSecretMailboxClient()
         mailbox.serving = [AccountServingEntry(serverDomain: "home.alice.flagship.services", boxPub: boxA, regGen: 1, policy: policy(boxA, .sevenDays))]

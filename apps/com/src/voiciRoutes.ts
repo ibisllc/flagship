@@ -91,9 +91,8 @@ export function isVoiciHost(hostname: string, env: VoiciEnv): boolean {
 const ACCOUNT_VOICI = /^\/api\/accounts\/([^/]+)\/(voici-drafts|voici-drafts\/consume|messages-state)$/;
 const PAGE_ROUTE = /^\/api\/voici\/pages\/([^/]+)(?:\/(pieces|publish|inbox|block)(?:\/([0-9a-f]{64}))?)?$/;
 
-/** The paths this file owns. `/api/voici/shorten` stays the code minter's. */
+/** The paths this file owns. */
 export function isVoiciApiPath(pathname: string): boolean {
-  if (pathname === "/api/voici/shorten") return false;
   return pathname.startsWith("/api/voici/") || ACCOUNT_VOICI.test(pathname);
 }
 

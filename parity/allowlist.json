@@ -178,11 +178,6 @@
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/voici-shorten/v1",
-      "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen."
-    },
-    {
-      "check": "signed-tags",
       "key": "ios:flagship/box-artifact/v1",
       "reason": "The box artifact is verified by the install scripts on the box and by Studio's burn path; the iOS app never installs a box. Android carries the tag only inside the embedded preseed engine it shares with the builder."
     },

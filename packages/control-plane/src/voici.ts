@@ -1,36 +1,22 @@
 // voi.ci (docs/voici-namespace-spec.md): mint codes, and resolve every voi.ci/<path> through one function.
 //
-//   1. mintShortLink (internal helper) — called by handleServiceRename, handleGetAppLinks and the one-off shorten
-//      endpoint. A code is a digit then 0-9a-z (D2), CODE_LENGTH long (D3); it is claimed by one INSERT into the
-//      names registry, and a taken safety key (a username, a link name, a code, a reserved word) mints another.
+//   1. mintShortLink (internal helper) — called only by handleServiceRename and handleGetAppLinks, for an app's own
+//      canonical address: voi.ci codes come only from the system, never from a URL a client names. A code is a
+//      digit then 0-9a-z (D2), CODE_LENGTH long (D3); it is claimed by one INSERT into the names registry, and a
+//      taken safety key (a username, a link name, a code, a reserved word) mints another.
 //
 //   2. resolveVoiciPath — the voi.ci host. Lowercase and no trailing slash or a 301 there (D13); `/-/…` is the site's
 //      own (D11); `/@<x>` only ever names a username (D10, D5); a live link or code 302s to its app; a retired one
 //      is 410; a username shows its page when published, else the same 404 as an unknown name; a held username
 //      301s to its owner's current name, or 404s when the account is gone.
-//
-//   3. handleVoiciShorten — phone-facing API. Signed by IRK; mints a one-off code (no serviceId binding).
 
-import {
-  isVoiciName,
-  mintVoiciCode,
-  verifyVoiciShorten,
-  type VoiciShorten,
-} from "@flagship/protocol";
+import { isVoiciName, mintVoiciCode } from "@flagship/protocol";
 import type {
   NameRegistryStorage,
   UsernameStorage,
   VoiciLinkStorage,
   VoiciStorage,
 } from "@flagship/storage";
-import { hexToBytes } from "./hex.js";
-import {
-  forbidden,
-  malformed,
-  notFound,
-  ok,
-  type HandlerResponseWithHeaders,
-} from "./types.js";
 
 /** CODE_LENGTH (D3): the length of a newly minted code. It can only grow; codes minted shorter keep working. */
 export const VOICI_CODE_LENGTH = 6;
@@ -65,29 +51,40 @@ export const DEFAULT_VOICI_HOST = "voi.ci";
  *  holds (a username, a link name, a live or retired code, a reserved word), and the minter draws fresh bytes. */
 const MAX_MINT_RETRIES = 8;
 
-const DEFAULT_MAX_AGE_MS = 5 * 60_000;
-const ONE_OFF_TTL_MS = 365 * 24 * 60 * 60_000;
-
-// Matches `^https://` — Worker rejects anything else so an attacker
-// can't mint a short code that redirects to `javascript:` etc.
 const TARGET_URL_RE = /^https:\/\/[^\s]+$/i;
 
-/** Worker-private: pick a fresh code, hand it back to the caller
- *  along with the persisted row. Used by both the public shorten
- *  endpoint AND the rename handler when minting the post-rename
- *  link. */
+/** An app's canonical address in the account's own zone: `https://<label>.[<server>.]<user>.flagship.services`
+ *  (or the gym's `gym.flagship.services`), origin only. Another account's zone, a foreign host or a path is refused. */
+export function isOwnAppCanonical(targetUrl: string, username: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(targetUrl);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" || u.username || u.password || u.port || u.search || u.hash) return false;
+  if (u.pathname !== "/" || !/^https:\/\/[^/]+\/?$/i.test(targetUrl)) return false;
+  const host = u.hostname.toLowerCase();
+  const zone = [`.${username}.flagship.services`, `.${username}.gym.flagship.services`].find((z) => host.endsWith(z));
+  if (!zone) return false;
+  const below = host.slice(0, host.length - zone.length).split(".");
+  return below.length >= 1 && below.length <= 2 && below.every((l) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(l));
+}
+
+/** Worker-private: pick a fresh code for one app and hand it back with the persisted row. Its callers pass the
+ *  canonical address `.com` worked out itself (appHome), never one from a request. */
 export async function mintShortLink(
   deps: VoiciDeps,
   args: {
     username: string;
-    serviceId?: string;
+    serviceId: string;
     targetUrl: string;
-    expiresAt?: number;
   },
 ): Promise<{ code: string; shortUrl: string } | { error: string }> {
   const username = args.username.toLowerCase();
   if (!isVoiciName(username)) return { error: "malformed username" };
-  if (!TARGET_URL_RE.test(args.targetUrl)) return { error: "targetUrl must be https://…" };
+  if (args.serviceId.length === 0) return { error: "a code names one app" };
+  if (!isOwnAppCanonical(args.targetUrl, username)) return { error: "targetUrl must be the app's own address" };
   const len = deps.codeLength ?? VOICI_CODE_LENGTH;
   const host = deps.shortHost ?? DEFAULT_VOICI_HOST;
   const now = (deps.now ?? (() => Date.now()))();
@@ -97,10 +94,9 @@ export async function mintShortLink(
     const insert = await deps.voiciLinks.insert({
       code,
       username,
-      ...(args.serviceId ? { serviceId: args.serviceId } : {}),
+      serviceId: args.serviceId,
       targetUrl: args.targetUrl,
       createdAt: now,
-      ...(args.expiresAt !== undefined ? { expiresAt: args.expiresAt } : {}),
     });
     if (insert.ok) {
       return { code, shortUrl: `https://${host}/${code}` };
@@ -108,63 +104,6 @@ export async function mintShortLink(
     // Taken or too similar — mint another (never reuse, D7).
   }
   return { error: "couldn't allocate a unique short code; retry" };
-}
-
-/** Phone-facing API. Signed by IRK over canonical bytes. Mints a
- *  one-off code (no serviceId binding). App-bound codes ride through
- *  handleServiceRename instead — serviceId binding lets that handler cascade-
- *  delete on subsequent renames. */
-export async function handleVoiciShorten(
-  deps: VoiciDeps,
-  body: unknown,
-): Promise<HandlerResponseWithHeaders> {
-  const now = (deps.now ?? (() => Date.now()))();
-  const maxAgeMs = DEFAULT_MAX_AGE_MS;
-
-  const b = body as { request?: Record<string, unknown>; signature?: unknown };
-  const r = b?.request ?? {};
-  if (
-    typeof r.username !== "string" ||
-    typeof r.targetUrl !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string"
-  ) {
-    return malformed("malformed body");
-  }
-  if (Math.abs(now - r.issuedAt) > maxAgeMs) return forbidden("stale request");
-  if (!TARGET_URL_RE.test(r.targetUrl)) return malformed("targetUrl must be https://…");
-
-  const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("unknown username");
-
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid signature hex");
-  }
-  const claim: VoiciShorten = {
-    username: r.username,
-    ...(typeof r.serviceId === "string" && r.serviceId.length > 0 ? { serviceId: r.serviceId } : {}),
-    targetUrl: r.targetUrl,
-    issuedAt: r.issuedAt,
-  };
-  if (!verifyVoiciShorten(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return forbidden("invalid signature");
-  }
-
-  const minted = await mintShortLink(deps, {
-    username: r.username,
-    ...(typeof r.serviceId === "string" && r.serviceId.length > 0 ? { serviceId: r.serviceId } : {}),
-    targetUrl: r.targetUrl,
-    expiresAt: now + ONE_OFF_TTL_MS,
-  });
-  if ("error" in minted) return { status: 500, body: { error: minted.error } };
-  return ok({
-    ok: true,
-    code: minted.code,
-    shortUrl: minted.shortUrl,
-  });
 }
 
 // ── resolution (docs/voici-namespace-spec.md, Resolution) ──────────────────────────────────
@@ -251,6 +190,8 @@ export async function resolveVoiciPath(deps: VoiciResolveDeps, pathname: string,
 
   if (row.kind === "link" || row.kind === "code") {
     if (row.status !== "active") return { kind: "gone" };
+    // A code bound to no app came from the removed any-URL shortener: it no longer redirects.
+    if (row.kind === "code" && !row.serviceId) return { kind: "gone" };
     const now = (deps.now ?? (() => Date.now()))();
     if (row.expiresAt !== null && row.expiresAt <= now) return { kind: "gone" };
     const owner = row.owner ?? "";

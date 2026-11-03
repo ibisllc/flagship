@@ -48,7 +48,7 @@ export const DEFAULT_SERVING_GRACE: ServingGrace = "indefinite";
  * The longest a renewal-key delegation lasts. A device re-delegates at an admin-root unlock it does anyway; a key
  * left on a demoted or lost device stops counting at its end even if no revocation reached the verifier.
  */
-export const RENEWAL_DELEGATION_MAX_MS = 90 * 86_400_000;
+export const RENEWAL_DELEGATION_MAX_MS = 30 * 86_400_000;
 /** How far a signer's clock may run ahead of the verifier's. */
 export const SERVING_CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -129,7 +129,7 @@ export function canonicalRenewalKeyDelegation(d: RenewalKeyDelegation): Bytes {
   intField("issuedAt", d.issuedAt);
   intField("expiresAt", d.expiresAt);
   if (d.expiresAt <= d.issuedAt) throw new Error("expiresAt must be after issuedAt");
-  if (d.expiresAt - d.issuedAt > RENEWAL_DELEGATION_MAX_MS) throw new Error("a delegation lasts at most 90 days");
+  if (d.expiresAt - d.issuedAt > RENEWAL_DELEGATION_MAX_MS) throw new Error("a delegation lasts at most 30 days");
   return enc([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt, d.expiresAt]);
 }
 

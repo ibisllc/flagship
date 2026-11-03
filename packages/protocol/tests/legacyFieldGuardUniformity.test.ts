@@ -45,7 +45,6 @@ import {
   type UninstallServiceRequest,
   type UpdatePullRequest,
   type UploadRecoveryRecord,
-  type VoiciShorten,
   type WipeRestart,
   signAuthCode,
   signAuthCodeRevocation,
@@ -79,7 +78,6 @@ import {
   signUninstallService,
   signUpdatePull,
   signUploadRecoveryRecord,
-  signVoiciShorten,
   signWipeRestart,
 } from "../src/auth.js";
 import {
@@ -405,14 +403,6 @@ describe("SEC-6 — service / recovery / lease / totp", () => {
       bothBad<SetCustomDomain>(
         (bad) => ({ username: "u", serviceId: "svc", fqdn: "x.example.com", [f]: bad, issuedAt: NOW }),
         (r) => signSetCustomDomain(r, kp),
-      );
-    }
-  });
-  it("VoiciShorten.{username,serviceId,targetUrl}", () => {
-    for (const f of ["username", "serviceId", "targetUrl"] as const) {
-      bothBad<VoiciShorten>(
-        (bad) => ({ username: "u", serviceId: "svc", targetUrl: "https://x", [f]: bad, issuedAt: NOW }),
-        (r) => signVoiciShorten(r, kp),
       );
     }
   });

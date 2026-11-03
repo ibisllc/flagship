@@ -34,8 +34,12 @@ Source: Harry's Claude Doc "voi.ci namespace: implementation spec"
   name at once (deviation: no person waits on a demo name).
 - **Folded in:** `voici_links` (codes) and `voici_names` (custom link names) are copied into `names` and no longer
   read (left in place, unread). `voici_name_changes` stays (rate limits). A custom link name given up for any reason
-  is `retired` for good (D7); the old 30-day wait-then-free is gone. Expired one-off codes are retired, never
-  deleted.
+  is `retired` for good (D7); the old 30-day wait-then-free is gone.
+- **Codes come only from the system** (owner decision 2026-11-03): one per app, minted by `.com` for the app's own
+  canonical address (`https://<label>.[<server>.]<user>.flagship.services`, origin only; `isOwnAppCanonical` in
+  `packages/control-plane/src/voici.ts`) when the app's links are read or it is renamed. The any-https one-off
+  shortener (`POST /api/voici/shorten`, `flagship/voici-shorten/v1`) is removed; a code bound to no app (none
+  existed in production) answers 410.
 - **Formats:** `voiciNameProblem` / `voiciNameKey` (the safety key) / `mintVoiciCode` in
   `packages/protocol/src/voiciName.ts`, pinned by `packages/protocol/test-vectors/voici-name/vectors.json` and ported
   to the webapp (`lib/nameRules.js`), Swift and Kotlin. Problems: `too-short`, `too-long`, `characters`, `hyphens`.

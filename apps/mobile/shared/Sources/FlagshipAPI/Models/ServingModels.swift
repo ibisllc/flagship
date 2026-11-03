@@ -50,7 +50,7 @@ public struct ServingPolicy: Codable, Equatable, Sendable {
 public struct RenewalKeyDelegation: Codable, Equatable, Sendable {
     public static let tag = "flagship/renewal-key-delegation/v2"
     /// The longest a delegation lasts.
-    public static let maxLifetimeMs: Int64 = 90 * 86_400_000
+    public static let maxLifetimeMs: Int64 = 30 * 86_400_000
     /// A delegation this close to its end is signed again at the next admin-root signature.
     public static let renewBeforeMs: Int64 = 14 * 86_400_000
     public var account: String

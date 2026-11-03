@@ -38,7 +38,7 @@ extension RenewalKeyDelegation {
         try ServingAuthority.int("issuedAt", issuedAt, min: 0)
         try ServingAuthority.int("expiresAt", expiresAt, min: 0)
         guard expiresAt > issuedAt else { throw ServingRecordError.invalid("expiresAt must be after issuedAt") }
-        guard expiresAt - issuedAt <= Self.maxLifetimeMs else { throw ServingRecordError.invalid("a delegation lasts at most 90 days") }
+        guard expiresAt - issuedAt <= Self.maxLifetimeMs else { throw ServingRecordError.invalid("a delegation lasts at most 30 days") }
         return ServingAuthority.join([Self.tag, account, alg, renewalPub, deviceId, String(issuedAt), String(expiresAt)])
     }
 }

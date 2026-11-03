@@ -36,7 +36,7 @@ const DAY_MS: u64 = 86_400_000;
 /// How far a signer's clock may run ahead of the verifier's.
 pub const SERVING_CLOCK_SKEW_MS: u64 = 5 * 60_000;
 /// The longest a renewal-key delegation lasts.
-pub const RENEWAL_DELEGATION_MAX_MS: u64 = 90 * DAY_MS;
+pub const RENEWAL_DELEGATION_MAX_MS: u64 = 30 * DAY_MS;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServingError {

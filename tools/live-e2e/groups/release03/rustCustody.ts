@@ -146,10 +146,16 @@ export const rustCustody: Group = {
         const stk = String(row?.identityPubKey ?? "");
         assert(/^[0-9a-f]{64}$/i.test(stk), `no identity key on /pods: ${short(row)}`);
         const clientNonce = randomBytes(16).toString("hex");
-        const h = await postJson(`https://${bx.fqdn}/api/rescue/hello`, { clientNonce });
-        assert(h.status === 200, `rescue hello ${h.status}: ${short(h.text)}`);
+        // /api/rescue is LAN-only: through the relay it is a 404, so the hello is asked on the box, at its LAN-direct listener.
+        const relayed = await postJson(`https://${bx.fqdn}/api/rescue/hello`, { clientNonce });
+        assert(relayed.status === 404, `rescue hello through the relay ${relayed.status}: ${short(relayed.text)}`);
+        const lanAddr = (await sh("ss -Hltn 'sport = :443' | awk '{print $4}' | sed -E 's/:443$//; s/^\\[|\\]$//g' | grep -Ev '^(127\\.|::1$|\\*|0\\.0\\.0\\.0$|::$)' | head -n 1")).trim();
+        assert(lanAddr, "the box's LAN-direct listener is bound to no private address");
+        const host = lanAddr.includes(":") ? `[${lanAddr}]` : lanAddr;
+        const raw = await sh(`curl -sk --max-time 20 --resolve '${bx.fqdn}:443:${host}' -H 'content-type: application/json' -d '{"clientNonce":"${clientNonce}"}' 'https://${bx.fqdn}/api/rescue/hello'`);
+        const h = { json: JSON.parse(raw) as { hello?: unknown; signatureHex?: string } };
         const hello = rescueHelloFromBody(h.json.hello, bx.fqdn);
-        assert(hello && hello.clientNonce === clientNonce && verifyRescueHello(hello, hexToBytes(h.json.signatureHex), hexToBytes(stk)), "the hello is not signed by the box's own key");
+        assert(hello && hello.clientNonce === clientNonce && verifyRescueHello(hello, hexToBytes(String(h.json.signatureHex ?? "")), hexToBytes(stk)), `the hello is not signed by the box's own key: ${short(raw)}`);
         const heartbeat = await until("a heartbeat after the fallback", 8 * 60_000, async () => {
           const r = (await pods(A.username)).find((p) => p.serverDomain === bx.fqdn);
           const at = reportedAtMs(r?.lastReported);

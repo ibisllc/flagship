@@ -348,27 +348,6 @@ public enum ServiceRenameClaim {
     }
 }
 
-/// V2 — voi.ci one-off short link envelope. Signed by IRK. Optional
-/// `serviceId` binds the link to a specific service so a future rename can
-/// cascade-delete it.
-public enum VoiciShortenClaim {
-    public static let canonicalTag = "flagship/voici-shorten/v1"
-    public static func canonicalBytes(
-        username: String,
-        serviceId: String?,
-        targetUrl: String,
-        issuedAt: Int64
-    ) -> Data {
-        Data([
-            canonicalTag,
-            username,
-            serviceId ?? "",
-            targetUrl,
-            String(issuedAt),
-        ].joined(separator: "|").utf8)
-    }
-}
-
 /// E2 — Wipe & restart envelope. Signed by the OLD IRK over the
 /// new IRK + new credentialID + SHA-256 of the new wrapped UMK.
 /// Mirrors packages/protocol/src/auth.ts `TAG_WIPE_RESTART`.

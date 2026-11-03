@@ -65,7 +65,7 @@ const lease = (o: Partial<ServingLease> = {}): ServingLease => ({
   notAfter: T0 + 7 * DAY,
   ...o,
 });
-const delegation: RenewalKeyDelegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: key(6).pub, issuedAt: T0, expiresAt: T0 + 90 * DAY };
+const delegation: RenewalKeyDelegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: key(6).pub, issuedAt: T0, expiresAt: T0 + 30 * DAY };
 const sig = <K extends Parameters<typeof signServingRecord>[0]>(kind: K, r: Parameters<typeof signServingRecord<K>>[1], k = admin) =>
   hexOf(signServingRecord(kind, r, k.sign));
 const sp = (p: ServingPolicy, k = admin) => ({ record: p, signature: sig("serving-policy", p, k) });

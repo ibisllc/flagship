@@ -61,7 +61,7 @@ const signed = <T,>(kind: Parameters<typeof signServingRecord>[0], record: T, si
   record,
   signature: hexOf(signServingRecord(kind, record as never, signer.sign)),
 });
-const delegation: RenewalKeyDelegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: device, issuedAt: T0, expiresAt: T0 + 90 * DAY };
+const delegation: RenewalKeyDelegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: device, issuedAt: T0, expiresAt: T0 + 30 * DAY };
 const lease = (o: Partial<ServingLease> = {}): ServingLease => ({ ...leaseFor(policy(), T0, "ab".repeat(16))!, ...o });
 const input = (o: Partial<ServingInput> = {}): ServingInput => ({
   account: "alice",
@@ -186,9 +186,9 @@ describe("a finite grace", () => {
     expect(servingDecision(input({ now: T0 + 2 * DAY, leases: [{ ...p256Signed(after), delegation: short }] }))).toMatchObject({ reason: "no-lease" });
   });
 
-  it("a delegation must end, and within 90 days", () => {
+  it("a delegation must end, and within 30 days", () => {
     expect(() => signServingRecord("renewal-key-delegation", { ...delegation, expiresAt: T0 }, admin.sign)).toThrow();
-    expect(() => signServingRecord("renewal-key-delegation", { ...delegation, expiresAt: T0 + 91 * DAY }, admin.sign)).toThrow();
+    expect(() => signServingRecord("renewal-key-delegation", { ...delegation, expiresAt: T0 + 30 * DAY + 1 }, admin.sign)).toThrow();
     expect(() => signServingRecord("renewal-key-delegation", { ...delegation, expiresAt: undefined as never }, admin.sign)).toThrow();
   });
 

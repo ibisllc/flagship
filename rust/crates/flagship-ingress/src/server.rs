@@ -118,17 +118,27 @@ pub fn tls_configs(source: &Arc<CertSource>, kx: KxPolicy) -> Result<TlsConfigs,
     Ok(TlsConfigs { hybrid, classical })
 }
 
-/// The line the daemon reads first (`parseFrontendHeader` in tlsUpstream.ts): the same three
-/// fields, in flagship-tlsd's order. It comes from the ingress, never from the client.
-pub fn header_line(sni: &str, alpn: &str, tls: &str) -> Vec<u8> {
+/// The line the daemon reads first (`parseFrontendHeader` in tlsUpstream.ts): flagship-tlsd's
+/// three fields, then `peer`, the loopback port the connection came from, which tells the daemon
+/// whether its LAN-direct listener opened it (lanIngress.ts: `/api/rescue` is LAN-only). It comes
+/// from the ingress, never from the client.
+pub fn header_line(sni: &str, alpn: &str, tls: &str, peer: Option<u16>) -> Vec<u8> {
     let q = |s: &str| serde_json::Value::String(s.to_owned()).to_string();
+    let peer = peer.map(|p| format!(",\"peer\":{p}")).unwrap_or_default();
     format!(
-        "{{\"sni\":{},\"alpn\":{},\"tls\":{}}}\n",
+        "{{\"sni\":{},\"alpn\":{},\"tls\":{}{peer}}}\n",
         q(sni),
         q(alpn),
         q(tls)
     )
     .into_bytes()
+}
+
+/// The peer's port when it connected over loopback (the relay tunnel and the LAN listener both
+/// do); any other peer has no port the daemon could recognise.
+pub fn loopback_peer_port(peer: Option<std::net::SocketAddr>) -> Option<u16> {
+    peer.filter(|a| a.ip().is_loopback() || a.ip().to_canonical().is_loopback())
+        .map(|a| a.port())
 }
 
 pub fn tls_version_label(v: Option<ProtocolVersion>) -> &'static str {
@@ -174,6 +184,7 @@ pub async fn serve(
 
 async fn handle(stream: TcpStream, cfg: &IngressConfig, tls: &TlsConfigs) {
     let _ = stream.set_nodelay(true);
+    let peer = loopback_peer_port(stream.peer_addr().ok());
     let lim = &cfg.limits;
     let handshake = async {
         let start = LazyConfigAcceptor::new(Acceptor::default(), stream)
@@ -245,7 +256,7 @@ async fn handle(stream: TcpStream, cfg: &IngressConfig, tls: &TlsConfigs) {
     else {
         return;
     };
-    let mut preface = header_line(&sni, &alpn, version);
+    let mut preface = header_line(&sni, &alpn, version, peer);
     preface.extend_from_slice(&first);
     if up.write_all(&preface).await.is_err() {
         return;
@@ -387,14 +398,24 @@ mod tests {
     #[test]
     fn header_line_matches_flagship_tlsd() {
         assert_eq!(
-            header_line("chess.home.alice.flagship.services", "http/1.1", "1.3"),
+            header_line("chess.home.alice.flagship.services", "http/1.1", "1.3", None),
             b"{\"sni\":\"chess.home.alice.flagship.services\",\"alpn\":\"http/1.1\",\"tls\":\"1.3\"}\n".to_vec()
         );
         assert_eq!(
-            header_line("a", "", "1.2"),
-            b"{\"sni\":\"a\",\"alpn\":\"\",\"tls\":\"1.2\"}\n".to_vec()
+            header_line("a", "", "1.2", Some(41234)),
+            b"{\"sni\":\"a\",\"alpn\":\"\",\"tls\":\"1.2\",\"peer\":41234}\n".to_vec()
         );
         // The longest SNI fits well under the daemon's 2048-byte header cap.
-        assert!(header_line(&"a".repeat(253), "http/1.1", "1.3").len() < 2048);
+        assert!(header_line(&"a".repeat(253), "http/1.1", "1.3", Some(65535)).len() < 2048);
+    }
+
+    #[test]
+    fn only_a_loopback_peer_has_a_port_to_report() {
+        let at = |s: &str| Some(s.parse::<std::net::SocketAddr>().unwrap());
+        assert_eq!(loopback_peer_port(at("127.0.0.1:41234")), Some(41234));
+        assert_eq!(loopback_peer_port(at("[::1]:41234")), Some(41234));
+        assert_eq!(loopback_peer_port(at("[::ffff:127.0.0.1]:7")), Some(7));
+        assert_eq!(loopback_peer_port(at("192.168.1.5:41234")), None);
+        assert_eq!(loopback_peer_port(None), None);
     }
 }

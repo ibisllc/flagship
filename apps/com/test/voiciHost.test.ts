@@ -85,7 +85,7 @@ describe("the voi.ci host (one namespace)", () => {
     const w = await world();
     try {
       await w.seed.voiciNames.claim({ key: "chess-club", display: "chess-club", username: USER, serviceId: `${USER}--chess`, state: "live", setAt: 1, lastActiveAt: 1, warned: 0 });
-      await w.seed.voiciLinks.insert({ code: "4bcdef", username: USER, targetUrl: "https://example.com/one-off", createdAt: 1 });
+      await w.seed.voiciLinks.insert({ code: "4bcdef", username: USER, serviceId: `${USER}--notes`, targetUrl: "https://example.com/one-off", createdAt: 1 });
       expect((await w.call("/@chess-club")).status).toBe(404);
       expect((await w.call("/@4bcdef")).status).toBe(404);
       expect(location(await w.call("/4bcdef"))).toEqual([302, "https://example.com/one-off"]);
@@ -152,7 +152,7 @@ describe("the voi.ci host (one namespace)", () => {
   it("before VOICI_ENABLED is on, only links and codes resolve, and refusals carry no text", async () => {
     const w = await world(false);
     try {
-      await w.seed.voiciLinks.insert({ code: "4bcdef", username: USER, targetUrl: "https://example.com/one-off", createdAt: 1 });
+      await w.seed.voiciLinks.insert({ code: "4bcdef", username: USER, serviceId: `${USER}--notes`, targetUrl: "https://example.com/one-off", createdAt: 1 });
       expect(location(await w.call("/4bcdef"))).toEqual([302, "https://example.com/one-off"]);
       for (const p of ["/alice", "/@alice", `/-/${VOICI_SITE_DIR}/style.css`]) {
         const r = await w.call(p);

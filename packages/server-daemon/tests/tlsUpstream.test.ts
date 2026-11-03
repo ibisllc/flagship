@@ -15,6 +15,12 @@ describe("the frontend's header line", () => {
       expect(parseFrontendHeader(bad), bad).toBeNull();
     }
   });
+  it("takes the optional loopback peer port, and refuses a line whose peer is not a port", () => {
+    expect(parseFrontendHeader('{"sni":"a","alpn":"","tls":"1.3","peer":41234}')).toEqual({ sni: "a", alpn: "", tls: "1.3", peer: 41234 });
+    for (const bad of ['"41234"', "0", "65536", "1.5", "null"]) {
+      expect(parseFrontendHeader(`{"sni":"a","alpn":"","tls":"1.3","peer":${bad}}`), bad).toBeNull();
+    }
+  });
 });
 
 describe("listening for the frontend", () => {

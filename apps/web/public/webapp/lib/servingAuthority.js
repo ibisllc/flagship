@@ -7,7 +7,7 @@
 // Under a finite policy every admin device signs a `serving-lease/v1` each time
 // the app is opened, with a renewal key: a non-extractable WebCrypto ECDSA P-256
 // key kept in IndexedDB, delegated once by the admin root
-// (`renewal-key-delegation/v2`, for at most 90 days, signed again before it
+// (`renewal-key-delegation/v2`, for at most 30 days, signed again before it
 // ends). No prompt, nothing under an indefinite policy.
 //
 // Canonical bytes mirror @flagship/protocol servingAuthority.ts byte for byte
@@ -41,7 +41,7 @@ export const TAG_SERVING_LEASE = "flagship/serving-lease/v1";
 export const GRACES = ["7d", "30d", "indefinite"];
 export const GRACE_MS = { "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
 export const ON_LAPSE = ["stop-apps", "lock-server"];
-export const RENEWAL_DELEGATION_MAX_MS = 90 * 86_400_000;
+export const RENEWAL_DELEGATION_MAX_MS = 30 * 86_400_000;
 /** A delegation this close to its end is signed again at the next admin-root signature. */
 export const RENEWAL_DELEGATION_RENEW_MS = 14 * 86_400_000;
 
@@ -93,7 +93,7 @@ export function canonicalRenewalKeyDelegation(d) {
   intField("issuedAt", d.issuedAt);
   intField("expiresAt", d.expiresAt);
   if (d.expiresAt <= d.issuedAt) throw new Error("expiresAt must be after issuedAt");
-  if (d.expiresAt - d.issuedAt > RENEWAL_DELEGATION_MAX_MS) throw new Error("a delegation lasts at most 90 days");
+  if (d.expiresAt - d.issuedAt > RENEWAL_DELEGATION_MAX_MS) throw new Error("a delegation lasts at most 30 days");
   return te([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt, d.expiresAt]);
 }
 

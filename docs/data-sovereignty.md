@@ -259,6 +259,25 @@ its bytes (`backup-file`, `chunk`, `bundle`), delete it. No link minting, no
 approvals, no restore, no saved-backup routes, no other screens. A rescue
 session cannot install, remove, read app data or change access.
 
+**LAN only (owner decision 2026-11-03).** Every `/api/rescue/*` route answers
+only to a connection that came in through the LAN-direct listener; through the
+relay it is the box's plain 404 (`not found`), the same as a path it does not
+have. Through the relay it would add nothing: the relay admits only registered,
+unrevoked boxes and stops admitting a box a minute after losing `.com`, so it
+cannot route around a `.com` ban, and an owner who is online has the normal
+screens. The relay tunnel and the LAN listener feed the same loopback TLS
+server, so the box cannot tell them apart from the request, and never from
+anything the client sends: the LAN listener records the loopback source port of
+each connection it opens to the TLS server while that connection lives, and the
+TLS server checks the port it sees (`lanIngress.ts`). Behind flagship-ingress
+the ingress passes the port it accepted from as `peer` in its header line; a
+header without one counts as not LAN. A port is held by the listener's own
+socket while it is recorded, so nothing else on the box can connect from it.
+`FLAGSHIP_LAN_DIRECT=0` therefore turns rescue off. Tests:
+`packages/server-daemon/tests/lanIngress.test.ts` (relay path refused, LAN path
+served, the ingress header), `flagship-ingress` `server::tests` and
+`serves_tls_…`.
+
 Availability: everything on the LAN reaches the app as one loopback source, so
 there is no per-caller limit. A guess cannot succeed (it needs a signature), so
 the caps only bound memory and log noise: a flood of hellos drops the oldest
@@ -507,8 +526,9 @@ answered before any session gate, each only ever *removing* authority:
   restarts (which also ends every in-memory rescue session). The old root can
   then do nothing on this box.
 
-The owner's phone sends both to each box it can reach (LAN or relay) in
-addition to `.com`. **Residual, stated plainly:** a revocation or rotation
+The owner's phone sends both to each box it can reach on the LAN (the
+`/api/rescue` routes are LAN-only, section 4.4) in addition to `.com`, from
+which every box picks them up through the relay. **Residual, stated plainly:** a revocation or rotation
 takes effect on a box when that box receives it. A box the owner cannot
 reach keeps trusting the revoked admin; a bare-root holder can race the
 rotation on boxes the owner cannot reach first (the shared-root problem
@@ -569,7 +589,9 @@ before it signs: signature, server, nonce, **certificate hash**, freshness);
 ### 5.2 Box (`packages/server-daemon/src/rescue/rescue.ts`, `lanDiscovery.ts`)
 
 `/api/rescue/{hello,session,server,archive/*}` answered **before** the
-paired-session gate in `screensHttp.ts`, wired in `index.ts`; mDNS responder
+paired-session gate in `screensHttp.ts`, wired in `index.ts`, and only on a
+LAN-direct connection (`lanIngress.ts`, checked in `runtime.ts` before any
+handler; 404 through the relay); mDNS responder
 started with the LAN listener (`FLAGSHIP_LAN_DISCOVERY=0` disables;
 `FLAGSHIP_LAN_DIRECT=0` disables both). A bind failure is logged and ignored.
 Activity: `server.rescue.opened` and `server.rescue.refused`.

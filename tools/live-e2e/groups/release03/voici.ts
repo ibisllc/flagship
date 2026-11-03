@@ -63,7 +63,6 @@ import {
   signVoiciMessageReport,
   signVoiciPageIndex,
   signVoiciPieceUpload,
-  signVoiciShorten,
   signVoiciThreadStatement,
   signWebDelegation,
   signWebDelegationRevoke,
@@ -476,22 +475,13 @@ export const voici: Group = {
       if (!pub1) return;
 
       // ── one namespace (docs/voici-namespace-spec.md) ──────────────────────────────────────────────────────────
-      await rec.check("one namespace: T1 capitals and a trailing slash 301 to voi.ci/<u>; T7 /@<u> 301s to it; a code minted for O redirects but /@<code> is a 404 (T10, D10); a reserved word, an unknown name and /@<unknown> are the same 404 shell; the site lives under /-/ (D11) and /_/ is gone", async () => {
+      await rec.check("one namespace: T1 capitals and a trailing slash 301 to voi.ci/<u>; T7 /@<u> 301s to it; the removed any-URL shortener is a 404 (codes come only from apps); a reserved word, an unknown name and /@<unknown> are the same 404 shell; the site lives under /-/ (D11) and /_/ is gone", async () => {
         const upper = await http(`${VOICI_ORIGIN}/${user.toUpperCase()}/`);
         assert(upper.status === 301 && new URL(upper.headers.get("location") ?? "", VOICI_ORIGIN).href === new URL(`/${user}`, VOICI_ORIGIN).href, `/${user.toUpperCase()}/ ${upper.status} ${upper.headers.get("location")}`);
         const at = await http(`${VOICI_ORIGIN}/@${user}`);
         assert(at.status === 301 && new URL(at.headers.get("location") ?? "", VOICI_ORIGIN).href === new URL(`/${user}`, VOICI_ORIGIN).href, `/@${user} ${at.status} ${at.headers.get("location")}`);
-        // A one-off code (IRK-signed shorten): a digit first, CODE_LENGTH 6 (D2, D3); it 302s, and /@ never names it.
-        const target = `${API}/`;
-        const req = { username: user, targetUrl: target, issuedAt: Date.now() };
-        const minted = await postJson(`${API}/api/voici/shorten`, { request: req, signature: bytesToHex(signVoiciShorten(req, owner.keys.irk)) });
-        assert(minted.status === 200, `shorten ${minted.status} ${short(minted.text)}`);
-        const code = String(minted.json?.code ?? "");
-        assert(/^[0-9][0-9a-z]{5}$/.test(code), `minted code ${code}`);
-        const hit = await http(`${VOICI_ORIGIN}/${code}`);
-        assert(hit.status === 302 && hit.headers.get("location") === target, `/${code} ${hit.status} ${hit.headers.get("location")}`);
-        const atCode = await http(`${VOICI_ORIGIN}/@${code}`);
-        assert(atCode.status === 404, `/@${code} ${atCode.status}`);
+        const shorten = await postJson(`${API}/api/voici/shorten`, { request: { username: user, targetUrl: `${API}/`, issuedAt: Date.now() }, signature: "00" });
+        assert(shorten.status === 404, `POST /api/voici/shorten ${shorten.status} ${short(shorten.text)}`);
         const nobody = `nobody-${randomBytes(4).toString("hex")}`;
         for (const p of ["/admin", `/${nobody}`, `/@${nobody}`]) {
           const r = await http(`${VOICI_ORIGIN}${p}`);
@@ -501,7 +491,7 @@ export const voici: Group = {
         assert(about.status === 200 && /<html/i.test(about.text), `/-/about ${about.status}`);
         const old = await http(`${VOICI_ORIGIN}/_/about`);
         assert(old.status === 404, `/_/about ${old.status}`);
-        return `301 to /${user} for capitals, a trailing slash and /@; code ${code} 302s, /@${code} 404; reserved and unknown 404 with the site's 404 shell; /-/about 200, /_/about 404`;
+        return `301 to /${user} for capitals, a trailing slash and /@; /api/voici/shorten 404; reserved and unknown 404 with the site's 404 shell; /-/about 200, /_/about 404`;
       });
 
       filesCors = await rec.check("files.voi.ci answers the site's origin with CORS (the R2 rule; without it the site can't read a page)", async () => {

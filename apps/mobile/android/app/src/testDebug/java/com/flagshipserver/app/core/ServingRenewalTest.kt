@@ -55,7 +55,7 @@ class ServingRenewalTest {
     )
 
     @Test fun anExpiringDelegationIsSignedAgainAndAnExpiredOneSignsNothing() = runTest {
-        val old = RenewalKeyDelegation(user, renewalPub = signer.publicKeyHex, deviceId = device, issuedAt = now - 89L * 86_400_000, expiresAt = now - 1)
+        val old = RenewalKeyDelegation(user, renewalPub = signer.publicKeyHex, deviceId = device, issuedAt = now - 29L * 86_400_000, expiresAt = now - 1)
         delegations[user] = SignedRenewalDelegation(old, ServingAuthority.signEd25519(ServingAuthority.canonical(old), admin))
         val mailbox = MockSecretMailboxClient()
         mailbox.serving += AccountServingEntry("home.alice.flagship.services", boxA, 1, policy(boxA, ServingGrace.SEVEN_DAYS))

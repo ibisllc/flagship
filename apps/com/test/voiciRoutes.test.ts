@@ -55,12 +55,13 @@ async function publishPage(w: Awaited<ReturnType<typeof world>>, now: number) {
 }
 
 describe("voi.ci routes", () => {
-  it("own their paths, leave the code minter alone, and are metered by voiciRoutes, not endpointFor", () => {
+  it("own their paths (the removed shortener's included, so it is a 404) and are metered by voiciRoutes, not endpointFor", () => {
     expect(isVoiciApiPath("/api/voici/pages/alice/publish")).toBe(true);
     expect(isVoiciApiPath("/api/voici/web/send")).toBe(true);
     expect(isVoiciApiPath("/api/accounts/alice/voici-drafts/consume")).toBe(true);
     expect(isVoiciApiPath("/api/accounts/alice/messages-state")).toBe(true);
-    expect(isVoiciApiPath("/api/voici/shorten")).toBe(false);
+    expect(isVoiciApiPath("/api/voici/shorten")).toBe(true);
+    expect(endpointFor("POST", "/api/voici/shorten")).toBeNull();
     expect(endpointFor("POST", "/api/voici/web/send")).toBeNull();
   });
 
