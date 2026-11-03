@@ -21,7 +21,7 @@ models, localisation, secondary screens.
 
 | Surface | Status | Missing before it can be called Preview |
 |---|---|---|
-| Windows Studio + hosted VM | Experimental | first boot of the republished appliance after the UART and resize fixes; UAC cancel and "Restart as administrator"; stop/start and second boot |
+| Windows Studio + hosted VM | Experimental | first boot of the republished appliance after the UART and resize fixes; UAC cancel and "Restart as administrator"; stop/start and second boot (0.3: the whole round is `runbooks/0.3-windows-studio-acceptance.md`) |
 | Linux Studio | Experimental | a real desktop run of 1 to 6 |
 | Mac Studio | shipping | n/a |
 | Wear OS | Experimental (label it so in the Play listing) | a hardware run of pairing and an approval |

@@ -78,6 +78,7 @@
     <Compile Include="WizardStateMachineTests.cs" />
     <Compile Include="Ed25519VerifyTests.cs" />
     <Compile Include="RecipeTests.cs" />
+    <Compile Include="StudioVersionTests.cs" />
     <Compile Include="DiskWriteTests.cs" />
     <Compile Include="IsoManifestClientTests.cs" />
     <Compile Include="IsoBaseCacheTests.cs" />

@@ -23,6 +23,20 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const VERSION_FILE = "release/version.json";
 
+// The one switch per desktop platform for the "Experimental" tag (owner, 2026-11-02): the website reads it in
+// the browser, and the Windows and Linux Studios carry a stamped copy for their window title. A platform's tag
+// is dropped only after its hardware acceptance passes (docs/runbooks/0.3-windows-studio-acceptance.md).
+export const STUDIO_TAG_FILE = "apps/web/public/app-stores.js";
+
+/** STUDIO_EXPERIMENTAL from app-stores.js as { mac, windows, linux } booleans, or null when it can't be read. */
+export function parseStudioExperimental(text) {
+  const block = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(text ?? "");
+  if (!block) return null;
+  const out = {};
+  for (const m of block[1].matchAll(/\b(mac|windows|linux)\s*:\s*(true|false)\b/g)) out[m[1]] = m[2] === "true";
+  return typeof out.windows === "boolean" && typeof out.linux === "boolean" ? out : null;
+}
+
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function parseVersion(text) {
@@ -47,7 +61,7 @@ export const display = (v) => `${v.product} ${v.label}`;
  * it must equal. A generated surface can be fixed by --write; a "pinned" one
  * (no `fix`) only reports.
  */
-export function surfaces(v) {
+export function surfaces(v, experimental = null) {
   const s = [];
   const add = (id, path, pattern, want, why, { fix = true, flags = "m" } = {}) => s.push({ id, path, pattern: new RegExp(pattern, flags), want, why, fix });
 
@@ -66,6 +80,10 @@ export function surfaces(v) {
   add("mac:label", "apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift", `(static let label = ")([^"]*)(")`, v.label, "Mac Studio About label");
   add("linux:label", "apps/builder-linux/version.py", `(LABEL = ")([^"]*)(")`, v.label, "Linux Studio About label");
   add("windows:label", "apps/builder-windows/src/StudioVersion.cs", `(Label = ")([^"]*)(")`, v.label, "Windows Studio About label");
+  if (experimental) {
+    add("windows:experimental", "apps/builder-windows/src/StudioVersion.cs", `(public const bool Experimental = )(true|false)(;)`, String(experimental.windows), `Windows Studio window title follows ${STUDIO_TAG_FILE} STUDIO_EXPERIMENTAL.windows`);
+    add("linux:experimental", "apps/builder-linux/version.py", `(EXPERIMENTAL = )(True|False)()`, experimental.linux ? "True" : "False", `Linux Studio window title follows ${STUDIO_TAG_FILE} STUDIO_EXPERIMENTAL.linux`);
+  }
   return s;
 }
 
@@ -100,7 +118,9 @@ export function checkVersions(repo) {
   }
   for (const e of parsed.errors) findings.push({ key: VERSION_FILE, message: e });
   const { v } = parsed;
-  for (const sf of surfaces(v)) {
+  const experimental = parseStudioExperimental(repo.read(STUDIO_TAG_FILE));
+  if (!experimental) findings.push({ key: STUDIO_TAG_FILE, message: `${STUDIO_TAG_FILE}: STUDIO_EXPERIMENTAL { windows, linux } not found (the Studios' Experimental tag follows it)` });
+  for (const sf of surfaces(v, experimental)) {
     const src = repo.read(sf.path);
     if (src == null) {
       findings.push({ key: sf.id, message: `${sf.path} is missing` });
@@ -135,7 +155,9 @@ export function writeVersions(root) {
   const { v, errors } = parseVersion(readFileSync(join(root, VERSION_FILE), "utf8"));
   if (errors.length) throw new Error(errors.join("; "));
   const changed = new Set();
-  for (const sf of surfaces(v)) {
+  const tags = join(root, STUDIO_TAG_FILE);
+  const experimental = existsSync(tags) ? parseStudioExperimental(readFileSync(tags, "utf8")) : null;
+  for (const sf of surfaces(v, experimental)) {
     const abs = join(root, sf.path);
     if (!existsSync(abs)) continue;
     const src = readFileSync(abs, "utf8");

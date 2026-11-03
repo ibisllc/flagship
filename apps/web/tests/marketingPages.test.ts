@@ -410,10 +410,19 @@ describe("Studio platforms that have not passed a hardware run say so", () => {
     expect(studio).toContain("Node.js 22");
     expect(studio).not.toContain("Node.js 20");
   });
-  it("the Windows and Linux window titles carry the label", () => {
+  it("the Windows and Linux window titles carry the label while the same switch says so", () => {
     const root = join(__dirname, "../../");
-    expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml"), "utf8")).toContain('Title="{local:Str flagshipStudioExperimental}"');
-    expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain('window.set_title(tr("Flagship Studio (Experimental)"))');
+    const sw = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(readFileSync(join(pub, "app-stores.js"), "utf8"))?.[1] ?? "";
+    const on = (p: string) => new RegExp(`\\b${p}: true,`).test(sw);
+    // scripts/check-versions.mjs --write stamps the switch into each Studio (docs/runbooks/0.3-windows-studio-acceptance.md).
+    const win = readFileSync(join(root, "builder-windows/src/StudioVersion.cs"), "utf8");
+    expect(win).toContain(`public const bool Experimental = ${on("windows")};`);
+    expect(win).toContain('Strings.T("flagshipStudioExperimental")');
+    expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml.cs"), "utf8")).toContain("Title = StudioVersion.WindowTitle();");
+    const linux = readFileSync(join(root, "builder-linux/version.py"), "utf8");
+    expect(linux).toContain(`EXPERIMENTAL = ${on("linux") ? "True" : "False"}`);
+    expect(linux).toContain('tr("Flagship Studio (Experimental)")');
+    expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain("window.set_title(window_title())");
   });
 });
 

@@ -11,6 +11,18 @@ internal static class StudioVersion
     /// (release/version.json; scripts/check-versions.mjs --write keeps it in step).</summary>
     public const string Label = "Beta";
 
+    /// <summary>Whether this platform still carries the "Experimental" tag: STUDIO_EXPERIMENTAL.windows in
+    /// apps/web/public/app-stores.js, the website's switch (scripts/check-versions.mjs --write keeps it in step).
+    /// It goes false only after docs/runbooks/0.3-windows-studio-acceptance.md passes.</summary>
+    public const bool Experimental = true;
+
+    /// <summary>The brand name, not translated.</summary>
+    public const string ProductName = "Flagship Studio";
+
+    /// <summary>The main window's title: the brand, tagged while the platform is Experimental.</summary>
+    public static string WindowTitle(bool experimental = Experimental)
+        => experimental ? Strings.T("flagshipStudioExperimental") : ProductName;
+
     public static readonly string Current =
         (typeof(StudioVersion).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? "0.0.0-dev").Split('+')[0];

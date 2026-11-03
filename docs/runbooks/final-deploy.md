@@ -1071,14 +1071,25 @@ different one. Then update the two URLs in
 "Experimental"; neither has been run on a real Windows PC or Linux desktop beyond the
 2026-10-18 Windows run recorded in AGENTS.md.
 
-**Dropping a platform's "Experimental" tag** (0.3: Windows, once its hardware tests
-pass) is one line: set the platform to `false` in `STUDIO_EXPERIMENTAL` at the top of
-`apps/web/public/app-stores.js` (e.g. `windows: false,`), then redeploy `.com` (step 7).
-Every page in every language marks the tag with `data-studio-experimental="<platform>"`,
-so no page or translation is edited. Update the pin in
-`apps/web/tests/marketingPages.test.ts` ("Studio platforms that have not passed a
-hardware run say so") in the same commit. The homepage shows no per-platform tag: it
-has a single "Download Flagship Studio on your computer" link to `/studio`.
+**Dropping a platform's "Experimental" tag** (0.3: Windows, owner 2026-11-02) needs its
+acceptance first: for Windows, `docs/runbooks/0.3-windows-studio-acceptance.md` passed,
+with the report (`Verdict: PASS`) on an origin `device-results/windows-<date>` branch.
+Then it is one setting: the platform to `false` in `STUDIO_EXPERIMENTAL` at the top of
+`apps/web/public/app-stores.js` (e.g. `windows: false,`). The same setting drives the
+Studio's own window title: `node scripts/check-versions.mjs --write` stamps it into
+`apps/builder-windows/src/StudioVersion.cs` (`Experimental`) and
+`apps/builder-linux/version.py` (`EXPERIMENTAL`), and the checker (also run by
+`studio-release.yml` and `npm run parity`) fails when they disagree. So decide it
+**before** `studio-release.yml` builds the public release: the title is compiled into
+the exe. `scripts/release.sh` step `studiowl` asks first, checks the results branch,
+flips the setting, stamps, tests and lands it before dispatching the build; the website
+loses the tag at the phase B redeploy (step 7). Every page in every language marks the
+tag with `data-studio-experimental="<platform>"`, so no page or translation is edited.
+Update the pin in `apps/web/tests/marketingPages.test.ts` ("Studio platforms that have
+not passed a hardware run say so") in the same commit (the script does). The homepage
+shows no per-platform tag: it has a single "Download Flagship Studio on your computer"
+link to `/studio`. Code signing is a separate owner decision (the acceptance runbook,
+"Code signing").
 
 **Mac** (`scripts/release-studio.sh`, needs the notary credentials in the
 keychain and `wrangler` on PATH):
@@ -1311,7 +1322,9 @@ account. The plan file and its `.log.jsonl` list exactly what went.
 - The arm64 appliance needs a green `main` run published (step 9): until then
   Apple Silicon hosting gets the 2026-10-13 image, which stops at first boot.
 - Windows and Linux Studio have not run end to end on real hardware; ship them
-  as Experimental (owner, 2026-10-20).
+  as Experimental (owner, 2026-10-20). 0.3: Windows drops the tag only if
+  `0.3-windows-studio-acceptance.md` passes before step `studiowl` (owner, 2026-11-02);
+  otherwise it ships tagged again, which does not block the release.
 - Mac Studio reports version 0.2.0 (step 10; stamped from `release/version.json`).
 - Not run by anyone yet, per AGENTS.md: the whole server restore, docker
   save/load and pg_dump/restore against a real box, and the final root-wildcard

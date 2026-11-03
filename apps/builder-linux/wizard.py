@@ -57,7 +57,7 @@ from cli_runner import (
 )
 from pair_session import PairEvent, PairSession
 from pairing_watch import PairingWatch, timer_schedule
-from version import VERSION, display_version
+from version import VERSION, display_version, window_title
 from wifi_store import WifiStore, default_backend
 from vm import artifact_preflight, host_arch, older_app_recipe, recipe_info, resource_plan, ssh_launch
 from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
@@ -1410,7 +1410,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     wizard_model = model if model is not None else WizardModel(mode=MODE_SIMPLE, auto_pair=True)
 
     window = Adw.ApplicationWindow(application=application)
-    window.set_title(tr("Flagship Studio (Experimental)"))
+    window.set_title(window_title())
     window.set_default_size(960, 820)
 
     header = Adw.HeaderBar()

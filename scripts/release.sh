@@ -550,8 +550,11 @@ EOF
 meta_studiowl() {
   TITLE="Studio for Windows and Linux: public GitHub release + download URLs"
   RUNBOOK="10. Studio releases (Mac, Windows, Linux)"
-  WHAT="Dispatches studio-release.yml with publish=true, waits for it, points INSTALLER_DOWNLOADS in apps/com/src/route.ts (and its test) at the new asset names, tests, pushes."
+  WHAT="First asks whether the Windows Studio acceptance passed (docs/runbooks/0.3-windows-studio-acceptance.md): only then, and only with a device-results/windows-<date> branch on origin whose report says 'Verdict: PASS', it sets STUDIO_EXPERIMENTAL.windows to false in apps/web/public/app-stores.js, stamps the window title (check-versions --write) and lands that before the build. Then dispatches studio-release.yml with publish=true, waits for it, points INSTALLER_DOWNLOADS in apps/com/src/route.ts (and its test) at the new asset names, tests, pushes."
   read -r -d '' CMDS <<'EOF' || true
+(only if the Windows acceptance passed) git grep '^Verdict: PASS' origin/device-results/windows-<date> -- 'device-results/windows-0.3-acceptance-*.md'
+(only if the Windows acceptance passed) set windows: false in STUDIO_EXPERIMENTAL (apps/web/public/app-stores.js) and its pin in apps/web/tests/marketingPages.test.ts
+(only if the Windows acceptance passed) node scripts/check-versions.mjs --write && git commit && git push origin HEAD:main
 gh workflow run studio-release.yml --ref main -f publish=true
 gh run watch <id> --exit-status
 gh release view studio-v<studio version> --json assets
@@ -560,7 +563,7 @@ npx vitest run apps/com/test/route.test.ts
 git add -- apps/com/src/route.ts apps/com/test/route.test.ts && git commit -m "Point the Windows and Linux Studio downloads at studio-v<version>"
 git push origin HEAD:main
 EOF
-  GATE="The release has the Windows zip and the Linux AppImage; the route test passes on the new names."
+  GATE="The Experimental tag is dropped only on a passed Windows acceptance; the release has the Windows zip and the Linux AppImage; the route test passes on the new names."
   ROLLBACK="Point INSTALLER_DOWNLOADS back at the previous tag and redeploy .com; delete the release with gh release delete if it is wrong."
 }
 meta_studiomac() {
@@ -2150,14 +2153,62 @@ run_retire() {
 }
 
 studio_version() { node -p "require('$WT/release/version.json').studio"; }
+
+# The Windows Studio's "Experimental" tag (owner, 2026-11-02) is dropped only on a passed acceptance run
+# (docs/runbooks/0.3-windows-studio-acceptance.md). One switch, STUDIO_EXPERIMENTAL in apps/web/public/app-stores.js,
+# drives the website and (stamped by check-versions.mjs --write) the window title compiled into the exe, so it is
+# decided before studio-release.yml builds the public release, never after.
+STUDIO_TAGS=apps/web/public/app-stores.js
+studio_windows_experimental() { grep -Eq '^[[:space:]]*windows:[[:space:]]*true,' "$WT/$STUDIO_TAGS"; }
+studio_windows_tag() {
+  if ! studio_windows_experimental; then
+    ok "Windows Studio carries no Experimental tag (STUDIO_EXPERIMENTAL.windows is false in $STUDIO_TAGS)"
+    XA "$WT" node scripts/check-versions.mjs
+    return 0
+  fi
+  say "  Windows Studio is tagged Experimental, on the website and in its window title (STUDIO_EXPERIMENTAL.windows)."
+  say "  Drop it only if docs/runbooks/0.3-windows-studio-acceptance.md passed: every required row pass on a build of"
+  say "  this release line, the report on an origin device-results/windows-<date> branch saying 'Verdict: PASS', and"
+  say "  row 6 of docs/runbooks/0.3-hardware-acceptance.md (section 19) filled in. Code signing is the owner's separate call."
+  if ! confirm "Did the 0.3 Windows Studio acceptance pass, and should this release drop Windows' Experimental tag?"; then
+    ok "Windows Studio ships tagged Experimental"; return 0
+  fi
+  local branch; branch=$(ask_word "Its results branch on origin (device-results/windows-YYYY-MM-DD)")
+  if ! [[ "$branch" =~ ^device-results/windows-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    err "'$branch' is not a device-results/windows-<date> branch: Windows keeps its Experimental tag"; return 0
+  fi
+  if ! wt_git fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null; then
+    err "origin has no $branch: Windows keeps its Experimental tag"; return 0
+  fi
+  if ! wt_git grep -q -E '^Verdict: PASS' "origin/$branch" -- 'device-results/windows-0.3-acceptance-*.md'; then
+    err "no device-results/windows-0.3-acceptance-*.md on $branch says 'Verdict: PASS': Windows keeps its Experimental tag"; return 0
+  fi
+  ok "$branch reports the Windows acceptance passed"
+  ( cd "$WT" && node -e '
+const fs=require("fs");
+const edit=(f,from,to)=>{const s=fs.readFileSync(f,"utf8");const n=s.replace(from,to);if(n===s)throw new Error(`${f}: nothing to change`);fs.writeFileSync(f,n)};
+edit("apps/web/public/app-stores.js",/^(\s*windows:\s*)true,/m,"$1false,");
+edit("apps/web/tests/marketingPages.test.ts","toMatch(/\\bwindows: true,/)","toMatch(/\\bwindows: false,/)");' ) \
+    || fail "could not set STUDIO_EXPERIMENTAL.windows to false"
+  XA "$WT" node scripts/check-versions.mjs --write
+  XA "$WT" node scripts/check-versions.mjs
+  XA "$WT" npx vitest run scripts/check-versions.test.ts apps/web/tests/marketingPages.test.ts apps/web/tests/studioPage.test.ts
+  commit_paths "Windows Studio: drop the Experimental tag (acceptance passed, $branch)" \
+    "$STUDIO_TAGS" apps/web/tests/marketingPages.test.ts apps/builder-windows/src/StudioVersion.cs
+  land_commits || return $?
+  say "  The website loses the tag at the redeploy step; the window title of the build this step dispatches has none."
+}
+
 run_studiowl() {
   ensure_wt
   local v tag; v=$(studio_version); tag="studio-v$v"
   say "  Studio version from release/version.json: $v (tag $tag)"
-  say "  Windows is unsigned and neither Windows nor Linux has run on real hardware beyond the recorded Windows run: they ship as preview."
+  say "  Windows is unsigned; Linux has not run on real hardware: Linux ships tagged Experimental."
   if (cd "$WT" && gh release view "$tag" >/dev/null 2>&1); then
     ok "release $tag already exists: skipping the build"
+    if studio_windows_experimental; then warn "Windows Studio in $tag is tagged Experimental (decided when it was built)"; fi
   else
+    studio_windows_tag || return $?
     confirm "Dispatch studio-release.yml with publish=true (creates the PUBLIC GitHub release $tag)?" || return 10
     local t0; t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     XA "$WT" gh workflow run studio-release.yml --ref main -f publish=true

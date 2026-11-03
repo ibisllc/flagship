@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         _wizard = new Wizard();
         DataContext = _wizard;
         InitializeComponent();
+        Title = StudioVersion.WindowTitle();
         WifiPasswordBox.Password = _wizard.WifiPassword;
         _trayIcon = new TrayIcon(this, _wizard.Vm);
         // Every exit path (window X, File > Exit, tray Quit, restart elevated)
@@ -139,7 +140,7 @@ public partial class MainWindow : Window
     private void RestoreAfterShutdown()
     {
         _wizard.Vm.CancelQuit();
-        Title = Strings.T("flagshipStudioExperimental");
+        Title = StudioVersion.WindowTitle();
         IsEnabled = true;
         _trayIcon.SetStatus(null);
     }

@@ -20,3 +20,8 @@ def test_a_dev_build_and_a_patch_release_are_shown_as_is():
 def test_the_label_is_the_shared_release_files():
     shared = json.loads((Path(__file__).resolve().parents[3] / "release" / "version.json").read_text())
     assert version.LABEL == shared["label"]
+
+
+def test_the_window_title_is_tagged_only_while_linux_is_experimental():
+    assert version.window_title(True) == "Flagship Studio (Experimental)"
+    assert version.window_title(False) == "Flagship Studio"

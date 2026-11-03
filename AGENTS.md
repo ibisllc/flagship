@@ -1493,6 +1493,14 @@ release, and applies to a VM from its next start).
 `docs/runbooks/device-test-agent.md`** (what to test, how to report: results go
 on a `device-results/<machine>-<date>` branch, never `main`).
 
+**0.3 (owner, 2026-11-02): Windows drops "Experimental" if
+`docs/runbooks/0.3-windows-studio-acceptance.md` passes** (gym, a `release/0.3` build;
+brief for the Windows agent at its end). One switch, `STUDIO_EXPERIMENTAL` in
+`apps/web/public/app-stores.js`, drives the website tag and, through
+`scripts/check-versions.mjs --write`, the Windows and Linux window titles; `release.sh`
+step `studiowl` flips it only on a `Verdict: PASS` results branch. Code signing (the zip
+is unsigned) is an open owner decision; Windows 10 is proposed out of the floor.
+
 Follow `docs/runbooks/desktop-windows-linux-validation.md`: the released
 Windows zip and Linux AppImage each need one real run (pair with a phone, host a
 server through phone unlock to a green padlock, burn a USB and boot it on

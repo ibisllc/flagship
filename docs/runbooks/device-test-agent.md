@@ -52,6 +52,9 @@ Write down the build you test (run id or release version, Help → About).
 
 ## Windows PC
 
+**0.3 round (2026-11):** follow `0.3-windows-studio-acceptance.md` instead of this section: it runs
+against the gym on a `release/0.3` build, and its report decides the Windows "Experimental" tag.
+
 Run sections 2.1–2.8 of `desktop-windows-linux-validation.md` with the CI
 build, then:
 

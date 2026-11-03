@@ -15,7 +15,10 @@ npx tsc -b
 
 Agents on that machine get `AGENTS.md` through `CLAUDE.md` automatically.
 
-## 2. Windows (10 or 11, x64)
+**0.3 (Windows):** the round that decides whether Windows drops "Experimental" is
+`0.3-windows-studio-acceptance.md`; it runs against the gym and supersedes section 2 for 0.3.
+
+## 2. Windows (11, x64)
 
 Prerequisites: .NET 8 SDK, Windows PowerShell, and Hyper-V's Windows Hypervisor
 Platform enabled (Settings → Optional features → More Windows features).
