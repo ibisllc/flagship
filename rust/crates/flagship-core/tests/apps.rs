@@ -530,6 +530,57 @@ fn an_address_held_by_something_else_is_skipped() {
 }
 
 #[test]
+fn an_address_conflict_is_not_a_failure_and_the_next_pass_redeploys_elsewhere() {
+    let dir = tempdir();
+    let mut c = open(dir.path());
+    let mut engine = Engine::default();
+    engine.containers.insert(
+        "flagship-other--x".into(),
+        Container {
+            installation: "other--x".into(),
+            component: "main".into(),
+            generation: 1,
+            running: true,
+            address: Some("10.89.0.2".into()),
+        },
+    );
+    let mut req = request(
+        "ex1",
+        Mode::Rust,
+        &[desired("alice--notes", 'a', true)],
+        &engine,
+    );
+    req.observed.clear();
+    let r = c.sync(&req).unwrap();
+    let res = engine.perform(&r.effects[0]);
+    assert!(res.is_err());
+    c.settle(&SettleRequest {
+        executor: "ex1".into(),
+        op: r.effects[0].op,
+        outcome: Outcome::Definite,
+        detail: res.err(),
+        conflict_ip: Some("10.89.0.2".into()),
+    })
+    .unwrap();
+    // No time passes: a waiting owner must see a new deploy, not "failed" behind a back-off.
+    let r = c
+        .sync(&request(
+            "ex1",
+            Mode::Rust,
+            &[desired("alice--notes", 'a', true)],
+            &engine,
+        ))
+        .unwrap();
+    assert_ne!(state_of(&r, "alice--notes"), "failed");
+    let deploy = r
+        .effects
+        .iter()
+        .find(|e| e.installation == "alice--notes")
+        .expect("a new deploy");
+    assert_ne!(deploy.address.as_deref(), Some("10.89.0.2"));
+}
+
+#[test]
 fn what_does_not_fit_waits_and_nothing_running_is_evicted() {
     let dir = tempdir();
     let mut c = open(dir.path());

@@ -1154,6 +1154,11 @@ impl AppController {
                 self.settle_op(op.id, "done", detail.as_deref(), now)?;
                 self.clear_deployed(&op.key, op.generation)?;
             }
+            // The engine refused the address core picked because something it doesn't own holds it:
+            // not the app's failure, so no back-off; the next pass deploys at another address.
+            (Outcome::Definite, EffectKind::Deploy) if s.conflict_ip.is_some() => {
+                self.settle_op(op.id, "abandoned", detail.as_deref(), now)?;
+            }
             (Outcome::Definite, _) => {
                 self.settle_op(op.id, "failed", detail.as_deref(), now)?;
             }
