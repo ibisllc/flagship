@@ -278,6 +278,25 @@ describe("handleVoiciNameSet", () => {
     expect((await set(deps, "named4x")).status).toBe(200);
   });
 
+  it("the live gym's sequence (named-links): refusals count nothing, a 3-character name is valid, and set + replace + clear use all three changes", async () => {
+    const { deps } = await setup();
+    expect((await set(deps, "gym-d6a338-link")).status).toBe(200);
+    expect(code(await set(deps, "admin"))).toBe("taken");
+    expect((await set(deps, "ab")).body).toMatchObject({ code: "invalid", problem: "too-short" });
+    expect((await voiciLinkState(deps, "alice", SVC)).changesLeft).toBe(2);
+    expect(await checkVoiciName(deps, "alice", SVC, "gym-d6a338-link")).toEqual({ status: "current" });
+    expect(await checkVoiciName(deps, "alice", SVC, "gymd6a338link")).toEqual({ status: "taken" });
+    // "abc" is a valid name (3 to 30): setting it is a real change, which is what run 32's group did by mistake.
+    expect(await checkVoiciName(deps, "alice", SVC, "abc")).toEqual({ status: "available" });
+    expect((await set(deps, "gym-d6a338-link-two")).status).toBe(200);
+    const cleared = await clear(deps);
+    expect(cleared.status).toBe(200);
+    expect((cleared.body as { link: { name: string | null; changesLeft: number } }).link).toMatchObject({ name: null, changesLeft: 0 });
+    const fourth = await set(deps, "gym-d6a338-link-three");
+    expect(fourth.status).toBe(429);
+    expect(fourth.body).toMatchObject({ code: "change-limit", nextChangeAt: NOW + 30 * DAY });
+  });
+
   it("applies a brake of ten changes a day to the whole account", async () => {
     const { deps } = await setup({ tier: "maker" });
     for (let i = 0; i < VOICI_CHANGES_PER_ACCOUNT_DAY; i++) {

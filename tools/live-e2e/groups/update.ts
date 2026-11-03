@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signDeviceEndpointClaim, signUpdateOrder, type UpdateOrder } from "@flagship/protocol";
 import { pair, type Account } from "../lib/fleet.js";
-import { CONTROL, assert, http, postJson, short, sleep } from "../lib/harness.js";
+import { CONTROL, SkipError, assert, http, postJson, short, sleep } from "../lib/harness.js";
 import type { Group } from "./types.js";
 import { journal } from "./release03/util.js";
 
@@ -26,6 +26,30 @@ export function mailboxAuth(acct: Account): { auth: Record<string, unknown>; aut
     auth: { ...claim, phoneIrkPub: bytesToHex(claim.phoneIrkPub), nonce: bytesToHex(nonce) },
     authSignature: bytesToHex(signDeviceEndpointClaim(claim, acct.keys.irk)),
   };
+}
+
+/**
+ * Does the daemon at `commit` carry the G2 runtime-manifest step (artifactUpdate.ts logs its decision)? The update is
+ * applied by the daemon the box ran BEFORE it, which may be an older release (B3 starts one release behind, on a
+ * gym-branch commit), so this reads that commit's own source: a hash-ancestry test fails across the gym's rebases.
+ * null: neither the gym worktree nor this checkout has the commit.
+ */
+function daemonHasG2(commit: string): boolean | null {
+  const repos = [process.env.GYM_WORKTREE || `${homedir()}/.cache/flagship/gym-worktree`, fileURLToPath(new URL("../../..", import.meta.url))];
+  for (const repo of repos) {
+    try {
+      execFileSync("git", ["-C", repo, "cat-file", "-e", `${commit}^{commit}`], { stdio: "ignore" });
+    } catch {
+      continue;
+    }
+    try {
+      const src = execFileSync("git", ["-C", repo, "show", `${commit}:packages/server-daemon/src/artifactUpdate.ts`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      return /runtime manifest not checked/.test(src);
+    } catch {
+      return false; // no artifactUpdate.ts at all: older still
+    }
+  }
+  return null;
 }
 
 const SCRIPT = fileURLToPath(new URL("../../../scripts/gym-update-target.sh", import.meta.url));
@@ -165,6 +189,10 @@ export const update: Group = {
     // lock. While the gym's .com serves no manifest this proves the fail-safe half live; the refusal half is the Rust
     // updater's install tests and the privd/broker conformance corpus.
     await rec.check("the update decided about the signed runtime manifest before switching (G2)", async () => {
+      // The updating daemon is the one on `current`; a release from before G2 cannot log the decision.
+      const g2 = daemonHasG2(current);
+      if (g2 === false) return `not applicable (old daemon): the update was applied by ${current.slice(0, 8)}, which predates the G2 runtime-manifest step`;
+      if (g2 === null) throw new SkipError(`can't tell whether the updating daemon ${current.slice(0, 8)} has the G2 step: the commit is in neither the gym worktree nor this checkout`);
       const daemon = await journal(acct, b, 4000);
       const skipped = daemon.filter((l) => /runtime manifest not checked/.test(l));
       const passed = daemon.filter((l) => /runtime manifest checked by the installer/.test(l));

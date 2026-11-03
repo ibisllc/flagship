@@ -28,7 +28,7 @@ import {
   type MoveHintRateState,
   type ServingPolicy,
 } from "@flagship/protocol";
-import { mintDeviceGrant } from "../../lib/fleet.js";
+import { createRealAccount, mintDeviceGrant, type Account } from "../../lib/fleet.js";
 import { accountReadHeaders } from "../../readToken.js";
 import {
   moveSimBox,
@@ -141,14 +141,26 @@ export const relayMesh: Group = {
     const held: { rogue: MeshSimRelay | null } = { rogue: null };
     const rates = new Map<string, MoveHintRateState>();
 
-    const register = async (): Promise<SimServer> => {
-      const r = await registerSimServer(acct);
+    /** Which account each sim server belongs to (account A, or the rebalancing check's own fresh account). */
+    const ownerOf = new Map<string, Account>();
+    const register = async (owner: Account = acct): Promise<SimServer> => {
+      const r = await registerSimServer(owner);
       assert(r.status === 200 || r.status === 201, `register ${r.status}: ${short(r.text)}`);
       servers.push(r);
+      ownerOf.set(r.fqdn, owner);
       return r;
     };
-    const payloadFor = (s: SimServer, canonicals: string[], serving: Record<string, unknown> = { servingAdminKey: adminPub, servingPolicy: null }) => () =>
-      simHelloPayload({ username: user, server: s, irk: acct.keys.irk, rootSigner: acct.keys.adminRoot, canonicals, serving });
+    const payloadFor = (s: SimServer, canonicals: string[], serving?: Record<string, unknown>) => () => {
+      const owner = ownerOf.get(s.fqdn) ?? acct;
+      return simHelloPayload({
+        username: owner.username,
+        server: s,
+        irk: owner.keys.irk,
+        rootSigner: owner.keys.adminRoot,
+        canonicals,
+        serving: serving ?? { servingAdminKey: bytesToHex(owner.keys.adminRoot.publicKey), servingPolicy: null },
+      });
+    };
     /** A mesh sim box on `relay`; retried until the relay knows the new registration from the log (≤ 45 s). */
     const connectOn = async (s: SimServer, relay: GymRelay, label: string, o: { canonicals?: string[]; serving?: Record<string, unknown>; echo?: boolean; tries?: number } = {}): Promise<SimBox> => {
       const payload = payloadFor(s, o.canonicals ?? [], o.serving);
@@ -414,9 +426,15 @@ export const relayMesh: Group = {
       if (process.env.GYM_MESH_REBALANCE !== "1") {
         rec.skip("§14.1 rebalancing: visits through gym-c dominate and the account moves there with no failed visit", "set GYM_MESH_REBALANCE=1 once the gym relays run with FLAGSHIP_MESH_REBALANCE_MS shortened (docs/runbooks/relay-mesh.md \"Gym\"); unshortened the decision runs hourly");
       } else {
+        // A fresh account with no other box and no other traffic: account A's real boxes (A1, A2, ...) talk to each
+        // other through their relay (gossip to each sibling's own name is visitor traffic, counted with the home as the
+        // entry) and may attach elsewhere or as legacy boxes, so with account A the home's decision could be "share",
+        // "lead" or "legacy-box" depending on what the fleet did in the last window (run 30 alone: moved; full runs 28 and
+        // 32: no hint). Here K is the account's only box, so gym-a is its home and every counted byte enters at gym-c.
         await rec.check("§14.1 rebalancing: 600 visits through gym-c to a box on gym-a: gym-a moves the account to gym-c (locality hint), the box moves make-before-break, and no visit through gym-c fails", async () => {
           need3();
-          const s = await register();
+          const solo = await createRealAccount();
+          const s = await register(solo);
           let b = await connectOn(s, RA, "K");
           mustMesh(b, RA);
           assert((await until(() => reaches(RC!, s.fqdn, "K"), 20_000)) !== null, `K never reachable through ${RC!.relayId}`);
@@ -448,7 +466,7 @@ export const relayMesh: Group = {
             const st = await relayStats(RA);
             const reb = (st?.mesh as { rebalance?: unknown } | undefined)?.rebalance;
             const why = reb ? `${RA.relayId} rebalance ${JSON.stringify(reb)}` : `set GYM_RELAY_STATS_SECRET to see ${RA.relayId}'s decision counts`;
-            throw new Error(`no locality hint within 4 min after ${visits} visits through ${RC!.relayId} (§10.2; ${why})`);
+            throw new Error(`no locality hint within 4 min after ${visits} visits (${failed} failed) through ${RC!.relayId} to ${s.fqdn}, the only box of the fresh account ${solo.username} (§10.2; ${why})`);
           }
           assert((hint.hint as { toRelayId?: string }).toRelayId === RC!.relayId, `the locality hint names ${String((hint.hint as { toRelayId?: string }).toRelayId)}, not ${RC!.relayId}`);
           b = await follow(b, s, hint, []);
@@ -457,7 +475,7 @@ export const relayMesh: Group = {
           await Promise.all(pumps);
           assert(b.relayId === RC!.relayId, `K is on ${b.relayId}`);
           assert(failed === 0, `${failed} of ${visits} visits through ${RC!.relayId} failed during the move`);
-          return `${visits} visits, none failed; K moved ${RA.relayId}→${RC!.relayId}`;
+          return `${visits} visits, none failed; K (fresh account ${solo.username}) moved ${RA.relayId}→${RC!.relayId}`;
         });
       }
 
@@ -561,7 +579,7 @@ export const relayMesh: Group = {
       held.rogue?.close();
       for (const b of sims) b.terminate();
       for (const p of phones) p.terminate();
-      for (const s of servers) await revokeServer(acct, s.fqdn).catch(() => undefined);
+      for (const s of servers) await revokeServer(ownerOf.get(s.fqdn) ?? acct, s.fqdn).catch(() => undefined);
       for (const grantId of grants) {
         const r = { grantId, username: user, reason: "decommissioned" as const, issuedAt: Date.now() };
         await postJson(`https://${CONTROL}/api/users/${user}/device-grants/revoke`, { request: r, signature: bytesToHex(signRevokeDeviceCapabilityGrant(r, acct.keys.irk)) }).catch(() => undefined);

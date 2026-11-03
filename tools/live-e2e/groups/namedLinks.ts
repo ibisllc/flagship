@@ -82,23 +82,32 @@ export const namedLinks: Group = {
       assert(l.link?.name === name && l.link?.changesLeft === 2 && l.shortCode === before, `link ${short(l)}`);
       return `${name}, 2 changes left`;
     });
+    // Names are 3 to 30 characters (voici-namespace-spec owner clarification 4), so the too-short case is 2 characters
+    // ("abc" is a valid name and would be set, using a change). A reserved word answers `taken`, like any other name
+    // the registry holds (docs/named-links.md, superseded note).
     await rec.check("a reserved word and a too-short name are refused, and count as no change", async () => {
       const a = await setName("admin");
-      const b = await setName("abc");
-      assert(a.status === 409 && a.json?.code === "reserved", `reserved ${a.status}: ${short(a.text)}`);
-      assert(b.status === 400 && b.json?.code === "invalid", `short ${b.status}: ${short(b.text)}`);
+      const b = await setName("ab");
+      assert(a.status === 409 && a.json?.code === "taken", `reserved ${a.status}: ${short(a.text)}`);
+      assert(b.status === 400 && b.json?.code === "invalid" && b.json?.problem === "too-short", `short ${b.status}: ${short(b.text)}`);
       const l = await links();
-      assert(l.link?.changesLeft === 2, `link ${short(l.link)}`);
-      return `${a.json.code}, ${b.json.code}`;
+      assert(l.link?.name === name && l.link?.changesLeft === 2, `link ${short(l.link)}`);
+      return `${a.json.code}, ${b.json.code} (${b.json.problem})`;
     });
-    await rec.check("the name without its hyphens is the same name (current for this app)", async () => {
+    // A look-up matches the exact name (spec: voi.ci/halloweenparty does not reach halloween-party), so the name
+    // without its hyphens is another name whose safety key the app's own name already holds: taken, not current.
+    await rec.check("the app's own name checks as current; the name without its hyphens is a look-alike and taken", async () => {
+      const own = await http(`${base}/voici-name-check?name=${encodeURIComponent(name)}&service=${serviceId}`);
+      assert(own.json?.status === "current", `own name ${short(own.text)}`);
       const r = await http(`${base}/voici-name-check?name=${encodeURIComponent(name.replace(/-/g, ""))}&service=${serviceId}`);
-      assert(r.json?.status === "current", `check ${short(r.text)}`);
-      return String(r.json?.status);
+      assert(r.json?.status === "taken", `look-alike ${short(r.text)}`);
+      return `current, ${r.json?.status}`;
     });
     await rec.check("a replace and a clear use the other two changes; the fourth is refused with a date", async () => {
-      assert((await setName(`${name}-two`)).status === 200, "replace refused");
-      assert((await setName("")).status === 200, "clear refused");
+      const rep = await setName(`${name}-two`);
+      assert(rep.status === 200, `replace refused ${rep.status}: ${short(rep.text)}`);
+      const clr = await setName("");
+      assert(clr.status === 200 && clr.json?.link?.name === null, `clear refused ${clr.status}: ${short(clr.text)}`);
       const r = await setName(`${name}-three`);
       assert(r.status === 429, `fourth change got ${r.status}`);
       assert(r.json?.code === "change-limit" && Number(r.json?.nextChangeAt) > Date.now(), `body ${short(r.text)}`);
