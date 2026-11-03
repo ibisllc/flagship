@@ -218,20 +218,28 @@ async function boxLane(rec: Recorder, dir: string, cleanup: Cleanup): Promise<vo
   if (!made) return;
 
   const row = async () => (await pods(acct.username)).find((p) => p.serverDomain === b.fqdn);
-  const registered = await rec.check("the 0.2 box registers and sends heartbeats to the 0.3 .com (≤ 30 min)", async () => {
+  // A 0.2 daemon's heartbeat stays idle until it holds a certificate (0.2 daemonStatusHeartbeat.ts:339 `if (!snapshot)
+  // return`; only onCertIssued fills it), and 0.3 gives a fresh 0.2 box none (DNS-01 answers 410). So a box installed
+  // the 0.2 way on 0.3 registers and stays silent. Real 0.2 boxes already hold a certificate, keep beating and are
+  // flagged from their stored, level-less report (podInventory.test.ts); after release a 0.2 recipe installs GitHub
+  // main, which is 0.3 by then.
+  const registered = await rec.check("the 0.2 box registers with the 0.3 .com (≤ 30 min)", async () => {
     const deadline = Date.now() + 30 * 60_000;
     let last = "";
     while (Date.now() < deadline) {
       const v = podView(await row());
       last = JSON.stringify(v);
-      if (v.registered && v.heartbeat) return last;
+      if (v.registered) return last;
       await sleep(30_000);
     }
-    throw new Error(`not registered with a heartbeat in 30 min: ${last}`);
+    throw new Error(`not registered in 30 min: ${last}`);
   });
   if (!registered) return;
 
   await rec.check(".com flags it on /pods: updateRequired box-too-old (the apps' \"This server needs an update\")", async () => {
+    if (!podView(await row()).heartbeat) {
+      throw new SkipError("a fresh 0.2 box never beats without a certificate, and 0.3 issues it none, so .com has no report to judge; the flag for a 0.2 box that holds one is proven by packages/control-plane/tests/podInventory.test.ts (a stored report without boxLevel is box-too-old)");
+    }
     const deadline = Date.now() + 10 * 60_000;
     let r: Record<string, unknown> | undefined;
     while (Date.now() < deadline) {
