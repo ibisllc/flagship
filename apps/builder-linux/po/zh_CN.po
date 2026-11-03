@@ -8,3 +8,757 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Language: zh-CN\n"
 
+
+#: wizard.py:79 (prose)
+msgid "Debug access (SSH with your own key) is turned on in the Flagship app: choose “Debug-friendly server” when you make the recipe, or use Debug access on the server’s page later."
+msgstr "调试访问（使用你自己的密钥进行 SSH）需在 Flagship 应用中开启：创建配方时选择“便于调试的服务器”，或稍后在服务器页面使用“调试访问”。"
+
+#: wizard.py:276 (prose)
+msgid "USB drive"
+msgstr "U 盘"
+
+#: wizard.py:283 (prose)
+#, python-brace-format
+msgid "Ready: {0} -> {1}"
+msgstr "就绪：{0} -> {1}"
+
+#: wizard.py:284 (prose)
+#, python-brace-format
+msgid "Need: {0}."
+msgstr "还需要：{0}。"
+
+#: wizard.py:289 (prose)
+msgid "Downloading base image…"
+msgstr "正在下载基础镜像…"
+
+#: wizard.py:290 (prose)
+msgid "Downloading the server image…"
+msgstr "正在下载服务器镜像…"
+
+#: wizard.py:291 (prose)
+msgid "Verifying the server image…"
+msgstr "正在验证服务器镜像…"
+
+#: wizard.py:292 (prose)
+msgid "Preparing the server's disk…"
+msgstr "正在准备服务器磁盘…"
+
+#: wizard.py:293 (prose)
+msgid "Starting the server…"
+msgstr "正在启动服务器…"
+
+#: wizard.py:294 (prose)
+msgid "Building image…"
+msgstr "正在构建镜像…"
+
+#: wizard.py:295 (prose)
+msgid "Writing to USB…"
+msgstr "正在写入 U 盘…"
+
+#: wizard.py:297 (prose)
+#, python-brace-format
+msgid "Server handed off · returning home in {0}…"
+msgstr "服务器已移交 · {0} 秒后返回首页…"
+
+#: wizard.py:299 (prose)
+msgid "Preparing a new server…"
+msgstr "正在准备新服务器…"
+
+#: wizard.py:311 (prose)
+msgid "Pasted recipe was empty."
+msgstr "粘贴的配方是空的。"
+
+#: wizard.py:327 (prose)
+msgid "Building the installer needs xorriso, which isn't installed. Install it (Debian/Ubuntu: sudo apt install xorriso; Fedora: sudo dnf install xorriso; Arch: sudo pacman -S libisoburn) and try again."
+msgstr "构建安装程序需要 xorriso，但它尚未安装。请先安装（Debian/Ubuntu：sudo apt install xorriso；Fedora：sudo dnf install xorriso；Arch：sudo pacman -S libisoburn），然后重试。"
+
+#: wizard.py:451 (prose)
+#, python-brace-format
+msgid "Could not stage pasted recipe: {0}"
+msgstr "无法暂存粘贴的配方：{0}"
+
+#: wizard.py:650 (prose)
+#, python-brace-format
+msgid "Couldn't remember the Wi-Fi details: {0}"
+msgstr "无法记住 Wi-Fi 信息：{0}"
+
+#: wizard.py:804 (prose)
+#, python-brace-format
+msgid "This PC doesn't have enough free memory to host a server (each server needs ~{0} GiB)."
+msgstr "这台电脑的可用内存不足，无法托管服务器（每台服务器约需 {0} GiB）。"
+
+#: wizard.py:809 (prose)
+#, python-brace-format
+msgid "This PC is at its hosting limit ({0}). Remove one first, or burn to USB."
+msgstr "这台电脑已达到托管上限（{0}）。请先删除一台，或改为刻录到 U 盘。"
+
+#: wizard.py:834 (prose)
+#, python-brace-format
+msgid "Will run as a managed VM on this PC — {0} vCPU, {1} GiB RAM, {2} GiB disk."
+msgstr "将在这台电脑上作为受管虚拟机运行：{0} 个 vCPU、{1} GiB 内存、{2} GiB 磁盘。"
+
+#: wizard.py:871 (prose)
+#, python-brace-format
+msgid "Cannot read the recipe: {0}"
+msgstr "无法读取配方：{0}"
+
+#: wizard.py:1120 (prose)
+msgid "SSH is available once the server is running (a debug-enabled VM forwards a local port to the guest)."
+msgstr "服务器运行后即可使用 SSH（启用调试的虚拟机会把本地端口转发到客户机）。"
+
+#: wizard.py:1157 (prose)
+msgid "Waiting for an internet connection…"
+msgstr "正在等待网络连接…"
+
+#: wizard.py:1176 (prose)
+msgid "Starting…"
+msgstr "正在启动…"
+
+#: wizard.py:1194 (prose)
+msgid "Pairing couldn't start — is Node installed?"
+msgstr "无法开始配对：是否已安装 Node？"
+
+#: wizard.py:1222 (prose)
+msgid "Scan the QR with the Flagship app, or type the code."
+msgstr "用 Flagship 应用扫描二维码，或输入代码。"
+
+#: wizard.py:1226 (prose)
+msgid "Phone connected — check the security code matches, then approve on your phone."
+msgstr "手机已连接：请核对安全码是否一致，然后在手机上批准。"
+
+#: wizard.py:1230 (prose)
+msgid "Paired — receiving your recipe…"
+msgstr "已配对：正在接收你的配方…"
+
+#: wizard.py:1232 (prose)
+#, python-brace-format
+msgid "Recipe received for {0}."
+msgstr "已收到 {0} 的配方。"
+
+#: wizard.py:1255 (prose)
+msgid "Pairing failed."
+msgstr "配对失败。"
+
+#: wizard.py:1348 (prose)
+msgid "Flagship Studio (Experimental)"
+msgstr "Flagship Studio（实验性）"
+
+#: wizard.py:1353 (prose)
+msgid "Return to pairing home"
+msgstr "返回配对首页"
+
+#: wizard.py:1359 (label=)
+msgid "Bring my own ISO (Advanced)"
+msgstr "使用我自己的 ISO（高级）"
+
+#: wizard.py:1390 (prose)
+msgid "Build and host your own Flagship server."
+msgstr "构建并托管你自己的 Flagship 服务器。"
+
+#: wizard.py:1418 (prose)
+msgid "New Server"
+msgstr "新建服务器"
+
+#: wizard.py:1422 (prose)
+msgid "Auto (System)"
+msgstr "自动（跟随系统）"
+
+#: wizard.py:1423 (label)
+msgid "Light"
+msgstr "浅色"
+
+#: wizard.py:1424 (label)
+msgid "Dark"
+msgstr "深色"
+
+#: wizard.py:1426 (label)
+msgid "Appearance"
+msgstr "外观"
+
+#: wizard.py:1430 (label)
+msgid "Documentation"
+msgstr "文档"
+
+#: wizard.py:1431 (prose)
+msgid "Report an Issue"
+msgstr "报告问题"
+
+#: wizard.py:1435 (prose)
+msgid "About Flagship Studio"
+msgstr "关于 Flagship Studio"
+
+#: wizard.py:1436 (label)
+msgid "Quit"
+msgstr "退出"
+
+#: wizard.py:1441 (prose)
+msgid "Main menu"
+msgstr "主菜单"
+
+#: wizard.py:1487 (title=)
+msgid "Drop the recipe"
+msgstr "拖放配方"
+
+#: wizard.py:1488 (subtitle=)
+msgid "JSON file from the website after you scanned the QR code."
+msgstr "扫描二维码后从网站获得的 JSON 文件。"
+
+#: wizard.py:1493 (prose)
+msgid "Drop .flagship-recipe.json here"
+msgstr "将 .flagship-recipe.json 拖放到此处"
+
+#: wizard.py:1499 (label=)
+msgid "Choose file..."
+msgstr "选择文件..."
+
+#: wizard.py:1501 (prose)
+msgid "Pick recipe"
+msgstr "选择配方"
+
+#: wizard.py:1507 (label=)
+msgid "Or paste the JSON:"
+msgstr "或粘贴 JSON："
+
+#: wizard.py:1519 (label=)
+msgid "Use pasted JSON"
+msgstr "使用粘贴的 JSON"
+
+#: wizard.py:1529 (label=)
+msgid "Pair with your phone"
+msgstr "与你的手机配对"
+
+#: wizard.py:1531 (prose)
+msgid "Scan a QR with the Flagship app to receive a recipe — no file needed."
+msgstr "用 Flagship 应用扫描二维码即可接收配方，无需任何文件。"
+
+#: wizard.py:1556 (title=)
+msgid "Drop the ISO"
+msgstr "拖放 ISO"
+
+#: wizard.py:1557 (subtitle=)
+msgid "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs."
+msgstr "标准 Debian netinst 镜像。运行 `flagship-build distros` 可查看接受的 SHA。"
+
+#: wizard.py:1562 (prose)
+msgid "Drop debian-*-netinst.iso here"
+msgstr "将 debian-*-netinst.iso 拖放到此处"
+
+#: wizard.py:1570 (prose)
+msgid "Pick ISO"
+msgstr "选择 ISO"
+
+#: wizard.py:1582 (title=)
+msgid "Pick the USB drive"
+msgstr "选择 U 盘"
+
+#: wizard.py:1583 (subtitle=)
+msgid "Only removable drives in the 500MB-500GB band. Internal disks are hidden by design."
+msgstr "仅显示 500 MB 至 500 GB 的可移动驱动器。内置磁盘会被有意隐藏。"
+
+#: wizard.py:1588 (label=)
+msgid "Refresh"
+msgstr "刷新"
+
+#: wizard.py:1616 (title=)
+msgid "Flash the USB"
+msgstr "写入 U 盘"
+
+#: wizard.py:1617 (subtitle=)
+msgid "Writes the install image to the picked disk. Needs admin via pkexec."
+msgstr "把安装镜像写入所选磁盘。需要通过 pkexec 获得管理员权限。"
+
+#: wizard.py:1629 (prose)
+msgid "Wi-Fi network (optional)"
+msgstr "Wi-Fi 网络（可选）"
+
+#: wizard.py:1635 (prose)
+msgid "Wi-Fi password"
+msgstr "Wi-Fi 密码"
+
+#: wizard.py:1646 (label=)
+msgid "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only."
+msgstr "为没有网线的服务器提供的可选 Wi-Fi。会被写入这个一次性安装程序，并仅为你的账户记忆在这台电脑上。"
+
+#: wizard.py:1655 (label=)
+msgid "Flash to USB"
+msgstr "写入 U 盘"
+
+#: wizard.py:1661 (label=)
+msgid "Bake ISO only (no flash)"
+msgstr "仅生成 ISO（不写入）"
+
+#: wizard.py:1665 (label=)
+msgid "Verify recipe only"
+msgstr "仅验证配方"
+
+#: wizard.py:1693 (title=)
+msgid "Done"
+msgstr "完成"
+
+#: wizard.py:1694 (subtitle=)
+msgid "Bring this USB to the machine you're installing on."
+msgstr "把这个 U 盘带到要安装的机器上。"
+
+#: wizard.py:1711 (label=)
+msgid "Recipe verified — choose where this server should live."
+msgstr "配方已验证：请选择此服务器的运行位置。"
+
+#: wizard.py:1718 (label=)
+msgid "Burn to USB"
+msgstr "刻录到 U 盘"
+
+#: wizard.py:1725 (label=)
+msgid "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick."
+msgstr "构建专用硬件主机，这是最理想的方式。用 U 盘启动任意闲置的机器。"
+
+#: wizard.py:1740 (label=)
+msgid "Host on this PC"
+msgstr "在这台电脑上托管"
+
+#: wizard.py:1747 (label=)
+msgid "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys."
+msgstr "在此应用内以受管虚拟机的形式运行同样的加密、由手机把关的设备。同样的配方、同样的解锁，密钥仍由你的手机持有。"
+
+#: wizard.py:1769 (label=)
+msgid "‹ Choose destination"
+msgstr "‹ 选择目标位置"
+
+#: wizard.py:1782 (label=)
+msgid "The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key."
+msgstr "虚拟机会从与 U 盘刻录相同的镜像无人值守安装，然后以加密状态启动，等待你的手机解锁。此应用永远看不到磁盘密钥。"
+
+#: wizard.py:1795 (label=)
+msgid "Create server on this PC"
+msgstr "在这台电脑上创建服务器"
+
+#: wizard.py:1801 (label=)
+msgid "Encrypted disk · unlocked by your phone"
+msgstr "加密磁盘 · 由你的手机解锁"
+
+#: wizard.py:1836 (label=)
+msgid "Security code — confirm it matches your phone"
+msgstr "安全码：请确认与你手机上的一致"
+
+#: wizard.py:1845 (label=)
+msgid "Cancel"
+msgstr "取消"
+
+#: wizard.py:1891 (label=)
+msgid "Start"
+msgstr "启动"
+
+#: wizard.py:1894 (label=)
+msgid "Stop"
+msgstr "停止"
+
+#: wizard.py:1896 (label=)
+msgid "Restart"
+msgstr "重新启动"
+
+#: wizard.py:1898 (label=)
+msgid "Retry install"
+msgstr "重试安装"
+
+#: wizard.py:1901 (label=)
+msgid "Stop installation"
+msgstr "停止安装"
+
+#: wizard.py:1906 (label=)
+msgid "Open in SSH"
+msgstr "在 SSH 中打开"
+
+#: wizard.py:1909 (label=)
+msgid "Delete this server"
+msgstr "删除此服务器"
+
+#: wizard.py:1925 (heading=)
+msgid "Delete this server?"
+msgstr "删除此服务器？"
+
+#: wizard.py:1926 (body=)
+#, python-brace-format
+msgid "Delete {0}?\n\nThe VM and its encrypted disk image are removed from this PC. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not."
+msgstr "删除 {0}？\n\n虚拟机及其加密磁盘镜像将从这台电脑上删除。服务器的身份仍保留在你的账户中。存放在此服务器上的备份会随之删除；保存在你手机上或对等节点处的副本（取决于其备份策略）不会被删除。"
+
+#: wizard.py:1932 (label)
+msgid "Delete"
+msgstr "删除"
+
+#: wizard.py:1970 (label=)
+msgid "Servers on this PC"
+msgstr "此电脑上的服务器"
+
+#: wizard.py:1990 (label=)
+msgid "None yet. Verify a recipe and choose \"Host on this PC\"."
+msgstr "暂无。请验证一个配方并选择“在这台电脑上托管”。"
+
+#: wizard.py:1999 (label=)
+msgid "＋ Add a server"
+msgstr "＋ 添加服务器"
+
+#: wizard.py:2086 (prose)
+msgid "Delete…"
+msgstr "删除…"
+
+#: wizard.py:2124 (label=)
+msgid "Log"
+msgstr "日志"
+
+#: wizard.py:2136 (label=)
+msgid "Clear"
+msgstr "清除"
+
+#: wizard.py:2201 (prose)
+#, python-brace-format
+msgid "Code: {0}"
+msgstr "代码：{0}"
+
+#: wizard.py:2218 (label)
+msgid "Health"
+msgstr "状态"
+
+#: wizard.py:2222 (prose)
+msgid "Last connected: "
+msgstr "上次连接："
+
+#: wizard.py:2223 (prose)
+msgid "Not yet"
+msgstr "尚无"
+
+#: wizard.py:2242 (prose)
+#, python-brace-format
+msgid "Loaded: {0}"
+msgstr "已加载：{0}"
+
+#: wizard.py:2249 (prose)
+#, python-brace-format
+msgid "Recipe verified · server: {0} · expires: {1}"
+msgstr "配方已验证 · 服务器：{0} · 过期时间：{1}"
+
+#: wizard.py:2405 (prose)
+msgid "Shutting down your servers…"
+msgstr "正在关闭你的服务器…"
+
+#: wizard.py:2418 (label=)
+msgid "This can take up to a minute."
+msgstr "这最多可能需要一分钟。"
+
+#: wizard.py:2588 (label=)
+#, python-brace-format
+msgid "{0} · removable: {1} · bus: {2} · {3}"
+msgstr "{0} · 可移动：{1} · 总线：{2} · {3}"
+
+#: tray.py:42 (prose)
+msgid "Open Flagship Studio"
+msgstr "打开 Flagship Studio"
+
+#: tray.py:57 (prose)
+msgid "No servers hosted yet"
+msgstr "尚未托管任何服务器"
+
+#: tray.py:61 (prose)
+msgid "Stop all running servers"
+msgstr "停止所有正在运行的服务器"
+
+#: tray.py:63 (prose)
+msgid "Quit Flagship Studio"
+msgstr "退出 Flagship Studio"
+
+#: tray.py:234 (label)
+msgid "Active"
+msgstr "当前"
+
+#: tray.py:243 (label)
+msgid "Activate"
+msgstr "设为当前"
+
+#: disk_enumerator.py:116 (prose)
+msgid "(unknown model)"
+msgstr "（未知型号）"
+
+#: disk_enumerator.py:176 (prose)
+#, python-brace-format
+msgid "OS marks {0} as internal media"
+msgstr "系统将 {0} 标记为内部介质"
+
+#: elevation.py:22 (prose)
+msgid "No way to elevate the raw USB write: pkexec (PolicyKit) is not installed and passwordless sudo isn't available. Install pkexec (Debian/Ubuntu: sudo apt install pkexec; Fedora: sudo dnf install polkit) and retry."
+msgstr "无法为 U 盘的原始写入提权：未安装 pkexec（PolicyKit），也没有免密码的 sudo。请安装 pkexec（Debian/Ubuntu：sudo apt install pkexec；Fedora：sudo dnf install polkit）后重试。"
+
+#: vm/server_health.py:107 (prose)
+#, python-brace-format
+msgid "No health report for {0} min. The server itself may be off or frozen."
+msgstr "已 {0} 分钟没有健康报告。服务器本身可能已关机或卡死。"
+
+#: vm/server_health.py:112 (prose)
+#, python-brace-format
+msgid "Ran out of memory {0}× since it started ({1} MB free of {2} MB now)."
+msgstr "启动以来已 {0} 次内存不足（当前 {1} MB 可用，共 {2} MB）。"
+
+#: vm/server_health.py:117 (prose)
+#, python-brace-format
+msgid "The server software isn't running ({0}; restarted {1}×, last exit code {2})."
+msgstr "服务器软件未在运行（{0}；已重启 {1} 次，最后退出码 {2}）。"
+
+#: vm/server_health.py:122 (prose)
+#, python-brace-format
+msgid "The server software restarted {0}× since it started (last exit code {1})."
+msgstr "服务器软件自启动以来已重启 {0} 次（最后退出码 {1}）。"
+
+#: vm/server_health.py:126 (prose)
+msgid "Can't reach the Flagship relay."
+msgstr "无法连接 Flagship 中继。"
+
+#: vm/server_health.py:128 (prose)
+#, python-brace-format
+msgid "Disk is {0}% full."
+msgstr "磁盘已用 {0}%。"
+
+#: vm/server_health.py:132 (prose)
+#, python-brace-format
+msgid "Healthy · {0} MB free of {1} MB · disk {2}% · up {3}"
+msgstr "正常 · {0} MB 可用，共 {1} MB · 磁盘 {2}% · 已运行 {3}"
+
+#: vm/qemu_failure.py:30 (prose)
+#, python-brace-format
+msgid "Not enough free memory: this server needs {0} GiB. Close other apps and try again."
+msgstr "可用内存不足：此服务器需要 {0} GiB。请关闭其他应用后重试。"
+
+#: vm/qemu_failure.py:60 (prose)
+#, python-brace-format
+msgid "QEMU stopped unexpectedly (exit {0})."
+msgstr "QEMU 意外停止（退出码 {0}）。"
+
+#: vm/qemu_failure.py:61 (prose)
+#, python-brace-format
+msgid "QEMU stopped (exit {0}): {1}"
+msgstr "QEMU 已停止（退出码 {0}）：{1}"
+
+#: vm/manager.py:60 (prose)
+msgid "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry."
+msgstr "耗时超出预期：盒子可能没有连上网络，或者正在等待你在手机上批准解锁。请确认它在线，或关机后重试。"
+
+#: vm/manager.py:65 (prose)
+msgid "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there."
+msgstr "正在使用你的手机留下的密钥解锁其磁盘。如果手机要求批准，请在手机上批准。"
+
+#: vm/manager.py:72 (prose)
+msgid "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there."
+msgstr "正在启动。手机提示时，请在手机上批准此服务器的首次解锁。之后它应能自行解锁；如果手机再次提示，请在手机上批准。"
+
+#: vm/manager.py:75 (prose)
+msgid "Starting. When your phone asks, approve the unlock there."
+msgstr "正在启动。手机提示时，请在手机上批准解锁。"
+
+#: vm/manager.py:77 (prose)
+msgid "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone."
+msgstr "安装程序已结束，但此服务器从未注册，因此没有需要批准的内容。请在 Studio 中删除它，然后在手机上重新创建。"
+
+#: vm/manager.py:81 (prose)
+msgid "Setup didn't finish"
+msgstr "设置未完成"
+
+#: vm/manager.py:86 (prose)
+msgid "Booting the installer"
+msgstr "正在启动安装程序"
+
+#: vm/manager.py:87 (prose)
+msgid "Preparing the encrypted disk"
+msgstr "正在准备加密磁盘"
+
+#: vm/manager.py:88 (prose)
+msgid "Installing Debian"
+msgstr "正在安装 Debian"
+
+#: vm/manager.py:89 (prose)
+msgid "Downloading Flagship software"
+msgstr "正在下载 Flagship 软件"
+
+#: vm/manager.py:90 (prose)
+msgid "Registering the server"
+msgstr "正在注册服务器"
+
+#: vm/manager.py:91 (prose)
+msgid "Sealing the disk key"
+msgstr "正在密封磁盘密钥"
+
+#: vm/manager.py:92 (prose)
+msgid "Installation complete"
+msgstr "安装完成"
+
+#: vm/manager.py:93 (prose)
+msgid "Pairing with your phone"
+msgstr "正在与你的手机配对"
+
+#: vm/manager.py:94 (prose)
+msgid "Server is live"
+msgstr "服务器已上线"
+
+#: vm/manager.py:95 (prose)
+msgid "Installation reported an error"
+msgstr "安装报告了错误"
+
+#: vm/manager.py:96 (prose)
+msgid "Waiting for an installer checkpoint"
+msgstr "正在等待安装程序检查点"
+
+#: vm/manager.py:153 (prose)
+msgid "Waiting for the first guest checkpoint."
+msgstr "正在等待第一个客户机检查点。"
+
+#: vm/manager.py:157 (prose)
+#, python-brace-format
+msgid "No new guest checkpoint for {0} minutes. Last reported: {1}. The VM may be stalled."
+msgstr "已 {0} 分钟没有新的客户机检查点。最后报告：{1}。虚拟机可能已停滞。"
+
+#: vm/manager.py:162 (prose)
+#, python-brace-format
+msgid "Serving at https://{0}/"
+msgstr "服务地址：https://{0}/"
+
+#: vm/manager.py:166 (prose)
+msgid "Start the server to bring it online."
+msgstr "启动服务器即可上线。"
+
+#: vm/manager.py:167 (prose)
+msgid "Preparing the installer…"
+msgstr "正在准备安装程序…"
+
+#: vm/manager.py:185 (prose)
+msgid "Encrypted (LUKS)"
+msgstr "已加密（LUKS）"
+
+#: vm/manager.py:322 (prose)
+#, python-brace-format
+msgid "Hosting isn't supported on this CPU architecture ({0})."
+msgstr "此 CPU 架构（{0}）不支持托管。"
+
+#: vm/manager.py:389 (prose)
+msgid "The app quit while the install was running."
+msgstr "安装运行期间应用意外退出。"
+
+#: vm/manager.py:471 (prose)
+msgid "Installation stopped by you."
+msgstr "安装已被你停止。"
+
+#: vm/manager.py:657 (prose)
+msgid "QEMU is not installed."
+msgstr "未安装 QEMU。"
+
+#: vm/manager.py:885 (prose)
+msgid "Keeping this PC awake while it hosts servers"
+msgstr "托管服务器期间保持这台电脑唤醒"
+
+#: vm/manager.py:887 (prose)
+msgid "No server running: this PC may sleep again"
+msgstr "没有正在运行的服务器：这台电脑可以再次睡眠"
+
+#: vm/lifecycle.py:89 (prose)
+msgid "Installing…"
+msgstr "正在安装…"
+
+#: vm/lifecycle.py:99 (prose)
+msgid "Install failed"
+msgstr "安装失败"
+
+#: vm/lifecycle.py:99 (prose)
+msgid "Stopped unexpectedly"
+msgstr "意外停止"
+
+#: vm/lifecycle.py:156 (prose)
+#, python-brace-format
+msgid "Invalid VM transition: {0} on {1}."
+msgstr "无效的虚拟机状态转换：{1} 时执行 {0}。"
+
+#: vm/lifecycle.py:178 (prose)
+#, python-brace-format
+msgid "The installer stopped after only {0}s — too fast to have completed. The guest likely failed to boot the installer ISO. Retry the install; if it persists, re-download the base image and remaster again."
+msgstr "安装程序在仅 {0} 秒后就停止了，速度太快，不可能已完成。客户机很可能没能启动安装程序 ISO。请重试安装；若问题依旧，请重新下载基础镜像并再次重制。"
+
+#: vm/lifecycle.py:191 (prose)
+#, python-brace-format
+msgid "The appliance stopped after only {0}s — too fast to have specialized. The image may be the wrong architecture or otherwise not bootable."
+msgstr "设备在仅 {0} 秒后就停止了，速度太快，不可能已完成专用化。镜像的架构可能不对，或者无法启动。"
+
+#: vm/server_tier.py:23 (prose)
+msgid "Appliance (hardware)"
+msgstr "设备（硬件）"
+
+#: vm/server_tier.py:24 (prose)
+msgid "Appliance (hosted VM)"
+msgstr "设备（托管虚拟机）"
+
+#: vm/kvm_probe.py:45 (prose)
+msgid "KVM is available."
+msgstr "KVM 可用。"
+
+#: vm/kvm_probe.py:57 (prose)
+msgid "CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's firmware. Enable it in the BIOS/UEFI settings, then try again."
+msgstr "你的电脑固件中已禁用 CPU 虚拟化（Intel VT-x / AMD-V）。请在 BIOS/UEFI 设置中启用它，然后重试。"
+
+#: vm/kvm_probe.py:62 (prose)
+msgid "The kvm kernel module isn't loaded (no /dev/kvm). Load it with `sudo modprobe kvm_intel` (or kvm_amd) — or your kernel may lack KVM."
+msgstr "未加载 kvm 内核模块（没有 /dev/kvm）。请用 `sudo modprobe kvm_intel`（或 kvm_amd）加载它，也可能是你的内核不支持 KVM。"
+
+#: vm/host_power.py:14 (prose)
+msgid "Hosting Flagship servers for the internet"
+msgstr "正在为互联网托管 Flagship 服务器"
+
+#: vm/host_power.py:60 (prose)
+msgid "Can't keep this PC awake: no sleep inhibitor is available. Turn off automatic suspend while hosting."
+msgstr "无法让这台电脑保持唤醒：没有可用的睡眠抑制器。托管期间请关闭自动挂起。"
+
+#: vm/host_power.py:65 (prose)
+#, python-brace-format
+msgid "Can't keep this PC awake: {0}"
+msgstr "无法让这台电脑保持唤醒：{0}"
+
+#: vm/appliance_cache.py:54 (prose)
+#, python-brace-format
+msgid "No prebuilt {0} server image is published yet."
+msgstr "尚未发布预构建的 {0} 服务器镜像。"
+
+#: vm/appliance_cache.py:58 (prose)
+msgid "The prebuilt server image's manifest is malformed."
+msgstr "预构建服务器镜像的清单格式有误。"
+
+#: vm/appliance_cache.py:62 (prose)
+#, python-brace-format
+msgid "Couldn't download the prebuilt server image: {0}"
+msgstr "无法下载预构建的服务器镜像：{0}"
+
+#: vm/appliance_cache.py:67 (prose)
+#, python-brace-format
+msgid "The server returned HTTP {0} for the prebuilt server image."
+msgstr "服务器对预构建的服务器镜像返回了 HTTP {0}。"
+
+#: vm/appliance_cache.py:73 (prose)
+#, python-brace-format
+msgid "The prebuilt server image failed its integrity check ({0})."
+msgstr "预构建的服务器镜像未通过完整性检查（{0}）。"
+
+#: vm/appliance_cache.py:218 (prose)
+msgid "Download cancelled."
+msgstr "下载已取消。"
+
+#: vm/appliance_cache.py:287 (prose)
+#, python-brace-format
+msgid "The prebuilt server image is for {0}, but this recipe installs {1}."
+msgstr "预构建的服务器镜像适用于 {0}，但此配方安装的是 {1}。"
+
+#: vm/appliance_cache.py:307 (prose)
+#, python-brace-format
+msgid "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free."
+msgstr "服务器镜像所需的可用磁盘空间不足：需要 {0:.1f} GB，可用 {1:.1f} GB。"
+
+#: version.py (LABEL, looked up at run time)
+msgid "Beta"
+msgstr "Beta"
+
+#: vm/artifact_preflight.py:33 (prose)
+msgid "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later."
+msgstr "此服务器暂时无法安装：它的软件包尚未在 flagshipserver.com 上发布。请更新 Flagship Studio 和 Flagship 应用，或稍后重试。"
+
+#: vm/artifact_preflight.py:37 (prose)
+msgid "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
+msgstr "无法确认此服务器的软件包是否已在 flagshipserver.com 上发布。请检查网络连接后重试。"
