@@ -130,7 +130,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       lane (burned stick boots, installs from the signed artifact, comes online).
 
 ### B. Acceptance (security first)
-- [~] B0 (SECOND AGENT, 2026-10-25: cause confirmed by reading the scripts and FIXED, see Log; still to confirm on a real box in the D2 live gym: the unlock log and lock-once marker appear on FLAGSHIP_BOOT after a reboot) Check on a real gym box (live gym or debug box) the premount bug the boot-chain agent
+- [~] B0 (SECOND AGENT, 2026-10-25: cause confirmed by reading the scripts and FIXED, see Log; still to confirm on a real box in the D2 live gym: the unlock log and lock-once marker appear on FLAGSHIP_BOOT after a reboot. 2026-11-02 reconcile: NO live gym group or lane checks FLAGSHIP_BOOT (only tools/boot-chain-drill in QEMU); proof = E1 hardware runbook's FLAGSHIP_BOOT check or the D2 boot-chain lane, which is not built) Check on a real gym box (live gym or debug box) the premount bug the boot-chain agent
       suspects: FLAGSHIP_BOOT's early mount wrote no log until ext4 was preloaded (amd64) / busybox
       present (arm64), so the unlock log, the lock-once marker and the live owner-key read may never
       work on real boxes. If confirmed, fix in packages/boot-chain (ship via the refresh) and gym it.
@@ -142,25 +142,34 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       boot-chain refresh (daemon-writable source refused, broken initrd falls back), USB seed
       (tampered seed/preseed refused, LUKS key per install), GPU approvals, stack switch, local AI,
       journal admin-only. Fix every finding; 0 it.fails.
-- [~] B2 (SECOND AGENT, 2026-10-25: 4 fresh read-only reviewers by surface; the fixable findings are FIXED with tests, the rest are listed in the Log as OPEN for the main agent / owner) Independent security review pass by a fresh agent over the 0.3 diff since main (focus: new
+- [~] B2 (SECOND AGENT, 2026-10-25: 4 fresh read-only reviewers by surface; the fixable findings are FIXED with tests, the rest are listed in the Log as OPEN for the main agent / owner. 2026-11-02 reconcile: none of the "B2 OPEN" items has been fixed since (no commits); and everything landed after 10-25 (G1-G10, H1-H10, H11 voi.ci/Messages, Android 10) has had NO independent review pass, only per-agent fixes such as `3a271e7da`) Independent security review pass by a fresh agent over the 0.3 diff since main (focus: new
       additions); fix findings; record them in SECURITY-0.3-PROGRESS.md.
 - [x] B3 (SECOND AGENT, 2026-10-25) crypto-graph: add nodes for every new order (rescue session, offline orders); schema ok.
 
 ### C. Stage 1 — code tests on the frozen tip
 - [ ] C1 `bash scripts/full-test-vm.sh --commit <tip>` all green except crypto-graph strict (known,
-      until the PQ ceremony); CI + Rust CI green on release/0.3.
+      until the PQ ceremony); CI + Rust CI green on release/0.3. (2026-11-02: last real run was `009fa70c3` on 10-25; the
+      `186a08b9b` attempt got UpCloud 403 while gym run 32 held the core quota: retry after it, on the final tip)
 - [x] C2 `npm run ready` (branch drift, tsc, vitest, e2e, parity) and the iOS string harvest.
 
 ### D. Stage 2 — gyms
 - [ ] D1 Mock gyms on the frozen tip: web (`npm run gym:locked -- --surface web`), iOS, Android
-      (one native build at a time); fix failures.
+      (one native build at a time); fix failures. (2026-11-02: web 361/0 on `a96e69917`; iOS 284/286 and Android 208/210
+      on 11-01, both fixed `af0dbe618`/`728d11a6b`; since then H11, Android 10 and the update-required banner changed all
+      three: all three need one run on the frozen tip)
 - [ ] D2 Live release gym (rebase `gym` onto release/0.3 first; load gym secrets; see Commands):
       act on its exit code — set newBoxStack (scripts/set-new-box-stack.mjs) and appBrowser
       (scripts/set-app-browser.mjs) and commit. Add live lanes: sovereignty (cut a box off .com,
       rescue + offline control over its private network, import into account B), local-ai, the M7
       drills (WASI, app groups, dedicated DBs, GPU sim), stack switch classic→arch-v2, boot-chain
-      refresh across an update + reboot.
-- [ ] D3 Live gym green twice in a row; record run ids.
+      refresh across an update + reboot. (2026-11-02 reconcile: verdicts set and committed: newBoxStack arch-v2, appBrowser
+      true (browser-verdict pass in runs 27 and 28). Lanes that exist and ran green: local-ai, local-ai-cpu, wasi-apps,
+      app-groups-db, gpu-sim, stack-switch (classic pass), plus every G/H group. NOT BUILT: the sovereignty lane (cut a box
+      off .com, rescue + offline control, import into B) and the boot-chain refresh across update + reboot lane; no
+      group exercises an updater ROLLBACK either)
+- [ ] D3 Live gym green twice in a row; record run ids. (2026-11-02: runs 26 and 27 green arch-v2 but pre-mesh and
+      pre-H11; 28 red, closed by verify 29 + relay-mesh 30; 31 aborted; 32 running on pre-`df6c70747` code = signal only.
+      The counted pair runs on the final tip, after the remaining code below lands)
 
 ### E. Stage 3 — hardware (OWNER hands; I prepare checklists and drive what I can)
 - [x] E1 (SECOND AGENT, 2026-10-25; the OWNER runs it before release phase A and fills its sign-off table) Write docs/runbooks/0.3-hardware-acceptance.md: iPhone + Android dev builds (pair, unlock,
@@ -189,7 +198,11 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       marketingPages.test.ts), security.html "a stolen server cannot self-unlock" vs opt-in
       Auto-unlock, Raspberry Pi answers say x86_64 only (arm64 appliances exist), docs/index.html
       "Phone pairing" section outdated, docs/data-sovereignty.md header still says parked; pick one
-      word for "box" per language (glossary vs site) for the native reviewers.
+      word for "box" per language (glossary vs site) for the native reviewers. (2026-11-02: the text fixes landed in
+      `f0c3bcb8c`; 67 TODO-RM markers remain: new-box-stack 17, usb-burn 16, findings 15, canary 9, app-browser 9, pubDate.
+      new-box-stack (arch-v2) and app-browser (on) are now decided by the gym. ALSO MISSING from release notes, store
+      listings and the 0.3 blog (F3/F4 were written before them): voi.ci pages + Messages (H11), the server time limit /
+      dead-man (H4), runtime verification (/runtime), Android 10 minimum; store screenshots have no Messages tab)
 - [~] F4c (SECOND AGENT, 2026-10-25: product 0.3 + Studio 0.3.0 done on every surface; the iOS version/build and Android versionCode are NOT touched: the OWNER types them at release step 2, because I can't see App Store Connect / Play and they must climb past what was uploaded) Bump the product version to 0.3: release/version.json then `node scripts/check-versions.mjs
       --write` (homepage badge, webapp, iOS, Android, Studios); store build numbers climb (iOS 1.1→
       next, Android versionCode > highest uploaded, Studio 0.3.0).
@@ -197,18 +210,18 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       to main (fast-forward); canary; store submissions (iOS + watch, Android + Wear), Studios.
 - [ ] F6 After launch: hall of fame (hof-jay), translation review request, hardware receipts, the
       weekly rate-limit check; rebase the feature branches onto main.
-- [ ] F7 (owner 2026-11-02) Move the AI inference endpoint OFF a secret: FLAGSHIP_INFERENCE_ENDPOINT
+- [x] F7 (`9a3717d6f`; release.sh deletes the old prod secret before the .com deploy; gym parity fix in the run-31 note) (owner 2026-11-02) Move the AI inference endpoint OFF a secret: FLAGSHIP_INFERENCE_ENDPOINT
       ({baseUrl, model}) holds nothing confidential (the box receives both in every pass), and being a
       secret hid the stale workers.dev address that broke every free AI build from 10-18 to 11-02. Make
       it a plain [vars] entry in apps/com/wrangler.toml (and gym), drop it from release.sh KNOWN_SECRETS
       + fixtures + docs (final-deploy.md, infra/inference/README.md, controlPlaneRoutes.ts comment), and add
       a release step to `wrangler secret delete FLAGSHIP_INFERENCE_ENDPOINT` BEFORE the .com deploy (a var
       and a secret can't share a name). Keep it a secret only if a security benefit turns up.
-- [ ] F9 (owner 2026-11-02) 0.2 clients: every published 0.2 app and Studio keeps working on production until 0.3 is
+- [~] F9 (code `df6c70747` + `e1efccf4f`: upgrade sentences, STUDIO_PIPE_MIN gate, release step 35 notice, per-server updateRequired on 3 apps; OWNER signs the update notice after both stores approve; endorse the 0.3 box release AFTER `e1efccf4f`; NOT proven by any lane: 0.2 box → 0.3 update, a 0.2 recipe through the installer on 0.3 main, a 0.2 Studio hosting the 0.3 appliance) (owner 2026-11-02) 0.2 clients: every published 0.2 app and Studio keeps working on production until 0.3 is
       released (nothing that breaks them reaches prod early: published appliances/ISO seed/Studio downloads, migrations,
       secrets, DNS); after release each 0.2 client must tell the user clearly "you have to upgrade" (no silent or
       confusing failure); 0.2 servers get "you need to update your server". Audit + server-side work: agent started.
-- [ ] F8 (owner 2026-11-02) Translation rule: every customer-facing text that is not a server-thrown
+- [x] F8 (`0b81c247a`, `a5069e816`, `87279106a`; `npm run i18n` all ok incl. hard-coded text, re-run 2026-11-02; legal pages stay English by owner decision) (owner 2026-11-02) Translation rule: every customer-facing text that is not a server-thrown
       error is translated into every language (gate: `npm run i18n`, incl. the hard-coded-text line).
       Server error sentences stay English for now: owner rejected wire error codes as too tight a
       coupling unless there's a clear benefit.
@@ -222,23 +235,23 @@ before ticking anything (done 2026-10-30: keyd, broker, tlsd/ingress, boot, GPU,
 proxy/controller handover; R4's authority contract before any migrated effect goes live; R7 qualifies independently.
 Keep the gateway route; `--host-uds=all` stays disabled. R5 (per-service certificates in keyd) is NOT in 0.3: the owner
 agreed on 2026-10-30 that per-service certificates are retired (apps are served under the per-user wildcard).
-- [~] G1 (2026-11-01 PROVEN LIVE for install: gym 17 update group, arch-v2 box journal "installed: 33c43eb8… amd64 sequence 202611010301 (flagship-updater)" then the health gate committed it (`c036de397` + `4f13d2209` made the installer visible); still to prove live: restore/rollback by the updater and the guard hand-over. 2026-10-30: BUILT and unit-tested: `rust/crates/flagship-updater` verifier/extractor/intent/switch/restore/guard, 70 tests; broker + privd release op run it with the shell scripts as fallback; artifact builds + pins it; the update guard hands over to a pin-checked /usr/local/sbin/flagship-updater; proof comes with the next gym artifact: the `update` group, one-list restart) Independent updater, rollback and recovery supervisor in Rust (staged version dir, atomic switch, health check,
+- [~] G1 (2026-11-02 reconcile: install proven again in runs 26-27 (update 8/0, journal "(flagship-updater)"); a failed-health ROLLBACK by the updater and the guard hand-over are in no gym group: needs one update-group check that ships a release failing its gate. 2026-11-01 PROVEN LIVE for install: gym 17 update group, arch-v2 box journal "installed: 33c43eb8… amd64 sequence 202611010301 (flagship-updater)" then the health gate committed it (`c036de397` + `4f13d2209` made the installer visible); still to prove live: restore/rollback by the updater and the guard hand-over. 2026-10-30: BUILT and unit-tested: `rust/crates/flagship-updater` verifier/extractor/intent/switch/restore/guard, 70 tests; broker + privd release op run it with the shell scripts as fallback; artifact builds + pins it; the update guard hands over to a pin-checked /usr/local/sbin/flagship-updater; proof comes with the next gym artifact: the `update` group, one-list restart) Independent updater, rollback and recovery supervisor in Rust (staged version dir, atomic switch, health check,
       recovery without Node, persisted update intent, schema-compatible rollback, never roll back keys/revocation/security floors).
-- [~] G2 (2026-10-30: lock `release/runtime-lock.json` (Node 24.22.1, real digests, signer key by fingerprint), `flagship-updater runtime verify|install|status` with digest-keyed offline cache, proven live against nodejs.org and against Node's real PGP signature; the artifact install refuses a bundled Node that is not the lock's binary. STILL TO DO: the Flagship-signed manifest at flagshipserver.com/runtime (+ freshness/sequence/revocation), the owner-facing verification view in the apps, wiring `runtime install` into activation if/when Node leaves the artifact, the CI check that the lock and node-pins agree) Runtime lock + verifiable runtime distribution: version-controlled lock (exact Node patch version, per-target
+- [~] G2 (2026-11-02 reconcile: `1d569dbe1` built the rest: `flagship/runtime-manifest/v1`+v2 PQ companion (TS/Rust, 20 vectors), `/api/runtime/manifest` (204 until signed) + flagshipserver.com/runtime page in 7 languages, the owner-facing Runtime card with "Check it yourself" on the server page in webapp/iOS/Android, box `runtime` in server-detail, the CI guard `scripts/runtime-pins.test.ts`. LEFT: (a) CODE: no release.sh / deploy-sheet step builds, signs (`runtime-manifest.ts sign` + `pq-release-key.mjs sign-runtime-manifest`) and commits `release/runtime-manifest.json` (still `null`) before the .com deploy; (b) privd/broker `--runtime-manifest` wiring, deferred past 0.3 by the release manager on 11-01 (Node ships in the artifact); (c) OWNER: the YubiKey signature. Earlier: 2026-10-30: lock `release/runtime-lock.json` (Node 24.22.1, real digests, signer key by fingerprint), `flagship-updater runtime verify|install|status` with digest-keyed offline cache, proven live against nodejs.org and against Node's real PGP signature; the artifact install refuses a bundled Node that is not the lock's binary. STILL TO DO: the Flagship-signed manifest at flagshipserver.com/runtime (+ freshness/sequence/revocation), the owner-facing verification view in the apps, wiring `runtime install` into activation if/when Node leaves the artifact, the CI check that the lock and node-pins agree) Runtime lock + verifiable runtime distribution: version-controlled lock (exact Node patch version, per-target
       URL, size, SHA-256, executable digest), signed runtime manifest on flagshipserver.com bound into the endorsed release,
       official-upstream download with the signed SHASUMS256 check, safe extraction, activation through G1, owner-facing
       verification view, the adversarial tests listed in Appendix G section 3.
-- [~] G3 (R2) (`894c41eea`: flagship-core serve owns app reconciling behind admin-signed rust-ownership/v1, reconciler shadow|rust default shadow; live gym group rust-core; not yet run live) App reconciliation and runtime ownership in Rust core (reconciler, endpoint table, address pool, scheduling,
+- [~] G3 (R2) (`894c41eea`: flagship-core serve owns app reconciling behind admin-signed rust-ownership/v1, reconciler shadow|rust default shadow; LIVE-PROVEN: rust-core 11/0 in runs 25-28 (adopt across restarts, install, restart a dead app, hand back; fixes `155402b19`, `f89d4ff88`). The shipped default stays shadow: flipping it is an owner call, not recorded) App reconciliation and runtime ownership in Rust core (reconciler, endpoint table, address pool, scheduling,
       container and local-AI lifecycle; desired state persisted; adopt on restart; one writer; shadow mode performs no effects).
-- [~] G4 (R3) (`894c41eea`: flagship-ingress carries HTTP/1, SSE, WebSocket, uploads behind proxy ts|rust default ts; TS↔Rust app-proxy vectors; not yet run live) Reverse proxy and streaming transport in the Rust ingress (bounded, backpressure, SSE/WebSocket/uploads, pins/SNI/ALPN).
-- [~] G5 (R4) (`894c41eea`: flagship-access crate + 95/22 shared vectors, FLAGSHIP_ACCESS_AUTHORITY ts|shadow|rust, shadow on arch-v2; writes and account-people classification still TS) Authoritative access enforcement and journal at the effect boundary in Rust (shared conformance vectors first).
-- [~] G6 (`1d569dbe1`: keyd archive ops, broker appdata.files, Rust tar check with 58 vectors; live in gym 21-22 backups; privd --runtime-manifest wiring left) (R6) Constrained backup/restore/migration effects behind keyd/broker (scoped paths, safe extraction).
-- [~] G7 (`d186fd968`+`6a6947249`: Rust relay passes 28/28 conformance + P07 against the TS hub, phone route included; 6 MiB vs 133 MiB idle RSS; activation in production is a later owner rollout, TS hub stays the 0.3 relay) (R7; 2026-10-30 read: `flagship-relay` is a library plus the wiring, 5.4k lines, NOT a running service; the doc `relay-transport.md` section 3 lists what is lacking before it can replace the TS hub: the real `HelloAuthority` (cert ids, RootEntitlement under admin root or IRK, ServiceEntitlement, STK lookup and binding, HELLO signature, ServiceGrants, revocation: needs the entitlement canonical forms in Rust plus `.com` lookups), the outbound relay (AI provider calls go through it: disabled today), eviction, blessing, peer-backup mailboxes, custom-domain pull, the gossip HTTP surface, `/api/health`+stats, the Fly image and a gym canary with mixed-version boxes. The allocator now carries the same own-zone claim fix as the TS hub) Qualify and activate the existing Rust relay (replacement rollout, mixed-version compatibility, rollback).
-- [~] G8 (`4795bee37`: arm64 artifacts built; nothing removed until the proofs exist) (R8) Consolidate the existing Rust boundaries on amd64 and arm64; remove obsolete TS/Go/shell alternatives only after
+- [~] G4 (R3) (`894c41eea`: flagship-ingress carries HTTP/1, SSE, WebSocket, uploads behind proxy ts|rust default ts; TS↔Rust app-proxy vectors; LIVE-PROVEN in rust-core runs 25-28: SSE, WebSocket, 32 MiB upload, forged headers stripped; per-SNI certificates `d70179e5b`. Default stays ts: owner call, not recorded) Reverse proxy and streaming transport in the Rust ingress (bounded, backpressure, SSE/WebSocket/uploads, pins/SNI/ALPN).
+- [~] G5 (R4) (`894c41eea`: flagship-access crate + 95/22 shared vectors, FLAGSHIP_ACCESS_AUTHORITY ts|shadow|rust, shadow on arch-v2; writes and account-people classification still TS. 2026-11-02: unchanged since (only `749fe6011`, a TS fix); CODE LEFT: durable journal writes + account-people classification in Rust, then rust as the arch-v2 default; owner 2026-10-30 (11) "DO ALL" keeps it in 0.3) Authoritative access enforcement and journal at the effect boundary in Rust (shared conformance vectors first).
+- [x] G6 (`1d569dbe1`: keyd archive ops, broker appdata.files, Rust tar check with 58 vectors; live in gym 21-22 backups and again in runs 26-28 and 32 ("backup and restore went through keyd and the broker … Rust extraction check"); the privd --runtime-manifest wiring belongs to G2) (R6) Constrained backup/restore/migration effects behind keyd/broker (scoped paths, safe extraction).
+- [~] G7 (QUALIFIED 2026-11-02: the Rust relay gym-c (UpCloud, non-Fly) carried live mesh traffic in relay-mesh runs 4 and 30 (phone hand-over gen 1→2 onto it, rebalancing 2113 visits, revocation, dead-man); MESH01-13 31/31 on mixed TS/Rust trios. ACTIVATION is an owner rollout: production launches on the TS hub with RELAY_MESH off (owner 2026-11-02). Earlier: `d186fd968`+`6a6947249`: Rust relay passes 28/28 conformance + P07 against the TS hub, phone route included; 6 MiB vs 133 MiB idle RSS; activation in production is a later owner rollout, TS hub stays the 0.3 relay) (R7; 2026-10-30 read: `flagship-relay` is a library plus the wiring, 5.4k lines, NOT a running service; the doc `relay-transport.md` section 3 lists what is lacking before it can replace the TS hub: the real `HelloAuthority` (cert ids, RootEntitlement under admin root or IRK, ServiceEntitlement, STK lookup and binding, HELLO signature, ServiceGrants, revocation: needs the entitlement canonical forms in Rust plus `.com` lookups), the outbound relay (AI provider calls go through it: disabled today), eviction, blessing, peer-backup mailboxes, custom-domain pull, the gossip HTTP surface, `/api/health`+stats, the Fly image and a gym canary with mixed-version boxes. The allocator now carries the same own-zone claim fix as the TS hub) Qualify and activate the existing Rust relay (replacement rollout, mixed-version compatibility, rollback).
+- [~] G8 (`4795bee37`: arm64 artifacts built; nothing removed until the proofs exist. 2026-11-02: rust-consolidation.md lists the missing proofs: a gym check that asserts which keyd served, a crash-and-fallback drill, an arm64 box in a live gym (every gym box is amd64); removal itself waits for them by R8's own rule) (R8) Consolidate the existing Rust boundaries on amd64 and arm64; remove obsolete TS/Go/shell alternatives only after
       the upgrade/recovery paths are proven.
-- [~] G9 (`1d569dbe1`: sandbox drop-in 45-hardening.conf, removed on rollback or crash loop; inventory/SBOM/reproducible builds left) (§2, §4) Retained-TypeScript hardening and inspectable/owner-built releases: execution-surface inventory, one
+- [~] G9 (`1d569dbe1`: sandbox drop-in 45-hardening.conf, removed on rollback or crash loop. 2026-11-02 reconcile: the "left" note was stale: the same commit built the inventory (execution-surfaces.md, retained-typescript.md), CycloneDX SBOM + in-toto provenance in every box artifact (digests in the signed manifest), TypeScript 5.9.3 pinned, owner builds refused unless they match, scripts/repro-compare.sh. LEFT: a cross-machine comparison (`repro-compare.sh --second-where vm` or `--against` the CI-built endorsed artifact; owner-builds.md §4 says not run); privd and the health timer still run as root, documented) (§2, §4) Retained-TypeScript hardening and inspectable/owner-built releases: execution-surface inventory, one
       qualified Node, frozen locks, unprivileged runtime, SBOM/provenance, isolated owner builds, reproducible-build comparisons.
-- [~] G10 (`4795bee37`: benchmarks, fuzzing, unsafe audit; 248 µs access over IPC) (§5) Completion evidence: startup/CPU/RSS/throughput/p95-p99 benchmarks on amd64 and arm64, shared vectors,
+- [~] G10 (`4795bee37`: benchmarks on amd64 AND arm64, fuzzing, SIGKILL recovery, unsafe audit; 248 µs access over IPC; mixed-version via MESH01-13. Not measured: whole-box boot by phase, loaded RSS. Production qualification comes after launch by definition) (§5) Completion evidence: startup/CPU/RSS/throughput/p95-p99 benchmarks on amd64 and arm64, shared vectors,
       fuzzing, crash/power-loss, mixed-version and install/update/rollback tests, unsafe/FFI audit, production qualification.
 
 ### H. Phone and box TLS, phone routing, offline grace, namespace isolation (owner direction, 2026-10-30; part of 0.3)
@@ -247,14 +260,14 @@ It is a PROPOSED design: nothing is implemented, deployed or security-validated.
 and H5 pass their adversarial scenarios through the real harness, issuance service and relay. Verified against the current code
 2026-10-30 (cert finding): a box cert today carries SANs `<server>.<user>`, `*.<server>.<user>`, `*.<user>` with the box's own key,
 which matches the spec's box row; the bare `<user>` name is not issued to anyone yet. Per-service certificates stay retired (G).
-- [~] H1 (`894c41eea`: certificateIssuance.ts + migration 0121, /api/dns-01 retired 410; fake-CA tested; gym key set 2026-11-01; live gym group issuance not yet run) Trusted issuance service on `.com`: authenticate the device and its current grant, derive the exact order identifiers from
+- [x] H1 (`894c41eea`: certificateIssuance.ts + migration 0121, /api/dns-01 retired 410; LIVE with real Let's Encrypt: issuance 12/0/1 in runs 27 and 28, fixes `338ccba2a`, `a7a0a8d7e`, `f171abb80`; OWNER step left: the existing-certificate / prior-authorization inventory in final-deploy.md; 0.2 boxes renew only by DNS-01 (410 now): demo cert ends 2027-01-05) Trusted issuance service on `.com`: authenticate the device and its current grant, derive the exact order identifiers from
       authorization, verify the CSR and names, own the ACME order lifecycle with service-held credentials (boxes lose arbitrary
       access to the shared account-zone DNS-01 writer), publish only that order's challenge, verify the certificate before delivery,
       refuse every box request for the bare user name (also mixed orders). Inventory existing certificates and prior ACME
       authorizations first and decide how residual authority is closed (Appendix H, "Issuance boundary").
-- [~] H2 (`894c41eea`: phone key + CSR + TLS on iOS/Android, unit-tested; never on a device) Phone certificate for the bare `<user>.flagship.services` (one private key per phone, never uploaded) and the box wildcard
+- [~] H2 (`894c41eea`: phone key + CSR + TLS on iOS/Android, unit-tested; never on a device. 2026-11-02: the phone-endpoint and phone-route groups prove the relay/issuance half with a simulated phone; the real-device proof is E1 (hardware runbook §9)) Phone certificate for the bare `<user>.flagship.services` (one private key per phone, never uploaded) and the box wildcard
       row; phone-side TLS termination; keep the bare name (NOT `admin.<user>`, which every box wildcard covers).
-- [~] H3 (`894c41eea`; owner 2026-11-01 redesign in progress: vacancy-only claims, standby, voluntary release, presence hello; no preemption, no drain timer) Phone routing through the relay (TS hub and the Rust relay, G7): signed claim bound to account, phone identity, hostname,
+- [x] H3 (owner 2026-11-01 redesign BUILT: `6cd99ed7d` vacancy-only claims, standby, route-release/v1, phone-presence/v1; `903f2eb73` a releasing phone becomes a standby; `511be423e` presence only for the account's devices; Rust relay `6a6947249` (P07 28/28); phones iOS/Android `PhoneRoute`. LIVE: phone-route 9/9 in runs 27, verify 29 and 32 (hand-over, standby, replay refused, revocation); across three relays incl. the Rust one in relay-mesh 4/30. Not built (follow-ups named in `6cd99ed7d`): the mailbox "please release" ask, any UI for the presence list. Never on a real phone: E1) Phone routing through the relay (TS hub and the Rust relay, G7): signed claim bound to account, phone identity, hostname,
       session, freshness and a short lease; only an authorized admin phone; one holder at a time with relay-issued generations;
       handover on explicit foreground acquisition; old connections stay; fail closed, never fall back to a box; exclusivity across
       relay instances. Decide lease durations, replay protection, acquisition ordering, deadlines and revocation propagation first.
@@ -272,17 +285,18 @@ which matches the spec's box row; the bare `<user>` name is not issued to anyone
       the relay ends that box's tunnel at once; gap or reconnect = fetch "since N" before admitting; one heartbeat per
       relay a minute; the admin sees "confirmed by every relay"; no contact for ~1 min = no new tunnels, established
       ones dropped after a 10 min grace. Formats: docs/architecture-v2/issuance-and-lease-records.md.
-- [~] H9 (`894c41eea`: control/apps/phone classes; CAA pin + inventory are owner steps in final-deploy.md; arch-v2 ingress serves one cert until G4 picks per name) Separate control and app certificates (Appendix I section 2, 5-6): control cert exactly the control name, app cert an
+- [~] H9 (`894c41eea`: control/apps/phone classes; CAA pin + inventory are owner steps in final-deploy.md; per-name certificates on arch-v2 fixed `d70179e5b` and checked live by issuance (split certificates) in runs 27-28. Code DONE; OWNER: apex CAA pin + inventory) Separate control and app certificates (Appendix I section 2, 5-6): control cert exactly the control name, app cert an
       approved subset of the wildcards, phone cert exactly the bare name; service-owned ACME account, DNS-01 performed centrally,
       apex CAA `issue`/`issuewild` pinned to the service account with `validationmethods=dns-01` (zero per-account CAA), reserve
       control names in the route allocator, migrate existing combined certificates and reusable ACME authorizations first.
-- [~] H5 (`894c41eea`: routed-name origin check, forwarding headers stripped, reserved aliases; gym group app-isolation not yet run) Malicious-app namespace isolation: app identity and hostnames bound to the trusted installation record, caller derived from
+- [x] H5 (`894c41eea`: routed-name origin check, forwarding headers stripped, reserved aliases; LIVE: app-isolation 5/0 and phone-endpoint 8/0 in runs 27-28 and 32. NOTE: phone-endpoint still drives the one-time-code session (`/api/phone/session`, `/api/phone/ping`) through phoneSim, which the apps RETIRED for H11 deliver/live; retarget it) Malicious-app namespace isolation: app identity and hostnames bound to the trusted installation record, caller derived from
       the harness boundary (not headers or the manifest), no app access to keyd, issuance or relay-claim credentials; host-only
       `__Host-` cookies, exact origin checks, CSRF protection and no sibling CORS for phone-endpoint operations. Pairs with G3/G5.
 - [x] H6 (`dab23cfc5`: groups phone-endpoint, relay-authority, relay-instances + issuance, phone-route, app-isolation, serving; acceptance-map.md; ran live in gyms 21-22) The eleven acceptance scenarios of Appendix H and the ten recovery/revocation scenarios and malicious-app tests of Appendix I as gym groups (negative isolation, relay multi-instance, lease expiry with a
       still-valid certificate, renewal policy, sibling-app web attacks), run through the real harness, issuance service and relay.
-- [~] H7 (`894c41eea`: renewal in the last third, own limits under LE's; flagship.services is NOT on the PSL: 50 certs/week shared by gym+prod, owner to submit PSL or ask LE) CA limits: reuse each phone's valid certificate (no issuance per handover); schedule renewals within the issuance limits.
-- [ ] H10 RELAY MESH (owner, 2026-11-01: "I want that live in this release 0.3 so that going forward we can add and remove relays at will"). Spec docs/architecture-v2/relay-mesh.md. Boxes hold one tunnel and sign a short-lived attachment (box key, names the relay); relays gossip signed attachments (push + query on miss; no .com registry: .com never learns which relay a box uses); blessed relays bridge to each other over mutually authenticated TLS (one hop, ciphertext only) and forward visitors to the holder; .com's relay-facing data becomes a public, signed, cacheable feed (no caller identity; revocations also gossiped, each verified); hourly "please connect to relay C" hint, signed, make-before-break, hysteresis, only to blessed relays; Cloudflare Load Balancing (DNS-only) in front. TS hub and Rust relay together with shared conformance; box side; .com feed; multi-relay gym incl. a non-Fly Rust relay on UpCloud. D3 restarts after it lands.
+- [~] H7 (`894c41eea`: renewal in the last third, own limits under LE's; flagship.services is NOT on the PSL: 50 certs/week shared by gym+prod, owner to submit PSL or ask LE. Code DONE; OWNER step only) CA limits: reuse each phone's valid certificate (no issuance per handover); schedule renewals within the issuance limits.
+- [x] H10 (chunks A-G `e7779382f`, `ab1f64485`, `631cdfc9d`, `8a39ee12e`, `2cb06b8d5`, `bfc24aa38`, `f037a05c6`, `a09f97902`; fixes `1a10aa851`, `1709ecf81`; LIVE: relay-mesh 10/0/1 in runs 4 and 30 on gym-a (TS, Fly), gym-b (TS, Fly ams, IPv6) and gym-c (Rust, UpCloud); the skip is by design. Production launches with RELAY_MESH off (owner 2026-11-02, for the 0.2 demo waiver); turning it on is an OWNER rollout after store approval with the open items from chunk G: shared tunnel.<apex> cert across Fly apps, relay C's :8444 echo, Cloudflare DNS-only LB, IPv4/IPv6 mix; a mesh-on gym-refresh must also redeploy gym-b/gym-c) RELAY MESH (owner, 2026-11-01: "I want that live in this release 0.3 so that going forward we can add and remove relays at will"). Spec docs/architecture-v2/relay-mesh.md. Boxes hold one tunnel and sign a short-lived attachment (box key, names the relay); relays gossip signed attachments (push + query on miss; no .com registry: .com never learns which relay a box uses); blessed relays bridge to each other over mutually authenticated TLS (one hop, ciphertext only) and forward visitors to the holder; .com's relay-facing data becomes a public, signed, cacheable feed (no caller identity; revocations also gossiped, each verified); hourly "please connect to relay C" hint, signed, make-before-break, hysteresis, only to blessed relays; Cloudflare Load Balancing (DNS-only) in front. TS hub and Rust relay together with shared conformance; box side; .com feed; multi-relay gym incl. a non-Fly Rust relay on UpCloud. D3 restarts after it lands.
+- [~] H11 VOI.CI PAGES + MESSAGES (owner 2026-11-02; spec docs/voici-and-messages.md, namespace docs/voici-namespace-spec.md). BUILT: A `38356a0f9`, B1+B2+C `8188763df`, D iOS `999b9c1b4`, E Android `15decc1c8`, F webapp `c14a07d1c`, G live group `8618f8c6c`, H texts/legal `8a1955233`, browser reply alerts `26cbe8463`, security fix `3a271e7da`, namespace `12ed3143f`, names cap 30 `5de603a82`. LIVE: voici 22/0/0 (voici-2.log) and in run 28. VOICI_ENABLED is "off" in prod wrangler.toml until the release turns it on. OWNER: DMCA agent in terms §9 (release-manifest `ga-placeholders` fails until then), counsel review of terms §8-9 / privacy §2.11 / abuse.html, App Attest + DeviceCheck keys, Play Integrity project, abuse keys on the YubiKeys, files.voi.ci DNS at release, VOICI_ENABLED on before store submission, Data safety / privacy-label answers, a NEW 0.3 review account with a page. Not in the hardware runbook yet; not in the release notes / store texts yet (F4b).
 
 ### Appendix G. Rust migration and verifiable runtime distribution: requirements (folded in from docs/rust-migration-todo.md, 2026-10-30)
 
@@ -296,6 +310,10 @@ TypeScript. Migrate for a concrete security, recovery or performance benefit,
 not a line-count target. This is an implementation TODO, not evidence of shipped
 capabilities. Current open-work status remains in `AGENTS.md`.
 
+**Reconciled 2026-11-02:** this appendix is the requirement list; G1-G10 above are the tracked items and are NOT
+superseded by it, nor it by them. R1→G1, R2→G3, R3→G4, R4→G5, R5 OUT of 0.3 (owner 2026-10-30), R6→G6, R7→G7, R8→G8;
+§2→G9 (+G2 for the lock), §3→G2, §4→G9, §5→G10. Ticks below follow the G items' evidence.
+
 #### 1. Additional Rust work, in priority order
 
 The implementer's inventory reports keyd, broker, TLS ingress, boot, GPU and WASI
@@ -303,7 +321,7 @@ already implemented in Rust, and a Rust relay awaiting production activation.
 Verify that inventory in the implementation branch before marking anything done;
 those implementations are not present in this main checkout.
 
-- [ ] **R1 — Independent updater, rollback and recovery supervisor.** Move the
+- [~] **R1 (→ G1) — Independent updater, rollback and recovery supervisor.** Move the
   platform update consumer and guard into Rust. Verify release authority, source
   revision, artifact digests, platform compatibility and security floors before
   activation. Stage a complete version separately, atomically switch, health-check
@@ -312,20 +330,20 @@ those implementations are not present in this main checkout.
   rollback; switching executables alone is insufficient. Do not roll back keys,
   revocation epochs or minimum-security state with app data. Starting points:
   `packages/server-daemon/src/updateConsumer.ts` and `updateGuard.ts`.
-- [ ] **R2 — App reconciliation and runtime ownership.** Move the app reconciler,
+- [~] **R2 (→ G3) — App reconciliation and runtime ownership.** Move the app reconciler,
   endpoint table, address pool, resource scheduling and container lifecycle into
   Rust core. Include local-AI container lifecycle, not its chat/provider business
   logic. Persist desired state and operation outcomes. Adopt running workloads
   after restart; use one writer per resource, fencing and idempotent operations.
   Shadow evaluation must perform no effects. Prove handover and recovery without
   duplicate launches, lost volumes or two active controllers.
-- [ ] **R3 — Reverse proxy and streaming transport.** Move remaining per-request
+- [~] **R3 (→ G4) — Reverse proxy and streaming transport.** Move remaining per-request
   proxying, WebSockets and streaming into the Rust ingress/transport layer. Bound
   connections, queues, body/header sizes, tasks and deadlines; enforce backpressure,
   cancellation and fairness. Preserve HTTP, SSE, uploads, pins, SNI, ALPN and app
   routing behavior. Keep unprivileged product handlers behind authenticated local
   IPC; ingress must not become a general host-control process.
-- [ ] **R4 — Authoritative access enforcement and journal.** Establish shared
+- [~] **R4 (→ G5) — Authoritative access enforcement and journal.** Establish shared
   conformance vectors first, then move authority verification, replay protection,
   revocation checks and durable access-journal transitions into Rust at the effect
   boundary. Preserve per-app identities and existing admin/rank rules. A TS caller
@@ -333,26 +351,26 @@ those implementations are not present in this main checkout.
   sync validation and state transitions with this owner; leave message/workflow
   orchestration in its existing language where it adds no authority. Inventory
   remote APIs too: local IPC checks cannot repair authorization omitted upstream.
-- [ ] **R5 — Complete keyd support for per-service certificates.** Add key creation,
+- [ ] **R5 (OUT of 0.3, owner 2026-10-30: per-service certificates retired) — Complete keyd support for per-service certificates.** Add key creation,
   CSR construction/signing and opaque key handles for authorized additional names.
   Independently validate name/delegation authority, generation, renewal and signing
   context; callers cannot request arbitrary names or a generic signing oracle.
   Exercise migrated apps under their old names. No daemon-held private-key escape
   hatch. Keep ACME networking outside keyd; do not move working Rust ACME code to TS.
   This is the previously deferred certificate feature, not permission to expand 0.3.
-- [ ] **R6 — Constrained backup/restore/migration effects.** Put secret-key
+- [x] **R6 (→ G6) — Constrained backup/restore/migration effects.** Put secret-key
   operations and privileged filesystem effects behind existing Rust keyd/broker
   boundaries. Scope volume/path access and defend archive extraction against path
   traversal, links and resource exhaustion. Keep the workflow in its current
   language. Move remaining bulk archive/crypto streaming only when profiling or
   isolation analysis establishes a benefit; use maintained crypto implementations.
-- [ ] **R7 — Qualify and activate the existing Rust relay.** Treat this as a
+- [~] **R7 (→ G7) — Qualify and activate the existing Rust relay.** Treat this as a
   replacement rollout, not a new rewrite. Prove routing authorization, opaque box
   TLS, echo, quotas, outbound streams, mailbox behavior, bounded flow control,
   drain, mixed-version compatibility and reconnect behavior. Deploy from main
   after gym/canary qualification with a compatible rollback. Relay redundancy is
   separate; canonical broadcast addresses remain a separately deferred feature.
-- [ ] **R8 — Consolidate existing Rust boundaries.** Qualify keyd, broker, ingress,
+- [~] **R8 (→ G8) — Consolidate existing Rust boundaries.** Qualify keyd, broker, ingress,
   boot, GPU and WASI on both architectures. Remove obsolete TS/Go/shell alternatives
   only after proving upgrade, recovery and compatibility paths. Never silently
   fall back to raw-key custody or weaker host isolation. Do not delete a necessary
@@ -370,31 +388,31 @@ where a new implementation might otherwise reasonably have been TS.
 
 #### 2. Retained TypeScript and runtime hardening
 
-- [ ] Inventory all retained execution surfaces: box API/product workflows,
+- [x] (`f7fe1b284`, `1d569dbe1`: execution-surfaces.md, retained-typescript.md) Inventory all retained execution surfaces: box API/product workflows,
   AI/MCP/provider integrations, build tools, Workers, browser and gym. Record
   required authority, secret access, runtime owner and patch mechanism. No broad
   daemon rewrite; no Rust-to-TS migration. Workers/browser execution engines are
   platform-managed and cannot be pinned like the box's Node executable.
-- [ ] Use one qualified Node.js runtime for retained box TS/JS unless a measured
+- [x] (release/runtime-lock.json, Node 24.22.1) Use one qualified Node.js runtime for retained box TS/JS unless a measured
   compatibility/security requirement justifies another. TS is normally compiled
   to JS and executed by Node; pin the TypeScript compiler separately. Do not
   introduce Bun, Deno or a runtime TS loader merely to call it a safer interpreter.
-- [ ] Create a version-controlled runtime lock with exact patch version, OS,
+- [x] (`58bdf5bb9`) Create a version-controlled runtime lock with exact patch version, OS,
   architecture, libc/ABI requirements, official versioned download URL, archive
   filename, byte size and SHA-256 for every supported target. Pin the extracted
   executable digest too. No `latest`, major-only ranges or host `PATH` discovery.
   Select actual versions and hashes during implementation from verified upstream
   releases; this TODO supplies no guessed release numbers or checksums.
-- [ ] Select a security-supported release line; record upstream support end date,
+- [x] (lock `support` + securityFloor, checked 2026-10-30) Select a security-supported release line; record upstream support end date,
   advisory review date, known applicable vulnerabilities and compatibility results.
   Maintain distinct recommended versions and minimum-security floors. Pinning is
   not perpetual approval: monitor advisories, qualify patch updates promptly and
   rotate pins through the authenticated release process.
-- [ ] Pin compiler, package manager, dependencies and native addons with integrity
+- [~] (`1d569dbe1`: TypeScript 5.9.3 pinned and run by path, SBOM refuses components without integrity; isolated lifecycle-script review not recorded) Pin compiler, package manager, dependencies and native addons with integrity
   metadata. Build with frozen locks; forbid fallback from a failed locked install
   to dependency re-resolution. Review necessary lifecycle scripts and run them
   only in an isolated build environment without production data or secrets.
-- [ ] Run retained Node processes as unprivileged users with narrow IPC capabilities,
+- [~] (daemon unprivileged since SEC-DAEMON-001 + the G9 sandbox drop-in; --jitless measured and not adopted; privd fallback and the health timer stay root, documented) Run retained Node processes as unprivileged users with narrow IPC capabilities,
   filesystem/network access and resource limits. Sanitize environment, including
   loader/preload settings, and launch an absolute verified executable. The daemon
   cannot modify its runtime or approved code. Qualify `--jitless` where compatible
@@ -408,37 +426,37 @@ not a Flagship-repacked opaque runtime. Flagship publishes the exact approved
 checksum and release metadata at flagshipserver.com. This verifies approved bytes
 and upstream origin; it does not prove correspondence between binary and source.
 
-- [ ] Define a public, versioned runtime-manifest URL on `flagshipserver.com`
+- [~] (`1d569dbe1`: /api/runtime/manifest + /runtime page; serves 204 until the first manifest is signed and committed: no release step does that yet) Define a public, versioned runtime-manifest URL on `flagshipserver.com`
   (new endpoint/path to implement, not an existing service). Publish a readable
   page plus machine-readable signed metadata binding all runtime-lock fields,
   Flagship release, sequence/version, validity and security floor. Bind its digest
   into the endorsed release. The website serves metadata; it cannot mint new trust.
-- [ ] Authenticate that metadata using the existing pinned maintainer trust and
+- [~] (built: pinned release trust + PQ companion, sequence/replay refusal `ec8d44f58`; needs the owner's signature to be real) Authenticate that metadata using the existing pinned maintainer trust and
   reviewed update/rotation mechanism, independent of the TLS connection to `.com`.
   Add rollback/freeze resistance and bounded offline behavior. Do not trust a new
   signing key fetched from the same page merely because the page supplied it.
-- [ ] Download the exact archive directly from the official versioned upstream
+- [x] (`58bdf5bb9`, `fb4dbf3e1`) Download the exact archive directly from the official versioned upstream
   URL. Allow only reviewed upstream distribution/CDN redirects over HTTPS; refuse
   arbitrary redirect destinations and oversized/truncated downloads. Cache by
   digest. The user may manually supply the same official archive for offline use.
-- [ ] For Node, verify upstream signed `SHASUMS256.txt` using independently
+- [x] (`58bdf5bb9`, Rust `pgp`, signer by fingerprint) For Node, verify upstream signed `SHASUMS256.txt` using independently
   provisioned approved Node release keys. Pin the keyring revision/fingerprints and
   define authenticated rotation/revocation; never blindly import a key shipped with
   the download. Confirm the exact archive filename and digest in the signed list.
-- [ ] Hash the downloaded archive locally and require agreement among its SHA-256,
+- [x] (three-way agreement, `1d569dbe1`) Hash the downloaded archive locally and require agreement among its SHA-256,
   the upstream signed checksum and the Flagship signed manifest. A discrepancy or
   unverifiable signature blocks the new installation and leaves the current
   healthy installation running. Never execute the candidate to identify its version
   before verification.
-- [ ] Extract safely into a fresh version directory, rejecting escaping paths,
+- [x] (`58bdf5bb9`; activation via G1 only if Node ever leaves the artifact) Extract safely into a fresh version directory, rejecting escaping paths,
   unsafe links and special files. Validate required files, permissions and the
   executable digest, then run compatibility/health checks with reduced privileges.
   Activate through R1; protect the installed tree against daemon modification.
-- [ ] Provide an owner-facing verification view: exact version/platform, official
+- [x] (`1d569dbe1`: Runtime card in webapp/iOS/Android + /runtime "Check it yourself") Provide an owner-facing verification view: exact version/platform, official
   source link, expected checksum from flagshipserver.com, locally computed checksum,
   upstream-signature status, Flagship-signature status and active version. Publish
   reproducible CLI instructions for independent checking, not just a green badge.
-- [ ] Test altered archives/metadata, substituted filenames, wrong architecture,
+- [x] (flagship-updater tests/runtime.rs + runtime_manifest.rs, 20 shared manifest vectors) Test altered archives/metadata, substituted filenames, wrong architecture,
   malicious redirects, stale/replayed metadata, revoked keys, interrupted downloads,
   unsafe extraction, offline cached installs and failed activation. A healthy
   current installation must not stop merely because metadata fetching fails.
@@ -451,32 +469,32 @@ claim requiring a qualified reproducible build; checksums alone cannot provide i
 
 #### 4. Inspectable releases and owner-built artifacts
 
-- [ ] Publish the exact source revision, dependency locks, toolchain identities,
+- [x] (`1d569dbe1`: SBOM + provenance per box artifact, digests in the signed manifest) Publish the exact source revision, dependency locks, toolchain identities,
   build recipe, SBOM and provenance alongside each Flagship release. Preserve
   inspectable TS sources and their relation to executed JS; do not obscure them
   inside a mandatory single opaque executable.
-- [ ] Support owner builds in an isolated staging environment while the current
+- [x] (`1d569dbe1`, owner-builds.md) Support owner builds in an isolated staging environment while the current
   installation runs. No live keys/data in builds; no in-place production rebuild.
   An unsuccessful build leaves the old installation intact. Use the same versioned
   installation and recovery mechanism for downloaded and locally built artifacts.
-- [ ] Establish reproducible builds per platform for Flagship Rust and JS artifacts
+- [~] (one same-machine comparison only; cross-machine / vs the CI artifact not run) Establish reproducible builds per platform for Flagship Rust and JS artifacts
   and publish independent digest comparisons. Record unresolved differences rather
   than claiming reproducibility. A locally built artifact matching the endorsed
   digest can use that endorsement; a differing artifact requires an explicit
   owner-authorized local-build policy and distinct provenance, never a forged or
   inferred upstream binary endorsement.
-- [ ] Reconcile architecture plan §12.1 with this owner-build option and direct
+- [x] (owner-builds.md §5) Reconcile architecture plan §12.1 with this owner-build option and direct
   official-runtime downloads: the release unit binds the exact runtime digest,
   without requiring Flagship to redistribute its bytes. Builds stay isolated from
   the trusted live installation. Preserve existing phone authorization and recovery.
 
 #### 5. Completion evidence
 
-- [ ] Benchmark cold/warm startup by phase, idle/loaded CPU, total RSS, streaming
+- [~] (`4795bee37`, benchmarks-0.3.md, amd64 + arm64; whole-box boot by phase and loaded RSS not measured) Benchmark cold/warm startup by phase, idle/loaded CPU, total RSS, streaming
   throughput and p95/p99 latency on amd64 and arm64. Compare whole installations,
   including IPC overhead. The reported two-minute startup and 25% CPU target are
   inputs to investigate, not proven Rust gains.
-- [ ] Run shared protocol/authority vectors, relevant existing tests, parser fuzzing,
+- [~] (vectors, 6 fuzz targets, SIGKILL tests, unsafe audit, mixed TS/Rust MESH01-13, live install/update; live updater rollback not run) Run shared protocol/authority vectors, relevant existing tests, parser fuzzing,
   crash/power-loss recovery, mixed-version and real install/update/rollback tests.
   Audit unsafe/FFI use and dependency changes; Rust alone is not a security proof.
 - [ ] Record production qualification before removing old implementations. Implement
@@ -1439,3 +1457,9 @@ all Flagship relay access within the documented deadline.
 - 2026-11-02 Committed 2d59953ec Android 10+ (minSdk 29; Wear 33; KeyAuthSpec/AndroidVersionPolicy/SensitiveClipboard/WindowSecurity; calm OutdatedAndroidSliver + Settings row; also fixed every system prompt failing to start on Android 10 (androidx.biometric rejects STRONG|DEVICE_CREDENTIAL on 28-29); unit + API 29/31 emulator mock-gym green; no real 10-12 device tested). :app:lintRelease had 13 pre-existing errors -> lint-fix agent started. Run 32 still running (pre-change code; signal only).
 - 2026-11-02 Committed 186a08b9b Android release lint clean (12 real fixes, 1 justified RestrictedApi suppression). Code complete for now. STARTED C1 full-test-vm on 186a08b9b (log gymlogs/full-test-vm-186a08b9b.log). Next: when run 32 ends, start the D3 pair on the current tip (gym refresh picks it up), then luks-burn lane.
 - 2026-11-02 C1 attempt failed to start: UpCloud create returned 403 (likely account core/server limit while gym run 32 holds boxes). Retry after run 32.
+- 2026-11-02 **PLAN RECONCILED** (every [ ] / [~] item checked against git, the code, gym-results/ and gymlogs runs 25-32, gym-verify-29, relay-mesh-30; plan lines above updated in place). Ticked now: F7 `9a3717d6f`, F8 (`0b81c247a`, `a5069e816`, `87279106a`; `npm run i18n` all ok today), G6, H1, H3 (vacancy-only redesign `6cd99ed7d`/`903f2eb73`/`511be423e`, Rust `6a6947249`), H5, H10; added the missing plan line **H11** (voi.ci + Messages, built, voici 22/0). Appendix G is the requirement list, mapped to G1-G10 (not superseded); its boxes now follow the G evidence. STALE NOTES FIXED: G9 said SBOM/inventory/reproducibility "left" (built in `1d569dbe1`); H1/H5/G3/G4 said "not yet run live" (green in runs 25-28); H9's one-cert note (fixed `d70179e5b`); the H section's "nothing is implemented" header is out of date.
+  **CODE-REMAINING** (rough size): (1) G2 release step: build + sign + commit `release/runtime-manifest.json` (still `null`) in release.sh and the deploy sheet before the .com deploy (~0.5 day; the signature itself is OWNER). (2) G5: durable access-journal writes + account-people classification in Rust, then rust as the arch-v2 default (~2-4 days; owner 10-30 "DO ALL"). (3) D2 lanes not built: sovereignty (cut a box off .com, rescue + offline control, import into B; ~1-2 days, needs a private network between gym VMs) and boot-chain refresh across update + reboot (also B0's FLAGSHIP_BOOT proof; ~1 day). (4) G1: an update-group check whose target fails its health gate, proving updater rollback + guard hand-over (~0.5 day). (5) G8 proofs: assert which keyd served, a crash-and-fallback drill, one arm64 gym box (~1-2 days). (6) Launch texts: release notes, store listings, What's new, the 0.3 blog and screenshots lack H11 voi.ci/Messages, H4 time limit, /runtime, Android 10 (~1 day incl. 6 languages); then the 67 TODO-RM markers once D3 and the owner settle usb-burn/canary/findings (new-box-stack = arch-v2, app-browser = on are decided). (7) phone-endpoint gym group + phoneSim still test the RETIRED one-time-code session (`/api/phone/session`, `/ping`); retarget to deliver/live and fix hardware runbook §9.4 (~0.5 day). Hardware runbook has no voi.ci/Messages act (~1 h). (8) B2 re-pass: no independent review since 10-25 of G/H/H10/H11/Android 10, and the 10-25 "B2 OPEN" list is untouched (health report under strict, gpud approval replay + unsigned claim fields, arch-v2-verdict trust, keyd evidence freshness, premount disk binding, installer two-disk wipe, model-install digest, update-receipts, re-pair rate limit, 5-min journal replay): ~1 day review + fixes as found, or owner accepts named items. (9) F9 lanes: 0.2 box → 0.3 update, 0.2 recipe through the installer on 0.3 main, 0.2 Studio hosting the 0.3 appliance (~1 day; or accept the replay test + manual checks). (10) G9: one cross-machine reproducibility comparison (`repro-compare.sh --second-where vm`, ~1 h VM).
+  **BUILT-NEEDS-LIVE-PROOF**: installer fix `53da81ab6` → `luks-burn` lane (not run since); B0 → E1 FLAGSHIP_BOOT check or the lane in (3); H2/H3 on a real phone → E1 §9; Android 10-12 → a real device (emulator API 29/31 only); Live Activity tap fix → real iPhone; inference 1042 fix → one live free-AI build on prod (owner set the secret); D1 mock gyms (web, iOS, Android) on the frozen tip; D3 two consecutive green full runs on the final tip with the mesh env (run 32 is pre-`df6c70747`, signal only); C1 full-test-vm on the final tip (UpCloud 403 while gyms hold cores) + CI and Rust CI; G3/G4 proven only as opt-in (rust-core group), defaults stay shadow/ts.
+  **OWNER-STEP**: E1 hardware acts + sign-off; YubiKey signature of the runtime manifest; PQ ceremony (deploy sheet 2c; pins empty → classical-only endorsement); CAA pin + certificate/authorization inventory (H1/H9); PSL submission or LE rate-limit ask (H7); F4c store build numbers at release step 2; H11 owner list (DMCA agent, counsel review, App Attest/DeviceCheck, Play Integrity, abuse keys, VOICI_ENABLED + files.voi.ci, privacy labels, new 0.3 review account with a page); F9 update notice after both stores approve; whether 0.3 Studio preflights the artifact manifest; whether G3/G4/G5 Rust owners become the arch-v2 default in 0.3; delete home.serene-parrot; F5 release run, store submissions, F6; reminders: delete `~/.ssh/gym-debug*` and gym UPCLOUD_SSH_PUBLIC_KEY after the clean gym pair; retire gym-0sim after D3; AGENTS.md "Current status" must be rewritten at merge (F1 is from 10-25; Android minimum is now 10, not 13).
+  **DEFERRED** (cite): R5 / per-service certificates out of 0.3 (owner 2026-10-30); G7 Rust relay and H10 mesh ACTIVATION in production after store approval and the demo update (owner 2026-11-02, "production deploys 0.3 with RELAY_MESH off"); G2 privd/broker `--runtime-manifest` wiring past 0.3 (release-manager call 2026-11-01, not an owner decision: flag it); G8 removal of old implementations until their proofs (R8's own rule); G10 production qualification (after launch); legal pages stay English (owner 2026-11-02); server error sentences stay English, no wire codes (owner 2026-11-02); gpu-real on owner hardware after the release (owner decision 1); H3 "please release" mailbox ask and a presence-list UI (follow-ups named in `6cd99ed7d`, no owner date).
+  CONTRADICTIONS found: F3/F4 ticked but their texts predate H11/H4/Android 10; the H section header still says nothing is implemented; the phone-endpoint group tests a session the apps retired; G6's "left" item was G2's; B2 ticked [~] with an OPEN list nobody has worked since 10-25.
