@@ -22,6 +22,10 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass as Materi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import android.os.Build
+import com.flagshipserver.app.core.AndroidVersionPolicy
+import com.flagshipserver.app.ui.components.WindowSecurity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -840,8 +844,19 @@ class MainActivity : FragmentActivity() {
             // With the app lock on, Recents shows no snapshot of the account
             // (the lock screen only arrives after the app is already gone).
             val lockOn by privacy.requireBiometricAtLaunch.collectAsState()
-            LaunchedEffect(lockOn) {
-                setRecentsScreenshotEnabled(!lockOn)
+            // Android 10 to 12 have no such switch: FLAG_SECURE while the lock is on keeps the
+            // account out of Recents there (and also blocks screenshots of the app).
+            DisposableEffect(lockOn) {
+                if (AndroidVersionPolicy.hasRecentsScreenshotControl(Build.VERSION.SDK_INT)) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(!lockOn)
+                    onDispose { }
+                } else if (lockOn && !com.flagshipserver.app.core.Variant.allowScreenCapture) {
+                    val holder = Any()
+                    WindowSecurity.hold(this@MainActivity, holder)
+                    onDispose { WindowSecurity.release(this@MainActivity, holder) }
+                } else {
+                    onDispose { }
+                }
             }
 
             FlagshipTheme(darkTheme = useDark) {
@@ -1081,11 +1096,14 @@ private fun AppRoot(
                 GlobalOperationsBar()
                 // The security sliver (SEC N14): one row per issue, and the answer to a waiting publisher key.
                 com.flagshipserver.app.ui.components.SecuritySliverBar()
+                // Android 10 to 12: this phone no longer gets security updates (calm, can be snoozed).
+                com.flagshipserver.app.ui.components.OutdatedAndroidSliver()
                 RootShell(widthSizeClass = widthSizeClass, initialTab = initialTab)
             }
         } else {
             Column(Modifier.fillMaxSize()) {
                 com.flagshipserver.app.ui.components.NoticeBanner(noticeCenter)
+                com.flagshipserver.app.ui.components.OutdatedAndroidSliver()
                 Box(Modifier.weight(1f)) {
                     OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })
                 }

@@ -98,13 +98,15 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
             }
         }
         val filter = IntentFilter(UsbHost.ACTION_USB_PERMISSION)
-        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        // ContextCompat keeps the receiver private on Android 10 to 12 too (a signature permission there).
+        androidx.core.content.ContextCompat.registerReceiver(context, receiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 
     fun requestPermission() {
         val sel = state.selected ?: return
-        val flags = PendingIntent.FLAG_MUTABLE
+        // The system fills in the device extra, so the intent must be mutable (implicitly so before Android 12).
+        val flags = if (android.os.Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
         val pi = PendingIntent.getBroadcast(
             context, 0, Intent(UsbHost.ACTION_USB_PERMISSION).setPackage(context.packageName), flags,
         )

@@ -3422,5 +3422,9 @@
   "needs_an_update": "Mise à jour requise",
   "update_required_title": "Ce serveur doit être mis à jour pour continuer à fonctionner avec Flagship 0.3",
   "update_required_cert_ends": "Son certificat ne peut pas être renouvelé et expire le %1$s. Mettez-le à jour avant cette date.",
-  "update_required_cert_unknown": "Son certificat ne pourra pas être renouvelé tant qu’il n’est pas mis à jour."
+  "update_required_cert_unknown": "Son certificat ne pourra pas être renouvelé tant qu’il n’est pas mis à jour.",
+  "android_version_no_longer_gets_updates": "La version d’Android de ce téléphone ne reçoit plus de mises à jour de sécurité. Votre téléphone détient la clé de votre compte et de vos serveurs : mettre à jour Android, ou passer à un téléphone plus récent, les protège mieux.",
+  "check_for_android_updates": "Rechercher des mises à jour",
+  "android_security_updates": "Mises à jour de sécurité Android",
+  "android_version_no_longer_gets_updates_detail": "Android %1$s ne reçoit plus de mises à jour de sécurité. Votre téléphone détient la clé de votre compte et de vos serveurs : mettre à jour Android, ou passer à un téléphone plus récent, les protège mieux. Tout fonctionne toujours dans Flagship."
 }

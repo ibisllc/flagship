@@ -43,7 +43,9 @@ android {
 
     defaultConfig {
         applicationId = "com.flagshipserver.app"
-        minSdk = 33
+        // Android 10 (owner, 2026-11-02): below 33 the app uses the stand-ins in
+        // core/AndroidVersionPolicy.kt and says the phone no longer gets security updates.
+        minSdk = 29
         targetSdk = 36
         versionCode = (releaseVersion["androidVersionCode"] as Number).toInt()
         versionName = releaseVersion["product"] as String

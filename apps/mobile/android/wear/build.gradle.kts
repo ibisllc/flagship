@@ -3,9 +3,10 @@
 // security events, a tile and a complication. Same applicationId and signing
 // key as the phone app, which the Wearable Data Layer requires.
 //
-// minSdk 33 = Wear OS 4 (Android 13), the same floor as the phone app
-// (AGENTS.md's minimum-OS rule: Wear OS 3 watches that can't take Wear OS 4
-// are out of security support). Re-check on each toolchain update.
+// minSdk 33 = Wear OS 4 (Android 13). The phone app goes down to Android 10
+// (owner, 2026-11-02); the watch stays here (AGENTS.md's minimum-OS rule: Wear
+// OS 3 watches that can't take Wear OS 4 are out of security support).
+// Re-check on each toolchain update.
 
 import java.util.Properties
 

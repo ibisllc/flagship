@@ -6,8 +6,6 @@
 
 package com.flagshipserver.app.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -304,8 +302,7 @@ private fun BackupSection(vm: OfflineControlViewModel) {
                                 )
                             }
                             TextButton(onClick = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText(FSStrings.get(R.string.backup_passcode), vm.suggestedPasscode))
+                                com.flagshipserver.app.core.SensitiveClipboard.copy(context, FSStrings.get(R.string.backup_passcode), vm.suggestedPasscode)
                                 copied = true
                             }) { Text(if (copied) stringResource(R.string.copied_2) else stringResource(R.string.copy)) }
                         }

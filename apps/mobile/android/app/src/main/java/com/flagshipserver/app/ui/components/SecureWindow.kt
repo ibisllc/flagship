@@ -26,14 +26,33 @@ fun SecureWindow() {
     val context = LocalContext.current
     DisposableEffect(Unit) {
         if (com.flagshipserver.app.core.Variant.allowScreenCapture) return@DisposableEffect onDispose { }
-        val activity = context.findActivity()
-        activity?.window?.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
-        onDispose {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        val activity = context.findActivity() ?: return@DisposableEffect onDispose { }
+        val holder = Any()
+        WindowSecurity.hold(activity, holder)
+        onDispose { WindowSecurity.release(activity, holder) }
+    }
+}
+
+/**
+ * Who wants FLAG_SECURE on a window: a sensitive screen ([SecureWindow]) or, on Android 10 to 12,
+ * the app lock (no `setRecentsScreenshotEnabled` there, so FLAG_SECURE keeps the account out of
+ * Recents). The flag stays while anyone holds it, so one leaving never clears the other's.
+ */
+object WindowSecurity {
+    private val holders = java.util.WeakHashMap<Activity, MutableSet<Any>>()
+
+    fun hold(activity: Activity, holder: Any) {
+        synchronized(holders) { holders.getOrPut(activity) { mutableSetOf() }.add(holder) }
+        activity.window?.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
+    fun release(activity: Activity, holder: Any) {
+        val empty = synchronized(holders) {
+            val set = holders[activity] ?: return
+            set.remove(holder)
+            set.isEmpty()
         }
+        if (empty) activity.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
 }
 

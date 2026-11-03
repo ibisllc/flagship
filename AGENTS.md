@@ -99,20 +99,27 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   or a security-critical API needs it. Re-check on every toolchain update.
   Current floors: **iOS/iPadOS 18.0** (iOS 17 stopped receiving fixes, every
   iOS 17 iPhone can run 18, and passkey PRF — cloud recovery — is iOS 18+),
-  **watchOS 11.0** (the iOS 18 companion), **Android 13 (`minSdk 33`)** and
-  **Wear OS 4 (`minSdk 33`, owner decision 2026-10-17)**. Android 13 is the
-  oldest branch where every security feature the app leans on exists: the
-  Recents screenshot block for the app lock (`setRecentsScreenshotEnabled`,
-  API 33), the sensitive-clipboard flag for API keys (33), the runtime
-  notification permission for content-free pushes (33), non-exported broadcast
-  receivers, and the biometric-or-credential key auth parameters (30). Android
-  9 to 12 lack the first three, so they were dropped rather than carried with
-  weaker behaviour; the API-level branches for them are gone from the code.
-  That older Android branches are mostly out of vendor security support is
-  general knowledge, to verify against vendor bulletins (a mid-2026 check found
-  Samsung S22 and later, and Pixel 6 and later, still patched, older phones
-  phasing out); the decision rests on the three missing features. Wear OS 4 is
-  Android 13, so the watch matches the phone.
+  **watchOS 11.0** (the iOS 18 companion), **Android 10 (`minSdk 29`) for the
+  phone** and **Wear OS 4 (`minSdk 33`, owner decision 2026-10-17)**. Android
+  is the one exception to the rule (owner, 2026-11-02): reach over the
+  security-feature floor, so phones in poorer countries can use Flagship
+  (Android 10 to 12 are about a quarter of active devices; Google's bulletins
+  now patch only Android 14 and up, so 10 to 13 are all unpatched by Google).
+  Android 13 has the security features the app was built around: the Recents
+  screenshot block for the app lock (`setRecentsScreenshotEnabled`, API 33),
+  the sensitive-clipboard flag (33), the runtime notification permission (33)
+  and biometric-or-PIN key parameters (30). Below them the app runs every
+  feature with stand-ins, all in `core/AndroidVersionPolicy.kt`: FLAG_SECURE
+  while the app lock is on (blocks screenshots too); copied secrets (API keys,
+  backup passcodes) cleared from the clipboard after 60 s if still ours
+  (`SensitiveClipboard`); no notification prompt is needed (granted at
+  install); on Android 10 keys use `setUserAuthenticationValidityDurationSeconds`
+  and per-use keys become a 15 s window after a plain prompt (weaker: any
+  strong unlock, the lock screen's included, opens it, `KeyAuthSpec`); the
+  watch's X25519 start-up key is a software key in the encrypted prefs on 10
+  and 11 (Keystore X25519 is API 31). A calm, snoozable sliver and a Settings
+  line say "This phone's Android version no longer gets security updates"
+  (`OutdatedAndroidSliver`). Wear OS 4 stays at Android 13.
   **macOS 15** for Studio (Sequoia; Sonoma stopped getting fixes, owner
   decision 2026-10-17; the mobile packages' `.macOS("15.0")` is host-build
   only and follows Studio). Platform versions in the `swift-tools-version:5.9` manifests use the
@@ -265,8 +272,8 @@ levels and the webapp shell number are separate and unchanged.
 (webapp shell **v156**), `.services`, `webapp.`. The endorsed box release is `dbdf2e08`; no box
 code changed after it. VM appliances published: amd64 `67e45517`, arm64 `d636f161`. Versions: iOS
 1.1 (5), Android code 9 (wear +1,000,000), Studio 0.2.0 (Mac DMG signed, notarized, stapled;
-Windows and Linux unsigned). Android minimum is API 33 (owner, 2026-10-17), so Play drops about
-7,800 devices that ran Android 9 to 12. Receipts: `d1-export` recorded; 19 hardware receipts are
+Windows and Linux unsigned). Android minimum was API 33 for 0.2 (owner, 2026-10-17); 0.3 lowers
+the phone app to API 29 (owner, 2026-11-02; see Conventions). Receipts: `d1-export` recorded; 19 hardware receipts are
 missing and accepted as known gaps (`npm run release-manifest`). Still manual: submit iOS 1.1 (5)
 in App Store Connect; promote Android 9 from the internal track (Wear under Wear OS); switch
 Universal SSL off for `flagship.services` so the apex CAA lists only Let's Encrypt, then
@@ -1549,8 +1556,8 @@ published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
    the same appliance since 2026-10-15 (not yet run on real hardware).
 3. **Hetzner:** account suspended; five orphaned servers to delete by hand when
    it unlocks (153213447, 153638469, 153643080, 153813669, 155315594).
-4. **Minimum-OS review** (Conventions rule): done. Android and Wear OS are
-   `minSdk 33`; Mac Studio is macOS 15 (2026-10-17).
+4. **Minimum-OS review** (Conventions rule): done. Android phone `minSdk 29`
+   (0.3, owner 2026-11-02), Wear OS `minSdk 33`; Mac Studio is macOS 15 (2026-10-17).
 5. **Restricted-device profile-key delivery is unimplemented.** The server
    stores and authorizes `accountDirectoryKeyGrant`s, but no client seals or
    unseals `sealedKeyHex`. Mirror the `AcmeAccountKeyGrant` envelope with

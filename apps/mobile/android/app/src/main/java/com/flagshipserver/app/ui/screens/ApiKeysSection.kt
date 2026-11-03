@@ -9,11 +9,7 @@ import com.flagshipserver.app.core.FSStrings
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.R
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
 import android.content.Context
-import android.os.PersistableBundle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -383,10 +379,7 @@ private fun Choice(
     }
 }
 
-/** Copies the key, flagged sensitive so the system doesn't preview it. */
+/** Copies the key, flagged sensitive so the system doesn't preview it (cleared after a minute on Android 10 to 12). */
 private fun copySecret(ctx: Context, key: String) {
-    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText(FSStrings.get(R.string.flagship_api_key), key)
-    clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-    cm.setPrimaryClip(clip)
+    com.flagshipserver.app.core.SensitiveClipboard.copy(ctx, FSStrings.get(R.string.flagship_api_key), key)
 }

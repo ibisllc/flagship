@@ -3425,4 +3425,8 @@
     <string name="update_required_title">Dieser Server braucht ein Update, um weiter mit Flagship 0.3 zu funktionieren</string>
     <string name="update_required_cert_ends">Sein Zertifikat kann nicht erneuert werden und läuft am %1$s ab. Aktualisiere ihn vorher.</string>
     <string name="update_required_cert_unknown">Sein Zertifikat kann erst nach einem Update erneuert werden.</string>
+    <string name="android_version_no_longer_gets_updates">Die Android-Version dieses Telefons bekommt keine Sicherheitsupdates mehr. Dein Telefon hält den Schlüssel zu deinem Konto und deinen Servern: Ein Android-Update oder ein neueres Telefon schützt sie besser.</string>
+    <string name="check_for_android_updates">Nach Updates suchen</string>
+    <string name="android_security_updates">Android-Sicherheitsupdates</string>
+    <string name="android_version_no_longer_gets_updates_detail">Android %1$s bekommt keine Sicherheitsupdates mehr. Dein Telefon hält den Schlüssel zu deinem Konto und deinen Servern: Ein Android-Update oder ein neueres Telefon schützt sie besser. In Flagship funktioniert weiterhin alles.</string>
 </resources>

@@ -152,7 +152,7 @@ class TlsRelayEcho(private val timeoutMs: Int = 2_500) : RelayEcho {
             it.startHandshake()
             it.outputStream.write("GET /echo HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n".toByteArray())
             it.outputStream.flush()
-            val raw = it.inputStream.readNBytes(MAX_REPLY).toString(Charsets.UTF_8)
+            val raw = readUpTo(it.inputStream, MAX_REPLY).toString(Charsets.UTF_8)
             RelayAddressRules.parseEchoReply(raw)
         }
     } catch (_: Throwable) {
@@ -163,6 +163,18 @@ class TlsRelayEcho(private val timeoutMs: Int = 2_500) : RelayEcho {
         const val HOST = "flagship-services.fly.dev"
         const val PORT = 8444
         private const val MAX_REPLY = 4096
+
+        /** InputStream.readNBytes(int) is API 33; the same, for Android 10+. */
+        internal fun readUpTo(input: java.io.InputStream, max: Int): ByteArray {
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(1024)
+            while (out.size() < max) {
+                val n = input.read(buf, 0, minOf(buf.size, max - out.size()))
+                if (n < 0) break
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
+        }
     }
 }
 

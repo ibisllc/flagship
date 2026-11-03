@@ -186,15 +186,12 @@ object Keystore {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(true)
             .setIsStrongBoxBacked(useStrongBox)
         // Accept a strong biometric OR the device credential (PIN / pattern /
         // password) to unlock the key — device-agnostic, and usable on phones
-        // with a screen lock but no enrolled biometric.
-        builder.setUserAuthenticationParameters(
-            0, // auth required for every use (no time window)
-            KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
-        )
+        // with a screen lock but no enrolled biometric. 0: auth for every use
+        // (Android 10: a short window, see KeyAuthSpec).
+        KeyAuthSpec.require(builder, 0)
         gen.init(builder.build())
         return gen.generateKey()
     }
@@ -538,6 +535,19 @@ object Keystore {
 
     fun clearWatchBootCopies() {
         requirePrefs().edit().remove(watchBootCopiesKey()).apply()
+    }
+
+    private fun watchBootSoftKeyKey() = pkey("watch.boot.x25519")
+
+    /** Android 10 and 11 only: the watch's X25519 start-up key, kept in these encrypted prefs
+     *  (the same custody as the account seed) because Keystore holds X25519 only from Android 12. */
+    fun watchBootSoftKey(): ByteArray? =
+        requirePrefs().getString(watchBootSoftKeyKey(), null)?.let { HexUtil.decode(it) }?.takeIf { it.size == 32 }
+
+    fun setWatchBootSoftKey(privateKey: ByteArray?) {
+        val e = requirePrefs().edit()
+        if (privateKey == null) e.remove(watchBootSoftKeyKey()) else e.putString(watchBootSoftKeyKey(), HexUtil.encode(privateKey))
+        e.apply()
     }
 
     private fun serverKeyPinsKey() = pkey("server.key.pins")

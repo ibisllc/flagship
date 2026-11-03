@@ -72,15 +72,11 @@ class KeystorePqSeedWrapper(
 
     private fun generate(strongBox: Boolean): SecretKey {
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(true)
-            .setUserAuthenticationParameters(
-                authWindowSeconds,
-                KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
-            )
+        val spec = KeyAuthSpec.require(builder, authWindowSeconds)
             // Enrolling a new fingerprint must not silently destroy the PQ keys: the binding on
             // `.com` keeps the first ML-DSA key per Ed25519 key, so a lost seed can't be rebound.
             .setInvalidatedByBiometricEnrollment(false)

@@ -10,8 +10,6 @@ import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.selection.selectable
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -167,8 +165,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                         vm = vm,
                         copied = copied,
                         onCopy = {
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText(FSStrings.get(R.string.backup_passcode), vm.suggestedPasscode))
+                            com.flagshipserver.app.core.SensitiveClipboard.copy(context, FSStrings.get(R.string.backup_passcode), vm.suggestedPasscode)
                             copied = true
                         },
                         onStart = { scope.launch { vm.start() } },

@@ -1,7 +1,8 @@
 // The watch's boot-only X25519 key (docs/watch-boot-approval-without-unlock.md, option (a)), kept
 // in the AndroidKeyStore: generated there, never exportable, bound to this device. Every agreement
 // runs inside the Keystore. The servers holding a copy for it are remembered in the profile's
-// encrypted prefs so the switches and the watch path need no network read.
+// encrypted prefs so the switches and the watch path need no network read. Android 10 and 11 have no
+// X25519 in Keystore: there the key is a software one in the same encrypted prefs.
 //
 // The Keystore can't require user presence here: the phone may be locked in a pocket and the
 // presence is the owner's tap on the watch, which reaches the phone as a Data Layer request.
@@ -20,6 +21,10 @@ import java.security.PrivateKey
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.X509EncodedKeySpec
 import javax.crypto.KeyAgreement
+import android.annotation.SuppressLint
+import android.os.Build
+import com.flagshipserver.app.core.AndroidVersionPolicy
+import com.google.crypto.tink.subtle.X25519
 
 class KeystoreWatchBootKeys : WatchBootKeyStore {
     private val alias: String get() = "com.flagship.watchboot.${Keystore.activeProfileTag()}"
@@ -27,14 +32,23 @@ class KeystoreWatchBootKeys : WatchBootKeyStore {
     private fun keyStore(): KeyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
 
     override fun existing(): BootDecryptKey? {
+        Keystore.watchBootSoftKey()?.let { return Software(it) }
         val ks = keyStore()
         val priv = ks.getKey(alias, null) as? PrivateKey ?: return null
         val pub = ks.getCertificate(alias)?.publicKey ?: return null
         return Hardware(priv, rawX25519(pub.encoded))
     }
 
+    @SuppressLint("InlinedApi") // PURPOSE_AGREE_KEY is only used on API 31+
     override fun loadOrCreate(): BootDecryptKey {
         existing()?.let { return it }
+        if (!AndroidVersionPolicy.keystoreHasX25519(Build.VERSION.SDK_INT)) {
+            // Android 10 and 11: Keystore has no X25519, so the key is a software one kept in the
+            // encrypted prefs. Weaker: it is in the app's memory while used, not only in hardware.
+            val priv = X25519.generatePrivateKey()
+            Keystore.setWatchBootSoftKey(priv)
+            return Software(priv)
+        }
         val gen = KeyPairGenerator.getInstance("XDH", ANDROID_KEY_STORE)
         gen.initialize(
             KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_AGREE_KEY)
@@ -51,7 +65,16 @@ class KeystoreWatchBootKeys : WatchBootKeyStore {
 
     override fun clear() {
         runCatching { keyStore().deleteEntry(alias) }
+        runCatching { Keystore.setWatchBootSoftKey(null) }
         Keystore.clearWatchBootCopies()
+    }
+
+    private class Software(private val priv: ByteArray) : BootDecryptKey {
+        override val publicKey: ByteArray = X25519.publicFromPrivate(priv)
+        override fun agree(peerPublicKey: ByteArray): ByteArray {
+            require(peerPublicKey.size == 32) { "X25519 public key must be 32 bytes" }
+            return X25519.computeSharedSecret(priv, peerPublicKey)
+        }
     }
 
     private class Hardware(private val priv: PrivateKey, override val publicKey: ByteArray) : BootDecryptKey {

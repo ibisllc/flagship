@@ -450,6 +450,21 @@ fun SettingsScreen(nav: NavController) {
                         onClick = {},
                     ),
                 )
+                // Android 10 to 12: the phone no longer gets security updates (AndroidVersionPolicy).
+                if (com.flagshipserver.app.core.AndroidVersionPolicy.warnOutdatedAndroid(android.os.Build.VERSION.SDK_INT)) {
+                    FSDivider()
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    FSSettingsRow(
+                        FSSettingsRowData(
+                            icon = Icons.Outlined.Info,
+                            title = stringResource(R.string.android_security_updates),
+                            subtitle = fsString(R.string.android_version_no_longer_gets_updates_detail, android.os.Build.VERSION.RELEASE ?: ""),
+                            showsChevron = false,
+                            onClick = { com.flagshipserver.app.ui.components.openSystemUpdateSettings(ctx) },
+                            testTag = "settings-android-outdated",
+                        ),
+                    )
+                }
             }
         }
 

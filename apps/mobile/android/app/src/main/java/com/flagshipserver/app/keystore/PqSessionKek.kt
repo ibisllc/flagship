@@ -36,6 +36,9 @@ object PqSessionKek {
     /** The cipher the unlock prompt should carry, or null to prompt without one. */
     fun begin(): PqKekVault.Pending? = runCatching { vault?.begin() }.getOrNull()
 
+    /** The vault's key opens after a plain prompt instead of riding in it (Android 10). */
+    fun opensAfterPrompt(): Boolean = runCatching { vault?.opensAfterPrompt() == true }.getOrDefault(false)
+
     /** After the prompt succeeded with [pending]'s cipher (now authenticated): open the KEK. */
     fun finish(pending: PqKekVault.Pending, authenticated: Cipher?) {
         val v = vault ?: return
@@ -61,6 +64,9 @@ object PqSessionKek {
 interface PqKekVault {
     class Pending(val cipher: Cipher, val creating: Boolean)
     fun begin(): Pending
+    /** True when the key opens for a short window after a plain prompt (Android 10), so the
+     *  prompt must not carry its cipher; [begin] is then called after the prompt succeeded. */
+    fun opensAfterPrompt(): Boolean = false
     /** Returns the 32-byte KEK, creating and storing it on [Pending.creating]. */
     fun finish(p: Pending, authenticated: Cipher): ByteArray
 }
@@ -91,19 +97,21 @@ class KeystorePqKekVault(context: Context, private val alias: String = ALIAS) : 
 
     private fun generate(strongBox: Boolean): SecretKey {
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(true)
-            // 0: every use needs its own authentication, i.e. the CryptoObject of a prompt.
-            .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL)
+        // 0: every use needs its own authentication, i.e. the CryptoObject of a prompt. On Android 10
+        // a short window the prompt opens instead ([opensAfterPrompt]; KeyAuthSpec says why).
+        val spec = KeyAuthSpec.require(builder, 0)
             .setInvalidatedByBiometricEnrollment(false)
             .setIsStrongBoxBacked(strongBox)
             .build()
         gen.init(spec)
         return gen.generateKey()
     }
+
+    override fun opensAfterPrompt(): Boolean = KeyAuthSpec.isWindowKey(key())
 
     override fun begin(): PqKekVault.Pending {
         val blob = prefs.getString(BLOB, null)?.let { PqHex.decode(it) }

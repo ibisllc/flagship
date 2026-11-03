@@ -14136,5 +14136,21 @@
   "update_required_cert_unknown": {
     "en": "Its certificate can't be renewed until it is updated.",
     "ctx": "ui/screens/UpdateRequiredBanner.kt (banner line when the date is unknown)"
+  },
+  "android_version_no_longer_gets_updates": {
+    "en": "This phone's Android version no longer gets security updates. Your phone holds the key to your account and servers: updating Android, or moving to a newer phone, keeps them safer.",
+    "ctx": "ui/components/OutdatedAndroidSliver.kt (calm top sliver on Android 10 to 12; not an error)"
+  },
+  "check_for_android_updates": {
+    "en": "Check for updates",
+    "ctx": "ui/components/OutdatedAndroidSliver.kt (button: opens the phone's system update settings)"
+  },
+  "android_security_updates": {
+    "en": "Android security updates",
+    "ctx": "ui/screens/SettingsScreen.kt (Settings row title, Android 10 to 12)"
+  },
+  "android_version_no_longer_gets_updates_detail": {
+    "en": "Android %1$s no longer gets security updates. Your phone holds the key to your account and servers: updating Android, or moving to a newer phone, keeps them safer. Everything in Flagship still works.",
+    "ctx": "ui/screens/SettingsScreen.kt (Settings row detail; %1$s = Android version number, e.g. 11)"
   }
 }

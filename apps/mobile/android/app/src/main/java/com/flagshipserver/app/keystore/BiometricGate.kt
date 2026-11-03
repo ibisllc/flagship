@@ -1,6 +1,7 @@
 package com.flagshipserver.app.keystore
 
-import androidx.biometric.BiometricManager.Authenticators
+import android.os.Build
+import com.flagshipserver.app.core.AndroidVersionPolicy
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -58,6 +59,13 @@ object BiometricGate {
      */
     suspend fun evaluateUnlockingPq(activity: FragmentActivity, title: String, subtitle: String) {
         if (com.flagshipserver.app.core.Variant.bypassBiometricGates) return
+        if (!AndroidVersionPolicy.promptCanCarryKey(Build.VERSION.SDK_INT) || PqSessionKek.opensAfterPrompt()) {
+            // Android 10: a prompt carrying a key could only take a fingerprint, so the KEK's key
+            // opens for a few seconds after the plain prompt instead (KeyAuthSpec).
+            evaluate(activity, title, subtitle)
+            PqSessionKek.begin()?.let { PqSessionKek.finish(it, null) }
+            return
+        }
         val pending = PqSessionKek.begin()
         if (pending == null) return evaluate(activity, title, subtitle)
         val starter = PlatformPromptStarter(activity, title, subtitle, BiometricPrompt.CryptoObject(pending.cipher))
@@ -180,10 +188,12 @@ private class PlatformPromptStarter(
         // lock but no enrolled biometric still authenticates. With
         // DEVICE_CREDENTIAL the system supplies its own cancel affordance, so
         // a negative button must NOT be set (the two are mutually exclusive).
+        // Android 10 takes BIOMETRIC_WEAK | DEVICE_CREDENTIAL for the same choice
+        // (AndroidVersionPolicy.promptAuthenticators).
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
-            .setAllowedAuthenticators(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL)
+            .setAllowedAuthenticators(AndroidVersionPolicy.promptAuthenticators(Build.VERSION.SDK_INT))
             .build()
         try {
             if (crypto != null) prompt.authenticate(info, crypto) else prompt.authenticate(info)

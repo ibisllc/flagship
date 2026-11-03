@@ -3362,5 +3362,9 @@
   "needs_an_update": "bd6af9f6333a",
   "update_required_title": "d034c377354d",
   "update_required_cert_ends": "f5bf218acf0f",
-  "update_required_cert_unknown": "1756fe6e8116"
+  "update_required_cert_unknown": "1756fe6e8116",
+  "android_version_no_longer_gets_updates": "f123caae6681",
+  "check_for_android_updates": "31eaced1f83b",
+  "android_security_updates": "60a77206a77b",
+  "android_version_no_longer_gets_updates_detail": "c933cd023bcd"
 }

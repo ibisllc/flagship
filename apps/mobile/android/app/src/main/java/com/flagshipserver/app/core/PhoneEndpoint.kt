@@ -398,7 +398,7 @@ object SecretSeal {
  *  the Ed25519 compressed point. Matches noble's toMontgomery. For SEEDS:
  *  `clamp(SHA512(seed)[0..32])` (crypto_sign_ed25519_sk_to_curve25519). */
 object Curve25519Map {
-    private val P = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19))
+    private val P = BigInteger.valueOf(2).pow(255).subtract(BigInteger.valueOf(19))
     private val ONE = BigInteger.ONE
 
     fun edwardsPubToMontgomery(edPub: ByteArray): ByteArray {
