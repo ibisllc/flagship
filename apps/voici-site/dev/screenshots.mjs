@@ -103,7 +103,7 @@ async function signInAsVectorVisitor(page) {
   await page.evaluate(
     async ({ M }) => {
       const dir = document.querySelector('meta[name="voici-build"]').getAttribute("content").slice(0, 16);
-      const W = await import(`/_/${dir}/flagship-web/index.js`);
+      const W = await import(`/-/${dir}/flagship-web/index.js`);
       const P = W.protocol;
       const b = await W.createBrowserKey();
       const D = M.derivations;
@@ -169,7 +169,7 @@ for (const size of ["phone", "desktop"]) {
     await p.waitForSelector(".report-form");
   }));
   files.push(await shot("not-found", size, "light", "/nobody"));
-  files.push(await shot("about", size, "light", "/_/about"));
+  files.push(await shot("about", size, "light", "/-/about"));
 }
 files.push(await shot("alice-french", "phone", "light", "/alice", async (p) => {
   await p.selectOption(".lang", "fr");

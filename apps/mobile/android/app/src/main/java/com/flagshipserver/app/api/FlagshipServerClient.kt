@@ -1430,11 +1430,12 @@ class LiveFlagshipServerClient(
     }
 
     override suspend fun claimUsername(req: UsernameClaimRequest) {
-        // 409 (already-claimed-by-same-IRK) is idempotent success
+        // A re-claim by the same IRK is a 200; a 409 is `{code:"taken"}` (taken or too similar to an existing name,
+        // docs/voici-namespace-spec.md) and is thrown for UserErrorText to say so.
         transport.postJson(
             "$base/api/username/claim", req,
             serializer = UsernameClaimRequest.serializer(),
-            accept = setOf(200, 201, 204, 409),
+            accept = setOf(200, 201, 204),
         )
     }
 

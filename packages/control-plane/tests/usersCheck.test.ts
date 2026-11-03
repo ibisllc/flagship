@@ -110,14 +110,14 @@ describe("handleUsersCheck", () => {
     expect(body.reason).not.toMatch(/no hyphens/i);
   });
 
-  it("accepts an all-alphanumeric username at the 30-char max", async () => {
-    const u = "a".repeat(30);
+  it("accepts an all-alphanumeric username at the 63-char max (D12)", async () => {
+    const u = "a".repeat(63);
     const r = await handleUsersCheck({ storage: fakeStorage() }, { username: u });
     expect((r.body as UsersCheckResponse).available).toBe(true);
   });
 
-  it("rejects a username over 30 chars and one under 3 chars", async () => {
-    const tooLong = await handleUsersCheck({ storage: fakeStorage() }, { username: "a".repeat(31) });
+  it("rejects a username over 63 chars and one under 3 chars", async () => {
+    const tooLong = await handleUsersCheck({ storage: fakeStorage() }, { username: "a".repeat(64) });
     expect((tooLong.body as UsersCheckResponse).available).toBe(false);
     const tooShort = await handleUsersCheck({ storage: fakeStorage() }, { username: "ab" });
     expect((tooShort.body as UsersCheckResponse).available).toBe(false);
@@ -188,7 +188,7 @@ describe("public username privacy", () => {
     expect(response.body).toEqual({
       username: "demoalice.reviewer",
       available: false,
-      reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+      reason: "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
     });
     expect(JSON.stringify(response.body)).not.toMatch(/device|grant|ciphertext/i);
   });

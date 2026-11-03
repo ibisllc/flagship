@@ -31,7 +31,8 @@ import {
   handleVoiciRevoke,
   handleVoiciSend,
   handleVoiciThread,
-  resolveVoiciPagePath,
+  resolveVoiciPath,
+  appHome,
   runVoiciGc,
   sendVoiciReplyAlerts,
   voiciIndexKey,
@@ -43,11 +44,12 @@ import {
   type VoiciBucket,
 } from "@flagship/control-plane";
 import { D1NonceStore } from "@flagship/boot-core";
-import { D1Storage, RequestD1, type D1Database } from "@flagship/storage";
+import { D1Storage, RequestD1, type D1Database, type NameRegistryStorage } from "@flagship/storage";
 import { workerCaTrustChain } from "./caTrustChainLoader.js";
 import { buildOptionalPushForwarder, type ControlPlaneEnv } from "./controlPlaneRoutes.js";
 import { checkRateLimit, clientIp, type RateLimitEndpoint, type RateLimitEnv, type WaitUntilLike } from "./rateLimit.js";
-import { voiciShellResponse, voiciSiteFile } from "./voiciSite.js";
+import { voiciErrorResponse, voiciShellResponse, voiciSiteFile } from "./voiciSite.js";
+import { deriveUrlFragment } from "@flagship/protocol";
 import { deleteVoiciAbuseAccount, isAccountBanned, isPseudonymBanned, pruneVoiciAbuse } from "./voiciAbuse.js";
 
 export interface VoiciEnv extends RateLimitEnv {
@@ -64,6 +66,8 @@ export interface VoiciEnv extends RateLimitEnv {
   CLOUDFLARE_PURGE_TOKEN?: string;
   CONTROL_APEX?: string;
   SERVICES_APEX?: string;
+  /** "1": a link or code goes to its app's canonical address, worked out on each visit (docs/named-links.md §2.3). */
+  VOICI_CANONICAL?: string;
   ACCOUNT_READ_TOKEN_SECRET?: string;
   FLAGSHIP_CA_PRIV_HEX?: string;
   /** The webapp's Web Push (VAPID) keys, reused for voi.ci reply alerts (pushBridge.ts). */
@@ -441,24 +445,77 @@ async function serveSiteAsset(request: Request, env: VoiciEnv, assetPath: string
   return voiciSiteFile(request, env.ASSETS, assetPath.slice(VOICI_SITE_ASSET_PREFIX.length + 1), voiciSiteHeaders(env));
 }
 
+/** Where a link with an app goes: the app's canonical address (behind VOICI_CANONICAL), else the box that leads it. */
+function linkTargets(env: VoiciEnv, storage: D1Storage) {
+  const label = async (username: string, serviceId: string) =>
+    (await storage.userServiceAliases.get(username, serviceId))?.displayLabel ?? deriveUrlFragment(serviceId, username);
+  return {
+    ...(env.VOICI_CANONICAL === "1"
+      ? {
+          resolveCanonical: async (username: string, serviceId: string) =>
+            `https://${await label(username, serviceId)}.${username}.${env.SERVICES_APEX ?? "flagship.services"}`,
+        }
+      : {}),
+    resolveAppUrl: async (username: string, serviceId: string) => {
+      const home = await appHome({ servers: storage.servers, daemonStatus: storage.daemonStatus }, username, serviceId, await label(username, serviceId));
+      return home.hasServer ? home.canonicalUrl : null;
+    },
+  };
+}
+
 /**
- * `voi.ci/<path>`: a link name or code first (the existing redirect, unchanged), then a page's shell (the same bytes
- * for every page; 410 for a page taken down), `/@<username>` → 301, the site's files under `/_/`, else the redirect
- * handler's own 404/410.
+ * `voi.ci/<path>` (docs/voici-namespace-spec.md, Resolution): everything goes through resolveVoiciPath. A
+ * non-canonical path 301s (lowercase, no trailing slash), `/-/…` is the site, `/@x` reaches usernames only, a live
+ * link or code 302s, a retired one is 410, a published page is the shell, and everything else (unknown, reserved,
+ * unpublished, a held name of a deleted account) is the same 404. Until `VOICI_ENABLED` is "on" no page, site file or
+ * shell is served: links and codes still redirect, and refusals carry no body.
  */
-export async function serveVoiciHost(request: Request, url: URL, env: VoiciEnv, redirect: () => Promise<Response>): Promise<Response> {
+export async function serveVoiciHost(request: Request, url: URL, env: VoiciEnv): Promise<Response> {
   const method = request.method.toUpperCase();
-  const on = voiciEnabled(env) && !!env.DB && (method === "GET" || method === "HEAD");
-  if (on && url.pathname.startsWith("/_/")) return serveSiteAsset(request, env, `${VOICI_SITE_ASSET_PREFIX}/${url.pathname.slice(3)}`);
-  const res = await redirect();
-  if (!on || res.status !== 404) return res;
-  const path = url.pathname.replace(/^\/+/, "");
-  if (path === "" || path.includes("/")) return res;
-  const answer = await resolveVoiciPagePath({ voici: new D1Storage(env.DB!).voici }, path);
-  if (answer.kind === "at-redirect") return new Response(null, { status: 301, headers: { location: answer.location } });
-  if (answer.kind === "page") return serveSiteAsset(request, env, VOICI_SITE_SHELL);
-  if (answer.kind === "page-gone") return serveSiteAsset(request, env, VOICI_SITE_SHELL, 410);
-  return res;
+  if (method !== "GET" && method !== "HEAD") {
+    return new Response(null, { status: 405, headers: { allow: "GET, HEAD", "cache-control": "private, no-store" } });
+  }
+  if (!env.DB) return new Response(null, { status: 503, headers: { "cache-control": "private, no-store" } });
+  const on = voiciEnabled(env);
+  const head = method === "HEAD";
+  const storage = new D1Storage(new RequestD1(env.DB));
+  // Before the switch voi.ci is the shortener it was: only links and codes resolve, people are not there yet.
+  const linksOnly: Pick<NameRegistryStorage, "lookup" | "activeUsername"> = {
+    lookup: async (name, kind) => {
+      if (kind === "username") return undefined;
+      const row = await storage.names.lookup(name);
+      return row && (row.kind === "link" || row.kind === "code") ? row : undefined;
+    },
+    activeUsername: async () => undefined,
+  };
+  const answer = await resolveVoiciPath(
+    {
+      names: on ? storage.names : linksOnly,
+      pages: on ? storage.voici : { getPage: async () => null },
+      ...linkTargets(env, storage),
+    },
+    url.pathname,
+    url.search,
+  );
+  const plain = (status: number) => new Response(null, { status, headers: { "cache-control": "private, no-store" } });
+  const refuse = (status: 404 | 410) => (on ? voiciErrorResponse(status, voiciSiteHeaders(env), head) : plain(status));
+  switch (answer.kind) {
+    case "system":
+      return on ? serveSiteAsset(request, env, `${VOICI_SITE_ASSET_PREFIX}/${answer.rest}`) : plain(404);
+    case "redirect":
+      return new Response(null, { status: 301, headers: { location: answer.location, "cache-control": "private, no-store" } });
+    case "link":
+      return new Response(null, { status: 302, headers: { location: answer.target, "cache-control": "private, no-store" } });
+    case "gone":
+      return refuse(410);
+    case "page":
+      return serveSiteAsset(request, env, VOICI_SITE_SHELL);
+    case "page-gone":
+      return serveSiteAsset(request, env, VOICI_SITE_SHELL, 410);
+    case "home":
+    case "not-found":
+      return refuse(404);
+  }
 }
 
 // ── removal (takedown, account deletion) and upkeep ─────────────────────────

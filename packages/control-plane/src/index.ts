@@ -32,6 +32,7 @@ export * from "./wipeRestart.js";
 export * from "./webauthnRecovery.js";
 export * from "./passkeyAssertion.js";
 export * from "./voici.js";
+export * from "./voiciNamespace.js";
 export * from "./voiciPages.js";
 export * from "./voiciMailbox.js";
 export * from "./voiciAlerts.js";

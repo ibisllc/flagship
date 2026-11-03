@@ -2679,11 +2679,7 @@
   "Only an admin device can change this": "Seul un appareil administrateur peut modifier ceci",
   "Next change %@": "Prochain changement : %@",
   "Letters, numbers and hyphens only": "Lettres, chiffres et tirets uniquement",
-  "At least 4 characters": "Au moins 4 caractères",
-  "At most 40 characters": "40 caractères au maximum",
   "All %lld names in use": "Les %lld noms sont utilisés",
-  "Reserved": "Réservé",
-  "Taken": "Déjà pris",
   "Reserved for the owner of %@": "Réservé au propriétaire de %@",
   "Couldn't check %@. Try again.": "Impossible de vérifier %@. Réessayez.",
   "Too many changes today": "Trop de changements aujourd'hui",
@@ -3163,5 +3159,12 @@
   "Google push": "Notifications push de Google",
   "Every device on the account needs its post-quantum key before strict comes back.": "Chaque appareil du compte a besoin de sa clé post-quantique avant le retour du mode strict.",
   "Test your recovery before turning strict on again.": "Testez votre récupération avant de réactiver le mode strict.",
-  "Email": "E-mail"
+  "Email": "E-mail",
+  "Taken or too similar to an existing name": "Déjà pris ou trop proche d'un nom existant",
+  "At least 3 characters": "Au moins 3 caractères",
+  "At most 63 characters": "63 caractères au maximum",
+  "No hyphen at the start or end, or two in a row": "Pas de trait d'union au début ni à la fin, ni deux à la suite",
+  "The installer finished. The server is starting and should register in a few minutes.": "L’installation est terminée. Le serveur démarre et devrait s’enregistrer d’ici quelques minutes.",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "Ce serveur ne donne plus de nouvelles et ne s’est pas enregistré. Il est peut-être bloqué.",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "S’il tourne dans Flagship Studio, regardez-le là. Sinon, redémarrez la machine. S’il ne démarre toujours pas, annulez la commande et recréez le serveur."
 }

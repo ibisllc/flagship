@@ -26,7 +26,6 @@ import {
   verifyVoiciDraftsConsume,
   verifyVoiciPieceUpload,
   voiciCardRole,
-  voiciNameKey,
   VOICI_CHUNK_MAX_BYTES,
   VOICI_DRAFT_MAX_ENVELOPE_BYTES,
   VOICI_DRAFTS_CONSUME_MAX,
@@ -37,7 +36,7 @@ import {
   type VoiciPageIndex,
   type VoiciSignerKind,
 } from "@flagship/protocol";
-import type { UsernameRecord, UsernameStorage, VoiciLinkStorage, VoiciNameStorage, VoiciPageRecord, VoiciPieceRecord, VoiciStorage } from "@flagship/storage";
+import type { UsernameRecord, UsernameStorage, VoiciPageRecord, VoiciPieceRecord, VoiciStorage } from "@flagship/storage";
 import { requireAccountRead, ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, type AccountReadTokenDeps } from "./accountReadToken.js";
 import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization } from "./accountDirectory.js";
 import { hexToBytes } from "./hex.js";
@@ -277,43 +276,8 @@ export async function handleVoiciGetPage(deps: Pick<VoiciPagesDeps, "voici">, us
   return { status: 200, body: { index: JSON.parse(page.indexJson) }, headers: { "cache-control": "no-cache" } };
 }
 
-// ── voi.ci/<name> (§4.1) ─────────────────────────────────────────────────────
-
-export type VoiciPathAnswer =
-  | { kind: "page"; username: string }
-  | { kind: "page-gone"; username: string }
-  | { kind: "at-redirect"; location: string }
-  | { kind: "none" };
-
-/**
- * What `GET voi.ci/<path>` is when no link name or code answered it: a published page (the site shell), a page taken
- * down (the shell, 410), `/@<username>` (301 to `/<username>`), or nothing.
- */
-export async function resolveVoiciPagePath(deps: Pick<VoiciPagesDeps, "voici">, path: string): Promise<VoiciPathAnswer> {
-  const at = path.startsWith("@");
-  const name = (at ? path.slice(1) : path).toLowerCase();
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(name)) return { kind: "none" };
-  if (at) return { kind: "at-redirect", location: `/${name}` };
-  const page = await deps.voici.getPage(name);
-  if (!page) return { kind: "none" };
-  return page.takenDownAt === null ? { kind: "page", username: name } : { kind: "page-gone", username: name };
-}
-
-/**
- * One namespace (§4.1, D2): a username whose hyphen-less key equals a voi.ci name (live or in its wait) or any
- * random code (live or retired) is refused, so `voi.ci/<username>` can never mean two things.
- */
-export async function usernameCollidesWithVoici(
-  deps: { voiciLinks?: Pick<VoiciLinkStorage, "get">; voiciNames?: Pick<VoiciNameStorage, "get"> },
-  username: string,
-): Promise<boolean> {
-  const key = voiciNameKey(username);
-  const [name, code] = await Promise.all([
-    deps.voiciNames?.get(key),
-    /^[a-z0-9]{1,10}$/.test(key) ? deps.voiciLinks?.get(key) : undefined,
-  ]);
-  return !!name || !!code;
-}
+// voi.ci/<name> is resolved by resolveVoiciPath (voici.ts): one function for links, codes and pages
+// (docs/voici-namespace-spec.md), with the names registry as the only collision check.
 
 // ── drafts (§5.2) ───────────────────────────────────────────────────────────
 

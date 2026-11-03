@@ -256,7 +256,7 @@ public final class OpenAccountViewModel {
             createdDeviceId = deviceId
             phase = .opened(deviceName: effectiveDeviceName)
         } catch {
-            phase = .failed(UserErrorText.of(error))
+            phase = .failed(NameRuleText.refusal(error) ?? UserErrorText.of(error))
         }
     }
 }

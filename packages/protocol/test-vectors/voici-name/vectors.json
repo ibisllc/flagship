@@ -1,5 +1,5 @@
 {
-  "about": "Custom voi.ci names (docs/named-links.md). Every platform must build `set.canonical` and `clear.canonical` from `set.fields` / `clear.fields` byte for byte and verify the signatures under keys.pubHex (Ed25519 over the canonical bytes); `reject` must NOT verify. `names` pins the rules a client checks before asking .com: `problem` is voiciNameProblem(typed) (null = fine) and `key` is voiciNameKey(typed) for a valid name (null otherwise).",
+  "about": "Custom voi.ci names (docs/named-links.md) and the one namespace they share with usernames (docs/voici-namespace-spec.md). Every platform must build `set.canonical` and `clear.canonical` from `set.fields` / `clear.fields` byte for byte and verify the signatures under keys.pubHex (Ed25519 over the canonical bytes); `reject` must NOT verify. `names` pins the format every username and link name meets (D12: 3 to 63 of a-z 0-9 -, no leading, trailing or double hyphen) that a client checks before asking .com: `problem` is voiciNameProblem(typed) (null = fine; else too-short, too-long, characters or hyphens, checked in that order on the lower-cased input) and `key` is voiciNameKey(typed), the safety key (lower case, hyphens removed, 0 read as o, 1 as l), for a valid name (null otherwise).",
   "keys": {
     "seedHex": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
     "pubHex": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff"
@@ -67,8 +67,8 @@
     },
     {
       "typed": "abc",
-      "problem": "too-short",
-      "key": null
+      "problem": null,
+      "key": "abc"
     },
     {
       "typed": "a-b-c-d",
@@ -82,17 +82,17 @@
     },
     {
       "typed": "-party",
-      "problem": "characters",
+      "problem": "hyphens",
       "key": null
     },
     {
       "typed": "party-",
-      "problem": "characters",
+      "problem": "hyphens",
       "key": null
     },
     {
       "typed": "my--party",
-      "problem": "characters",
+      "problem": "hyphens",
       "key": null
     },
     {
@@ -106,14 +106,14 @@
       "key": null
     },
     {
-      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "problem": "too-long",
       "key": null
     },
     {
-      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "problem": null,
-      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     },
     {
       "typed": "café",
@@ -123,12 +123,72 @@
     {
       "typed": "1234",
       "problem": null,
-      "key": "1234"
+      "key": "l234"
     },
     {
       "typed": "k3x9qa",
       "problem": null,
       "key": "k3x9qa"
+    },
+    {
+      "typed": "50cent",
+      "problem": null,
+      "key": "5ocent"
+    },
+    {
+      "typed": "5ocent",
+      "problem": null,
+      "key": "5ocent"
+    },
+    {
+      "typed": "chess-c1ub",
+      "problem": null,
+      "key": "chessclub"
+    },
+    {
+      "typed": "p1ucky-avocet",
+      "problem": null,
+      "key": "pluckyavocet"
+    },
+    {
+      "typed": "plucky-avocet",
+      "problem": null,
+      "key": "pluckyavocet"
+    },
+    {
+      "typed": "-ab",
+      "problem": "hyphens",
+      "key": null
+    },
+    {
+      "typed": "ab-",
+      "problem": "hyphens",
+      "key": null
+    },
+    {
+      "typed": "a--b",
+      "problem": "hyphens",
+      "key": null
+    },
+    {
+      "typed": "a",
+      "problem": "too-short",
+      "key": null
+    },
+    {
+      "typed": "",
+      "problem": "too-short",
+      "key": null
+    },
+    {
+      "typed": "a-b",
+      "problem": null,
+      "key": "ab"
+    },
+    {
+      "typed": "A-B",
+      "problem": null,
+      "key": "ab"
     }
   ]
 }

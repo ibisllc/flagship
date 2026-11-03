@@ -3,55 +3,36 @@
  * Mirror of @flagship/services-zone validateUserLabel — hoisted here so
  * the control-plane package has zero runtime deps on Node-specific code.
  */
+import { voiciNameKey, voiciNameProblem } from "@flagship/protocol";
+import reservedNames from "./reservedNames.json" with { type: "json" };
 
-// Usernames: lowercase alphanumerics + INTERIOR single dashes, 3–30 chars, no
-// leading/trailing dash and NO `--` (docs/service-addressing-double-dash.md).
-// Dashes are now safe because the slug↔creator composite uses a DOUBLE dash
-// (`<creator>--<slug>` / `<slug>--<creator>`) as its delimiter, so single dashes
-// in either half are unambiguous. The `--` ban (enforced separately, since the
-// regex alone would permit it) keeps the composite delimiter unique.
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+// Usernames follow the voi.ci namespace format (docs/voici-namespace-spec.md D12, shared with custom link names):
+// 3–63 of a-z 0-9 and -, no leading, trailing or double hyphen (`--` stays the slug↔creator delimiter,
+// docs/service-addressing-double-dash.md), and may start with a digit (D5). One rule, `voiciNameProblem` in
+// @flagship/protocol, so every client and the server agree.
 
-/** Username SHAPE check only (grammar + the `--` ban) — no reserved-word check.
- *  The single source of truth other modules import instead of re-declaring the
- *  regex (kills drift). */
+/** Username SHAPE check only (the D12 format) — no reserved-word check. */
 export function isValidUsernameShape(input: string): boolean {
-  const norm = String(input).toLowerCase();
-  return USERNAME_RE.test(norm) && !norm.includes("--");
+  return voiciNameProblem(String(input)) === null;
+}
+
+/**
+ * The reserved words (packages/control-plane/src/reservedNames.json, the one list): each is a `reserved` row of the
+ * names registry, which is what refuses them and their look-alikes at claim time. The set is kept here too so a
+ * caller without the registry still refuses them; compare with `isReservedName` (on the safety key).
+ */
+const RESERVED_USER_LABELS: ReadonlySet<string> = new Set(reservedNames.words);
+const RESERVED_KEYS: ReadonlySet<string> = new Set(reservedNames.words.map((w) => voiciNameKey(w)));
+
+/** True when `name` or a look-alike of it (same safety key) is a reserved word. */
+export function isReservedName(name: string): boolean {
+  return RESERVED_KEYS.has(voiciNameKey(name));
 }
 
 // App slugs / pod names / arbitrary DNS labels follow RFC 1123
 // (hyphens allowed in the interior, not at the ends, 1–63). Both
 // validateAppLabel and validateServerLabel use this; usernames do NOT.
 const LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
-
-const RESERVED_USER_LABELS = new Set([
-  "api", "www", "admin", "administrator", "root", "support", "help",
-  "billing", "payment", "auth", "login", "signup", "register",
-  "flagship", "flagshipserver", "flagship-services", "service", "services",
-  "status", "ops", "ns1", "ns2", "mail", "email", "smtp", "imap", "pop",
-  "static", "cdn", "assets", "files", "git", "tunnel", "control",
-  "control-plane", "console", "dashboard", "blog", "docs",
-  // The relay mesh (relay-mesh.md §2): `lb.<apex>` is the load-balanced name if the zone's `*` has to be a
-  // CNAME to it; `tunnel` (above) holds every relay's direct name `<relayId>.tunnel.<apex>`.
-  "lb",
-  // Per-account gossip fan-out reserved names (Phase 4). `broadcast` is the
-  // reserved fan-out label `broadcast--<user>.flagship.services` the hub mirrors
-  // gossip through; `servers`/`all` are reserved collective addresses for the
-  // same fleet-wide regime. A user must never own any of these as a username.
-  "broadcast", "servers", "all",
-  // The Android relay fallback answers at `relay-fallback.flagship.services` by the
-  // zone's root wildcard, so no record may exist at that name: nobody may own it as an
-  // account (docs/wildcard-dns.md; zone-health fails if a record sits there).
-  "relay-fallback",
-  // Test-environment apex labels (docs/ui-test-gym.md §6.5). Banning
-  // these as usernames is what makes the `gym.` test env safe to share
-  // the prod zones: no prod user can ever own the `gym` label, so a test
-  // cert under `*.gym.flagship.services` can never collide with a
-  // registered prod box's SAN set (closes the CT-monitor false-positive)
-  // nor shadow `gym.flagshipserver.com`'s identity / zone.
-  "gym", "test", "e2e", "qa", "ci", "staging",
-]);
 
 // Server (pod) labels are the leftmost segment of
 // `<server>.<user>.flagship.services`. They are a standard RFC-1123 DNS
@@ -72,7 +53,7 @@ const RESERVED_SERVER_LABELS = new Set([
   // `<server>` label) must not collide with the fleet-wide gossip addresses
   // either, so a box can never shadow `broadcast--<user>` routing.
   "broadcast", "servers", "all",
-  // Reserved for the Android relay fallback (see RESERVED_USER_LABELS).
+  // Reserved for the Android relay fallback (also a reserved name, reservedNames.json).
   "relay-fallback",
 ]);
 
@@ -92,10 +73,10 @@ export function validateUserLabel(input: string): LabelValidation {
     return {
       ok: false,
       reason:
-        "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+        "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
     };
   }
-  if (RESERVED_USER_LABELS.has(norm)) {
+  if (isReservedName(norm)) {
     return { ok: false, reason: `username "${norm}" is reserved` };
   }
   return { ok: true, label: norm };
@@ -133,7 +114,6 @@ export function validateServerLabel(input: string): LabelValidation {
 
 export const _labelInternal = {
   LABEL_RE,
-  USERNAME_RE,
   RESERVED_USER_LABELS,
   RESERVED_SERVER_LABELS,
 };

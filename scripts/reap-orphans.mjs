@@ -61,7 +61,7 @@ export const GROUP_WAIT_MS = 15_000;
 
 /** The deletion group of a plan item: legacyDeletionOrder is group * 10 + type. */
 export const groupOf = (order) => Math.floor((Number.isFinite(order) ? order : 0) / 10);
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const DNS_ID_RE = /^[0-9a-f]{32}$/i;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NEVER_ORPHAN = ["playstore-test-0725"];

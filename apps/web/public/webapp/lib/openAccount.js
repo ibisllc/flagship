@@ -41,11 +41,7 @@ import {
 } from "../keystore.js";
 
 import { tr } from "./i18n.js";
-/** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
- *  3–30, interior single dashes OK (no leading/trailing), no `--` (the
- *  slug↔creator delimiter). Mirror of control-plane labels.ts
- *  (docs/service-addressing-double-dash.md). The `--` ban is checked separately. */
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+import { isValidName, nameRefusalText } from "./nameRules.js";
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
  *  `views/create-server.js` (TAG_CLAIM) and the Worker. */
@@ -59,11 +55,8 @@ function canonical(parts) {
 
 /** True iff `username` is a syntactically valid bare account handle. */
 export function isValidUsername(username) {
-  return (
-    typeof username === "string" &&
-    USERNAME_RE.test(username) &&
-    !username.includes("--")
-  );
+  // The voi.ci namespace format (docs/voici-namespace-spec.md D12), the same rule `.com` checks.
+  return isValidName(username);
 }
 
 /** POST the standalone, idempotent username claim. A 409 means the name
@@ -107,6 +100,11 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
       ...(adminRootPubHex ? { adminRootPub: adminRootPubHex } : {}),
     }),
   });
+  // The names registry answers another holder (or a look-alike) as 409 {code:"taken"}; a re-claim by this IRK is a 200.
+  if (resp.status === 409 || resp.status === 400) {
+    const refused = nameRefusalText(await resp.clone().json().catch(() => null));
+    if (refused) throw new Error(refused);
+  }
   if (!resp.ok && resp.status !== 409) {
     await throwIfRateLimited(resp);
     const body = await safeText(resp);
@@ -260,6 +258,9 @@ export async function openAccount(username, deps) {
   });
   if (!response.ok) {
     await throwIfRateLimited(response);
+    // "Taken or too similar to an existing name", or the format problem, in the person's language.
+    const refused = nameRefusalText(await response.clone().json().catch(() => null));
+    if (refused) throw new Error(refused);
     throw new Error(`account bootstrap failed (${response.status}): ${await safeText(response)}`);
   }
   const created = await response.json().catch(() => ({}));

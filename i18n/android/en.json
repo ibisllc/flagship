@@ -10597,12 +10597,16 @@
     "en": "Letters, numbers and hyphens only",
     "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
   },
-  "at_least_4_characters": {
-    "en": "At least 4 characters",
+  "at_least_3_characters": {
+    "en": "At least 3 characters",
     "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
   },
-  "at_most_40_characters": {
-    "en": "At most 40 characters",
+  "at_most_63_characters": {
+    "en": "At most 63 characters",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "no_hyphen_at_the_start_or_end_or_two_in_a_row": {
+    "en": "No hyphen at the start or end, or two in a row",
     "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
   },
   "all_names_in_use": {
@@ -10610,12 +10614,8 @@
     "ctx": "viewmodels/LinkFieldViewModel.kt (prose)",
     "args": 1
   },
-  "reserved": {
-    "en": "Reserved",
-    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
-  },
-  "taken": {
-    "en": "Taken",
+  "taken_or_too_similar_to_an_existing_name": {
+    "en": "Taken or too similar to an existing name",
     "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
   },
   "reserved_for_the_owner_of": {
@@ -14107,5 +14107,17 @@
   "access_list_not_a_valid_host": {
     "en": "\"%1$s\" is not a valid host name",
     "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "provision_quiet_installer_finished": {
+    "en": "The installer finished. The server is starting and should register in a few minutes.",
+    "ctx": "core/ProvisionQuiet.kt (install progress, box gone quiet)"
+  },
+  "provision_quiet_stuck": {
+    "en": "This server stopped reporting and hasn't registered. It may be stuck.",
+    "ctx": "core/ProvisionQuiet.kt (install progress, box gone quiet)"
+  },
+  "provision_quiet_stuck_advice": {
+    "en": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.",
+    "ctx": "core/ProvisionQuiet.kt (install progress, box gone quiet)"
   }
 }

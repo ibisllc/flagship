@@ -3217,5 +3217,13 @@
   "You can start {0} new conversations a day. Try again {1}.": "你每天可以开始 {0} 个新对话。请在{1}再试。",
   "You have a reply on voi.ci/{0}": "你在 voi.ci/{0} 有一条回复",
   "{0} rule": "{0} 条规则",
-  "Email": "电子邮件"
+  "Email": "电子邮件",
+  "At least 3 characters": "至少 3 个字符",
+  "At most 63 characters": "最多 63 个字符",
+  "No hyphen at the start or end, or two in a row": "开头和结尾不能是连字符，也不能连续使用两个连字符",
+  "Taken or too similar to an existing name": "已被占用，或与现有名称过于相似",
+  "3 to 63 lowercase letters, numbers and hyphens": "3 到 63 个小写字母、数字和连字符",
+  "The installer finished. The server is starting and should register in a few minutes.": "安装程序已结束。服务器正在启动，应会在几分钟内完成注册。",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "此服务器已停止报告且尚未注册，可能已卡住。",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "如果它在 Flagship Studio 中运行，请在那里查看。否则请重启这台机器。如果仍然无法启动，请取消订单并重新创建服务器。"
 }

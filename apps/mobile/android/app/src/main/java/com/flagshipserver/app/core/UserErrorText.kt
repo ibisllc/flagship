@@ -148,8 +148,20 @@ object UserErrorText {
     private fun forStatus(status: Int, body: String, fallback: String?): String {
         if (status >= 500) return SERVER_PROBLEM
         if (status == 408) return TIMEOUT
+        nameRefusal(body)?.let { return it }
         boxSentence(body)?.let { return it }
         return fallback ?: REFUSED
+    }
+
+    /** A refused username or link-name claim (docs/voici-namespace-spec.md): `{code:"taken"}`, or `{code:"invalid", problem}`. */
+    private fun nameRefusal(body: String): String? {
+        val obj = runCatching { json.parseToJsonElement(body.trim().removePrefix(":").trim()) as? JsonObject }.getOrNull() ?: return null
+        val code = (obj["code"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        return when (code) {
+            "taken" -> VoiciName.takenText()
+            "invalid" -> VoiciName.Problem.of((obj["problem"] as? JsonPrimitive)?.takeIf { it.isString }?.content)?.let(VoiciName::problemText)
+            else -> null
+        }
     }
 
     /** The sentence in a refused call's `{"error": "..."}` body, when it is one

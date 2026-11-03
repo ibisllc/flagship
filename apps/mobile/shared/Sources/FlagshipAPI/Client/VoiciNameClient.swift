@@ -31,11 +31,16 @@ public struct VoiciLinkState: Decodable, Equatable, Sendable {
 }
 
 /// `.com`'s answer to a name check: `status` is one of available, current,
-/// invalid, reserved, taken, dibs, dibs-unchecked; `domain` rides with `dibs`.
+/// invalid (with `problem`), taken, dibs, dibs-unchecked; `domain` rides with
+/// `dibs`. (A reserved word answers taken: it is a row of the names registry.)
 public struct VoiciNameCheck: Decodable, Equatable, Sendable {
     public let status: String
     public let domain: String?
-    public init(status: String, domain: String? = nil) { self.status = status; self.domain = domain }
+    /// With `invalid`: too-short, too-long, characters or hyphens.
+    public let problem: String?
+    public init(status: String, domain: String? = nil, problem: String? = nil) {
+        self.status = status; self.domain = domain; self.problem = problem
+    }
 }
 
 /// One live custom name of the account (the "Free one up" list).
@@ -79,11 +84,13 @@ public struct VoiciNameError: Error, Equatable, LocalizedError {
     public let limit: Int?
     public let nextChangeAt: Int64?
     public let retryAfterSec: Int?
+    /// With `invalid`: too-short, too-long, characters or hyphens.
+    public let problem: String?
     public var errorDescription: String? { message }
 
     public init(
         status: Int, code: String? = nil, message: String? = nil, domain: String? = nil,
-        limit: Int? = nil, nextChangeAt: Int64? = nil, retryAfterSec: Int? = nil
+        limit: Int? = nil, nextChangeAt: Int64? = nil, retryAfterSec: Int? = nil, problem: String? = nil
     ) {
         self.status = status
         self.code = code
@@ -92,6 +99,7 @@ public struct VoiciNameError: Error, Equatable, LocalizedError {
         self.limit = limit
         self.nextChangeAt = nextChangeAt
         self.retryAfterSec = retryAfterSec
+        self.problem = problem
     }
 
     init(status: Int, body: Data) {
@@ -103,7 +111,8 @@ public struct VoiciNameError: Error, Equatable, LocalizedError {
             domain: json["domain"] as? String,
             limit: (json["limit"] as? NSNumber)?.intValue,
             nextChangeAt: (json["nextChangeAt"] as? NSNumber)?.int64Value,
-            retryAfterSec: (json["retryAfterSec"] as? NSNumber)?.intValue
+            retryAfterSec: (json["retryAfterSec"] as? NSNumber)?.intValue,
+            problem: json["problem"] as? String
         )
     }
 }

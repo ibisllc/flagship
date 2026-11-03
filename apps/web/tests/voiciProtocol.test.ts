@@ -27,7 +27,6 @@ describe("voici vectors (test-vectors/voici) in the webapp", () => {
     expect(P.VOICI_LINK_SITES).toEqual(V.linkSites.table);
     for (const c of V.linkSites.cases) expect(P.voiciLinkSite(c.url), c.url).toBe(c.site);
     for (const c of V.pseudonymNames) expect([P.voiciPseudonymCode(c.pub), P.voiciPseudonymName(c.pub)]).toEqual([c.code, c.name]);
-    for (const c of V.namespaceKeys) expect(P.voiciNamespaceKey(c.name)).toBe(c.key);
     for (const c of V.jpegs) expect([P.isVoiciJpeg(h(c.hex)), P.voiciJpegHasMetadata(h(c.hex))]).toEqual([c.isJpeg, c.hasMetadata]);
   });
 

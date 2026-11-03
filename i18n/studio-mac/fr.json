@@ -119,8 +119,6 @@
   "Waiting for an installer checkpoint": "En attente d’un point de contrôle de l’installateur",
   "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.": "Cela prend plus de temps que prévu — le boîtier n’a peut-être pas atteint le réseau, ou il attend que vous approuviez le déverrouillage sur votre téléphone. Vérifiez qu’il est en ligne, ou éteignez-le et réessayez.",
   "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.": "Déverrouillage de son disque avec la clé que votre téléphone lui a laissée. Si votre téléphone vous demande d’approuver, faites-le là-bas.",
-  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": "Le disque est scellé — approuvez le premier déverrouillage sur votre téléphone. Ensuite, il devrait se déverrouiller tout seul ; si votre téléphone vous le redemande, approuvez-le là-bas.",
-  "The disk is sealed — approve the unlock on your phone.": "Le disque est scellé — approuvez le déverrouillage sur votre téléphone.",
   "Library/Application Support": "Library/Application Support",
   "The app quit while the install was running.": "L’app s’est fermée pendant l’installation.",
   "Hosting Flagship servers for the internet": "Hébergement de serveurs Flagship pour Internet",
@@ -219,5 +217,11 @@
   "The image could not be handed to the helper.": "L’image n’a pas pu être transmise à l’assistant.",
   "The helper would not accept that disk.": "L’assistant n’a pas accepté ce disque.",
   "Couldn't unmount the disk: %@": "Impossible de démonter le disque : %@",
-  "Beta": "Bêta"
+  "Beta": "Bêta",
+  "Starting…": "Démarrage…",
+  "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.": "Démarrage. Quand votre téléphone vous le demande, approuvez-y le premier déverrouillage de ce serveur. Ensuite, il devrait se déverrouiller tout seul ; si votre téléphone vous le redemande, approuvez-le là-bas.",
+  "Starting. When your phone asks, approve the unlock there.": "Démarrage. Quand votre téléphone vous le demande, approuvez-y le déverrouillage.",
+  "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.": "L’installation est terminée, mais ce serveur ne s’est jamais enregistré : il n’y a rien à approuver. Supprimez-le dans Studio et recréez-le depuis votre téléphone.",
+  "Setup didn't finish": "Configuration inachevée",
+  "Unlocking…": "Déverrouillage…"
 }

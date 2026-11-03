@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryStorage } from "@flagship/storage";
+import { resolveVoiciPath } from "../src/voici.js";
 import {
   canonicalJsonBytes,
   sha256Hex,
@@ -20,8 +21,6 @@ import {
   handleVoiciGetPage,
   handleVoiciPieceUpload,
   handleVoiciPublish,
-  resolveVoiciPagePath,
-  usernameCollidesWithVoici,
   voiciIndexKey,
   voiciPieceKey,
   VOICI_PIECE_BYTES_PER_DAY,
@@ -162,26 +161,19 @@ describe("voi.ci publish", () => {
 });
 
 describe("voi.ci paths and the one namespace", () => {
-  it("answers a published page, a taken-down page, /@name and nothing", async () => {
+  it("answers a published page, a taken-down page, /@name and nothing (resolveVoiciPath)", async () => {
     const w = await world();
     const p1 = buildPage({ seq: 1, issuedAt: T0 });
     await w.upload(p1);
     await w.publish(p1);
-    expect(await resolveVoiciPagePath(w.deps, "Alice")).toEqual({ kind: "page", username: USER });
-    expect(await resolveVoiciPagePath(w.deps, "@alice")).toEqual({ kind: "at-redirect", location: "/alice" });
-    expect(await resolveVoiciPagePath(w.deps, "bob")).toEqual({ kind: "none" });
-    expect(await resolveVoiciPagePath(w.deps, "a_b")).toEqual({ kind: "none" });
+    const resolve = (p: string) => resolveVoiciPath({ names: w.storage.names, pages: w.storage.voici }, p);
+    expect(await resolve("/Alice")).toEqual({ kind: "redirect", location: "/alice" });
+    expect(await resolve("/alice")).toEqual({ kind: "page", username: USER });
+    expect(await resolve("/@alice")).toEqual({ kind: "redirect", location: "/alice" });
+    expect(await resolve("/bob")).toEqual({ kind: "not-found" });
+    expect(await resolve("/a_b")).toEqual({ kind: "not-found" });
     await w.storage.voici.setTakedown(USER, T0, "spam");
-    expect(await resolveVoiciPagePath(w.deps, "alice")).toEqual({ kind: "page-gone", username: USER });
-  });
-
-  it("finds a username colliding with a link name or a code", async () => {
-    const s = new InMemoryStorage();
-    await s.voiciLinks.insert({ code: "abc123", username: "x", targetUrl: "https://a.example", createdAt: 1 });
-    await s.voiciNames.claim({ key: "halloweenparty", typed: "halloween-party", username: "x", serviceId: "x-party", state: "live", setAt: 1 } as never);
-    expect(await usernameCollidesWithVoici(s, "abc-123")).toBe(true);
-    expect(await usernameCollidesWithVoici(s, "halloween-party")).toBe(true);
-    expect(await usernameCollidesWithVoici(s, "plucky-avocet")).toBe(false);
+    expect(await resolve("/alice")).toEqual({ kind: "page-gone", username: USER });
   });
 });
 

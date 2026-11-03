@@ -1,6 +1,6 @@
 // voi.ci's reply-alert service worker (the "Alerts:" note in docs/voici-and-messages.md §8.3). A classic script with
-// no imports, served by `.com` as https://voi.ci/_/sw.js (this build's file, listed in its MANIFEST.json) and
-// registered by flagship-web's enableReplyAlerts with the scope /_/alerts/, under which no page lives: it controls no
+// no imports, served by `.com` as https://voi.ci/-/sw.js (this build's file, listed in its MANIFEST.json) and
+// registered by flagship-web's enableReplyAlerts with the scope /-/alerts/, under which no page lives: it controls no
 // page and has no fetch handler, it only shows alerts.
 //
 // A push carries {kind:"voici-reply", u:<page username>} and nothing else. The text shown is fixed: the localized
@@ -50,7 +50,7 @@ async function showAlert(data) {
     u = null;
   }
   const n = (await readNotice()) ?? {};
-  const icon = typeof n.icon === "string" && n.icon.startsWith("/_/") ? n.icon : undefined;
+  const icon = typeof n.icon === "string" && n.icon.startsWith("/-/") ? n.icon : undefined;
   return self.registration.showNotification(text(n.title, DEFAULT_NOTICE.title, 80), {
     body: text(n.body, DEFAULT_NOTICE.body, 200),
     tag: u ? `voici-reply:${u}` : "voici-reply",

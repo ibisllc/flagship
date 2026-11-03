@@ -115,6 +115,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0125",
   // Relay log: device-grant-revoke for the apps' grant ids (UUIDs), not only 64-hex ones.
   "0126",
+  // voi.ci namespace: one `names` registry for usernames, link names, codes and reserved words (unique safety key).
+  "0127",
 ];
 
 export interface SchemaStatusDeps {

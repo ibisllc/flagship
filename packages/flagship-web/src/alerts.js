@@ -23,8 +23,8 @@ const NO_CREDS = { credentials: "omit", referrerPolicy: "no-referrer", mode: "co
 
 export const TAG_VOICI_ALERTS = "flagship/voici-alerts/v1";
 /** The service worker (served by `.com` as the current build's sw.js) and its scope: no page of the site is under it. */
-export const ALERTS_SW_URL = "/_/sw.js";
-export const ALERTS_SCOPE = "/_/alerts/";
+export const ALERTS_SW_URL = "/-/sw.js";
+export const ALERTS_SCOPE = "/-/alerts/";
 /** Store keys: the notification text the service worker shows ({title, body, icon?}), and "alerts on" per page. */
 export const ALERTS_NOTICE_KEY = "voici-alerts:notice";
 const ON_PREFIX = "voici-alerts:on:";

@@ -96,5 +96,7 @@
   "The alert only says that they replied, never what they wrote.": "L’alerte indique seulement qu’il y a une réponse, jamais son contenu.",
   "Rules and reports": "Règles et signalements",
   "Terms": "Conditions",
-  "Report abuse": "Signaler un abus"
+  "Report abuse": "Signaler un abus",
+  "This link was removed.": "Ce lien a été supprimé.",
+  "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": "Il ne mène plus nulle part. Demandez-en un nouveau à la personne qui l'a partagé."
 }

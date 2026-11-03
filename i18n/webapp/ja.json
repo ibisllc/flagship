@@ -3217,5 +3217,13 @@
   "You can start {0} new conversations a day. Try again {1}.": "新しい会話は 1 日 {0} 件まで開始できます。{1}にもう一度お試しください。",
   "You have a reply on voi.ci/{0}": "voi.ci/{0} に返信があります",
   "{0} rule": "{0} 件のルール",
-  "Email": "メール"
+  "Email": "メール",
+  "At least 3 characters": "3文字以上",
+  "At most 63 characters": "63文字以内",
+  "No hyphen at the start or end, or two in a row": "ハイフンは先頭・末尾に置けず、2つ続けることもできません",
+  "Taken or too similar to an existing name": "使用済みか、既存の名前に似すぎています",
+  "3 to 63 lowercase letters, numbers and hyphens": "小文字の英字・数字・ハイフンで3〜63文字",
+  "The installer finished. The server is starting and should register in a few minutes.": "インストーラーが終了しました。サーバーは起動中で、数分以内に登録されるはずです。",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "このサーバーからの報告が止まり、登録もされていません。停止している可能性があります。",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Flagship Studio で動かしている場合は、そちらで確認してください。そうでなければ、マシンを再起動してください。それでも起動しない場合は、注文をキャンセルしてサーバーを作成し直してください。"
 }

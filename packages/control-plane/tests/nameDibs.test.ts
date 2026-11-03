@@ -323,11 +323,10 @@ describe("allocateDibsName", () => {
 describe("a claim for a voi.ci name (kind: link)", () => {
   const LONG = "the-annual-halloween-block-party-2026";
 
-  it("takes a longer label than an account name allows, and one that is another account's name", async () => {
+  it("takes a long label (both kinds allow 63 characters now) and one that is another account's name", async () => {
     const { deps } = await setup({ registered: [`${LONG}.com`, "rapid-bison.com"] });
     const own = initiate("fresh-poppy", LONG, alice);
     expect((await handleNameDibsInitiate(deps, { ...own, kind: "link" })).status).toBe(200);
-    expect((await handleNameDibsInitiate(deps, own)).status).toBe(400);
     const clash = initiate("fresh-poppy", "rapid-bison", alice);
     expect((await handleNameDibsInitiate(deps, { ...clash, kind: "link" })).status).toBe(200);
     expect((await handleNameDibsInitiate(deps, clash)).status).toBe(409);

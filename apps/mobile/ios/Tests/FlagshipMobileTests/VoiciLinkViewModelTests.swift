@@ -35,18 +35,21 @@ final class VoiciLinkMessageTests: XCTestCase {
     }
 
     func test_checksTheGrammarBeforeAskingDotCom() {
-        XCTAssertEqual(msg(typed: "ab").text, "At least 4 characters")
+        XCTAssertEqual(msg(typed: "ab").text, "At least 3 characters")
         XCTAssertEqual(msg(typed: "a_b_c_d").text, "Letters, numbers and hyphens only")
-        XCTAssertEqual(msg(typed: String(repeating: "x", count: 41)).text, "At most 40 characters")
+        XCTAssertEqual(msg(typed: "a--b").text, "No hyphen at the start or end, or two in a row")
+        XCTAssertEqual(msg(typed: "-abc").text, "No hyphen at the start or end, or two in a row")
+        XCTAssertEqual(msg(typed: String(repeating: "x", count: 64)).text, "At most 63 characters")
     }
 
     func test_offersSaveOnlyForAnAvailableName() {
         XCTAssertEqual(msg(check: VoiciNameCheck(status: "available")).tone, .ok)
         XCTAssertTrue(msg(check: VoiciNameCheck(status: "available")).canSave)
         let taken = msg(check: VoiciNameCheck(status: "taken"))
-        XCTAssertEqual(taken.text, "Taken")
+        XCTAssertEqual(taken.text, "Taken or too similar to an existing name")
         XCTAssertFalse(taken.canSave)
-        XCTAssertEqual(msg(check: VoiciNameCheck(status: "reserved")).text, "Reserved")
+        XCTAssertEqual(msg(check: VoiciNameCheck(status: "reserved")).text, "Taken or too similar to an existing name")
+        XCTAssertEqual(msg(check: VoiciNameCheck(status: "invalid", problem: "hyphens")).text, "No hyphen at the start or end, or two in a row")
         XCTAssertEqual(msg(check: VoiciNameCheck(status: "error")).text, "Couldn't check halloween. Try again.")
     }
 
@@ -73,7 +76,11 @@ final class VoiciLinkMessageTests: XCTestCase {
         func line(_ code: String, limit: Int? = nil) -> String {
             VoiciLinkViewModel.refusalMessage(VoiciNameError(status: 409, code: code, limit: limit), typed: "x")
         }
-        XCTAssertEqual(line("taken"), "Taken")
+        XCTAssertEqual(line("taken"), "Taken or too similar to an existing name")
+        XCTAssertEqual(
+            VoiciLinkViewModel.refusalMessage(VoiciNameError(status: 400, code: "invalid", problem: "too-short"), typed: "x"),
+            "At least 3 characters"
+        )
         XCTAssertEqual(line("rate-limited"), "Too many changes today")
         XCTAssertEqual(line("name-limit", limit: 25), "All 25 names in use")
         XCTAssertEqual(
@@ -167,7 +174,7 @@ final class VoiciLinkViewModelTests: XCTestCase {
         model.edit("halloween")
         await model.runCheck()
         await model.requestSave()
-        XCTAssertEqual(model.message.text, "Taken")
+        XCTAssertEqual(model.message.text, "Taken or too similar to an existing name")
         XCTAssertEqual(model.link.name, nil)
         model.edit("halloween2")
         XCTAssertEqual(model.message.text, "")

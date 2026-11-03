@@ -37,7 +37,6 @@ sealed interface ConnectInput {
 
         private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
         private val SESSION_PARAM = Regex("(^|[?&])(sid|pk)=")
-        private val ACCOUNT_NAME = Regex("^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$")
 
         fun classify(text: String): ConnectInput {
             val raw = text.trim()
@@ -60,7 +59,8 @@ sealed interface ConnectInput {
             Empty -> PairingField.None
             is Pairing -> PairingField.Join(c.link)
             BadLink -> PairingField.Error(BAD_LINK)
-            is Name -> PairingField.Error(if (ACCOUNT_NAME.matches(c.name)) NAME_IN_CODE else NOT_A_CODE)
+            // An account name has the one D12 format (VoiciName.problem), shared with link names.
+            is Name -> PairingField.Error(if (VoiciName.problem(c.name) == null) NAME_IN_CODE else NOT_A_CODE)
         }
     }
 }

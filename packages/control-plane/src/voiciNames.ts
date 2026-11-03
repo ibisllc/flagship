@@ -5,11 +5,12 @@
 //   POST /api/users/:u/apps/:serviceId/voici-name  signed     — set, replace or clear a service's name
 //
 // The service's random code is separate and permanent (voici.ts); this is the
-// optional readable name on top of it. A name belongs to ONE service, is unique
-// across every account (compared without hyphens), counts against the account's
-// plan, and is released after 60 days without a server running the app. After
-// any release it sits out a 30-day wait: it answers 410, redirects nowhere and
-// nobody can take it, the account that gave it up included.
+// optional readable name on top of it. A name belongs to ONE service, is a row of
+// the names registry (docs/voici-namespace-spec.md: unique on the safety key with
+// every username, code and reserved word), counts against the account's plan, and
+// is released after 60 days without a server running the app. A name given up for
+// any reason is retired for good (D7): it answers 410 and nobody can take it or a
+// look-alike of it again, the account that gave it up included.
 //
 // Refusals carry `{ error, code, ... }`; the apps write their own sentences from
 // the code (nothing here is shown to a person).
@@ -18,7 +19,6 @@ import {
   parseServiceId,
   parseSignedVoiciNameOrder,
   verifyVoiciNameOrder,
-  voiciNameKey,
   voiciNameProblem,
   type SignedVoiciNameOrder,
   type VoiciNameProblem,
@@ -26,6 +26,7 @@ import {
 import type {
   AuditEventStorage,
   DeviceCapabilityGrantStorage,
+  NameRegistryStorage,
   TierName,
   TierStorage,
   UsernameStorage,
@@ -33,11 +34,11 @@ import type {
   VoiciNameRecord,
   VoiciNameReleaseReason,
   VoiciNameStorage,
-  VoiciStorage,
 } from "@flagship/storage";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
+import { isReservedName } from "./labels.js";
 import { effectiveTierOf } from "./meter.js";
 import { dibsWindowState, dotComRegistered, type DibsFetch, type NameDibsDeps } from "./nameDibs.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
@@ -51,21 +52,11 @@ export const VOICI_CHANGES_PER_SERVICE = 3;
 export const VOICI_CHANGE_WINDOW_MS = 30 * DAY;
 /** A brake on the whole account, not a product rule. */
 export const VOICI_CHANGES_PER_ACCOUNT_DAY = 10;
-/** How long a released name answers 410 before anyone can take it. */
-export const VOICI_NAME_WAIT_MS = 30 * DAY;
 /** No server running the app for this long releases its name. */
 export const VOICI_NAME_INACTIVE_MS = 60 * DAY;
 /** Warnings go out this long before the release (30 days, then 7 days). */
 export const VOICI_WARN_BEFORE_MS = [30 * DAY, 7 * DAY] as const;
 const FRESHNESS_MS = 5 * 60_000;
-
-/** Words nobody may take, compared on the hyphen-less key. */
-export const RESERVED_VOICI_NAMES: ReadonlySet<string> = new Set([
-  "www", "api", "admin", "root", "mail", "smtp", "imap", "ftp", "dns", "host", "localhost", "test", "staging", "dev", "prod",
-  "flagship", "flagshipserver", "voici", "voi", "login", "signin", "signup", "register", "logout", "support", "help", "security",
-  "status", "abuse", "about", "pricing", "terms", "privacy", "legal", "blog", "docs", "download", "downloads", "studio", "remote",
-  "webapp", "app", "apps", "static", "assets", "cdn", "billing", "account", "settings", "home", "index", "null", "undefined",
-]);
 
 export interface VoiciNamesDeps {
   usernames: UsernameStorage;
@@ -79,8 +70,8 @@ export interface VoiciNamesDeps {
   /** A name is only set for an app a server of the account runs (the same check the upkeep uses),
    *  so names cannot be parked on made-up service ids. Absent in tests that don't care. */
   appRunning?: (username: string, serviceId: string) => Promise<boolean>;
-  /** One namespace with usernames (docs/voici-and-messages.md §4.1): a name whose key is a username's is taken. */
-  voici?: Pick<VoiciStorage, "usernameWithKey">;
+  /** The names registry: the availability answer (the claim itself is the registry insert in voiciNames.claim). */
+  names: Pick<NameRegistryStorage, "isTaken">;
   now?: () => number;
 }
 
@@ -94,7 +85,6 @@ export type VoiciNameCheck =
   | { status: "available" }
   | { status: "current" }
   | { status: "invalid"; problem: VoiciNameProblem }
-  | { status: "reserved" }
   | { status: "taken" }
   | { status: "dibs"; domain: string; until: number | null }
   | { status: "dibs-unchecked"; domain: string };
@@ -112,7 +102,8 @@ async function dibsBlock(
 ): Promise<Extract<VoiciNameCheck, { status: "dibs" | "dibs-unchecked" }> | null> {
   const win = dibsWindowState(deps.dibs.window, nowOf(deps));
   if (!win.open) return null;
-  const labels = [...new Set([voiciNameKey(typed), typed])];
+  // The `.com` domains a name stands for: as typed, and without hyphens (not the safety key: 0 and 1 stay digits).
+  const labels = [...new Set([typed.replace(/-/g, ""), typed])];
   for (const label of labels) {
     let unchecked = false;
     let registered = false;
@@ -141,16 +132,12 @@ export async function checkVoiciName(
   const name = typed.toLowerCase();
   const problem = voiciNameProblem(name);
   if (problem) return { status: "invalid", problem };
-  const key = voiciNameKey(name);
-  if (RESERVED_VOICI_NAMES.has(key)) return { status: "reserved" };
-  const held = await deps.voiciNames.get(key);
-  if (held) {
-    if (serviceId && held.state === "live" && held.username === username && held.serviceId === serviceId) return { status: "current" };
-    return { status: "taken" };
+  if (serviceId) {
+    const held = await deps.voiciNames.get(name);
+    if (held && held.state === "live" && held.username === username && held.serviceId === serviceId) return { status: "current" };
   }
-  // A random code is a name too: nobody may take one that exists.
-  if (/^[a-z0-9]{1,10}$/.test(key) && (await deps.voiciLinks.get(key))) return { status: "taken" };
-  if (deps.voici && (await deps.voici.usernameWithKey(key))) return { status: "taken" };
+  // One generic answer for a username, a link name, a code, a reserved word or a held name, and their look-alikes.
+  if (isReservedName(name) || (await deps.names.isTaken(name))) return { status: "taken" };
   const dibs = await dibsBlock(deps, username, name);
   if (dibs) return dibs;
   return { status: "available" };
@@ -273,8 +260,7 @@ export async function handleVoiciNameSet(
   const typed = order.name.toLowerCase();
   const problem = voiciNameProblem(typed);
   if (problem) return refuse(400, "invalid", "that isn't a valid name", { problem });
-  const key = voiciNameKey(typed);
-  if (current && current.key === key) {
+  if (current && current.key === typed) {
     // Same name again: nothing changes, nothing is counted.
     return ok({ ok: true, link: await voiciLinkState(deps, u, order.serviceId) });
   }
@@ -295,25 +281,26 @@ export async function handleVoiciNameSet(
   }
 
   const check = await checkVoiciName(deps, u, order.serviceId, typed);
-  if (check.status === "reserved") return refuse(409, "reserved", "that name is reserved");
-  if (check.status === "taken") return refuse(409, "taken", "that name is taken");
+  if (check.status === "taken") return refuse(409, "taken", "taken or too similar to an existing name");
   if (check.status === "dibs") return refuse(409, "dibs", "that name is reserved for the owner of its .com", { domain: check.domain, until: check.until });
   if (check.status === "dibs-unchecked") {
     return refuse(503, "dibs-unchecked", "couldn't check the .com registration, try again", { domain: check.domain });
   }
 
   const rec: VoiciNameRecord = {
-    key, display: typed, username: u, serviceId: order.serviceId, state: "live", setAt: now, lastActiveAt: now, warned: 0,
+    key: typed, display: typed, username: u, serviceId: order.serviceId, state: "live", setAt: now, lastActiveAt: now, warned: 0,
   };
   const claimed = await deps.voiciNames.claim(rec);
-  if (!claimed.ok) return refuse(409, "taken", "that name is taken");
+  // The registry insert is the collision check: anything holding the safety key refuses it.
+  if (!claimed.ok) return refuse(409, "taken", "taken or too similar to an existing name");
   if (current) await deps.voiciNames.release(u, order.serviceId, "replaced", now, current.key);
   await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce);
   await audit(deps, u, "voici-name-set", `voi.ci/${typed}${current ? ` (was ${current.display})` : ""}`, now);
   return ok({ ok: true, link: await voiciLinkState(deps, u, order.serviceId) });
 }
 
-/** The account was deleted: its names enter their wait and its codes are retired for good. */
+/** The account was deleted: its names and its codes are retired for good (usernames.delete does the same in its
+ *  transaction; this is the explicit form for callers that delete links without the account row). */
 export async function releaseAccountLinks(
   deps: Pick<VoiciNamesDeps, "voiciLinks" | "voiciNames" | "now">,
   username: string,
@@ -334,8 +321,7 @@ export interface VoiciNamesMaintenance {
 }
 
 /**
- * Frees names whose wait is over, forgets old changes, and walks one window of
- * live names: a name whose app runs now is marked active; one that has been idle
+ * Forgets old changes, and walks one window of live names: a name whose app runs now is marked active; one that has been idle
  * 30 and 7 days short of the limit is warned; one idle for the limit is released.
  * `offset` wraps, so successive calls cover every name in turn.
  */
@@ -344,15 +330,14 @@ export async function runVoiciNamesMaintenance(
   running: RunningNow,
   window: { offset: number; count: number },
   hooks: VoiciNamesMaintenance = {},
-): Promise<{ freed: number; released: number; warned: number; checked: number }> {
+): Promise<{ released: number; warned: number; checked: number }> {
   const now = nowOf(deps);
-  const freed = await deps.voiciNames.deleteWaitingReleasedBefore(now - VOICI_NAME_WAIT_MS);
   await deps.voiciNames.pruneChanges(now - VOICI_CHANGE_WINDOW_MS);
   const total = await deps.voiciNames.countAllLive();
   let released = 0;
   let warned = 0;
   let checked = 0;
-  if (total === 0) return { freed, released, warned, checked };
+  if (total === 0) return { released, warned, checked };
   const offset = window.offset % total;
   const page = await deps.voiciNames.listLivePage(offset, window.count);
   for (const r of page) {
@@ -376,5 +361,5 @@ export async function runVoiciNamesMaintenance(
       await hooks.notify?.({ kind: "warning", username: r.username, serviceId: r.serviceId, name: r.display, releasesAt }).catch(() => {});
     }
   }
-  return { freed, released, warned, checked };
+  return { released, warned, checked };
 }

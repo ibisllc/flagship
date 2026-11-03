@@ -2560,11 +2560,11 @@
   "only_an_admin_device_can_change_this": "只有管理员设备可以更改此项",
   "next_change": "下次可更改时间：%1$s",
   "letters_numbers_and_hyphens_only": "仅限字母、数字和连字符",
-  "at_least_4_characters": "至少 4 个字符",
-  "at_most_40_characters": "最多 40 个字符",
+  "at_least_3_characters": "至少 3 个字符",
+  "at_most_63_characters": "最多 63 个字符",
+  "no_hyphen_at_the_start_or_end_or_two_in_a_row": "开头和结尾不能有连字符，也不能有两个连续的连字符",
   "all_names_in_use": "%1$s 个名称已全部使用",
-  "reserved": "已保留",
-  "taken": "已被占用",
+  "taken_or_too_similar_to_an_existing_name": "已被占用，或与现有名称过于相似",
   "reserved_for_the_owner_of": "保留给 %1$s 的所有者",
   "couldnt_check_try_again": "无法检查 %1$s。请重试。",
   "too_many_changes_today": "今天更改次数过多",
@@ -3415,5 +3415,8 @@
   "access_list_host_without_port": "只写主机名，不要带端口",
   "access_list_wildcard_only_first": "* 只能放在主机名开头，例如 *.example.com",
   "access_list_localhost_not_public": "“localhost”不是公共主机名",
-  "access_list_not_a_valid_host": "“%1$s”不是有效的主机名"
+  "access_list_not_a_valid_host": "“%1$s”不是有效的主机名",
+  "provision_quiet_installer_finished": "安装程序已结束。服务器正在启动，应会在几分钟内完成注册。",
+  "provision_quiet_stuck": "此服务器已停止报告且尚未注册，可能已卡住。",
+  "provision_quiet_stuck_advice": "如果它在 Flagship Studio 中运行，请在那里查看。否则请重启这台机器。如果仍然无法启动，请取消订单并重新创建服务器。"
 }

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { b64Encode, ed, hybridSealKeygen, sealVoiciAbuseTag, verifyAbuseKeyEntry } from "@flagship/protocol";
 import { generate, parseArgs as parseKeyArgs, readList, sign, status } from "./abuse-key.mjs";
 import { client, formatList, openReport, parseArgs } from "./voici-abuse.mjs";
-import { collisions, format } from "./voici-namespace-report.mjs";
+import { format, report } from "./voici-namespace-report.mjs";
 import { createFakeYubikeys, fakeVault, withSeed } from "./pq-release-key.mjs";
 
 const V = JSON.parse(readFileSync(new URL("../packages/protocol/test-vectors/messages/vectors.json", import.meta.url), "utf8"));
@@ -103,18 +103,30 @@ describe("abuse-key", () => {
   });
 });
 
-describe("voici-namespace-report", () => {
-  it("finds usernames whose key equals a custom name's or a code's", () => {
-    const found = collisions({
-      usernames: ["alice", "bob-smith", "carol"],
-      names: [{ key: "bobsmith", state: "live", username: "dave" }, { key: "party", state: "live", username: "alice" }],
-      codes: [{ code: "carol", retired: true }, { code: "x7k2p9", retired: false }],
-    });
-    expect(found).toEqual([
-      { username: "bob-smith", with: "custom name", name: "bobsmith", state: "live", nameOwner: "dave", sameAccount: false },
-      { username: "carol", with: "code", name: "carol", state: "retired" },
+describe("voici-namespace-report (migration 0127's read-only checks)", () => {
+  it("lists format failures, safety-key duplicates and reserved words already held, renaming nothing", () => {
+    const r = report(
+      {
+        usernames: [
+          { username: "plucky-avocet", claimedAt: 1 },
+          { username: "openai-build", claimedAt: 2 },
+          { username: "openaibuild", claimedAt: 3 },
+          { username: "a--b", claimedAt: 4 },
+          { username: "official", claimedAt: 5 },
+        ],
+        names: [{ display: "p1ucky-avocet", state: "live", username: "dave" }],
+        codes: [{ code: "x7k2p9", username: "dave", retired: false }],
+      },
+      ["official", "admin"],
+    );
+    expect(r.invalid).toEqual([{ username: "a--b", problem: "hyphens" }]);
+    expect(r.duplicates.map((d) => [d.key, d.keeps.name, d.without.name])).toEqual([
+      ["openaibuild", "openai-build", "openaibuild"],
+      ["pluckyavocet", "plucky-avocet", "p1ucky-avocet"],
     ]);
-    expect(format(found, { usernames: 3, names: 2, codes: 2 }).join("\n")).toContain("voi.ci/bob-smith");
-    expect(format([], { usernames: 3, names: 0, codes: 0 }).join("\n")).toContain("No collisions");
+    expect(r.reservedHeld).toEqual([{ word: "official", heldBy: { kind: "username", name: "official", owner: "official" } }]);
+    const text = format(r).join("\n");
+    expect(text).toContain("openai-build keeps it");
+    expect(format(report({ usernames: [{ username: "solar-guava", claimedAt: 1 }], names: [], codes: [] }, ["admin"])).join("\n")).toContain("No safety-key duplicates");
   });
 });

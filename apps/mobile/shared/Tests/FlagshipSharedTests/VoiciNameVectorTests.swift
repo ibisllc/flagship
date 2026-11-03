@@ -85,6 +85,7 @@ final class VoiciNameVectorTests: XCTestCase {
             case "too-short": expected = .tooShort
             case "too-long": expected = .tooLong
             case "characters": expected = .characters
+            case "hyphens": expected = .hyphens
             default: expected = nil
             }
             XCTAssertEqual(VoiciName.problem(typed), expected, typed)

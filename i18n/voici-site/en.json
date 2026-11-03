@@ -63,6 +63,14 @@
     "en": "Check the address and try again.",
     "ctx": "voici-site/app.js:158"
   },
+  "This link was removed.": {
+    "en": "This link was removed.",
+    "ctx": "voici-site/app.js:162"
+  },
+  "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": {
+    "en": "It doesn't lead anywhere any more. Ask whoever shared it for a new one.",
+    "ctx": "voici-site/app.js:162"
+  },
   "Visitor {0}": {
     "en": "Visitor {0}",
     "ctx": "voici-site/messages.js:18"

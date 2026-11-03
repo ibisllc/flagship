@@ -7,7 +7,8 @@ import FlagshipAPI
 /// `packages/protocol/test-vectors/voici-name/`). A service always keeps its
 /// random code; an admin may give it ONE readable name on top. The order that
 /// sets or clears it is signed with the sensitive-order key: the admin root
-/// when this device holds one, else the account IRK.
+/// when this device holds one, else the account IRK. The name rules (`VoiciName`)
+/// live in FlagshipAPI, so the client's username checks use them too.
 public struct VoiciNameOrder: Equatable, Sendable {
     public static let tag = "flagship/voici-name/v1"
 
@@ -84,38 +85,5 @@ public struct VoiciNameOrder: Equatable, Sendable {
 
     private static func isLowerHex(_ s: String, bytes: Int) -> Bool {
         s.count == bytes * 2 && s.unicodeScalars.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
-    }
-}
-
-/// The name rules a client checks before asking `.com` (which stays the
-/// authority on what is taken, reserved or held for a .com owner).
-public enum VoiciName {
-    /// Shortest (hyphens left out) and longest (hyphens counted) a name may be.
-    public static let minLength = 4
-    public static let maxLength = 40
-
-    public enum Problem: Equatable, Sendable {
-        case tooShort
-        case tooLong
-        case characters
-    }
-
-    /// `characters` covers anything but `a-z 0-9 -` and a leading, trailing or
-    /// doubled hyphen. Upper case is folded, not refused.
-    public static func problem(_ typed: String) -> Problem? {
-        let name = typed.lowercased()
-        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
-        let valid = parts.allSatisfy { part in
-            !part.isEmpty && part.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) }
-        }
-        if !valid { return .characters }
-        if name.count > maxLength { return .tooLong }
-        if name.replacingOccurrences(of: "-", with: "").count < minLength { return .tooShort }
-        return nil
-    }
-
-    /// The key two names are compared by: lower case, hyphens removed.
-    public static func key(_ typed: String) -> String {
-        typed.lowercased().replacingOccurrences(of: "-", with: "")
     }
 }

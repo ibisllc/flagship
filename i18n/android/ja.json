@@ -2560,11 +2560,11 @@
   "only_an_admin_device_can_change_this": "変更できるのは管理者のデバイスだけです",
   "next_change": "次に変更できる日時：%1$s",
   "letters_numbers_and_hyphens_only": "使えるのは英数字とハイフンだけです",
-  "at_least_4_characters": "4文字以上",
-  "at_most_40_characters": "40文字以内",
+  "at_least_3_characters": "3文字以上",
+  "at_most_63_characters": "63文字以内",
+  "no_hyphen_at_the_start_or_end_or_two_in_a_row": "先頭と末尾にハイフンは使えず、2つ続けることもできません",
   "all_names_in_use": "%1$s 個の名前をすべて使用中です",
-  "reserved": "予約済み",
-  "taken": "使用済み",
+  "taken_or_too_similar_to_an_existing_name": "使用済みか、既存の名前に似すぎています",
   "reserved_for_the_owner_of": "%1$s の所有者用に予約されています",
   "couldnt_check_try_again": "%1$s を確認できませんでした。もう一度お試しください。",
   "too_many_changes_today": "今日の変更回数が上限に達しました",
@@ -3415,5 +3415,8 @@
   "access_list_host_without_port": "ホスト名のみを書いてください（ポートは不要）",
   "access_list_wildcard_only_first": "* はホストの先頭にのみ使えます（例：*.example.com）",
   "access_list_localhost_not_public": "「localhost」は公開ホスト名ではありません",
-  "access_list_not_a_valid_host": "「%1$s」は有効なホスト名ではありません"
+  "access_list_not_a_valid_host": "「%1$s」は有効なホスト名ではありません",
+  "provision_quiet_installer_finished": "インストーラーが終了しました。サーバーは起動中で、数分以内に登録されるはずです。",
+  "provision_quiet_stuck": "このサーバーからの報告が止まり、登録もされていません。停止している可能性があります。",
+  "provision_quiet_stuck_advice": "Flagship Studio で動かしている場合は、そちらで確認してください。そうでなければ、マシンを再起動してください。それでも起動しない場合は、注文をキャンセルしてサーバーを作成し直してください。"
 }

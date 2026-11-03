@@ -7,19 +7,21 @@ import {
 
 // Two DISTINCT rules, enforced here as the authoritative source of truth:
 //
-//   - USERNAME (strict): /^[a-z0-9]{3,30}$/ + reserved-word check. No
-//     hyphens — usernames compose into the app id `<creator>-<slug>`, so
-//     a hyphen inside one would make the split ambiguous.
+//   - USERNAME: the voi.ci namespace format (docs/voici-namespace-spec.md D12):
+//     3–63 of a-z 0-9 -, no leading, trailing or double hyphen (`--` is the
+//     `<creator>--<slug>` delimiter), + the reserved words of reservedNames.json
+//     and their look-alikes (same safety key).
 //   - SERVER NAME (loose): RFC-1123 DNS label /^[a-z0-9]([a-z0-9-]{0,61}
 //     [a-z0-9])?$/ + a small reserved set. Interior hyphens are SAFE here
 //     (server names never mix with app-names), so `media-server` is fine.
 
-describe("validateUserLabel — strict, 3–30, dashless", () => {
+describe("validateUserLabel — D12: 3–63, single interior dashes", () => {
   it("accepts lowercase alphanumeric handles in range", () => {
     expect(validateUserLabel("harry").ok).toBe(true);
     expect(validateUserLabel("abc").ok).toBe(true); // min length 3
     expect(validateUserLabel("media2").ok).toBe(true);
-    expect(validateUserLabel("a".repeat(30)).ok).toBe(true); // max length 30
+    expect(validateUserLabel("a".repeat(63)).ok).toBe(true); // max length 63
+    expect(validateUserLabel("50cent").ok).toBe(true); // may start with a digit (D5)
   });
 
   it("normalizes case to lowercase", () => {
@@ -34,9 +36,8 @@ describe("validateUserLabel — strict, 3–30, dashless", () => {
     expect(validateUserLabel("ab").ok).toBe(false);
   });
 
-  it("rejects too-long labels (> 30)", () => {
-    expect(validateUserLabel("a".repeat(31)).ok).toBe(false);
-    expect(validateUserLabel("a".repeat(63)).ok).toBe(false);
+  it("rejects too-long labels (> 63)", () => {
+    expect(validateUserLabel("a".repeat(64)).ok).toBe(false);
   });
 
   it("accepts interior single dashes; rejects leading/trailing and `--`", () => {
@@ -64,6 +65,9 @@ describe("validateUserLabel — strict, 3–30, dashless", () => {
     expect(validateUserLabel("admin").ok).toBe(false);
     expect(validateUserLabel("flagship").ok).toBe(false);
     expect(validateUserLabel("support").ok).toBe(false);
+    // Look-alikes of a reserved word (D9): hyphens removed, 0 read as o, 1 as l.
+    expect(validateUserLabel("ad-min").ok).toBe(false);
+    expect(validateUserLabel("supp0rt").ok).toBe(false);
   });
 
   it("reserves the relay mesh's labels tunnel and lb as account names (relay-mesh.md §2)", () => {

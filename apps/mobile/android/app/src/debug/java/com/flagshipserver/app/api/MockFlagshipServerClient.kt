@@ -248,11 +248,11 @@ class MockFlagshipServerClient(
                 demoServer = demoBlock,
             )
         }
-        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase chars,
+        // Mirrors the Worker's username format (docs/voici-namespace-spec.md D12): 3–63 lowercase chars,
         // interior single dashes OK, no leading/trailing dash, and no `--` (the
         // `<slug>--<creator>` delimiter — docs/service-addressing-double-dash.md).
-        if (lower.length < 3 || lower.length > 30) {
-            return UsernameAvailabilityResponse(lower, false, "Must be 3–30 chars.", demoServer = demoBlock)
+        if (lower.length < 3 || lower.length > 63) {
+            return UsernameAvailabilityResponse(lower, false, "Must be 3–63 chars.", demoServer = demoBlock)
         }
         if (lower in reservedUsernames) {
             return UsernameAvailabilityResponse(lower, false, "Reserved.", demoServer = demoBlock)

@@ -1,3 +1,4 @@
+import type { NameRegistryStorage } from "./names.js";
 /**
  * Pure interfaces for the .com control-plane stores. Two implementations:
  *   - InMemory (this package), used by tests and for dev runs.
@@ -203,6 +204,12 @@ export interface UsernameAliasStorage {
 }
 
 export interface UsernameStorage {
+  /**
+   * Claim (or re-claim, same IRK) the account name. The name's `username` row in the names registry is inserted in
+   * the same transaction (docs/voici-namespace-spec.md): `{ ok: false, reason: "taken" }` when its safety key is
+   * already blocked (another account, a link name, a code, a reserved word, a held name) or the name belongs to
+   * another IRK.
+   */
   put(rec: UsernameRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   get(username: string): Promise<UsernameRecord | undefined>;
   list(): Promise<UsernameRecord[]>;
@@ -297,14 +304,12 @@ export interface UsernameStorage {
    */
   touchLastActive(username: string, atMs: number): Promise<boolean>;
   /**
-   * Account-deletion (§1) — HARD-DELETE the username row so the name
-   * becomes immediately claimable again (no grace; the deliberate
-   * deletion ceremony already gated it behind typed-username + biometric +
-   * last-device enforcement). Idempotent: deleting an absent row returns
-   * false. The caller (handleAccountSelfDelete) tears down the account's
-   * servers + purges related records around this call.
+   * Account-deletion (§1) — delete the username row and, in the same transaction, hold the account's names in the
+   * registry for GRACE (30 days: nobody can claim them, the old owner included) and retire its link names and codes
+   * for good. Idempotent: deleting an absent row returns false. The caller (handleAccountSelfDelete) tears down the
+   * account's servers + purges related records around this call.
    */
-  delete(username: string): Promise<boolean>;
+  delete(username: string, at?: number): Promise<boolean>;
 }
 
 export interface AuthCodeStorage {
@@ -1593,7 +1598,7 @@ export interface UserServiceAliasStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// voi.ci short-link table (migration 0019)
+// voi.ci codes and custom link names: rows of the names registry (migration 0127, names.ts)
 // ──────────────────────────────────────────────────────────────────────
 
 export interface VoiciLinkRecord {
@@ -1605,17 +1610,19 @@ export interface VoiciLinkRecord {
   createdAt: number;
   /** Optional soft TTL. NULL on service-bound links; set on one-offs. */
   expiresAt?: number;
-  /** Set when the service was deleted: the code answers 410 for good and is never minted again. */
+  /** Set when the code was retired (its service or account deleted): it answers 410 for good and is never minted again. */
   retiredAt?: number;
 }
 
-export type VoiciNameState = "live" | "waiting";
+/** A custom name is live, or retired: it answers 410 and blocks its look-alikes for good (D7). */
+export type VoiciNameState = "live" | "retired";
 export type VoiciNameReleaseReason = "replaced" | "cleared" | "lapsed" | "deleted";
 
-/** A custom voi.ci name (docs/named-links.md), keyed by the name without hyphens. */
+/** A custom voi.ci name (docs/named-links.md): a `link` row of the names registry. */
 export interface VoiciNameRecord {
+  /** The name itself (lower case, hyphens kept), as in the URL. */
   key: string;
-  /** The name as typed (lower case, hyphens kept). */
+  /** The same as `key` (kept for the apps' wire shape). */
   display: string;
   username: string;
   serviceId: string;
@@ -1630,20 +1637,19 @@ export interface VoiciNameRecord {
 }
 
 export interface VoiciNameStorage {
-  get(key: string): Promise<VoiciNameRecord | undefined>;
+  /** The live or retired name, by its exact name. */
+  get(name: string): Promise<VoiciNameRecord | undefined>;
   /** The live name of a service, if it has one. */
   getLiveByService(username: string, serviceId: string): Promise<VoiciNameRecord | undefined>;
   listLive(username: string): Promise<VoiciNameRecord[]>;
   countLive(username: string): Promise<number>;
-  /** Take a free key. "taken" when any row (live or waiting) holds it. */
+  /** One INSERT into the registry: "taken" when anything blocks the name's safety key. */
   claim(rec: VoiciNameRecord): Promise<{ ok: true } | { ok: false; reason: "taken" }>;
-  /** Live → waiting for the service's name. Undefined when it has none. Pass `key` when the
+  /** Live → retired for the service's name. Undefined when it has none. Pass `key` (the name) when the
    *  service briefly holds two live names (a replace claims the new one first). */
   release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string): Promise<VoiciNameRecord | undefined>;
-  /** Release every live name of the account (account deleted). */
+  /** Retire every live name of the account (account deleted). */
   releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number): Promise<number>;
-  /** Delete the waiting names whose wait ended at or before `before`: they are free. */
-  deleteWaitingReleasedBefore(before: number): Promise<number>;
   /** A page of live names in key order, for the lapse job (offset wraps in the caller). */
   listLivePage(offset: number, limit: number): Promise<VoiciNameRecord[]>;
   countAllLive(): Promise<number>;
@@ -1659,8 +1665,8 @@ export interface VoiciNameStorage {
 }
 
 export interface VoiciLinkStorage {
-  /** Mint a fresh row. Collision on `code` returns ok=false so the
-   *  caller can pick another short code. */
+  /** Claim a fresh code in the registry. A taken safety key returns ok=false so the
+   *  caller can mint another code. */
   insert(rec: VoiciLinkRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** Redirect-path lookup. */
   get(code: string): Promise<VoiciLinkRecord | undefined>;
@@ -1671,15 +1677,13 @@ export interface VoiciLinkStorage {
    *  (defensive); undefined if no service-bound short link has been
    *  minted. */
   getByService(username: string, serviceId: string): Promise<VoiciLinkRecord | undefined>;
-  /** Cascade-delete on service rename / uninstall. Returns count deleted. */
-  deleteByService(username: string, serviceId: string): Promise<number>;
   /** The service was deleted: keep the row so the code answers 410 and is
    *  never handed out again. Returns how many rows were retired. */
   retireByService(username: string, serviceId: string, at: number): Promise<number>;
   /** The account was deleted: retire every service-bound code it holds. */
   retireAllForUser(username: string, at: number): Promise<number>;
-  /** Periodic GC for expired one-offs. */
-  deleteExpired(before: number): Promise<number>;
+  /** Expired one-offs are retired (never deleted: a code is never reused, D7). */
+  retireExpired(before: number): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1849,6 +1853,8 @@ export interface NameDibsClaimStorage {
 }
 
 export interface Storage {
+  /** The one registry of voi.ci paths (names.ts, migration 0127). */
+  names: NameRegistryStorage;
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
   suggestionQueue: SuggestionQueueStorage;

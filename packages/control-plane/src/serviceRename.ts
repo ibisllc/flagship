@@ -22,6 +22,7 @@
 import {
   verifyServiceRename,
   deriveUrlFragment,
+  isVoiciName,
   parseServiceId,
   type ServiceRename,
 } from "@flagship/protocol";
@@ -54,10 +55,10 @@ export interface ServiceRenameDeps {
   usernames: UsernameStorage;
   userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
-  /** Custom names: a minted code never equals one. Also feeds `link` on the links read. */
+  /** Custom names: feeds `link` on the links read. (A minted code never collides with anything: the names registry.) */
   voiciNames?: VoiciNameStorage;
-  /** voi.ci pages: a minted code never equals a username's key (docs/voici-and-messages.md §4.1). */
-  voici?: VoiciDeps["voici"];
+  /** CODE_LENGTH (D3), from `.com`'s VOICI_CODE_LENGTH. */
+  codeLength?: number;
   /** With [voiciNames]: the plan that sets how many names the account may hold. */
   tiers?: TierStorage;
   servers: ServerStorage;
@@ -79,7 +80,7 @@ export interface ServiceRenameDeps {
   shortHost?: string;
 }
 
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // no hyphens — see labels.ts
+const USERNAME_RE = { test: (u: string) => isVoiciName(u) }; // the D12 format (labels.ts)
 const DNS_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 const RESERVED_LABELS = new Set([
   "www", "api", "admin", "root", "mail", "smtp", "imap", "pop", "ftp",
@@ -190,10 +191,9 @@ export async function handleServiceRename(
         {
           usernames: deps.usernames,
           voiciLinks: deps.voiciLinks,
-          voiciNames: deps.voiciNames,
-          voici: deps.voici,
           now: deps.now,
           shortHost: deps.shortHost,
+          ...(deps.codeLength ? { codeLength: deps.codeLength } : {}),
         } satisfies VoiciDeps,
         { username: u, serviceId: r.serviceId, targetUrl: newCanonical },
       );
@@ -309,9 +309,9 @@ export async function handleGetAppLinks(
 
   const { canonicalUrl, instances, hasServer } = await appHome(deps, u, serviceId, displayLabel);
 
-  // V4 — Active app-bound short link via the new getByService index.
-  // handleServiceRename cascade-deletes prior rows before minting the
-  // new one, so at most ONE row should match. If no row exists
+  // V4 — Active app-bound short link via the getByService index. The code
+  // is permanent while the service lives (docs/named-links.md), so at most
+  // ONE active row should match. If no row exists
   // (newly installed app that hasn't been renamed), lazy-mint
   // against the canonical so the first /links call already returns
   // a shareable voi.ci/<code>.
@@ -322,9 +322,9 @@ export async function handleGetAppLinks(
       {
         usernames: deps.usernames,
         voiciLinks: deps.voiciLinks,
-        voici: deps.voici,
         now: deps.now,
         shortHost: deps.shortHost,
+        ...(deps.codeLength ? { codeLength: deps.codeLength } : {}),
       } satisfies VoiciDeps,
       { username: u, serviceId, targetUrl: canonicalUrl },
     );

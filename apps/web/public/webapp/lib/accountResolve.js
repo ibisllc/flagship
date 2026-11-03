@@ -49,10 +49,8 @@ import { throwIfRateLimited } from "./rateLimited.js";
 import { generateDeviceId } from "./accountMetadata.js";
 
 import { tr } from "./i18n.js";
-/** Login field is a bare handle: 3–30 lowercase letters/digits, interior single
- *  dashes OK (no leading/trailing), no dots, no `--`. Mirror of control-plane
- *  labels.ts (docs/service-addressing-double-dash.md). */
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+// The login field is a bare handle in the voi.ci namespace format (docs/voici-namespace-spec.md D12).
+import { isValidName } from "./nameRules.js";
 
 /** A locally-synthesized `unknown` resolution. We never have to call the
  *  network for an obviously-invalid handle, and we still render a STATE
@@ -79,11 +77,7 @@ function localUnknown(username) {
  *  @returns {boolean}
  */
 export function isBareLoginHandle(username) {
-  return (
-    typeof username === "string" &&
-    USERNAME_RE.test(username) &&
-    !username.includes("--")
-  );
+  return isValidName(username);
 }
 
 /** GET `/api/account/resolve/<username>` — the login/join preflight.

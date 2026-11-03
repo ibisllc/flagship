@@ -16,7 +16,7 @@ import { getSession } from "../lib/state.js";
 import { humanError } from "../lib/humanError.js";
 import { toast } from "../lib/toast.js";
 import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
-import { PROVISION_PHASE_TITLES, renderProgressDetail, renderSetupStopped } from "../lib/provisionProgress.js";
+import { PROVISION_PHASE_TITLES, PROVISION_QUIET_COPY, provisionQuiet, renderProgressDetail, renderSetupStopped, renderStuckAdvice } from "../lib/provisionProgress.js";
 import { clearPendingRck } from "../lib/pendingRck.js";
 import { controlApex } from "../lib/apex.js";
 import { noteServerSeen } from "../lib/studioConfirm.js";
@@ -30,6 +30,8 @@ const MAX_REMEMBERED = 20;
 
 let currentOrder = null;
 let statusTimer = null;
+/** The last status painted, so each poll re-judges a quiet box even when no new status arrives. */
+let lastPainted = null;
 
 function clearStatusPoll() {
   if (statusTimer) {
@@ -84,18 +86,23 @@ export function enterPendingServer(order) {
     cancel.disabled = false;
     cancel.textContent = tr("Cancel order");
   }
-  paint(currentOrder.phase ?? null, currentOrder.detail ?? null);
+  lastPainted = null;
+  paint(currentOrder.phase ?? null, currentOrder.detail ?? null, currentOrder.updatedAt ?? null);
   show("view-pending-server");
   void poll(currentOrder);
 }
 
-function paint(phase, detail) {
+function paint(phase, detail, updatedAt = null) {
+  lastPainted = { phase, detail, updatedAt };
+  const quiet = provisionQuiet(phase, updatedAt, Date.now());
   const note = $("pending-server-note");
   if (note) {
     note.textContent = phase
       ? phase === "error"
         ? tr("Setup stopped")
-        : PROVISION_PHASE_TITLES[phase] || phase
+        : quiet !== "none"
+          ? PROVISION_QUIET_COPY[quiet]
+          : PROVISION_PHASE_TITLES[phase] || phase
       : tr("Waiting for the server to start. Write the recipe to a USB stick with Flagship Studio, then boot the server from it.");
   }
   const progress = $("pending-server-progress");
@@ -104,7 +111,9 @@ function paint(phase, detail) {
       renderProgressDetail({
         phase,
         lastError: phase === "error" ? detail || "" : undefined,
+        quiet,
       }) +
+      (quiet === "stuck" ? renderStuckAdvice() : "") +
       (phase === "error" ? renderSetupStopped({ serial: currentOrder?.serial, step: detail }) : "");
     $("setup-stopped-start-again")?.addEventListener("click", () => {
       runCancel({ startAgain: true }).catch((e) => toast(humanError(e), "err"));
@@ -124,6 +133,7 @@ async function readStatus(order) {
     return {
       phase: typeof body?.phase === "string" ? body.phase : null,
       detail: typeof body?.detail === "string" ? body.detail : null,
+      updatedAt: typeof body?.updatedAt === "number" ? body.updatedAt : null,
     };
   }
   const username = getSession().username;
@@ -155,7 +165,8 @@ async function poll(order) {
     await enterHome();
     return;
   }
-  if (status) paint(status.phase, status.detail);
+  if (status) paint(status.phase, status.detail, status.updatedAt ?? null);
+  else if (lastPainted) paint(lastPainted.phase, lastPainted.detail, lastPainted.updatedAt);
   if (status?.phase && TERMINAL_PHASES.has(status.phase)) return;
   statusTimer = setTimeout(() => void poll(order), POLL_INTERVAL_MS);
 }

@@ -40,7 +40,7 @@ import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterVetting } from "./adapterVetting.js";
-import { runVoiciNamesCron } from "./voiciNamesCron.js";
+import { runNamesCron, runVoiciNamesCron } from "./voiciNamesCron.js";
 import { runAdapterInsights } from "./adapterInsights.js";
 import { runRelayDirectoryCron, type RelayDirectoryEnv } from "./relayDirectory.js";
 import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
@@ -175,6 +175,8 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runVoiciGcCron(env, now);
     case "relay-directory":
       return runRelayDirectoryCron(env as unknown as RelayDirectoryEnv, now);
+    case "names":
+      return runNamesCron(env, now);
   }
 }
 
@@ -236,6 +238,7 @@ export async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Prom
   await replenishSuggestionQueue({
     queue: storage.suggestionQueue,
     usernames: storage.usernames,
+    names: storage.names,
     comExists: (name) => comDomainExists(name, f),
     now: nowMs,
     // Each attempt is a D1 read and a DoH lookup (two subrequests): a cold queue

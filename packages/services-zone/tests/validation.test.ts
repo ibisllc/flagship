@@ -52,11 +52,11 @@ describe("validateUserLabel", () => {
     expect(validateUserLabel("HARRY!").ok).toBe(false);
   });
 
-  it("enforces the 3–30 length range", () => {
+  it("enforces the 3–63 length range (docs/voici-namespace-spec.md D12)", () => {
     expect(validateUserLabel("ab").ok).toBe(false); // too short (< 3)
     expect(validateUserLabel("abc").ok).toBe(true); // min
-    expect(validateUserLabel("a".repeat(30)).ok).toBe(true); // max
-    expect(validateUserLabel("a".repeat(31)).ok).toBe(false); // too long (> 30)
+    expect(validateUserLabel("a".repeat(63)).ok).toBe(true); // max
+    expect(validateUserLabel("a".repeat(64)).ok).toBe(false); // too long (> 63)
   });
 
   it("rejects reserved usernames so users can't shadow control-plane endpoints", () => {

@@ -479,14 +479,6 @@
     "en": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:39"
   },
-  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": {
-    "en": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:40"
-  },
-  "The disk is sealed — approve the unlock on your phone.": {
-    "en": "The disk is sealed — approve the unlock on your phone.",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:41"
-  },
   "Library/Application Support": {
     "en": "Library/Application Support",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:79"
@@ -1008,5 +1000,34 @@
     "en": "Beta",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift (StudioVersion.label, looked up at run time)",
     "manual": true
+  },
+  "Starting…": {
+    "en": "Starting…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift: sealed-state label"
+  },
+  "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.": {
+    "en": "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift: AwaitingUnlockCopy"
+  },
+  "Starting. When your phone asks, approve the unlock there.": {
+    "en": "Starting. When your phone asks, approve the unlock there.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift: AwaitingUnlockCopy"
+  },
+  "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.": {
+    "en": "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift: AwaitingUnlockCopy"
+  },
+  "Setup didn't finish": {
+    "en": "Setup didn't finish",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift: label when the install never registered the server"
+  },
+  "Unlocking…": {
+    "en": "Unlocking…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift: label while a sealed disk unlocks itself"
+  },
+  "VM %@: the installer stopped before the server registered (last checkpoint: %@); its disk has nothing to ask your phone": {
+    "en": "VM %@: the installer stopped before the server registered (last checkpoint: %@); its disk has nothing to ask your phone",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift: Studio log line",
+    "translatable": false
   }
 }

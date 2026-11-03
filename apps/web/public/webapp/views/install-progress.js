@@ -15,6 +15,7 @@ import { humanError } from "../lib/humanError.js";
 import {
   PROVISION_PHASE_TITLES,
   renderProgressDetail,
+  provisionQuiet,
 } from "../lib/provisionProgress.js";
 import { controlApex } from "../lib/apex.js";
 
@@ -52,6 +53,7 @@ function render() {
   const block = {
     phase: latest.phase,
     lastError: latest.phase === "error" ? latest.detail || "" : undefined,
+    quiet: provisionQuiet(latest.phase, latest.updatedAt, Date.now()),
   };
   const title = PROVISION_PHASE_TITLES[latest.phase] || latest.phase;
   const domain = latest.serverDomain

@@ -2676,11 +2676,7 @@
   "Only an admin device can change this": "25debfae8ae5",
   "Next change %@": "98ced117641d",
   "Letters, numbers and hyphens only": "854baf11d0c7",
-  "At least 4 characters": "5685e404ef55",
-  "At most 40 characters": "025c4cc5e7c8",
   "All %lld names in use": "9afcfaa933db",
-  "Reserved": "aa2eee54ec5a",
-  "Taken": "8c75f00d8c09",
   "Reserved for the owner of %@": "c905ed528305",
   "Couldn't check %@. Try again.": "7045bb955911",
   "Too many changes today": "8e2a14fa27e4",
@@ -3160,5 +3156,12 @@
   "Google push": "4994548bba11",
   "Every device on the account needs its post-quantum key before strict comes back.": "100d152f2bbc",
   "Test your recovery before turning strict on again.": "edef890f3589",
-  "Email": "0b57e967ff55"
+  "Email": "0b57e967ff55",
+  "Taken or too similar to an existing name": "43e22903b06d",
+  "At least 3 characters": "740c105312ad",
+  "At most 63 characters": "905bce7ee823",
+  "No hyphen at the start or end, or two in a row": "432338d9f4a9",
+  "The installer finished. The server is starting and should register in a few minutes.": "52a8ea882f62",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "02b65179ff38",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "f062e170ac2e"
 }

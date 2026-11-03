@@ -63,6 +63,7 @@ import {
   signVoiciMessageReport,
   signVoiciPageIndex,
   signVoiciPieceUpload,
+  signVoiciShorten,
   signVoiciThreadStatement,
   signWebDelegation,
   signWebDelegationRevoke,
@@ -276,7 +277,7 @@ interface Visitor {
 export const voici: Group = {
   name: "voici",
   title:
-    "voi.ci pages + Messages: publish with the admin phone online (direct draft + ack) and offline (draft lane), the real site in headless Chromium, a mailbox and a direct-to-phone round trip with flagship-web as the browser, reply alerts, first-contact limit, block, report → open-tag → ban, the revoke rule, CORS, takedown",
+    "voi.ci pages + Messages: one namespace (canonical 301s, /@ for people only, codes, one 404, /-/), publish with the admin phone online (direct draft + ack) and offline (draft lane), the real site in headless Chromium, a mailbox and a direct-to-phone round trip with flagship-web as the browser, reply alerts, first-contact limit, block, report → open-tag → ban, the revoke rule, CORS, takedown",
   needs: [],
   phase: 10.7,
   parallel: false,
@@ -473,6 +474,35 @@ export const voici: Group = {
         return `seq 1, ${published!.pieces.length} pieces; shell 200 with CSP; /@u 301; a repeated seq 409 seq-conflict; files index ${files.status}`;
       });
       if (!pub1) return;
+
+      // ── one namespace (docs/voici-namespace-spec.md) ──────────────────────────────────────────────────────────
+      await rec.check("one namespace: T1 capitals and a trailing slash 301 to voi.ci/<u>; T7 /@<u> 301s to it; a code minted for O redirects but /@<code> is a 404 (T10, D10); a reserved word, an unknown name and /@<unknown> are the same 404 shell; the site lives under /-/ (D11) and /_/ is gone", async () => {
+        const upper = await http(`${VOICI_ORIGIN}/${user.toUpperCase()}/`);
+        assert(upper.status === 301 && upper.headers.get("location") === `/${user}`, `/${user.toUpperCase()}/ ${upper.status} ${upper.headers.get("location")}`);
+        const at = await http(`${VOICI_ORIGIN}/@${user}`);
+        assert(at.status === 301 && at.headers.get("location") === `/${user}`, `/@${user} ${at.status} ${at.headers.get("location")}`);
+        // A one-off code (IRK-signed shorten): a digit first, CODE_LENGTH 6 (D2, D3); it 302s, and /@ never names it.
+        const target = `${API}/`;
+        const req = { username: user, targetUrl: target, issuedAt: Date.now() };
+        const minted = await postJson(`${API}/api/voici/shorten`, { request: req, signature: bytesToHex(signVoiciShorten(req, owner.keys.irk)) });
+        assert(minted.status === 200, `shorten ${minted.status} ${short(minted.text)}`);
+        const code = String(minted.json?.code ?? "");
+        assert(/^[0-9][0-9a-z]{5}$/.test(code), `minted code ${code}`);
+        const hit = await http(`${VOICI_ORIGIN}/${code}`);
+        assert(hit.status === 302 && hit.headers.get("location") === target, `/${code} ${hit.status} ${hit.headers.get("location")}`);
+        const atCode = await http(`${VOICI_ORIGIN}/@${code}`);
+        assert(atCode.status === 404, `/@${code} ${atCode.status}`);
+        const nobody = `nobody-${randomBytes(4).toString("hex")}`;
+        for (const p of ["/admin", `/${nobody}`, `/@${nobody}`]) {
+          const r = await http(`${VOICI_ORIGIN}${p}`);
+          assert(r.status === 404 && /name="voici-status" content="404"/.test(r.text), `${p} ${r.status}`);
+        }
+        const about = await http(`${VOICI_ORIGIN}/-/about`);
+        assert(about.status === 200 && /<html/i.test(about.text), `/-/about ${about.status}`);
+        const old = await http(`${VOICI_ORIGIN}/_/about`);
+        assert(old.status === 404, `/_/about ${old.status}`);
+        return `301 to /${user} for capitals, a trailing slash and /@; code ${code} 302s, /@${code} 404; reserved and unknown 404 with the site's 404 shell; /-/about 200, /_/about 404`;
+      });
 
       filesCors = await rec.check("files.voi.ci answers the site's origin with CORS (the R2 rule; without it the site can't read a page)", async () => {
         const r = await tryHttp(`${FILES_ORIGIN}/v1/u/${user}.json`, { headers: { origin: VOICI_ORIGIN } });

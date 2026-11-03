@@ -280,12 +280,12 @@ function splitStatements(sql: string): string[] {
  * a manual `--file` re-run is safe iff the runner treats these specific
  * errors as no-ops. The harness encodes exactly that policy.
  */
-export function applyAllMigrations(db: DatabaseSync): {
+export function applyAllMigrations(db: DatabaseSync, only: (file: string) => boolean = () => true): {
   applied: string[];
   toleratedNoOps: { file: string; error: string }[];
 } {
   const files = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => /^\d{4}_.*\.sql$/.test(f))
+    .filter((f) => /^\d{4}_.*\.sql$/.test(f) && only(f))
     .sort();
   const toleratedNoOps: { file: string; error: string }[] = [];
   for (const file of files) {
@@ -318,13 +318,15 @@ export function createSqliteD1(
   /** A database file that already has the schema (the CPU harness seeds
    *  wrangler's local D1 this way); the default is a fresh in-memory one. */
   existingFile?: string,
+  /** Which migration files to apply to a fresh database (all by default). */
+  only?: (file: string) => boolean,
 ): SqliteD1 {
   const raw = new DatabaseSync(existingFile ?? ":memory:");
   // Match D1: enforce FK + UNIQUE semantics (D1 has FKs on by default).
   raw.exec("PRAGMA foreign_keys = ON;");
   const { toleratedNoOps } = existingFile
     ? { toleratedNoOps: [] as { file: string; error: string }[] }
-    : applyAllMigrations(raw);
+    : applyAllMigrations(raw, only);
   return {
     raw,
     toleratedNoOps,

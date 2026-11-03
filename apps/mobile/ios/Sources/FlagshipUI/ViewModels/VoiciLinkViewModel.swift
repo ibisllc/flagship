@@ -135,15 +135,8 @@ public final class VoiciLinkViewModel {
             return VoiciLinkMessage(tone: .bad, text: String(localized: "Next change \(when)"))
         }
         if typed == current || typed.isEmpty { return VoiciLinkMessage() }
-        switch VoiciName.problem(typed) {
-        case .characters:
-            return VoiciLinkMessage(tone: .bad, text: String(localized: "Letters, numbers and hyphens only"))
-        case .tooShort:
-            return VoiciLinkMessage(tone: .bad, text: String(localized: "At least 4 characters"))
-        case .tooLong:
-            return VoiciLinkMessage(tone: .bad, text: String(localized: "At most 40 characters"))
-        case nil:
-            break
+        if let problem = VoiciName.problem(typed) {
+            return VoiciLinkMessage(tone: .bad, text: NameRuleText.problem(problem))
         }
         if link.held >= link.limit && link.name == nil {
             return VoiciLinkMessage(tone: .bad, text: String(localized: "All \(link.limit) names in use"), action: .freeUp)
@@ -155,11 +148,10 @@ public final class VoiciLinkViewModel {
         case "current":
             return VoiciLinkMessage()
         case "invalid":
-            return VoiciLinkMessage(tone: .bad, text: String(localized: "Letters, numbers and hyphens only"))
-        case "reserved":
-            return VoiciLinkMessage(tone: .bad, text: String(localized: "Reserved"))
-        case "taken":
-            return VoiciLinkMessage(tone: .bad, text: String(localized: "Taken"))
+            return VoiciLinkMessage(tone: .bad, text: NameRuleText.problem(code: check.problem))
+        case "reserved", "taken":
+            // A reserved word is a row of `.com`'s names registry: the same answer as any taken name.
+            return VoiciLinkMessage(tone: .bad, text: NameRuleText.taken)
         case "dibs":
             let domain = check.domain ?? ""
             return VoiciLinkMessage(tone: .info, text: String(localized: "Reserved for the owner of \(domain)"), action: .dibs)
@@ -171,9 +163,8 @@ public final class VoiciLinkViewModel {
     /// The sentence for a refusal from the save call.
     public nonisolated static func refusalMessage(_ e: VoiciNameError, typed: String, formatDate: (Int64) -> String = VoiciLinkViewModel.formatDate) -> String {
         switch e.code {
-        case "taken": return String(localized: "Taken")
-        case "reserved": return String(localized: "Reserved")
-        case "invalid": return String(localized: "Letters, numbers and hyphens only")
+        case "taken", "reserved": return NameRuleText.taken
+        case "invalid": return NameRuleText.problem(code: e.problem)
         case "dibs":
             let domain = e.domain ?? ""
             return String(localized: "Reserved for the owner of \(domain)")

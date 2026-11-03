@@ -4,7 +4,7 @@
 // moment, a peer hello (so the sign-in sheet shows its code). Same CSP as production, adapted to localhost.
 //
 //   node apps/voici-site/build.mjs && node apps/voici-site/dev/serve.mjs [--port 4173]
-//   then open http://127.0.0.1:4173/alice  (also /bruno, /cora, /nobody, /_/about)
+//   then open http://127.0.0.1:4173/alice  (also /bruno, /cora, /nobody, /-/about)
 //
 // startDevServer({port, images}) is what dev/screenshots.mjs (and a headless gym run) call.
 import { createHash } from "node:crypto";
@@ -121,5 +121,5 @@ export function startDevServer({ port = 4173, images = {} } = {}) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const i = process.argv.indexOf("--port");
   const port = i > 0 ? Number(process.argv[i + 1]) : 4173;
-  startDevServer({ port }).then(({ origin }) => console.log(`voi.ci preview: ${origin}/alice  ${origin}/bruno  ${origin}/cora  ${origin}/_/about`));
+  startDevServer({ port }).then(({ origin }) => console.log(`voi.ci preview: ${origin}/alice  ${origin}/bruno  ${origin}/cora  ${origin}/-/about`));
 }

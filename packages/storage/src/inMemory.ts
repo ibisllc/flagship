@@ -3,6 +3,7 @@ import { InMemoryServerOrderStorage } from "./serverOrders.js";
 import { InMemoryServerBootKeyStorage } from "./serverBootKeys.js";
 import { InMemoryPqTrustStorage } from "./pqTrust.js";
 import { InMemoryVoiciStorage } from "./voici.js";
+import { InMemoryNameRegistryStorage, type NameRecord } from "./names.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import type {
   SchemaVersionRecord,
@@ -138,11 +139,17 @@ import type {
 
 export class InMemoryUsernameStorage implements UsernameStorage {
   private byName = new Map<string, UsernameRecord>();
+  /** The names registry this store claims in (shared with the link and code stores by InMemoryStorage). */
+  constructor(readonly names: InMemoryNameRegistryStorage = new InMemoryNameRegistryStorage()) {}
   async put(rec: UsernameRecord) {
     const norm = rec.username.toLowerCase();
     const existing = this.byName.get(norm);
-    if (existing && existing.irkPubHex !== rec.irkPubHex) {
-      return { ok: false as const, reason: "username already claimed" };
+    if (existing && existing.irkPubHex.toLowerCase() !== rec.irkPubHex.toLowerCase()) {
+      return { ok: false as const, reason: "taken" };
+    }
+    const own = this.names.rows.some((r) => r.kind === "username" && r.name === norm && r.owner === norm && r.status === "active");
+    if (!own && !this.names.claim({ name: norm, kind: "username", owner: norm, at: rec.claimedAt }).ok) {
+      return { ok: false as const, reason: "taken" };
     }
     // A re-claim (same IRK) must not silently clear an already-set
     // demo flag: only an explicit isDemo on the incoming record, or
@@ -285,8 +292,16 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     this.byName.set(norm, { ...r, lastActive: atMs });
     return true;
   }
-  async delete(username: string) {
-    return this.byName.delete(username.toLowerCase());
+  async delete(username: string, at = Date.now()) {
+    const u = username.toLowerCase();
+    this.names.accountGone(u, at);
+    return this.byName.delete(u);
+  }
+  /** Demo teardown (an operator's, not a person's): the name is released at once. */
+  demoGone(username: string, at = Date.now()) {
+    const u = username.toLowerCase();
+    this.names.demoGone(u, at);
+    return this.byName.delete(u);
   }
 }
 
@@ -1903,34 +1918,50 @@ export class InMemoryUserServiceAliasStorage implements UserServiceAliasStorage 
   }
 }
 
+/** Codes: `code` rows of the shared names registry. */
 export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
-  private rows = new Map<string, VoiciLinkRecord>();
+  constructor(readonly names: InMemoryNameRegistryStorage = new InMemoryNameRegistryStorage()) {}
+  private static rec(r: NameRecord): VoiciLinkRecord {
+    return {
+      code: r.name,
+      username: r.owner ?? "",
+      ...(r.serviceId ? { serviceId: r.serviceId } : {}),
+      targetUrl: r.target ?? "",
+      createdAt: r.createdAt,
+      ...(r.expiresAt !== null ? { expiresAt: r.expiresAt } : {}),
+      ...(r.status === "retired" ? { retiredAt: r.statusChangedAt } : {}),
+    };
+  }
   async insert(rec: VoiciLinkRecord) {
-    if (this.rows.has(rec.code)) return { ok: false as const, reason: "code already taken" };
-    this.rows.set(rec.code, { ...rec, username: rec.username.toLowerCase() });
-    return { ok: true as const };
+    const claimed = this.names.claim({
+      name: rec.code,
+      kind: "code",
+      owner: rec.username.toLowerCase(),
+      serviceId: rec.serviceId ?? null,
+      target: rec.targetUrl,
+      expiresAt: rec.expiresAt ?? null,
+      at: rec.createdAt,
+    });
+    return claimed.ok ? { ok: true as const } : { ok: false as const, reason: "code already taken" };
   }
   async get(code: string) {
-    const r = this.rows.get(code);
-    return r ? { ...r } : undefined;
+    const r = this.names.live("code").find((x) => x.name === code);
+    return r ? InMemoryVoiciLinkStorage.rec(r) : undefined;
   }
   async getByService(username: string, serviceId: string) {
     const u = username.toLowerCase();
     // Most-recently created wins on (defensively) duplicate rows.
-    let pick: VoiciLinkRecord | undefined;
-    for (const r of this.rows.values()) {
-      if (r.username === u && r.serviceId === serviceId && r.retiredAt === undefined) {
-        if (!pick || r.createdAt > pick.createdAt) pick = r;
-      }
+    let pick: NameRecord | undefined;
+    for (const r of this.names.live("code")) {
+      if (r.owner === u && r.serviceId === serviceId && r.status === "active" && (!pick || r.createdAt >= pick.createdAt)) pick = r;
     }
-    return pick ? { ...pick } : undefined;
+    return pick ? InMemoryVoiciLinkStorage.rec(pick) : undefined;
   }
-  async deleteByService(username: string, serviceId: string) {
-    const u = username.toLowerCase();
+  private retireWhere(at: number, reason: string, pred: (r: NameRecord) => boolean) {
     let n = 0;
-    for (const [code, r] of this.rows) {
-      if (r.username === u && r.serviceId === serviceId) {
-        this.rows.delete(code);
+    for (const r of this.names.live("code")) {
+      if (r.status === "active" && pred(r)) {
+        Object.assign(r, { status: "retired", reason, statusChangedAt: at });
         n++;
       }
     }
@@ -1938,117 +1969,102 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
   }
   async retireByService(username: string, serviceId: string, at: number) {
     const u = username.toLowerCase();
-    let n = 0;
-    for (const r of this.rows.values()) {
-      if (r.username === u && r.serviceId === serviceId && r.retiredAt === undefined) {
-        r.retiredAt = at;
-        n++;
-      }
-    }
-    return n;
+    return this.retireWhere(at, "deleted", (r) => r.owner === u && r.serviceId === serviceId);
   }
   async retireAllForUser(username: string, at: number) {
     const u = username.toLowerCase();
-    let n = 0;
-    for (const r of this.rows.values()) {
-      if (r.username === u && r.serviceId !== undefined && r.retiredAt === undefined) {
-        r.retiredAt = at;
-        n++;
-      }
-    }
-    return n;
+    return this.retireWhere(at, "deleted", (r) => r.owner === u && r.serviceId !== null);
   }
-  async deleteExpired(before: number) {
-    let n = 0;
-    for (const [code, r] of this.rows) {
-      if (r.expiresAt !== undefined && r.expiresAt <= before) {
-        this.rows.delete(code);
-        n++;
-      }
-    }
-    return n;
+  async retireExpired(before: number) {
+    return this.retireWhere(before, "expired", (r) => r.expiresAt !== null && r.expiresAt <= before);
   }
 }
 
+/** Custom link names: `link` rows of the shared names registry; the change log is kept here. */
 export class InMemoryVoiciNameStorage implements VoiciNameStorage {
-  private rows = new Map<string, VoiciNameRecord>();
   private changes: Array<{ username: string; serviceId: string; at: number; nonce: string }> = [];
-  async get(key: string) {
-    const r = this.rows.get(key);
-    return r ? { ...r } : undefined;
+  constructor(readonly names: InMemoryNameRegistryStorage = new InMemoryNameRegistryStorage()) {}
+  private static rec(r: NameRecord): VoiciNameRecord {
+    return {
+      key: r.name,
+      display: r.name,
+      username: r.owner ?? "",
+      serviceId: r.serviceId ?? "",
+      state: r.status === "active" ? "live" : "retired",
+      setAt: r.createdAt,
+      lastActiveAt: r.lastActiveAt ?? r.createdAt,
+      warned: r.warned,
+      ...(r.status === "retired" ? { releasedAt: r.statusChangedAt } : {}),
+      ...(r.status === "retired" && r.reason ? { releaseReason: r.reason as VoiciNameReleaseReason } : {}),
+    };
+  }
+  private liveRows(): NameRecord[] {
+    return this.names.live("link").filter((r) => r.status === "active");
+  }
+  async get(name: string) {
+    const r = this.names.live("link").find((x) => x.name === name);
+    return r ? InMemoryVoiciNameStorage.rec(r) : undefined;
   }
   async getLiveByService(username: string, serviceId: string) {
     const u = username.toLowerCase();
-    for (const r of this.rows.values()) if (r.username === u && r.serviceId === serviceId && r.state === "live") return { ...r };
-    return undefined;
+    const r = this.liveRows().find((x) => x.owner === u && x.serviceId === serviceId);
+    return r ? InMemoryVoiciNameStorage.rec(r) : undefined;
   }
   async listLive(username: string) {
     const u = username.toLowerCase();
-    return [...this.rows.values()].filter((r) => r.username === u && r.state === "live").sort((a, b) => a.setAt - b.setAt).map((r) => ({ ...r }));
+    return this.liveRows()
+      .filter((r) => r.owner === u)
+      .sort((a, b) => a.createdAt - b.createdAt || a.id - b.id)
+      .map(InMemoryVoiciNameStorage.rec);
   }
   async countLive(username: string) {
     return (await this.listLive(username)).length;
   }
   async claim(rec: VoiciNameRecord) {
-    if (this.rows.has(rec.key)) return { ok: false as const, reason: "taken" as const };
-    this.rows.set(rec.key, { ...rec, username: rec.username.toLowerCase(), state: "live", warned: 0 });
-    return { ok: true as const };
+    const claimed = this.names.claim({
+      name: rec.display.toLowerCase(),
+      kind: "link",
+      owner: rec.username.toLowerCase(),
+      serviceId: rec.serviceId,
+      lastActiveAt: rec.lastActiveAt,
+      at: rec.setAt,
+    });
+    return claimed.ok ? { ok: true as const } : { ok: false as const, reason: "taken" as const };
   }
   async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string) {
     const u = username.toLowerCase();
-    for (const r of this.rows.values()) {
-      if (r.username === u && r.serviceId === serviceId && r.state === "live" && (key === undefined || r.key === key)) {
-        r.state = "waiting";
-        r.releasedAt = at;
-        r.releaseReason = reason;
-        return { ...r };
-      }
-    }
-    return undefined;
+    const r = this.liveRows().find((x) => x.owner === u && x.serviceId === serviceId && (key === undefined || x.name === key));
+    if (!r) return undefined;
+    Object.assign(r, { status: "retired", reason, statusChangedAt: at });
+    return InMemoryVoiciNameStorage.rec(r);
   }
   async releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number) {
     const u = username.toLowerCase();
     let n = 0;
-    for (const r of this.rows.values()) {
-      if (r.username === u && r.state === "live") {
-        r.state = "waiting";
-        r.releasedAt = at;
-        r.releaseReason = reason;
-        n++;
-      }
-    }
-    return n;
-  }
-  async deleteWaitingReleasedBefore(before: number) {
-    let n = 0;
-    for (const [k, r] of this.rows) {
-      if (r.state === "waiting" && r.releasedAt !== undefined && r.releasedAt <= before) {
-        this.rows.delete(k);
+    for (const r of this.liveRows()) {
+      if (r.owner === u) {
+        Object.assign(r, { status: "retired", reason, statusChangedAt: at });
         n++;
       }
     }
     return n;
   }
   async listLivePage(offset: number, limit: number) {
-    return [...this.rows.values()]
-      .filter((r) => r.state === "live")
-      .sort((a, b) => (a.key < b.key ? -1 : 1))
+    return this.liveRows()
+      .sort((a, b) => (a.name < b.name ? -1 : 1))
       .slice(offset, offset + limit)
-      .map((r) => ({ ...r }));
+      .map(InMemoryVoiciNameStorage.rec);
   }
   async countAllLive() {
-    return [...this.rows.values()].filter((r) => r.state === "live").length;
+    return this.liveRows().length;
   }
   async markActive(key: string, at: number) {
-    const r = this.rows.get(key);
-    if (r && r.state === "live") {
-      r.lastActiveAt = at;
-      r.warned = 0;
-    }
+    const r = this.liveRows().find((x) => x.name === key);
+    if (r) Object.assign(r, { lastActiveAt: at, warned: 0 });
   }
   async setWarned(key: string, warned: number) {
-    const r = this.rows.get(key);
-    if (r && r.state === "live") r.warned = warned;
+    const r = this.liveRows().find((x) => x.name === key);
+    if (r) r.warned = warned;
   }
   async recordChange(username: string, serviceId: string, at: number, nonce: string) {
     this.changes.push({ username: username.toLowerCase(), serviceId, at, nonce });
@@ -2319,7 +2335,8 @@ export class InMemoryDemoAccountProvisioningStorage implements DemoAccountProvis
     const row = await this.demos.get(username);
     if (!row || row.idempotencyKey !== idempotencyKey) return false;
     await this.demos.delete(username);
-    await this.usernames.delete(username);
+    if (this.usernames instanceof InMemoryUsernameStorage) this.usernames.demoGone(username);
+    else await this.usernames.delete(username);
     return true;
   }
 }
@@ -2418,7 +2435,8 @@ export class InMemoryDeviceCapabilityGrantStorage
 }
 
 export class InMemoryStorage implements Storage {
-  usernames = new InMemoryUsernameStorage();
+  names = new InMemoryNameRegistryStorage();
+  usernames = new InMemoryUsernameStorage(this.names);
   schemaVersion = new InMemorySchemaVersionStorage();
   suggestionQueue = new InMemorySuggestionQueueStorage();
   suggestThrottle = new InMemorySuggestThrottleStorage();
@@ -2456,8 +2474,8 @@ export class InMemoryStorage implements Storage {
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
   userIdentity = new InMemoryUserIdentityRecordStorage();
   userServiceAliases = new InMemoryUserServiceAliasStorage();
-  voiciLinks = new InMemoryVoiciLinkStorage();
-  voiciNames = new InMemoryVoiciNameStorage();
+  voiciLinks = new InMemoryVoiciLinkStorage(this.names);
+  voiciNames = new InMemoryVoiciNameStorage(this.names);
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
@@ -2483,7 +2501,7 @@ export class InMemoryStorage implements Storage {
   serverOrders = new InMemoryServerOrderStorage();
   serverBootKeys = new InMemoryServerBootKeyStorage();
   pqTrust = new InMemoryPqTrustStorage();
-  voici = new InMemoryVoiciStorage(this.usernames);
+  voici = new InMemoryVoiciStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

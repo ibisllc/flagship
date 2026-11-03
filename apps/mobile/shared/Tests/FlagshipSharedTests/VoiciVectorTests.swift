@@ -95,7 +95,6 @@ final class VoiciVectorTests: XCTestCase {
             XCTAssertEqual(try VoiciText.voiciPseudonymName(S.s(c["pub"])), S.s(c["name"]))
         }
         XCTAssertThrowsError(try VoiciText.voiciPseudonymCode("AB"))
-        for c in S.a(v["namespaceKeys"]) { XCTAssertEqual(VoiciPage.voiciNamespaceKey(S.s(c["name"])), S.s(c["key"])) }
         for c in S.a(v["jpegs"]) {
             XCTAssertEqual(c["isJpeg"], .bool(VoiciPage.isVoiciJpeg(S.h(c["hex"]))), S.s(c["name"]))
             XCTAssertEqual(c["hasMetadata"], .bool(VoiciPage.voiciJpegHasMetadata(S.h(c["hex"]))), S.s(c["name"]))

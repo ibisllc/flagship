@@ -4,12 +4,10 @@
  *
  * Two distinct label classes:
  *
- *   - **Username (creator + host):** `[a-z0-9]{3,30}` — dashless. The
- *     dash that separates `<slug>-<creator>` in app URLs is unambiguous
- *     only if usernames cannot contain dashes; the URL parser splits on
- *     the last dash to pull out `<creator>`. Usernames are short
- *     human-chosen handles where most people don't need dashes; the
- *     small UX cost is worth the parse simplicity.
+ *   - **Username (creator + host):** 3–63 of `[a-z0-9-]`, single interior
+ *     dashes only (docs/voici-namespace-spec.md D12). The `--` that joins
+ *     `<slug>--<creator>` in app URLs stays unambiguous because a username
+ *     never contains `--` (docs/service-addressing-double-dash.md).
  *
  *   - **App slug:** `[a-z0-9-]{1,32}` — dashes allowed but no leading,
  *     trailing, or doubled dashes. Slugs are routinely multi-word
@@ -23,10 +21,10 @@
  * can't claim "api" and shadow flagshipserver.com routes), plus a small
  * list of names commonly mistaken for system endpoints.
  */
-// Canonical username rule (mirror of control-plane labels.ts): lower
-// alphanumerics only, no hyphens, 3–30 chars. Hyphen-free usernames
-// keep `<creator>-<slug>` app ids unambiguous.
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+// Canonical username rule (mirror of control-plane labels.ts, the voi.ci namespace format of
+// docs/voici-namespace-spec.md D12): 3–63 of a-z 0-9 -, no leading, trailing or double hyphen
+// (`--` is the `<creator>--<slug>` delimiter); a name may start with a digit.
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const SLUG_RE = /^[a-z0-9](-?[a-z0-9])*$/;
 const SLUG_MAX = 32;
 /** Legacy DNS label regex retained for callers that do raw subdomain validation. */
@@ -110,7 +108,7 @@ export function validateUserLabel(input: string): LabelValidation {
   if (!USERNAME_RE.test(norm) || norm.includes("--")) {
     return {
       ok: false,
-      reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash — `--` is the slug-creator separator)",
+      reason: "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash — `--` is the slug-creator separator)",
     };
   }
   if (RESERVED_USER_LABELS.has(norm)) {

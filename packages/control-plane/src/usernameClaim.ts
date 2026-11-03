@@ -1,10 +1,17 @@
-import { verifyClaimUsername, type ClaimUsername } from "@flagship/protocol";
-import type { UsernameStorage, UsernameOfferStorage, VoiciLinkStorage, VoiciNameStorage } from "@flagship/storage";
+import { verifyClaimUsername, voiciNameProblem, type ClaimUsername } from "@flagship/protocol";
+import type { UsernameStorage, UsernameOfferStorage } from "@flagship/storage";
 import { HEX128, HEX64, hexToBytes, bytesToHex } from "./hex.js";
-import { validateUserLabel } from "./labels.js";
-import { conflict, forbidden, malformed, notFound, ok } from "./types.js";
+import { isReservedName } from "./labels.js";
+import { forbidden, malformed, notFound, ok } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
-import { usernameCollidesWithVoici } from "./voiciPages.js";
+
+/**
+ * The claim refusals (docs/voici-namespace-spec.md, Validation). The apps write the sentence from `code`:
+ * `taken` — "taken or too similar to an existing name" (one answer for another account, a link name, a code, a
+ * reserved word or a held name, so a refusal says nothing more); `invalid` with `problem` (too-short, too-long,
+ * characters, hyphens) — the specific format message.
+ */
+export const USERNAME_TAKEN = { status: 409, body: { error: "taken or too similar to an existing name", code: "taken" } } as const;
 
 /** How long a suggested name stays claimable (docs/username-suggestion-queue.md).
  *  Generous vs. an actual sign-up (seconds–minutes) so a slow one isn't blocked. */
@@ -24,9 +31,6 @@ export interface UsernameClaimDeps {
   bypassOfferGate?: boolean;
   freshnessMs?: number;
   now?: () => number;
-  /** One namespace on voi.ci (docs/voici-and-messages.md §4.1): a name whose key is a link name's or a code's is taken. */
-  voiciLinks?: Pick<VoiciLinkStorage, "get">;
-  voiciNames?: Pick<VoiciNameStorage, "get">;
 }
 
 export interface UsernameClaimBody {
@@ -85,14 +89,10 @@ export async function handleUsernameClaim(
   if (!verifyClaimUsername(claim, sig, irkPub)) return forbidden("invalid signature");
   if (Math.abs(now - r.issuedAt) > freshnessMs) return forbidden("stale request");
 
-  const v = validateUserLabel(r.username);
-  if (!v.ok) return malformed(v.reason);
-  if (await usernameCollidesWithVoici(deps, v.label)) {
-    const existing = await deps.storage.get(v.label);
-    if (!existing || existing.irkPubHex.toLowerCase() !== bytesToHex(irkPub).toLowerCase()) {
-      return { status: 409, body: { error: "that name is taken", code: "taken" } };
-    }
-  }
+  const problem = voiciNameProblem(r.username);
+  if (problem) return { status: 400, body: { error: "not a valid username", code: "invalid", problem } };
+  const v = { label: r.username.toLowerCase() };
+  if (isReservedName(v.label)) return { ...USERNAME_TAKEN };
 
   // Roster gate — a username is claimable ONLY if the server recently SUGGESTED
   // it (so the generator's not-claimed + not-.com vetting is what gates claims).
@@ -134,7 +134,8 @@ export async function handleUsernameClaim(
     ...(aidPubHex ? { aidPubHex } : {}),
     ...(adminRootPubHex ? { adminRootPubHex } : {}),
   });
-  if (!out.ok) return conflict(out.reason);
+  // The registry insert inside put() is the collision check (one source of truth): refused = taken or too similar.
+  if (!out.ok) return { ...USERNAME_TAKEN };
   // Claimed — retire the offer so the roster stays small + a name can't be
   // "re-claimed off-roster" by a different key later.
   if (deps.offers) await deps.offers.consume(v.label);

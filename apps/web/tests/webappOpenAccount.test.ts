@@ -54,7 +54,9 @@ describe("webapp account bootstrap", () => {
     expect(isValidUsername("demo--alice")).toBe(false);
     expect(isValidUsername("Alice")).toBe(false);
     expect(isValidUsername("ab")).toBe(false);
-    expect(isValidUsername("a".repeat(31))).toBe(false);
+    expect(isValidUsername("a".repeat(63))).toBe(true);
+    expect(isValidUsername("a".repeat(64))).toBe(false);
+    expect(isValidUsername("50cent")).toBe(true);
   });
 
   it("publishes identity and encrypted profiles in one request", async () => {

@@ -9,33 +9,50 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 object VoiciName {
     const val CANONICAL_TAG = "flagship/voici-name/v1"
     const val OP_SET = "set"
     const val OP_CLEAR = "clear"
 
-    /** Shortest and longest a name may be, as typed (hyphens included). */
-    const val MIN = 4
-    const val MAX = 40
+    /** Shortest and longest a username or link name may be, hyphens included (docs/voici-namespace-spec.md D12). */
+    const val MIN = 3
+    const val MAX = 63
 
-    enum class Problem { TooShort, TooLong, Characters }
+    /** Wire names: too-short, too-long, characters, hyphens. */
+    enum class Problem(val wire: String) { TooShort("too-short"), TooLong("too-long"), Characters("characters"), Hyphens("hyphens");
+        companion object { fun of(wire: String?): Problem? = entries.firstOrNull { it.wire == wire } }
+    }
 
-    private val GRAMMAR = Regex("^[a-z0-9]+(-[a-z0-9]+)*$")
+    private val CHARS = Regex("^[a-z0-9-]*$")
 
     /**
-     * What a client can check alone. Upper case is folded, not refused. The length
-     * that counts for "too short" is the one without hyphens (`a-b-c-d` is `abcd`).
+     * What a client can check alone, for a username or a custom link name (one format, D12). Upper case is folded,
+     * not refused. Checked in this order: characters, then hyphens, then length (hyphens counted).
      */
     fun problem(typed: String): Problem? {
         val name = typed.lowercase()
-        if (!GRAMMAR.matches(name)) return Problem.Characters
+        if (!CHARS.matches(name)) return Problem.Characters
+        if (name.startsWith("-") || name.endsWith("-") || "--" in name) return Problem.Hyphens
+        if (name.length < MIN) return Problem.TooShort
         if (name.length > MAX) return Problem.TooLong
-        if (name.replace("-", "").length < MIN) return Problem.TooShort
         return null
     }
 
-    /** The key two names are compared by: lower case, hyphens removed. */
-    fun key(typed: String): String = typed.lowercase().replace("-", "")
+    /** The format message for a username or link name, the same words on every platform. */
+    fun problemText(p: Problem): String = when (p) {
+        Problem.Characters -> FSStrings.get(R.string.letters_numbers_and_hyphens_only)
+        Problem.Hyphens -> FSStrings.get(R.string.no_hyphen_at_the_start_or_end_or_two_in_a_row)
+        Problem.TooShort -> FSStrings.get(R.string.at_least_3_characters)
+        Problem.TooLong -> FSStrings.get(R.string.at_most_63_characters)
+    }
+
+    /** `.com`'s one answer for a name that is taken, held, reserved or a look-alike of one (D9): nothing more is said. */
+    fun takenText(): String = FSStrings.get(R.string.taken_or_too_similar_to_an_existing_name)
+
+    /** The safety key every claim is unique on (D9): lower case, hyphens removed, 0 read as o, 1 as l. */
+    fun key(typed: String): String = typed.lowercase().replace("-", "").replace('0', 'o').replace('1', 'l')
 
     private fun field(label: String, v: String) {
         require(v.none { it == '|' || it.code < 0x20 || it.code == 0x7f }) { "bad $label" }

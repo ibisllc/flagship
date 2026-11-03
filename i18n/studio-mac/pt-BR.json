@@ -119,8 +119,6 @@
   "Waiting for an installer checkpoint": "Aguardando um ponto de verificação do instalador",
   "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.": "Está demorando mais que o esperado — a caixa pode não ter chegado à rede ou pode estar esperando você aprovar o desbloqueio no celular. Verifique se ela está online, ou desligue e tente de novo.",
   "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.": "Desbloqueando o disco com a chave que o seu celular deixou. Se o celular pedir aprovação, aprove nele.",
-  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": "O disco está selado — aprove o primeiro desbloqueio no celular. Depois disso ele deve desbloquear sozinho; se o celular pedir de novo, aprove nele.",
-  "The disk is sealed — approve the unlock on your phone.": "O disco está selado — aprove o desbloqueio no celular.",
   "Library/Application Support": "Library/Application Support",
   "The app quit while the install was running.": "O app foi encerrado enquanto a instalação rodava.",
   "Hosting Flagship servers for the internet": "Hospedando servidores Flagship para a internet",
@@ -219,5 +217,11 @@
   "The image could not be handed to the helper.": "Não foi possível entregar a imagem ao assistente.",
   "The helper would not accept that disk.": "O assistente não aceitou esse disco.",
   "Couldn't unmount the disk: %@": "Não foi possível desmontar o disco: %@",
-  "Beta": "Beta"
+  "Beta": "Beta",
+  "Starting…": "Iniciando…",
+  "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.": "Iniciando. Quando o celular pedir, aprove nele o primeiro desbloqueio deste servidor. Depois disso ele deve desbloquear sozinho; se o celular pedir de novo, aprove nele.",
+  "Starting. When your phone asks, approve the unlock there.": "Iniciando. Quando o celular pedir, aprove nele o desbloqueio.",
+  "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.": "O instalador terminou, mas este servidor nunca se registrou, então não há nada para aprovar. Exclua-o no Studio e crie-o de novo pelo celular.",
+  "Setup didn't finish": "A configuração não terminou",
+  "Unlocking…": "Desbloqueando…"
 }

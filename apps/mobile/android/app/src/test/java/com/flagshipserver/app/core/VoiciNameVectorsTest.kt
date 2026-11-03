@@ -86,6 +86,7 @@ class VoiciNameVectorsTest {
                 VoiciName.Problem.TooShort -> "too-short"
                 VoiciName.Problem.TooLong -> "too-long"
                 VoiciName.Problem.Characters -> "characters"
+                VoiciName.Problem.Hyphens -> "hyphens"
             }
             val want = n["problem"]
             assertEquals("problem for '$typed'", if (want is JsonNull) null else (want as JsonPrimitive).content, problem)

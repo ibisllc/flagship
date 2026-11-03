@@ -37,6 +37,8 @@ data class VoiciNameCheck(
     val status: String,
     val domain: String? = null,
     val until: Long? = null,
+    /** With status "invalid": too-short, too-long, characters or hyphens. */
+    val problem: String? = null,
 )
 
 /** One live custom name of the account, for the "Free one up" list. */

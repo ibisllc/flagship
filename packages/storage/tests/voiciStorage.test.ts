@@ -194,12 +194,10 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
     }
   });
 
-  it("finds a username by its hyphen-less key and deletes an account's voi.ci state", async () => {
+  it("deletes an account's voi.ci state", async () => {
     const { s, done } = fresh(adapter);
     try {
       await s.usernames.put({ username: "plucky-avocet", irkPubHex: "11".repeat(32), claimedAt: 1 });
-      expect(await s.voici.usernameWithKey("pluckyavocet")).toBe("plucky-avocet");
-      expect(await s.voici.usernameWithKey("plucky")).toBeNull();
       await s.voici.publishPage(page(1), 0);
       await s.voici.putPiece({ pageId: PAGE, sha256: H(1), username: "alice", size: 1, jpeg: false, uploadedAt: 1, unreferencedAt: null });
       await s.voici.insertMessage(msg("a".repeat(64), "01".repeat(16)));

@@ -20,7 +20,7 @@
  *
  * Exported API: TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES, VoiciTheme, VoiciProfile,
  * VoiciProfileLink, VoiciPost, VoiciPostLink, VoiciCard, VoiciChunk, VoiciPieceRef, VoiciPageIndexBody,
- * VoiciPageIndex, VoiciSignerKind, voiciNamespaceKey, isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile,
+ * VoiciPageIndex, VoiciSignerKind, isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile,
  * parseVoiciProfilePiece, parseVoiciPost, parseVoiciChunkPiece, voiciCardRole, canonicalVoiciPageIndex,
  * signVoiciPageIndex, parseVoiciPageIndex, VoiciPageRefusal, checkVoiciPageIndex, checkVoiciPublish,
  * voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload, VoiciPageState,
@@ -30,7 +30,6 @@ import { hex } from "./canonicalBase.js";
 import { ed } from "./edSync.js";
 import type { Bytes } from "./types.js";
 import type { VoiciDraftOp } from "./voiciMessages.js";
-import { voiciNameKey } from "./voiciName.js";
 import { checkVoiciLinkUrl, checkVoiciText, VOICI_LINK_SITES } from "./voiciText.js";
 import { canonicalJson, ed25519VerifyHex, isLowerHex } from "./webEnvelope.js";
 
@@ -102,11 +101,6 @@ const SITE_IDS = new Set(VOICI_LINK_SITES.map((s) => s.id));
 function exactKeys(r: Record<string, unknown>, keys: string[]): boolean {
   const ks = Object.keys(r);
   return ks.length === keys.length && keys.every((k) => k in r);
-}
-
-/** One namespace with custom link names and codes (§4.1): lowercase, hyphens removed. */
-export function voiciNamespaceKey(name: string): string {
-  return voiciNameKey(name);
 }
 
 export function isVoiciJpeg(b: Bytes): boolean {

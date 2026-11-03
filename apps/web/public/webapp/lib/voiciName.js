@@ -1,9 +1,9 @@
 // Custom voi.ci names for services (docs/named-links.md).
 //
 // A service keeps its random code; an admin may give it one readable name on
-// top. The rules below mirror packages/protocol/src/voiciName.ts byte for byte
-// (pinned by packages/protocol/test-vectors/voici-name/vectors.json); `.com`
-// stays the authority on what is taken, reserved or held for a .com owner.
+// top. The name rules live in nameRules.js (the one format usernames share,
+// docs/voici-namespace-spec.md); `.com` stays the authority on what is taken
+// or held for a .com owner.
 // Setting or clearing a name is a sensitive order: signed with the admin root
 // when this device holds it, else the account key.
 
@@ -15,22 +15,7 @@ import { sensitiveSigner } from "./adminRoot.js";
 const TAG = "flagship/voici-name/v1";
 const enc = (s) => new TextEncoder().encode(s);
 
-export const VOICI_NAME_MIN = 4;
-export const VOICI_NAME_MAX = 40;
-
-/** What a client can check alone: "characters" | "too-long" | "too-short" | null. */
-export function voiciNameProblem(typed) {
-  const name = String(typed).toLowerCase();
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) return "characters";
-  if (name.length > VOICI_NAME_MAX) return "too-long";
-  if (name.replace(/-/g, "").length < VOICI_NAME_MIN) return "too-short";
-  return null;
-}
-
-/** The key two names are compared by: lower case, hyphens removed. */
-export function voiciNameKey(typed) {
-  return String(typed).toLowerCase().replace(/-/g, "");
-}
+export { VOICI_NAME_MIN, VOICI_NAME_MAX, voiciNameProblem, voiciNameKey } from "./nameRules.js";
 
 /** @param {{user:string,serviceId:string,name:string,op:"set"|"clear",issuedAt:number,nonce:string}} o */
 export function canonicalVoiciNameBytes(o) {

@@ -1,19 +1,19 @@
 {
  "v": 1,
  "files": {
-  "app.js": "cbd1e8ab6cabddbfa0e2b18cf920f348d8fa3323540c6d9311479c9ea83011da",
-  "config.js": "80627ed12eff21ebbcfc5bc043da827b95c44f787cd4530cdc549d9854e0960e",
+  "app.js": "b25a70c8746cd735f905652090ad0ae485765402f332372cc28b8b7cc295645f",
+  "config.js": "b91340323a2c78e5c374f1185e5266b8f43b49683452864be5f2d416d5464afb",
   "dom.js": "43c9c817d3066563fb5c695a2bac90d6334357a8d2275f763fc27dcadfa30b6c",
   "favicon.svg": "681d17250cf4c5dd68f3122ec6dc9d8aab8c7d3c83e8318561350ded950d6cf2",
-  "flagship-web/alerts.js": "727c5b49f5b42435d33046c572da45d0b9514414f0487417753792cb518771fa",
+  "flagship-web/alerts.js": "74c73a4375f924c5c1058ebe1513c179d17a43883f84b0a6cb9df4a8b489986d",
   "flagship-web/deliver.js": "0fc10bf537e4ebae2b3b76762fc2d271290fa6f22434736269c8b873593a2e57",
   "flagship-web/envelope.js": "a90463eb195d2eca0366624cd65d42ce730213c29218aece8f9ec5bcdf302cc5",
   "flagship-web/index.js": "34cadabd413b7b22df109a7ec3a51b85e2615d1ff83d5c2af1b47dba4ba8d502",
   "flagship-web/pipeCrypto.js": "8ee6c0ae0029ecadc1d63657b01b606809cab4872b7cfe8d0bb527a55b943f83",
   "flagship-web/proto/lib/voiciCore.js": "80d0b17280dc8bf79d886e387ebde89dc8cc8f4004c437fa202706a8615f1206",
   "flagship-web/proto/lib/voiciMessages.js": "d83297c52a30c86baffa27eab7efc0bcde9e454a66935f0d0eaaaf8877fb9a4e",
-  "flagship-web/proto/lib/voiciPage.js": "72c138bb6ae1040a19af196081bee41a94ecb74048d51581087c24e9439ca42c",
-  "flagship-web/proto/lib/voiciProtocol.js": "626cad2dcff41876fe81740a44ab7df11f28800fd2f6a4f04489c1e0a3b9b528",
+  "flagship-web/proto/lib/voiciPage.js": "da873a9a1c695bfb65a731810ad6ecdf260dd06c786ce3135d8d5050a84672c7",
+  "flagship-web/proto/lib/voiciProtocol.js": "2548209d58d570b240ba88bd1ecbf8b5ca0718bf5d861cb410b4abe93b9d9e6d",
   "flagship-web/proto/lib/voiciText.js": "726c60b64c7e32df130772f37841db26d96ab7ed13c4d46084b602f5a21f1fde",
   "flagship-web/proto/vendor/noble-post-quantum/pq-seal.js": "35bf767792ced7459c9ade5cca7f44bd5eb49b96de8f40b6b4819f10084a4481",
   "flagship-web/signIn.js": "e4234bcf419638d8dc31043f546814651b977c790bb23a6290d56c62b44a8232",
@@ -28,8 +28,8 @@
   "qrEncoder.js": "cfae9ffa8ac1734af8c858ccd2c2c16684e8320434cf3fb461388b860ea4dd11",
   "report.js": "5406c94f1d8c0882cf137c5645dbc57807b16723dabd2134f77786e4ad296ef9",
   "sheet.js": "a875be200121ce81155d5a6ca3a73c933462aa3f751d1ea7069a235d6fbd5736",
-  "strings.js": "b647bae557543ccb0e14e63da245c9e3bd9c65212383bcb67263159ebe497061",
+  "strings.js": "98f69ec0c97cde1f37dc89b72c5301acabd0eeaf1caeb30a187d6c3cc83e9c81",
   "style.css": "40db60548eb97897211a75fe583be5559428fe1e09cb3f089705b0231bf89d88",
-  "sw.js": "f17a68d1a61b61b648b7cdb3c9a09ace5503bdf1628af5060cb9453fc529881e"
+  "sw.js": "7cbe74e17f74c4d6314d9d3fc1997bcb79bdb168239906d46da2f5cc899159e5"
  }
 }

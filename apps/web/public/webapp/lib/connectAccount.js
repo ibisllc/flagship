@@ -6,6 +6,7 @@
 import { parseJoinLink } from "./crossDevicePairing.js";
 
 import { tr } from "./i18n.js";
+import { isValidName } from "./nameRules.js";
 export const CONNECT_TITLE = tr("Connect to an existing account");
 export const CONNECT_NAME_HEADING = tr("Sign in with your account name");
 export const CONNECT_NAME_HELPER = tr("The name you picked when you made the account.");
@@ -46,7 +47,7 @@ export function readPairingField(text) {
   const c = classifyConnectInput(text);
   if (c.kind === "pairing") return { action: "join", link: c.link };
   if (c.kind === "empty") return { action: "none" };
-  if (c.kind === "name" && /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(c.name)) {
+  if (c.kind === "name" && isValidName(c.name)) {
     return { action: "error", error: CONNECT_NAME_IN_CODE };
   }
   if (c.kind === "bad-link") return { action: "error", error: CONNECT_BAD_LINK };

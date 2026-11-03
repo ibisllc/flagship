@@ -119,6 +119,7 @@ import {
   pushRedirection,
   bearer,
   handleVoiciShorten,
+  voiciCodeLength,
   handleGetInstallEvents,
   handleIsoManifest,
   handleGetSealedLuksKey,
@@ -271,6 +272,8 @@ import { PHONE_ROUTE_PREFIX, tryPhoneRouteRoute } from "./phoneRoute.js";
 import { tryIssuanceRoute } from "./certificateIssuance.js";
 
 export interface ControlPlaneEnv {
+  /** CODE_LENGTH for newly minted voi.ci codes (docs/voici-namespace-spec.md D3): 6 by default, can only grow. */
+  VOICI_CODE_LENGTH?: string;
   /**
    * The one-year name-dibs window (docs/naming-recovery-and-name-change.md §7),
    * ISO dates or ms. Both unset (or unparseable) ⇒ dibs is off and every free
@@ -1162,8 +1165,6 @@ export async function tryControlPlane(
           provisioning: storage.accountProvisioning,
           usernames: storage.usernames,
           offers: storage.usernameOffers,
-          voiciLinks: storage.voiciLinks,
-          voiciNames: storage.voiciNames,
         },
         await readJson(request),
       ),
@@ -1195,6 +1196,7 @@ export async function tryControlPlane(
         {
           queue: storage.suggestionQueue,
           usernames: storage.usernames,
+          names: storage.names,
           throttle: storage.suggestThrottle,
           offers: storage.usernameOffers,
         },
@@ -3103,7 +3105,7 @@ export async function tryControlPlane(
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           voiciNames: storage.voiciNames,
-          voici: storage.voici,
+          codeLength: voiciCodeLength(env.VOICI_CODE_LENGTH),
           servers: storage.servers,
           daemonStatus: storage.daemonStatus,
           auditEvents: storage.auditEvents,
@@ -3151,7 +3153,7 @@ export async function tryControlPlane(
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           voiciNames: storage.voiciNames,
-          voici: storage.voici,
+          codeLength: voiciCodeLength(env.VOICI_CODE_LENGTH),
           tiers: storage.tiers,
           servers: storage.servers,
           daemonStatus: storage.daemonStatus,
@@ -3228,7 +3230,7 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.VOICI_SHORTEN.test(path)) {
     return finish(
       await handleVoiciShorten(
-        { usernames: storage.usernames, voiciLinks: storage.voiciLinks },
+        { usernames: storage.usernames, voiciLinks: storage.voiciLinks, codeLength: voiciCodeLength(env.VOICI_CODE_LENGTH) },
         await readJson(request),
       ),
     );
@@ -4053,7 +4055,7 @@ function voiciNamesDeps(storage: D1Storage, env: ControlPlaneEnv) {
     usernames: storage.usernames,
     voiciLinks: storage.voiciLinks,
     voiciNames: storage.voiciNames,
-    voici: storage.voici,
+    names: storage.names,
     tiers: storage.tiers,
     grants: storage.deviceCapabilityGrants,
     auditEvents: storage.auditEvents,

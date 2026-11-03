@@ -106,15 +106,16 @@ describe("/api/username/claim", () => {
     expect(r.statusCode).toBe(403);
   });
 
-  it("rejects reserved usernames (api / admin / git / etc.)", async () => {
+  it("refuses reserved usernames and their look-alikes as taken (api / admin / git / ad-min, docs/voici-namespace-spec.md)", async () => {
     const { app } = makeApp();
-    for (const reserved of ["api", "admin", "git", "console"]) {
+    for (const reserved of ["api", "admin", "git", "console", "ad-min"]) {
       const r = await app.inject({
         method: "POST",
         url: "/api/username/claim",
         payload: buildSignedClaim(reserved),
       });
-      expect(r.statusCode).toBe(400);
+      expect(r.statusCode).toBe(409);
+      expect(r.json()).toMatchObject({ code: "taken" });
     }
   });
 

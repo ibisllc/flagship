@@ -96,5 +96,7 @@
   "The alert only says that they replied, never what they wrote.": "通知には返信があったことだけが表示され、内容は表示されません。",
   "Rules and reports": "ルールと報告",
   "Terms": "利用規約",
-  "Report abuse": "不正利用を報告"
+  "Report abuse": "不正利用を報告",
+  "This link was removed.": "このリンクは削除されました。",
+  "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": "このリンクはもうどこにもつながりません。共有した人に新しいリンクを頼んでください。"
 }

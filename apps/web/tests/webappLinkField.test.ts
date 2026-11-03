@@ -16,13 +16,15 @@ describe("link field messages", () => {
     expect(msg({ typed: "k3j9a2" })).toMatchObject({ text: "", canSave: false });
   });
   it("checks the grammar before asking .com", () => {
-    expect(msg({ typed: "ab" }).text).toBe("At least 4 characters");
+    expect(msg({ typed: "ab" }).text).toBe("At least 3 characters");
     expect(msg({ typed: "a_b_c_d" }).text).toBe("Letters, numbers and hyphens only");
+    expect(msg({ typed: "a--b" }).text).toBe("No hyphen at the start or end, or two in a row");
+    expect(msg({ typed: "a".repeat(64) }).text).toBe("At most 63 characters");
   });
   it("offers Save only for an available name", () => {
     expect(msg({ check: { status: "available" } })).toMatchObject({ tone: "ok", canSave: true });
-    expect(msg({ check: { status: "taken" } })).toMatchObject({ text: "Taken", canSave: false });
-    expect(msg({ check: { status: "reserved" } }).text).toBe("Reserved");
+    expect(msg({ check: { status: "taken" } })).toMatchObject({ text: "Taken or too similar to an existing name", canSave: false });
+    expect(msg({ check: { status: "reserved" } }).text).toBe("Taken or too similar to an existing name");
     expect(msg({ check: { status: "error" } }).text).toBe("Couldn't check halloween. Try again.");
   });
   it("hands a dibs name to the domain proof", () => {
@@ -42,7 +44,8 @@ describe("link field messages", () => {
   });
   it("turns each refusal into one short line", () => {
     const e = (code: string, data = {}) => new VoiciNameError(409, { code, ...data });
-    expect(refusalMessage(e("taken"), "x")).toBe("Taken");
+    expect(refusalMessage(e("taken"), "x")).toBe("Taken or too similar to an existing name");
+    expect(refusalMessage(new VoiciNameError(400, { code: "invalid", problem: "hyphens" }), "x")).toBe("No hyphen at the start or end, or two in a row");
     expect(refusalMessage(e("rate-limited"), "x")).toBe("Too many changes today");
     expect(refusalMessage(e("name-limit", { limit: 25 }), "x")).toBe("All 25 names in use");
   });

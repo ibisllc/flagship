@@ -2560,11 +2560,11 @@
   "only_an_admin_device_can_change_this": "Seul un appareil administrateur peut modifier ceci",
   "next_change": "Prochain changement : %1$s",
   "letters_numbers_and_hyphens_only": "Lettres, chiffres et tirets uniquement",
-  "at_least_4_characters": "Au moins 4 caractères",
-  "at_most_40_characters": "40 caractères au maximum",
+  "at_least_3_characters": "Au moins 3 caractères",
+  "at_most_63_characters": "63 caractères au maximum",
+  "no_hyphen_at_the_start_or_end_or_two_in_a_row": "Pas de trait d'union au début ou à la fin, ni deux à la suite",
   "all_names_in_use": "Les %1$s noms sont utilisés",
-  "reserved": "Réservé",
-  "taken": "Déjà pris",
+  "taken_or_too_similar_to_an_existing_name": "Déjà pris ou trop proche d'un nom existant",
   "reserved_for_the_owner_of": "Réservé au propriétaire de %1$s",
   "couldnt_check_try_again": "Impossible de vérifier %1$s. Réessayez.",
   "too_many_changes_today": "Trop de changements aujourd'hui",
@@ -3415,5 +3415,8 @@
   "access_list_host_without_port": "écrivez uniquement l’hôte, sans port",
   "access_list_wildcard_only_first": "un * ne peut commencer qu’un hôte, comme dans *.example.com",
   "access_list_localhost_not_public": "« localhost » n’est pas un nom d’hôte public",
-  "access_list_not_a_valid_host": "« %1$s » n’est pas un nom d’hôte valide"
+  "access_list_not_a_valid_host": "« %1$s » n’est pas un nom d’hôte valide",
+  "provision_quiet_installer_finished": "L’installation est terminée. Le serveur démarre et devrait s’enregistrer d’ici quelques minutes.",
+  "provision_quiet_stuck": "Ce serveur ne donne plus de nouvelles et ne s’est pas enregistré. Il est peut-être bloqué.",
+  "provision_quiet_stuck_advice": "S’il tourne dans Flagship Studio, regardez-le là. Sinon, redémarrez la machine. S’il ne démarre toujours pas, annulez la commande et recréez le serveur."
 }

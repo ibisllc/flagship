@@ -96,5 +96,7 @@
   "The alert only says that they replied, never what they wrote.": "提醒只会告诉你对方已回复，不会显示回复内容。",
   "Rules and reports": "规则与举报",
   "Terms": "条款",
-  "Report abuse": "举报滥用"
+  "Report abuse": "举报滥用",
+  "This link was removed.": "此链接已被删除。",
+  "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": "它已不再指向任何地方。请向分享它的人索取新的链接。"
 }

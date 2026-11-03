@@ -26,6 +26,15 @@ final class ConnectInputTests: XCTestCase {
         XCTAssertEqual(ConnectInput.readNameField("  Bright-Maple "), .signIn("bright-maple"))
         XCTAssertEqual(ConnectInput.readNameField("@demo"), .signIn("demo"))
         XCTAssertEqual(ConnectInput.readNameField("  "), .none)
+        XCTAssertEqual(ConnectInput.readNameField("50cent"), .signIn("50cent"))
+        XCTAssertEqual(ConnectInput.readNameField(String(repeating: "a", count: 63)), .signIn(String(repeating: "a", count: 63)))
+    }
+
+    func testAMalformedAccountNameSaysWhatIsWrong() {
+        XCTAssertEqual(ConnectInput.readNameField("ab"), .error(NameRuleText.problem(.tooShort)))
+        XCTAssertEqual(ConnectInput.readNameField(String(repeating: "a", count: 64)), .error(NameRuleText.problem(.tooLong)))
+        XCTAssertEqual(ConnectInput.readNameField("bright--maple"), .error(NameRuleText.problem(.hyphens)))
+        XCTAssertEqual(ConnectInput.readNameField("bright_maple"), .error(NameRuleText.problem(.characters)))
     }
 
     func testOtherLinksAreRefusedInASentence() {
@@ -37,6 +46,7 @@ final class ConnectInputTests: XCTestCase {
 
     func testANameInTheCodeFieldPointsAtSignIn() {
         XCTAssertEqual(ConnectInput.readPairingField("bright-maple"), .error(ConnectInput.nameInCode))
+        XCTAssertEqual(ConnectInput.readPairingField("50cent"), .error(ConnectInput.nameInCode))
         XCTAssertEqual(ConnectInput.readPairingField("not a code!"), .error(ConnectInput.notACode))
         XCTAssertEqual(ConnectInput.readPairingField(""), .none)
         for msg in [ConnectInput.routedToJoin, ConnectInput.notACode, ConnectInput.nameInCode, ConnectInput.badLinkMessage, ConnectInput.emptyCode] {

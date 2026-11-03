@@ -109,9 +109,9 @@ final class FlagshipServerClientTests: XCTestCase {
 
     func test_usernameAvailable_acceptsInteriorDashRejectsDoubleDash() async throws {
         // Interior single dashes are now allowed; `--` is the reserved
-        // `<slug>--<creator>` delimiter and must be rejected. Worker's labels.ts
-        // USERNAME_RE is /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/ + a `--` ban — the
-        // iOS Mock must agree (docs/service-addressing-double-dash.md).
+        // `<slug>--<creator>` delimiter and must be rejected. The Worker's labels.ts
+        // uses the voi.ci namespace format (D12: 3–63, no edge or double dash) — the
+        // iOS Mock must agree (docs/voici-namespace-spec.md).
         let c = makeClient()
         let single = try await c.usernameAvailable("play-q2")
         XCTAssertTrue(single.available)
@@ -127,18 +127,23 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertFalse(trail.available)
     }
 
-    func test_usernameAvailable_enforces3to30Length() async throws {
-        // Mirror of validateUserLabel: 3–30 chars. Reason string must
-        // match the Worker byte-for-byte (Mock ↔ Worker wire parity).
+    func test_usernameAvailable_enforces3to63Length() async throws {
+        // Mirror of validateUserLabel (D12): 3–63 chars, a digit may come first.
+        // Reason string must match the Worker byte-for-byte (Mock ↔ Worker wire parity).
         let c = makeClient()
+        let reason = "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)"
         let short = try await c.usernameAvailable("ab")
         XCTAssertFalse(short.available)
-        XCTAssertEqual(short.reason, "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)")
-        let long = try await c.usernameAvailable(String(repeating: "a", count: 31))
+        XCTAssertEqual(short.reason, reason)
+        let long = try await c.usernameAvailable(String(repeating: "a", count: 64))
         XCTAssertFalse(long.available)
-        XCTAssertEqual(long.reason, "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)")
+        XCTAssertEqual(long.reason, reason)
+        let okMax = try await c.usernameAvailable(String(repeating: "a", count: 63))
+        XCTAssertTrue(okMax.available)
         let okMin = try await c.usernameAvailable("abc")
         XCTAssertTrue(okMin.available)
+        let digitFirst = try await c.usernameAvailable("50cent")
+        XCTAssertTrue(digitFirst.available)
     }
 
     // MARK: - Recovery envelope

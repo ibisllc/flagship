@@ -8,8 +8,9 @@ import {
 } from "../src/index.js";
 import type { VoiciLinkStorage, VoiciNameRecord, VoiciNameStorage } from "../src/index.js";
 
-// Parity: the same assertions against the D1 adapter (sqlite + migration 0111)
-// and the in-memory store (docs/named-links.md).
+// Parity: the same assertions against the D1 adapter (sqlite + every migration, so the
+// names registry of 0127) and the in-memory store (docs/named-links.md,
+// docs/voici-namespace-spec.md: a given-up link name is retired for good, D7).
 
 const DAY = 86_400_000;
 const rec = (key: string, username = "fresh-poppy", serviceId = "fresh-poppy--party", at = 1000): VoiciNameRecord => ({
@@ -20,20 +21,23 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
   describe(label, () => {
     afterEach(() => teardown?.());
 
-    it("claim() takes a free key and refuses a held one, live or waiting", async () => {
+    it("claim() takes a free name and refuses it and its look-alikes, live or retired", async () => {
       const s = make();
       expect(await s.claim(rec("halloweenparty"))).toEqual({ ok: true });
       expect(await s.claim(rec("halloweenparty", "rapid-bison", "rapid-bison--x"))).toEqual({ ok: false, reason: "taken" });
+      expect(await s.claim(rec("halloween-party", "rapid-bison", "rapid-bison--x"))).toEqual({ ok: false, reason: "taken" });
+      expect(await s.claim(rec("ha1loweenparty", "rapid-bison", "rapid-bison--x"))).toEqual({ ok: false, reason: "taken" });
       await s.release("fresh-poppy", "fresh-poppy--party", "cleared", 2000);
       expect(await s.claim(rec("halloweenparty", "rapid-bison", "rapid-bison--x"))).toEqual({ ok: false, reason: "taken" });
-      expect((await s.get("halloweenparty"))?.state).toBe("waiting");
+      expect((await s.get("halloweenparty"))?.state).toBe("retired");
+      expect(await s.get("halloween-party")).toBeUndefined();
     });
 
-    it("release() moves a service's live name into its wait and says why", async () => {
+    it("release() retires a service's live name and says why", async () => {
       const s = make();
       await s.claim(rec("halloweenparty"));
       const r = await s.release("fresh-poppy", "fresh-poppy--party", "replaced", 5000);
-      expect(r).toMatchObject({ key: "halloweenparty", state: "waiting", releasedAt: 5000, releaseReason: "replaced" });
+      expect(r).toMatchObject({ key: "halloweenparty", state: "retired", releasedAt: 5000, releaseReason: "replaced" });
       expect(await s.getLiveByService("fresh-poppy", "fresh-poppy--party")).toBeUndefined();
       expect(await s.release("fresh-poppy", "fresh-poppy--party", "cleared", 6000)).toBeUndefined();
     });
@@ -43,20 +47,17 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
       await s.claim(rec("halloweenparty"));
       await s.claim(rec("springparty", "fresh-poppy", "fresh-poppy--party", 2000));
       const r = await s.release("fresh-poppy", "fresh-poppy--party", "replaced", 3000, "halloweenparty");
-      expect(r).toMatchObject({ key: "halloweenparty", state: "waiting" });
+      expect(r).toMatchObject({ key: "halloweenparty", state: "retired" });
       expect((await s.getLiveByService("fresh-poppy", "fresh-poppy--party"))?.key).toBe("springparty");
       expect(await s.release("fresh-poppy", "fresh-poppy--other", "replaced", 3000, "springparty")).toBeUndefined();
     });
 
-    it("deleteWaitingReleasedBefore() frees a name only once its wait is over", async () => {
+    it("a retired name blocks for good, the account that gave it up included (D7)", async () => {
       const s = make();
       await s.claim(rec("halloweenparty"));
       await s.release("fresh-poppy", "fresh-poppy--party", "cleared", 1000);
-      expect(await s.deleteWaitingReleasedBefore(999)).toBe(0);
-      expect(await s.get("halloweenparty")).toBeDefined();
-      expect(await s.deleteWaitingReleasedBefore(1000 + 30 * DAY)).toBe(1);
-      expect(await s.get("halloweenparty")).toBeUndefined();
-      expect(await s.claim(rec("halloweenparty", "rapid-bison", "rapid-bison--x"))).toEqual({ ok: true });
+      expect(await s.claim(rec("halloweenparty", "fresh-poppy", "fresh-poppy--party", 1000 + 400 * DAY))).toEqual({ ok: false, reason: "taken" });
+      expect((await s.get("halloweenparty"))?.state).toBe("retired");
     });
 
     it("countLive() and listLive() count live names only, per account", async () => {
@@ -70,7 +71,7 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
       expect(await s.countAllLive()).toBe(2);
     });
 
-    it("releaseAllForUser() puts every live name of a deleted account into its wait", async () => {
+    it("releaseAllForUser() retires every live name of a deleted account", async () => {
       const s = make();
       await s.claim(rec("aaaa", "fresh-poppy", "fresh-poppy--a"));
       await s.claim(rec("bbbb", "fresh-poppy", "fresh-poppy--b"));

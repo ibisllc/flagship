@@ -372,8 +372,10 @@ async function commitAccountHardDelete(
     }
   }
 
-  // The row delete is the irreversible act — name is claimable again at once.
-  await deps.usernames.delete(username);
+  // The row delete is the irreversible act. In the same transaction the names registry holds the name for 30 days
+  // (nobody may claim it, this account's keys included; then a job releases it to anyone) and retires the account's
+  // link names and codes for good (docs/voici-namespace-spec.md, Lifecycle).
+  await deps.usernames.delete(username, now);
   return { serversTornDown };
 }
 

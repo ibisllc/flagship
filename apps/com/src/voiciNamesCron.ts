@@ -6,7 +6,7 @@
 
 import { parseServiceId } from "@flagship/protocol";
 import { D1Storage } from "@flagship/storage";
-import { recordAuditEvent, runVoiciNamesMaintenance } from "@flagship/control-plane";
+import { recordAuditEvent, runNamesUpkeep, runVoiciNamesMaintenance, type NamesUpkeepResult } from "@flagship/control-plane";
 
 /** Live names looked at per tick. A window that wraps covers every name in turn. */
 export const VOICI_NAMES_PER_TICK = 10;
@@ -80,4 +80,16 @@ export async function runVoiciNamesCron(
       },
     },
   );
+}
+
+/**
+ * The names registry's upkeep (cronPlan.ts "names", every six hours; docs/voici-namespace-spec.md): held usernames
+ * whose 30 days are over are released, and reserved words new in reservedNames.json are added. Two D1 calls when
+ * nothing is new. A reserved word something already holds is left out and logged, to settle by hand.
+ */
+export async function runNamesCron(env: VoiciNamesCronEnv, now: Date): Promise<NamesUpkeepResult | null> {
+  if (!env.DB) return null;
+  const r = await runNamesUpkeep({ names: new D1Storage(env.DB).names }, now.getTime());
+  if (r.conflicts.length) console.warn("[cron] names: reserved words already held, left out:", r.conflicts.join(", "));
+  return r;
 }

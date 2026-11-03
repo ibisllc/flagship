@@ -16,6 +16,40 @@ Source: Harry's Claude Doc "voi.ci namespace: implementation spec"
 3. Account deletion today frees the name at once (`docs/account-deletion-and-name-reclaim.md` §1); with
    the registry it is held 30 days instead. Update that doc.
 
+## As built in 0.3 (adaptations to the stack)
+
+- **Registry:** D1 table `names` (migration `0127_names_registry.sql`; storage `packages/storage/src/names.ts`) with a
+  partial UNIQUE index `names_safety_key_live ON names(safety_key) WHERE status <> 'released'`. Every claim is one
+  INSERT; a unique violation is "taken or too similar". Status changes run in one D1 batch (one transaction).
+- **Accounts:** accounts are keyed by their username in this codebase, so `owner` holds the account's username
+  instead of an `accounts.username_id` pointer; a held row redirects to `activeUsername(owner)`, and an account with
+  no active username row is gone. `usernames` stays the account record: every write path to it (claim, account
+  bootstrap, demo provisioning) claims its `names` row in the same batch, `UsernameStorage.delete` holds it (and
+  retires the account's links and codes) in the same batch, and a demo account's operator teardown releases its
+  name at once (deviation: no person waits on a demo name).
+- **Folded in:** `voici_links` (codes) and `voici_names` (custom link names) are copied into `names` and no longer
+  read (left in place, unread). `voici_name_changes` stays (rate limits). A custom link name given up for any reason
+  is `retired` for good (D7); the old 30-day wait-then-free is gone. Expired one-off codes are retired, never
+  deleted.
+- **Formats:** `voiciNameProblem` / `voiciNameKey` (the safety key) / `mintVoiciCode` in
+  `packages/protocol/src/voiciName.ts`, pinned by `packages/protocol/test-vectors/voici-name/vectors.json` and ported
+  to the webapp (`lib/nameRules.js`), Swift and Kotlin. Problems: `too-short`, `too-long`, `characters`, `hyphens`.
+  Usernames moved from 3–30 to 3–63 everywhere (`.com`, apps, services-zone, the box's parsers).
+- **Settings:** CODE_LENGTH is `.com`'s `VOICI_CODE_LENGTH` (default 6, never below it); GRACE is
+  `NAME_HOLD_MS` = 30 days (storage). The scheduled job is the six-hourly `names` step of `apps/com/src/cronPlan.ts`
+  (release expired holds, add reserved words new in the config file).
+- **Reserved words:** `packages/control-plane/src/reservedNames.json` (the seed list plus the words already refused for
+  DNS or system reasons); 0127 seeds them, and the names job adds new ones (a word already held is left out and logged).
+- **Resolution:** `resolveVoiciPath` (`packages/control-plane/src/voici.ts`), served by `serveVoiciHost`
+  (`apps/com/src/voiciRoutes.ts`). D11 is checked before D13 so the site's files keep their case. The voi.ci system
+  routes moved from `/_/` to `/-/` (the site's files, `/-/about`, `/-/sw.js`, the alerts scope `/-/alerts/`); the
+  sign-in hand-off `/voici-sign-in` lives on flagshipserver.com, not voi.ci, so it stays. The 404 and 410 answers are
+  the site shell with `<meta name="voici-status">`, so the site writes them in the visitor's language. `/` is a 404.
+- **Read-only checks:** `node scripts/voici-namespace-report.mjs` (`--gym`) runs Migration steps 1 to 3.
+- **Tests:** `packages/control-plane/tests/voiciNamespace.test.ts` (T1–T20 without T16; T14 at the registry level),
+  `packages/storage/tests/namesRegistry.test.ts` (D1 and in-memory, T18 on the unique index, migration 0127),
+  `apps/com/test/voiciHost.test.ts` (HTTP), and the live gym group `voici` (`tools/live-e2e/groups/release03/voici.ts`).
+
 ## The spec (verbatim text of the doc)
 
 voi.ci namespace: implementation spec

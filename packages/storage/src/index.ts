@@ -8,3 +8,4 @@ export * from "./requestD1.js";
 export * from "./serverBootKeys.js";
 export * from "./pqTrust.js";
 export * from "./voici.js";
+export * from "./names.js";

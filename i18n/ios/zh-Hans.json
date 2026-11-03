@@ -2678,11 +2678,7 @@
   "Only an admin device can change this": "只有管理员设备可以更改此项",
   "Next change %@": "下次可更改时间：%@",
   "Letters, numbers and hyphens only": "仅限字母、数字和连字符",
-  "At least 4 characters": "至少 4 个字符",
-  "At most 40 characters": "最多 40 个字符",
   "All %lld names in use": "%lld 个名称已全部使用",
-  "Reserved": "已保留",
-  "Taken": "已被占用",
   "Reserved for the owner of %@": "保留给 %@ 的所有者",
   "Couldn't check %@. Try again.": "无法检查 %@。请重试。",
   "Too many changes today": "今天更改次数过多",
@@ -3162,5 +3158,12 @@
   "Google push": "Google 推送",
   "Every device on the account needs its post-quantum key before strict comes back.": "恢复严格模式之前，账户中的每台设备都需要它的抗量子密钥。",
   "Test your recovery before turning strict on again.": "重新开启严格模式之前，请测试你的恢复。",
-  "Email": "电子邮件"
+  "Email": "电子邮件",
+  "Taken or too similar to an existing name": "已被占用或与现有名称过于相似",
+  "At least 3 characters": "至少 3 个字符",
+  "At most 63 characters": "最多 63 个字符",
+  "No hyphen at the start or end, or two in a row": "开头和结尾不能是连字符，也不能连续两个连字符",
+  "The installer finished. The server is starting and should register in a few minutes.": "安装程序已结束。服务器正在启动，应会在几分钟内完成注册。",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "此服务器已停止报告且尚未注册，可能已卡住。",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "如果它在 Flagship Studio 中运行，请在那里查看。否则请重启这台机器。如果仍然无法启动，请取消订单并重新创建服务器。"
 }

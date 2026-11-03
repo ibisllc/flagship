@@ -7,7 +7,7 @@
 
 export const CHALLENGE_PREFIX = "_acme-challenge.";
 
-const USER_LABEL_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+const USER_LABEL_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
 /**
  * `<user>.<apex>` for any name of the form `[<label>.]*<user>.<apex>` with at

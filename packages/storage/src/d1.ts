@@ -10,6 +10,17 @@ import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js
 import { D1VoiciStorage, type VoiciStorage } from "./voici.js";
 import { D1ServerBootKeyStorage, type ServerBootKeyStorage } from "./serverBootKeys.js";
 import { D1PqTrustStorage, type PqTrustStorage } from "./pqTrust.js";
+import {
+  accountGoneStatements,
+  claimNameStatement,
+  claimUsernameStatement,
+  D1NameRegistryStorage,
+  demoGoneStatements,
+  isUniqueViolation,
+  NAME_COLS,
+  rowToName,
+  type NameRecord,
+} from "./names.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -292,44 +303,42 @@ export class D1UsernameStorage implements UsernameStorage {
   constructor(private db: D1Database) {}
   async put(rec: UsernameRecord) {
     const norm = rec.username.toLowerCase();
-    const existing = await this.db
-      .prepare("SELECT * FROM usernames WHERE username = ?")
-      .bind(norm)
-      .first<UsernameRow>();
-    if (existing && existing.irk_pub_hex !== rec.irkPubHex) {
-      return { ok: false as const, reason: "username already claimed" };
+    // One transaction: the registry claim (refused when the safety key is blocked) and the account row. A re-claim
+    // by the same IRK only moves claimed_at; another IRK changes nothing (the upsert's WHERE) and is refused.
+    let results: D1Result[];
+    try {
+      results = await this.db.batch([
+        claimUsernameStatement(this.db, norm, rec.claimedAt),
+        this.db
+          .prepare(
+            "INSERT INTO usernames " +
+              "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex) " +
+              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+              // ON CONFLICT updates only claimed_at — is_demo, the v1.2 cascade fields, aid_pub_hex and
+              // admin_root_pub_hex survive a benign re-claim — and only for the same IRK.
+              "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at WHERE lower(usernames.irk_pub_hex) = lower(excluded.irk_pub_hex)",
+          )
+          .bind(
+            norm,
+            rec.irkPubHex,
+            rec.claimedAt,
+            rec.isDemo ? 1 : 0,
+            rec.accountType ?? "single",
+            rec.totpSecretEncrypted ?? null,
+            rec.recoveryCodesHashesJson ?? null,
+            rec.totpEnrolledAt ?? null,
+            rec.recoveryWipePolicy ?? "graceful",
+            rec.aidPubHex ?? null,
+            rec.lastActive ?? null,
+            rec.adminRootPubHex ?? null,
+          ),
+      ]);
+    } catch (e) {
+      if (isUniqueViolation(e)) return { ok: false as const, reason: "taken" };
+      throw e;
     }
-    // ON CONFLICT deliberately updates only claimed_at — is_demo and
-    // the v1.2 cascade fields (account_type, TOTP artifacts) are never
-    // touched on a re-claim, so a benign re-put can't clear an
-    // operator-set demo flag or kick a multi-device account back to
-    // single. Mutation of those fields goes through setDemo() and the
-    // dedicated TOTP-enrollment paths (Phase 3) respectively.
-    await this.db
-      .prepare(
-        "INSERT INTO usernames " +
-          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-          // ON CONFLICT updates only claimed_at — like is_demo / the v1.2
-          // cascade fields, aid_pub_hex + admin_root_pub_hex survive a benign
-          // re-claim (a fresh value is set via the claim path, not a re-put).
-          "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
-      )
-      .bind(
-        norm,
-        rec.irkPubHex,
-        rec.claimedAt,
-        rec.isDemo ? 1 : 0,
-        rec.accountType ?? "single",
-        rec.totpSecretEncrypted ?? null,
-        rec.recoveryCodesHashesJson ?? null,
-        rec.totpEnrolledAt ?? null,
-        rec.recoveryWipePolicy ?? "graceful",
-        rec.aidPubHex ?? null,
-        rec.lastActive ?? null,
-        rec.adminRootPubHex ?? null,
-      )
-      .run();
+    const changes = results[1]?.meta?.changes;
+    if (changes === 0) return { ok: false as const, reason: "taken" };
     return { ok: true as const };
   }
   async get(username: string) {
@@ -455,12 +464,13 @@ export class D1UsernameStorage implements UsernameStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
-  async delete(username: string) {
-    const r = await this.db
-      .prepare("DELETE FROM usernames WHERE username = ?")
-      .bind(username.toLowerCase())
-      .run();
-    const meta = (r as { meta?: { changes?: number } }).meta;
+  async delete(username: string, at = Date.now()) {
+    const u = username.toLowerCase();
+    const results = await this.db.batch([
+      ...accountGoneStatements(this.db, u, at),
+      this.db.prepare("DELETE FROM usernames WHERE username = ?").bind(u),
+    ]);
+    const meta = results[results.length - 1]?.meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
 }
@@ -1078,225 +1088,182 @@ export class D1UserServiceAliasStorage implements UserServiceAliasStorage {
   }
 }
 
+/** A code row of the names registry as the link record the handlers use. */
+function nameToLink(r: NameRecord): VoiciLinkRecord {
+  return {
+    code: r.name,
+    username: r.owner ?? "",
+    ...(r.serviceId ? { serviceId: r.serviceId } : {}),
+    targetUrl: r.target ?? "",
+    createdAt: r.createdAt,
+    ...(r.expiresAt !== null ? { expiresAt: r.expiresAt } : {}),
+    ...(r.status === "retired" ? { retiredAt: r.statusChangedAt } : {}),
+  };
+}
+
+/** A link row of the names registry as the custom-name record the handlers use. */
+function nameToVoiciName(r: NameRecord): VoiciNameRecord {
+  return {
+    key: r.name,
+    display: r.name,
+    username: r.owner ?? "",
+    serviceId: r.serviceId ?? "",
+    state: r.status === "active" ? "live" : "retired",
+    setAt: r.createdAt,
+    lastActiveAt: r.lastActiveAt ?? r.createdAt,
+    warned: r.warned,
+    ...(r.status === "retired" ? { releasedAt: r.statusChangedAt } : {}),
+    ...(r.status === "retired" && r.reason ? { releaseReason: r.reason as VoiciNameReleaseReason } : {}),
+  };
+}
+
+/** Codes: `code` rows of the names registry (migration 0127). A code is never deleted, only retired (D7). */
 export class D1VoiciLinkStorage implements VoiciLinkStorage {
   constructor(private db: D1Database) {}
   async insert(rec: VoiciLinkRecord) {
     try {
-      await this.db
-        .prepare(
-          `INSERT INTO voici_links (code, username, service_id, target_url, created_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          rec.code,
-          rec.username.toLowerCase(),
-          rec.serviceId ?? null,
-          rec.targetUrl,
-          rec.createdAt,
-          rec.expiresAt ?? null,
-        )
-        .run();
+      await claimNameStatement(this.db, {
+        name: rec.code,
+        kind: "code",
+        owner: rec.username.toLowerCase(),
+        serviceId: rec.serviceId ?? null,
+        target: rec.targetUrl,
+        expiresAt: rec.expiresAt ?? null,
+        at: rec.createdAt,
+      }).run();
       return { ok: true as const };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // D1 surfaces UNIQUE constraint failures as "SQLITE_CONSTRAINT_PRIMARYKEY"
-      // / "UNIQUE constraint failed: voici_links.code". A `code` collision is
-      // the only expected failure (the only UNIQUE/PK constraint on this
-      // table); normalize it to the SAME contract reason the InMemory adapter
-      // returns ("code already taken") so the two adapters are observably
-      // identical and the raw SQLite error never leaks to a caller. Any OTHER
-      // failure rethrows — it's a genuine storage fault, not a retryable
-      // collision the handler should swallow by minting a fresh code.
-      if (/unique constraint|constraint failed/i.test(msg)) {
-        return { ok: false as const, reason: "code already taken" };
-      }
+      // The registry's unique safety key is the only collision check: the caller mints another code.
+      if (isUniqueViolation(e)) return { ok: false as const, reason: "code already taken" };
       throw e;
     }
   }
   async get(code: string): Promise<VoiciLinkRecord | undefined> {
     const r = await this.db
-      .prepare(
-        `SELECT code, username, service_id, target_url, created_at, expires_at, retired_at
-         FROM voici_links WHERE code = ?`,
-      )
+      .prepare(`SELECT ${NAME_COLS} FROM names WHERE kind = 'code' AND name = ? AND status <> 'released' LIMIT 1`)
       .bind(code)
-      .first<{
-        code: string; username: string; service_id: string | null;
-        target_url: string; created_at: number; expires_at: number | null; retired_at: number | null;
-      }>();
-    return r ? {
-      code: r.code,
-      username: r.username,
-      ...(r.service_id ? { serviceId: r.service_id } : {}),
-      targetUrl: r.target_url,
-      createdAt: r.created_at,
-      ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
-      ...(r.retired_at !== null ? { retiredAt: r.retired_at } : {}),
-    } : undefined;
+      .first<Parameters<typeof rowToName>[0]>();
+    return r ? nameToLink(rowToName(r)) : undefined;
   }
   async getByService(username: string, serviceId: string): Promise<VoiciLinkRecord | undefined> {
     const r = await this.db
       .prepare(
-        `SELECT code, username, service_id, target_url, created_at, expires_at, retired_at
-         FROM voici_links
-         WHERE username = ? AND service_id = ? AND retired_at IS NULL
-         ORDER BY created_at DESC
+        `SELECT ${NAME_COLS} FROM names
+         WHERE kind = 'code' AND owner = ? AND service_id = ? AND status = 'active'
+         ORDER BY created_at DESC, id DESC
          LIMIT 1`,
       )
       .bind(username.toLowerCase(), serviceId)
-      .first<{
-        code: string; username: string; service_id: string | null;
-        target_url: string; created_at: number; expires_at: number | null; retired_at: number | null;
-      }>();
-    return r ? {
-      code: r.code,
-      username: r.username,
-      ...(r.service_id ? { serviceId: r.service_id } : {}),
-      targetUrl: r.target_url,
-      createdAt: r.created_at,
-      ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
-      ...(r.retired_at !== null ? { retiredAt: r.retired_at } : {}),
-    } : undefined;
-  }
-  async deleteByService(username: string, serviceId: string): Promise<number> {
-    const r = await this.db
-      .prepare("DELETE FROM voici_links WHERE username = ? AND service_id = ?")
-      .bind(username.toLowerCase(), serviceId)
-      .run();
-    return r.meta?.changes ?? 0;
+      .first<Parameters<typeof rowToName>[0]>();
+    return r ? nameToLink(rowToName(r)) : undefined;
   }
   async retireByService(username: string, serviceId: string, at: number): Promise<number> {
     const r = await this.db
-      .prepare("UPDATE voici_links SET retired_at = ? WHERE username = ? AND service_id = ? AND retired_at IS NULL")
+      .prepare("UPDATE names SET status = 'retired', reason = 'deleted', status_changed_at = ? WHERE kind = 'code' AND owner = ? AND service_id = ? AND status = 'active'")
       .bind(at, username.toLowerCase(), serviceId)
       .run();
     return r.meta?.changes ?? 0;
   }
   async retireAllForUser(username: string, at: number): Promise<number> {
     const r = await this.db
-      .prepare("UPDATE voici_links SET retired_at = ? WHERE username = ? AND service_id IS NOT NULL AND retired_at IS NULL")
+      .prepare("UPDATE names SET status = 'retired', reason = 'deleted', status_changed_at = ? WHERE kind = 'code' AND owner = ? AND service_id IS NOT NULL AND status = 'active'")
       .bind(at, username.toLowerCase())
       .run();
     return r.meta?.changes ?? 0;
   }
-  async deleteExpired(before: number): Promise<number> {
+  async retireExpired(before: number): Promise<number> {
     const r = await this.db
-      .prepare("DELETE FROM voici_links WHERE expires_at IS NOT NULL AND expires_at <= ?")
+      .prepare("UPDATE names SET status = 'retired', reason = 'expired', status_changed_at = ?1 WHERE kind = 'code' AND status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?1")
       .bind(before)
       .run();
     return r.meta?.changes ?? 0;
   }
 }
 
+/** Custom link names: `link` rows of the names registry (migration 0127); the change log stays in voici_name_changes. */
 export class D1VoiciNameStorage implements VoiciNameStorage {
   constructor(private db: D1Database) {}
-  private static readonly COLS =
-    "key, display, username, service_id, state, set_at, last_active_at, warned, released_at, release_reason";
-  private static rec(r: {
-    key: string; display: string; username: string; service_id: string; state: string;
-    set_at: number; last_active_at: number; warned: number; released_at: number | null; release_reason: string | null;
-  }): VoiciNameRecord {
-    return {
-      key: r.key,
-      display: r.display,
-      username: r.username,
-      serviceId: r.service_id,
-      state: r.state === "waiting" ? "waiting" : "live",
-      setAt: r.set_at,
-      lastActiveAt: r.last_active_at,
-      warned: r.warned,
-      ...(r.released_at !== null ? { releasedAt: r.released_at } : {}),
-      ...(r.release_reason !== null ? { releaseReason: r.release_reason as VoiciNameReleaseReason } : {}),
-    };
+  private async one(sql: string, ...binds: unknown[]): Promise<VoiciNameRecord | undefined> {
+    const r = await this.db.prepare(sql).bind(...binds).first<Parameters<typeof rowToName>[0]>();
+    return r ? nameToVoiciName(rowToName(r)) : undefined;
   }
-  async get(key: string) {
-    const r = await this.db.prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE key = ?`).bind(key).first<any>();
-    return r ? D1VoiciNameStorage.rec(r) : undefined;
+  private async many(sql: string, ...binds: unknown[]): Promise<VoiciNameRecord[]> {
+    const rs = await this.db.prepare(sql).bind(...binds).all<Parameters<typeof rowToName>[0]>();
+    return (rs.results ?? []).map((r) => nameToVoiciName(rowToName(r)));
+  }
+  async get(name: string) {
+    return this.one(`SELECT ${NAME_COLS} FROM names WHERE kind = 'link' AND name = ? AND status <> 'released' LIMIT 1`, name);
   }
   async getLiveByService(username: string, serviceId: string) {
-    const r = await this.db
-      .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE username = ? AND service_id = ? AND state = 'live' LIMIT 1`)
-      .bind(username.toLowerCase(), serviceId)
-      .first<any>();
-    return r ? D1VoiciNameStorage.rec(r) : undefined;
+    return this.one(
+      `SELECT ${NAME_COLS} FROM names WHERE kind = 'link' AND owner = ? AND service_id = ? AND status = 'active' ORDER BY id LIMIT 1`,
+      username.toLowerCase(),
+      serviceId,
+    );
   }
   async listLive(username: string) {
-    const rs = await this.db
-      .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE username = ? AND state = 'live' ORDER BY set_at`)
-      .bind(username.toLowerCase())
-      .all<any>();
-    return (rs.results ?? []).map(D1VoiciNameStorage.rec);
+    return this.many(`SELECT ${NAME_COLS} FROM names WHERE kind = 'link' AND owner = ? AND status = 'active' ORDER BY created_at, id`, username.toLowerCase());
   }
   async countLive(username: string) {
     const r = await this.db
-      .prepare("SELECT COUNT(*) AS n FROM voici_names WHERE username = ? AND state = 'live'")
+      .prepare("SELECT COUNT(*) AS n FROM names WHERE kind = 'link' AND owner = ? AND status = 'active'")
       .bind(username.toLowerCase())
       .first<{ n: number }>();
     return r?.n ?? 0;
   }
   async claim(rec: VoiciNameRecord) {
     try {
-      await this.db
-        .prepare(
-          `INSERT INTO voici_names (key, display, username, service_id, state, set_at, last_active_at, warned, released_at, release_reason)
-           VALUES (?, ?, ?, ?, 'live', ?, ?, 0, NULL, NULL)`,
-        )
-        .bind(rec.key, rec.display, rec.username.toLowerCase(), rec.serviceId, rec.setAt, rec.lastActiveAt)
-        .run();
+      await claimNameStatement(this.db, {
+        name: rec.display.toLowerCase(),
+        kind: "link",
+        owner: rec.username.toLowerCase(),
+        serviceId: rec.serviceId,
+        lastActiveAt: rec.lastActiveAt,
+        at: rec.setAt,
+      }).run();
       return { ok: true as const };
     } catch (e) {
-      if (/unique constraint|constraint failed/i.test(e instanceof Error ? e.message : String(e))) {
-        return { ok: false as const, reason: "taken" as const };
-      }
+      if (isUniqueViolation(e)) return { ok: false as const, reason: "taken" as const };
       throw e;
     }
   }
   async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string) {
-    const cur = key === undefined
-      ? await this.getLiveByService(username, serviceId)
-      : await this.db
-          .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE key = ? AND username = ? AND service_id = ? AND state = 'live'`)
-          .bind(key, username.toLowerCase(), serviceId)
-          .first<any>()
-          .then((r) => (r ? D1VoiciNameStorage.rec(r) : undefined));
+    const cur =
+      key === undefined
+        ? await this.getLiveByService(username, serviceId)
+        : await this.one(
+            `SELECT ${NAME_COLS} FROM names WHERE kind = 'link' AND name = ? AND owner = ? AND service_id = ? AND status = 'active' LIMIT 1`,
+            key,
+            username.toLowerCase(),
+            serviceId,
+          );
     if (!cur) return undefined;
     const r = await this.db
-      .prepare("UPDATE voici_names SET state = 'waiting', released_at = ?, release_reason = ? WHERE key = ? AND state = 'live'")
-      .bind(at, reason, cur.key)
+      .prepare("UPDATE names SET status = 'retired', reason = ?, status_changed_at = ? WHERE kind = 'link' AND name = ? AND status = 'active'")
+      .bind(reason, at, cur.key)
       .run();
     if ((r.meta?.changes ?? 0) === 0) return undefined;
-    return { ...cur, state: "waiting" as const, releasedAt: at, releaseReason: reason };
+    return { ...cur, state: "retired" as const, releasedAt: at, releaseReason: reason };
   }
   async releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number) {
     const r = await this.db
-      .prepare("UPDATE voici_names SET state = 'waiting', released_at = ?, release_reason = ? WHERE username = ? AND state = 'live'")
-      .bind(at, reason, username.toLowerCase())
-      .run();
-    return r.meta?.changes ?? 0;
-  }
-  async deleteWaitingReleasedBefore(before: number) {
-    const r = await this.db
-      .prepare("DELETE FROM voici_names WHERE state = 'waiting' AND released_at <= ?")
-      .bind(before)
+      .prepare("UPDATE names SET status = 'retired', reason = ?, status_changed_at = ? WHERE kind = 'link' AND owner = ? AND status = 'active'")
+      .bind(reason, at, username.toLowerCase())
       .run();
     return r.meta?.changes ?? 0;
   }
   async listLivePage(offset: number, limit: number) {
-    const rs = await this.db
-      .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE state = 'live' ORDER BY key LIMIT ? OFFSET ?`)
-      .bind(limit, offset)
-      .all<any>();
-    return (rs.results ?? []).map(D1VoiciNameStorage.rec);
+    return this.many(`SELECT ${NAME_COLS} FROM names WHERE kind = 'link' AND status = 'active' ORDER BY name LIMIT ? OFFSET ?`, limit, offset);
   }
   async countAllLive() {
-    const r = await this.db.prepare("SELECT COUNT(*) AS n FROM voici_names WHERE state = 'live'").first<{ n: number }>();
+    const r = await this.db.prepare("SELECT COUNT(*) AS n FROM names WHERE kind = 'link' AND status = 'active'").first<{ n: number }>();
     return r?.n ?? 0;
   }
   async markActive(key: string, at: number) {
-    await this.db.prepare("UPDATE voici_names SET last_active_at = ?, warned = 0 WHERE key = ? AND state = 'live'").bind(at, key).run();
+    await this.db.prepare("UPDATE names SET last_active_at = ?, warned = 0 WHERE kind = 'link' AND name = ? AND status = 'active'").bind(at, key).run();
   }
   async setWarned(key: string, warned: number) {
-    await this.db.prepare("UPDATE voici_names SET warned = ? WHERE key = ? AND state = 'live'").bind(warned, key).run();
+    await this.db.prepare("UPDATE names SET warned = ? WHERE kind = 'link' AND name = ? AND status = 'active'").bind(warned, key).run();
   }
   async recordChange(username: string, serviceId: string, at: number, nonce: string) {
     await this.db
@@ -4628,6 +4595,7 @@ export class D1AccountProvisioningStorage implements AccountProvisioningStorage 
     const profile = input.primaryDeviceProfile;
     try {
       await this.db.batch([
+        claimUsernameStatement(this.db, u, username.claimedAt),
         this.db.prepare(
           `INSERT INTO usernames
             (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
@@ -4697,6 +4665,7 @@ export class D1DemoAccountProvisioningStorage implements DemoAccountProvisioning
     const demo = input.demo;
     try {
       await this.db.batch([
+        claimUsernameStatement(this.db, u, username.claimedAt),
         this.db.prepare(
           `INSERT INTO usernames
             (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
@@ -4778,6 +4747,8 @@ export class D1DemoAccountProvisioningStorage implements DemoAccountProvisioning
     await this.db.batch([
       this.db.prepare("DELETE FROM auth_codes WHERE username = ?").bind(u),
       this.db.prepare("DELETE FROM demo_users WHERE username = ? AND idempotency_key = ?").bind(u, idempotencyKey),
+      // An operator teardown, not a person giving a name up: the name is free again at once.
+      ...demoGoneStatements(this.db, u, Date.now()),
       this.db.prepare("DELETE FROM usernames WHERE username = ?").bind(u),
     ]);
     return true;
@@ -4932,6 +4903,7 @@ export class D1DeviceCapabilityGrantStorage
 }
 
 export class D1Storage implements Storage {
+  names: D1NameRegistryStorage;
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
   suggestionQueue: SuggestionQueueStorage;
@@ -4994,6 +4966,7 @@ export class D1Storage implements Storage {
   pqTrust: PqTrustStorage;
   voici: VoiciStorage;
   constructor(db: D1Database) {
+    this.names = new D1NameRegistryStorage(db);
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
     this.suggestionQueue = new D1SuggestionQueueStorage(db);

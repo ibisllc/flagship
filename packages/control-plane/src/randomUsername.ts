@@ -11,6 +11,7 @@
 
 import type {
   UsernameStorage,
+  NameRegistryStorage,
   SuggestionQueueStorage,
   SuggestThrottleStorage,
   UsernameOfferStorage,
@@ -165,6 +166,9 @@ const REPLENISH_ATTEMPT_CAP = 256;
 export interface ReplenishDeps {
   queue: SuggestionQueueStorage;
   usernames: UsernameStorage;
+  /** The names registry (docs/voici-namespace-spec.md): a name whose safety key anything holds (an account, a link
+   *  name, a code, a reserved or held name) is never suggested. */
+  names: Pick<NameRegistryStorage, "isTaken">;
   /** `.com` filter; omit to skip DNS (e.g. tests / DNS outage). */
   comExists?: (name: string) => Promise<boolean>;
   rng?: () => number;
@@ -187,8 +191,7 @@ export async function replenishSuggestionQueue(deps: ReplenishDeps): Promise<num
     const cand = await tryGenerateCandidate({
       rng: deps.rng,
       maxAttempts: 1,
-      isTaken: async (n) =>
-        fresh.has(n) || existing.has(n) || (await deps.usernames.get(n)) != null,
+      isTaken: async (n) => fresh.has(n) || existing.has(n) || (await deps.names.isTaken(n)),
       comExists: deps.comExists,
     });
     if (cand) fresh.add(cand);
@@ -201,12 +204,12 @@ export async function replenishSuggestionQueue(deps: ReplenishDeps): Promise<num
  *  Returns null when the queue is empty (or only holds now-claimed names). */
 export async function popSuggestion(deps: {
   queue: SuggestionQueueStorage;
-  usernames: UsernameStorage;
+  names: Pick<NameRegistryStorage, "isTaken">;
 }): Promise<string | null> {
   for (let i = 0; i < 64; i += 1) {
     const name = await deps.queue.popOldest();
     if (name == null) return null;
-    if ((await deps.usernames.get(name)) != null) continue; // claimed since enqueue → drop
+    if (await deps.names.isTaken(name)) continue; // taken (or a look-alike) since enqueue → drop
     return name;
   }
   return null;
@@ -262,6 +265,8 @@ export async function checkSuggestThrottle(
 export interface SuggestUsernameDeps {
   queue: SuggestionQueueStorage;
   usernames: UsernameStorage;
+  /** The names registry: suggestions skip every name a claim would refuse. */
+  names: Pick<NameRegistryStorage, "isTaken">;
   throttle: SuggestThrottleStorage;
   /** The recently-offered roster — a suggested name is recorded here so it (and
    *  only it) becomes claimable. Omit only in tests that don't assert the gate. */
@@ -289,7 +294,7 @@ export async function handleSuggestUsername(
   if (!decision.allowed) {
     return { status: 429, body: { error: "regenerating too fast", retryAfterMs: decision.retryAfterMs } };
   }
-  let name = await popSuggestion({ queue: deps.queue, usernames: deps.usernames });
+  let name = await popSuggestion({ queue: deps.queue, names: deps.names });
   if (name == null) {
     // Empty queue (cold start / drained): generate inline WITHOUT DNS so a slow
     // or down resolver can never block sign-up. The cron-warmed queue is what
@@ -297,7 +302,7 @@ export async function handleSuggestUsername(
     name = await tryGenerateCandidate({
       rng: deps.rng,
       maxAttempts: 80,
-      isTaken: async (n) => (await deps.usernames.get(n)) != null,
+      isTaken: (n) => deps.names.isTaken(n),
     });
   }
   if (name == null) {

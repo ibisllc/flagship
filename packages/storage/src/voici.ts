@@ -190,8 +190,6 @@ export interface VoiciStorage {
   deleteAlertsForPage(pageId: string): Promise<number>;
   deleteAlertsForDelegate(delegatePub: string): Promise<number>;
 
-  /** The username whose hyphen-less key is `key` (one namespace with voi.ci names and codes, §4.1). */
-  usernameWithKey(key: string): Promise<string | null>;
   /** Account deletion (§10.3): the page, its mailbox, reply alerts, blocks, revocations, drafts and the state blob go; its pieces
    *  are left for the cron to delete (unreferenced at 0). Returns the page id, if there was a page. */
   deleteAccount(username: string): Promise<string | null>;
@@ -751,14 +749,6 @@ export class D1VoiciStorage implements VoiciStorage {
     return res.meta.changes ?? 0;
   }
 
-  async usernameWithKey(key: string) {
-    const r = await this.db
-      .prepare("SELECT username FROM usernames WHERE replace(username, '-', '') = ?1 LIMIT 1")
-      .bind(key)
-      .first<{ username: string }>();
-    return r?.username ?? null;
-  }
-
   async deleteAccount(username: string) {
     const page = await this.getPage(username);
     const stmts: D1PreparedStatement[] = [
@@ -792,8 +782,6 @@ export class InMemoryVoiciStorage implements VoiciStorage {
   private drafts = new Map<string, VoiciDraftRecord>();
   private states = new Map<string, MessagesStateRecord>();
   private alerts: VoiciAlertRecord[] = [];
-
-  constructor(private readonly usernames?: { list(): Promise<{ username: string }[]> }) {}
 
   private static pk(a: string, b: string) {
     return `${a}|${b}`;
@@ -1120,11 +1108,6 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     const n = this.alerts.length;
     this.alerts = this.alerts.filter((a) => a.delegatePub !== delegatePub);
     return n - this.alerts.length;
-  }
-
-  async usernameWithKey(key: string) {
-    const all = (await this.usernames?.list()) ?? [];
-    return all.map((u) => u.username).find((u) => u.replace(/-/g, "") === key) ?? null;
   }
 
   async deleteAccount(username: string) {

@@ -2566,11 +2566,11 @@
     <string name="only_an_admin_device_can_change_this">Only an admin device can change this</string>
     <string name="next_change">Next change %1$s</string>
     <string name="letters_numbers_and_hyphens_only">Letters, numbers and hyphens only</string>
-    <string name="at_least_4_characters">At least 4 characters</string>
-    <string name="at_most_40_characters">At most 40 characters</string>
+    <string name="at_least_3_characters">At least 3 characters</string>
+    <string name="at_most_63_characters">At most 63 characters</string>
+    <string name="no_hyphen_at_the_start_or_end_or_two_in_a_row">No hyphen at the start or end, or two in a row</string>
     <string name="all_names_in_use">All %1$s names in use</string>
-    <string name="reserved">Reserved</string>
-    <string name="taken">Taken</string>
+    <string name="taken_or_too_similar_to_an_existing_name">Taken or too similar to an existing name</string>
     <string name="reserved_for_the_owner_of">Reserved for the owner of %1$s</string>
     <string name="couldnt_check_try_again">Couldn\'t check %1$s. Try again.</string>
     <string name="too_many_changes_today">Too many changes today</string>
@@ -3422,4 +3422,7 @@
     <string name="access_list_wildcard_only_first">a * may only start a host, as in *.example.com</string>
     <string name="access_list_localhost_not_public">\"localhost\" is not a public host name</string>
     <string name="access_list_not_a_valid_host">\"%1$s\" is not a valid host name</string>
+    <string name="provision_quiet_installer_finished">The installer finished. The server is starting and should register in a few minutes.</string>
+    <string name="provision_quiet_stuck">This server stopped reporting and hasn\'t registered. It may be stuck.</string>
+    <string name="provision_quiet_stuck_advice">If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn\'t come up, cancel the order and create the server again.</string>
 </resources>

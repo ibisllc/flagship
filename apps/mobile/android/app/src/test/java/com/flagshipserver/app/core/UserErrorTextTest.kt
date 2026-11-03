@@ -74,6 +74,18 @@ class UserErrorTextTest {
         assertEquals("Try later.", UserErrorText.of(HttpException(400, "x"), fallback = "Try later."))
     }
 
+    @Test fun aRefusedNameClaimSaysTakenOrWhichFormatRuleFailed() {
+        assertEquals(
+            "Taken or too similar to an existing name",
+            UserErrorText.of(HttpException(409, "{\"error\":\"taken or too similar to an existing name\",\"code\":\"taken\"}")),
+        )
+        assertEquals(
+            "No hyphen at the start or end, or two in a row",
+            UserErrorText.of(HttpException(400, "{\"error\":\"not a valid username\",\"code\":\"invalid\",\"problem\":\"hyphens\"}")),
+        )
+        assertEquals("At most 63 characters", UserErrorText.of(HttpException(400, "{\"code\":\"invalid\",\"problem\":\"too-long\"}")))
+    }
+
     @Test fun anAuthoredMessageStaysAndAShellLineNumberGoes() {
         assertEquals("Pick a name first.", UserErrorText.of(IllegalStateException("Pick a name first.")))
         assertEquals(

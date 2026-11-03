@@ -12,7 +12,7 @@ import Foundation
 ///
 /// Public API: VoiciProfile, VoiciProfileLink, VoiciCard, VoiciPostLink, VoiciPost, VoiciChunk, VoiciPieceRef,
 /// VoiciPageIndex (+ Refusal), VoiciPieceUpload, VoiciPageState (all with `json`), and the VoiciPage namespace:
-/// tagVoiciPage, tagVoiciPieceUpload, the caps, themes, voiciNamespaceKey, isVoiciJpeg, voiciJpegHasMetadata,
+/// tagVoiciPage, tagVoiciPieceUpload, the caps, themes, isVoiciJpeg, voiciJpegHasMetadata,
 /// parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost, parseVoiciChunkPiece, voiciCardRole,
 /// canonicalVoiciPageIndex, signVoiciPageIndex, parseVoiciPageIndex, checkVoiciPageIndex, checkVoiciPublish,
 /// voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload, chunkVoiciPosts,
@@ -172,9 +172,6 @@ public enum VoiciPage {
 
     static func isPageId(_ s: String) -> Bool { CanonicalJson.isLowerHex(s, bytes: 16) }
     static func isUsername(_ s: String) -> Bool { MessagesAttestations.isUsername(s) }
-
-    /// One namespace with custom link names and codes (§4.1): lowercase, hyphens removed.
-    public static func voiciNamespaceKey(_ name: String) -> String { VoiciName.key(name) }
 
     public static func isVoiciJpeg(_ b: [UInt8]) -> Bool { b.count >= 4 && b[0] == 0xff && b[1] == 0xd8 && b[2] == 0xff }
 

@@ -69,15 +69,21 @@ class LiveFlagshipServerClientTest {
         }
     }
 
-    @Test fun claimUsername_treats409AsSuccess() = runTest {
-        server.enqueue(MockResponse().setResponseCode(409).setBody("already claimed"))
-        client.claimUsername(
-            UsernameClaimRequest(
-                request = UsernameClaimRequest.Inner("harry", "deadbeef", 1L),
-                signature = "00",
-            ),
-        )
-        // No throw expected — re-take confirms request still fired.
+    @Test fun claimUsername_surfaces409TakenAsARefusal() = runTest {
+        // A same-IRK re-claim is a 200 now; a 409 is `{code:"taken"}` (docs/voici-namespace-spec.md).
+        server.enqueue(MockResponse().setResponseCode(409).setBody("""{"error":"taken or too similar to an existing name","code":"taken"}"""))
+        try {
+            client.claimUsername(
+                UsernameClaimRequest(
+                    request = UsernameClaimRequest.Inner("harry", "deadbeef", 1L),
+                    signature = "00",
+                ),
+            )
+            fail("expected HttpException")
+        } catch (e: HttpException) {
+            assertEquals(409, e.status)
+            assertEquals("Taken or too similar to an existing name", com.flagshipserver.app.core.UserErrorText.of(e))
+        }
         assertEquals("/api/username/claim", server.takeRequest().path)
     }
 

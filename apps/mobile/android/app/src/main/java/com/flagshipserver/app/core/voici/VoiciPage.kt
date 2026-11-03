@@ -9,7 +9,7 @@
 //   flagship/voici-piece-upload/v1|<u>|<pageId>|<sha256>|<size>|<issuedAt>
 //
 // Public API (object VoiciPage): TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES,
-// voiciNamespaceKey, isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost,
+// isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost,
 // parseVoiciChunkPiece, voiciCardRole, canonicalVoiciPageIndex, signVoiciPageIndex, parseVoiciPageIndex,
 // checkVoiciPageIndex, checkVoiciPublish (codes malformed, wrong-username, not-sensitive-key, bad-signature,
 // rolled-back, stale, seq-conflict, wrong-page), voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload,
@@ -157,9 +157,6 @@ object VoiciPage {
     private fun isTime(n: Long) = n in 0..VoiciJs.MAX_SAFE
     private fun hex(s: String?, n: Int) = WebEnvelopes.isLowerHex(s, n)
     private fun hex(e: JsonElement?, n: Int) = WebEnvelopes.isLowerHex(e, n)
-
-    /** One namespace with custom link names and codes (§4.1): lowercase, hyphens removed. */
-    fun voiciNamespaceKey(name: String): String = name.lowercase().replace("-", "")
 
     fun isVoiciJpeg(b: ByteArray): Boolean = b.size >= 4 && b[0] == 0xff.toByte() && b[1] == 0xd8.toByte() && b[2] == 0xff.toByte()
 

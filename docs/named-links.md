@@ -5,6 +5,15 @@ Status: **PLAN (pre-build), 2026-10-21.** Owner-directed in the session of
 expected to ship in the same release. Everything below is decided unless it is
 listed under "Open decisions" at the end.
 
+> **Superseded in part by `docs/voici-namespace-spec.md` (owner-approved 2026-11-02, built in 0.3, migration 0127).**
+> Custom names, codes and usernames are rows of ONE registry (`names`, `packages/storage/src/names.ts`) unique on a
+> safety key (lower case, hyphens removed, 0 read as o, 1 as l), so `voici_names` and `voici_links` are no longer read.
+> Where this file differs, the spec wins: the grammar is 3 to 63 characters (D12); a given-up name is **retired for
+> good** (D7: 410, never claimable again) instead of waiting 30 days and freeing (§2.9 below is replaced); codes are
+> minted with a digit first (D2) and never reused; reserved words live in `packages/control-plane/src/reservedNames.json`
+> and a reserved word answers `taken` (one refusal: "Taken or too similar to an existing name"); a look-up matches the
+> exact name, so `voi.ci/halloweenparty` no longer reaches `halloween-party`.
+
 ## 1. What it is
 
 Every service has a short link `voi.ci/<name>`. Today `<name>` is a random
@@ -37,11 +46,11 @@ rename. After this change:
 ### 2.2 Custom name
 
 - At most one per service.
-- Grammar: lowercase `[a-z0-9-]`, 4 to 40 characters, no leading, trailing or
-  doubled hyphen. Names of 3 characters or fewer are reserved for later.
-- **Uniqueness ignores hyphens:** the key is the name with hyphens removed, so
-  `halloween-party` and `halloweenparty` can't belong to two parties. The name
-  is stored and shown as typed.
+- Grammar (as built, D12 of the namespace spec): lowercase `[a-z0-9-]`, 3 to 63 characters, no leading, trailing
+  or doubled hyphen.
+- **Uniqueness is on the safety key** (hyphens removed, 0→o, 1→l), so
+  `halloween-party`, `halloweenparty` and `ha1loween-party` can't belong to two parties. The name
+  is stored and shown as typed, and looked up exactly.
 - A custom name may not equal any existing or retired code (same table, same
   unique key).
 - Reserved words are refused: the existing `RESERVED_LABELS` in
@@ -122,16 +131,13 @@ until it has released enough. Coasting over the limit is not possible.
   retires the code, 2.1).
 - The rule is stated under the field (2.9) so it is never a surprise.
 
-### 2.9 The waiting period
+### 2.9 A given-up name (replaced by D7 of docs/voici-namespace-spec.md)
 
-- **30 days** after any release: replace, clear, lapse, deletion.
-- During it the name answers a neutral **410** and **redirects nowhere**: the
-  wait exists so caches around the world forget the old redirect.
-- **Nobody can take it, including the account that gave it up.** Abandoning a
-  name gives no priority on it (no hold-and-cycle abuse).
-- After 30 days it is open to anyone, first come first served.
-- Availability answers `taken` for a name in its wait (it never says when a
-  name opens).
+- After any release (replace, clear, lapse, deletion) the name is **retired for good**: it answers a neutral **410**
+  and redirects nowhere, and nobody can take it or a look-alike of it again, the account that gave it up included.
+- (Planned before 0.3: a 30-day wait, then free to anyone. Not built: the owner's spec keeps retired link names
+  blocked forever, like codes.)
+- Availability answers `taken` for a retired name.
 
 ## 3. The link field (service page, all three apps)
 

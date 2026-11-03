@@ -128,6 +128,7 @@ describe("replenishSuggestionQueue", () => {
     const added = await replenishSuggestionQueue({
       queue: s.suggestionQueue,
       usernames: s.usernames,
+      names: s.names,
       rng: seededRng(11),
       now: 1000,
       target: 10,
@@ -145,6 +146,7 @@ describe("replenishSuggestionQueue", () => {
     await replenishSuggestionQueue({
       queue: s.suggestionQueue,
       usernames: s.usernames,
+      names: s.names,
       comExists: async (n) => n === "brave-fox",
       rng: seededRng(5),
       now: 1000,
@@ -161,6 +163,7 @@ describe("replenishSuggestionQueue", () => {
     const added = await replenishSuggestionQueue({
       queue: s.suggestionQueue,
       usernames: s.usernames,
+      names: s.names,
       now: 1000,
       target: 2,
     });
@@ -174,13 +177,23 @@ describe("popSuggestion", () => {
     await s.suggestionQueue.enqueue(["aaa-fox"], 1);
     await s.suggestionQueue.enqueue(["bbb-owl"], 2);
     await s.usernames.put({ username: "aaa-fox", irkPubHex: "aa", claimedAt: 5 }); // claimed in the gap
-    const got = await popSuggestion({ queue: s.suggestionQueue, usernames: s.usernames });
+    const got = await popSuggestion({ queue: s.suggestionQueue, names: s.names });
     expect(got).toBe("bbb-owl"); // aaa-fox dropped (claimed)
+  });
+
+  it("skips a name the registry refuses: a look-alike of a link name, a code or a reserved word (docs/voici-namespace-spec.md)", async () => {
+    const s = new InMemoryStorage();
+    await s.names.addReserved(["admin"], 0);
+    await s.voiciNames.claim({ key: "chess-club", display: "chess-club", username: "rapid-bison", serviceId: "rapid-bison--chess", state: "live", setAt: 1, lastActiveAt: 1, warned: 0 });
+    await s.suggestionQueue.enqueue(["chessclub"], 1);
+    await s.suggestionQueue.enqueue(["ad-min"], 2);
+    await s.suggestionQueue.enqueue(["calm-owl"], 3);
+    expect(await popSuggestion({ queue: s.suggestionQueue, names: s.names })).toBe("calm-owl");
   });
 
   it("returns null on an empty queue", async () => {
     const s = new InMemoryStorage();
-    expect(await popSuggestion({ queue: s.suggestionQueue, usernames: s.usernames })).toBeNull();
+    expect(await popSuggestion({ queue: s.suggestionQueue, names: s.names })).toBeNull();
   });
 });
 
@@ -221,7 +234,7 @@ describe("checkSuggestThrottle (escalating cooldown)", () => {
 describe("handleSuggestUsername", () => {
   it("400s a missing or oversized deviceKey", async () => {
     const s = new InMemoryStorage();
-    const deps = { queue: s.suggestionQueue, usernames: s.usernames, throttle: s.suggestThrottle };
+    const deps = { queue: s.suggestionQueue, usernames: s.usernames, names: s.names, throttle: s.suggestThrottle };
     expect((await handleSuggestUsername(deps, {})).status).toBe(400);
     expect((await handleSuggestUsername(deps, { deviceKey: "x".repeat(200) })).status).toBe(400);
   });
@@ -229,7 +242,7 @@ describe("handleSuggestUsername", () => {
   it("200s with a queued name + retryAfterMs, then 429s a too-fast regenerate", async () => {
     const s = new InMemoryStorage();
     await s.suggestionQueue.enqueue(["alpha-fox", "beta-owl"], 1);
-    const deps = { queue: s.suggestionQueue, usernames: s.usernames, throttle: s.suggestThrottle, now: 1000 };
+    const deps = { queue: s.suggestionQueue, usernames: s.usernames, names: s.names, throttle: s.suggestThrottle, now: 1000 };
     const r1 = await handleSuggestUsername(deps, { deviceKey: "devA" });
     expect(r1.status).toBe(200);
     expect((r1.body as { name: string }).name).toBe("alpha-fox");
@@ -246,6 +259,7 @@ describe("handleSuggestUsername", () => {
     const deps = {
       queue: s.suggestionQueue,
       usernames: s.usernames,
+      names: s.names,
       throttle: s.suggestThrottle,
       offers: s.usernameOffers,
       now: 5000,
@@ -257,7 +271,7 @@ describe("handleSuggestUsername", () => {
 
   it("falls back to inline generation (no DNS) when the queue is empty", async () => {
     const s = new InMemoryStorage();
-    const deps = { queue: s.suggestionQueue, usernames: s.usernames, throttle: s.suggestThrottle, now: 1, rng: seededRng(9) };
+    const deps = { queue: s.suggestionQueue, usernames: s.usernames, names: s.names, throttle: s.suggestThrottle, now: 1, rng: seededRng(9) };
     const r = await handleSuggestUsername(deps, { deviceKey: "devB" });
     expect(r.status).toBe(200);
     expect(validateUserLabel((r.body as { name: string }).name).ok).toBe(true);

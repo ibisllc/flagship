@@ -10950,27 +10950,11 @@
   },
   "Letters, numbers and hyphens only": {
     "en": "Letters, numbers and hyphens only",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:140"
-  },
-  "At least 4 characters": {
-    "en": "At least 4 characters",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:142"
-  },
-  "At most 40 characters": {
-    "en": "At most 40 characters",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:144"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:15"
   },
   "All %lld names in use": {
     "en": "All %lld names in use",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:149"
-  },
-  "Reserved": {
-    "en": "Reserved",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:160"
-  },
-  "Taken": {
-    "en": "Taken",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift:162"
   },
   "Reserved for the owner of %@": {
     "en": "Reserved for the owner of %@",
@@ -11381,8 +11365,8 @@
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2567",
     "translatable": false
   },
-  "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)": {
-    "en": "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+  "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)": {
+    "en": "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2583",
     "translatable": false
   },
@@ -13655,5 +13639,33 @@
   "Email": {
     "en": "Email",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:135"
+  },
+  "Taken or too similar to an existing name": {
+    "en": "Taken or too similar to an existing name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:11"
+  },
+  "At least 3 characters": {
+    "en": "At least 3 characters",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:13"
+  },
+  "At most 63 characters": {
+    "en": "At most 63 characters",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:14"
+  },
+  "No hyphen at the start or end, or two in a row": {
+    "en": "No hyphen at the start or end, or two in a row",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:16"
+  },
+  "The installer finished. The server is starting and should register in a few minutes.": {
+    "en": "The installer finished. The server is starting and should register in a few minutes.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ProvisionTimelineLadder.swift: ProvisionQuiet (install progress when the box goes quiet)"
+  },
+  "This server stopped reporting and hasn't registered. It may be stuck.": {
+    "en": "This server stopped reporting and hasn't registered. It may be stuck.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ProvisionTimelineLadder.swift: ProvisionQuiet (install progress when the box goes quiet)"
+  },
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": {
+    "en": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ProvisionTimelineLadder.swift: ProvisionQuiet (install progress when the box goes quiet)"
   }
 }

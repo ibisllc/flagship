@@ -1,8 +1,10 @@
-// How voi.ci serves its own site (docs/voici-and-messages.md §4.2, chunk C): the shell for every page and for
-// /_/about straight from the generated build module (no asset fetch, so no html_handling redirect can turn it into
-// a 307), and the site's files under /_/<dir>/ only when <dir> is this build and the path is in its manifest.
-// Anything else under /_/ is a 404, never the assets layer's single-page fallback.
-import { VOICI_SITE_DIR, VOICI_SITE_FILES, VOICI_SITE_SHELL } from "./voiciSiteBuild.generated.js";
+// How voi.ci serves its own site (docs/voici-and-messages.md §4.2, chunk C; system routes under /-/, D11 of
+// docs/voici-namespace-spec.md): the shell for every page and for /-/about straight from the generated build module
+// (no asset fetch, so no html_handling redirect can turn it into a 307), and the site's files under /-/<dir>/ only
+// when <dir> is this build and the path is in its manifest. Anything else under /-/ is a 404, never the assets
+// layer's single-page fallback. voi.ci's own 404 and 410 are the same shell with a `voici-status` meta, so the site
+// writes the sentence in the visitor's language.
+import { VOICI_SITE_DIR, VOICI_SITE_FILES, VOICI_SITE_SHELL, VOICI_SITE_SHELL_404, VOICI_SITE_SHELL_410 } from "./voiciSiteBuild.generated.js";
 
 /** Where apps/voici-site/build.mjs writes the files inside the Worker's assets (apps/web/public/_voici). */
 export const VOICI_SITE_ASSET_DIR = "/_voici";
@@ -21,8 +23,13 @@ function withHeaders(body: BodyInit | null, status: number, siteHeaders: [string
   return new Response(body, { status, headers });
 }
 
-const notFound = (siteHeaders: [string, string][]) =>
-  withHeaders("not found", 404, siteHeaders, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+const notFound = (siteHeaders: [string, string][]) => voiciErrorResponse(404, siteHeaders, false);
+
+/** voi.ci's 404 and 410: the site shell that says which, or no body at all when the site is off. */
+export function voiciErrorResponse(status: 404 | 410, siteHeaders: [string, string][], head: boolean): Response {
+  const body = head ? null : status === 410 ? VOICI_SITE_SHELL_410 : VOICI_SITE_SHELL_404;
+  return withHeaders(body, status, siteHeaders, { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" });
+}
 
 /** The page shell (the same bytes for every page); 410 for a page taken down. */
 export function voiciShellResponse(request: Request, siteHeaders: [string, string][], status = 200): Response {
@@ -33,7 +40,7 @@ export function voiciShellResponse(request: Request, siteHeaders: [string, strin
 }
 
 /**
- * `voi.ci/_/<rest>`: the about page's shell, one listed file of this build (immutable), or `/_/sw.js`, this build's
+ * `voi.ci/-/<rest>`: the about page's shell, one listed file of this build (immutable), or `/-/sw.js`, this build's
  * reply-alert service worker at a fixed URL (so its registration and push subscription outlive a deploy; browsers
  * re-fetch it to update, so it is never cached), else 404.
  */

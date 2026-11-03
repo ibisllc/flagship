@@ -288,13 +288,24 @@ live custom name or a live or retired code. A one-off script (`scripts/voici-nam
 existing collisions before the deploy; the owner decides each (D2). Expected: none (custom names are new in 0.3,
 codes are random).
 
+**As built: replaced by `docs/voici-namespace-spec.md` (2026-11-02, migration 0127).** One `names` registry holds
+every username, link name, code and reserved word, unique on a safety key (lower case, hyphens removed, 0→o, 1→l);
+every claim is one INSERT and the old checks are gone. All of `voi.ci/<path>` goes through one function
+(`resolveVoiciPath`, packages/control-plane/src/voici.ts; served by `serveVoiciHost`, apps/com/src/voiciRoutes.ts):
+a path that isn't lower case or ends in `/` 301s to its canonical form; `/-/…` is the site's own (the files, `/-/about`,
+`/-/sw.js`; it was `/_/`); `/@<x>` reaches usernames only and 301s to `/<x>`; a live link or code 302s; a retired one
+is 410 (the site shell saying "This link was removed."); a published page is the shell; and unknown names, reserved
+words, unpublished pages and held names of deleted accounts are one 404 (the site shell with "There's no page here.").
+The 404 and 410 shells carry `<meta name="voici-status">` so the site writes the sentence in the visitor's language.
+Before `VOICI_ENABLED` is on, only links and codes resolve and refusals have no body.
+
 ### 4.2 The site
 
 `apps/voici-site/` (new): plain ES modules, no bundler, no framework, vendored `@noble/hashes`,
 `@noble/curves` (Ed25519) and `@noble/post-quantum` (X-Wing), as the webapp vendors them. Served by `flagship-com`'s
-assets under `https://voi.ci/_/<build hash>/...`, every script tag with `integrity` (SRI). Reproducible: a build
+assets under `https://voi.ci/-/<build hash>/...` (`/_/` before the namespace spec), every script tag with `integrity` (SRI). Reproducible: a build
 script writes `apps/voici-site/dist/` and `dist/MANIFEST.json` (SHA-256 of every file); CI rebuilds and compares; the
-manifest hash is shown on `https://voi.ci/_/about`.
+manifest hash is shown on `https://voi.ci/-/about`.
 
 Render steps: fetch `files.voi.ci/v1/u/<u>.json` and `flagshipserver.com/api/username/<u>` in parallel; check the
 index signature against the account's current admin root (or IRK when it pins none) and `username`; check `seq`
@@ -311,8 +322,8 @@ apps/voici-site/build.mjs` writes it to `apps/web/public/_voici/<dir>/` (the `.c
 apps/web/public) with `MANIFEST.json` (`{v:1, files:{path: sha256}}`; the build id is SHA-256 of that file, `<dir>` its
 first 16 hex), and writes `apps/com/src/voiciSiteBuild.generated.ts` (build id, the listed files, the shell HTML).
 `--check` (and `apps/voici-site/tests/site.test.ts`) rebuild and compare byte for byte. The shell is served from that
-module for every page and `/_/about` (an ASSETS fetch of `/_voici/index.html` would be a 307 under the default
-html_handling); `/_/<dir>/<file>` serves only listed files of this build, immutable, else 404
+module for every page and `/-/about` (an ASSETS fetch of `/_voici/index.html` would be a 307 under the default
+html_handling); `/-/<dir>/<file>` serves only listed files of this build, immutable, else 404
 (`apps/com/src/voiciSite.ts`). SRI: every script and stylesheet tag, and a `modulepreload` with `integrity` for every
 module (an import map would need an inline script). Images are fetched, hash-checked, then shown from `blob:` URLs.
 `apps/voici-site/dev/serve.mjs` is a local preview with signed sample pages; `dev/screenshots.mjs` renders it in
@@ -697,8 +708,8 @@ Alerts: opt-in browser reply alerts (owner decision 2026-11-02; migration **0125
   pseudonym's); the delegation's expiry and conversations with no mail left (`voici-gc` hourly); a takedown
   (`removeVoiciPageObjects`, B2's `takedownStep`); account deletion (`deleteAccount`).
 - **Service worker.** `apps/voici-site/src/sw.js` is in the build and its MANIFEST (not modulepreloaded: a classic
-  script); `.com` serves this build's copy at the fixed `https://voi.ci/_/sw.js` (`cache-control: no-cache`, the
-  voi.ci CSP) so the registration and its subscription survive deploys. Scope `/_/alerts/`, where no page lives: it
+  script); `.com` serves this build's copy at the fixed `https://voi.ci/-/sw.js` (`cache-control: no-cache`, the
+  voi.ci CSP) so the registration and its subscription survive deploys. Scope `/-/alerts/`, where no page lives: it
   controls no page and has no fetch handler. No `importScripts`, no network use. Registration takes no SRI (the
   platform has none); the script is the manifest's bytes, and browsers re-check it for updates.
 - **Threat model.** *Someone else's conversation*: conv = H(pageId, P) and the order must be signed by a B that a
@@ -1129,7 +1140,7 @@ today's behaviour until `VOICI_ENABLED = "on"` (prod `"off"` in wrangler.toml; t
 - **CORS**: exactly `VOICI_WEB_ORIGIN`, no credentials, on the §4.4 routes and `POST /api/voici/reports`; a preflight
   may ask only for `content-type`. The webapp origin gains `x-flagship-page-id`, `-sha256`, `-size`, `-signer-pub`.
 - **voi.ci host**: a link name or code first (unchanged), then a published page's shell (410 when taken down), `/@u`
-  → 301; the shell and `/_/…` are C's `voiciSite.ts`. Namespace (D2): a link name whose key is a username's is
+  → 301; the shell and `/-/…` (was `/_/…`) are C's `voiciSite.ts`. Namespace (D2): a link name whose key is a username's is
   `taken`; no code is minted equal to a username's key; account creation (`POST /api/accounts`, and the older
   `username/claim` handler) refuses a name whose key is a voi.ci name's (live or in its wait) or any code's, 409
   `{code:"taken"}`.

@@ -56,18 +56,21 @@ class LinkFieldViewModelTest {
     }
 
     @Test fun checksTheGrammarBeforeAskingCom() {
-        assertEquals("At least 4 characters", msg(typed = "ab").text)
+        assertEquals("At least 3 characters", msg(typed = "ab").text)
         assertEquals("Letters, numbers and hyphens only", msg(typed = "a_b_c_d").text)
-        assertEquals("At most 40 characters", msg(typed = "x".repeat(41)).text)
+        assertEquals("No hyphen at the start or end, or two in a row", msg(typed = "my--party").text)
+        assertEquals("No hyphen at the start or end, or two in a row", msg(typed = "-party").text)
+        assertEquals("At most 63 characters", msg(typed = "x".repeat(64)).text)
+        assertEquals("At least 3 characters", msg(check = VoiciNameCheck("invalid", problem = "too-short")).text)
     }
 
     @Test fun offersSaveOnlyForAnAvailableName() {
         val ok = msg(check = status("available"))
         assertEquals(LinkField.Tone.Ok, ok.tone)
         assertTrue(ok.canSave)
-        assertEquals("Taken", msg(check = status("taken")).text)
+        assertEquals("Taken or too similar to an existing name", msg(check = status("taken")).text)
         assertFalse(msg(check = status("taken")).canSave)
-        assertEquals("Reserved", msg(check = status("reserved")).text)
+        assertEquals("Taken or too similar to an existing name", msg(check = status("reserved")).text)
         assertEquals("Couldn't check halloween. Try again.", msg(check = status("error")).text)
         assertEquals("", msg(check = null).text)
     }
@@ -97,7 +100,8 @@ class LinkFieldViewModelTest {
             JsonObject(data.associate { (k, v) -> k to (if (v is Number) JsonPrimitive(v) else JsonPrimitive(v.toString())) }),
             code,
         )
-        assertEquals("Taken", LinkField.refusalMessage(e("taken"), "x"))
+        assertEquals("Taken or too similar to an existing name", LinkField.refusalMessage(e("taken"), "x"))
+        assertEquals("No hyphen at the start or end, or two in a row", LinkField.refusalMessage(e("invalid", "problem" to "hyphens"), "x"))
         assertEquals("Too many changes today", LinkField.refusalMessage(e("rate-limited"), "x"))
         assertEquals("All 25 names in use", LinkField.refusalMessage(e("name-limit", "limit" to 25), "x"))
         assertEquals("Reserved for the owner of a.com", LinkField.refusalMessage(e("dibs", "domain" to "a.com"), "x"))
@@ -144,7 +148,7 @@ class LinkFieldViewModelTest {
         val model = vm(client)
         model.onTyped("ab")
         assertTrue(client.checks.isEmpty())
-        assertEquals("At least 4 characters", model.message.value.text)
+        assertEquals("At least 3 characters", model.message.value.text)
     }
 
     @Test fun aFailedCheckReadsAsCouldntCheck() = runBlocking {
@@ -216,7 +220,7 @@ class LinkFieldViewModelTest {
         val model = vm(client)
         model.onTyped("halloweenparty")
         model.requestSave()
-        assertEquals("Taken", model.message.value.text)
+        assertEquals("Taken or too similar to an existing name", model.message.value.text)
         assertEquals(LinkField.Tone.Bad, model.message.value.tone)
         assertNull(model.linkState.value.name)
         assertFalse(model.busy.value)

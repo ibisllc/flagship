@@ -12,5 +12,5 @@
     { "path": "../storage" },
     { "path": "../../billing/packages/metering" }
   ],
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "src/**/*.json"]
 }

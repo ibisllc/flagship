@@ -26,7 +26,6 @@ describe("voici vectors (test-vectors/voici)", () => {
     expect(V.linkSites.table).toEqual(JSON.parse(readFileSync(join(import.meta.dirname, "..", "src", "voiciLinkSites.json"), "utf8")));
     for (const c of V.linkSites.cases) expect(P.voiciLinkSite(c.url), c.url).toBe(c.site);
     for (const c of V.pseudonymNames) expect([P.voiciPseudonymCode(c.pub), P.voiciPseudonymName(c.pub)]).toEqual([c.code, c.name]);
-    for (const c of V.namespaceKeys) expect(P.voiciNamespaceKey(c.name)).toBe(c.key);
     for (const c of V.jpegs) expect([P.isVoiciJpeg(h(c.hex)), P.voiciJpegHasMetadata(h(c.hex))]).toEqual([c.isJpeg, c.hasMetadata]);
   });
 

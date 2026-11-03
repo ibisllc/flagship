@@ -13,6 +13,7 @@ import {
   setActiveCloudName,
 } from "./profilesStore.js";
 import { controlApex } from "./apex.js";
+import { isValidName, nameProblemText, voiciNameProblem } from "./nameRules.js";
 
 import { tr } from "./i18n.js";
 const _session = {
@@ -65,7 +66,6 @@ export function lockSession() {
   _session.adminRootSeed = null;
 }
 
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior dashes OK, no `--` (checked separately) — see packages/control-plane/src/labels.ts
 
 /**
  * Lazy-init the user's chosen username. Used by pairing + promo flows
@@ -86,9 +86,8 @@ export async function ensureUsername() {
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
-      if (!USERNAME_RE.test(v) || v.includes("--")) {
-        return tr("3–30 lowercase letters/digits with interior single dashes");
-      }
+      const problem = voiciNameProblem(v);
+      if (problem) return nameProblemText(problem);
       return null;
     },
   });
@@ -115,7 +114,7 @@ export async function ensureUsername() {
  */
 export async function checkUsernameAvailability(handle) {
   if (!handle) return { ok: false, reason: "empty" };
-  if (!USERNAME_RE.test(handle) || handle.includes("--")) return { ok: false, reason: "invalid" };
+  if (!isValidName(handle)) return { ok: false, reason: "invalid" };
   try {
     const r = await fetch(`${controlApex()}/api/username/${encodeURIComponent(handle)}`);
     if (r.status === 404) return { ok: true, available: true };

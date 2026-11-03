@@ -21,7 +21,7 @@
 //   voiciText.js     VOICI_TEXT_RULES, checkVoiciText, prepareVoiciText, VOICI_LINK_URL_MAX, checkVoiciLinkUrl,
 //                    voiciUrlHost, findVoiciLinks, VOICI_LINK_SITES, voiciLinkSite, voiciPseudonymCode,
 //                    voiciPseudonymName
-//   voiciPage.js     TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES, voiciNamespaceKey,
+//   voiciPage.js     TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES,
 //                    isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost,
 //                    parseVoiciChunkPiece, voiciCardRole, canonicalVoiciPageIndex, signVoiciPageIndex,
 //                    parseVoiciPageIndex, checkVoiciPageIndex, checkVoiciPublish, voiciPieceRefsOk,

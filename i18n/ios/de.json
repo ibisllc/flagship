@@ -2679,11 +2679,7 @@
   "Only an admin device can change this": "Nur ein Administratorgerät kann das ändern",
   "Next change %@": "Nächste Änderung: %@",
   "Letters, numbers and hyphens only": "Nur Buchstaben, Ziffern und Bindestriche",
-  "At least 4 characters": "Mindestens 4 Zeichen",
-  "At most 40 characters": "Höchstens 40 Zeichen",
   "All %lld names in use": "Alle %lld Namen sind belegt",
-  "Reserved": "Reserviert",
-  "Taken": "Vergeben",
   "Reserved for the owner of %@": "Reserviert für den Inhaber von %@",
   "Couldn't check %@. Try again.": "%@ konnte nicht geprüft werden. Versuche es erneut.",
   "Too many changes today": "Zu viele Änderungen heute",
@@ -3163,5 +3159,12 @@
   "Google push": "Google-Push",
   "Every device on the account needs its post-quantum key before strict comes back.": "Jedes Gerät des Kontos braucht seinen Post-Quanten-Schlüssel, bevor der strikte Modus zurückkommt.",
   "Test your recovery before turning strict on again.": "Teste deine Wiederherstellung, bevor du den strikten Modus wieder einschaltest.",
-  "Email": "E-Mail"
+  "Email": "E-Mail",
+  "Taken or too similar to an existing name": "Vergeben oder einem vorhandenen Namen zu ähnlich",
+  "At least 3 characters": "Mindestens 3 Zeichen",
+  "At most 63 characters": "Höchstens 63 Zeichen",
+  "No hyphen at the start or end, or two in a row": "Kein Bindestrich am Anfang oder Ende und nie zwei hintereinander",
+  "The installer finished. The server is starting and should register in a few minutes.": "Die Installation ist beendet. Der Server startet und sollte sich in wenigen Minuten registrieren.",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "Dieser Server meldet sich nicht mehr und hat sich nicht registriert. Er hängt möglicherweise.",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Läuft er in Flagship Studio, sieh dort nach. Andernfalls starte das Gerät neu. Kommt er dann immer noch nicht hoch, brich die Bestellung ab und erstelle den Server neu."
 }

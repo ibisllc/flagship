@@ -99,7 +99,7 @@ describe("D1 ↔ InMemory parity", () => {
         return s.usernames.put({ username: "bob", irkPubHex: "22", claimedAt: 2 });
       });
       expectParity(r);
-      expect(r.d1).toEqual({ ok: false, reason: "username already claimed" });
+      expect(r.d1).toEqual({ ok: false, reason: "taken" });
     });
 
     it("benign re-claim updates claimed_at but preserves accountType", async () => {
@@ -847,8 +847,8 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // voiciLinks — code-collision insert, getByService, cascade delete,
-  // expiry GC.
+  // voiciLinks — code-collision insert, getByService, retirement
+  // (codes are rows of the names registry and never deleted).
   // ────────────────────────────────────────────────────────────────────
   describe("voiciLinks", () => {
     it("insert collision rejected; get + getByService parity", async () => {
@@ -866,20 +866,22 @@ describe("D1 ↔ InMemory parity", () => {
       expect(r.d1.byServiceCode).toBe("abc");
     });
 
-    it("deleteByService cascade + deleteExpired count parity", async () => {
+    it("retireByService + retireExpired: codes are retired, never deleted (D7)", async () => {
       const r = await bothAdapters(async (s) => {
         await s.voiciLinks.insert({ code: "c1", username: "alice", serviceId: "svc", targetUrl: "u", createdAt: 1 });
         await s.voiciLinks.insert({ code: "c2", username: "alice", serviceId: "svc", targetUrl: "u", createdAt: 2 });
         await s.voiciLinks.insert({ code: "e1", username: "alice", targetUrl: "u", createdAt: 1, expiresAt: 100 });
-        const cascade = await s.voiciLinks.deleteByService("alice", "svc");
-        const expired = await s.voiciLinks.deleteExpired(500);
+        const retired = await s.voiciLinks.retireByService("alice", "svc", 300);
+        const expired = await s.voiciLinks.retireExpired(500);
         const remaining = await s.voiciLinks.get("e1");
-        return { cascade, expired, remaining };
+        const again = await s.voiciLinks.insert({ code: "e1", username: "bob", targetUrl: "u", createdAt: 600 });
+        return { retired, expired, remainingRetired: remaining?.retiredAt !== undefined, again: again.ok };
       });
       expectParity(r);
-      expect(r.d1.cascade).toBe(2);
+      expect(r.d1.retired).toBe(2);
       expect(r.d1.expired).toBe(1);
-      expect(r.d1.remaining).toBeUndefined();
+      expect(r.d1.remainingRetired).toBe(true);
+      expect(r.d1.again).toBe(false);
     });
   });
 

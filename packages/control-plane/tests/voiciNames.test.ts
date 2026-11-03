@@ -5,7 +5,6 @@ import {
   VOICI_CHANGES_PER_ACCOUNT_DAY,
   VOICI_NAME_INACTIVE_MS,
   VOICI_NAME_LIMITS,
-  VOICI_NAME_WAIT_MS,
   checkVoiciName,
   handleListVoiciNames,
   handleVoiciNameSet,
@@ -14,7 +13,7 @@ import {
   voiciLinkState,
   type VoiciNamesDeps,
 } from "../src/voiciNames.js";
-import { handleVoiciRedirect } from "../src/voici.js";
+import { resolveVoiciPath, type VoiciResolveDeps } from "../src/voici.js";
 import type { DibsFetch } from "../src/nameDibs.js";
 
 const DAY = 86_400_000;
@@ -48,6 +47,7 @@ async function setup(opts: { registered?: string[]; failDns?: boolean; window?: 
     usernames: s.usernames,
     voiciLinks: s.voiciLinks,
     voiciNames: s.voiciNames,
+    names: s.names,
     tiers: s.tiers,
     auditEvents: s.auditEvents,
     dibs: { claims: s.nameDibsClaims, window: opts.window ?? WINDOW, fetch: dns(opts.registered, opts.failDns) },
@@ -75,34 +75,39 @@ const clear = (d: VoiciNamesDeps, serviceId = SVC) => handleVoiciNameSet(d, "ali
 const code = (r: { body: unknown }) => (r.body as { code?: string }).code;
 
 describe("checkVoiciName", () => {
-  it("answers invalid, reserved, available and current", async () => {
+  it("answers invalid (with the problem), taken for a reserved word, available and current", async () => {
     const { deps } = await setup();
-    expect(await checkVoiciName(deps, "alice", SVC, "abc")).toEqual({ status: "invalid", problem: "too-short" });
+    expect(await checkVoiciName(deps, "alice", SVC, "ab")).toEqual({ status: "invalid", problem: "too-short" });
     expect(await checkVoiciName(deps, "alice", SVC, "my party")).toEqual({ status: "invalid", problem: "characters" });
-    expect(await checkVoiciName(deps, "alice", SVC, "log-in")).toEqual({ status: "reserved" });
+    expect(await checkVoiciName(deps, "alice", SVC, "my--party")).toEqual({ status: "invalid", problem: "hyphens" });
+    expect(await checkVoiciName(deps, "alice", SVC, "x".repeat(64))).toEqual({ status: "invalid", problem: "too-long" });
+    expect(await checkVoiciName(deps, "alice", SVC, "log-in")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(deps, "alice", SVC, "abc")).toEqual({ status: "available" });
     expect(await checkVoiciName(deps, "alice", SVC, "Halloween-Party")).toEqual({ status: "available" });
     await set(deps, "halloween-party");
-    expect(await checkVoiciName(deps, "alice", SVC, "halloweenparty")).toEqual({ status: "current" });
+    expect(await checkVoiciName(deps, "alice", SVC, "halloween-party")).toEqual({ status: "current" });
+    // A look-alike of the service's own name is another name, and the registry refuses it.
+    expect(await checkVoiciName(deps, "alice", SVC, "halloweenparty")).toEqual({ status: "taken" });
   });
 
   it("calls a name taken by another account, another service of the same account, or a random code", async () => {
     const { deps, s } = await setup();
-    await s.voiciNames.claim({ key: "chessclub", display: "chess-club", username: "bob", serviceId: "bob--chess", state: "live", setAt: 1, lastActiveAt: 1, warned: 0 });
-    await s.voiciLinks.insert({ code: "k3x9qa", username: "bob", serviceId: "bob--x", targetUrl: "https://x.example/", createdAt: 1 });
+    await s.voiciNames.claim({ key: "chess-club", display: "chess-club", username: "bob", serviceId: "bob--chess", state: "live", setAt: 1, lastActiveAt: 1, warned: 0 });
+    await s.voiciLinks.insert({ code: "3k9x2q", username: "bob", serviceId: "bob--x", targetUrl: "https://x.example/", createdAt: 1 });
     expect(await checkVoiciName(deps, "alice", SVC, "chess-club")).toEqual({ status: "taken" });
     expect(await checkVoiciName(deps, "alice", SVC, "chessclub")).toEqual({ status: "taken" });
-    expect(await checkVoiciName(deps, "alice", SVC, "k3x9qa")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(deps, "alice", SVC, "chess-c1ub")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(deps, "alice", SVC, "3k9x2q")).toEqual({ status: "taken" });
     await set(deps, "mynotes", SVC);
     expect(await checkVoiciName(deps, "alice", SVC2, "mynotes")).toEqual({ status: "taken" });
   });
 
-  it("calls a name taken when its key is a username's: voi.ci/<username> is the page (one namespace)", async () => {
+  it("calls a name taken when its safety key is a username's: voi.ci/<username> is the page (one namespace)", async () => {
     const { deps, s } = await setup();
     await s.usernames.put({ username: "plucky-avocet", irkPubHex: "11".repeat(32), claimedAt: 1 });
-    expect(await checkVoiciName(deps, "alice", SVC, "pluckyavocet")).toEqual({ status: "available" });
-    const withPages = { ...deps, voici: s.voici };
-    expect(await checkVoiciName(withPages, "alice", SVC, "pluckyavocet")).toEqual({ status: "taken" });
-    expect(await checkVoiciName(withPages, "alice", SVC, "plucky-avocet")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(deps, "alice", SVC, "pluckyavocet")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(deps, "alice", SVC, "plucky-avocet")).toEqual({ status: "taken" });
+    expect(await checkVoiciName(deps, "alice", SVC, "p1ucky-avocet")).toEqual({ status: "taken" });
   });
 
   it("holds a name for its .com owner while dibs is open, and fails closed when the lookup fails", async () => {
@@ -142,7 +147,7 @@ describe("handleVoiciNameSet", () => {
     const r = await set(deps, "Halloween-Party");
     expect(r.status).toBe(200);
     expect((r.body as { link: { name: string } }).link.name).toBe("halloween-party");
-    expect((await s.voiciNames.get("halloweenparty"))?.state).toBe("live");
+    expect((await s.voiciNames.get("halloween-party"))?.state).toBe("live");
     const rows = await s.auditEvents.list("alice", 0, 10);
     expect(rows.map((r) => r.eventKind)).toContain("voici-name-set");
   });
@@ -159,13 +164,13 @@ describe("handleVoiciNameSet", () => {
     expect((await set(gone, "springparty", SVC2)).status).toBe(200);
   });
 
-  it("replaces a name: the old one enters its wait and the count stays the same", async () => {
+  it("replaces a name: the old one is retired and the count stays the same", async () => {
     const { deps, s } = await setup();
     await set(deps, "firstname");
     const r = await set(deps, "secondname");
     expect(r.status).toBe(200);
     expect(await s.voiciNames.countLive("alice")).toBe(1);
-    expect(await s.voiciNames.get("firstname")).toMatchObject({ state: "waiting", releaseReason: "replaced" });
+    expect(await s.voiciNames.get("firstname")).toMatchObject({ state: "retired", releaseReason: "replaced" });
   });
 
   it("clears a name back to the code, and clearing nothing is fine", async () => {
@@ -177,17 +182,19 @@ describe("handleVoiciNameSet", () => {
     expect(await s.voiciNames.changesForService("alice", SVC, 0)).toHaveLength(2);
   });
 
-  it("setting the same name again changes nothing and counts nothing", async () => {
+  it("setting the same name again changes nothing and counts nothing; a look-alike of it is taken", async () => {
     const { deps, s } = await setup();
     await set(deps, "mynotes");
-    expect((await set(deps, "my-notes")).status).toBe(200);
+    expect((await set(deps, "mynotes")).status).toBe(200);
     expect(await s.voiciNames.changesForService("alice", SVC, 0)).toHaveLength(1);
+    expect(code(await set(deps, "my-notes"))).toBe("taken");
   });
 
-  it("refuses an invalid, a reserved and a taken name with a code", async () => {
+  it("refuses an invalid name with its problem, and a reserved or taken one as taken", async () => {
     const { deps, s } = await setup();
-    expect(code(await set(deps, "abc"))).toBe("invalid");
-    expect(code(await set(deps, "flagship"))).toBe("reserved");
+    expect((await set(deps, "ab")).body).toMatchObject({ code: "invalid", problem: "too-short" });
+    expect(code(await set(deps, "flagship"))).toBe("taken");
+    expect(code(await set(deps, "f1agship"))).toBe("taken");
     await s.voiciNames.claim({ key: "chessclub", display: "chessclub", username: "bob", serviceId: "bob--chess", state: "live", setAt: 1, lastActiveAt: 1, warned: 0 });
     expect(code(await set(deps, "chess-club"))).toBe("taken");
   });
@@ -279,16 +286,16 @@ describe("handleVoiciNameSet", () => {
     expect(code(await set(deps, "onetoomuch", "alice--zz"))).toBe("rate-limited");
   });
 
-  it("nobody can take a name in its wait, the account that gave it up included; then it is free to anyone", async () => {
+  it("nobody can take a given-up name ever again, the account that gave it up included (D7)", async () => {
     const { deps, s, clock } = await setup();
     await set(deps, "mynotes");
     await clear(deps);
     expect(code(await set(deps, "mynotes", SVC2))).toBe("taken");
     expect(await checkVoiciName({ ...deps }, "bob", "bob--x", "mynotes")).toEqual({ status: "taken" });
-    clock.t += VOICI_NAME_WAIT_MS + 1;
+    clock.t += 400 * DAY;
     await runVoiciNamesMaintenance(deps, async () => true, { offset: 0, count: 10 });
-    expect(await s.voiciNames.get("mynotes")).toBeUndefined();
-    expect((await checkVoiciName(deps, "bob", "bob--x", "mynotes")).status).toBe("available");
+    expect((await s.voiciNames.get("mynotes"))?.state).toBe("retired");
+    expect((await checkVoiciName(deps, "bob", "bob--x", "mynotes")).status).toBe("taken");
   });
 });
 
@@ -316,62 +323,57 @@ describe("voiciLinkState and the names list", () => {
   });
 });
 
-describe("the voi.ci redirect", () => {
+describe("the voi.ci redirect (resolveVoiciPath)", () => {
   async function world() {
     const w = await setup();
-    await w.s.voiciLinks.insert({ code: "k3x9qa", username: "alice", serviceId: SVC, targetUrl: "https://stored.example/", createdAt: 1 });
+    await w.s.voiciLinks.insert({ code: "3k9x2q", username: "alice", serviceId: SVC, targetUrl: "https://stored.example/", createdAt: 1 });
     await set(w.deps, "halloween-party");
-    const redirect = (path: string, extra: object = {}) =>
-      handleVoiciRedirect(
-        { usernames: w.s.usernames, voiciLinks: w.s.voiciLinks, voiciNames: w.s.voiciNames, now: () => NOW, ...extra },
-        path,
-      );
-    return { ...w, redirect };
+    const resolve = (path: string, extra: Partial<VoiciResolveDeps> = {}) =>
+      resolveVoiciPath({ names: w.s.names, pages: w.s.voici, now: () => NOW, ...extra }, `/${path}`);
+    return { ...w, resolve };
   }
 
-  it("sends the code and the name (with or without its hyphens or capitals) to the same place", async () => {
-    const { redirect } = await world();
+  it("sends the code and the name to the same place; capitals 301 to the lowercase name first (D13)", async () => {
+    const { resolve } = await world();
     const canonical = { resolveCanonical: async (u: string, id: string) => `https://party.${u}.flagship.services/#${id}` };
-    for (const p of ["k3x9qa", "halloween-party", "halloweenparty", "HalloweenParty", "Halloween-Party"]) {
-      const r = await redirect(p, canonical);
-      expect(r.status, p).toBe(302);
-      expect(r.headers?.location).toBe("https://party.alice.flagship.services/#alice--party");
-      expect(r.headers?.["cache-control"]).toBe("private, no-store");
+    for (const p of ["3k9x2q", "halloween-party"]) {
+      expect(await resolve(p, canonical), p).toEqual({ kind: "link", target: "https://party.alice.flagship.services/#alice--party" });
     }
+    expect(await resolve("Halloween-Party", canonical)).toEqual({ kind: "redirect", location: "/halloween-party" });
+    // Exact names only: a look-alike is not the link.
+    expect(await resolve("halloweenparty", canonical)).toEqual({ kind: "not-found" });
   });
 
   it("falls back to the box that runs the app, then to the stored target, and 404s a name with nowhere to go", async () => {
-    const { redirect } = await world();
-    expect((await redirect("k3x9qa", { resolveAppUrl: async () => "https://box.example/" })).headers?.location).toBe("https://box.example/");
-    expect((await redirect("k3x9qa")).headers?.location).toBe("https://stored.example/");
-    expect((await redirect("halloweenparty")).status).toBe(404);
+    const { resolve } = await world();
+    expect(await resolve("3k9x2q", { resolveAppUrl: async () => "https://box.example/" })).toEqual({ kind: "link", target: "https://box.example/" });
+    expect(await resolve("3k9x2q")).toEqual({ kind: "link", target: "https://stored.example/" });
+    expect(await resolve("halloween-party")).toEqual({ kind: "not-found" });
   });
 
-  it("answers 410 and redirects nowhere for a name in its wait", async () => {
-    const { redirect, deps } = await world();
+  it("answers 410 and redirects nowhere for a retired name", async () => {
+    const { resolve, deps } = await world();
     await clear(deps);
-    const r = await redirect("halloween-party", { resolveCanonical: async () => "https://party.alice.flagship.services/" });
-    expect(r.status).toBe(410);
-    expect(r.headers?.location).toBeUndefined();
+    expect(await resolve("halloween-party", { resolveCanonical: async () => "https://party.alice.flagship.services/" })).toEqual({ kind: "gone" });
   });
 
   it("answers 410 for a retired code and 404 for one that never existed", async () => {
-    const { redirect, s } = await world();
+    const { resolve, s } = await world();
     await s.voiciLinks.retireByService("alice", SVC, 5);
-    expect((await redirect("k3x9qa")).status).toBe(410);
-    expect((await redirect("zzzzzz")).status).toBe(404);
-    expect((await redirect("no-such-name")).status).toBe(404);
+    expect(await resolve("3k9x2q")).toEqual({ kind: "gone" });
+    expect(await resolve("9zzzzz")).toEqual({ kind: "not-found" });
+    expect(await resolve("no-such-name")).toEqual({ kind: "not-found" });
   });
 });
 
 describe("account deletion", () => {
-  it("puts every name into its wait and retires every code", async () => {
+  it("retires every name and every code", async () => {
     const { deps, s } = await setup();
-    await s.voiciLinks.insert({ code: "k3x9qa", username: "alice", serviceId: SVC, targetUrl: "https://x.example/", createdAt: 1 });
+    await s.voiciLinks.insert({ code: "3k9x2q", username: "alice", serviceId: SVC, targetUrl: "https://x.example/", createdAt: 1 });
     await set(deps, "mynotes");
     await releaseAccountLinks(deps, "alice");
-    expect(await s.voiciNames.get("mynotes")).toMatchObject({ state: "waiting", releaseReason: "deleted" });
-    expect((await s.voiciLinks.get("k3x9qa"))?.retiredAt).toBe(NOW);
+    expect(await s.voiciNames.get("mynotes")).toMatchObject({ state: "retired", releaseReason: "deleted" });
+    expect((await s.voiciLinks.get("3k9x2q"))?.retiredAt).toBe(NOW);
   });
 });
 
@@ -407,7 +409,7 @@ describe("runVoiciNamesMaintenance", () => {
     const last = await tick(61);
     expect(last.released).toBe(1);
     expect(events.map((e) => e.kind)).toEqual(["warning", "warning", "released"]);
-    expect(await s.voiciNames.get("mynotes")).toMatchObject({ state: "waiting", releaseReason: "lapsed" });
+    expect(await s.voiciNames.get("mynotes")).toMatchObject({ state: "retired", releaseReason: "lapsed" });
   });
 
   it("walks windows of names in turn and wraps around", async () => {

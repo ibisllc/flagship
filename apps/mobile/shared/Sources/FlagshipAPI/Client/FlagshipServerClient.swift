@@ -2569,18 +2569,15 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 demoServer: demoBlock
             )
         }
-        // Username rules. Mirrors the Worker's USERNAME_RE in
-        // labels.ts so the Mock's wire shape (reason strings +
-        // ordering) matches what a real Worker would return — keep these in
-        // sync with control-plane labels.ts. 3–30 chars, interior single dashes
-        // OK, no leading/trailing dash, no `--` (the slug-creator delimiter —
-        // docs/service-addressing-double-dash.md).
-        let usernameRe = "^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$"
-        if lower.range(of: usernameRe, options: .regularExpression) == nil || lower.contains("--") {
+        // Username rules: the voi.ci namespace format (D12, `VoiciName`), so the Mock's
+        // wire shape (reason strings + ordering) matches what the Worker's
+        // validateUserLabel in labels.ts returns. 3–63 chars, interior single dashes,
+        // no leading/trailing dash, no `--` (the slug-creator delimiter).
+        if VoiciName.problem(lower) != nil {
             return .init(
                 username: lower,
                 available: false,
-                reason: String(localized: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)"),
+                reason: String(localized: "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)"),
                 demoServer: demoBlock
             )
         }

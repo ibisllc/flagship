@@ -6,9 +6,9 @@ import {
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
-  handleVoiciRedirect,
   handleVoiciShorten,
   mintShortLink,
+  resolveVoiciPath,
 } from "../src/voici.js";
 
 const USER = "alice";
@@ -33,7 +33,7 @@ async function seed(s: InMemoryStorage, irk: Keypair) {
 }
 
 describe("mintShortLink (internal)", () => {
-  it("returns a 6-char lowercase base36 code by default", async () => {
+  it("returns a 6-char code, a digit first, by default (D2, D3)", async () => {
     const s = new InMemoryStorage();
     const r = await mintShortLink(
       { usernames: s.usernames, voiciLinks: s.voiciLinks, now: () => 1000 },
@@ -41,7 +41,7 @@ describe("mintShortLink (internal)", () => {
     );
     expect("error" in r).toBe(false);
     if ("code" in r) {
-      expect(r.code).toMatch(/^[a-z0-9]{6}$/);
+      expect(r.code).toMatch(/^[0-9][a-z0-9]{5}$/);
       expect(r.shortUrl).toBe(`https://voi.ci/${r.code}`);
     }
   });
@@ -82,77 +82,44 @@ describe("mintShortLink (internal)", () => {
       { username: USER, targetUrl: "https://example.com/" },
     );
     if ("code" in r) {
-      expect(r.code).toMatch(/^[a-z0-9]{8}$/);
+      expect(r.code).toMatch(/^[0-9][a-z0-9]{7}$/);
     }
   });
 });
 
-describe("handleVoiciRedirect (hostname route)", () => {
+describe("resolveVoiciPath for codes", () => {
+  const resolve = (s: InMemoryStorage, path: string, extra: object = {}) =>
+    resolveVoiciPath({ names: s.names, pages: s.voici, now: () => 1000, ...extra }, path);
+
   it("302s with the target URL on a hit", async () => {
     const s = new InMemoryStorage();
-    await s.voiciLinks.insert({
-      code: "abc123",
-      username: USER,
-      targetUrl: "https://example.com/landing",
-      createdAt: 1,
-    });
-    const res = await handleVoiciRedirect(
-      { usernames: s.usernames, voiciLinks: s.voiciLinks, now: () => 1000 },
-      "abc123",
-    );
-    expect(res.status).toBe(302);
-    expect(res.headers?.location).toBe("https://example.com/landing");
+    await s.voiciLinks.insert({ code: "1bc123", username: USER, targetUrl: "https://example.com/landing", createdAt: 1 });
+    expect(await resolve(s, "/1bc123")).toEqual({ kind: "link", target: "https://example.com/landing" });
   });
 
   it("sends an app's link to the box that runs the app now, and a one-off link where it was minted", async () => {
     const s = new InMemoryStorage();
-    await s.voiciLinks.insert({ code: "app123", username: USER, serviceId: "alice--family", targetUrl: "https://family.home.alice.flagship.services", createdAt: 1 });
-    await s.voiciLinks.insert({ code: "one123", username: USER, targetUrl: "https://example.com/x", createdAt: 1 });
+    await s.voiciLinks.insert({ code: "4pp123", username: USER, serviceId: "alice--family", targetUrl: "https://family.home.alice.flagship.services", createdAt: 1 });
+    await s.voiciLinks.insert({ code: "0ne123", username: USER, targetUrl: "https://example.com/x", createdAt: 1 });
     const asked: string[] = [];
-    const deps = {
-      usernames: s.usernames,
-      voiciLinks: s.voiciLinks,
-      resolveAppUrl: async (u: string, id: string) => (asked.push(`${u}/${id}`), "https://family.work.alice.flagship.services"),
-    };
-    expect((await handleVoiciRedirect(deps, "app123")).headers?.location).toBe("https://family.work.alice.flagship.services");
-    expect((await handleVoiciRedirect(deps, "one123")).headers?.location).toBe("https://example.com/x");
+    const appUrl = { resolveAppUrl: async (u: string, id: string) => (asked.push(`${u}/${id}`), "https://family.work.alice.flagship.services") };
+    expect(await resolve(s, "/4pp123", appUrl)).toEqual({ kind: "link", target: "https://family.work.alice.flagship.services" });
+    expect(await resolve(s, "/0ne123", appUrl)).toEqual({ kind: "link", target: "https://example.com/x" });
     expect(asked).toEqual(["alice/alice--family"]);
-    const unknown = { ...deps, resolveAppUrl: async () => null };
-    expect((await handleVoiciRedirect(unknown, "app123")).headers?.location).toBe("https://family.home.alice.flagship.services");
+    expect(await resolve(s, "/4pp123", { resolveAppUrl: async () => null })).toEqual({ kind: "link", target: "https://family.home.alice.flagship.services" });
   });
 
-  it("404s on miss", async () => {
+  it("404s on a miss, 410s on an expired one-off (the rotated-link case)", async () => {
     const s = new InMemoryStorage();
-    const res = await handleVoiciRedirect(
-      { usernames: s.usernames, voiciLinks: s.voiciLinks },
-      "nope42",
-    );
-    expect(res.status).toBe(404);
+    await s.voiciLinks.insert({ code: "5tale1", username: USER, targetUrl: "https://example.com/", createdAt: 1, expiresAt: 100 });
+    expect(await resolve(s, "/n0pe42")).toEqual({ kind: "not-found" });
+    expect(await resolve(s, "/5tale1")).toEqual({ kind: "gone" });
   });
 
-  it("410s on expired (the rotated-link case)", async () => {
+  it("never reads a path with more than one segment (no path traversal)", async () => {
     const s = new InMemoryStorage();
-    await s.voiciLinks.insert({
-      code: "stale1",
-      username: USER,
-      targetUrl: "https://example.com/",
-      createdAt: 1,
-      expiresAt: 100,
-    });
-    const res = await handleVoiciRedirect(
-      { usernames: s.usernames, voiciLinks: s.voiciLinks, now: () => 500 },
-      "stale1",
-    );
-    expect(res.status).toBe(410);
-  });
-
-  it("404s on malformed codes (no path traversal)", async () => {
-    const s = new InMemoryStorage();
-    const res = await handleVoiciRedirect(
-      { usernames: s.usernames, voiciLinks: s.voiciLinks },
-      "../../etc/passwd",
-    );
-    expect(res.status).toBe(404);
+    expect(await resolve(s, "/../../etc/passwd")).toEqual({ kind: "not-found" });
+    expect(await resolve(s, "/a/b")).toEqual({ kind: "not-found" });
   });
 });
 

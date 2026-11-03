@@ -7,7 +7,7 @@
 //     |<ownerSignPub>|<pieces>|<signerKind admin-root|irk>|<signerPub>
 //   flagship/voici-piece-upload/v1|<u>|<pageId>|<sha256>|<size>|<issuedAt>
 //
-// Exported API: TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES, voiciNamespaceKey, isVoiciJpeg,
+// Exported API: TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES, isVoiciJpeg,
 // voiciJpegHasMetadata, parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost, parseVoiciChunkPiece,
 // voiciCardRole, canonicalVoiciPageIndex, signVoiciPageIndex, parseVoiciPageIndex, checkVoiciPageIndex,
 // checkVoiciPublish, voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload,
@@ -40,11 +40,6 @@ const SITE_IDS = new Set(VOICI_LINK_SITES.map((s) => s.id));
 function exactKeys(r, keys) {
   const ks = Object.keys(r);
   return ks.length === keys.length && keys.every((k) => k in r);
-}
-
-/** One namespace with custom link names and codes (§4.1): lowercase, hyphens removed. */
-export function voiciNamespaceKey(name) {
-  return name.toLowerCase().replace(/-/g, "");
 }
 
 export function isVoiciJpeg(b) {

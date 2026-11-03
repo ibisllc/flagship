@@ -7,8 +7,9 @@ already landed: iOS sign-out now actually erases the iCloud-synchronizable UMK
 This spec covers three intertwined pieces:
 1. A **no-backup deletion ceremony** that turns "remove the last device" into a
    deliberate, twice-confirmed **account deletion**.
-2. **Username reclaim** — a deleted name is freed immediately; long-inactive names
-   are reclaimable by a sysadmin tool (not an auto-cron).
+2. **Username reclaim** — a deleted name is held for 30 days, then freed to anyone
+   (changed 2026-11-02 with the voi.ci namespace, `docs/voici-namespace-spec.md`);
+   long-inactive names are reclaimable by a sysadmin tool (not an auto-cron).
 3. **Server transfer-a-box** — hand a running box (and its contents) to another
    account via a QR, which doubles as the "Pair an existing box" acquirer flow.
 
@@ -40,7 +41,7 @@ must create that signal. (We chose: **hard-delete the username row** — §1.)
 |---|----------|--------|
 | Keychain wipe | sign-out must erase the synced key | ✅ DONE (`Keystore` fix) |
 | Death record | how account death is recorded | **Hard-delete the `usernames` row** |
-| Reclaim timing | when a deleted name frees | **Immediately** (grace-for-undo is cryptographically impossible without KYC / retaining the key) |
+| Reclaim timing | when a deleted name frees | **After a 30-day hold** (owner, 2026-11-02, `docs/voici-namespace-spec.md` clarification 1; was "immediately"). During the hold nobody can claim the name, the old owner included (no undo: that would still need the key or KYC), so caches and printed `voi.ci/<name>` links go stale before a new holder appears; then a scheduled job releases it, first come first served. |
 | Multi-device delete | whole-account delete on N devices | **Last device out kills it** (remove each device; the last removal deletes the account). No separate "delete-all" command. |
 | Inactive reclaim | dormant-but-undeleted names | **Sysadmin manual tool**, allowed for ≥3 months inactive (expectation: wait longer). NOT an automatic GC. |
 | Servers on delete | orphan vs transfer | **Orphan + lapse**, PLUS an opt-in **"ask all servers to delete their content"** checkbox; build a real **transfer-a-box** flow (§4). |
@@ -70,7 +71,7 @@ Three escalating steps:
    row** (and tears down routing/DNS/cert — §6). If the content-delete box was
    checked, it rides as **one atomic bundle** with that self-revoke (§5 invariant)
    — never on its own. Then `Keystore.wipeAllProfiles()` and drop to Welcome. The
-   name is free immediately.
+   name is held for 30 days, then free to anyone (§3).
 
 Mirror on iOS / Android / webapp. Fold the lock-screen sign-out under the same
 gate (today it only warns) so the ceremony is consistent everywhere.
@@ -79,8 +80,16 @@ gate (today it only warns) so the ceremony is consistent everywhere.
 
 ## 3. Username reclaim
 
-- **Deliberate deletion → immediate free.** Hard-deleting the row makes the name
-  pass `handleUsernameClaim` availability again at once. No grace (see §1).
+- **Deliberate deletion → held 30 days, then free.** As built (0.3, migration 0127): the names registry
+  (`packages/storage/src/names.ts`) is the only authority on who holds a name. Hard-deleting the `usernames` row
+  (`UsernameStorage.delete`, one transaction) sets the account's `username` row in `names` to `held` with
+  `held_until` = now + 30 days and retires its custom link names and codes for good. While held, the name (and
+  any look-alike: same safety key) is refused to every claimant, this account's old keys included, and
+  `voi.ci/<name>` answers the same 404 as an unknown name. The `.com` cron (`cronPlan.ts` job `names`, every six
+  hours) releases held rows whose hold has ended; the next claim is a brand-new row, and nothing of the old
+  account (page, messages, history) carries over. The admin reclaim tool below deletes through the same path,
+  so a reclaimed name is held 30 days too. A demo account's operator teardown (`sample-user` cleanup) releases
+  its name at once (no person waits on it).
 - **Inactive accounts → sysadmin tool, not a cron.** Add **`last_active`** to the
   username/identity (coarse, ~daily bump on any authenticated/IRK-signed call).
   Provide an admin-gated command that can revoke + free a name **inactive ≥ 3

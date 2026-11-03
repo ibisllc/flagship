@@ -3217,5 +3217,13 @@
   "You can start {0} new conversations a day. Try again {1}.": "Você pode iniciar {0} novas conversas por dia. Tente novamente {1}.",
   "You have a reply on voi.ci/{0}": "Você tem uma resposta em voi.ci/{0}",
   "{0} rule": "{0} regra",
-  "Email": "E-mail"
+  "Email": "E-mail",
+  "At least 3 characters": "Pelo menos 3 caracteres",
+  "At most 63 characters": "No máximo 63 caracteres",
+  "No hyphen at the start or end, or two in a row": "Sem hífen no início ou no fim, nem dois seguidos",
+  "Taken or too similar to an existing name": "Em uso ou parecido demais com um nome existente",
+  "3 to 63 lowercase letters, numbers and hyphens": "De 3 a 63 letras minúsculas, números e hifens",
+  "The installer finished. The server is starting and should register in a few minutes.": "O instalador terminou. O servidor está iniciando e deve se registrar em alguns minutos.",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "Este servidor parou de informar e não se registrou. Ele pode estar travado.",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Se ele roda no Flagship Studio, verifique lá. Caso contrário, reinicie a máquina. Se ainda assim não subir, cancele o pedido e crie o servidor de novo."
 }

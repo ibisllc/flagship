@@ -10,7 +10,7 @@ import {
   type Keypair,
   type ServersSelfDelete,
 } from "@flagship/protocol";
-import { InMemoryStorage } from "@flagship/storage";
+import { InMemoryStorage, NAME_HOLD_MS } from "@flagship/storage";
 import {
   handleAccountDeletionBundle,
   handleAdminUsernameReclaim,
@@ -82,7 +82,7 @@ function serversEnvelope(username: string, irk: Keypair, issuedAt = NOW) {
 }
 
 describe("handleAccountDeletionBundle — account-self-delete", () => {
-  it("hard-deletes the account and makes the name claimable again immediately", async () => {
+  it("hard-deletes the account; the name is held 30 days for everyone, then anyone may claim it", async () => {
     const storage = new InMemoryStorage();
     const irk = makeKey(1);
     await seedAccount(storage, "alice", irk);
@@ -93,24 +93,30 @@ describe("handleAccountDeletionBundle — account-self-delete", () => {
     expect(res.status).toBe(200);
     expect((res.body as { ok: boolean }).ok).toBe(true);
 
-    // Row is gone.
+    // Row is gone; the registry holds the name (docs/voici-namespace-spec.md, owner clarification 1).
     expect(await storage.usernames.get("alice")).toBeUndefined();
+    expect((await storage.names.lookup("alice"))?.status).toBe("held");
 
-    // The name passes claim availability again — a DIFFERENT IRK can claim it.
-    const newIrk = makeKey(2);
-    const claimOrder = { username: "alice", irkPub: newIrk.publicKey, issuedAt: NOW };
     const { signClaimUsername } = await import("@flagship/protocol");
-    const claim = await handleUsernameClaim(
-      { storage: storage.usernames, now: () => NOW },
-      {
-        request: { username: "alice", irkPub: hex(newIrk.publicKey), issuedAt: NOW },
-        signature: hex(signClaimUsername(claimOrder, newIrk)),
-      },
-    );
+    const claimAt = (key: ReturnType<typeof makeKey>, at: number) =>
+      handleUsernameClaim(
+        { storage: storage.usernames, now: () => at },
+        {
+          request: { username: "alice", irkPub: hex(key.publicKey), issuedAt: at },
+          signature: hex(signClaimUsername({ username: "alice", irkPub: key.publicKey, issuedAt: at }, key)),
+        },
+      );
+    // During the hold nobody may claim it, the old owner's key included.
+    const newIrk = makeKey(2);
+    expect((await claimAt(newIrk, NOW)).status).toBe(409);
+    expect((await claimAt(irk, NOW)).status).toBe(409);
+
+    // After 30 days the job releases it and the first claim wins.
+    const later = NOW + NAME_HOLD_MS + 1000;
+    expect(await storage.names.releaseExpiredHolds(later)).toBe(1);
+    const claim = await claimAt(newIrk, later);
     expect(claim.status).toBe(200);
-    expect((await storage.usernames.get("alice"))?.irkPubHex).toBe(
-      hex(newIrk.publicKey),
-    );
+    expect((await storage.usernames.get("alice"))?.irkPubHex).toBe(hex(newIrk.publicKey));
   });
 
   it("tears down every owned server (routing released, record revoked)", async () => {

@@ -3,6 +3,7 @@ import {
   verifyClaimUsername,
   verifyDeviceCapabilityGrant,
   verifyDeviceSelfProfile,
+  voiciNameProblem,
   type AccountProfileEnvelope,
   type ClaimUsername,
   type DeviceCapabilityGrant,
@@ -12,13 +13,11 @@ import type {
   AccountProvisioningStorage,
   UsernameOfferStorage,
   UsernameStorage,
-  VoiciLinkStorage,
-  VoiciNameStorage,
 } from "@flagship/storage";
 import { bytesToHex, HEX128, HEX64, hexToBytes } from "./hex.js";
-import { validateUserLabel } from "./labels.js";
+import { isReservedName } from "./labels.js";
 import { conflict, forbidden, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
-import { usernameCollidesWithVoici } from "./voiciPages.js";
+import { USERNAME_TAKEN } from "./usernameClaim.js";
 
 const DEVICE_ID = /^[0-9a-f]{32}$/;
 const PLATFORM_CLASSES = new Set(["ios", "android", "web", "macos", "windows", "linux", "other"]);
@@ -47,9 +46,6 @@ export interface AccountBootstrapDeps {
   offerTtlMs?: number;
   freshnessMs?: number;
   now?: () => number;
-  /** One namespace on voi.ci (docs/voici-and-messages.md §4.1): a name whose key is a link name's or a code's is taken. */
-  voiciLinks?: Pick<VoiciLinkStorage, "get">;
-  voiciNames?: Pick<VoiciNameStorage, "get">;
 }
 
 export async function handleAccountBootstrap(
@@ -65,11 +61,13 @@ export async function handleAccountBootstrap(
       typeof body.adminRootPub !== "string" || !HEX64.test(body.adminRootPub)) {
     return malformed("malformed account bootstrap");
   }
-  const validated = validateUserLabel(request.username);
-  if (!validated.ok) return malformed(validated.reason);
-  const username = validated.label;
+  // The format (D12) answers with the specific problem; a taken name, a look-alike of one or a reserved word with the
+  // one generic refusal. The registry insert inside provisioning.initialize is the collision check.
+  const problem = voiciNameProblem(request.username);
+  if (problem) return { status: 400, body: { error: "not a valid username", code: "invalid", problem } };
+  const username = request.username.toLowerCase();
   if (Math.abs(now - request.issuedAt) > (deps.freshnessMs ?? 5 * 60_000)) return forbidden("stale request");
-  if (await usernameCollidesWithVoici(deps, username)) return { status: 409, body: { error: "that name is taken", code: "taken" } };
+  if (isReservedName(username)) return { ...USERNAME_TAKEN };
 
   const irkPub = hexToBytes(request.irkPub);
   const claim: ClaimUsername = { username, irkPub, issuedAt: request.issuedAt };
@@ -154,7 +152,9 @@ export async function handleAccountBootstrap(
     accountProfile: { ...accountProfile, updatedAt: request.issuedAt },
     primaryDeviceProfile: { ...deviceProfile, updatedAt: request.issuedAt },
   });
-  if (!initialized.ok) return conflict(initialized.reason.replaceAll("-", " "));
+  if (!initialized.ok) {
+    return initialized.reason === "username-unavailable" ? { ...USERNAME_TAKEN } : conflict(initialized.reason.replaceAll("-", " "));
+  }
   if (initialized.created && deps.offers) await deps.offers.consume(username);
   return ok({ ok: true, username, accountId: username, deviceId: device.deviceId, created: initialized.created }, {
     "cache-control": "private, no-store",

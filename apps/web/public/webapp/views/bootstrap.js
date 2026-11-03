@@ -34,9 +34,9 @@ import { escapeHtml } from "../lib/util.js";
 import { set as profileSet } from "../lib/profilesStore.js";
 
 import { tr } from "../lib/i18n.js";
+import { isValidName, nameProblemText, voiciNameProblem } from "../lib/nameRules.js";
 registerView("view-bootstrap");
 
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior dashes OK, no `--` (checked separately) — see packages/control-plane/src/labels.ts
 
 // Sign-up no longer takes a chosen name — naming is random-by-default
 // (docs/naming-recovery-and-name-change.md §4): a custom name is a paid change,
@@ -44,8 +44,10 @@ const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior das
 // and "Connect to an existing account", one page holding both ways back in:
 // the account name (sign in) and a pairing code (join), as on iOS and Android.
 
-export const NAME_RULE_ERROR =
-  tr("Account names are 3 to 30 lowercase letters and digits, with single dashes inside.");
+/** The sentence for a typed account name that can't be one (docs/voici-namespace-spec.md D12). */
+export function nameRuleError(raw) {
+  return nameProblemText(voiciNameProblem(raw) ?? "characters");
+}
 
 function setFieldError(id, text) {
   const el = $(id);
@@ -127,9 +129,10 @@ async function handleContinue() {
   }
   if (field.action === "error") return setFieldError("connect-name-error", field.error);
   const raw = field.action === "sign-in" ? field.name : "";
-  if (!USERNAME_RE.test(raw) || raw.includes("--")) {
-    setFieldError("connect-name-error", NAME_RULE_ERROR);
-    return toast(NAME_RULE_ERROR, "err");
+  if (!isValidName(raw)) {
+    const error = nameRuleError(raw);
+    setFieldError("connect-name-error", error);
+    return toast(error, "err");
   }
   setFieldError("connect-name-error", "");
   hideAccess();

@@ -85,7 +85,6 @@ class VoiciVectorsTest {
             assertEquals(c.s("code"), VoiciText.voiciPseudonymCode(c.s("pub")))
             assertEquals(c.s("name"), VoiciText.voiciPseudonymName(c.s("pub")))
         }
-        for (c in V.a("namespaceKeys").map { it.jsonObject }) assertEquals(c.s("key"), VoiciPage.voiciNamespaceKey(c.s("name")))
         for (c in V.a("jpegs").map { it.jsonObject }) {
             assertEquals(c.s("name"), c["isJpeg"]!!.jsonPrimitive.boolean, VoiciPage.isVoiciJpeg(h(c.s("hex"))))
             assertEquals(c.s("name"), c["hasMetadata"]!!.jsonPrimitive.boolean, VoiciPage.voiciJpegHasMetadata(h(c.s("hex"))))

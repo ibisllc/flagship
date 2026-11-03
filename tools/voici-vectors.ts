@@ -173,7 +173,6 @@ want("site github", siteCases[0]!.site, "github");
 want("site mastodon path", siteCases[8]!.site, "mastodon");
 
 const pseudonymNames = [PPUB, "00".repeat(32), "ff".repeat(32)].map((pub) => ({ pub, code: P.voiciPseudonymCode(pub), name: P.voiciPseudonymName(pub) }));
-const namespaceKeys = ["Alice", "halloween-party", "a-b-c-d"].map((name) => ({ name, key: P.voiciNamespaceKey(name) }));
 
 // JPEGs: SOI, an optional APPn segment, SOS, EOI (not decodable, enough for the magic and segment checks)
 const jpegPlain = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x4a, 0x46, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9]);
@@ -385,7 +384,6 @@ const voici = {
   linkMatches: linkTexts,
   linkSites: { table: P.VOICI_LINK_SITES, cases: siteCases },
   pseudonymNames,
-  namespaceKeys,
   jpegs,
   pieces: {
     avatarHex: H(avatar),

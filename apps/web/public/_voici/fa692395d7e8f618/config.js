@@ -43,12 +43,19 @@ export function siteConfig(loc = globalThis.location, doc = globalThis.document)
   }
 }
 
-const USERNAME = /^[a-z0-9](?:-?[a-z0-9]){0,31}$/;
+// The username format (docs/voici-namespace-spec.md D12): 3 to 63 of a-z 0-9 -, no leading, trailing or double hyphen.
+const USERNAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
-/** "/alice" → {view:"page", username}; "/_/about" → {view:"about"}; anything else → {view:"missing"}. */
-export function routeOf(pathname) {
-  if (pathname === "/_/about" || pathname === "/_/about/") return { view: "about" };
+/**
+ * "/alice" → {view:"page", username}; "/-/about" → {view:"about"}; anything else → {view:"missing"}. `status` is the
+ * shell's `voici-status` meta: `.com` serves the same shell as its 404 (unknown, unpublished, held) and its 410 (a
+ * removed link or code), so the page can say which.
+ */
+export function routeOf(pathname, status = null) {
+  if (status === "410") return { view: "gone" };
+  if (status === "404") return { view: "missing" };
+  if (pathname === "/-/about" || pathname === "/-/about/") return { view: "about" };
   const m = /^\/([^/]+)\/?$/.exec(pathname);
-  if (m && USERNAME.test(m[1])) return { view: "page", username: m[1] };
+  if (m && USERNAME.test(m[1]) && !m[1].includes("--")) return { view: "page", username: m[1] };
   return { view: "missing" };
 }

@@ -137,7 +137,7 @@ function showAbout(cfg) {
         { class: "about" },
         h(doc, "p", { class: "label" }, t("This build")),
         h(doc, "p", { class: "mono-value" }, build || "dev"),
-        dir ? h(doc, "a", { class: "inline-link", href: `${win.location.origin.startsWith("https://") ? win.location.origin : "https://voi.ci"}/_/${dir}/MANIFEST.json` }, t("Manifest")) : null,
+        dir ? h(doc, "a", { class: "inline-link", href: `${win.location.origin.startsWith("https://") ? win.location.origin : "https://voi.ci"}/-/${dir}/MANIFEST.json` }, t("Manifest")) : null,
         stateFooter(cfg),
       ),
     });
@@ -148,7 +148,7 @@ function main() {
   initLocale();
   doc.documentElement.setAttribute("lang", locale());
   const cfg = siteConfig(win.location, doc);
-  const route = routeOf(win.location.pathname);
+  const route = routeOf(win.location.pathname, doc.querySelector('meta[name="voici-status"]')?.getAttribute("content") ?? null);
   if (!cfg) {
     rerender = () => showState(null, { title: t("This page couldn't be checked."), body: t("This copy of the site isn't running on voi.ci.") });
     return rerender();
@@ -156,6 +156,10 @@ function main() {
   if (route.view === "about") return showAbout(cfg);
   if (route.view === "missing") {
     rerender = () => showState(cfg, { icon: "globe", title: t("There's no page here."), body: t("Check the address and try again.") });
+    return rerender();
+  }
+  if (route.view === "gone") {
+    rerender = () => showState(cfg, { icon: "globe", title: t("This link was removed."), body: t("It doesn't lead anywhere any more. Ask whoever shared it for a new one.") });
     return rerender();
   }
   showPage(cfg, route.username).catch(() => failure(cfg, "bad-piece", route.username));

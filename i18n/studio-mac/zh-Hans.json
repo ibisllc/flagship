@@ -119,8 +119,6 @@
   "Waiting for an installer checkpoint": "正在等待安装程序检查点",
   "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.": "耗时超出预期：盒子可能没有连上网络，或者正在等待你在手机上批准解锁。请确认它在线，或关机后重试。",
   "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.": "正在使用你的手机留下的密钥解锁其磁盘。如果手机要求批准，请在手机上批准。",
-  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": "磁盘已密封：请在手机上批准首次解锁。之后它应能自行解锁；如果手机再次提示，请在手机上批准。",
-  "The disk is sealed — approve the unlock on your phone.": "磁盘已密封：请在手机上批准解锁。",
   "Library/Application Support": "Library/Application Support",
   "The app quit while the install was running.": "安装运行期间应用意外退出。",
   "Hosting Flagship servers for the internet": "正在为互联网托管 Flagship 服务器",
@@ -219,5 +217,11 @@
   "The image could not be handed to the helper.": "无法将映像交给辅助程序。",
   "The helper would not accept that disk.": "辅助程序不接受该磁盘。",
   "Couldn't unmount the disk: %@": "无法卸载磁盘：%@",
-  "Beta": "Beta"
+  "Beta": "Beta",
+  "Starting…": "正在启动…",
+  "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.": "正在启动。手机提示时，请在手机上批准此服务器的首次解锁。之后它应能自行解锁；如果手机再次提示，请在手机上批准。",
+  "Starting. When your phone asks, approve the unlock there.": "正在启动。手机提示时，请在手机上批准解锁。",
+  "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.": "安装程序已结束，但此服务器从未注册，因此没有需要批准的内容。请在 Studio 中删除它，然后在手机上重新创建。",
+  "Setup didn't finish": "设置未完成",
+  "Unlocking…": "正在解锁…"
 }

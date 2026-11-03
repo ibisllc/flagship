@@ -146,10 +146,10 @@ describe("handleAccountResolve", () => {
   it("multi account: kind:multi, totpEnrolled true, graceModel:24h-totp", async () => {
     const r = await handleAccountResolve(
       deps({
-        usernames: usernames({ team: { accountType: "multi", totpEnrolledAt: 123 } }),
-        webauthnRecovery: recovery({ team: {} }),
+        usernames: usernames({ "crew-one": { accountType: "multi", totpEnrolledAt: 123 } }),
+        webauthnRecovery: recovery({ "crew-one": {} }),
       }),
-      "team",
+      "crew-one",
     );
     const b = body(r);
     expect(b.kind).toBe("multi");

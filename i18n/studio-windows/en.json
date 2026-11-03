@@ -339,10 +339,6 @@
     "en": "Installing…",
     "ctx": "VM/VMLifecycle.cs:55 (prose)"
   },
-  "waitingForYouToUnlock": {
-    "en": "Waiting for you to unlock",
-    "ctx": "VM/VMLifecycle.cs:57 (prose)"
-  },
   "installFailed": {
     "en": "Install failed",
     "ctx": "VM/VMLifecycle.cs:60 (prose)"
@@ -439,13 +435,21 @@
     "en": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
     "ctx": "VM/VMManager.cs:96 (prose)"
   },
-  "theDiskIsSealedApproveThe": {
-    "en": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
-    "ctx": "VM/VMManager.cs:98 (prose)"
+  "startingWhenYourPhoneAsksApproveFirst": {
+    "en": "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "ctx": "VM/VMManager.cs:95 (prose)"
   },
-  "theDiskIsSealedApproveThe2": {
-    "en": "The disk is sealed — approve the unlock on your phone.",
-    "ctx": "VM/VMManager.cs:100 (prose)"
+  "startingWhenYourPhoneAsksApprove": {
+    "en": "Starting. When your phone asks, approve the unlock there.",
+    "ctx": "VM/VMManager.cs:96 (prose)"
+  },
+  "theInstallerFinishedButThisServerNever": {
+    "en": "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.",
+    "ctx": "VM/VMManager.cs:97 (prose)"
+  },
+  "setupDidntFinish": {
+    "en": "Setup didn't finish",
+    "ctx": "VM/VMManager.cs:99 (prose)"
   },
   "waitingForTheFirstGuestCheckpoint": {
     "en": "Waiting for the first guest checkpoint.",

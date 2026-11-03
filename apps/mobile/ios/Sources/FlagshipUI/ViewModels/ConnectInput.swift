@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 import FlagshipCore
 
 /// "Connect to an existing account": one page, two ways in. The account-name
@@ -42,7 +43,10 @@ public enum ConnectInput: Equatable, Sendable {
         case .empty: return .none
         case .pairing(let link): return .join(link: link, note: routedToJoin)
         case .badLink: return .error(badLinkMessage)
-        case .name(let n): return .signIn(n)
+        case .name(let n):
+            // The account-name format (D12): the specific line for what is wrong with it.
+            if let p = VoiciName.problem(n) { return .error(NameRuleText.problem(p)) }
+            return .signIn(n)
         }
     }
 
@@ -59,7 +63,7 @@ public enum ConnectInput: Equatable, Sendable {
         case .pairing(let link): return .join(link)
         case .badLink: return .error(badLinkMessage)
         case .name(let n):
-            return n.range(of: #"^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$"#, options: .regularExpression) != nil
+            return VoiciName.isValid(n)
                 ? .error(nameInCode)
                 : .error(notACode)
         }

@@ -35,10 +35,10 @@ describe("voi.ci build", () => {
     expect(b.files.has("sw.js")).toBe(true);
     expect(shell).not.toContain("sw.js");
     for (const p of js) {
-      const tag = p === "app.js" ? `<script type="module" src="/_/${b.dir}/app.js" integrity="${sri(p)}">` : `<link rel="modulepreload" href="/_/${b.dir}/${p}" integrity="${sri(p)}">`;
+      const tag = p === "app.js" ? `<script type="module" src="/-/${b.dir}/app.js" integrity="${sri(p)}">` : `<link rel="modulepreload" href="/-/${b.dir}/${p}" integrity="${sri(p)}">`;
       expect(shell, p).toContain(tag);
     }
-    expect(shell).toContain(`<link rel="stylesheet" href="/_/${b.dir}/style.css" integrity="${sri("style.css")}">`);
+    expect(shell).toContain(`<link rel="stylesheet" href="/-/${b.dir}/style.css" integrity="${sri("style.css")}">`);
     const manifest = JSON.parse(b.files.get("MANIFEST.json")!.toString("utf8"));
     expect(createHash("sha256").update(b.files.get("MANIFEST.json")!).digest("hex")).toBe(b.build);
     for (const [p, h] of Object.entries(manifest.files)) expect(createHash("sha256").update(b.files.get(p)!).digest("hex"), p).toBe(h);
@@ -129,10 +129,10 @@ describe("voi.ci config and routes", () => {
     expect(siteConfig({ hostname: "voi.ci" } as Location, devDoc)).toMatchObject({ dev: false, apex: "flagshipserver.com" });
   });
 
-  it("routes /<username> and /_/about only", () => {
+  it("routes /<username> and /-/about only", () => {
     expect(routeOf("/alice")).toEqual({ view: "page", username: "alice" });
     expect(routeOf("/alice/")).toEqual({ view: "page", username: "alice" });
-    expect(routeOf("/_/about")).toEqual({ view: "about" });
-    for (const p of ["/", "/Alice", "/a/b", "/alice--x", "/-alice", "/%3Cscript%3E", "/_/x"]) expect(routeOf(p).view, p).toBe("missing");
+    expect(routeOf("/-/about")).toEqual({ view: "about" });
+    for (const p of ["/", "/Alice", "/a/b", "/alice--x", "/-alice", "/%3Cscript%3E", "/-/x"]) expect(routeOf(p).view, p).toBe("missing");
   });
 });

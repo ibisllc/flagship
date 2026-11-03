@@ -2678,11 +2678,7 @@
   "Only an admin device can change this": "変更できるのは管理者のデバイスだけです",
   "Next change %@": "次に変更できる日時：%@",
   "Letters, numbers and hyphens only": "使えるのは英数字とハイフンだけです",
-  "At least 4 characters": "4文字以上",
-  "At most 40 characters": "40文字以内",
   "All %lld names in use": "%lld 個の名前をすべて使用中です",
-  "Reserved": "予約済み",
-  "Taken": "使用済み",
   "Reserved for the owner of %@": "%@ の所有者用に予約されています",
   "Couldn't check %@. Try again.": "%@ を確認できませんでした。もう一度お試しください。",
   "Too many changes today": "今日の変更回数が上限に達しました",
@@ -3162,5 +3158,12 @@
   "Google push": "Google のプッシュ通知",
   "Every device on the account needs its post-quantum key before strict comes back.": "厳格モードに戻す前に、アカウントのすべてのデバイスに耐量子鍵が必要です。",
   "Test your recovery before turning strict on again.": "厳格モードを再びオンにする前に、復旧をテストしてください。",
-  "Email": "メール"
+  "Email": "メール",
+  "Taken or too similar to an existing name": "使用済みか、既存の名前に似すぎています",
+  "At least 3 characters": "3文字以上",
+  "At most 63 characters": "63文字以内",
+  "No hyphen at the start or end, or two in a row": "先頭と末尾にハイフンは使えず、2つ続けることもできません",
+  "The installer finished. The server is starting and should register in a few minutes.": "インストーラーが終了しました。サーバーは起動中で、数分以内に登録されるはずです。",
+  "This server stopped reporting and hasn't registered. It may be stuck.": "このサーバーからの報告が止まり、登録もされていません。停止している可能性があります。",
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Flagship Studio で動かしている場合は、そちらで確認してください。そうでなければ、マシンを再起動してください。それでも起動しない場合は、注文をキャンセルしてサーバーを作成し直してください。"
 }

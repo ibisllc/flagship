@@ -13169,5 +13169,37 @@
   "Email": {
     "en": "Email",
     "ctx": "webapp/views/page-editor.js:90"
+  },
+  "At least 3 characters": {
+    "en": "At least 3 characters",
+    "ctx": "webapp/lib/nameRules.js:35"
+  },
+  "At most 63 characters": {
+    "en": "At most 63 characters",
+    "ctx": "webapp/lib/nameRules.js:37"
+  },
+  "No hyphen at the start or end, or two in a row": {
+    "en": "No hyphen at the start or end, or two in a row",
+    "ctx": "webapp/lib/nameRules.js:39"
+  },
+  "Taken or too similar to an existing name": {
+    "en": "Taken or too similar to an existing name",
+    "ctx": "webapp/lib/nameRules.js:47"
+  },
+  "3 to 63 lowercase letters, numbers and hyphens": {
+    "en": "3 to 63 lowercase letters, numbers and hyphens",
+    "ctx": "webapp/views/wizard.js:336"
+  },
+  "The installer finished. The server is starting and should register in a few minutes.": {
+    "en": "The installer finished. The server is starting and should register in a few minutes.",
+    "ctx": "webapp/lib/provisionProgress.js (install progress, box gone quiet)"
+  },
+  "This server stopped reporting and hasn't registered. It may be stuck.": {
+    "en": "This server stopped reporting and hasn't registered. It may be stuck.",
+    "ctx": "webapp/lib/provisionProgress.js (install progress, box gone quiet)"
+  },
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": {
+    "en": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.",
+    "ctx": "webapp/lib/provisionProgress.js (install progress, box gone quiet)"
   }
 }

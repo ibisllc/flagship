@@ -73,12 +73,7 @@ object LinkField {
             return Message(Tone.Bad, FSStrings.get(R.string.next_change, formatDate(link.nextChangeAt ?: (now + DAY_MS))))
         }
         if (typed == current || typed.isEmpty()) return Message()
-        when (VoiciName.problem(typed)) {
-            VoiciName.Problem.Characters -> return Message(Tone.Bad, FSStrings.get(R.string.letters_numbers_and_hyphens_only))
-            VoiciName.Problem.TooShort -> return Message(Tone.Bad, FSStrings.get(R.string.at_least_4_characters))
-            VoiciName.Problem.TooLong -> return Message(Tone.Bad, FSStrings.get(R.string.at_most_40_characters))
-            null -> Unit
-        }
+        VoiciName.problem(typed)?.let { return Message(Tone.Bad, problemText(it)) }
         if (link.held >= link.limit && link.name.isNullOrEmpty()) {
             return Message(Tone.Bad, FSStrings.get(R.string.all_names_in_use, link.limit), Action.FreeUp)
         }
@@ -86,20 +81,22 @@ object LinkField {
         return when (check.status) {
             "available" -> Message(Tone.Ok, FSStrings.get(R.string.available), canSave = true)
             "current" -> Message()
-            "invalid" -> Message(Tone.Bad, FSStrings.get(R.string.letters_numbers_and_hyphens_only))
-            "reserved" -> Message(Tone.Bad, FSStrings.get(R.string.reserved))
-            "taken" -> Message(Tone.Bad, FSStrings.get(R.string.taken))
+            "invalid" -> Message(Tone.Bad, problemText(VoiciName.Problem.of(check.problem) ?: VoiciName.Problem.Characters))
+            // A reserved word is a row of the names registry: the same one answer as any taken name.
+            "taken", "reserved" -> Message(Tone.Bad, VoiciName.takenText())
             "dibs" -> Message(Tone.Info, FSStrings.get(R.string.reserved_for_the_owner_of, check.domain ?: ""), Action.Dibs)
             else -> Message(Tone.Bad, FSStrings.get(R.string.couldnt_check_try_again, typed))
         }
     }
 
+    /** The format message for a username or link name (docs/voici-namespace-spec.md D12), shared with sign-in and claims. */
+    fun problemText(p: VoiciName.Problem): String = VoiciName.problemText(p)
+
     /** The sentence for a refusal from the save call. */
     fun refusalMessage(e: VoiciNameException, typed: String, formatDate: (Long) -> String = ::formatWhen): String =
         when (e.code) {
-            "taken" -> FSStrings.get(R.string.taken)
-            "reserved" -> FSStrings.get(R.string.reserved)
-            "invalid" -> FSStrings.get(R.string.letters_numbers_and_hyphens_only)
+            "taken", "reserved" -> VoiciName.takenText()
+            "invalid" -> problemText(VoiciName.Problem.of(e.string("problem")) ?: VoiciName.Problem.Characters)
             "dibs" -> FSStrings.get(R.string.reserved_for_the_owner_of, e.string("domain") ?: "")
             "dibs-unchecked" -> FSStrings.get(R.string.couldnt_check_try_again, typed)
             "change-limit" -> FSStrings.get(

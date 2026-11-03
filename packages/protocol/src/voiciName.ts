@@ -83,32 +83,66 @@ export function parseSignedVoiciNameOrder(body: unknown): SignedVoiciNameOrder |
   };
 }
 
-// ---- the name rules ------------------------------------------------------------------------
+// ---- the namespace rules (docs/voici-namespace-spec.md) --------------------------------------
+//
+// Usernames and custom link names share one format (D12): 3 to 63 characters, a-z 0-9 and -, no leading, trailing
+// or double hyphen; a name may start with a digit (D5). Codes are minted by `.com` only: a digit first, then 0-9a-z,
+// never a hyphen (D2). Every claim of any kind is unique on the safety key (D9), enforced by `.com`'s registry.
 
-/** Shortest and longest a name may be, as typed (hyphens included). */
-export const VOICI_NAME_MIN = 4;
-export const VOICI_NAME_MAX = 40;
+export const VOICI_NAME_MIN = 3;
+export const VOICI_NAME_MAX = 63;
 
-export type VoiciNameProblem = "too-short" | "too-long" | "characters";
+export type VoiciNameProblem = "too-short" | "too-long" | "characters" | "hyphens";
 
 /**
- * Check what a client can check alone. `characters` covers anything but
- * `a-z 0-9 -`, a leading/trailing/doubled hyphen. The length that counts for
- * "too short" is the one without hyphens (`a-b-c-d` is the same name as `abcd`).
- * Upper case is folded, not refused: the field lower-cases as people type.
+ * What a client can check alone, for a username or a custom link name. Upper case is folded, not refused (fields
+ * lower-case as people type), so the answer is about `typed.toLowerCase()`. Checked in this order: characters, then
+ * hyphens, then length.
  */
 export function voiciNameProblem(typed: string): VoiciNameProblem | null {
   const name = typed.toLowerCase();
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) return "characters";
+  if (!/^[a-z0-9-]*$/.test(name)) return "characters";
+  if (name.startsWith("-") || name.endsWith("-") || name.includes("--")) return "hyphens";
+  if (name.length < VOICI_NAME_MIN) return "too-short";
   if (name.length > VOICI_NAME_MAX) return "too-long";
-  if (name.replace(/-/g, "").length < VOICI_NAME_MIN) return "too-short";
   return null;
 }
 
+/** True when `name` is already canonical (lower case) and meets the format. */
+export function isVoiciName(name: string): boolean {
+  return name === name.toLowerCase() && voiciNameProblem(name) === null;
+}
+
 /**
- * The key two names are compared by: lower case, hyphens removed, so
- * `halloween-party` and `halloweenparty` can't belong to two different people.
+ * The safety key every claim is unique on (D9): lower case, hyphens removed, 0 read as o and 1 as l, so
+ * chess-club, chessclub and chess-c1ub can't coexist.
  */
 export function voiciNameKey(typed: string): string {
-  return typed.toLowerCase().replace(/-/g, "");
+  return typed.toLowerCase().replace(/-/g, "").replace(/0/g, "o").replace(/1/g, "l");
+}
+
+// ---- codes (D2, D3) -----------------------------------------------------------------------------
+
+const CODE_FIRST = "0123456789";
+const CODE_REST = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+/** A code's shape: a digit, then 0-9a-z; never a hyphen. Codes minted before D2 may start with a letter and stay valid. */
+export function isVoiciCodeShape(s: string): boolean {
+  return /^[0-9][0-9a-z]+$/.test(s);
+}
+
+/** One uniformly random character of `alphabet` (rejection sampling, so no modulo bias). */
+function pick(alphabet: string, random: (n: number) => Uint8Array): string {
+  const limit = 256 - (256 % alphabet.length);
+  for (;;) {
+    for (const b of random(16)) if (b < limit) return alphabet[b % alphabet.length]!;
+  }
+}
+
+/** A fresh code of `length` characters (the CODE_LENGTH setting): a digit first, the rest from 0-9a-z. */
+export function mintVoiciCode(length: number, random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
+  if (!Number.isInteger(length) || length < 2) throw new Error("code length must be an integer of at least 2");
+  let out = pick(CODE_FIRST, random);
+  while (out.length < length) out += pick(CODE_REST, random);
+  return out;
 }

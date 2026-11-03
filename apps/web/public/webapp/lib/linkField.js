@@ -11,6 +11,7 @@ import { toast } from "./toast.js";
 import { inlineConfirm } from "./modal.js";
 import { formatWhen } from "./dateFormat.js";
 import { voiciNameProblem, checkVoiciName, listVoiciNames, saveVoiciName, VoiciNameError } from "./voiciName.js";
+import { nameProblemText, nameTakenText } from "./nameRules.js";
 
 const DEBOUNCE_MS = 400;
 const DAY_MS = 86_400_000;
@@ -32,9 +33,7 @@ export function linkMessage({ typed, current, link, check, admin, now = Date.now
   }
   if (typed === current || typed === "") return none;
   const problem = voiciNameProblem(typed);
-  if (problem === "characters") return { ...none, tone: "bad", text: tr("Letters, numbers and hyphens only") };
-  if (problem === "too-short") return { ...none, tone: "bad", text: tr("At least 4 characters") };
-  if (problem === "too-long") return { ...none, tone: "bad", text: tr("At most 40 characters") };
+  if (problem) return { ...none, tone: "bad", text: nameProblemText(problem) };
   if (link.held >= link.limit && !link.name) {
     return { ...none, tone: "bad", text: tr("All {0} names in use", link.limit), action: "free-up" };
   }
@@ -45,11 +44,10 @@ export function linkMessage({ typed, current, link, check, admin, now = Date.now
     case "current":
       return none;
     case "invalid":
-      return { ...none, tone: "bad", text: tr("Letters, numbers and hyphens only") };
+      return { ...none, tone: "bad", text: nameProblemText(check.problem) };
     case "reserved":
-      return { ...none, tone: "bad", text: tr("Reserved") };
     case "taken":
-      return { ...none, tone: "bad", text: tr("Taken") };
+      return { ...none, tone: "bad", text: nameTakenText() };
     case "dibs":
       return { ...none, tone: "info", text: tr("Reserved for the owner of {0}", check.domain), action: "dibs" };
     default:
@@ -61,11 +59,10 @@ export function linkMessage({ typed, current, link, check, admin, now = Date.now
 export function refusalMessage(e, typed) {
   switch (e.code) {
     case "taken":
-      return tr("Taken");
     case "reserved":
-      return tr("Reserved");
+      return nameTakenText();
     case "invalid":
-      return tr("Letters, numbers and hyphens only");
+      return nameProblemText(e.data?.problem);
     case "dibs":
       return tr("Reserved for the owner of {0}", e.data.domain);
     case "dibs-unchecked":
