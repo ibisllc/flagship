@@ -5,13 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
-    <meta name="description" content="Report abuse on flagship.services subdomains and voi.ci pages, and appeal a decision." />
+    <meta name="description" content="Report abuse on Flagship apps, flagship.services subdomains, voi.ci links and pages, and appeal a decision." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/site.css" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'" />
     <title>Abuse · Flagship</title>
     <style>
       code { background: var(--bg-elev); color: var(--fg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
+      #abuse-form label { display: block; margin-top: var(--space-6); margin-bottom: var(--space-2); }
+      #abuse-form fieldset { border: 0; padding: 0; margin: 0; }
+      #abuse-form fieldset label { display: inline; margin: 0 1.2rem 0 0.3rem; }
+      #abuse-form textarea { min-height: 8rem; width: 100%; }
+      #abuse-form input[type="text"], #abuse-form input[type="email"], #abuse-form select { width: 100%; }
+      #abuse-form .req { color: var(--err); }
+      #abuse-form .hint { color: var(--fg-mute); }
+      .out { margin-top: 1.5rem; padding: 1rem 1.1rem; border-radius: var(--radius); }
+      .out:empty { display: none; }
+      .out.ok { background: var(--ok-soft); border: 1px solid var(--accent-graphic); }
+      .out.err { background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -33,8 +45,53 @@
     <main>
       <h1>Report abuse</h1>
       <p class="lede">
-        If a <code>*.flagship.services</code> subdomain is hosting malware, phishing, copyright infringement, or other abuse, contact us and we will investigate and take action. For a <code>voi.ci</code> page or a message, see <a href="#voici">voi.ci pages and Messages</a> below.
+        If a Flagship app (a <code>*.flagship.services</code> address) or a <code>voi.ci</code> link or page is hosting malware, phishing, copyright infringement, or other abuse, report it with the form below or by email, and we will investigate and take action. For a message, see <a href="#voici">voi.ci pages and Messages</a> below.
       </p>
+
+      <h2 id="report">Report a link or an app</h2>
+      <p>You don't need an account. We don't keep your IP address. Leave an email only if you want us to confirm we got the report and tell you what we decided; it is deleted with the report.</p>
+      <form id="abuse-form" novalidate>
+        <fieldset>
+          <legend>What are you reporting?</legend>
+          <input type="radio" id="kind-app" name="kind" value="app" checked /><label for="kind-app">A Flagship app or address</label>
+          <input type="radio" id="kind-link" name="kind" value="link" /><label for="kind-link">A voi.ci link or page</label>
+        </fieldset>
+
+        <label for="subject">Address <span class="req">*</span> <span class="hint">for example <code>shop.name.flagship.services</code> or <code>voi.ci/abc123</code></span></label>
+        <input id="subject" name="subject" type="text" required maxlength="300" autocomplete="off" spellcheck="false" />
+
+        <label for="reason">Reason <span class="req">*</span></label>
+        <select id="reason" name="reason" required>
+          <option value="phishing">Phishing or a scam</option>
+          <option value="malware">Malware</option>
+          <option value="csam">Child sexual abuse material</option>
+          <option value="spam">Spam</option>
+          <option value="harassment">Harassment or threats</option>
+          <option value="impersonation">Impersonation</option>
+          <option value="copyright">Copyright infringement</option>
+          <option value="illegal">Other illegal content</option>
+          <option value="other">Something else</option>
+        </select>
+
+        <label for="note">What is wrong <span class="hint">(which page, what it does, any evidence)</span></label>
+        <textarea id="note" name="note" maxlength="2000"></textarea>
+
+        <label for="contact">Your email <span class="hint">(optional, for an acknowledgement)</span></label>
+        <input id="contact" name="contact" type="email" maxlength="254" autocomplete="email" />
+
+        <button class="cta" type="submit" style="margin-top: 1.5rem;">Send report</button>
+      </form>
+      <div id="abuse-out" class="out" role="status" aria-live="polite"></div>
+      <div id="abuse-messages" hidden>
+        <p data-msg="sending">Sending…</p>
+        <p data-msg="ok">Thank you. Your report number is <span data-arg></span>. A person at Flagship will look at it.</p>
+        <p data-msg="missing">Enter the address you are reporting.</p>
+        <p data-msg="not-flagship">That isn't a voi.ci link or a Flagship address we know. Check the address, or email abuse@flagship.services.</p>
+        <p data-msg="malformed">Check the address, the reason and your email.</p>
+        <p data-msg="rate-limited">Too many reports from your network. Try again later, or email abuse@flagship.services.</p>
+        <p data-msg="failed">Sending failed (HTTP <span data-arg></span>). Please email abuse@flagship.services.</p>
+        <p data-msg="network">Network error. Please email abuse@flagship.services.</p>
+      </div>
 
       <h2>Contact</h2>
       <ul class="bullets">
@@ -53,14 +110,19 @@
       <h2>Response targets</h2>
       <ul class="bullets">
         <li>Acknowledge within <strong>2 business days</strong>.</li>
-        <li>CSAM and active phishing escalated immediately on receipt.</li>
+        <li>CSAM, active phishing and malware escalated immediately on receipt.</li>
         <li>Other categories triaged within <strong>5 business days</strong>.</li>
       </ul>
 
       <h2>What we can do</h2>
       <p>
-        Each Flagship server runs on hardware the user owns; user content is end-to-end private to that user (TLS terminates on their machine, not on our infrastructure). What we control is the routing layer: we can revoke a subdomain's routing entry on <code>flagship.services</code>, which removes the abusive site from the public internet, and we can revoke the user's identity on <code>flagshipserver.com</code>.
+        Each Flagship server runs on hardware the user owns; user content is end-to-end private to that user (TLS terminates on their machine, not on our infrastructure). What we control is the routing layer and the account.
       </p>
+      <ul class="bullets">
+        <li>We work out which account the app, link or page belongs to and send that account's administrators a notice in the Flagship app: what was reported, why, what to do (change it or take it down) and a deadline.</li>
+        <li>If it is still there after the deadline, we can suspend the account: its servers are taken off the public internet (their routing on <code>flagship.services</code> is revoked), its <code>voi.ci</code> page is taken down and its names are held. Child sexual abuse material, active phishing and malware can be suspended at once, without waiting for a deadline.</li>
+        <li>A suspended owner's data stays on their own server: they can still back it up and move it over their home network. If we got it wrong, we lift the suspension and everything comes back.</li>
+      </ul>
       <p>
         We cannot read the content of a user's TLS-encrypted traffic, so requests for content monitoring or interception cannot be honored, by design.
       </p>
@@ -98,12 +160,12 @@
 
       <h3 id="reasons">If we act on your page or account</h3>
       <p>
-        When we take down your page or stop your account from sending messages, the Flagship app tells you, with the reason. If you ask, we send you a full statement of reasons: what we restricted, which of our rules or which law it was under, whether we acted on a report or found it ourselves, the facts we relied on, and how to appeal.
+        When we send your account a notice, take down your page, stop your account from sending messages or suspend it, the Flagship app tells you, with the reason. A notice shows its deadline; tap <strong>I've done this</strong> once you have changed or removed what it names, and we check. If you ask, we send you a full statement of reasons: what we restricted, which of our rules or which law it was under, whether we acted on a report or found it ourselves, the facts we relied on, and how to appeal.
       </p>
 
       <h3 id="appeal">Appeal a decision</h3>
       <p>
-        You can appeal for six months after a decision: a page owner whose page was taken down, an account that was stopped from sending messages, or a person whose report we turned down. A person at Flagship reviews the appeal again, looking at what you sent, and we answer within <strong>14 days</strong>.
+        You can appeal for six months after a decision: an account that got a notice or was suspended, a page owner whose page was taken down, an account that was stopped from sending messages, or a person whose report we turned down. A person at Flagship reviews the appeal again, looking at what you sent, and we answer within <strong>14 days</strong>.
       </p>
       <p>
         <strong><a href="mailto:abuse@flagship.services?subject=Appeal&amp;body=Your%20Flagship%20username%20(or%20the%20page%20address)%3A%0A%0AWhat%20we%20decided%3A%0A%0AWhy%20you%20think%20it%20was%20wrong%3A%0A">Write an appeal</a></strong>
@@ -167,6 +229,7 @@
     <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
   </div>
 </footer>
+  <script src="/abuse.js" defer></script>
   <script src="/motion.js" defer></script>
 </body>
 </html>

@@ -57,16 +57,23 @@ object NotificationChannels {
         FSStrings.get(R.string.voici_channel_drafts_desc),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
+    /** An operator's notice about one of the account's apps or pages, or a suspension (docs/abuse-handling.md). */
+    val ACCOUNT_NOTICES get() = Channel(
+        "flagship.account-notices", FSStrings.get(R.string.abuse_channel_name),
+        FSStrings.get(R.string.abuse_channel_desc),
+        NotificationManager.IMPORTANCE_HIGH,
+    )
     val GENERAL get() = Channel(
         "flagship.alerts", FSStrings.get(R.string.other_alerts),
         FSStrings.get(R.string.everything_else_from_flagship),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
 
-    val all = listOf(APPROVALS, SETUP, SECURITY, APPS, BUILDS, REMINDERS, MESSAGES, PAGE_DRAFTS, GENERAL)
+    val all = listOf(APPROVALS, SETUP, SECURITY, APPS, BUILDS, REMINDERS, MESSAGES, PAGE_DRAFTS, ACCOUNT_NOTICES, GENERAL)
 
     const val MESSAGES_CATEGORY = "messages"
     const val PAGE_DRAFTS_CATEGORY = "page-drafts"
+    const val ABUSE_NOTICE_CATEGORY = "abuse-notice"
 
     private val SECURITY_CATEGORIES = setOf(
         "server-registered",
@@ -88,6 +95,7 @@ object NotificationChannels {
         category == "vibecode-needs-you" -> BUILDS
         category == MESSAGES_CATEGORY -> MESSAGES
         category == PAGE_DRAFTS_CATEGORY -> PAGE_DRAFTS
+        category == ABUSE_NOTICE_CATEGORY || kind == ABUSE_NOTICE_CATEGORY -> ACCOUNT_NOTICES
         else -> GENERAL
     }
 

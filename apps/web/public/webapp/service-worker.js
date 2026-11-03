@@ -468,7 +468,13 @@
 //       naming the disk (lib/provisionProgress.js parseDiskStop; test-vectors/install-disk-stop.json).
 //  v198: "Sign out" of a voi.ci website sends the page with the revoke and reads any answer but 2xx as a failure, in
 //       the app's language (lib/voiciSignIn.js revokeSignedInSite; .com stores a P-signed revoke for any browser key).
-const SHELL_VERSION = "v198";
+//  v199: a renewal-key delegation lasts at most 30 days (was 90), still signed again once 14 days or fewer remain
+//       (lib/servingAuthority.js RENEWAL_DELEGATION_MAX_MS).
+//  v200: abuse notices and suspension (docs/abuse-handling.md): an operator's notice shows on Home to admin devices
+//       with its deadline, "I've done this" (signed flagship/abuse-notice-done/v1) and Appeal; a suspended account
+//       shows "This account was suspended" on every device; content-free `abuse-notice` push
+//       (lib/abuseNotices.js, lib/abuseNoticeUi.js).
+const SHELL_VERSION = "v200";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -658,6 +664,8 @@ const OPTIONAL_SHELL = [
   "/lib/adminKeyWarning.js",
   "/lib/securityNotice.js",
   "/lib/noticeUi.js",
+  "/lib/abuseNotices.js",
+  "/lib/abuseNoticeUi.js",
   "/lib/updateLock.js",
   "/lib/buildInfo.js",
   "/lib/openAccount.js",
@@ -1069,6 +1077,25 @@ self.addEventListener("push", (event) => {
         icon: "/icon.svg",
         data: { kind: "invite-created", deepLink: "/?view=account-audit" },
       }),
+    );
+    return;
+  }
+
+  // An operator's notice to the account, or its suspension (docs/abuse-handling.md). Content-free: Home and the
+  // suspended screen read the details with the account's read token.
+  if (data && (data.category === "abuse-notice" || data.kind === "abuse-notice")) {
+    event.waitUntil(
+      Promise.all([
+        self.registration.showNotification("Flagship", {
+          body: "There is a notice about your Flagship account. Open Flagship to read it.",
+          tag: "flagship-abuse-notice",
+          renotify: true,
+          requireInteraction: true,
+          icon: "/icon.svg",
+          data: { kind: "abuse-notice", deepLink: "/" },
+        }),
+        self.clients.matchAll({ type: "window" }).then((cs) => cs.forEach((c) => c.postMessage({ kind: "abuse-notice" }))),
+      ]),
     );
     return;
   }

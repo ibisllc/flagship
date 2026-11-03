@@ -69,6 +69,8 @@ import {
 } from "../lib/serverOrder.js";
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
 import { addRestoreButtonHtml, openAddOrRestore } from "./import-backup.js";
+import { renderAbuseNoticeBanners } from "../lib/abuseNoticeUi.js";
+import { refreshAbuseNotices } from "../lib/abuseNotices.js";
 
 import { tr, trn } from "../lib/i18n.js";
 registerView("view-home", { tab: "home" });
@@ -1488,6 +1490,10 @@ export async function renderHome() {
   // as skipped (not enrolled) and the user hasn't dismissed it on this
   // device. Local-only signal; no API call.
   renderRecoveryBanner();
+
+  // An operator's abuse notice (admin devices) or the account's suspension (docs/abuse-handling.md).
+  renderAbuseNoticeBanners();
+  void refreshAbuseNotices();
 
   void renderSharedWithMe();
   // Name dibs — while the window is open, tell .com holders they can claim the

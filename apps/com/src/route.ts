@@ -27,7 +27,8 @@ import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
 import { localisedAssetPath, pickWebLocale } from "./localeRedirect.js";
 import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
-import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
+import { tryControlPlane, tryBootHost, isAccountGoneResponse, buildOptionalPushForwarder } from "./controlPlaneRoutes.js";
+import { handleAbuseRoute, isAbusePath, suspensionGuard } from "./abuseCases.js";
 import { mayCommitRevocation, pokeServingFeed, type ServingFeedNamespace } from "./servingAuthority.js";
 import { phoneEligibilityAccount } from "./phoneRoute.js";
 import { endpointRelays, handleRelayAdmin, RELAY_ADMIN_PATH } from "./relayDirectory.js";
@@ -944,6 +945,14 @@ async function routeImpl(
 
   // voi.ci Messages attestations, reports and the owner's abuse tools (voiciAbuseRoutes.ts; metered above).
   if (isVoiciAbusePath(url.pathname)) return handleVoiciAbuseRoute(buffered, env, ctx);
+
+  // Abuse reports of links and apps, notices and suspensions (abuseCases.ts, docs/abuse-handling.md; metered above).
+  if (isAbusePath(url.pathname)) {
+    return handleAbuseRoute(buffered, env, { forward: buildOptionalPushForwarder(env), ...(ctx ? { waitUntil: (p) => ctx.waitUntil(p) } : {}) });
+  }
+  // A suspended account's names stay held and its servers down: no name release, transfer or new server.
+  const suspended = await suspensionGuard(buffered, env.DB);
+  if (suspended) return suspended;
 
   // voi.ci pages and Messages (voiciRoutes.ts): their own budgets, 404 until VOICI_ENABLED is "on".
   if (isVoiciApiPath(url.pathname)) {

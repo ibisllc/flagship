@@ -62,6 +62,13 @@ class FlagshipFcmService : FirebaseMessagingService() {
             data["deepLink"] = com.flagshipserver.app.core.Endpoints.appRoute("secret-requests")
         }
 
+        // An abuse notice or a suspension: refresh what Home and the suspended screen show.
+        if (data["category"] == NotificationChannels.ABUSE_NOTICE_CATEGORY) {
+            com.flagshipserver.app.core.AbuseNoticeCenter.shared?.let { c ->
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { c.refresh() } }
+            }
+        }
+
         AccountNoticePush.body(data)?.let { body ->
             data["title"] = AccountNoticePush.TITLE
             data["body"] = body

@@ -256,6 +256,8 @@ public struct HomeScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 subheader(c: c)
+                // An operator's notice about a report (admin devices) or the suspended line (docs/abuse-handling.md).
+                AbuseNoticeHomeSection()
                 // One announcement at a time, highest priority first: an
                 // account-reset (danger) suppresses everything; otherwise the
                 // backup banner, then the recovery nudge.

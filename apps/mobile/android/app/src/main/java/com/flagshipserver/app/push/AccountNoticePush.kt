@@ -15,6 +15,8 @@ object AccountNoticePush {
     private val TEXT get() = mapOf(
         "cert-alert" to FSStrings.get(R.string.one_of_your_servers_needs_your),
         "server-registered" to FSStrings.get(R.string.a_new_server_was_added_to),
+        // An operator's notice or a suspension (docs/abuse-handling.md): names no app, page or reason.
+        "abuse-notice" to FSStrings.get(R.string.abuse_push_body),
     )
 
     /** The notice's text, or null for any other push. */

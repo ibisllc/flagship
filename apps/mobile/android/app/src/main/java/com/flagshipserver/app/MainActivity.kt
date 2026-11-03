@@ -337,6 +337,13 @@ class MainActivity : FragmentActivity() {
             },
             isDemo = { com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value) },
         )
+        // Abuse notices and suspension (docs/abuse-handling.md): read with the account read token; a gym run
+        // on mocks has no `.com` to ask.
+        com.flagshipserver.app.core.AbuseNoticeCenter.shared = if (mocks != null) null else com.flagshipserver.app.core.AbuseNoticeCenter(
+            api = com.flagshipserver.app.core.LiveAbuseNoticesApi(OkHttpJsonTransport(okHttp)),
+            username = { appState.currentUser.value },
+            isAdmin = { com.flagshipserver.app.core.AddServerGate.allows(appState) },
+        )
 
         // voi.ci pages and Messages (docs/voici-and-messages.md): one center per process; it reads the account
         // lazily, so a profile switch only needs a refresh.
@@ -941,6 +948,7 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         foreground.value = true
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
+        com.flagshipserver.app.core.AbuseNoticeCenter.shared?.let { c -> lifecycleScope.launch { runCatching { c.refresh() } } }
         com.flagshipserver.app.keystore.ServingRenewal.appOpened()
         com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
         // voi.ci reply notices are checked on foreground only (no push, no background polling).
@@ -1029,6 +1037,7 @@ private fun AppRoot(
     // full-screen treatment, leading to the account's recovery (AccountKeyLostScreen).
     val keyLost by com.flagshipserver.app.keystore.SeedVault.lost.collectAsState()
     val showAccountGone = (goneName != null || keyLost) && isPaired && isUnlocked
+    val suspendedShowing = com.flagshipserver.app.ui.components.abuseSuspendedShowing()
 
     // Keep the global operations sliver's deploy feeder in sync with the pod
     // list (mirror of iOS ContentView's syncDeployOperations on every pod
@@ -1107,6 +1116,7 @@ private fun AppRoot(
             // height), exactly like WhatsApp's active-call bar.
             Column(Modifier.fillMaxSize()) {
                 com.flagshipserver.app.ui.components.NoticeBanner(noticeCenter)
+                com.flagshipserver.app.ui.components.AbuseSuspendedBanner()
                 // The trust sliver sits ABOVE the operations sliver: a degraded
                 // maintainer-trust state is higher priority than any running
                 // operation, and both push the shell down from the top.
@@ -1177,6 +1187,10 @@ private fun AppRoot(
         }
         if (isPaired && !isUnlocked && !showUpdateLock) {
             com.flagshipserver.app.ui.shell.BiometricLockScreen()
+        }
+        // docs/abuse-handling.md §5: every device of a suspended account; "Continue to my data" leaves a banner.
+        if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone && suspendedShowing) {
+            com.flagshipserver.app.ui.components.AbuseSuspendedScreen()
         }
         if (showAccountGone && !showUpdateLock) {
             val gone = goneName

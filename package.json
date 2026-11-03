@@ -41,6 +41,7 @@
     "canary": "tsx scripts/canary.ts",
     "outbound-hosts": "node scripts/outbound-hosts.mjs",
     "voici-abuse": "node scripts/voici-abuse.mjs",
+    "abuse": "node scripts/abuse-cases.mjs",
     "abuse-key": "node scripts/abuse-key.mjs",
     "voici-namespace-report": "node scripts/voici-namespace-report.mjs",
     "relays": "node scripts/relays.mjs",

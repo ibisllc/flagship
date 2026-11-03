@@ -44,6 +44,12 @@ public protocol FlagshipServerClient: Sendable {
     /// `ServerUnrevocation`. A 409 means the server was deleted, transferred
     /// or retired and can't be restored.
     func unrevokeServer(_ req: ServerUnrevocationRequest) async throws -> ServerUnrevocationResponse
+    /// The operator's notices to this account and its suspension, if any (docs/abuse-handling.md §4). Read with
+    /// the account read token; demo accounts read without one.
+    func abuseNotices(username: String) async throws -> AbuseNoticesResponse
+    /// "I've done this" on a notice: the sensitive-order-key-signed `flagship/abuse-notice-done/v1`.
+    /// 403 `not-admin` when this device isn't an admin device.
+    func markAbuseNoticeDone(_ req: AbuseNoticeDoneRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     /// Sign-up handle suggestion. POST /api/username/suggest with a throwaway
     /// `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
@@ -2427,8 +2433,36 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
     public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
     private var nextPushTokenId = 1
+    /// What `abuseNotices` answers (docs/abuse-handling.md); empty by default.
+    public var abuseNoticesResponse = AbuseNoticesResponse()
+    /// Recorded "I've done this" notes, oldest first.
+    public private(set) var abuseNoticesDone: [AbuseNoticeDoneRequest] = []
+    /// When set, `markAbuseNoticeDone` throws this instead of recording (e.g. 403 not-admin).
+    public var abuseNoticeDoneError: Error? = nil
 
     public init() {}
+
+    public func abuseNotices(username: String) async throws -> AbuseNoticesResponse {
+        try await tick()
+        return abuseNoticesResponse
+    }
+
+    public func markAbuseNoticeDone(_ req: AbuseNoticeDoneRequest) async throws {
+        try await tick()
+        if let abuseNoticeDoneError { throw abuseNoticeDoneError }
+        try MockOrderSigners.shared.require(.sensitive, kind: "abuse-notice-done", signatureHex: req.signature, payload: req)
+        abuseNoticesDone.append(req)
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        abuseNoticesResponse = AbuseNoticesResponse(
+            notices: abuseNoticesResponse.notices.map { n in
+                guard n.id == req.request.noticeId, n.doneAt == nil else { return n }
+                return AbuseNoticeWire(id: n.id, subjectKind: n.subjectKind, subject: n.subject, serviceId: n.serviceId,
+                                       category: n.category, action: n.action, detail: n.detail, deadlineAt: n.deadlineAt,
+                                       issuedAt: n.issuedAt, doneAt: now, doneNote: req.request.note)
+            },
+            suspension: abuseNoticesResponse.suspension
+        )
+    }
 
     private func tick() async throws {
         if simulatedLatency > 0 {
@@ -4384,5 +4418,29 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         let encoded = try JSONEncoder().encode(body)
         return try await postJsonReturning("/api/users/\(u)/admin-root-rotation", body: encoded)
+    }
+}
+
+// MARK: - Abuse notices (docs/abuse-handling.md §4)
+
+extension LiveFlagshipServerClient {
+    public func abuseNotices(username: String) async throws -> AbuseNoticesResponse {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/abuse-notices"))
+        req.httpMethod = "GET"
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await send($0)
+        }
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(AbuseNoticesResponse.self, from: data)
+    }
+
+    public func markAbuseNoticeDone(_ req: AbuseNoticeDoneRequest) async throws {
+        let u = req.request.username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.username
+        let n = req.request.noticeId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.noticeId
+        try await postJson("/api/users/\(u)/abuse-notices/\(n)/done", body: try JSONEncoder().encode(req))
     }
 }

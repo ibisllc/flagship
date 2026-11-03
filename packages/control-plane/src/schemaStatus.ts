@@ -119,6 +119,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0127",
   // voi.ci: browser-key revocations keyed by (browser key, pseudonym), so one pseudonym never signs another's out.
   "0128",
+  // voi.ci: the one page each pseudonym may write to (bound at its first accepted send).
+  "0129",
+  // Abuse reports for links and apps, notices to an account, suspensions (docs/abuse-handling.md).
+  "0130",
 ];
 
 export interface SchemaStatusDeps {

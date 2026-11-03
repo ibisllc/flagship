@@ -301,6 +301,10 @@ fun HomeScreen(
             }
         }
 
+        // An operator's notice about one of this account's apps or pages (admin devices only;
+        // docs/abuse-handling.md §4).
+        com.flagshipserver.app.ui.components.AbuseNoticeHomeBanners()
+
         // One announcement at a time, highest priority first: an account-reset
         // (danger) suppresses everything; otherwise the backup banner, then the
         // recovery nudge. All three fold into one FSAnnouncementCard.

@@ -22,6 +22,8 @@ struct FlagshipApp: App {
     /// "This account was removed" (docs/account-gone.md): `.com` says this
     /// device's own account no longer exists.
     @State private var accountGone = AccountGoneCenter()
+    /// An operator's notices to this account and its suspension (docs/abuse-handling.md).
+    @State private var abuseNotices = AbuseNoticeCenter()
     @State private var pushRegistrar: PushRegistrar?
     @State private var persistedIdentityRestoreStarted = false
     @State private var orphanedPersistedUsername: String?
@@ -757,6 +759,7 @@ struct FlagshipApp: App {
                 // Inside the environment below: the overlay windows read the app state.
                 .updateLockHost()
                 .accountGoneHost()
+                .abuseNoticeHost()
                 .onGeometryChange(for: CGSize.self, of: { $0.size }) { _ in
                     OrientationPolicy.reconcile()
                 }
@@ -768,6 +771,7 @@ struct FlagshipApp: App {
                 .environment(privacy)
                 .environment(notices)
                 .environment(accountGone)
+                .environment(abuseNotices)
                 .environment(\.screensClient, activeClient)
                 .environment(\.sessionStore, sessionStore)
                 .environment(\.podScreensClients, activePodClients)

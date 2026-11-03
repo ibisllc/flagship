@@ -277,7 +277,9 @@ immutable, 404 for a piece the account's stored index doesn't list (B1). (The al
 The `voi.ci` host is already routed to `flagship-com` (`apps/com/src/route.ts`, `handleVoiciRedirect`). New order
 for `GET /<name>`:
 
-1. A live custom name or code (`docs/named-links.md`) → its redirect, unchanged.
+1. A live custom name or code (`docs/named-links.md`) → its redirect, unchanged. Codes come only from the system:
+   one per app, for the app's own canonical address (owner decision 2026-11-03; the any-https `POST
+   /api/voici/shorten` is removed, see `docs/voici-namespace-spec.md`).
 2. A username with a published, not taken-down page → the site shell (static HTML, the same bytes for every page).
 3. `/@<username>` → 301 to `/<username>`.
 4. Otherwise the existing 404/410.
@@ -891,6 +893,12 @@ code and the appeal link. `restore` reverses it (the owner republishes).
 | Act on reports in a timely way (Apple: 24 h) | `voici-abuse list` is a weekly-plus duty; ops alert when a report is older than 24 h (`npm run ops -- voici`) |
 | Published contact info | abuse.html, the footer link |
 | Account deletion | exists; deletes the page, mailbox and pieces (§10.3) |
+
+### 9.8 Links, apps, notices and suspension
+
+Reports of a voi.ci link or code, a user page reported by address, and Flagship apps reported by hostname go through
+`POST /api/abuse/reports` and the operator's `npm run abuse` queue, with a notice and deadline to the account's admins
+and, after the deadline, a suspension (servers revoked, page taken down, names held). See `docs/abuse-handling.md`.
 
 ## 10. Owner-side state and lifecycle
 

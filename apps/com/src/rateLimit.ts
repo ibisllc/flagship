@@ -163,11 +163,7 @@ export type RateLimitEndpoint =
   // against the token owner's registered key. A token-id-knower probing for
   // a valid signature, or replaying captured DELETEs, is fenced here.
   | "push-revoke"
-  // SEC-3 — voi.ci short-code mint. Session-authenticated (IRK-signed body
-  // keyed by `request.username`), so per-IP at the edge; conservative enough
-  // that a valid session can't farm short codes into D1 in a loop.
-  | "voici-shorten"
-  // SEC-3 — LLM promo / BYOK-credit issuance. Tighter than voici (each issue
+  // SEC-3 — LLM promo / BYOK-credit issuance (each issue
   // mints a scoped provider key + bumps the ledger), per-IP at the edge.
   | "llm-promo-issue"
   // Free AI credits: an IRK-signed token mint (one per build start and per
@@ -212,6 +208,11 @@ export type RateLimitEndpoint =
   | "messages-attest"
   | "messages-enroll-unattested"
   | "voici-report"
+  // Abuse reports of links and apps (abuseCases.ts, docs/abuse-handling.md): anonymous, the address counted here and
+  // never stored; an account's notices read; an admin's signed "done".
+  | "abuse-report"
+  | "abuse-notices"
+  | "abuse-notice-done"
   // voi.ci pages and the Messages mailbox (voiciRoutes.ts; §9.4). Charged by voiciRoutes itself, not endpointFor:
   // sends per address (owner replies included); new conversations into one page (subject = pageId); publishes and
   // piece uploads per address and per account (subject = username; the 50 MiB a day is counted in D1); a browser's
@@ -408,14 +409,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 100, windowSec: 3600 },
   ],
-  // SEC-3 — voi.ci short-code mint. Per-IP (the IRK pub isn't on the wire at
-  // edge speed; the body carries `request.username`). 10/min + 100/h matches
-  // the conservative budget in the finding — enough for a human sharing a few
-  // links, tight enough to stop D1-bloat farming.
-  "voici-shorten": [
-    { axis: "ip", limit: 10, windowSec: 60 },
-    { axis: "ip", limit: 100, windowSec: 3600 },
-  ],
   // SEC-3 — LLM promo / BYOK-credit issuance. Tighter: 5/h per-IP (token
   // farming is the concern, and a legitimate client issues rarely).
   "llm-promo-issue": [{ axis: "ip", limit: 5, windowSec: 3600 }],
@@ -484,6 +477,9 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "voici-thread": [{ axis: "ip", limit: 1000, windowSec: 3600 }],
   "voici-owner": [{ axis: "ip", limit: 1000, windowSec: 3600 }],
   "voici-page-read": [{ axis: "ip", limit: 300, windowSec: 60 }],
+  "abuse-report": [{ axis: "ip", limit: 10, windowSec: 3600 }],
+  "abuse-notices": [{ axis: "ip", limit: 600, windowSec: 3600 }],
+  "abuse-notice-done": [{ axis: "ip", limit: 30, windowSec: 3600 }],
 };
 
 export interface RateLimitInput {
@@ -714,6 +710,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/apps\/[^/]+\/voici-name$/.test(pathname)) return "voici-name-set";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/messages-attestation$/.test(pathname)) return "messages-attest";
   if (m === "POST" && pathname === "/api/voici/reports") return "voici-report";
+  if (m === "POST" && pathname === "/api/abuse/reports") return "abuse-report";
+  if (m === "GET" && /^\/api\/users\/[^/]+\/abuse-notices$/.test(pathname)) return "abuse-notices";
+  if (m === "POST" && /^\/api\/users\/[^/]+\/abuse-notices\/[0-9a-f]{32}\/done$/.test(pathname)) return "abuse-notice-done";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:
@@ -846,10 +845,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "DELETE" && /^\/api\/push\/[^/]+$/.test(pathname)) {
     return "push-revoke";
   }
-  // SEC-3 — voi.ci short-code mint + LLM-promo issuance.
-  if (m === "POST" && pathname === "/api/voici/shorten") {
-    return "voici-shorten";
-  }
+  // SEC-3 — LLM-promo issuance.
   if (m === "POST" && pathname === "/api/llm-promo/issue") {
     return "llm-promo-issue";
   }

@@ -1,12 +1,12 @@
 {
   "%lld%%": {
     "en": "%lld%%",
-    "ctx": "apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift:33",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift:34",
     "translatable": false
   },
   "Provisioning %@…": {
     "en": "Provisioning %@…",
-    "ctx": "apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift:80"
+    "ctx": "apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift:86"
   },
   "PodStatusWidget": {
     "en": "PodStatusWidget",

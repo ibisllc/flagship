@@ -82,6 +82,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-migration-control/v1", // migration confirm-ready / abort
   "flagship/release-server-name/v1", //    release server name
   "flagship/server-unrevoke/v1", //        un-revoke a lost/stolen server
+  "flagship/abuse-notice-done/v1", //      mark an operator's abuse notice done (docs/abuse-handling.md)
   "flagship/rck-register/v1", //           a new server's routing key (adding a server)
   "flagship/voici-name/v1", //             an app's custom voi.ci name (set / clear)
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)

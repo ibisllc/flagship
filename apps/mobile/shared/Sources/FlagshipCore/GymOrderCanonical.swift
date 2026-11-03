@@ -12,6 +12,11 @@ public enum GymOrderCanonical {
             return try? ServerOrder(user: w.order.user, stks: w.order.stks, issuedAt: w.order.issuedAt,
                                     nonce: w.order.nonce, pqKeyIds: w.order.pqKeyIds).canonicalBytes()
         }
+        signers.registerCanonical("abuse-notice-done") { p in
+            guard let r = p as? AbuseNoticeDoneRequest else { return nil }
+            return try? AbuseNoticeDone(username: r.request.username, noticeId: r.request.noticeId,
+                                        note: r.request.note, issuedAt: r.request.issuedAt).canonicalBytes()
+        }
         signers.registerCanonical("server-unrevoke") { p in
             guard let r = p as? ServerUnrevocationRequest else { return nil }
             return ServerUnrevocation.canonicalBytes(username: r.request.username, serverDomain: r.request.serverDomain,

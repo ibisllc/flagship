@@ -13245,5 +13245,113 @@
   "Couldn't sign out of that website. Try again.": {
     "en": "Couldn't sign out of that website. Try again.",
     "ctx": "webapp/lib/voiciCopy.js:71"
+  },
+  "Action needed on your account": {
+    "en": "Action needed on your account",
+    "ctx": "webapp/lib/abuseNotices.js:25"
+  },
+  "We received a report about {0}.": {
+    "en": "We received a report about {0}.",
+    "ctx": "webapp/lib/abuseNotices.js:26"
+  },
+  "Reason: {0}": {
+    "en": "Reason: {0}",
+    "ctx": "webapp/lib/abuseNotices.js:27"
+  },
+  "What to do: change it so it follows our rules.": {
+    "en": "What to do: change it so it follows our rules.",
+    "ctx": "webapp/lib/abuseNotices.js:28"
+  },
+  "What to do: take it down.": {
+    "en": "What to do: take it down.",
+    "ctx": "webapp/lib/abuseNotices.js:29"
+  },
+  "Deadline: {0}": {
+    "en": "Deadline: {0}",
+    "ctx": "webapp/lib/abuseNotices.js:30"
+  },
+  "If it is still there after the deadline, this account can be suspended.": {
+    "en": "If it is still there after the deadline, this account can be suspended.",
+    "ctx": "webapp/lib/abuseNotices.js:31"
+  },
+  "I've done this": {
+    "en": "I've done this",
+    "ctx": "webapp/lib/abuseNotices.js:32"
+  },
+  "Appeal": {
+    "en": "Appeal",
+    "ctx": "webapp/lib/abuseNotices.js:33"
+  },
+  "Tell us what you changed": {
+    "en": "Tell us what you changed",
+    "ctx": "webapp/lib/abuseNotices.js:34"
+  },
+  "What you changed (optional)": {
+    "en": "What you changed (optional)",
+    "ctx": "webapp/lib/abuseNotices.js:35"
+  },
+  "Marked done on {0}. We will check it.": {
+    "en": "Marked done on {0}. We will check it.",
+    "ctx": "webapp/lib/abuseNotices.js:37"
+  },
+  "Only an admin device can do this.": {
+    "en": "Only an admin device can do this.",
+    "ctx": "webapp/lib/abuseNotices.js:38"
+  },
+  "Couldn't send. Try again.": {
+    "en": "Couldn't send. Try again.",
+    "ctx": "webapp/lib/abuseNotices.js:39"
+  },
+  "This account was suspended": {
+    "en": "This account was suspended",
+    "ctx": "webapp/lib/abuseNotices.js:40"
+  },
+  "Your servers are offline to the internet and the account can't add servers or change names until this is resolved.": {
+    "en": "Your servers are offline to the internet and the account can't add servers or change names until this is resolved.",
+    "ctx": "webapp/lib/abuseNotices.js:41"
+  },
+  "Your data stays on your own server. You can still back it up and move it over your home network, and start again under a new name.": {
+    "en": "Your data stays on your own server. You can still back it up and move it over your home network, and start again under a new name.",
+    "ctx": "webapp/lib/abuseNotices.js:42"
+  },
+  "If you think this is a mistake, write to abuse@flagship.services. We answer appeals within 14 days.": {
+    "en": "If you think this is a mistake, write to abuse@flagship.services. We answer appeals within 14 days.",
+    "ctx": "webapp/lib/abuseNotices.js:43"
+  },
+  "Continue to my data": {
+    "en": "Continue to my data",
+    "ctx": "webapp/lib/abuseNotices.js:44"
+  },
+  "This account is suspended.": {
+    "en": "This account is suspended.",
+    "ctx": "webapp/lib/abuseNotices.js:45"
+  },
+  "Phishing": {
+    "en": "Phishing",
+    "ctx": "webapp/lib/abuseNotices.js:51"
+  },
+  "Active phishing": {
+    "en": "Active phishing",
+    "ctx": "webapp/lib/abuseNotices.js:52"
+  },
+  "Malware": {
+    "en": "Malware",
+    "ctx": "webapp/lib/abuseNotices.js:53"
+  },
+  "Child sexual abuse material": {
+    "en": "Child sexual abuse material",
+    "ctx": "webapp/lib/abuseNotices.js:54"
+  },
+  "Impersonation": {
+    "en": "Impersonation",
+    "ctx": "webapp/lib/abuseNotices.js:56"
+  },
+  "Copyright infringement": {
+    "en": "Copyright infringement",
+    "ctx": "webapp/lib/abuseNotices.js:57"
+  },
+  "Other": {
+    "en": "Other",
+    "ctx": "webapp/lib/abuseNotices.js:59"
   }
 }

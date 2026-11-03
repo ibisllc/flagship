@@ -198,3 +198,16 @@ describe("shared vectors: browser-grant-revoke", () => {
     for (const r of v.refused) expect(() => canonicalBrowserGrantRevoke(r.revoke), r.name).toThrow();
   });
 });
+
+describe("shared vectors: abuse-notice-done", () => {
+  const v = read("../test-vectors/abuse-notice-done/vectors.json");
+  it("matches canonical bytes and signatures, and refuses the malformed notes", async () => {
+    const { canonicalAbuseNoticeDone, verifyAbuseNoticeDone } = await import("../src/abuseNotice.js");
+    for (const d of v.done) {
+      expect(new TextDecoder().decode(canonicalAbuseNoticeDone(d.done))).toBe(d.canonical);
+      expect(verifyAbuseNoticeDone(d.done, unhex(d.signatureHex), unhex(v.pubHex))).toBe(true);
+      expect(verifyAbuseNoticeDone({ ...d.done, note: d.done.note + "x" }, unhex(d.signatureHex), unhex(v.pubHex))).toBe(false);
+    }
+    for (const r of v.refused) expect(() => canonicalAbuseNoticeDone(r.done), r.name).toThrow();
+  });
+});

@@ -420,6 +420,43 @@ async function takedownStep(db: D1Database, env: VoiciAbuseEnv, fetchFn: typeof 
   return { done: true, deleted, purged };
 }
 
+/**
+ * A suspension's takedown (docs/abuse-handling.md §5): the rows and the purge of the admin `takedown`, in up to five
+ * steps. `took` is false when the page was already taken down (or none was published), so un-suspending leaves it as
+ * the operator left it.
+ */
+export async function takedownVoiciPageFor(
+  db: D1Database,
+  env: VoiciAbuseEnv,
+  fetchFn: typeof fetch,
+  username: string,
+  reason: string,
+  now: number,
+): Promise<{ took: boolean; done: boolean }> {
+  const u = username.toLowerCase();
+  const [already, page] = await db.batch([
+    db.prepare("SELECT 1 AS x FROM voici_takedowns WHERE username = ?1").bind(u),
+    db.prepare("SELECT 1 AS x FROM voici_pages WHERE username = ?1").bind(u),
+  ]);
+  if ((already?.results?.length ?? 0) > 0 || (page?.results?.length ?? 0) === 0) return { took: false, done: true };
+  await db.batch([
+    db.prepare("INSERT OR IGNORE INTO voici_takedowns (username, reason, taken_down_at) VALUES (?1, ?2, ?3)").bind(u, reason, now),
+    db.prepare("UPDATE voici_pages SET taken_down_at = ?2, takedown_reason = ?3 WHERE username = ?1 AND taken_down_at IS NULL").bind(u, now, reason),
+  ]);
+  let done = false;
+  for (let i = 0; i < 5 && !done; i++) done = (await takedownStep(db, env, fetchFn, u)).done;
+  return { took: true, done };
+}
+
+/** Un-suspending (docs/abuse-handling.md §5): lift the takedown the suspension made (the owner republishes). */
+export async function restoreVoiciPageFor(db: D1Database, username: string): Promise<void> {
+  const u = username.toLowerCase();
+  await db.batch([
+    db.prepare("DELETE FROM voici_takedowns WHERE username = ?1").bind(u),
+    db.prepare("UPDATE voici_pages SET taken_down_at = NULL, takedown_reason = NULL WHERE username = ?1").bind(u),
+  ]);
+}
+
 export async function handleVoiciAdmin(request: Request, env: VoiciAbuseEnv, deps: VoiciAbuseDeps & { abuseKeyStatus?: () => { epoch: number; notAfter: number } | null }): Promise<Response> {
   const auth = authorizeAdmin({ expected: env.FLAGSHIP_ADMIN_SECRET, provided: request.headers.get("x-admin-secret") });
   if (auth) return json(auth.body, auth.status);

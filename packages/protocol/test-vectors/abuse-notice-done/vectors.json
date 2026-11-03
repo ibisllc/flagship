@@ -1,0 +1,65 @@
+{
+  "about": "An account admin marks an abuse notice done: flagship/abuse-notice-done/v1|username (lowercase)|noticeId (32 lowercase hex)|sha256 hex of the UTF-8 note|issuedAt (ms), Ed25519, seed 0x55 repeated. The note is at most 1000 characters (UTF-16 units) and may hold any text, including '|'. Each refused case must fail to produce canonical bytes.",
+  "seedHex": "5555555555555555555555555555555555555555555555555555555555555555",
+  "pubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+  "done": [
+    {
+      "done": {
+        "username": "Alice",
+        "noticeId": "0123456789abcdef0123456789abcdef",
+        "note": "",
+        "issuedAt": 1762000000000
+      },
+      "canonical": "flagship/abuse-notice-done/v1|alice|0123456789abcdef0123456789abcdef|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|1762000000000",
+      "signatureHex": "d3c4a494b00fd9fd5918db0271e61864c7f563c36c1e6b27fdb36b271aa0250558cea93274b3255644690485cd61c8e2a44b2771b1b0a5f653172e2b0c22360d"
+    },
+    {
+      "done": {
+        "username": "plucky-avocet",
+        "noticeId": "fedcba9876543210fedcba9876543210",
+        "note": "Took the page down. | Ça va? 日本",
+        "issuedAt": 1762000123456
+      },
+      "canonical": "flagship/abuse-notice-done/v1|plucky-avocet|fedcba9876543210fedcba9876543210|839a8fee8730aad93f5a95cee11030024411571ff61ba7240f3c94beeabecd51|1762000123456",
+      "signatureHex": "2b647d9e271d2a13af1bb9f03a0a39f65b216e5629ac421929af4f0a62b733cc77e9d8cd45e07a57f3736edfba80ce7055aea3f06674781691c74ae99279e901"
+    }
+  ],
+  "refused": [
+    {
+      "name": "noticeId not 32 hex",
+      "done": {
+        "username": "Alice",
+        "noticeId": "XYZ",
+        "note": "",
+        "issuedAt": 1762000000000
+      }
+    },
+    {
+      "name": "username with a dot",
+      "done": {
+        "username": "a.b",
+        "noticeId": "0123456789abcdef0123456789abcdef",
+        "note": "",
+        "issuedAt": 1762000000000
+      }
+    },
+    {
+      "name": "note over 1000 characters",
+      "done": {
+        "username": "Alice",
+        "noticeId": "0123456789abcdef0123456789abcdef",
+        "note": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "issuedAt": 1762000000000
+      }
+    },
+    {
+      "name": "issuedAt zero",
+      "done": {
+        "username": "Alice",
+        "noticeId": "0123456789abcdef0123456789abcdef",
+        "note": "",
+        "issuedAt": 0
+      }
+    }
+  ]
+}

@@ -79,6 +79,10 @@ public final class PushNotifications: NSObject {
     /// account activity; older payloads without one still land there.
     public nonisolated static let inviteCreatedCategory = "invite-created"
 
+    /// An operator's notice about a report, or a suspension (docs/abuse-handling.md): content-free. The app re-reads
+    /// the notices; a tap just opens it, where Home shows the notice (admin devices) or the suspended screen.
+    public nonisolated static let abuseNoticeCategory = "abuse-notice"
+
     /// voi.ci Messages pushes (content-free): `messages` with kind `message` or `message-request`, and `page-drafts`.
     public nonisolated static let messagesCategory = "messages"
     public nonisolated static let pageDraftsCategory = "page-drafts"
@@ -115,6 +119,7 @@ public final class PushNotifications: NSObject {
         if category == messagesCategory || kind == "message" || kind == "message-request" { return .messages }
         if category == pageDraftsCategory { return .pageEditor }
         if let category, accountNoticeCategories.contains(category) { return nil }
+        if (kind ?? category) == abuseNoticeCategory { return nil }
         if kind == appStorageFullKind, let serviceId = info["serviceId"] as? String, !serviceId.isEmpty {
             if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {
                 return .appDetailOnServer(serviceId: serviceId, serverFqdn: server)
@@ -128,6 +133,14 @@ public final class PushNotifications: NSObject {
             return .vibeCodeChat(sessionId: sessionId)
         }
         return nil
+    }
+
+    /// An `abuse-notice` push, by its category (APNs `aps.category`, Android's top-level one) or its `kind`.
+    public nonisolated static func isAbuseNotice(_ info: [AnyHashable: Any], categoryIdentifier: String = "") -> Bool {
+        let category = info["category"] as? String
+            ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
+        return categoryIdentifier == abuseNoticeCategory || category == abuseNoticeCategory
+            || (info["kind"] as? String) == abuseNoticeCategory
     }
 
     public func tokenAsHex() -> String? {
@@ -202,6 +215,9 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             return
         }
         Task { @MainActor in
+            if Self.isAbuseNotice(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
+                AbuseNoticeEvents.post()
+            }
             if let event = ProvisionPhaseBridge.parse(info) {
                 ProvisionPhaseBridge.shared.onPhase?(event)
             }
@@ -225,6 +241,7 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
                 completionHandler()
                 return
             }
+            if Self.isAbuseNotice(userInfo, categoryIdentifier: category) { AbuseNoticeEvents.post() }
             self.handleNotificationPayload(userInfo)
             completionHandler()
         }

@@ -259,6 +259,8 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   // voi.ci Messages (docs/voici-and-messages.md §8.3): content-free, kinds `message` and `message-request`.
   messages: { title: "Flagship", body: "New message" },
   "page-drafts": { title: "Flagship", body: "A device on your account has changes waiting to be published on your page." },
+  // An operator's notice or a suspension (docs/abuse-handling.md): names no app, page or reason.
+  "abuse-notice": { title: "Flagship", body: "There is a notice about your Flagship account. Open Flagship to read it." },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 

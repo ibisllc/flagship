@@ -118,7 +118,6 @@ import {
   handleRedirectionLookup,
   pushRedirection,
   bearer,
-  handleVoiciShorten,
   voiciCodeLength,
   handleGetInstallEvents,
   handleIsoManifest,
@@ -826,7 +825,6 @@ const ROUTE_RE = {
   VOICI_NAMES_LIST: /^\/api\/users\/([^/]+)\/voici-names$/,
   CUSTOM_DOMAIN: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/custom-domain$/,
   APP_ALIASES: /^\/api\/users\/([^/]+)\/apps\/aliases$/,
-  VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   ADMIN_DNS_CHALLENGE_GC: /^\/api\/admin\/dns-challenge-gc$/,
   ADMIN_DNS_ROUTE_GC: /^\/api\/admin\/dns-route-gc$/,
@@ -3248,14 +3246,6 @@ export async function tryControlPlane(
         bearer(request.headers.get("authorization")),
         env.SERVICES_CONTROL_SECRET,
         url.searchParams.get("fqdn"),
-      ),
-    );
-  }
-  if (method === "POST" && ROUTE_RE.VOICI_SHORTEN.test(path)) {
-    return finish(
-      await handleVoiciShorten(
-        { usernames: storage.usernames, voiciLinks: storage.voiciLinks, codeLength: voiciCodeLength(env.VOICI_CODE_LENGTH) },
-        await readJson(request),
       ),
     );
   }

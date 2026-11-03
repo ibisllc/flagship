@@ -14244,5 +14244,149 @@
   "voici_err_sign_out": {
     "en": "Couldn't sign out of that website. Try again.",
     "ctx": "voi.ci / Messages: error"
+  },
+  "abuse_notice_title": {
+    "en": "Action needed on your account",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_notice_about": {
+    "en": "We received a report about %1$s.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_reason_line": {
+    "en": "Reason: %1$s",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_action_modify": {
+    "en": "What to do: change it so it follows our rules.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_action_take_down": {
+    "en": "What to do: take it down.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_deadline_line": {
+    "en": "Deadline: %1$s",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_notice_warning": {
+    "en": "If it is still there after the deadline, this account can be suspended.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_ive_done_this": {
+    "en": "I've done this",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_appeal": {
+    "en": "Appeal",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_done_dialog_title": {
+    "en": "Tell us what you changed",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_done_note_label": {
+    "en": "What you changed (optional)",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_send": {
+    "en": "Send",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_notice_done_line": {
+    "en": "Marked done on %1$s. We will check it.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_only_admin": {
+    "en": "Only an admin device can do this.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_done_failed": {
+    "en": "Couldn't send. Try again.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_done_sign_reason": {
+    "en": "Mark the notice about your account as done",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_spam": {
+    "en": "Spam",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_phishing": {
+    "en": "Phishing",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_active_phishing": {
+    "en": "Active phishing",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_malware": {
+    "en": "Malware",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_csam": {
+    "en": "Child sexual abuse material",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_harassment": {
+    "en": "Harassment",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_impersonation": {
+    "en": "Impersonation",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_copyright": {
+    "en": "Copyright infringement",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_illegal": {
+    "en": "Illegal content",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_category_other": {
+    "en": "Other",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_suspended_title": {
+    "en": "This account was suspended",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_suspended_offline": {
+    "en": "Your servers are offline to the internet and the account can't add servers or change names until this is resolved.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_suspended_data_stays": {
+    "en": "Your data stays on your own server. You can still back it up and move it over your home network, and start again under a new name.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_suspended_appeal_line": {
+    "en": "If you think this is a mistake, write to abuse@flagship.services. We answer appeals within 14 days.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_continue_to_data": {
+    "en": "Continue to my data",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_suspended_banner": {
+    "en": "This account is suspended.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_details": {
+    "en": "Details",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_push_body": {
+    "en": "There is a notice about your Flagship account. Open Flagship to read it.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_channel_name": {
+    "en": "Account notices",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "abuse_channel_desc": {
+    "en": "A report about one of your apps or pages, with what to do and by when.",
+    "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
   }
 }
