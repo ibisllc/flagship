@@ -1144,6 +1144,67 @@ async fn a_revoked_box_is_dropped_by_every_relay_within_the_deadline() {
     }
 }
 
+/// An un-revoke (the owner's, or the operator's unsuspend) is `.com`'s `box-register` at the next regGen: the same
+/// key is admitted again at that generation only, a later revoke at it closes the tunnel, and a register re-sent at the
+/// revoked generation brings nothing back.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unrevoked_box_serves_again_at_its_new_reg_gen_until_revoked_again() {
+    let w = world(Tune::default()).await;
+    let a = alice();
+    let stk = key(0x33);
+    let pod = format!("back.alice.{APEX}");
+    let opts = BoxOpts {
+        mesh: true,
+        ..BoxOpts::default()
+    };
+    let reg = |g: u64| RelayLogBody::BoxRegister {
+        name_hash: rm::name_hash(&pod).unwrap(),
+        box_pub: pubhex(&stk),
+        reg_gen: g,
+    };
+    let revoke = |g: u64| RelayLogBody::BoxRevoke {
+        box_pub: pubhex(&stk),
+        reg_gen: g,
+    };
+    w.com.account(&a);
+    w.com.append(reg(1));
+    w.com.append(revoke(1));
+    synced(&w).await;
+    for id in IDS {
+        let (b, ack) = SimBox::connect(w.node(id).r().hub_addr, &a, &pod, &stk, &opts).await;
+        assert!(!ack.ok, "revoked at regGen 1: refused on {id}");
+        drop(b);
+    }
+
+    w.com.append(reg(2));
+    synced(&w).await;
+    let (mut b, ack) = SimBox::connect(w.node("aa1").r().hub_addr, &a, &pod, &stk, &opts).await;
+    assert!(ack.ok, "un-revoked: admitted");
+    let old = b.attachment("aa1", |x| x.reg_gen = 1);
+    assert_eq!(
+        b.attach_with(old).await,
+        json!({"ok": false, "code": "mismatch"}),
+        "an attachment at the revoked regGen is refused"
+    );
+    let cur = b.attachment("aa1", |x| x.reg_gen = 2);
+    assert_eq!(b.attach_with(cur).await, json!({"ok": true}));
+    eventually("bb1 knows", || w.node("bb1").mesh.winner_of(&pod).is_some()).await;
+    reaches(w.node("cc1").r(), &pod, &pod).await;
+
+    w.com.append(revoke(2));
+    eventually("the holder closes the tunnel", || b.closed_with().is_some()).await;
+    w.com.append(reg(2));
+    synced(&w).await;
+    for n in &w.nodes {
+        eventually("every relay drops it", || n.mesh.winner_of(&pod).is_none()).await;
+    }
+    for id in IDS {
+        let (b2, ack) = SimBox::connect(w.node(id).r().hub_addr, &a, &pod, &stk, &opts).await;
+        assert!(!ack.ok, "revoked at regGen 2, a re-sent register notwithstanding: refused on {id}");
+        drop(b2);
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_account_has_one_home_and_a_box_elsewhere_is_hinted_to_it() {
     let w = world(Tune::default()).await;

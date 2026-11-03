@@ -499,6 +499,49 @@ att("signed by another box", homeAtt, "bad-signature", { k: boxCabin });
 att("legacy signature on a box item", homeAtt, "bad-signature", { sig: sigBy(iad1, "relay-legacy-attachment", homeAtt) });
 att("re-registered key ok", { ...homeAtt, serverFqdn: name("lab"), boxPub: boxLab2.pub, regGen: 2 }, "ok", { k: boxLab2 });
 
+// Revoke / un-revoke of one box key (§4.2): `.com` writes an un-revoke (owner, or the operator's unsuspend) as a
+// `box-register` at the next regGen; only a later `box-revoke` at that regGen (or above) revokes it again, and a
+// replayed or re-sent register cannot bring it back. A log of its own, applied from empty.
+const revival = (() => {
+  const back = name("back");
+  const rBodies: RelayLogBody[] = [
+    { kind: "box-register", nameHash: P.nameHash(back), boxPub: boxOld.pub, regGen: 1 },
+    { kind: "box-revoke", boxPub: boxOld.pub, regGen: 1 },
+    { kind: "box-register", nameHash: P.nameHash(back), boxPub: boxOld.pub, regGen: 2 },
+    { kind: "box-revoke", boxPub: boxOld.pub, regGen: 2 },
+    { kind: "box-register", nameHash: P.nameHash(back), boxPub: boxOld.pub, regGen: 2 },
+  ];
+  const rEntries = rBodies.map((b, i) => signEntry(P.makeRelayLogEntry(i + 1, T0 - HOUR + i * MIN, b)));
+  const attAt = (regGen: number): BoxAttachment => ({ serverFqdn: back, boxPub: boxOld.pub, regGen, relayId: "iad1", attachedAt: T0 - 5 * MIN, issuedAt: T0 - MIN, notAfter: T0 + 29 * MIN });
+  const steps = [
+    ["registered", [1], ["ok", "mismatch"]],
+    ["revoked", [1, 2], ["revoked", "mismatch"]],
+    ["un-revoked: a new regGen", [1, 2, 3], ["mismatch", "ok"]],
+    ["revoked again", [1, 2, 3, 4], ["mismatch", "revoked"]],
+    ["the un-revoke replayed", [1, 2, 3, 4, 3], ["mismatch", "revoked"]],
+    ["a register re-sent at the revoked regGen", [1, 2, 3, 4, 5], ["mismatch", "revoked"]],
+    ["out of order", [3, 1, 4, 2], ["mismatch", "revoked"]],
+  ] as const;
+  return {
+    entries: rEntries,
+    steps: steps.map(([n, list, wants]) => {
+      const r = P.applyRelayLog(empty, list.map((i) => rEntries[i - 1]!), logKey.pub);
+      if (!r.ok) throw new Error(`${n}: must apply`);
+      return {
+        name: n,
+        /** A number n stands for `entries[n - 1]`. */
+        entries: [...list],
+        expected: applyOut(r),
+        attachments: [1, 2].map((g, i) => {
+          const a = attAt(g);
+          const signature = attSig(a, boxOld);
+          return { attachment: a, signature, now: T0, expected: want(`${n} regGen ${g}`, P.checkBoxAttachment(a, signature, ctx({ log: r.state })), wants[i]) };
+        }),
+      };
+    }),
+  };
+})();
+
 const legacyCases = [
   ["ok", legacyAtt, iad1, "ok"],
   ["ok on ams1", { ...legacyAtt, relayId: "ams1" }, ams1, "ok"],
@@ -842,6 +885,7 @@ const doc = {
     directory: directoryChecks,
     newerDirectory,
     boxAttachment: attachmentCases,
+    unrevoke: revival,
     legacyAttachment: legacyCases,
     compareAttachments: compare,
     withdraw: withdrawCases,

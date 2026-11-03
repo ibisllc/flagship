@@ -653,6 +653,53 @@ fn applies_the_log_like_ts() {
 }
 
 #[test]
+fn unrevoke_is_a_new_reg_gen_like_ts() {
+    let w = World::new();
+    let u = &w.v["checks"]["unrevoke"];
+    let list: Vec<(RelayLogEntry, String)> = u["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (log_entry(&e["entry"]), s(e, "signature")))
+        .collect();
+    let empty = RelayLogState::new(&w.apex).unwrap();
+    for step in u["steps"].as_array().unwrap() {
+        let picked: Vec<(RelayLogEntry, String)> = step["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| list[(i.as_u64().unwrap() - 1) as usize].clone())
+            .collect();
+        let r = m::apply_relay_log(&empty, &picked, &s(&w.v, "logKey"));
+        assert_eq!(apply_json(&r), step["expected"], "{}", step["name"]);
+        let RelayLogApply::Applied { state, .. } = r else {
+            panic!("{}: must apply", step["name"])
+        };
+        for a in step["attachments"].as_array().unwrap() {
+            let ctx = MeshCheckContext {
+                services_apex: &w.apex,
+                log: &state,
+                directory: Some(&w.dir),
+                now: n(a, "now"),
+            };
+            let got = res(m::check_box_attachment(
+                &attachment(&a["attachment"]),
+                &s(a, "signature"),
+                &ctx,
+                None,
+            ));
+            assert_eq!(
+                got,
+                a["expected"],
+                "{} regGen {}",
+                step["name"],
+                a["attachment"]["regGen"]
+            );
+        }
+    }
+}
+
+#[test]
 fn heads_like_ts() {
     let w = World::new();
     let h = &w.v["heads"];

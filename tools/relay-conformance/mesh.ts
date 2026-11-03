@@ -231,6 +231,11 @@ export class MeshCom extends MockCom {
     this.append({ kind: "box-revoke", boxPub: hex(b.stk.publicKey), regGen });
   }
 
+  /** `.com`'s un-revoke (the owner's, or the operator's unsuspend): a `box-register` for the same key at `regGen`. */
+  unrevokeBox(b: BoxIdentity, regGen: number): void {
+    this.append({ kind: "box-register", nameHash: nameHash(b.pod), boxPub: hex(b.stk.publicKey), regGen });
+  }
+
   policyHead(b: BoxIdentity, regGen: number, p: ServingPolicy): void {
     this.append({ kind: "policy-head", boxPub: hex(b.stk.publicKey), regGen, policyGen: p.policyGen, policySha256: createHash("sha256").update(canonicalServingPolicy(p)).digest("hex") });
   }

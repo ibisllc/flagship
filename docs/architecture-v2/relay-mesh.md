@@ -256,6 +256,21 @@ the name is evicted); per boxPub the highest revoked regGen; per accountHash the
 the newest policy head; sets of revoked renewal keys, grant ids, cert ids and relays. `servingDecision` gets its
 revocations through an adapter keyed by box key alone (box keys are unique, so `boxRevoked` drops the account).
 
+**Un-revoke is a new generation, never an undo.** There is no un-revoke entry kind. `.com`'s un-revoke (the owner's
+`/api/server-registry/unrevoke`, and the operator's unsuspend in `apps/com/src/abuseCases.ts`, both through
+`servers.unrevoke`) clears `revoked_at`; migration 0120's `trg_serving_box_unrevoked` raises the row's `reg_gen` by
+one in the same transaction, and 0122's `trg_relay_log_box_regen` appends `box-register` for the same key at that
+regGen. A relay admits the box only when its newest registration's regGen is above the key's highest revoked regGen,
+so the box comes back at the new regGen only (its attachments must name it; one at the old regGen is `mismatch`, and
+the box learns the regGen from its heartbeat reply). A later revoke appends `box-revoke` at the new regGen. Because
+revocation is "every generation ≤ it" and only the maximum is kept, nothing re-delivered can lift it: a replayed entry
+is a duplicate sequence (skipped), and even a fresh `box-register` at a revoked regGen leaves the box revoked; only
+`.com` raising the regGen again (another owner un-revoke or operator unsuspend) admits it. A serving policy is bound
+to its regGen, so a box whose owner set a dead-man policy serves its control name at once but its apps only after
+the owner signs a policy for the new regGen (the box keeps the regGen of the policy it holds, so `.com` cannot disarm
+a lock by reporting a newer one). Vectors: `checks.unrevoke` in `test-vectors/relay-mesh/vectors.json` (TS and Rust);
+conformance MESH09b (both runtimes, every entry/holder pair).
+
 ### 4.3 The head
 
 ```text

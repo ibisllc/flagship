@@ -501,6 +501,37 @@ describe("relay mesh: three relays in one process", () => {
     }
   });
 
+  it("an un-revoke is a box-register at the next regGen: the box serves again at it until revoked again; a re-sent register brings nothing back", async () => {
+    const admin = account("una");
+    const u1 = box(`back.una.${APEX}`, "una", admin, "U1");
+    fx.append({ kind: "box-revoke", boxPub: u1.boxPub, regGen: 1 });
+    await synced();
+    for (const id of ["ra", "rb", "rc"]) {
+      const refused = new SimBox(u1.pod, "una", u1.stk, admin, "U1");
+      expect((await refused.connect(R(id))).ok, `revoked at regGen 1 on ${id}`).toBe(false);
+      refused.ws.terminate();
+    }
+    fx.registerBox(u1.pod, u1.boxPub, 2);
+    await synced();
+    expect((await u1.connect(R("ra"))).ok).toBe(true);
+    expect(await u1.attach({ regGen: 1 })).toEqual({ ok: false, code: "mismatch" });
+    expect(await u1.attach({ regGen: 2 })).toEqual({ ok: true });
+    R("ra").node.flushAnnouncements();
+    await waitFor(() => R("rc").node.store.winner(u1.pod) !== null, 3_000, "announced");
+    expect(await reaches(R("rc"), u1.pod, "U1")).toBe(true);
+
+    fx.append({ kind: "box-revoke", boxPub: u1.boxPub, regGen: 2 });
+    await waitFor(() => u1.closedCode !== null, 3_000, "holder closed the tunnel");
+    fx.registerBox(u1.pod, u1.boxPub, 2);
+    await synced();
+    await waitFor(() => ["ra", "rb", "rc"].every((id) => R(id).node.store.winner(u1.pod) === null), 3_000, "dropped everywhere");
+    for (const id of ["ra", "rb", "rc"]) {
+      const again = new SimBox(u1.pod, "una", u1.stk, admin, "U1");
+      expect((await again.connect(R(id))).ok, `revoked at regGen 2 on ${id}`).toBe(false);
+      again.ws.terminate();
+    }
+  });
+
   it("account home: a second box landing elsewhere is hinted co-locate, moves, and the shortened name answers from every entry", async () => {
     const admin = account("bob");
     const app = `notes.bob.${APEX}`;

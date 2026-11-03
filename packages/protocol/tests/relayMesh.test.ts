@@ -137,6 +137,19 @@ describe("relay mesh vectors", () => {
     for (const c of k.withdrawCovers) expect(P.withdrawCovers(c.withdraw, c.item), c.name).toBe(c.expected);
   });
 
+  it("revoke, un-revoke (a new regGen), revoke again; a replayed un-revoke changes nothing", () => {
+    const u = v.checks.unrevoke;
+    const list: SignedRelayLogEntry[] = u.entries;
+    for (const step of u.steps) {
+      const r = P.applyRelayLog(P.emptyRelayLogState(APEX), step.entries.map((i: number) => list[i - 1]!), v.logKey);
+      expect(r.ok && { ok: true, applied: r.applied, state: summary(r.state) }, step.name).toEqual(step.expected);
+      for (const a of step.attachments) {
+        const got = P.checkBoxAttachment(a.attachment, a.signature, { servicesApex: APEX, log: r.state, directory: D, now: a.now });
+        expect(got, `${step.name} regGen ${a.attachment.regGen}`).toEqual(a.expected);
+      }
+    }
+  });
+
   it("bridges, hints, moves, phones", () => {
     const k = v.checks;
     for (const c of k.bridgeAuth) {

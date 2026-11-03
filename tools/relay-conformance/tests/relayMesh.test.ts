@@ -690,6 +690,44 @@ for (const cfg of CONFIGS) {
       live.close();
     }, 90_000);
 
+    it("MESH09b un-revoke: .com's box-register at the next regGen admits the same key again on every relay, at that regGen only; a later revoke at it closes the tunnel and a re-sent register brings nothing back", async () => {
+      const a = com.account(uniq("unrev"));
+      const id = com.box(a, "back");
+      com.revokeBox(id, 1);
+      await synced();
+      for (const r of IDS) {
+        const refused = new MeshBox(id, "UR0");
+        expect((await refused.connect(R(r))).ok, `${label(r)} refuses the box revoked at regGen 1`).toBe(false);
+        refused.raw.close();
+      }
+      com.unrevokeBox(id, 2);
+      await synced();
+      for (const [entry, holder] of PAIRS) {
+        const b = mk(new MeshBox(id, `UR-${entry}-${holder}`));
+        const ack = await b.connect(R(holder));
+        expect(ack.ok, `${label(holder)} admits the un-revoked box: ${ack.reason}`).toBe(true);
+        expect(await b.attach({ regGen: 1 }), `${label(holder)}: an attachment at the revoked regGen`).toEqual({ ok: false, code: "mismatch" });
+        expect(await b.attach({ regGen: 2 })).toEqual({ ok: true });
+        await waitReaches(R(entry), b.pod, b.label);
+        b.close();
+        await waitFor(async () => !(await reaches(R(entry), b.pod, b.label, 600)), 8_000, "the tunnel closed");
+      }
+      const live = mk(new MeshBox(id, "UR2"));
+      expect((await live.connect(R("rc"))).ok).toBe(true);
+      expect(await live.attach({ regGen: 2 })).toEqual({ ok: true });
+      com.revokeBox(id, 2);
+      await live.raw.closed;
+      expect(live.raw.closeInfo?.code).toBe(1008);
+      com.unrevokeBox(id, 2);
+      await synced();
+      for (const r of IDS) {
+        const again = new MeshBox(id, "UR3");
+        expect((await again.connect(R(r))).ok, `${label(r)} refuses the box revoked again at regGen 2`).toBe(false);
+        again.raw.close();
+        expect(await reaches(R(r), id.pod, "UR2", 800)).toBe(false);
+      }
+    }, 90_000);
+
     it("MESH13 a mesh-off relay: no relayId in the ACK for a mesh-v1 box and no /mesh endpoint", async () => {
       const a = com.account(uniq("off"));
       const b = com.box(a, "home");

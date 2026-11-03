@@ -5250,6 +5250,568 @@
         }
       }
     ],
+    "unrevoke": {
+      "entries": [
+        {
+          "entry": {
+            "sequence": 1,
+            "kind": "box-register",
+            "at": 1799996400000,
+            "f1": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0",
+            "f2": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+            "f3": "1",
+            "f4": ""
+          },
+          "signature": "aa744a6c89048ad561d9ac6cdb9318a5651a354a367a538dd852dd59168c2b055b8d5d300ad2ac2d5aa17660a4bdb299c8b8a0e586c6e93ba14e8e20c6215404"
+        },
+        {
+          "entry": {
+            "sequence": 2,
+            "kind": "box-revoke",
+            "at": 1799996460000,
+            "f1": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+            "f2": "1",
+            "f3": "",
+            "f4": ""
+          },
+          "signature": "a585151cca31c14a3a2377c8b82e47b7805ebd6d30c782b184e6836c98dc8f31bcaa43cf5bdc4c78283516e9bf0bc937771a4514f8e4e06569221d5cfa8cad0d"
+        },
+        {
+          "entry": {
+            "sequence": 3,
+            "kind": "box-register",
+            "at": 1799996520000,
+            "f1": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0",
+            "f2": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+            "f3": "2",
+            "f4": ""
+          },
+          "signature": "fd062e13432f81d74d155b021ede3464427d8a38427c2d88fc39703f7b52d633a2d6f554eb11894d21ded610db5605555a589664107d89cb7c3393d74a11e107"
+        },
+        {
+          "entry": {
+            "sequence": 4,
+            "kind": "box-revoke",
+            "at": 1799996580000,
+            "f1": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+            "f2": "2",
+            "f3": "",
+            "f4": ""
+          },
+          "signature": "ea2b1756c9ae21e86934a06fd1ff75f4bce1d75043ab4fcc3ddf3829ea3be48a96809e8979fde2c4ff47ea0aba9d0619a9d2adac609a3c6a85ee69b023e5fb0b"
+        },
+        {
+          "entry": {
+            "sequence": 5,
+            "kind": "box-register",
+            "at": 1799996640000,
+            "f1": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0",
+            "f2": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+            "f3": "2",
+            "f4": ""
+          },
+          "signature": "32d65d471cefdf7d2bad25a7599b900e7ba1d684bf75ffb1d8756a07d5bf95908cbfef66053d745a22a5499c8b940960b46fdc43f15aa08eda54cbeb6ec8cb0f"
+        }
+      ],
+      "steps": [
+        {
+          "name": "registered",
+          "entries": [
+            1
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 1,
+            "state": {
+              "sequence": 1,
+              "tipSha256": "a998763a332e0c17f410a9ea682e9d3c0f756e76276858fcaf2aa7664c4e29de",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 1,
+                  "sequence": 1
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {},
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": true
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            }
+          ]
+        },
+        {
+          "name": "revoked",
+          "entries": [
+            1,
+            2
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 2,
+            "state": {
+              "sequence": 2,
+              "tipSha256": "3678b412990715bfdb49b3aeb3d61b2fba04cbb49f7c6318d8ac7cd7fdc8c3f7",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 1,
+                  "sequence": 1
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": 1
+              },
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "revoked"
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            }
+          ]
+        },
+        {
+          "name": "un-revoked: a new regGen",
+          "entries": [
+            1,
+            2,
+            3
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 3,
+            "state": {
+              "sequence": 3,
+              "tipSha256": "819542a452dcb428bf948b075dfa9406d9512e3c55218379acc2696c64420a8e",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 2,
+                  "sequence": 3
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": 1
+              },
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "revoked again",
+          "entries": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 4,
+            "state": {
+              "sequence": 4,
+              "tipSha256": "c4d39bb29268eb545dd1ddba2f21b74d27d75def026cf0c62b0d0d3b999f6e62",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 2,
+                  "sequence": 3
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": 2
+              },
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "revoked"
+              }
+            }
+          ]
+        },
+        {
+          "name": "the un-revoke replayed",
+          "entries": [
+            1,
+            2,
+            3,
+            4,
+            3
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 4,
+            "state": {
+              "sequence": 4,
+              "tipSha256": "c4d39bb29268eb545dd1ddba2f21b74d27d75def026cf0c62b0d0d3b999f6e62",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 2,
+                  "sequence": 3
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": 2
+              },
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "revoked"
+              }
+            }
+          ]
+        },
+        {
+          "name": "a register re-sent at the revoked regGen",
+          "entries": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 5,
+            "state": {
+              "sequence": 5,
+              "tipSha256": "f94866e3372fcd275c8845d8b192bba722141a363eea7565c489ecfe0432ae8c",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 2,
+                  "sequence": 5
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": 2
+              },
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "revoked"
+              }
+            }
+          ]
+        },
+        {
+          "name": "out of order",
+          "entries": [
+            3,
+            1,
+            4,
+            2
+          ],
+          "expected": {
+            "ok": true,
+            "applied": 4,
+            "state": {
+              "sequence": 4,
+              "tipSha256": "c4d39bb29268eb545dd1ddba2f21b74d27d75def026cf0c62b0d0d3b999f6e62",
+              "boxesByName": {
+                "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0": {
+                  "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                  "regGen": 2,
+                  "sequence": 3
+                }
+              },
+              "boxNames": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": "6947c5eeecab3a572037944fd52cfa1f0dfecdb73aa4ac3a9f6c46c56fdcb6e0"
+              },
+              "revokedBoxes": {
+                "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc": 2
+              },
+              "authorities": {},
+              "policyHeads": {},
+              "revokedRenewalKeys": [],
+              "revokedGrants": {},
+              "revokedCerts": [],
+              "revokedRelays": {}
+            }
+          },
+          "attachments": [
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 1,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "adb68aaade45754f057108d2e8fb0811192db5f20f00b345231322fe11be29563441b1348a2c3dfc07bb7d04d9260d46c90582c24b152b6635b8a2ba287fba0f",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "mismatch"
+              }
+            },
+            {
+              "attachment": {
+                "serverFqdn": "back.alice.flagship.services",
+                "boxPub": "31debe55d37c722768b137131caa6087080b2e0b60b94bd785d14575cfa498bc",
+                "regGen": 2,
+                "relayId": "iad1",
+                "attachedAt": 1799999700000,
+                "issuedAt": 1799999940000,
+                "notAfter": 1800001740000
+              },
+              "signature": "99a5d15ecad24bcc1fe7bce8731bd67153cf90af5ed9b367266eb65affea66dacf773e55923c1c6de6aa54e74fa6da70295bf20afe9e9513f0938c6f78033a00",
+              "now": 1800000000000,
+              "expected": {
+                "ok": false,
+                "reason": "revoked"
+              }
+            }
+          ]
+        }
+      ]
+    },
     "legacyAttachment": [
       {
         "name": "ok",

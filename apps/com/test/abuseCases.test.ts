@@ -307,6 +307,12 @@ describe("suspension", () => {
       expect(await w.db.prepare("SELECT 1 AS x FROM voici_takedowns WHERE username = 'alice'").first()).toBeNull();
       expect(await suspensionOf(w.db, "alice")).toBeNull();
       expect(await held("/api/account/self-delete", { accountSelfDelete: { request: { username: "alice" } } })).toBeNull();
+
+      // The relays see suspend / un-suspend as box-revoke at regGen 1, then box-register at regGen 2 (the box is
+      // admitted again at the new generation only); the server kept as "lost" stays revoked.
+      const log = (await w.db.prepare("SELECT kind, src, f1, f2, f3 FROM relay_log WHERE kind IN ('box-register', 'box-revoke') AND (f1 = ?1 OR f2 = ?1) ORDER BY sequence").bind(stk).all<Record<string, string | null>>()).results;
+      expect(log.map((r) => [r.kind, r.kind === "box-revoke" ? r.f2 : r.f3])).toEqual([["box-register", "1"], ["box-revoke", "1"], ["box-register", "2"]]);
+      expect((await w.db.prepare("SELECT reg_gen FROM servers WHERE server_domain = 'home.alice.flagship.services'").first<{ reg_gen: number }>())!.reg_gen).toBe(2);
     } finally {
       w.close();
     }
