@@ -123,7 +123,7 @@ public sealed class PairSession : IDisposable
 
         var host = Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST") ?? "flagshipserver.com";
         var scheme = Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_INSECURE") == "1" ? "ws" : "wss";
-        var uri = new Uri($"{scheme}://{host}/builder-pipe/{SessionId}?role=builder");
+        var uri = new Uri($"{scheme}://{host}/builder-pipe/{SessionId}?role=builder&studio=2");
 
         OnEvent?.Invoke(new PairEvent
         {

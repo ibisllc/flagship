@@ -145,13 +145,34 @@ function writeAttachment(ws: WebSocket, attachment: SocketAttachment): void {
   if (typeof fn === "function") fn.call(ws, attachment);
 }
 
+/**
+ * The Studio pairing level this tree's Studios send as `&studio=<n>` on the builder leg. A Studio that sends less
+ * (every 0.2 Studio sends none) is refused once `STUDIO_PIPE_MIN` asks for it, with the one line all three 0.2
+ * Studios show word for word: the relay's `error` frame `reason` (owner rule 2026-11-02, journal F9).
+ */
+export const STUDIO_PIPE_LEVEL = 2;
+export const STUDIO_OUTDATED_REASON =
+  "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.";
+
+/** True when `STUDIO_PIPE_MIN` is set and the builder leg names a lower pairing level (or none). */
+export function studioOutdated(url: URL, minSetting: unknown): boolean {
+  const min = typeof minSetting === "string" ? Number.parseInt(minSetting, 10) : typeof minSetting === "number" ? minSetting : 0;
+  if (!Number.isSafeInteger(min) || min <= 0) return false;
+  if (url.searchParams.get("role") !== ROLE_BUILDER) return false;
+  const raw = url.searchParams.get("studio") ?? "";
+  const level = /^[0-9]{1,4}$/.test(raw) ? Number(raw) : 0;
+  return level < min;
+}
+
 export class BuilderRelaySession implements DurableObject {
   private readonly state: BuilderRelayDurableObjectState;
   private createdAt = 0;
   private readonly loaded: Promise<void>;
+  private readonly studioMin: unknown;
 
-  constructor(state: BuilderRelayDurableObjectState, _env: unknown) {
+  constructor(state: BuilderRelayDurableObjectState, env: unknown) {
     this.state = state;
+    this.studioMin = (env as { STUDIO_PIPE_MIN?: unknown } | null | undefined)?.STUDIO_PIPE_MIN;
     this.loaded = this.loadOrInit();
   }
 
@@ -276,6 +297,12 @@ export class BuilderRelaySession implements DurableObject {
       );
     }
     const { client, server } = createWebSocketPair();
+    if (studioOutdated(url, this.studioMin)) {
+      // Not attached: the old Studio gets its one readable line, never a session a phone could join.
+      server.accept();
+      this.send(server, { kind: "error", reason: STUDIO_OUTDATED_REASON });
+      return makeUpgradeResponse(client);
+    }
     this.attach(server, role);
     return makeUpgradeResponse(client);
   }

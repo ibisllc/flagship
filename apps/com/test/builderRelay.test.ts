@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BuilderRelaySession, _internal } from "../src/builderRelay.js";
+import { BuilderRelaySession, STUDIO_OUTDATED_REASON, studioOutdated, _internal } from "../src/builderRelay.js";
 
 /**
  * Builder relay — tests for the phone↔desktop-builder live-session DO.
@@ -460,5 +461,70 @@ describe("builder relay — TTL + hibernation", () => {
     expect(src).toContain("state.acceptWebSocket");
     expect(src).toContain("webSocketMessage");
     expect(src).toContain("webSocketClose");
+  });
+});
+
+describe("builder relay — 0.2 Studios after the 0.3 Studios ship (journal F9)", () => {
+  async function upgradeUrl(obj: BuilderRelaySession, query: string): Promise<FakeSocket> {
+    const resp = (await obj.fetch(new Request(`https://do.internal/test?${query}`, {
+      method: "GET",
+      headers: { upgrade: "websocket" },
+    }))) as Response & { webSocket?: FakeSocket };
+    expect(resp.status).toBe(101);
+    return (resp as any).webSocket as FakeSocket;
+  }
+  function boundWith(env: Record<string, unknown>) {
+    const state = makeState();
+    const obj = new BuilderRelaySession(state as any, env);
+    state._bindDo(obj);
+    return { state, obj };
+  }
+
+  it("decides on the builder leg's studio level only when STUDIO_PIPE_MIN asks", () => {
+    const u = (q: string) => new URL(`https://flagshipserver.com/builder-pipe/abcdefghijklmnop?${q}`);
+    expect(studioOutdated(u("role=builder"), undefined)).toBe(false);
+    expect(studioOutdated(u("role=builder"), "")).toBe(false);
+    expect(studioOutdated(u("role=builder"), "0")).toBe(false);
+    expect(studioOutdated(u("role=builder"), "2")).toBe(true);
+    expect(studioOutdated(u("role=builder&studio=1"), "2")).toBe(true);
+    expect(studioOutdated(u("role=builder&studio=x"), "2")).toBe(true);
+    expect(studioOutdated(u("role=builder&studio=2"), "2")).toBe(false);
+    expect(studioOutdated(u("role=builder&studio=3"), "2")).toBe(false);
+    expect(studioOutdated(u("role=phone"), "2")).toBe(false);
+  });
+
+  it("a 0.2 Studio (no level) gets the one readable line and no session; the phone never sees it", async () => {
+    const { state, obj } = boundWith({ STUDIO_PIPE_MIN: "2" });
+    const old = await upgradeUrl(obj, "role=builder");
+    const refused = await old.waitFor((m) => m.kind === "error");
+    expect(refused.reason).toBe(STUDIO_OUTDATED_REASON);
+    await old.expectNone((m) => m.kind === "accepted");
+    expect(state._attached).toHaveLength(0);
+    const phone = await upgradeUrl(obj, "role=phone");
+    await phone.waitFor((m) => m.kind === "accepted");
+    await phone.expectNone((m) => m.kind === "peer-present");
+  });
+
+  it("a 0.3 Studio (studio=2) pairs as before", async () => {
+    const { obj } = boundWith({ STUDIO_PIPE_MIN: "2" });
+    const builder = await upgradeUrl(obj, "role=builder&studio=2");
+    await builder.waitFor((m) => m.kind === "accepted");
+  });
+
+  it("until the switch is set, a 0.2 Studio keeps pairing (nothing breaks before release)", async () => {
+    const { obj } = boundWith({});
+    const builder = await upgradeUrl(obj, "role=builder");
+    await builder.waitFor((m) => m.kind === "accepted");
+  });
+
+  it("every 0.3 Studio sends the level the relay checks", () => {
+    const root = new URL("../../../", import.meta.url).pathname;
+    for (const f of [
+      "apps/builder-mac/Sources/FlagshipBuilder/BuilderSessionClient.swift",
+      "apps/builder-windows/src/PairSession.cs",
+      "packages/flagship-builder/src/pair.ts",
+    ]) {
+      expect(readFileSync(`${root}${f}`, "utf8"), f).toContain("?role=builder&studio=2");
+    }
   });
 });

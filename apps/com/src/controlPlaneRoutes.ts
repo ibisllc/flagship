@@ -187,6 +187,7 @@ import {
   handlePostServerHealth,
   handleUserPubKeyCert,
   handleShareKeyAttestation,
+  appUpdateRequired,
   handleAuthTime,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
@@ -624,6 +625,8 @@ const ROUTE_RE = {
   SERVER_REGISTRY_UNREVOKE: /^\/api\/server-registry\/unrevoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   SHARE_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/share-key-attestation$/,
+  /** 0.2's share-accept read, retired for share-key-attestation: answered with an update sentence. */
+  LEGACY_ACCOUNT_KEY_ATTESTATION: /^\/api\/users\/[^/]+\/account-key-attestation$/,
   AUTH_TIME: /^\/api\/auth-time$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
@@ -1496,6 +1499,9 @@ export async function tryControlPlane(
   // a share acceptance, so the shared server can check that an admin device
   // accepted without learning any key `.com` serves by name, and `.com` never
   // learns the share (docs/share-a-server.md §5.1, AT-LNK-10).
+  if (method === "GET" && ROUTE_RE.LEGACY_ACCOUNT_KEY_ATTESTATION.test(path)) {
+    return finish(appUpdateRequired(410, "shareAccept"));
+  }
   if (method === "POST" && (m = path.match(ROUTE_RE.SHARE_KEY_ATTESTATION))) {
     return finish(
       await handleShareKeyAttestation(

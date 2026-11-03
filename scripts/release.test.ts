@@ -82,14 +82,14 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(36);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 36 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(37);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 37 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(36);
+    expect(phases).toHaveLength(37);
     expect(phases.slice(0, 22).every((p) => p === "A")).toBe(true);
     expect(phases.slice(22).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(36);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(36);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(37);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(37);
     expect(calls(env)).toBe("");
   });
 
@@ -103,7 +103,7 @@ describe("release.sh", () => {
     // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
       "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "9", "5", "6", "1b", "4", "8", "7a", "6a", "7", "14", "9", "9", "9",
-      "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11b", "13",
+      "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11d", "11b", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
     for (const m of r.out.matchAll(/runbook: (.+)$/gm)) {
@@ -128,6 +128,9 @@ describe("release.sh", () => {
     expect(idx("Deploy the DNS broker")).toBeLessThan(idx("Deploy .com"));
     expect(idx("Gym gate")).toBeLessThan(idx("Deploy the DNS broker"));
     expect(idx("hall of fame")).toBeGreaterThan(idx("Redeploy .com"));
+    // The 0.2 apps are told to update only after the 0.3 store builds exist (journal F9).
+    expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("iOS: Release-clean"));
+    expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("Android: release-clean"));
     expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
     expect(idx("Write DEPLOYED-FINAL")).toBe(22);
     // the canary opens phase B: after the release is published, before the scrub and the stores
@@ -140,7 +143,7 @@ describe("release.sh", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
     expect(steps[0]!.n).toBe(23);
-    expect(steps).toHaveLength(14);
+    expect(steps).toHaveLength(15);
   });
 
   it("--dry-run --from 1 prints every command of phase A and runs no tool", () => {

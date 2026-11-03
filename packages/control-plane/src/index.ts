@@ -22,6 +22,7 @@ export * from "./brokerDnsClient.js";
 export * from "./accountDns.js";
 export * from "./dns01.js";
 export * from "./luksKeys.js";
+export * from "./clientUpdate.js";
 export * from "./bootKeys.js";
 export * from "./pqKeyBindings.js";
 export * from "./accountPqTrust.js";

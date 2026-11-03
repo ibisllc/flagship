@@ -43,7 +43,7 @@ final class BuilderSessionClient: NSObject {
 
     func connect() {
         guard !closed else { return }
-        guard let url = URL(string: "wss://\(host)/builder-pipe/\(engine.sessionId)?role=builder") else {
+        guard let url = URL(string: "wss://\(host)/builder-pipe/\(engine.sessionId)?role=builder&studio=2") else {
             onStage?(.ended(reason: String(localized: "Couldn't build the relay URL.")))
             return
         }

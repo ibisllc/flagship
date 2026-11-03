@@ -1,3 +1,4 @@
+import { appUpdateRequired, isLegacyRecoveryEnvelope } from "./clientUpdate.js";
 import {
   checkRecoveryEvolution,
   recoveryRecordDigest,
@@ -212,6 +213,7 @@ async function checkEnvelope(
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
   const b = (body ?? {}) as Record<string, unknown>;
+  if (isLegacyRecoveryEnvelope(body)) return { response: appUpdateRequired(400, "recoverySave") };
   const claim = parseClaim(b.claim);
   if (!claim || typeof b.signature !== "string" || !/^[0-9a-f]{128}$/.test(b.signature)) {
     return { response: malformed("malformed recovery record envelope (a v2 signed record is required)") };
@@ -418,7 +420,8 @@ export async function handleFetchWrappedUmkWithToken(
     if (!deps.recoveryProofSecret) return { status: 503, body: { error: "passkey recovery is not configured", code: "passkey-unavailable" } };
     const p = b.passkey as { challenge?: unknown; assertion?: unknown } | undefined;
     if (!p || typeof p !== "object" || typeof p.challenge !== "string") {
-      return { status: 403, body: { error: "this recovery needs your passkey", code: "passkey-required" } };
+      // Only a 0.2 app (no passkey support) gets here: 0.3 clients map the code to their own translated text.
+      return appUpdateRequired(403, "recoveryPasskey", "passkey-required");
     }
     if (!(await checkRecoveryChallenge(deps.recoveryProofSecret, username, p.challenge, now()))) {
       return { status: 403, body: { error: "the passkey challenge expired; try again", code: "passkey-challenge" } };

@@ -169,7 +169,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
     }
   };
 
-  const url = `${scheme}://${host}/builder-pipe/${sid}?role=builder`;
+  const url = `${scheme}://${host}/builder-pipe/${sid}?role=builder&studio=2`;
   const transport = makeTransport(url);
 
   let aeadKey: Bytes | null = null;

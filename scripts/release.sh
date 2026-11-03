@@ -95,7 +95,7 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 # ---------------------------------------------------------------- the plan
 
 STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
-          canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android hof final)
+          canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android upgradenotice hof final)
 LAST_A=22   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
@@ -608,6 +608,20 @@ shasum -a 256 <the two .aab files>
 EOF
   GATE="check-release-clean prints ok for app and wear; the AAB versionCode is above Play's highest."
   ROLLBACK="Nothing is uploaded by this step; upload to the Play internal track by hand."
+}
+meta_upgradenotice() {
+  TITLE="Tell the 0.2 apps to update (signed notice, once the stores carry 0.3)"
+  RUNBOOK="11d. Tell the 0.2 apps to update"
+  WHAT="Run it (--only) once App Store and Google Play have approved the 0.3 builds: previews an update-required notice naming the new store builds and the live webapp shell, you sign it with the YubiKey in another terminal, then it commits, pushes and redeploys .com. 0.2 iOS 1.1 (5) and Android 9 show a banner with an Update button on every launch (their release builds never lock); a 0.2 webapp shell locks until its Update button loads the new one. iOS 1.0 (4) predates notices and shows nothing."
+  read -r -d '' CMDS <<'EOF' || true
+node scripts/security-notice.mjs required --message "<text>" --event <approval time> --lock-at <time> --platform ios:<iosBuild> --platform android:<androidVersionCode> --platform web:<shell> --advisory <id> --security-reason "<one sentence>"     (preview)
+(you, in another terminal: the same command with --sign)
+git add -- .maintainers/notices && git commit -m "Notice: the 0.2 apps must update" && git push origin HEAD:main
+(cd apps/com && npm run deploy)
+curl -s https://flagshipserver.com/api/notices
+EOF
+  GATE="Both stores list the 0.3 builds; /api/notices returns the notice; a 0.2 phone shows the update banner."
+  ROLLBACK="node scripts/security-notice.mjs clear --sign (with --supersede-lock while the lock is in force), commit, deploy."
 }
 meta_final() {
   TITLE="Final verification and the closing summary"
@@ -1924,6 +1938,45 @@ EOF
   com_checks
 }
 
+# The 0.2 apps learn they must update only from a signed notice (journal F9): their release builds show an
+# update-required notice as a banner with an Update button (never a lock); a 0.2 webapp shell locks until it reloads.
+run_upgradenotice() {
+  ensure_wt
+  local ib av sv msg reason event lock advisory
+  ib=$(node -p "require('$WT/release/version.json').iosBuild"); av=$(node -p "require('$WT/release/version.json').androidVersionCode")
+  sv=$(shell_version "$WT"); sv=${sv#v}
+  [ "$ib" -gt 5 ] && [ "$av" -gt 9 ] || fail "release/version.json still names the 0.2 store builds (iOS build $ib, Android $av): the notice would ask nobody to update"
+  say "  Only once BOTH stores carry the 0.3 builds (iOS build $ib, Android versionCode $av): the banner's Update"
+  say "  button opens the store, so before approval it would send people to the version they already have."
+  [ "$(ask_word "Type  approved  when App Store and Google Play both show the 0.3 builds (Enter = later)")" = approved ] || return 20
+  msg="Flagship 0.3 is here. Update the app to keep using your account and servers: this version no longer works with them."
+  reason="0.3 fixes security issues in how this version signs and checks account and server messages."
+  event=$(ask_word "When were the store builds approved? ISO time, e.g. 2026-11-20T00:00:00Z")
+  [ -n "$event" ] || return 10
+  lock=$(ask_word "When should a 0.2 webapp lock? ISO time or now (Enter = now)"); lock=${lock:-now}
+  advisory=$(ask_word "Advisory id for the 0.3 security fixes (e.g. FSA-2026-003)")
+  [ -n "$advisory" ] || return 10
+  local args=(required --message "$msg" --event "$event" --lock-at "$lock" --platform "ios:$ib" --platform "android:$av" --platform "web:$sv" --advisory "$advisory" --security-reason "$reason")
+  say "  Preview (writes nothing):"
+  with_maintainers XA "$WT" node scripts/security-notice.mjs "${args[@]}"
+  say ""
+  say "  To publish it, sign in ANOTHER terminal (the YubiKey PIN prompt reads /dev/tty):"
+  say ""
+  say "      cd $WT"
+  say "      ln -s $MAIN_CHECKOUT/maintainers maintainers"
+  say "      node scripts/security-notice.mjs required --message \"$msg\" --event $event --lock-at $lock --platform ios:$ib --platform android:$av --platform web:$sv --advisory $advisory --security-reason \"$reason\" --sign"
+  say "      rm maintainers"
+  say ""
+  say "  Then come back here. This step commits .maintainers/notices, pushes it and redeploys .com."
+  [ "$(ask_word "Type  signed  when done, or press Enter to leave it for later")" = signed ] || return 20
+  [ -n "$(wt_git status --porcelain -- .maintainers/notices)" ] || fail "nothing new under .maintainers/notices in the worktree"
+  commit_paths "Notice: the 0.2 apps must update" .maintainers/notices
+  land_commits || return $?
+  com_deploy || return $?
+  say "  $(curl -s -m 25 "$COM_URL/api/notices" | head -c 400)"
+  com_checks
+}
+
 DANGER_TABLES="servers routing auth_codes device_identities daemon_status secret_mailbox meter_counters audit_events demo_users"
 run_scrub() {
   ensure_wt
@@ -2119,7 +2172,23 @@ run_publisharm() {
   land_commits || return $?
 }
 
+# 0.2 Studios can't tell they're out of date; the pairing relay tells them once the 0.3 Studios are downloadable
+# (STUDIO_PIPE_MIN, builderRelay.ts; journal F9). Never before: a refused 0.2 Studio would have nothing to update to.
+studio_pipe_switch() {
+  local toml="$WT/apps/com/wrangler.toml"
+  if grep -q '^STUDIO_PIPE_MIN *= *"2"' "$toml"; then ok "STUDIO_PIPE_MIN is on: 0.2 Studios are told to download the new one"; return 0; fi
+  if ! st_has done "$(step_index studiowl)" || ! st_has done "$(step_index studiomac)"; then
+    warn "the 0.3 Studios are not all published (steps studiowl, studiomac): 0.2 Studios keep pairing for now"; return 0
+  fi
+  confirm "All three 0.3 Studios are downloadable. Turn on STUDIO_PIPE_MIN=2, so a 0.2 Studio is told to download the new one when it pairs?" || return 0
+  sed -i.bak 's/^# STUDIO_PIPE_MIN = "2"$/STUDIO_PIPE_MIN = "2"/' "$toml" && rm -f "$toml.bak"
+  grep -q '^STUDIO_PIPE_MIN = "2"' "$toml" || fail "could not turn on STUDIO_PIPE_MIN in apps/com/wrangler.toml"
+  commit_paths "Tell 0.2 Studios to download the new one" apps/com/wrangler.toml
+  land_commits || return $?
+}
+
 run_redeployB() {
+  studio_pipe_switch || return $?
   com_deploy || return $?
   com_checks
   PROBE_FAILS=0

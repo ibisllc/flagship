@@ -1,3 +1,4 @@
+import { appUpdateRequired } from "./clientUpdate.js";
 import { verifyPutSealedLuksKey, type PutSealedLuksKey } from "@flagship/protocol";
 import type { LuksKeyStorage, ServerStorage, UsernameStorage } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
@@ -114,7 +115,12 @@ export async function handleGetSealedLuksKey(
     authorization,
     ACCOUNT_KEY_HOLDERS_ONLY,
   );
-  if (!check.ok) return check.response;
+  if (!check.ok) {
+    // No token at all is the 0.2 apps' read (it predates the token): tell them to update. The same answer for
+    // every name, so it still reveals nothing about which servers hold a deposit.
+    if (!authorization) return { ...appUpdateRequired(401, "startUp"), headers: { ...ACCOUNT_READ_HEADERS } };
+    return check.response;
+  }
   const rec = reg ? await deps.luksKeys.getSealed(host) : undefined;
   if (!rec) return { ...notFound("no sealed key on file"), headers: { ...ACCOUNT_READ_HEADERS } };
   return {

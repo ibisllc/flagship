@@ -24,9 +24,9 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 36 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --list                # the 37 steps, with phase, commands, gate, rollback
 bash scripts/release.sh --phase A             # deploy the real state (steps 1-22), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 23-36; 23 is the canary, re-run with --only 23)
+bash scripts/release.sh --phase B             # after the Windows results (steps 23-37; 23 is the canary, re-run with --only 23)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
@@ -55,6 +55,55 @@ holds the other phase B steps. The maintenance notice (12.1) is its own step aft
 script: `scripts/gym-release-run.sh`, gated on its exit code), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
 reading the Windows results (typed `windows-ok` before the scrub).
+
+### The 0.2 apps, Studios and servers until 0.3 ships (owner rule 2026-11-02)
+
+The 0.2 apps (iOS 1.1 build 5 and 1.0 build 4, Android 9 + Wear, webapp shell v156), the 0.2
+Studios and 0.2 boxes must keep working on production until the release; after it they may only
+be told to update, clearly. What in this run reaches them early, in order:
+
+1. **Landing `release/0.3` on `main`** (before step 1): every 0.2 app writes `installerGitRef:
+   "main"` into its recipes, and a USB/ISO install (and a 0.2 Studio's installer fallback) clones
+   `main` at install time. From this push on, a server created from a 0.2 app installs the 0.3 tree
+   with the 0.2 bootstrap, against the 0.2 `.com` until step 18. Keep the time from this push to
+   the `.com` deploy as short as you can (one sitting), and don't push 0.3 to `main` days ahead.
+2. **The endorsement (step 7)**: a 0.2 box lists releases from `origin/main` itself. From this
+   push on, every 0.2 box offers "Update to latest" (0.3) while `.com` is still 0.2, and a NEW 0.2
+   box (no update history, no apps) moves to it on its first boot. Run steps 7 to 18 in one
+   sitting; publish the maintenance notice (12.1) before it, from a 0.2 commit (below).
+3. **Migrations (step 14)** are additive (new tables, nullable columns, AFTER triggers): the 0.2
+   `.com` keeps working on them. One gap: 0127 copies usernames, codes and link names into `names`
+   once; anything the 0.2 `.com` creates between step 14 and step 18 is missing there. Keep 14-18
+   together, or re-run its steps 4a-4c (`INSERT OR IGNORE`, idempotent) after step 18.
+4. **`.services` (step 15)** is deployed before `.com`. Without `FLAGSHIP_SERVING_REVOCATION_PUB`
+   the 0.3 relay routes every name a box proves, as the 0.2 one did; the key is given only after the
+   `.com` deploy (`serving_relay_key`). (Section 8's "right after `.com`" predates this order.)
+5. **`.com` (step 18) is the release moment for the apps.** After it, a real (non-demo) account's
+   0.2 app: Home, sign-in, pairing and orders keep working; start-up approval, accepting a shared
+   server, saving cloud recovery and a passkey recovery answer with "…needs the newest version of
+   Flagship. Update the app…" (`packages/control-plane/src/clientUpdate.ts`). A 0.2 box keeps its
+   tunnel and control name; once the relay holds the serving key its app names stop (it pins no
+   admin key) and its certificate can no longer renew (DNS-01 answers 410 "Update this server.").
+   The investor demo is waived (`demo02Compat.test.ts`).
+6. **Appliance manifests (steps 20-21, 30)** overwrite `/downloads/FlagshipVMAppliance-*.json`. A
+   0.2 Studio accepts any `version: 1` qcow2 manifest whose `installerGitRef` matches its recipe
+   ("main"), so after step 21 a 0.2 Studio hosts the 0.3 appliance with its 0.2 seed. Not run on the
+   gym; until the 0.3 Studios are out (steps 28-29) that is what 0.2 Studio hosting does.
+7. **Studio downloads (steps 28-29, 31)**: the 0.2 downloads stay until the redeploy; the same
+   redeploy turns on `STUDIO_PIPE_MIN` (asked), after which a 0.2 Studio is refused at pairing with
+   "This version of Flagship Studio is out of date. Download the new one…" (the relay's error line,
+   the only server text 0.2 Studios show).
+8. **The stores**: the 0.3 builds are submitted in steps 33-34, after the `.com` deploy, and
+   review takes days. Until both are approved, a 0.2 phone user who is told to update has nothing
+   to update to; submit as soon as phase A is green (`--only 33`, `--only 34`), then step 35 signs
+   the update notice once both stores carry 0.3.
+
+**Before landing 0.3 on `main` (owner, optional but recommended):** sign a maintenance notice on
+the 0.2 tree and deploy it with the 0.2 `.com` (a `main` commit: `node scripts/security-notice.mjs
+maintenance --message "We will update Flagship on {date}. Your servers keep running; update the app
+when the new version reaches your store." --event <release time> --sign`, commit
+`.maintainers/notices`, `cd apps/com && npm run deploy`). 0.2 iOS 1.1 (5), Android 9 and web show it
+as a banner; 0.3 apps ignore it (no PQ half), which is harmless.
 
 ### What the owner does by hand in a release (0.3 and later)
 
@@ -1060,6 +1109,31 @@ review login, and unlock an auto-unlock server.
 
 Rollback: a store build cannot be recalled; halt the rollout in the console and
 ship a higher version. The notice mechanism (step 12) can ask people to update.
+
+## 11d. Tell the 0.2 apps to update
+
+Run once both stores carry the 0.3 builds (`bash scripts/release.sh --only 35`). The script
+previews an `update-required` notice naming this release's store builds and webapp shell; you
+sign it in another terminal (ca-track YubiKey, plus the PQ half from the release key), and it
+commits `.maintainers/notices`, pushes and redeploys `.com`.
+
+```sh
+node scripts/security-notice.mjs required \
+  --message "Flagship 0.3 is here. Update the app to keep using your account and servers: this version no longer works with them." \
+  --event <approval time> --lock-at <time or now> \
+  --platform ios:<iosBuild> --platform android:<androidVersionCode> --platform web:<shell> \
+  --advisory <FSA id for the 0.3 fixes> \
+  --security-reason "0.3 fixes security issues in how this version signs and checks account and server messages." \
+  --sign
+```
+
+What each 0.2 client does with it: iOS 1.1 (5) and Android 9 show the message as a banner with an
+Update button (store) on every launch: their release builds turn a lock into that banner. A 0.2
+webapp shell locks, and its Update button loads the new shell (which is above `web:`); most
+browsers have the new shell already from the `.com` deploy. iOS 1.0 (4) predates notices and shows
+nothing. A notice lasts at most 30 days: sign a new one (next `seq`) while 0.2 apps are still
+seen. Check it the way a 0.2 phone does before people see it: the 0.2 parsers ignore the `pq`
+field and verify the classical signature over the same canonical bytes.
 
 ## 11b. Publish the hall of fame entry
 

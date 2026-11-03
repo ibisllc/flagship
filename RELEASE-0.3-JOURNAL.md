@@ -80,7 +80,7 @@ AI01/AI02 local AI) and 8 (V01 adversarial suite + assessment package, V02 canar
   stop the harness again for that pass and let the script end by itself. Killing the script first orphans the harness
   and ends its caffeinate (the Mac then sleeps). Afterwards: `npx tsx tools/live-e2e/sweep-cli.ts --destroy`, remove a
   stale `/private/tmp/claude-501/flagship-locks/gym.lock`.
-- Release: `bash scripts/release.sh --list`, then `--phase A`, `--phase B` (36 steps, prompts before each
+- Release: `bash scripts/release.sh --list`, then `--phase A`, `--phase B` (37 steps, prompts before each
   outward step).
 - Android Gradle needs `JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`.
   iOS: project `apps/mobile/ios/App/FlagshipApp.xcodeproj`, scheme `FlagshipApp`, Xcode RC at
