@@ -70,7 +70,8 @@
   "qemuStoppedUnexpectedlyExit": "QEMU wurde unerwartet beendet (Exit-Code {0}).",
   "qemuStoppedExit": "QEMU wurde beendet (Exit-Code {0}): {1}",
   "foundQemuAtButQemuImg": "QEMU wurde in {0} gefunden, aber qemu-img.exe fehlt – installiere QEMU neu.",
-  "orSetToYourQemuFolder": "(oder setze {0} auf deinen QEMU-Ordner).",
+  "foundQemuAtButFirmwareMissing": "QEMU wurde in {0} gefunden, aber seine UEFI-Firmware ({1}) fehlt – installiere QEMU neu.",
+  "qemuNotInstalledWinget": "QEMU ist nicht installiert. Installiere es mit: winget install {0} (oder setze {1} auf deinen QEMU-Ordner).",
   "applianceHardware": "Appliance (Hardware)",
   "applianceHostedVm": "Appliance (gehostete VM)",
   "unknownServerTier": "Unbekannte Serverstufe „{0}“.",
@@ -230,7 +231,8 @@
   "wiFiPasswordOptional": "WLAN-Passwort (optional)",
   "actions": "Aktionen",
   "Beta": "Beta",
-  "softwarePackageNotPublished": "Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf flagshipserver.com nicht veröffentlicht. Aktualisiere Flagship Studio und die Flagship-App oder versuche es später erneut.",
-  "couldntCheckSoftwarePackage": "Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.",
+  "softwarePackageNotPublished": "Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf {0} nicht veröffentlicht. Aktualisiere Flagship Studio und die Flagship-App oder versuche es später erneut.",
+  "couldntCheckSoftwarePackage": "Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf {0} veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.",
+  "windows10NoLongerGetsSecurityUpdates": "Diese Windows-Version erhält keine Sicherheitsupdates mehr. Studio funktioniert hier weiterhin und kann deinen Server hosten; ein Update auf Windows 11 macht diesen PC sicherer.",
   "recipeMadeByOlderApp": "Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App auf deinem Telefon und erstelle den Server dann erneut."
 }

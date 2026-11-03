@@ -223,8 +223,11 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="foundQemuAtButQemuImg" xml:space="preserve">
     <value>QEMU wurde in {0} gefunden, aber qemu-img.exe fehlt – installiere QEMU neu.</value>
   </data>
-  <data name="orSetToYourQemuFolder" xml:space="preserve">
-    <value>(oder setze {0} auf deinen QEMU-Ordner).</value>
+  <data name="foundQemuAtButFirmwareMissing" xml:space="preserve">
+    <value>QEMU wurde in {0} gefunden, aber seine UEFI-Firmware ({1}) fehlt – installiere QEMU neu.</value>
+  </data>
+  <data name="qemuNotInstalledWinget" xml:space="preserve">
+    <value>QEMU ist nicht installiert. Installiere es mit: winget install {0} (oder setze {1} auf deinen QEMU-Ordner).</value>
   </data>
   <data name="applianceHardware" xml:space="preserve">
     <value>Appliance (Hardware)</value>
@@ -704,10 +707,13 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
     <value>Beta</value>
   </data>
   <data name="softwarePackageNotPublished" xml:space="preserve">
-    <value>Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf flagshipserver.com nicht veröffentlicht. Aktualisiere Flagship Studio und die Flagship-App oder versuche es später erneut.</value>
+    <value>Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf {0} nicht veröffentlicht. Aktualisiere Flagship Studio und die Flagship-App oder versuche es später erneut.</value>
   </data>
   <data name="couldntCheckSoftwarePackage" xml:space="preserve">
-    <value>Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.</value>
+    <value>Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf {0} veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.</value>
+  </data>
+  <data name="windows10NoLongerGetsSecurityUpdates" xml:space="preserve">
+    <value>Diese Windows-Version erhält keine Sicherheitsupdates mehr. Studio funktioniert hier weiterhin und kann deinen Server hosten; ein Update auf Windows 11 macht diesen PC sicherer.</value>
   </data>
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App auf deinem Telefon und erstelle den Server dann erneut.</value>

@@ -293,9 +293,15 @@ final class VMCoreVectorTests: XCTestCase {
                            status.map(String.init) ?? "no answer")
         }
         let messages = section["messages"] as! [String: String]
-        XCTAssertEqual(ArtifactPreflight.message(for: .missing), messages["missing"])
-        XCTAssertEqual(ArtifactPreflight.message(for: .unreachable), messages["unreachable"])
-        XCTAssertNil(ArtifactPreflight.message(for: .published))
+        let hosts = section["messageHosts"] as! [String]
+        XCTAssertFalse(hosts.isEmpty)
+        for host in hosts {
+            XCTAssertEqual(ArtifactPreflight.message(for: .missing, controlHost: host),
+                           messages["missing"]?.replacingOccurrences(of: "{host}", with: host))
+            XCTAssertEqual(ArtifactPreflight.message(for: .unreachable, controlHost: host),
+                           messages["unreachable"]?.replacingOccurrences(of: "{host}", with: host))
+            XCTAssertNil(ArtifactPreflight.message(for: .published, controlHost: host))
+        }
         // No exact commit: refused without a request (the bootstrap would refuse it too).
         let verdict = await ArtifactPreflight.check(commit: "main", arch: .amd64, environment: [:])
         XCTAssertEqual(verdict, .missing)
@@ -313,6 +319,22 @@ final class VMCoreVectorTests: XCTestCase {
         }
         let messages = section["messages"] as! [String: String]
         XCTAssertEqual(OlderAppRecipe.message, messages["studio"])
+    }
+
+    // MARK: - Which prebuilt appliance hosts a recipe
+
+    func testApplianceMatchMatchesVectors() throws {
+        let section = try loadVectors()["applianceMatch"] as! [String: Any]
+        let cases = section["cases"] as! [[String: Any]]
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let label = c["installerGitRef"] as! String, commit = c["commit"] as? String
+            let ref = c["recipeRef"] as! String, name = c["name"] as? String ?? ""
+            XCTAssertEqual(ApplianceMatch.matches(installerGitRef: label, commit: commit, recipeRef: ref),
+                           c["matches"] as? Bool, name)
+            XCTAssertEqual(ApplianceMatch.published(installerGitRef: label, commit: commit, recipeRef: ref),
+                           c["published"] as? String, name)
+        }
     }
 
     func testSealedBootSetUpMatchesVectors() throws {

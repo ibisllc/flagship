@@ -403,10 +403,10 @@ describe("Studio platforms that have not passed a hardware run say so", () => {
       expect(page, lang).toContain('href="/download/linux"');
     }
   });
-  it("the floors on /studio are the ones the owner set: Windows 11, Node.js 22", () => {
+  it("the floors on /studio are the ones the owner set: Windows 11 or Windows 10 22H2, Node.js 22", () => {
     const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
-    expect(studio).not.toContain("Windows 10");
-    expect(studio).toContain("Windows 11");
+    // Owner, 2026-11-02: Windows 10 22H2 is supported (Studio shows a calm no-security-updates line there).
+    expect(studio).toContain("Windows 11 or Windows 10 22H2");
     expect(studio).toContain("Node.js 22");
     expect(studio).not.toContain("Node.js 20");
   });

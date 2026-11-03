@@ -65,6 +65,7 @@
     <Compile Include="..\src\VM\VMServerHealth.cs" />
     <Compile Include="..\src\VM\UnlockWatch.cs" />
     <Compile Include="..\src\VM\QemuFailure.cs" />
+    <Compile Include="..\src\VM\ApplianceMatch.cs" />
     <Compile Include="..\src\VM\ApplianceCache.cs" />
     <Compile Include="..\src\VM\ApplianceProvisioner.cs" />
     <Compile Include="..\src\VM\ApplianceHosting.cs" />
@@ -73,7 +74,9 @@
     <Compile Include="..\src\QuitGate.cs" />
     <Compile Include="..\src\ArtifactPreflight.cs" />
     <Compile Include="..\src\OlderAppRecipe.cs" />
+    <Compile Include="..\src\WindowsSupport.cs" />
     <Compile Include="DiskEnumeratorTests.cs" />
+    <Compile Include="WindowsSupportTests.cs" />
     <Compile Include="VerifyResultTests.cs" />
     <Compile Include="WizardStateMachineTests.cs" />
     <Compile Include="Ed25519VerifyTests.cs" />

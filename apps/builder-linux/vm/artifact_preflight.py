@@ -29,20 +29,23 @@ _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _ARCHES = ("amd64", "arm64")
 
 
-def missing_message() -> str:
-    return tr("This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later.")
+def missing_message(control_host: Optional[str] = None) -> str:
+    return tr("This server can't be installed yet: its software package isn't published on {0}. Update Flagship Studio and the Flagship app, or try again later.").format(control_host or control_plane.control_host())
 
 
-def unreachable_message() -> str:
-    return tr("Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.")
+def unreachable_message(control_host: Optional[str] = None) -> str:
+    return tr("Couldn't check that this server's software package is published on {0}. Check your internet connection and try again.").format(control_host or control_plane.control_host())
 
 
-def message(verdict: str) -> Optional[str]:
-    """The refusal for a verdict; None when the install may go ahead."""
+def message(verdict: str, env: Optional[Mapping[str, str]] = None, control_host: Optional[str] = None) -> Optional[str]:
+    """The refusal for a verdict; None when the install may go ahead. The
+    sentence names the control host the check asked (the gym when Studio
+    follows FLAGSHIP_CONTROL_HOST), never a hard-coded flagshipserver.com."""
+    host = control_host or control_plane.control_host(env)
     if verdict == MISSING:
-        return missing_message()
+        return missing_message(host)
     if verdict == UNREACHABLE:
-        return unreachable_message()
+        return unreachable_message(host)
     return None
 
 

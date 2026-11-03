@@ -30,9 +30,10 @@ def sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
-def manifest(ref: str = "main", arch: str = "amd64") -> bytes:
+def manifest(ref: str = "main", arch: str = "amd64", commit=None) -> bytes:
     whole = PART_A + PART_B
-    return json.dumps({
+    extra = {} if commit is None else {"commit": commit}
+    return json.dumps({**extra,
         "version": 1, "arch": arch, "installerGitRef": ref, "format": "qcow2",
         "sha256": sha(whole), "sizeBytes": len(whole),
         "parts": [
@@ -196,3 +197,27 @@ def test_reads_the_backing_file_a_server_disk_names(tmp_path):
     assert backing_files_in_use([str(disk), str(plain), str(raw)]) == {
         os.path.realpath("/data/Appliances/appliance-amd64/abc/base.qcow2")
     }
+
+
+COMMIT = "386e29c84899283c167c9ce983d2dc2acbaa4f11"
+
+
+def test_an_exact_commit_recipe_matches_the_manifest_commit_not_the_label(tmp_path):
+    """Production keeps the "main" label for 0.2 Studios; a 0.3 recipe names
+    the exact commit, which the manifest's "commit" carries."""
+    base = cache(tmp_path, Fakes(body=manifest("main", commit=COMMIT))).ensure(COMMIT)
+    assert json.loads(Path(base + ".json").read_text())["commit"] == COMMIT
+    assert cache(tmp_path, Fakes(offline=True)).ensure(COMMIT) == base
+    for body in (manifest("main", commit="b" * 40), manifest("main"), manifest(COMMIT)):
+        with pytest.raises(ApplianceCacheError) as e:
+            cache(tmp_path, Fakes(body=body)).ensure(COMMIT)
+        assert e.value.falls_back_to_installer
+
+
+def test_a_cached_base_records_the_commit_the_manifest_now_names(tmp_path):
+    base = cache(tmp_path, Fakes()).ensure("main")
+    assert "commit" not in json.loads(Path(base + ".json").read_text())
+    fakes = Fakes(body=manifest("main", commit=COMMIT))
+    assert cache(tmp_path, fakes).ensure(COMMIT) == base
+    assert fakes.downloads == []
+    assert json.loads(Path(base + ".json").read_text())["commit"] == COMMIT

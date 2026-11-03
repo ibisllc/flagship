@@ -277,10 +277,18 @@ def test_artifact_preflight_verdict(case):
     assert artifact_preflight.verdict_for(case["status"]) == case["verdict"]
 
 
-def test_artifact_preflight_messages():
-    assert artifact_preflight.message(artifact_preflight.MISSING) == PREFLIGHT["messages"]["missing"]
-    assert artifact_preflight.message(artifact_preflight.UNREACHABLE) == PREFLIGHT["messages"]["unreachable"]
-    assert artifact_preflight.message(artifact_preflight.PUBLISHED) is None
+@pytest.mark.parametrize("host", PREFLIGHT["messageHosts"])
+def test_artifact_preflight_messages(host):
+    msgs = PREFLIGHT["messages"]
+    assert artifact_preflight.message(artifact_preflight.MISSING, control_host=host) == msgs["missing"].replace("{host}", host)
+    assert artifact_preflight.message(artifact_preflight.UNREACHABLE, control_host=host) == msgs["unreachable"].replace("{host}", host)
+    assert artifact_preflight.message(artifact_preflight.PUBLISHED, control_host=host) is None
+
+
+def test_artifact_preflight_message_names_the_control_host_studio_follows():
+    env = {"FLAGSHIP_CONTROL_HOST": "gym.flagshipserver.com"}
+    assert "gym.flagshipserver.com" in artifact_preflight.message(artifact_preflight.MISSING, env=env)
+    assert "on flagshipserver.com" in artifact_preflight.message(artifact_preflight.MISSING, env={})
 
 
 def test_artifact_preflight_check_asks_the_control_plane_studio_follows():
@@ -317,3 +325,19 @@ def test_older_app_recipe_message():
     assert older_app_recipe.message() == OLDER_APP["messages"]["studio"]
     assert older_app_recipe.refusal("main") == OLDER_APP["messages"]["studio"]
     assert older_app_recipe.refusal("386e29c84899283c167c9ce983d2dc2acbaa4f11") is None
+
+
+# ---------------------------------------------------------------------------
+# applianceMatch — which prebuilt appliance can host a recipe
+# ---------------------------------------------------------------------------
+
+from vm.appliance_cache import appliance_matches, appliance_published_as  # noqa: E402
+
+APPLIANCE_MATCH = VECTORS["applianceMatch"]
+
+
+@pytest.mark.parametrize("case", APPLIANCE_MATCH["cases"], ids=lambda c: c["name"])
+def test_appliance_match_rule(case):
+    args = (case["installerGitRef"], case["commit"], case["recipeRef"])
+    assert appliance_matches(*args) is case["matches"]
+    assert appliance_published_as(*args) == case["published"]

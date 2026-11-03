@@ -744,7 +744,7 @@
   "seb168dc1b8": "Ouvrez <1>flagshipserver.com/studio</1> sur le Mac ou l’ordinateur Windows ou Linux que vous utiliserez pour créer le serveur.",
   "s1fb69e7dd2": "Télécharger Flagship Studio",
   "s60eea284d6": "<1> <2>Recommandé pour cet ordinateur</2> <3>Télécharger pour macOS</3> <4>Apple Silicon et Intel · DMG</4> </1>",
-  "sf3a3815c27": "<1> <2>Recommandé pour cet ordinateur</2> <3>Télécharger pour Windows <4>Expérimental</4></3> <5>Windows 11 · ZIP · pas encore éprouvé sur tous les PC</5> </1>",
+  "sb623240f19": "<1> <2>Recommandé pour cet ordinateur</2> <3>Télécharger pour Windows <4>Expérimental</4></3> <5>Windows 11 ou Windows 10 22H2 · ZIP · pas encore éprouvé sur tous les PC</5> </1>",
   "sa31b171250": "<1> <2>Recommandé pour cet ordinateur</2> <3>Télécharger pour Linux <4>Expérimental</4></3> <5>x86-64 · AppImage · nécessite Node.js 22 ou plus récent, pkexec et xorriso</5> </1>",
   "s74cd12cd37": "<1>Installez et ouvrez Studio.</1>",
   "s0b23b9824d": "Studio affiche un QR code et un code d’association court.",

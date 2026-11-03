@@ -41,10 +41,10 @@ public sealed class ApplianceCacheTests : IDisposable
 
     private static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
-    private static byte[] Manifest(string gitRef = "main", string arch = "amd64")
+    private static byte[] Manifest(string gitRef = "main", string arch = "amd64", string? commit = null)
     {
         var whole = PartA.Concat(PartB).ToArray();
-        return JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object>
+        var d = new Dictionary<string, object>
         {
             ["version"] = 1, ["arch"] = arch, ["installerGitRef"] = gitRef, ["format"] = "qcow2",
             ["sha256"] = Sha(whole), ["sizeBytes"] = whole.Length,
@@ -54,7 +54,9 @@ public sealed class ApplianceCacheTests : IDisposable
                 new Dictionary<string, object> { ["name"] = "part-01", ["sizeBytes"] = PartB.Length, ["sha256"] = Sha(PartB) },
             },
             ["rawSha256"] = new string('0', 64), ["rawSizeBytes"] = 8L * 1024 * 1024 * 1024,
-        });
+        };
+        if (commit is not null) d["commit"] = commit;
+        return JsonSerializer.SerializeToUtf8Bytes(d);
     }
 
     private sealed class Fakes
@@ -110,6 +112,34 @@ public sealed class ApplianceCacheTests : IDisposable
 
         Assert.Equal(basePath, await Cache(f).EnsureAsync("main"));
         Assert.Equal(2, f.Downloads.Count);
+    }
+
+    /// Production keeps the "main" label for 0.2 Studios; a 0.3 recipe names the exact commit, which the
+    /// manifest's "commit" carries (vm-core-vectors.json "applianceMatch").
+    [Fact]
+    public async Task AnExactCommitRecipeMatchesTheManifestCommitNotTheLabel()
+    {
+        var basePath = await Cache(new Fakes { Body = Manifest("main", commit: Commit) }).EnsureAsync(Commit);
+        Assert.Equal(Commit, ApplianceProvisioner.Verify(basePath, "amd64", Commit).Commit);
+        Assert.Throws<InvalidDataException>(() => ApplianceProvisioner.Verify(basePath, "amd64", new string('b', 40)));
+        Assert.Equal(basePath, await Cache(new Fakes { Offline = true }).EnsureAsync(Commit));
+
+        foreach (var body in new[] { Manifest("main", commit: new string('b', 40)), Manifest("main"), Manifest(Commit) })
+        {
+            var e = await Assert.ThrowsAsync<ApplianceCacheException>(() => Cache(new Fakes { Body = body }).EnsureAsync(Commit));
+            Assert.True(e.FallsBackToInstaller);
+        }
+    }
+
+    [Fact]
+    public async Task ACachedBaseRecordsTheCommitTheManifestNowNames()
+    {
+        var basePath = await Cache(new Fakes()).EnsureAsync("main");
+        Assert.Null(ApplianceBaseManifest.TryLoad(basePath)!.Commit);
+        var f = new Fakes { Body = Manifest("main", commit: Commit) };
+        Assert.Equal(basePath, await Cache(f).EnsureAsync(Commit));
+        Assert.Empty(f.Downloads);
+        Assert.Equal(Commit, ApplianceBaseManifest.TryLoad(basePath)!.Commit);
     }
 
     [Fact]
@@ -255,7 +285,7 @@ public sealed class ApplianceCacheTests : IDisposable
     [Fact]
     public async Task CreatesTheServerOnAnOverlayWithItsSeed()
     {
-        var basePath = await Cache(new Fakes { Body = Manifest(Commit) }).EnsureAsync(Commit);
+        var basePath = await Cache(new Fakes { Body = Manifest(commit: Commit) }).EnsureAsync(Commit);
         var vm = new VMManager(new VMInventoryStore(new VMBundleLayout(Path.Combine(_root, "VMs"))), null, "tests");
         var config = Config();
         string[]? ran = null;
@@ -286,7 +316,7 @@ public sealed class ApplianceCacheTests : IDisposable
     [Fact]
     public async Task AFailedOverlayLeavesNoServerBehind()
     {
-        var basePath = await Cache(new Fakes { Body = Manifest(Commit) }).EnsureAsync(Commit);
+        var basePath = await Cache(new Fakes { Body = Manifest(commit: Commit) }).EnsureAsync(Commit);
         var vm = new VMManager(new VMInventoryStore(new VMBundleLayout(Path.Combine(_root, "VMs"))), null, "tests");
         var vector = JsonDocument.Parse(EmbeddedVectors()).RootElement.GetProperty("vectors")[0];
         var recipeJson = Encoding.UTF8.GetBytes(vector.GetProperty("recipeJson").GetString()!);

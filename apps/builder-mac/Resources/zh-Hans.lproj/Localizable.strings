@@ -224,6 +224,6 @@
 "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone." = "安装程序已结束，但此服务器从未注册，因此没有需要批准的内容。请在 Studio 中删除它，然后在手机上重新创建。";
 "Setup didn't finish" = "设置未完成";
 "Unlocking…" = "正在解锁…";
-"This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later." = "此服务器暂时无法安装：它的软件包尚未在 flagshipserver.com 上发布。请更新 Flagship Studio 和 Flagship 应用，或稍后重试。";
-"Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again." = "无法确认此服务器的软件包是否已在 flagshipserver.com 上发布。请检查网络连接后重试。";
+"This server can't be installed yet: its software package isn't published on %@. Update Flagship Studio and the Flagship app, or try again later." = "此服务器暂时无法安装：它的软件包尚未在 %@ 上发布。请更新 Flagship Studio 和 Flagship 应用，或稍后重试。";
+"Couldn't check that this server's software package is published on %@. Check your internet connection and try again." = "无法确认此服务器的软件包是否已在 %@ 上发布。请检查网络连接后重试。";
 "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again." = "此配方由旧版 Flagship 应用创建。请在手机上更新 Flagship 应用，然后重新创建服务器。";

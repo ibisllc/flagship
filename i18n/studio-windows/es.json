@@ -70,7 +70,8 @@
   "qemuStoppedUnexpectedlyExit": "QEMU se detuvo inesperadamente (código de salida {0}).",
   "qemuStoppedExit": "QEMU se detuvo (código de salida {0}): {1}",
   "foundQemuAtButQemuImg": "Se encontró QEMU en {0} pero falta qemu-img.exe: reinstala QEMU.",
-  "orSetToYourQemuFolder": "(o define {0} con tu carpeta de QEMU).",
+  "foundQemuAtButFirmwareMissing": "Se encontró QEMU en {0} pero falta su firmware UEFI ({1}): reinstala QEMU.",
+  "qemuNotInstalledWinget": "QEMU no está instalado. Instálalo con: winget install {0} (o define {1} con tu carpeta de QEMU).",
   "applianceHardware": "Appliance (hardware)",
   "applianceHostedVm": "Appliance (VM alojada)",
   "unknownServerTier": "Nivel de servidor desconocido «{0}».",
@@ -230,7 +231,8 @@
   "wiFiPasswordOptional": "Contraseña de Wi-Fi (opcional)",
   "actions": "Acciones",
   "Beta": "Beta",
-  "softwarePackageNotPublished": "Este servidor aún no se puede instalar: su paquete de software no está publicado en flagshipserver.com. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde.",
-  "couldntCheckSoftwarePackage": "No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo.",
+  "softwarePackageNotPublished": "Este servidor aún no se puede instalar: su paquete de software no está publicado en {0}. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde.",
+  "couldntCheckSoftwarePackage": "No se pudo comprobar si el paquete de software de este servidor está publicado en {0}. Revisa tu conexión a internet e inténtalo de nuevo.",
+  "windows10NoLongerGetsSecurityUpdates": "Esta versión de Windows ya no recibe actualizaciones de seguridad. Studio sigue funcionando aquí y puede alojar tu servidor; actualizar a Windows 11 mantiene este PC más seguro.",
   "recipeMadeByOlderApp": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship en tu teléfono y vuelve a crear el servidor."
 }

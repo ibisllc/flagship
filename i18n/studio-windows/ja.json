@@ -70,7 +70,8 @@
   "qemuStoppedUnexpectedlyExit": "QEMU が予期せず停止しました（終了コード {0}）。",
   "qemuStoppedExit": "QEMU が停止しました（終了コード {0}）：{1}",
   "foundQemuAtButQemuImg": "{0} に QEMU が見つかりましたが、qemu-img.exe がありません。QEMU を再インストールしてください。",
-  "orSetToYourQemuFolder": "（または {0} に QEMU のフォルダーを設定してください）。",
+  "foundQemuAtButFirmwareMissing": "{0} に QEMU が見つかりましたが、UEFI ファームウェア（{1}）がありません。QEMU を再インストールしてください。",
+  "qemuNotInstalledWinget": "QEMU がインストールされていません。winget install {0} でインストールしてください（または {1} に QEMU のフォルダーを設定してください）。",
   "applianceHardware": "アプライアンス（ハードウェア）",
   "applianceHostedVm": "アプライアンス（ホスト型 VM）",
   "unknownServerTier": "不明なサーバーティア「{0}」です。",
@@ -230,7 +231,8 @@
   "wiFiPasswordOptional": "Wi-Fi パスワード（任意）",
   "actions": "操作",
   "Beta": "ベータ",
-  "softwarePackageNotPublished": "このサーバーはまだインストールできません。ソフトウェアパッケージが flagshipserver.com で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
-  "couldntCheckSoftwarePackage": "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
+  "softwarePackageNotPublished": "このサーバーはまだインストールできません。ソフトウェアパッケージが {0} で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
+  "couldntCheckSoftwarePackage": "このサーバーのソフトウェアパッケージが {0} で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
+  "windows10NoLongerGetsSecurityUpdates": "このバージョンの Windows にはセキュリティ更新プログラムが提供されなくなりました。Studio はこのまま使え、サーバーをホストできます。Windows 11 にアップデートすると、この PC をより安全に保てます。",
   "recipeMadeByOlderApp": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"
 }

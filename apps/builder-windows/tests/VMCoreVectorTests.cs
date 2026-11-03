@@ -263,6 +263,22 @@ public class VMCoreVectorTests
     }
 
     [Fact]
+    public void ApplianceMatchMatchesVectors()
+    {
+        var cases = Vectors.GetProperty("applianceMatch").GetProperty("cases").EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var c in cases)
+        {
+            var label = c.GetProperty("installerGitRef").GetString()!;
+            var commit = c.GetProperty("commit").ValueKind == JsonValueKind.Null ? null : c.GetProperty("commit").GetString();
+            var recipeRef = c.GetProperty("recipeRef").GetString()!;
+            var name = c.GetProperty("name").GetString();
+            Assert.True(c.GetProperty("matches").GetBoolean() == ApplianceMatch.Matches(label, commit, recipeRef), name);
+            Assert.True(c.GetProperty("published").GetString() == ApplianceMatch.Published(label, commit, recipeRef), name);
+        }
+    }
+
+    [Fact]
     public async Task ArtifactPreflightMatchesVectors()
     {
         var section = Vectors.GetProperty("artifactPreflight");
@@ -286,9 +302,16 @@ public class VMCoreVectorTests
         }
         Assert.True(verdicts > 0);
         var messages = section.GetProperty("messages");
-        Assert.Equal(messages.GetProperty("missing").GetString(), ArtifactPreflight.Message(ArtifactPreflight.Verdict.Missing));
-        Assert.Equal(messages.GetProperty("unreachable").GetString(), ArtifactPreflight.Message(ArtifactPreflight.Verdict.Unreachable));
-        Assert.Null(ArtifactPreflight.Message(ArtifactPreflight.Verdict.Published));
+        int hosts = 0;
+        foreach (var h in section.GetProperty("messageHosts").EnumerateArray())
+        {
+            var host = h.GetString()!;
+            Assert.Equal(messages.GetProperty("missing").GetString()!.Replace("{host}", host), ArtifactPreflight.Message(ArtifactPreflight.Verdict.Missing, host));
+            Assert.Equal(messages.GetProperty("unreachable").GetString()!.Replace("{host}", host), ArtifactPreflight.Message(ArtifactPreflight.Verdict.Unreachable, host));
+            Assert.Null(ArtifactPreflight.Message(ArtifactPreflight.Verdict.Published, host));
+            hosts++;
+        }
+        Assert.True(hosts > 0);
 
         // One HEAD for the manifest; the status decides.
         var commit = "386e29c84899283c167c9ce983d2dc2acbaa4f11";

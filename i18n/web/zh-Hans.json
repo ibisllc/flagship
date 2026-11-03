@@ -744,7 +744,7 @@
   "seb168dc1b8": "请在你将用来创建服务器的 Mac、Windows 或 Linux 电脑上打开 <1>flagshipserver.com/studio</1>。",
   "s1fb69e7dd2": "下载 Flagship Studio",
   "s60eea284d6": "<1> <2>推荐用于此电脑</2> <3>下载 macOS 版</3> <4>Apple 芯片和 Intel · DMG</4> </1>",
-  "sf3a3815c27": "<1> <2>推荐用于此电脑</2> <3>下载 Windows 版 <4>实验性</4></3> <5>Windows 11 · ZIP · 尚未在所有电脑上验证</5> </1>",
+  "sb623240f19": "<1> <2>推荐用于此电脑</2> <3>下载 Windows 版 <4>实验性</4></3> <5>Windows 11 或 Windows 10 22H2 · ZIP · 尚未在所有电脑上验证</5> </1>",
   "sa31b171250": "<1> <2>推荐用于此电脑</2> <3>下载 Linux 版 <4>实验性</4></3> <5>x86-64 · AppImage · 需要 Node.js 22 或更高版本、pkexec 和 xorriso</5> </1>",
   "s74cd12cd37": "<1>安装并打开 Studio。</1>",
   "s0b23b9824d": "Studio 会显示一个二维码和一个简短的配对码。",

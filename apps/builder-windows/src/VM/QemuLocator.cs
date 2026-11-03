@@ -53,13 +53,12 @@ public static class QemuLocator
                 throw new QemuLocatorException(Strings.F("foundQemuAtButQemuImg", root));
             if (!File.Exists(code) || !File.Exists(vars))
                 throw new QemuLocatorException(
-                    $"Found QEMU at {root} but the bundled UEFI firmware (share\\{QemuToolchain.CodeFileName}) is missing — reinstall QEMU.");
+                    Strings.F("foundQemuAtButFirmwareMissing", root, $"share\\{QemuToolchain.CodeFileName}"));
             return new QemuToolchain(sys, img, code, vars);
         }
 
         throw new QemuLocatorException(
-            "QEMU is not installed. Install it with: winget install SoftwareFreedomConservancy.QEMU " +
-            Strings.F("orSetToYourQemuFolder", EnvOverride));
+            Strings.F("qemuNotInstalledWinget", "SoftwareFreedomConservancy.QEMU", EnvOverride));
     }
 
     private static IEnumerable<string> DefaultRoots()

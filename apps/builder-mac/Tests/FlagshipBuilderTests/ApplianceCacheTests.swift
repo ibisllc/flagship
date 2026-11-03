@@ -23,7 +23,7 @@ final class ApplianceCacheTests: XCTestCase {
     }
 
     /// A distribution whose two parts are the split fixture image.
-    private func distribution(ref: String = "main") throws -> (Data, [String: URL]) {
+    private func distribution(ref: String = "main", commit: String? = nil) throws -> (Data, [String: URL]) {
         let a = try fixture("fixture-compressed.qcow2.part-a"), b = try fixture("fixture-compressed.qcow2.part-b")
         let whole = try Data(contentsOf: a) + Data(contentsOf: b)
         let archiveSha = SHA256.hash(data: whole).map { String(format: "%02x", $0) }.joined()
@@ -31,8 +31,9 @@ final class ApplianceCacheTests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let rawSize = try String(contentsOf: fixture("fixture.raw.size"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let commitField = commit.map { #""commit":"\#($0)","# } ?? ""
         let json = """
-        {"version":1,"arch":"arm64","installerGitRef":"\(ref)","format":"qcow2","sha256":"\(archiveSha)",
+        {"version":1,"arch":"arm64","installerGitRef":"\(ref)",\(commitField)"format":"qcow2","sha256":"\(archiveSha)",
          "sizeBytes":\(whole.count),
          "parts":[{"name":"part-00","sizeBytes":\(try Data(contentsOf: a).count),"sha256":"\(try sha(a))"},
                   {"name":"part-01","sizeBytes":\(try Data(contentsOf: b).count),"sha256":"\(try sha(b))"}],
@@ -117,6 +118,49 @@ final class ApplianceCacheTests: XCTestCase {
                 XCTAssertTrue(error.fallsBackToInstaller)
             }
         }
+    }
+
+    private let release = "386e29c84899283c167c9ce983d2dc2acbaa4f11"
+
+    /// Production keeps the "main" label for 0.2 Studios; a 0.3 recipe names the exact commit, which the
+    /// manifest's `commit` carries.
+    func testAnExactCommitRecipeMatchesTheManifestCommitNotTheLabel() async throws {
+        let (manifest, parts) = try distribution(ref: "main", commit: release)
+        let counter = Counter()
+        let base = try await cache(manifest: manifest, parts: parts, counter: counter).ensure(installerGitRef: release)
+        let provisioner = try ApplianceProvisioner.load(baseURL: base, expectedArch: .arm64, installerGitRef: release)
+        XCTAssertEqual(provisioner.manifest.commit, release)
+        XCTAssertThrowsError(try ApplianceProvisioner.load(
+            baseURL: base, expectedArch: .arm64, installerGitRef: String(repeating: "b", count: 40)))
+        let offline = try await cache(manifest: nil, parts: [:], offline: true).ensure(installerGitRef: release)
+        XCTAssertEqual(offline.resolvingSymlinksInPath(), base.resolvingSymlinksInPath())
+    }
+
+    func testAnExactCommitRecipeFallsBackWhenTheImageHoldsAnotherCommitOrNone() async throws {
+        let other = String(repeating: "b", count: 40)
+        for (commit, published) in [(other as String?, other), (nil, "main")] {
+            let (manifest, parts) = try distribution(ref: "main", commit: commit)
+            do {
+                _ = try await cache(manifest: manifest, parts: parts).ensure(installerGitRef: release)
+                XCTFail("expected refMismatch")
+            } catch let error as ApplianceCache.CacheError {
+                XCTAssertEqual(error, .refMismatch(published: published, recipe: release))
+                XCTAssertTrue(error.fallsBackToInstaller)
+            }
+        }
+    }
+
+    /// A base kept from a manifest without `commit` learns it when the republished manifest names it.
+    func testACachedBaseRecordsTheCommitTheManifestNowNames() async throws {
+        let (old, parts) = try distribution(ref: "main")
+        let base = try await cache(manifest: old, parts: parts).ensure(installerGitRef: "main")
+        let (named, _) = try distribution(ref: "main", commit: release)
+        let counter = Counter()
+        let again = try await cache(manifest: named, parts: parts, counter: counter).ensure(installerGitRef: release)
+        XCTAssertEqual(again, base)
+        XCTAssertEqual(counter.downloads, 0)
+        XCTAssertEqual(try ApplianceProvisioner.load(baseURL: base, expectedArch: .arm64, installerGitRef: release)
+            .manifest.commit, release)
     }
 
     func testStopsBeforeDownloadingWhenTheDiskIsTooFull() async throws {

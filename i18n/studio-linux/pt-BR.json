@@ -151,6 +151,7 @@
   "The app quit while the install was running.": "O app foi encerrado enquanto a instalação rodava.",
   "Installation stopped by you.": "Instalação interrompida por você.",
   "QEMU is not installed.": "O QEMU não está instalado.",
+  "QEMU is not installed. Install it with your package manager (e.g. {0}), or set {1} to your {2} binary.": "O QEMU não está instalado. Instale-o com o seu gerenciador de pacotes (por exemplo, {0}) ou defina {1} com o seu binário {2}.",
   "Keeping this PC awake while it hosts servers": "Mantendo este PC ativo enquanto hospeda servidores",
   "No server running: this PC may sleep again": "Nenhum servidor em execução: este PC pode voltar a repousar",
   "Installing…": "Instalando…",
@@ -176,7 +177,7 @@
   "The prebuilt server image is for {0}, but this recipe installs {1}.": "A imagem de servidor pré-construída é para {0}, mas esta receita instala {1}.",
   "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.": "Não há espaço livre suficiente em disco para a imagem do servidor: precisa de {0:.1f} GB, há {1:.1f} GB livres.",
   "Beta": "Beta",
-  "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later.": "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em flagshipserver.com. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde.",
-  "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.": "Não foi possível verificar se o pacote de software deste servidor está publicado em flagshipserver.com. Verifique sua conexão com a internet e tente novamente.",
+  "This server can't be installed yet: its software package isn't published on {0}. Update Flagship Studio and the Flagship app, or try again later.": "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em {0}. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde.",
+  "Couldn't check that this server's software package is published on {0}. Check your internet connection and try again.": "Não foi possível verificar se o pacote de software deste servidor está publicado em {0}. Verifique sua conexão com a internet e tente novamente.",
   "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo."
 }

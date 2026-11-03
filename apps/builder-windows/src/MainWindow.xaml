@@ -58,7 +58,14 @@
         </MenuItem>
     </Menu>
         <!-- Header -->
-        <Grid Grid.Row="1" Margin="22,18,22,8">
+        <StackPanel Grid.Row="1">
+        <!-- Windows 10: a calm notice, never a block (WindowsSupport.cs). -->
+        <Border Margin="22,12,22,0" Padding="12,8" CornerRadius="6"
+                Background="{StaticResource FB.WarningFaded}"
+                Visibility="{Binding WindowsVersionNotice, Converter={StaticResource NotNullToVisible}}">
+            <TextBlock Text="{Binding WindowsVersionNotice}" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+        </Border>
+        <Grid Margin="22,18,22,8">
             <Button HorizontalAlignment="Left"
                     VerticalAlignment="Center"
                     Style="{StaticResource LinkButton}"
@@ -75,6 +82,7 @@
                     Click="ModeToggle_Click"
                     Visibility="{Binding AdvancedAllowed, Converter={StaticResource BoolToVisibility}}"/>
         </Grid>
+        </StackPanel>
             <Grid Grid.Row="2">
             <!-- ============ MAIN AREA ============ -->
             <ScrollViewer Grid.Column="0"

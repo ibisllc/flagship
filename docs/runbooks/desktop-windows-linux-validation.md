@@ -18,7 +18,14 @@ Agents on that machine get `AGENTS.md` through `CLAUDE.md` automatically.
 **0.3 (Windows):** the round that decides whether Windows drops "Experimental" is
 `0.3-windows-studio-acceptance.md`; it runs against the gym and supersedes section 2 for 0.3.
 
-## 2. Windows (11, x64)
+## 2. Windows (11 or 10 22H2, x64)
+
+Supported (owner, 2026-11-02): Windows 11 in any version Microsoft still services, and Windows 10 22H2.
+On Windows 10 (build below 22000) Studio shows one calm line at the top of the window, "This version
+of Windows no longer gets security updates. Studio still works here and can host your server;
+updating to Windows 11 keeps this PC safer.", and blocks nothing. Run the steps below on Windows 11,
+and the pairing and one Host on this PC on a Windows 10 22H2 PC when one is available (check the line
+shows there and never on Windows 11).
 
 Prerequisites: .NET 8 SDK, Windows PowerShell, and Hyper-V's Windows Hypervisor
 Platform enabled (Settings → Optional features → More Windows features).
@@ -32,8 +39,10 @@ Then test the **released** package, not the dev build, because that's what
 users get:
 
 1. Download `/download/windows` (the latest `studio-v*` zip), unzip it, and run
-   `Flagship Studio.exe`. SmartScreen will warn (unsigned): More info → Run
-   anyway. Help → About must show the release version.
+   `Flagship Studio.exe`. SmartScreen will warn (unsigned; the owner decided on
+   2026-11-02 not to sign 0.3): More info → Run anyway. With Smart App Control on,
+   Windows may block it outright. Both are expected: record them, they are not
+   failures. Help → About must show the release version.
 2. **Pairing:** the pairing code is up at launch with no click. Pull the
    network cable / turn Wi-Fi off: it says "Waiting for an internet
    connection"; restore it and a fresh code appears. Pair from the phone (Add

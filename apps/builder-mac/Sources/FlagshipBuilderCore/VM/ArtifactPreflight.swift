@@ -13,20 +13,22 @@ public enum ArtifactPreflight {
 
     public static let timeoutSeconds: TimeInterval = 15
 
-    public static var missingMessage: String {
-        String(localized: "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later.")
+    /// `controlHost` is the control plane the check asked (the gym when Studio follows it), named in the sentence.
+    public static func missingMessage(controlHost: String) -> String {
+        String(localized: "This server can't be installed yet: its software package isn't published on \(controlHost). Update Flagship Studio and the Flagship app, or try again later.")
     }
 
-    public static var unreachableMessage: String {
-        String(localized: "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.")
+    public static func unreachableMessage(controlHost: String) -> String {
+        String(localized: "Couldn't check that this server's software package is published on \(controlHost). Check your internet connection and try again.")
     }
 
     /// The refusal for a verdict; nil when the install may go ahead.
-    public static func message(for verdict: Verdict) -> String? {
+    public static func message(for verdict: Verdict,
+                               controlHost: String = ControlPlane.host()) -> String? {
         switch verdict {
         case .published: return nil
-        case .missing: return missingMessage
-        case .unreachable: return unreachableMessage
+        case .missing: return missingMessage(controlHost: controlHost)
+        case .unreachable: return unreachableMessage(controlHost: controlHost)
         }
     }
 

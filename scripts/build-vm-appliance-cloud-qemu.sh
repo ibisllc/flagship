@@ -125,7 +125,7 @@ fi
 echo "appliance boot smoke test reached the readiness marker"
 
 node packages/flagship-builder/dist/cli.js appliance-manifest \
-  "$OUTPUT_RAW" "$OUTPUT_RAW.json" --arch "$ARCH" --git-ref "$GIT_REF"
+  "$OUTPUT_RAW" "$OUTPUT_RAW.json" --arch "$ARCH" --git-ref "$GIT_REF" ${GIT_COMMIT:+--git-commit "$GIT_COMMIT"}
 SUCCESS=1
 rm -f "$OUTPUT_RAW.factory.log"
 echo "appliance: $OUTPUT_RAW"

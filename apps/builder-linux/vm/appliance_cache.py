@@ -95,6 +95,8 @@ class ApplianceDistribution:
     parts: Tuple[AppliancePart, ...]
     raw_sha256: str
     raw_size_bytes: int
+    # The exact release commit installed on the image; None on manifests from before 0.3.
+    commit: Optional[str] = None
 
     @staticmethod
     def parse(data: bytes) -> "ApplianceDistribution":
@@ -111,6 +113,7 @@ class ApplianceDistribution:
                 parts=parts,
                 raw_sha256=d["rawSha256"],
                 raw_size_bytes=d["rawSizeBytes"],
+                commit=d.get("commit") if isinstance(d.get("commit"), str) else None,
             )
             ok = (
                 d["version"] == 1
@@ -142,6 +145,31 @@ class ApplianceDistribution:
             c if (c.isascii() and c.isalnum()) or c in ".-" else "-" for c in self.installer_git_ref
         )
         return f"flagship-vm-appliance-{self.arch}-{slug}-{self.sha256[:12]}.qcow2"
+
+
+_EXACT_COMMIT = re.compile(r"[0-9a-f]{40}")
+
+
+def appliance_matches(installer_git_ref: Optional[str], commit: Optional[str], recipe_ref: str) -> bool:
+    """Whether a prebuilt appliance can host a recipe. The appliance's
+    bootstrap refuses a release that is not the exact commit signed into the
+    recipe, so an exact-commit recipe (every 0.3 recipe) matches only the
+    manifest's `commit`, the release installed on the image; `installerGitRef`
+    is only the label it is published under ("main", kept for 0.2 Studios).
+    A branch or tag recipe (an app older than 0.3, refused at load anyway)
+    keeps the old label match. Pinned by vm-core-vectors.json "applianceMatch";
+    the Node CLI's appliance-provision holds the same rule."""
+    ref = recipe_ref.strip()
+    if _EXACT_COMMIT.fullmatch(ref):
+        return commit == ref
+    return installer_git_ref == ref
+
+
+def appliance_published_as(installer_git_ref: str, commit: Optional[str], recipe_ref: str) -> str:
+    """What the image holds, as the mismatch sentence names it."""
+    if _EXACT_COMMIT.fullmatch(recipe_ref.strip()):
+        return commit if commit is not None else installer_git_ref
+    return installer_git_ref
 
 
 def _is_count(v) -> bool:
@@ -283,15 +311,22 @@ class ApplianceCache:
         dist = ApplianceDistribution.parse(body)
         if dist.arch != self.arch:
             raise _invalid()
-        if dist.installer_git_ref != installer_git_ref:
+        if not appliance_matches(dist.installer_git_ref, dist.commit, installer_git_ref):
             raise ApplianceCacheError(
                 "ref-mismatch",
-                tr('The prebuilt server image is for {0}, but this recipe installs {1}.').format(dist.installer_git_ref, installer_git_ref),
+                tr('The prebuilt server image is for {0}, but this recipe installs {1}.').format(
+                    appliance_published_as(dist.installer_git_ref, dist.commit, installer_git_ref),
+                    installer_git_ref.strip(),
+                ),
             )
 
         directory = os.path.join(self.arch_root, dist.sha256[:16])
         base = os.path.join(directory, "base.qcow2")
         if self.is_ready(base, dist.sha256, dist.size_bytes):
+            # A base kept from before manifests named their commit: record it, the disk is the same.
+            kept = self._runtime(base)
+            if kept is not None and kept.get("commit") != dist.commit:
+                self._write_runtime(dist, base)
             self._log(f"appliance: cached {base} sha256={dist.sha256}")
             self.prune(keep=directory)
             progress("ready", None)
@@ -352,6 +387,16 @@ class ApplianceCache:
             raise _checksum("archive")
         os.replace(partial, base)
         os.chmod(base, 0o600)
+        self._write_runtime(dist, base)
+        self.prune(keep=directory)
+        self._log(f"appliance: downloaded {base} sha256={dist.sha256}")
+        progress("ready", None)
+        return base
+
+    # ---- helpers ----
+
+    @staticmethod
+    def _write_runtime(dist: "ApplianceDistribution", base: str) -> None:
         runtime = {
             "version": 1,
             "arch": dist.arch,
@@ -360,16 +405,12 @@ class ApplianceCache:
             "sizeBytes": dist.size_bytes,
             "virtualSizeBytes": dist.raw_size_bytes,
         }
+        if dist.commit is not None:
+            runtime["commit"] = dist.commit
         tmp = base + ".json.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(runtime, f)
         os.replace(tmp, base + ".json")
-        self.prune(keep=directory)
-        self._log(f"appliance: downloaded {base} sha256={dist.sha256}")
-        progress("ready", None)
-        return base
-
-    # ---- helpers ----
 
     @staticmethod
     def _runtime(base: str) -> Optional[dict]:
@@ -400,7 +441,7 @@ class ApplianceCache:
             m = self._runtime(base)
             if (
                 m is None
-                or m.get("installerGitRef") != installer_git_ref
+                or not appliance_matches(m.get("installerGitRef"), m.get("commit"), installer_git_ref)
                 or not os.path.isfile(base)
                 or os.path.getsize(base) != m.get("sizeBytes")
             ):

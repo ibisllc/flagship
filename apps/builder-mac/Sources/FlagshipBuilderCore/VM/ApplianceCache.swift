@@ -13,6 +13,8 @@ public struct ApplianceDistribution: Codable, Equatable, Sendable {
     public let version: Int
     public let arch: IsoArch
     public let installerGitRef: String
+    /// The exact release commit installed on the image; absent on manifests from before 0.3.
+    public let commit: String?
     public let format: String
     public let sha256: String
     public let sizeBytes: UInt64
@@ -179,13 +181,19 @@ public struct ApplianceCache: Sendable {
         }
         try dist.validate()
         guard dist.arch == arch else { throw CacheError.invalidManifest }
-        guard dist.installerGitRef == installerGitRef else {
-            throw CacheError.refMismatch(published: dist.installerGitRef, recipe: installerGitRef)
+        guard ApplianceMatch.matches(installerGitRef: dist.installerGitRef, commit: dist.commit,
+                                     recipeRef: installerGitRef) else {
+            throw CacheError.refMismatch(
+                published: ApplianceMatch.published(installerGitRef: dist.installerGitRef, commit: dist.commit,
+                                                    recipeRef: installerGitRef),
+                recipe: installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
         let dir = archRoot.appendingPathComponent(String(dist.rawSha256.prefix(16)), isDirectory: true)
         let base = dir.appendingPathComponent("base.raw")
         if isReady(base: base, rawSha256: dist.rawSha256, rawSize: dist.rawSizeBytes) {
+            // A base kept from before manifests named their commit: record it, the disk is the same.
+            try writeRuntimeManifest(dist, base: base, onlyIfChanged: true)
             log("appliance: cached \(base.path) sha256=\(dist.rawSha256)")
             prune(keeping: dir)
             progress(.ready(fromCache: true))
@@ -243,10 +251,7 @@ public struct ApplianceCache: Sendable {
         try? fm.removeItem(at: base)
         try fm.moveItem(at: partial, to: base)
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: base.path)
-        let runtime = ApplianceBaseManifest(arch: arch, installerGitRef: dist.installerGitRef,
-                                            sha256: dist.rawSha256, sizeBytes: dist.rawSizeBytes,
-                                            virtualSizeBytes: dist.rawSizeBytes)
-        try JSONEncoder().encode(runtime).write(to: URL(fileURLWithPath: base.path + ".json"), options: .atomic)
+        try writeRuntimeManifest(dist, base: base, onlyIfChanged: false)
         try? fm.removeItem(at: partsDir)
         prune(keeping: dir)
         if let isoCacheRoot { IsoBaseCache.pruneUnused(in: isoCacheRoot) }
@@ -256,6 +261,19 @@ public struct ApplianceCache: Sendable {
     }
 
     // MARK: - Helpers
+
+    func writeRuntimeManifest(_ dist: ApplianceDistribution, base: URL, onlyIfChanged: Bool) throws {
+        let runtime = ApplianceBaseManifest(arch: arch, installerGitRef: dist.installerGitRef,
+                                            commit: dist.commit,
+                                            sha256: dist.rawSha256, sizeBytes: dist.rawSizeBytes,
+                                            virtualSizeBytes: dist.rawSizeBytes)
+        let url = URL(fileURLWithPath: base.path + ".json")
+        if onlyIfChanged, let data = try? Data(contentsOf: url),
+           (try? JSONDecoder().decode(ApplianceBaseManifest.self, from: data)) == runtime {
+            return
+        }
+        try JSONEncoder().encode(runtime).write(to: url, options: .atomic)
+    }
 
     func isReady(base: URL, rawSha256: String, rawSize: UInt64) -> Bool {
         guard fileSize(base) == rawSize,
@@ -273,7 +291,9 @@ public struct ApplianceCache: Sendable {
             let base = dir.appendingPathComponent("base.raw")
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: base.path + ".json")),
                   let m = try? JSONDecoder().decode(ApplianceBaseManifest.self, from: data),
-                  m.installerGitRef == installerGitRef, fileSize(base) == m.sizeBytes else { return nil }
+                  ApplianceMatch.matches(installerGitRef: m.installerGitRef, commit: m.commit,
+                                         recipeRef: installerGitRef),
+                  fileSize(base) == m.sizeBytes else { return nil }
             let date = (try? dir.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             return (base, date ?? .distantPast)
         }.max { $0.1 < $1.1 }?.0

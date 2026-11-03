@@ -12,6 +12,8 @@ import shutil
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
+from i18n import tr
+
 # Env overrides for a non-standard install. They win for EITHER arch — an
 # explicit override is the operator saying "use exactly this".
 ENV_SYSTEM = "FLAGSHIP_QEMU_SYSTEM"   # qemu-system-x86_64 / qemu-system-aarch64
@@ -88,9 +90,9 @@ def locate(
     system = env.get(ENV_SYSTEM) or which(binary_name)
     if not system or not exists(system):
         raise QemuLocatorError(
-            "QEMU is not installed. Install it with your package manager "
-            f"(e.g. {install_hint}), or set "
-            f"{ENV_SYSTEM} to your {binary_name} binary."
+            tr("QEMU is not installed. Install it with your package manager (e.g. {0}), or set {1} to your {2} binary.").format(
+                install_hint, ENV_SYSTEM, binary_name
+            )
         )
 
     img = env.get(ENV_IMG) or which("qemu-img")

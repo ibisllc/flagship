@@ -70,7 +70,8 @@
   "qemuStoppedUnexpectedlyExit": "O QEMU parou inesperadamente (código de saída {0}).",
   "qemuStoppedExit": "O QEMU parou (código de saída {0}): {1}",
   "foundQemuAtButQemuImg": "O QEMU foi encontrado em {0}, mas o qemu-img.exe está ausente — reinstale o QEMU.",
-  "orSetToYourQemuFolder": "(ou defina {0} com a sua pasta do QEMU).",
+  "foundQemuAtButFirmwareMissing": "O QEMU foi encontrado em {0}, mas o firmware UEFI dele ({1}) está ausente — reinstale o QEMU.",
+  "qemuNotInstalledWinget": "O QEMU não está instalado. Instale-o com: winget install {0} (ou defina {1} com a sua pasta do QEMU).",
   "applianceHardware": "Appliance (hardware)",
   "applianceHostedVm": "Appliance (VM hospedada)",
   "unknownServerTier": "Nível de servidor desconhecido «{0}».",
@@ -230,7 +231,8 @@
   "wiFiPasswordOptional": "Senha do Wi-Fi (opcional)",
   "actions": "Ações",
   "Beta": "Beta",
-  "softwarePackageNotPublished": "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em flagshipserver.com. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde.",
-  "couldntCheckSoftwarePackage": "Não foi possível verificar se o pacote de software deste servidor está publicado em flagshipserver.com. Verifique sua conexão com a internet e tente novamente.",
+  "softwarePackageNotPublished": "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em {0}. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde.",
+  "couldntCheckSoftwarePackage": "Não foi possível verificar se o pacote de software deste servidor está publicado em {0}. Verifique sua conexão com a internet e tente novamente.",
+  "windows10NoLongerGetsSecurityUpdates": "Esta versão do Windows não recebe mais atualizações de segurança. O Studio continua funcionando aqui e pode hospedar seu servidor; atualizar para o Windows 11 deixa este PC mais seguro.",
   "recipeMadeByOlderApp": "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo."
 }

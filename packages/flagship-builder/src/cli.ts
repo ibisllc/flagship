@@ -44,6 +44,8 @@ import {
 } from "./index.js";
 
 import { runPair } from "./pair.js";
+import { applianceMatchesRecipe, appliancePublishedAs } from "./applianceMatch.js";
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import { resolveWifiPassword } from "./wifiArgs.js";
 
 const args = process.argv.slice(2);
@@ -258,6 +260,8 @@ interface ApplianceBaseManifest {
   version: number;
   arch: "amd64" | "arm64";
   installerGitRef: string;
+  /** The exact release commit installed on the image (applianceMatch.ts); absent before 0.3. */
+  commit?: string;
   sha256: string;
   sizeBytes: number;
   virtualSizeBytes: number;
@@ -297,8 +301,8 @@ async function cmdApplianceProvision(rest: string[]): Promise<void> {
     throw new Error("prebuilt appliance manifest is malformed or unsupported");
   }
   if (manifest.arch !== arch) throw new Error(`prebuilt appliance is ${manifest.arch}; this host needs ${arch}`);
-  if (manifest.installerGitRef !== loaded.blob.installerGitRef) {
-    throw new Error(`prebuilt appliance contains installer ref ${manifest.installerGitRef}; recipe requires ${loaded.blob.installerGitRef}`);
+  if (!applianceMatchesRecipe(manifest, loaded.blob.installerGitRef)) {
+    throw new Error(`prebuilt appliance contains installer ref ${appliancePublishedAs(manifest, loaded.blob.installerGitRef)}; recipe requires ${loaded.blob.installerGitRef}`);
   }
   const baseStat = await stat(basePath);
   if (baseStat.size !== manifest.sizeBytes) {
@@ -384,8 +388,11 @@ async function cmdApplianceManifest(rest: string[]): Promise<void> {
   const output = rest[1];
   const arch = extractFlagValue(rest, "--arch");
   const gitRef = extractFlagValue(rest, "--git-ref");
-  if (!basePath || !output || (arch !== "amd64" && arch !== "arm64") || !gitRef) {
-    console.error("usage: flagship-build appliance-manifest <base.raw> <manifest.json> --arch amd64|arm64 --git-ref <ref>");
+  // The release the factory installed: --git-commit when it was given one, else the box release this
+  // checkout compiles in (buildAppliancePrepareScript's own default). Studios match exact-commit recipes on it.
+  const gitCommit = extractFlagValue(rest, "--git-commit") || BOX_RELEASE.commit;
+  if (!basePath || !output || (arch !== "amd64" && arch !== "arm64") || !gitRef || !/^[0-9a-f]{40}$/.test(gitCommit)) {
+    console.error("usage: flagship-build appliance-manifest <base.raw> <manifest.json> --arch amd64|arm64 --git-ref <ref> [--git-commit <sha>]");
     process.exit(2);
   }
   const info = await stat(basePath);
@@ -395,6 +402,7 @@ async function cmdApplianceManifest(rest: string[]): Promise<void> {
     version: 1,
     arch,
     installerGitRef: gitRef,
+    commit: gitCommit,
     sha256: hasher.digest("hex"),
     sizeBytes: info.size,
     virtualSizeBytes: info.size,
@@ -558,7 +566,7 @@ usage:
                                                            build the secret-free generalized-base installer
   flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref> [--git-commit <sha>] [--timeout-scale 1-50]
                                                            convert an official Debian cloud disk into the encrypted base
-  flagship-build appliance-manifest <base.raw> <manifest.json> --arch <arch> --git-ref <ref>
+  flagship-build appliance-manifest <base.raw> <manifest.json> --arch <arch> --git-ref <ref> [--git-commit <sha>]
                                                            hash + describe a completed generalized raw disk
   flagship-build write <recipe.json> <iso>                  prepare + raw-write to a USB device
                                                            [--device /dev/diskN | auto] [--yes] [--keep-recipe]

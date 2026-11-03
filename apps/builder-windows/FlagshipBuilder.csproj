@@ -41,6 +41,7 @@
     <Compile Include="src\QuitGate.cs" />
     <Compile Include="src\ArtifactPreflight.cs" />
     <Compile Include="src\OlderAppRecipe.cs" />
+    <Compile Include="src\WindowsSupport.cs" />
     <Compile Include="src\Wizard.cs" />
     <Compile Include="src\DiskEnumerator.cs" />
     <Compile Include="src\VerifyResult.cs" />
@@ -75,6 +76,7 @@
     <Compile Include="src\VM\VMServerHealth.cs" />
     <Compile Include="src\VM\UnlockWatch.cs" />
     <Compile Include="src\VM\QemuFailure.cs" />
+    <Compile Include="src\VM\ApplianceMatch.cs" />
     <Compile Include="src\VM\ApplianceCache.cs" />
     <Compile Include="src\VM\ApplianceProvisioner.cs" />
     <Compile Include="src\VM\ApplianceHosting.cs" />

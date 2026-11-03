@@ -70,7 +70,8 @@
   "qemuStoppedUnexpectedlyExit": "c9fb3acc40d3",
   "qemuStoppedExit": "17c5ce455a19",
   "foundQemuAtButQemuImg": "1f503af804a2",
-  "orSetToYourQemuFolder": "a4a3dcf7c2f6",
+  "foundQemuAtButFirmwareMissing": "cfc4792b271c",
+  "qemuNotInstalledWinget": "8a4abcf33471",
   "applianceHardware": "cf9be02a81ed",
   "applianceHostedVm": "0aa560e0c645",
   "unknownServerTier": "e8fea25f20a9",
@@ -230,7 +231,8 @@
   "wiFiPasswordOptional": "69178de8cbb0",
   "actions": "aa6d82bdb3cc",
   "Beta": "45dcef5400c6",
-  "softwarePackageNotPublished": "578d78fe5dc2",
-  "couldntCheckSoftwarePackage": "a0fb0fc42f6d",
+  "softwarePackageNotPublished": "9cf0abc83307",
+  "couldntCheckSoftwarePackage": "8c8289bd15fb",
+  "windows10NoLongerGetsSecurityUpdates": "3fc1e8c127c7",
   "recipeMadeByOlderApp": "e7ef2e7d5286"
 }

@@ -19,7 +19,7 @@ on:
         description: "The ref recipes name (installerGitRef); the image carries it as its label"
         default: "main"
       release:
-        description: "Commit to install: 'latest-endorsed' (the newest release a box would verify), 'tip' (the ref's tip, unsigned), or a 40-hex commit"
+        description: "Commit to install: 'box-release' (release/box-release.json in the checkout: the commit 0.3 recipes name, so Studios use the image), 'latest-endorsed' (the newest release a box would verify), 'tip' (same as box-release: the factory installs the checkout's box release), or a 40-hex commit"
         default: "latest-endorsed"
       debian_build:
         description: "cloud.debian.org trixie build directory"
@@ -97,12 +97,13 @@ jobs:
           RELEASE: ${{ inputs.release }}
         run: |
           case "$RELEASE" in
+            box-release) commit=$(node -p 'require("./release/box-release.json").commit') ;;
             latest-endorsed) commit=$(node scripts/latest-endorsed-release.mjs .) ;;
             tip) commit="" ;;
-            *) echo "$RELEASE" | grep -Eq '^[0-9a-f]{40}$' || { echo "release must be latest-endorsed, tip or a 40-hex commit"; exit 1; }; commit="$RELEASE" ;;
+            *) echo "$RELEASE" | grep -Eq '^[0-9a-f]{40}$' || { echo "release must be box-release, latest-endorsed, tip or a 40-hex commit"; exit 1; }; commit="$RELEASE" ;;
           esac
           echo "GIT_COMMIT=$commit" >> "$GITHUB_ENV"
-          echo "installing ${commit:-the tip of ${{ inputs.git_ref }}}"
+          echo "installing ${commit:-the box release of ${{ inputs.git_ref }} (release/box-release.json)}"
 
       - name: Download the pinned Debian cloud image
         run: |
@@ -144,7 +145,9 @@ jobs:
                             "sha256": hashlib.sha256(p.read_bytes()).hexdigest()})
           manifest = {
               "version": 1, "arch": os.environ["ARCH"], "installerGitRef": os.environ["GIT_REF"],
-              **({"commit": os.environ["GIT_COMMIT"]} if os.environ.get("GIT_COMMIT") else {}),
+              # the release the factory installed (the runtime manifest records it even for 'tip',
+              # where the factory installs the checkout's release/box-release.json commit)
+              "commit": os.environ.get("GIT_COMMIT") or json.loads(pathlib.Path(os.environ["RUNNER_TEMP"], "base.raw.json").read_text())["commit"],
               "format": "qcow2", "sha256": os.environ["SHA"], "sizeBytes": int(os.environ["SIZE"]),
               "parts": parts, "rawSha256": os.environ["RAW_SHA"], "rawSizeBytes": int(os.environ["RAW_SIZE"]),
               "source": {"name": f"debian-13-generic-{os.environ['ARCH']}-{os.environ['DEBIAN_BUILD']}.qcow2", "sha512": os.environ["SOURCE_SHA512"]},

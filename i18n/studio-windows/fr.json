@@ -70,7 +70,8 @@
   "qemuStoppedUnexpectedlyExit": "QEMU s’est arrêté de façon inattendue (code de sortie {0}).",
   "qemuStoppedExit": "QEMU s’est arrêté (code de sortie {0}) : {1}",
   "foundQemuAtButQemuImg": "QEMU trouvé dans {0}, mais qemu-img.exe est introuvable — réinstallez QEMU.",
-  "orSetToYourQemuFolder": "(ou définissez {0} sur votre dossier QEMU).",
+  "foundQemuAtButFirmwareMissing": "QEMU trouvé dans {0}, mais son micrologiciel UEFI ({1}) est introuvable — réinstallez QEMU.",
+  "qemuNotInstalledWinget": "QEMU n’est pas installé. Installez-le avec : winget install {0} (ou définissez {1} sur votre dossier QEMU).",
   "applianceHardware": "Appliance (matériel)",
   "applianceHostedVm": "Appliance (VM hébergée)",
   "unknownServerTier": "Niveau de serveur inconnu « {0} ».",
@@ -230,7 +231,8 @@
   "wiFiPasswordOptional": "Mot de passe Wi-Fi (facultatif)",
   "actions": "Actions",
   "Beta": "Bêta",
-  "softwarePackageNotPublished": "Ce serveur ne peut pas encore être installé : son paquet logiciel n’est pas publié sur flagshipserver.com. Mettez à jour Flagship Studio et l’app Flagship, ou réessayez plus tard.",
-  "couldntCheckSoftwarePackage": "Impossible de vérifier que le paquet logiciel de ce serveur est publié sur flagshipserver.com. Vérifiez votre connexion Internet et réessayez.",
+  "softwarePackageNotPublished": "Ce serveur ne peut pas encore être installé : son paquet logiciel n’est pas publié sur {0}. Mettez à jour Flagship Studio et l’app Flagship, ou réessayez plus tard.",
+  "couldntCheckSoftwarePackage": "Impossible de vérifier que le paquet logiciel de ce serveur est publié sur {0}. Vérifiez votre connexion Internet et réessayez.",
+  "windows10NoLongerGetsSecurityUpdates": "Cette version de Windows ne reçoit plus de mises à jour de sécurité. Studio fonctionne toujours ici et peut héberger votre serveur ; passer à Windows 11 rend ce PC plus sûr.",
   "recipeMadeByOlderApp": "Cette recette a été créée par une ancienne version de l’app Flagship. Mettez à jour l’app Flagship sur votre téléphone, puis recréez le serveur."
 }

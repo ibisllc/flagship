@@ -6,6 +6,8 @@ public struct ApplianceBaseManifest: Codable, Equatable, Sendable {
     public let version: Int
     public let arch: IsoArch
     public let installerGitRef: String
+    /// The exact release commit installed on the image (ApplianceMatch); absent before 0.3.
+    public let commit: String?
     public let sha256: String
     public let sizeBytes: UInt64
     public let virtualSizeBytes: UInt64
@@ -13,12 +15,14 @@ public struct ApplianceBaseManifest: Codable, Equatable, Sendable {
     public init(version: Int = 1,
                 arch: IsoArch,
                 installerGitRef: String,
+                commit: String? = nil,
                 sha256: String,
                 sizeBytes: UInt64,
                 virtualSizeBytes: UInt64) {
         self.version = version
         self.arch = arch
         self.installerGitRef = installerGitRef
+        self.commit = commit
         self.sha256 = sha256
         self.sizeBytes = sizeBytes
         self.virtualSizeBytes = virtualSizeBytes
@@ -90,9 +94,12 @@ public struct ApplianceProvisioner: Sendable {
         guard manifest.arch == expectedArch else {
             throw ApplianceProvisionError.architectureMismatch(expected: expectedArch, got: manifest.arch)
         }
-        guard manifest.installerGitRef == installerGitRef else {
+        guard ApplianceMatch.matches(installerGitRef: manifest.installerGitRef, commit: manifest.commit,
+                                     recipeRef: installerGitRef) else {
             throw ApplianceProvisionError.gitRefMismatch(
-                expected: installerGitRef, got: manifest.installerGitRef)
+                expected: installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines),
+                got: ApplianceMatch.published(installerGitRef: manifest.installerGitRef, commit: manifest.commit,
+                                              recipeRef: installerGitRef))
         }
         let attrs = try fm.attributesOfItem(atPath: baseURL.path)
         let actualSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0

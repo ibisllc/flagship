@@ -19,14 +19,16 @@ public static class ArtifactPreflight
 
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
-    public static string MissingMessage => Strings.T("softwarePackageNotPublished");
-    public static string UnreachableMessage => Strings.T("couldntCheckSoftwarePackage");
+    /// <summary>The sentences name the control host the check asked (the gym when Studio follows
+    /// FLAGSHIP_CONTROL_HOST), never a hard-coded flagshipserver.com.</summary>
+    public static string MissingMessage(string controlHost) => Strings.F("softwarePackageNotPublished", controlHost);
+    public static string UnreachableMessage(string controlHost) => Strings.F("couldntCheckSoftwarePackage", controlHost);
 
     /// <summary>The refusal for a verdict; null when the install may go ahead.</summary>
-    public static string? Message(Verdict verdict) => verdict switch
+    public static string? Message(Verdict verdict, string? controlHost = null) => verdict switch
     {
-        Verdict.Missing => MissingMessage,
-        Verdict.Unreachable => UnreachableMessage,
+        Verdict.Missing => MissingMessage(controlHost ?? ControlHost()),
+        Verdict.Unreachable => UnreachableMessage(controlHost ?? ControlHost()),
         _ => null,
     };
 

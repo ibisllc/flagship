@@ -31,7 +31,7 @@ public sealed record AppliancePart(string Name, long SizeBytes, string Sha256);
 /// split into parts, plus the hash of the raw disk it expands to.</summary>
 public sealed record ApplianceDistribution(
     string Arch, string InstallerGitRef, string Sha256, long SizeBytes,
-    IReadOnlyList<AppliancePart> Parts, string RawSha256, long RawSizeBytes)
+    IReadOnlyList<AppliancePart> Parts, string RawSha256, long RawSizeBytes, string? Commit = null)
 {
     private static readonly Regex Hex64 = new("^[0-9a-f]{64}$", RegexOptions.CultureInvariant);
     private static readonly Regex PartName = new("^part-[0-9]{2}$", RegexOptions.CultureInvariant);
@@ -50,7 +50,8 @@ public sealed record ApplianceDistribution(
             var dist = new ApplianceDistribution(
                 d.GetProperty("arch").GetString()!, d.GetProperty("installerGitRef").GetString()!,
                 d.GetProperty("sha256").GetString()!, d.GetProperty("sizeBytes").GetInt64(), parts,
-                d.GetProperty("rawSha256").GetString()!, d.GetProperty("rawSizeBytes").GetInt64());
+                d.GetProperty("rawSha256").GetString()!, d.GetProperty("rawSizeBytes").GetInt64(),
+                d.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.String ? commit.GetString() : null);
             var ok = d.GetProperty("version").GetInt32() == 1
                 && d.GetProperty("format").GetString() == "qcow2"
                 && Hex64.IsMatch(dist.Sha256) && Hex64.IsMatch(dist.RawSha256)
@@ -159,14 +160,18 @@ public sealed class ApplianceCache
         if (status is < 200 or > 299) throw Http(status);
         var dist = ApplianceDistribution.Parse(body);
         if (dist.Arch != _arch) throw Invalid();
-        if (dist.InstallerGitRef != installerGitRef)
+        if (!ApplianceMatch.Matches(dist.InstallerGitRef, dist.Commit, installerGitRef))
             throw new ApplianceCacheException("ref-mismatch",
-                Strings.F("thePrebuiltServerImageIsFor", dist.InstallerGitRef, installerGitRef));
+                Strings.F("thePrebuiltServerImageIsFor",
+                    ApplianceMatch.Published(dist.InstallerGitRef, dist.Commit, installerGitRef), installerGitRef.Trim()));
 
         var dir = Path.Combine(ArchRoot, dist.Sha256[..16]);
         var basePath = Path.Combine(dir, "base.qcow2");
         if (IsReady(basePath, dist.Sha256, dist.SizeBytes))
         {
+            // A base kept from before manifests named their commit: record it, the disk is the same.
+            if (ApplianceBaseManifest.TryLoad(basePath) is { } kept && kept.Commit != dist.Commit)
+                WriteRuntimeManifest(dist, basePath);
             _log($"appliance: cached {basePath} sha256={dist.Sha256}");
             Prune(dir);
             progress("ready", null);
@@ -232,14 +237,20 @@ public sealed class ApplianceCache
             throw Checksum("archive");
         }
         File.Move(partial, basePath, overwrite: true);
-        var runtime = new ApplianceBaseManifest(1, dist.Arch, dist.InstallerGitRef, dist.Sha256, dist.SizeBytes, dist.RawSizeBytes);
-        var tmp = basePath + ".json.tmp";
-        File.WriteAllBytes(tmp, JsonSerializer.SerializeToUtf8Bytes(runtime, ApplianceBaseManifest.Json));
-        File.Move(tmp, basePath + ".json", overwrite: true);
+        WriteRuntimeManifest(dist, basePath);
         Prune(dir);
         _log($"appliance: downloaded {basePath} sha256={dist.Sha256}");
         progress("ready", null);
         return basePath;
+    }
+
+    private static void WriteRuntimeManifest(ApplianceDistribution dist, string basePath)
+    {
+        var runtime = new ApplianceBaseManifest(1, dist.Arch, dist.InstallerGitRef, dist.Sha256, dist.SizeBytes,
+                                                dist.RawSizeBytes, dist.Commit);
+        var tmp = basePath + ".json.tmp";
+        File.WriteAllBytes(tmp, JsonSerializer.SerializeToUtf8Bytes(runtime, ApplianceBaseManifest.Json));
+        File.Move(tmp, basePath + ".json", overwrite: true);
     }
 
     private static ApplianceCacheException Http(int code) =>
@@ -259,7 +270,7 @@ public sealed class ApplianceCache
         if (!Directory.Exists(ArchRoot)) return null;
         return Directory.EnumerateDirectories(ArchRoot)
             .Select(d => Path.Combine(d, "base.qcow2"))
-            .Where(b => ApplianceBaseManifest.TryLoad(b) is { } m && m.InstallerGitRef == installerGitRef
+            .Where(b => ApplianceBaseManifest.TryLoad(b) is { } m && ApplianceMatch.Matches(m.InstallerGitRef, m.Commit, installerGitRef)
                         && File.Exists(b) && new FileInfo(b).Length == m.SizeBytes)
             .OrderByDescending(File.GetLastWriteTimeUtc)
             .FirstOrDefault();
@@ -403,9 +414,14 @@ public sealed class ApplianceCache
 
 /// <summary>The runtime manifest beside a verified base (`&lt;base&gt;.json`).</summary>
 public sealed record ApplianceBaseManifest(int Version, string Arch, string InstallerGitRef,
-                                           string Sha256, long SizeBytes, long VirtualSizeBytes)
+                                           string Sha256, long SizeBytes, long VirtualSizeBytes,
+                                           string? Commit = null)
 {
-    internal static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    internal static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public static ApplianceBaseManifest? TryLoad(string basePath)
     {

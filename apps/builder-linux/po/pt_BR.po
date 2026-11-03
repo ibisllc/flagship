@@ -645,6 +645,11 @@ msgstr "Instalação interrompida por você."
 msgid "QEMU is not installed."
 msgstr "O QEMU não está instalado."
 
+#: vm/qemu_locator.py:92 (prose)
+#, python-brace-format
+msgid "QEMU is not installed. Install it with your package manager (e.g. {0}), or set {1} to your {2} binary."
+msgstr "O QEMU não está instalado. Instale-o com o seu gerenciador de pacotes (por exemplo, {0}) ou defina {1} com o seu binário {2}."
+
 #: vm/manager.py:885 (prose)
 msgid "Keeping this PC awake while it hosts servers"
 msgstr "Mantendo este PC ativo enquanto hospeda servidores"
@@ -756,12 +761,14 @@ msgid "Beta"
 msgstr "Beta"
 
 #: vm/artifact_preflight.py:33 (prose)
-msgid "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later."
-msgstr "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em flagshipserver.com. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde."
+#, python-brace-format
+msgid "This server can't be installed yet: its software package isn't published on {0}. Update Flagship Studio and the Flagship app, or try again later."
+msgstr "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em {0}. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde."
 
 #: vm/artifact_preflight.py:37 (prose)
-msgid "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
-msgstr "Não foi possível verificar se o pacote de software deste servidor está publicado em flagshipserver.com. Verifique sua conexão com a internet e tente novamente."
+#, python-brace-format
+msgid "Couldn't check that this server's software package is published on {0}. Check your internet connection and try again."
+msgstr "Não foi possível verificar se o pacote de software deste servidor está publicado em {0}. Verifique sua conexão com a internet e tente novamente."
 
 #: vm/older_app_recipe.py:21 (prose)
 msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."

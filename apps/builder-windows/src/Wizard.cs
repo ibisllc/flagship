@@ -52,6 +52,10 @@ public sealed class Wizard : INotifyPropertyChanged
     /// </summary>
     public bool DidRemasterForTest { get; private set; }
 
+    /// <summary>A calm line on Windows 10, which no longer gets security updates; null on Windows 11.
+    /// Informational only: nothing is blocked (WindowsSupport).</summary>
+    public string? WindowsVersionNotice { get; } = WindowsSupport.CurrentNotice();
+
     public Wizard() : this(null) { }
 
     /// <param name="baseCache">Injectable for tests (stubbed HTTP + temp cache

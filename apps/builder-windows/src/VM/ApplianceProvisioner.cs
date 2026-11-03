@@ -62,8 +62,8 @@ public static class ApplianceProvisioner
             throw new InvalidDataException("The prebuilt server image's manifest is malformed.");
         if (m.Arch != expectedArch)
             throw new InvalidDataException($"The prebuilt server image is for {m.Arch}, but this PC needs {expectedArch}.");
-        if (m.InstallerGitRef != installerGitRef)
-            throw new InvalidDataException($"The prebuilt server image contains installer ref {m.InstallerGitRef}, but this recipe requires {installerGitRef}.");
+        if (!ApplianceMatch.Matches(m.InstallerGitRef, m.Commit, installerGitRef))
+            throw new InvalidDataException($"The prebuilt server image contains installer ref {ApplianceMatch.Published(m.InstallerGitRef, m.Commit, installerGitRef)}, but this recipe requires {installerGitRef.Trim()}.");
         var size = new FileInfo(basePath).Length;
         if (size != m.SizeBytes)
             throw new InvalidDataException($"The prebuilt server image has {size} bytes, but its manifest declares {m.SizeBytes}.");

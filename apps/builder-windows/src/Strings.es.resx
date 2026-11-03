@@ -223,8 +223,11 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="foundQemuAtButQemuImg" xml:space="preserve">
     <value>Se encontró QEMU en {0} pero falta qemu-img.exe: reinstala QEMU.</value>
   </data>
-  <data name="orSetToYourQemuFolder" xml:space="preserve">
-    <value>(o define {0} con tu carpeta de QEMU).</value>
+  <data name="foundQemuAtButFirmwareMissing" xml:space="preserve">
+    <value>Se encontró QEMU en {0} pero falta su firmware UEFI ({1}): reinstala QEMU.</value>
+  </data>
+  <data name="qemuNotInstalledWinget" xml:space="preserve">
+    <value>QEMU no está instalado. Instálalo con: winget install {0} (o define {1} con tu carpeta de QEMU).</value>
   </data>
   <data name="applianceHardware" xml:space="preserve">
     <value>Appliance (hardware)</value>
@@ -704,10 +707,13 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
     <value>Beta</value>
   </data>
   <data name="softwarePackageNotPublished" xml:space="preserve">
-    <value>Este servidor aún no se puede instalar: su paquete de software no está publicado en flagshipserver.com. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde.</value>
+    <value>Este servidor aún no se puede instalar: su paquete de software no está publicado en {0}. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde.</value>
   </data>
   <data name="couldntCheckSoftwarePackage" xml:space="preserve">
-    <value>No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo.</value>
+    <value>No se pudo comprobar si el paquete de software de este servidor está publicado en {0}. Revisa tu conexión a internet e inténtalo de nuevo.</value>
+  </data>
+  <data name="windows10NoLongerGetsSecurityUpdates" xml:space="preserve">
+    <value>Esta versión de Windows ya no recibe actualizaciones de seguridad. Studio sigue funcionando aquí y puede alojar tu servidor; actualizar a Windows 11 mantiene este PC más seguro.</value>
   </data>
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship en tu teléfono y vuelve a crear el servidor.</value>
