@@ -208,10 +208,19 @@ public final class LiveRescueConnection: RescueConnection, @unchecked Sendable {
 
     public func hello(clientNonce: String) async throws -> RescueHelloReply {
         let (data, _) = try await request("/api/rescue/hello", method: "POST", json: ["clientNonce": clientNonce], timeout: 15)
-        struct Wire: Decodable { let hello: Rescue.Exchange; let signatureHex: String; let pqSignature: SignatureEnvelope? }
-        guard let w = try? JSONDecoder().decode(Wire.self, from: data), let sig = HexUtil.decode(w.signatureHex),
-              let seen = delegate.lastSeen() else { throw RescueTransportError.malformed }
-        return RescueHelloReply(hello: w.hello, signature: sig, pqSignature: w.pqSignature, seenCertSha256: seen.sha, certificateTrusted: seen.trusted)
+        guard let w = Self.helloBody(data, serverDomain: serverDomain), let seen = delegate.lastSeen() else { throw RescueTransportError.malformed }
+        return RescueHelloReply(hello: w.hello, signature: w.signature, pqSignature: w.pqSignature, seenCertSha256: seen.sha, certificateTrusted: seen.trusted)
+    }
+
+    /// The box leaves its name out of the hello (a stranger on the LAN must not read it). The phone puts back the name
+    /// it connected to; the box signed its own name, so a hello from another box then fails its signature.
+    static func helloBody(_ data: Data, serverDomain: String) -> (hello: Rescue.Exchange, signature: Data, pqSignature: SignatureEnvelope?)? {
+        struct Body: Decodable { let clientNonce: String; let boxNonce: String; let certSha256: String; let issuedAt: Int64 }
+        struct Wire: Decodable { let hello: Body; let signatureHex: String; let pqSignature: SignatureEnvelope? }
+        guard let w = try? JSONDecoder().decode(Wire.self, from: data), let sig = HexUtil.decode(w.signatureHex) else { return nil }
+        let hello = Rescue.Exchange(serverDomain: serverDomain.lowercased(), clientNonce: w.hello.clientNonce, boxNonce: w.hello.boxNonce,
+                                    certSha256: w.hello.certSha256, issuedAt: w.hello.issuedAt)
+        return (hello, sig, w.pqSignature)
     }
 
     public func openSession(order: Rescue.Exchange, signatureHex: String, pqSignature: PqSignatureWire?) async throws -> Int64 {

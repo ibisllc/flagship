@@ -4,7 +4,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 /// fsync a directory so a rename inside it is durable.
@@ -84,4 +84,21 @@ pub fn read_regular(path: &Path) -> Option<String> {
         return None;
     }
     fs::read_to_string(path).ok()
+}
+
+/// [`read_regular`] for a file `uid` owns.
+#[must_use]
+pub fn read_owned_by(path: &Path, uid: u32) -> Option<String> {
+    let meta = fs::symlink_metadata(path).ok()?;
+    if !meta.file_type().is_file() || meta.uid() != uid {
+        return None;
+    }
+    read_regular(path)
+}
+
+/// A state file this account (root, on a box) wrote itself: the unprivileged daemon may add files to the state
+/// directory, so one it owns is never trusted as history.
+#[must_use]
+pub fn read_own(path: &Path) -> Option<String> {
+    read_owned_by(path, rustix::process::geteuid().as_raw())
 }

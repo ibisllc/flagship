@@ -611,7 +611,7 @@ fn run_runtime_manifest(
         let seq_path = state.as_ref().map(|d| d.join("runtime-sequence"));
         let last = seq_path
             .as_ref()
-            .and_then(|p| crate::fsutil::read_regular(p))
+            .and_then(|p| crate::fsutil::read_own(p))
             .and_then(|t| t.trim().parse::<u64>().ok());
         let now = f
             .get("now")

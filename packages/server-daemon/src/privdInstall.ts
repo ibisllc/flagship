@@ -217,6 +217,9 @@ export const ROOT_KEEPS = new Set([
   "artifact-previous",
   "artifact-current.json",
   "update-guard-starts",
+  "update-intent.json",
+  "runtime-manifest-accepted",
+  "runtime-sequence",
 ]);
 /** Inside `data`: the data services' own folders, owned by their containers. */
 export const DATA_KEEPS = new Set(["postgres", "forgejo"]);

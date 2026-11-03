@@ -6,7 +6,7 @@
 //! (about to flip the link), `switched` (the link and every state file name the new release;
 //! waiting for the daemon's health gate, which owns `update-pending.json`).
 
-use crate::fsutil::{read_regular, write_durable};
+use crate::fsutil::{read_own, write_durable};
 use serde_json::{Map, Value};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -74,11 +74,11 @@ impl Intent {
         write_durable(&path(state), Value::Object(m).to_string().as_bytes(), 0o600)
     }
 
-    /// The intent on disk; `None` when there is none or it cannot be read (the caller treats an
-    /// unreadable intent as "unknown" and reconciles from the release link instead).
+    /// The intent on disk; `None` when there is none, it cannot be read, or this account did not write it (the daemon
+    /// may add files to the state directory). The caller then reconciles from the release link instead.
     #[must_use]
     pub fn read(state: &Path) -> Option<Self> {
-        let v: Value = serde_json::from_str(&read_regular(&path(state))?).ok()?;
+        let v: Value = serde_json::from_str(&read_own(&path(state))?).ok()?;
         let hex40 =
             |s: &str| s.len() == 40 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
         let commit = v.get("commit")?.as_str().filter(|c| hex40(c))?.to_owned();

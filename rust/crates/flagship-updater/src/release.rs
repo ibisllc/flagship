@@ -7,7 +7,7 @@
 //! release now running and the one before it are kept: a rollback needs exactly those two.
 
 use crate::extract::{Limits, extract_tar_gz};
-use crate::fsutil::{read_regular, switch_symlink, sync_dir, write_durable};
+use crate::fsutil::{read_own, read_regular, switch_symlink, sync_dir, write_durable};
 use crate::journal::{Intent, Phase};
 use crate::manifest;
 use crate::refusal::Refusal;
@@ -15,7 +15,7 @@ use crate::verify::{Expect, Trust, Verified, verify};
 use serde_json::{Map, Value};
 use std::fs::{self, File};
 use std::io::Read;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -109,16 +109,6 @@ fn is_commit(s: &str) -> bool {
     s.len() == 40 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// A state file this account wrote itself: the unprivileged daemon may add files to the state
-/// directory, so one it owns is never trusted as history.
-fn own_file(path: &Path) -> Option<String> {
-    let meta = fs::symlink_metadata(path).ok()?;
-    if !meta.file_type().is_file() || meta.uid() != rustix::process::geteuid().as_raw() {
-        return None;
-    }
-    read_regular(path)
-}
-
 fn is_executable_file(path: &Path) -> bool {
     fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
@@ -162,6 +152,13 @@ const TSX_WRAPPER: &str = "#!/bin/sh\n# Run a TypeScript file with the box's own
 fn check_bundled_runtime(staging: &Path, v: &Verified, a: &InstallArgs) -> Result<(), Failure> {
     let arch = &v.arch;
     let Some(text) = read_regular(&staging.join("app/release/runtime-lock.json")) else {
+        if let Some(policy) = crate::runtime::manifest::accepted_policy(&a.paths.state) {
+            crate::runtime::manifest::check_accepted_policy(&policy, &v.node_version, &[])
+                .map_err(|r| Failure {
+                    exit: 1,
+                    refusal: r,
+                })?;
+        }
         return Ok(());
     };
     let lock = crate::runtime::Lock::parse(&text).map_err(|r| Failure {
@@ -176,6 +173,15 @@ fn check_bundled_runtime(staging: &Path, v: &Verified, a: &InstallArgs) -> Resul
     }
     if let Some(path) = &a.runtime_manifest {
         check_runtime_manifest(path, &text, &lock, a)?;
+    }
+    if let Some(policy) = crate::runtime::manifest::accepted_policy(&a.paths.state) {
+        let signers: Vec<String> = lock.signers.iter().map(|s| s.fingerprint.clone()).collect();
+        crate::runtime::manifest::check_accepted_policy(&policy, &lock.version, &signers).map_err(
+            |r| Failure {
+                exit: 1,
+                refusal: r,
+            },
+        )?;
     }
     let target = lock.target(&format!("linux-{arch}")).map_err(|r| Failure {
         exit: 3,
@@ -226,7 +232,7 @@ fn check_runtime_manifest(
 }
 
 fn read_sequence(paths: &Paths) -> Option<u64> {
-    own_file(&paths.state.join("artifact-sequence"))?
+    read_own(&paths.state.join("artifact-sequence"))?
         .trim()
         .parse()
         .ok()

@@ -14,7 +14,7 @@
 //! epochs or the minimum-security state (`artifact-sequence` stays where it is, so the rolled-back
 //! box still refuses anything older than it ever ran).
 
-use crate::fsutil::{read_regular, write_durable};
+use crate::fsutil::{read_own, read_regular, write_durable};
 use crate::journal::{Intent, Phase};
 use crate::release::{Paths, current_commit, restore};
 use serde_json::{Map, Value};
@@ -100,22 +100,30 @@ pub fn reconcile(paths: &Paths) {
                 let _ = Intent::clear(&paths.state);
                 return;
             }
+            // The sequence comes from the record the installer wrote beside the verified release, never from the
+            // intent: an intent naming a huge sequence would refuse every later update as a rollback.
             let dest = paths.releases.join(&intent.commit);
-            if let Some(record) = read_regular(&dest.join("INSTALLED.json")) {
+            let record = read_own(&dest.join("INSTALLED.json")).filter(|r| {
+                serde_json::from_str::<Value>(r).ok().is_some_and(|v| {
+                    v.get("commit").and_then(Value::as_str) == Some(intent.commit.as_str())
+                })
+            });
+            if let Some(record) = &record {
                 let _ = write_durable(
                     &paths.state.join("artifact-current.json"),
                     record.as_bytes(),
                     0o644,
                 );
             }
+            let recorded = record
+                .and_then(|r| serde_json::from_str::<Value>(&r).ok())
+                .and_then(|v| v.get("sequence").and_then(Value::as_u64));
             let seq_path = paths.state.join("artifact-sequence");
-            let known = read_regular(&seq_path).and_then(|t| t.trim().parse::<u64>().ok());
-            if known.is_none_or(|k| k < intent.sequence) {
-                let _ = write_durable(
-                    &seq_path,
-                    format!("{}\n", intent.sequence).as_bytes(),
-                    0o644,
-                );
+            let known = read_own(&seq_path).and_then(|t| t.trim().parse::<u64>().ok());
+            if let Some(seq) = recorded
+                && known.is_none_or(|k| k < seq)
+            {
+                let _ = write_durable(&seq_path, format!("{seq}\n").as_bytes(), 0o644);
             }
             let _ = crate::fsutil::switch_symlink(
                 &paths.bin.join("node"),
@@ -243,7 +251,7 @@ fn decide(
     attempts: u64,
 ) -> GuardAction {
     // Counted per target, so a count left by an earlier update never carries over.
-    let counted = read_regular(starts_path).and_then(|t| {
+    let counted = read_own(starts_path).and_then(|t| {
         let mut it = t.split_whitespace();
         let (c, n) = (it.next()?.to_owned(), it.next()?.parse::<u64>().ok()?);
         (c == target).then_some(n)

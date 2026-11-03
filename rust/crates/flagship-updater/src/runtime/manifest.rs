@@ -306,14 +306,74 @@ pub fn check_release_lock(
     Ok(())
 }
 
-/// What a box last accepted: `<state>/runtime-manifest-accepted` holds `<sequence> <digest>`.
-const ACCEPTED: &str = "runtime-manifest-accepted";
+/// What a box last accepted: `<state>/runtime-manifest-accepted` holds `<sequence> <digest> <floor> <revoked>`
+/// (`revoked` comma-separated, `-` for none; files written before the floor was kept have only the first two).
+pub const ACCEPTED: &str = "runtime-manifest-accepted";
 
-fn read_accepted(state: &std::path::Path) -> Option<(u64, String)> {
-    let t = crate::fsutil::read_regular(&state.join(ACCEPTED))?;
+/// The security floor and withdrawn upstream signers of the last manifest the box accepted. They keep applying to
+/// every install after that manifest stops being published, expires or cannot be fetched.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcceptedPolicy {
+    pub security_floor: String,
+    pub revoked_signers: Vec<String>,
+}
+
+struct Accepted {
+    sequence: u64,
+    digest: String,
+    policy: Option<AcceptedPolicy>,
+}
+
+fn read_accepted(state: &std::path::Path) -> Option<Accepted> {
+    let t = crate::fsutil::read_own(&state.join(ACCEPTED))?;
     let mut it = t.split_whitespace();
-    let seq = it.next()?.parse().ok()?;
-    Some((seq, it.next()?.to_owned()))
+    let sequence = it.next()?.parse().ok()?;
+    let digest = it.next()?.to_owned();
+    let policy = it
+        .next()
+        .filter(|f| semver(f).is_some())
+        .map(|floor| AcceptedPolicy {
+            security_floor: floor.to_owned(),
+            revoked_signers: it
+                .next()
+                .filter(|r| *r != "-")
+                .map(|r| r.split(',').map(str::to_ascii_lowercase).collect())
+                .unwrap_or_default(),
+        });
+    Some(Accepted {
+        sequence,
+        digest,
+        policy,
+    })
+}
+
+/// The floor and revocations this box recorded, if it ever accepted a manifest that carried them.
+#[must_use]
+pub fn accepted_policy(state: &std::path::Path) -> Option<AcceptedPolicy> {
+    read_accepted(state)?.policy
+}
+
+/// An install with no fresh manifest still honours the recorded one: a runtime below its floor, or a lock naming a
+/// signer it withdrew, is refused.
+///
+/// # Errors
+/// `runtime-below-floor` or `signer-revoked`.
+pub fn check_accepted_policy(
+    p: &AcceptedPolicy,
+    version: &str,
+    signers: &[String],
+) -> Result<(), Refusal> {
+    match (semver(version), semver(&p.security_floor)) {
+        (Some(v), Some(f)) if v >= f => {}
+        _ => return Err(Refusal::new("runtime-below-floor")),
+    }
+    if signers
+        .iter()
+        .any(|f| p.revoked_signers.iter().any(|r| r.eq_ignore_ascii_case(f)))
+    {
+        return Err(Refusal::new("signer-revoked"));
+    }
+    Ok(())
 }
 
 /// Verifies a manifest for USE on a box: the sequence may equal the last accepted one only when it is the very same
@@ -335,23 +395,42 @@ pub fn accept(
         file,
         trust,
         now_ms,
-        last.as_ref().map(|(s, _)| s.saturating_sub(1)),
+        last.as_ref().map(|a| a.sequence.saturating_sub(1)),
     )?;
-    if let Some((seq, digest)) = &last
-        && v.sequence == *seq
-        && v.digest != *digest
+    if let Some(a) = &last
+        && v.sequence == a.sequence
+        && v.digest != a.digest
     {
         return Err(Refusal::with(
             "rollback",
             "another manifest under an accepted sequence",
         ));
     }
-    if record && last.as_ref().is_none_or(|(seq, _)| v.sequence > *seq) {
+    if record
+        && last
+            .as_ref()
+            .is_none_or(|a| v.sequence > a.sequence || a.policy.is_none())
+    {
+        let mut revoked: Vec<String> = v
+            .revoked_signers
+            .iter()
+            .map(|r| r.to_ascii_lowercase())
+            .collect();
+        revoked.sort();
+        let revoked = if revoked.is_empty() {
+            "-".to_owned()
+        } else {
+            revoked.join(",")
+        };
         std::fs::create_dir_all(state)
             .and_then(|()| {
                 crate::fsutil::write_durable(
                     &state.join(ACCEPTED),
-                    format!("{} {}\n", v.sequence, v.digest).as_bytes(),
+                    format!(
+                        "{} {} {} {revoked}\n",
+                        v.sequence, v.digest, v.security_floor
+                    )
+                    .as_bytes(),
                     0o644,
                 )
             })

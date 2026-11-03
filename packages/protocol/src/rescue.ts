@@ -20,7 +20,8 @@
  *     the box's own, so a signature gathered on one connection cannot be
  *     replayed on another.
  *
- * All nonces are 16 bytes, lowercase hex.
+ * All nonces are 16 bytes, lowercase hex. The hello travels without
+ * `serverDomain` (`rescueHelloFromBody`): the phone already knows the name.
  */
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
@@ -104,6 +105,15 @@ export function parseRescueExchange(v: unknown): RescueExchange | null {
     return null;
   }
   return x;
+}
+
+/**
+ * The hello as the box sends it: everything but `serverDomain`, which a stranger on the LAN must not read. The phone
+ * puts back the name it connected to; the box signed its own name, so a hello from another box fails the signature.
+ */
+export function rescueHelloFromBody(v: unknown, serverDomain: string): RescueExchange | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  return parseRescueExchange({ ...(v as Record<string, unknown>), serverDomain: serverDomain.toLowerCase() });
 }
 
 export type RescueHelloCheck = { ok: true } | { ok: false; reason: string };

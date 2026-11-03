@@ -3,7 +3,8 @@
  * to its own box and takes a backup off it with no call to `.com` or
  * `.services`, on the LAN or through the relay.
  *
- *   POST /api/rescue/hello    {clientNonce}                         -> the box's STK-signed hello (+ its hybrid half)
+ *   POST /api/rescue/hello    {clientNonce}                         -> the box's STK-signed hello (+ its hybrid half), without
+ *                                                                     the server's name: the phone knows it and puts it back
  *   POST /api/rescue/session  {order, signatureHex, pqSignature?}   -> {token, expiresAt}
  *   GET  /api/rescue/server                                         -> status and the apps, with their state
  *   POST /api/rescue/control  {order, signatureHex, pqSignature?}   -> start/stop/restart an app, restart/shut down
@@ -25,7 +26,7 @@
  * the session order (same authority, same post-quantum gate), bound to this
  * session's box nonce, fresh and spent once. The token alone starts nothing.
  */
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   RESCUE_HELLO_TTL_MS,
   offlineControlCanonicalBytes,
@@ -52,17 +53,15 @@ export const RESCUE_NEW_ADMIN_COOLING_MS = 24 * 60 * 60_000;
 /** Who signed a rescue order: the admin root itself, or an admin device by its own key and grant. */
 export type RescueSigner = { kind: "root" } | { kind: "device"; grantId: string; deviceId: string; grantIssuedAt: number };
 /**
- * Everything on the local network reaches the app as one loopback source, so
- * there is no per-caller limit to be had. A guess cannot succeed (a signature
- * is needed), so these caps only bound memory and log noise; a flood can slow
- * the owner down (the oldest pending hello is dropped) but never lock them
- * out, and never gets anyone in.
+ * Everything on the local network (and the relay) reaches the app as one loopback source, so there is no per-caller
+ * limit to be had, and a shared cap would let a stranger's flood refuse the owner. So a hello holds nothing: the box
+ * nonce is a MAC (under a key made at start) of the time and the phone's nonce, checked when the order comes back.
+ * Only an owner-signed order that opened a session is remembered, so it cannot be replayed.
  */
-const MAX_OUTSTANDING_NONCES = 256;
 const MAX_SESSIONS = 4;
-const WINDOW_MS = 60_000;
-const MAX_HELLOS_PER_WINDOW = 300;
 const NOTE_REFUSALS_EVERY_MS = 10_000;
+const NONCE_TIME_BYTES = 6;
+const NONCE_FUTURE_SLACK_MS = 5_000;
 
 /** The only backup routes a rescue token opens: method, rescue-relative path. */
 const ARCHIVE_ROUTES: ReadonlySet<string> = new Set([
@@ -170,8 +169,28 @@ export function buildRescue(deps: RescueDeps) {
     }
   };
 
-  /** boxNonce -> the client nonce it was issued for, until it is spent or ages out. */
-  const nonces = new Map<string, { clientNonce: string; issuedAt: number }>();
+  const nonceKey = random(32);
+  const nonceMac = (clientNonce: string, issuedAt: number, time: Buffer): Buffer =>
+    createHmac("sha256", nonceKey)
+      .update(`flagship/rescue-box-nonce/v1|${deps.serverFqdn}|${clientNonce}|${issuedAt}|`)
+      .update(time)
+      .digest()
+      .subarray(0, 16 - NONCE_TIME_BYTES);
+  const issueNonce = (clientNonce: string, issuedAt: number): string => {
+    const time = Buffer.alloc(NONCE_TIME_BYTES);
+    time.writeUIntBE(issuedAt, 0, NONCE_TIME_BYTES);
+    return Buffer.concat([time, nonceMac(clientNonce, issuedAt, time)]).toString("hex");
+  };
+  /** When this box issued `boxNonce` for `clientNonce`, or null if it never did. */
+  const issuedAtOf = (boxNonce: string, clientNonce: string): number | null => {
+    const raw = Buffer.from(boxNonce, "hex");
+    if (raw.length !== 16) return null;
+    const time = raw.subarray(0, NONCE_TIME_BYTES);
+    const at = time.readUIntBE(0, NONCE_TIME_BYTES);
+    return timingSafeEqual(raw.subarray(NONCE_TIME_BYTES), nonceMac(clientNonce, at, time)) ? at : null;
+  };
+  /** Box nonces whose order opened a session, until they would be too old anyway. */
+  const spentNonces = new Map<string, number>();
   /** sha256(token) -> expiry, who opened it, and the box nonce its order answered (what offline orders name). */
   const sessions = new Map<string, { exp: number; signer: RescueSigner; sessionNonce: string }>();
   /** Offline-control nonces already spent, with when, so a signed order acts once. */
@@ -180,15 +199,13 @@ export function buildRescue(deps: RescueDeps) {
   deps.revocations?.subscribe((grantId) => {
     for (const [k, v] of sessions) if (v.signer.kind === "device" && v.signer.grantId === grantId) sessions.delete(k);
   });
-  let hellos: number[] = [];
   let lastRefusalNote = -Infinity;
 
   const sweep = () => {
     const t = now();
-    for (const [k, v] of nonces) if (t - v.issuedAt > RESCUE_HELLO_TTL_MS) nonces.delete(k);
+    for (const [k, at] of spentNonces) if (t - at > RESCUE_HELLO_TTL_MS) spentNonces.delete(k);
     for (const [k, v] of sessions) if (v.exp <= t) sessions.delete(k);
     for (const [k, at] of spentControl) if (t - at > 2 * RESCUE_HELLO_TTL_MS) spentControl.delete(k);
-    hellos = hellos.filter((x) => t - x < WINDOW_MS);
   };
 
   function hello(req: HttpRequest): HttpResponse {
@@ -201,15 +218,8 @@ export function buildRescue(deps: RescueDeps) {
     if (typeof b.clientNonce !== "string" || !/^[0-9a-f]{32}$/.test(b.clientNonce)) return err(400, "clientNonce must be 16 bytes of lowercase hex");
     const cert = deps.certSha256();
     if (!cert) return err(503, "this server has no certificate yet", "no-certificate");
-    if (hellos.length >= MAX_HELLOS_PER_WINDOW) return err(429, "too many tries: wait a minute", "rate-limited");
-    hellos.push(now());
-    if (nonces.size >= MAX_OUTSTANDING_NONCES) {
-      const oldest = nonces.keys().next().value;
-      if (oldest !== undefined) nonces.delete(oldest);
-    }
-    const boxNonce = random(16).toString("hex");
-    const h: RescueExchange = { serverDomain: deps.serverFqdn, clientNonce: b.clientNonce, boxNonce, certSha256: cert, issuedAt: now() };
-    nonces.set(boxNonce, { clientNonce: b.clientNonce, issuedAt: h.issuedAt });
+    const issuedAt = now();
+    const h: RescueExchange = { serverDomain: deps.serverFqdn, clientNonce: b.clientNonce, boxNonce: issueNonce(b.clientNonce, issuedAt), certSha256: cert, issuedAt };
     let pqSignature: { suite: string; signature: string } | undefined;
     if (deps.signHybridAsBox) {
       try {
@@ -218,7 +228,9 @@ export function buildRescue(deps: RescueDeps) {
         log(`[rescue] the hello's hybrid half couldn't be signed: ${(e as Error).message}`);
       }
     }
-    return json(200, { hello: h, signatureHex: Buffer.from(signRescueHello(h, deps.signAsBox)).toString("hex"), ...(pqSignature ? { pqSignature } : {}) });
+    // The name stays out of the body: a stranger on the LAN must not learn whose server this is.
+    const { serverDomain: _name, ...body } = h;
+    return json(200, { hello: body, signatureHex: Buffer.from(signRescueHello(h, deps.signAsBox)).toString("hex"), ...(pqSignature ? { pqSignature } : {}) });
   }
 
   function refuse(why: string, status = 403, code = "rescue-refused"): HttpResponse {
@@ -238,12 +250,10 @@ export function buildRescue(deps: RescueDeps) {
     }
     const order = parseRescueExchange(b.order);
     if (!order || typeof b.signatureHex !== "string" || !/^[0-9a-f]{128}$/.test(b.signatureHex)) return refuse("malformed order", 400);
-    // The nonce is spent by the first order that names it, right or wrong.
-    const issued = nonces.get(order.boxNonce);
-    nonces.delete(order.boxNonce);
-    if (!issued) return refuse("unknown or already used nonce");
-    if (now() - issued.issuedAt > RESCUE_HELLO_TTL_MS) return refuse("the hello is too old");
-    if (issued.clientNonce !== order.clientNonce) return refuse("not the nonce this hello was for");
+    const issuedAt = issuedAtOf(order.boxNonce, order.clientNonce);
+    if (issuedAt === null) return refuse("not a nonce this server issued for this hello");
+    if (issuedAt > now() + NONCE_FUTURE_SLACK_MS || now() - issuedAt > RESCUE_HELLO_TTL_MS) return refuse("the hello is too old");
+    if (spentNonces.has(order.boxNonce)) return refuse("already used nonce");
     if (order.serverDomain !== deps.serverFqdn) return refuse("another server");
     const cert = deps.certSha256();
     if (!cert || order.certSha256 !== cert) return refuse("another certificate");
@@ -262,6 +272,7 @@ export function buildRescue(deps: RescueDeps) {
       const oldest = [...sessions.entries()].sort((a, c) => a[1].exp - c[1].exp)[0];
       if (oldest) sessions.delete(oldest[0]);
     }
+    spentNonces.set(order.boxNonce, issuedAt);
     const token = random(32).toString("hex");
     const expiresAt = now() + RESCUE_SESSION_TTL_MS;
     sessions.set(sha(token), { exp: expiresAt, signer, sessionNonce: order.boxNonce });

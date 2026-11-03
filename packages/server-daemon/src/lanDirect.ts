@@ -14,6 +14,9 @@
  *     with 200 and then piped — a client that can only point its HTTP stack
  *     at a proxy (iOS URLSession `proxyConfigurations`).
  *
+ * Either way the TLS ClientHello must name the box or a name under it, or the
+ * connection is dropped before the box presents a certificate.
+ *
  * It binds ONLY to private interface addresses (`isLanAddress`) and skips
  * container/VM/VPN bridges, so a VPS with only a public address binds nothing
  * and a home box is never reachable from the internet through it.
@@ -22,6 +25,7 @@ import net from "node:net";
 import os from "node:os";
 import { existsSync, readdirSync } from "node:fs";
 import { X509Certificate } from "node:crypto";
+import { DEFAULT_SNI_LIMITS, parseClientHelloSni } from "@flagship/tunnel-protocol";
 import {
   isLanAddress,
   signLanHint,
@@ -85,6 +89,15 @@ export function parseConnectRequest(
   if (m[2] !== "443") return { ok: false, status: 403 };
   if (host !== z && !host.endsWith(`.${z}`)) return { ok: false, status: 403 };
   return { ok: true, host };
+}
+
+/** Whether a TLS client asked for the box's own name or one under it: anything else (no SNI, an IP, a guess) is
+ *  refused before the box presents a certificate, so a stranger on the LAN never reads the box's names from it. */
+export function lanSniAllowed(sni: string | null, zone: string): boolean {
+  if (!sni) return false;
+  const h = sni.toLowerCase();
+  const z = zone.toLowerCase();
+  return h === z || h.endsWith(`.${z}`);
 }
 
 /** `FLAGSHIP_LAN_PORT`, or 443 when unset or not a usable port. */
@@ -159,9 +172,30 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
     client.setTimeout(headerTimeoutMs, () => client.destroy());
 
     let head = Buffer.alloc(0);
+    let hello: Buffer | null = null;
+    const gate = (): void => {
+      if (hello === null || hello.length === 0) return;
+      const r = parseClientHelloSni(hello);
+      if (r.kind === "incomplete") {
+        if (hello.length > DEFAULT_SNI_LIMITS.maxRawBytes) client.destroy();
+        return;
+      }
+      if (r.kind === "error" || !lanSniAllowed(r.sni, o.zone)) {
+        client.destroy();
+        return;
+      }
+      pipe(hello);
+    };
     const onData = (chunk: Buffer): void => {
+      if (hello !== null) {
+        hello = Buffer.concat([hello, chunk]);
+        return gate();
+      }
       head = Buffer.concat([head, chunk]);
-      if (head[0] === 0x16) return pipe(head);
+      if (head[0] === 0x16) {
+        hello = head;
+        return gate();
+      }
       const end = head.indexOf("\r\n\r\n");
       if (end === -1) {
         if (head.length > 4096) client.destroy();
@@ -174,7 +208,8 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
         return;
       }
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-      pipe(head.subarray(end + 4));
+      hello = head.subarray(end + 4);
+      gate();
     };
     const pipe = (initial: Buffer): void => {
       client.removeListener("data", onData);

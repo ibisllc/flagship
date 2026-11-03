@@ -74,7 +74,7 @@ import {
   deriveSWK,
   openBackupWithPasscode,
   parseBackupFile,
-  parseRescueExchange,
+  rescueHelloFromBody,
   signOfflineControl,
   signRescueSession,
   wrapAccountSlot,
@@ -314,7 +314,8 @@ async function main(): Promise<number> {
       const clientNonce = nonceHex();
       const r = await lan("POST", "/api/rescue/hello", { clientNonce });
       assert(r.status === 200, `hello ${r.status}: ${short(r.body.toString("utf8"))}`);
-      const h = parseRescueExchange(r.json?.hello);
+      assert(r.json?.hello?.serverDomain === undefined && !r.body.toString("utf8").includes(boxA.fqdn), "the hello names the server to anyone on the LAN");
+      const h = rescueHelloFromBody(r.json?.hello, boxA.fqdn);
       assert(h, `hello shape ${short(r.json)}`);
       const check = checkRescueHello(h, hexToBytes(String(r.json.signatureHex)), pinnedStk, { serverDomain: boxA.fqdn, clientNonce, seenCertSha256: r.certSha256, now: Date.now() });
       assert(check.ok, `the hello does not check out: ${check.ok ? "" : check.reason}`);

@@ -21,6 +21,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import okhttp3.ConnectionPool
 import okhttp3.Dns
@@ -165,6 +166,18 @@ internal class RescueTrustManager(private val serverDomain: String) : X509TrustM
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
 }
 
+/**
+ * The box leaves its name out of the hello (a stranger on the LAN must not read it). The phone puts back the name it
+ * connected to; the box signed its own name, so a hello from another box then fails its signature.
+ */
+internal fun helloFromBody(body: JsonObject, domain: String): Rescue.Exchange = Rescue.Exchange(
+    serverDomain = domain.lowercase(),
+    clientNonce = body["clientNonce"]!!.jsonPrimitive.content,
+    boxNonce = body["boxNonce"]!!.jsonPrimitive.content,
+    certSha256 = body["certSha256"]!!.jsonPrimitive.content,
+    issuedAt = body["issuedAt"]!!.jsonPrimitive.long,
+)
+
 class LiveRescueConnection(private val endpoint: RescueEndpoint, serverDomain: String) : RescueConnection {
     private val domain = serverDomain.lowercase()
     private val trust = RescueTrustManager(domain)
@@ -217,7 +230,7 @@ class LiveRescueConnection(private val endpoint: RescueEndpoint, serverDomain: S
     override suspend fun hello(clientNonce: String): RescueHelloReply {
         val bytes = call("/api/rescue/hello", "POST", buildJsonObject { put("clientNonce", clientNonce) })
         val o = runCatching { json.parseToJsonElement(String(bytes, Charsets.UTF_8)).jsonObject }.getOrNull() ?: throw RescueTransportException.Malformed()
-        val hello = runCatching { json.decodeFromJsonElement(Rescue.Exchange.serializer(), o["hello"]!!) }.getOrNull() ?: throw RescueTransportException.Malformed()
+        val hello = runCatching { helloFromBody(o["hello"]!!.jsonObject, domain) }.getOrNull() ?: throw RescueTransportException.Malformed()
         val sig = HexUtil.decode(o["signatureHex"]?.jsonPrimitive?.contentOrNull ?: "") ?: throw RescueTransportException.Malformed()
         val pq = o["pqSignature"] as? JsonObject
         val seen = trust.seen ?: throw RescueTransportException.Malformed()

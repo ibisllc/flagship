@@ -1,3 +1,4 @@
+import { X509Certificate } from "node:crypto";
 import { createSecureContext, type SecureContext } from "node:tls";
 import type { AlpnChallengeServer } from "./acme/letsEncryptIssuer.js";
 
@@ -27,6 +28,7 @@ export interface CertMaterial {
 
 export class CertManager implements AlpnChallengeServer {
   private real: CertMaterial | null = null;
+  private realX509: X509Certificate | null = null;
   private alpn = new Map<string, CertMaterial>();
   private notAfterMs = 0;
   /**
@@ -44,6 +46,11 @@ export class CertManager implements AlpnChallengeServer {
   install(cert: CertMaterial, notAfterMs: number): void {
     this.real = cert;
     this.notAfterMs = notAfterMs;
+    try {
+      this.realX509 = new X509Certificate(cert.certPem);
+    } catch {
+      this.realX509 = null;
+    }
   }
 
   /** Install (or replace) the certificate served for exactly `name`, the box's control name. */
@@ -81,7 +88,7 @@ export class CertManager implements AlpnChallengeServer {
     };
   }
 
-  /** Returns null if no cert is loaded for this SNI. */
+  /** Returns null if no cert is loaded for this SNI, or none covers it. */
   contextFor(sni: string): SecureContext | null {
     const key = sni.toLowerCase();
     // ALPN challenge cert wins during the (~5s) TLS-ALPN-01 window —
@@ -102,7 +109,9 @@ export class CertManager implements AlpnChallengeServer {
         key: custom.cert.privateKeyPem,
       });
     }
-    if (!this.real) return null;
+    // Only for a name the certificate covers: a stranger on the LAN who sends any other SNI must not learn the
+    // box's account and server names from it.
+    if (!this.real || !this.realX509 || this.realX509.checkHost(key) === undefined) return null;
     return createSecureContext({ cert: this.real.certPem, key: this.real.privateKeyPem });
   }
 

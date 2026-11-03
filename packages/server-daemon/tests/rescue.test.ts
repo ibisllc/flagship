@@ -16,6 +16,7 @@ import tls from "node:tls";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkRescueHello,
+  rescueHelloFromBody,
   deriveIRK,
   ed,
   unwrapAccountFromKeyfile,
@@ -344,7 +345,7 @@ async function openSession(port: number, signer: Keypair, over: { mutate?: (o: R
   const clientNonce = nonce();
   const h = await request(port, "POST", "/api/rescue/hello", { body: { clientNonce } });
   expect(h.status).toBe(200);
-  const hello = h.json.hello as RescueExchange;
+  const hello = rescueHelloFromBody(h.json.hello, FQDN)!;
   const check = checkRescueHello(hello, Buffer.from(h.json.signatureHex, "hex"), stk.publicKey, { serverDomain: FQDN, clientNonce, seenCertSha256: h.seenCertSha, now: clock });
   expect(check).toEqual({ ok: true });
   const order = over.mutate ? over.mutate(hello) : { ...hello, issuedAt: clock };
@@ -446,7 +447,7 @@ describe("rescue session with .com unreachable", () => {
     rig = await startBox({ adminPinned: true });
     const clientNonce = nonce();
     const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
-    const order = { ...(h.json.hello as RescueExchange), issuedAt: clock };
+    const order = { ...rescueHelloFromBody(h.json.hello, FQDN)!, issuedAt: clock };
     const body = { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") };
     expect((await request(rig.port, "POST", "/api/rescue/session", { body })).status).toBe(200);
     expect((await request(rig.port, "POST", "/api/rescue/session", { body })).status).toBe(403);
@@ -468,7 +469,7 @@ describe("rescue session with .com unreachable", () => {
     const clientNonce = nonce();
     const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
     clock += 3 * 60_000;
-    const order = { ...(h.json.hello as RescueExchange), issuedAt: clock };
+    const order = { ...rescueHelloFromBody(h.json.hello, FQDN)!, issuedAt: clock };
     const late = await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
     expect(late.status).toBe(403);
   });
@@ -492,9 +493,9 @@ describe("rescue session with .com unreachable", () => {
       expect(h.status).toBe(200);
       expect(h.seenCertSha).toBe(rogueCertSha);
       // The hello is genuine (the box signed it) but names the box's certificate, not the one on this connection.
-      expect(checkRescueHello(h.json.hello, Buffer.from(h.json.signatureHex, "hex"), stk.publicKey, { serverDomain: FQDN, clientNonce, seenCertSha256: h.seenCertSha, now: clock })).toEqual({ ok: false, reason: "cert-mismatch" });
+      expect(checkRescueHello(rescueHelloFromBody(h.json.hello, FQDN)!, Buffer.from(h.json.signatureHex, "hex"), stk.publicKey, { serverDomain: FQDN, clientNonce, seenCertSha256: h.seenCertSha, now: clock })).toEqual({ ok: false, reason: "cert-mismatch" });
       // Had the phone signed anyway, the order would carry the rogue's hash and the box would refuse it.
-      const order = { ...(h.json.hello as RescueExchange), certSha256: rogueCertSha, issuedAt: clock };
+      const order = { ...rescueHelloFromBody(h.json.hello, FQDN)!, certSha256: rogueCertSha, issuedAt: clock };
       const r = await request((rogue.address() as AddressInfo).port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
       expect(r.status).toBe(403);
     } finally {
@@ -563,27 +564,41 @@ describe("rescue session with .com unreachable", () => {
     expect(rig.notes.filter((n) => n.kind === "server.rescue.refused")).toHaveLength(2);
   });
 
-  it("hello needs a well-formed nonce and is bounded", async () => {
+  it("hello needs a well-formed nonce, never names the server, and has no cap a stranger could use", async () => {
     rig = await startBox({ adminPinned: true });
     expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: "short" } })).status).toBe(400);
     expect((await request(rig.port, "POST", "/api/rescue/hello", { body: Buffer.from("not json") })).status).toBe(400);
-    for (let i = 0; i < 300; i++) expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(200);
-    expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(429);
-    clock += 61_000;
-    expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(200);
+    const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
+    expect(h.status).toBe(200);
+    expect(h.json.hello.serverDomain).toBeUndefined();
+    expect(h.body.toString("utf8")).not.toContain(FQDN);
+    for (let i = 0; i < 400; i++) expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(200);
   });
 
-  it("a flood of hellos drops the oldest pending one instead of refusing the owner", async () => {
+  it("a flood of hellos while the owner signs neither refuses nor drops the owner's hello", async () => {
     rig = await startBox({ adminPinned: true });
     const clientNonce = nonce();
     const first = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
-    for (let i = 0; i < 256; i++) await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
-    const late = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
-    expect(late.status).toBe(200);
-    const order = { ...(first.json.hello as RescueExchange), issuedAt: clock };
-    const stale = await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
-    expect(stale.status).toBe(403);
-    expect((await openSession(rig.port, adminRoot)).reply.status).toBe(200);
+    for (let i = 0; i < 600; i++) await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
+    const order = { ...rescueHelloFromBody(first.json.hello, FQDN)!, issuedAt: clock };
+    const opened = await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
+    expect(opened.status).toBe(200);
+  });
+
+  it("a box nonce is checked by the box's own key: a made-up one, or one for another phone nonce, is refused", async () => {
+    rig = await startBox({ adminPinned: true });
+    const clientNonce = nonce();
+    const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
+    const hello = rescueHelloFromBody(h.json.hello, FQDN)!;
+    const forged = { ...hello, boxNonce: `${hello.boxNonce.slice(0, 12)}${"0".repeat(20)}`, issuedAt: clock };
+    const later = { ...hello, boxNonce: `${(clock + 1).toString(16).padStart(12, "0")}${hello.boxNonce.slice(12)}`, issuedAt: clock };
+    for (const order of [forged, later, { ...hello, clientNonce: nonce(), issuedAt: clock }]) {
+      const r = await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
+      expect(r.status).toBe(403);
+    }
+    // A refused order spends nothing: the real one still opens the session.
+    const order = { ...hello, issuedAt: clock };
+    expect((await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } })).status).toBe(200);
   });
 });
 
@@ -657,7 +672,6 @@ describe("admin devices, revocation and rotation without .com", () => {
     const dev = admitAdminDevice(rig, 32, 3 * 86_400_000);
     await rig.refreshBook();
     for (let i = 0; i < 300; i++) await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
-    expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(429);
     expect((await request(rig.port, "POST", "/api/rescue/revoke", { body: revoke(dev.grant.grantId) })).status).toBe(200);
     expect(rig.revocations.has(dev.grant.grantId)).toBe(true);
   });
@@ -745,7 +759,7 @@ describe("every copy that leaves the server is told to the admin devices", () =>
     rig = await startBox({ adminPinned: true });
     const clientNonce = nonce();
     const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
-    const order = { ...(h.json.hello as RescueExchange), issuedAt: clock };
+    const order = { ...rescueHelloFromBody(h.json.hello, FQDN)!, issuedAt: clock };
     await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
     expect(rig.alerts).toEqual([{ kind: "backup-exported", serviceId: "", stage: "rescue-opened", by: "the admin key", ref: clientNonce, at: clock }]);
     expect(rig.notes.map((n) => n.kind)).toEqual(["server.rescue.opened"]);
@@ -839,7 +853,7 @@ const pqWire = (canonical: Uint8Array) => ({ suite: "hybrid-ed25519-mldsa65/v1",
 async function openHybridSession(port: number): Promise<{ token: string; hello: RescueExchange; reply: Reply }> {
   const clientNonce = nonce();
   const h = await request(port, "POST", "/api/rescue/hello", { body: { clientNonce } });
-  const hello = h.json.hello as RescueExchange;
+  const hello = rescueHelloFromBody(h.json.hello, FQDN)!;
   const order = { ...hello, issuedAt: clock };
   const reply = await request(port, "POST", "/api/rescue/session", {
     body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex"), pqSignature: pqWire(rescueSessionCanonicalBytes(order)) },
@@ -1055,7 +1069,7 @@ describe("the box's hello under keyd and post-quantum", () => {
         { role: "box-stk", subjectId: FQDN, ed25519PubHex: st.ed25519PubHex, now: clock },
       );
       const v = verifyCriticalSignature({
-        message: rescueHelloCanonicalBytes(h.json.hello),
+        message: rescueHelloCanonicalBytes(rescueHelloFromBody(h.json.hello, FQDN)!),
         expectedPurpose: "flagship/rescue-hello/v1",
         envelope: h.json.pqSignature,
         signerEd25519PubHex: st.ed25519PubHex,

@@ -9,6 +9,7 @@ import {
   isContainerBridge,
   lanAddressesFromInterfaces,
   lanPortFromEnv,
+  lanSniAllowed,
   leafCertSha256,
   parseConnectRequest,
   startLanListener,
@@ -19,6 +20,22 @@ import type { HttpRequest } from "../src/runtime.js";
 import { checkLanHint, deriveSTK, deriveSWK, resolveMsgSigner } from "@flagship/protocol";
 
 const ZONE = "home.alice.flagship.services";
+
+/** A minimal TLS ClientHello record naming `sni` (or none). */
+function clientHello(sni?: string): Buffer {
+  const u16 = (n: number) => Buffer.from([n >> 8, n & 0xff]);
+  let ext = Buffer.alloc(0);
+  if (sni) {
+    const host = Buffer.from(sni);
+    const entry = Buffer.concat([Buffer.from([0]), u16(host.length), host]);
+    const list = Buffer.concat([u16(entry.length), entry]);
+    const e = Buffer.concat([u16(0), u16(list.length), list]);
+    ext = Buffer.concat([u16(e.length), e]);
+  }
+  const body = Buffer.concat([Buffer.from([3, 3]), Buffer.alloc(32), Buffer.from([0]), u16(2), Buffer.from([0x00, 0x9c]), Buffer.from([1, 0]), ext]);
+  const hs = Buffer.concat([Buffer.from([1, 0, body.length >> 8, body.length & 0xff]), body]);
+  return Buffer.concat([Buffer.from([0x16, 3, 1]), u16(hs.length), hs]);
+}
 
 const iface = (address: string, internal = false, family = address.includes(":") ? "IPv6" : "IPv4") =>
   ({ address, internal, family }) as os.NetworkInterfaceInfo;
@@ -148,20 +165,39 @@ describe("startLanListener (live sockets)", () => {
 
   it("pipes a raw TLS stream (first byte 0x16) to the backend byte-for-byte", async () => {
     const port = await setup();
-    const hello = Buffer.from([0x16, 0x03, 0x01, 0x00, 0x05, 1, 2, 3, 4, 5]);
+    const hello = clientHello(`photos.${ZONE}`);
     const got = await talk(port, hello, (g) => g.length >= 5 + hello.length);
     expect(Buffer.from(got, "latin1")).toEqual(Buffer.concat([Buffer.from("echo:"), hello]));
+  });
+
+  it("hangs up before the box answers a hello that names no name of the box", async () => {
+    const port = await setup();
+    for (const hello of [clientHello(), clientHello("192.168.1.20"), clientHello("printer.local"), clientHello(`x${ZONE}`)]) {
+      const got = await talk(port, hello, () => false);
+      expect(got).toBe("");
+    }
+    const viaConnect = await talk(port, Buffer.concat([Buffer.from(`CONNECT ${ZONE}:443 HTTP/1.1\r\n\r\n`), clientHello("anything.example")]), () => false);
+    expect(viaConnect).toBe("HTTP/1.1 200 Connection Established\r\n\r\n");
+    expect(backendHits).toBe(0);
+  });
+
+  it("allows only the box's own name and the names under it", () => {
+    expect(lanSniAllowed(ZONE, ZONE)).toBe(true);
+    expect(lanSniAllowed(`App.${ZONE}`, ZONE)).toBe(true);
+    expect(lanSniAllowed(null, ZONE)).toBe(false);
+    expect(lanSniAllowed("alice.flagship.services", ZONE)).toBe(false);
+    expect(lanSniAllowed(`evil${ZONE}`, ZONE)).toBe(false);
   });
 
   it("answers an in-zone CONNECT with 200 and then pipes", async () => {
     const port = await setup();
     const got = await talk(
       port,
-      Buffer.from(`CONNECT photos.${ZONE}:443 HTTP/1.1\r\nHost: photos.${ZONE}:443\r\n\r\nhello`),
-      (g) => g.includes("echo:hello"),
+      Buffer.concat([Buffer.from(`CONNECT photos.${ZONE}:443 HTTP/1.1\r\nHost: photos.${ZONE}:443\r\n\r\n`), clientHello(`photos.${ZONE}`)]),
+      (g) => g.includes("echo:"),
     );
     expect(got.startsWith("HTTP/1.1 200 Connection Established\r\n\r\n")).toBe(true);
-    expect(got).toContain("echo:hello");
+    expect(got).toContain("echo:");
   });
 
   it("refuses an out-of-zone CONNECT without ever reaching the backend", async () => {
@@ -215,7 +251,7 @@ describe("startLanListener (live sockets)", () => {
     const port = await setup();
     await new Promise<void>((r) => backend.close(() => r()));
     backend = net.createServer();
-    expect(await closesWithin(port, Buffer.from([0x16, 0x03, 0x01]), 2_000)).toBe(true);
+    expect(await closesWithin(port, clientHello(ZONE), 2_000)).toBe(true);
   });
 });
 
@@ -243,7 +279,7 @@ describe("startLanListener against a host that hogs the slots", () => {
 
   it("closes a connection that starts a handshake and never completes it", async () => {
     const port = await setup({ handshakeTimeoutMs: 150 });
-    const c = net.connect(port, "127.0.0.1", () => c.write(Buffer.from([0x16, 0x03])));
+    const c = net.connect(port, "127.0.0.1", () => c.write(clientHello(ZONE)));
     expect(await closedWithin(c, 2000)).toBe(true);
   });
 

@@ -6,6 +6,7 @@ import {
   RESCUE_HELLO_TTL_MS,
   checkRescueHello,
   parseRescueExchange,
+  rescueHelloFromBody,
   rescueDiscoveryId,
   rescueHelloCanonicalBytes,
   rescueSessionCanonicalBytes,
@@ -200,5 +201,19 @@ describe("rescue PQ gate vectors (test-vectors/rescue/pq-vectors.json)", () => {
   });
   it("a classical-only order never passes under strict", () => {
     for (const g of PQ.gate.filter((x) => x.envelope.suite === "ed25519/v1" && x.policy.profile === "strict")) expect(g.expect.ok).toBe(false);
+  });
+});
+
+describe("the hello body carries no server name", () => {
+  const body = { clientNonce: "11".repeat(16), boxNonce: "22".repeat(16), certSha256: "ab".repeat(32), issuedAt: 5 };
+  it("the phone puts back the name it connected to", () => {
+    expect(rescueHelloFromBody(body, "Home.Harry.flagship.services")).toEqual({ ...body, serverDomain: "home.harry.flagship.services" });
+  });
+  it("a name in the body is not trusted over the phone's own", () => {
+    expect(rescueHelloFromBody({ ...body, serverDomain: "evil.example" }, "home.harry.flagship.services")?.serverDomain).toBe("home.harry.flagship.services");
+  });
+  it("a malformed body is refused", () => {
+    expect(rescueHelloFromBody(null, "home.harry.flagship.services")).toBeNull();
+    expect(rescueHelloFromBody({ ...body, boxNonce: "zz" }, "home.harry.flagship.services")).toBeNull();
   });
 });

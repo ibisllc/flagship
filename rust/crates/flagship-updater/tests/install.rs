@@ -615,3 +615,91 @@ fn a_restore_with_no_drop_ins_is_unchanged() {
     assert!(!paths.systemd.exists());
     assert!(flagship_updater::release::remove_release_dropins(&paths).is_empty());
 }
+
+#[test]
+fn a_planted_intent_cannot_raise_the_anti_rollback_sequence() {
+    let t = Tmp::new("intent");
+    let paths = temp_paths(&t);
+    let a = build(&Spec::new('a', 5));
+    install(&install_args(&a, &paths)).unwrap();
+    Intent {
+        phase: Phase::Switched,
+        commit: a.commit.clone(),
+        previous: None,
+        sequence: u64::MAX,
+        at_ms: 1,
+    }
+    .write(&paths.state)
+    .unwrap();
+    reconcile(&paths);
+    assert_eq!(
+        fs::read_to_string(paths.state.join("artifact-sequence"))
+            .unwrap()
+            .trim(),
+        "5"
+    );
+    install(&install_args(&build(&Spec::new('b', 6)), &paths)).unwrap();
+}
+
+#[test]
+fn state_files_another_account_owns_are_not_read() {
+    let t = Tmp::new("owner");
+    let p = t.path().join("update-intent.json");
+    fs::write(&p, "x").unwrap();
+    let me = rustix::process::geteuid().as_raw();
+    assert_eq!(
+        flagship_updater::fsutil::read_owned_by(&p, me).as_deref(),
+        Some("x")
+    );
+    assert!(flagship_updater::fsutil::read_owned_by(&p, me.wrapping_add(1)).is_none());
+}
+
+#[test]
+fn an_accepted_manifest_records_its_floor_and_revocations() {
+    let t = Tmp::new("inst");
+    let paths = temp_paths(&t);
+    let a = honest_release('a', 5);
+    let lock = a.lock_text.clone().unwrap();
+    let other = "1".repeat(40);
+    let mpath = t.path().join("m.json");
+    fs::write(
+        &mpath,
+        common::signed_runtime_manifest(1, &lock, "24.22.1", "24.20.0", 7, FAR, &[other.as_str()]),
+    )
+    .unwrap();
+    let mut args = install_args(&a, &paths);
+    args.runtime_manifest = Some(mpath);
+    install(&args).unwrap();
+    let rec = fs::read_to_string(paths.state.join("runtime-manifest-accepted")).unwrap();
+    let f: Vec<&str> = rec.split_whitespace().collect();
+    assert_eq!((f[0], f[2], f[3]), ("7", "24.20.0", other.as_str()));
+}
+
+#[test]
+fn the_recorded_floor_and_revocations_apply_without_a_fresh_manifest() {
+    let digest = "a".repeat(64);
+    let cases = [
+        (format!("7 {digest} 24.30.0 -\n"), "runtime-below-floor"),
+        (
+            format!("7 {digest} 24.0.0 {}\n", "0".repeat(40)),
+            "signer-revoked",
+        ),
+        (format!("7 {digest} 24.0.0 -\n"), ""),
+        (format!("7 {digest}\n"), ""),
+    ];
+    for (recorded, code) in cases {
+        let t = Tmp::new("inst");
+        let paths = temp_paths(&t);
+        fs::create_dir_all(&paths.state).unwrap();
+        fs::write(paths.state.join("runtime-manifest-accepted"), &recorded).unwrap();
+        let b = honest_release('b', 6);
+        let r = install(&install_args(&b, &paths));
+        if code.is_empty() {
+            r.unwrap();
+            continue;
+        }
+        let f = r.unwrap_err();
+        assert_eq!((f.exit, f.refusal.code), (1, code), "{recorded}");
+        assert!(!paths.current.exists());
+    }
+}

@@ -25,14 +25,16 @@ describe("CertManager", () => {
     expect(m.hasReal()).toBe(false);
   });
 
-  it("installs the live cert and returns a SecureContext for any SNI", async () => {
+  it("installs the live cert and serves it only for a name it covers", async () => {
     const m = new CertManager();
     const cert = await makeStubCertPair("home.alice.flagship.services");
     m.install(cert, Date.now() + 90 * 24 * 60 * 60_000);
     expect(m.hasReal()).toBe(true);
     expect(m.contextFor("home.alice.flagship.services")).not.toBeNull();
-    // SecureContext is opaque; just confirm it was produced.
-    expect(m.contextFor("anything")).not.toBeNull();
+    expect(m.contextFor("HOME.alice.flagship.services")).not.toBeNull();
+    expect(m.contextFor("anything")).toBeNull();
+    expect(m.contextFor("192.168.1.20")).toBeNull();
+    expect(m.contextFor("other.alice.flagship.services")).toBeNull();
   });
 
   it("present() returns a disposer that removes the ALPN slot", async () => {

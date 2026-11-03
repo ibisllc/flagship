@@ -14,7 +14,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hexToBytes } from "@noble/hashes/utils";
-import { verifyRescueHello, type RescueHello } from "@flagship/protocol";
+import { rescueHelloFromBody, verifyRescueHello } from "@flagship/protocol";
 import { addBox, pair, pods, waitOnline, type Box } from "../../lib/fleet.js";
 import { ADMIN, CONTROL, assert, http, postJson, short, sleep, tryHttp } from "../../lib/harness.js";
 import {
@@ -148,8 +148,8 @@ export const rustCustody: Group = {
         const clientNonce = randomBytes(16).toString("hex");
         const h = await postJson(`https://${bx.fqdn}/api/rescue/hello`, { clientNonce });
         assert(h.status === 200, `rescue hello ${h.status}: ${short(h.text)}`);
-        const hello = h.json.hello as RescueHello;
-        assert(hello.clientNonce === clientNonce && verifyRescueHello(hello, hexToBytes(h.json.signatureHex), hexToBytes(stk)), "the hello is not signed by the box's own key");
+        const hello = rescueHelloFromBody(h.json.hello, bx.fqdn);
+        assert(hello && hello.clientNonce === clientNonce && verifyRescueHello(hello, hexToBytes(h.json.signatureHex), hexToBytes(stk)), "the hello is not signed by the box's own key");
         const heartbeat = await until("a heartbeat after the fallback", 8 * 60_000, async () => {
           const r = (await pods(A.username)).find((p) => p.serverDomain === bx.fqdn);
           const at = reportedAtMs(r?.lastReported);
