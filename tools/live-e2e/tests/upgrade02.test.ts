@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BRANCH_REF_REFUSAL, parseLsRemote, podView, productAtLeast } from "../lib/upgrade02.js";
+import * as builder from "@flagship/builder";
 import { preseedFor } from "../lib/isoBox.js";
 
 describe("F9 lane helpers", () => {
@@ -29,7 +30,7 @@ describe("F9 lane helpers", () => {
     expect(podView({ identityPubKey: "ab", lastReported: 1, updateRequired: null, currentCert: { notAfter: 1 } }).updateRequired).toBeNull();
   });
 
-  it("the 0.3 engine refuses a 0.2 app's recipe (installerGitRef \"main\") unless the installer names the commit", () => {
+  it("the 0.3 engine refuses a 0.2 app's recipe (installerGitRef \"main\") unless the installer names the commit", async () => {
     // Structurally valid recipe; the engine does not verify signatures (the native caller does).
     const hex = (n: number, len: number) => n.toString(16).padStart(2, "0").repeat(len);
     const recipe = JSON.stringify({
@@ -55,7 +56,8 @@ describe("F9 lane helpers", () => {
       rckPubKey: hex(5, 32),
       blobSignatureHex: hex(6, 64),
     });
-    expect(() => preseedFor(recipe)).toThrow(BRANCH_REF_REFUSAL);
-    expect(() => preseedFor(recipe, { installerGitRef: "c".repeat(40) })).not.toThrow();
+    // This checkout's builder: the lanes use the gym worktree's, which CI does not have.
+    await expect(preseedFor(recipe, {}, builder)).rejects.toThrow(BRANCH_REF_REFUSAL);
+    await expect(preseedFor(recipe, { installerGitRef: "c".repeat(40) }, builder)).resolves.toBeTypeOf("string");
   });
 });

@@ -150,8 +150,8 @@ export async function gymBuilder(): Promise<typeof import("@flagship/builder")> 
   return (await import(pathToFileURL(entry).href)) as typeof import("@flagship/builder");
 }
 
-export async function preseedFor(recipeJson: string, burn: IsoBurn = {}): Promise<string> {
-  const { buildDebianPreseed, optionsFromRecipeJson } = await gymBuilder();
+export async function preseedFor(recipeJson: string, burn: IsoBurn = {}, builder?: Pick<typeof import("@flagship/builder"), "buildDebianPreseed" | "optionsFromRecipeJson">): Promise<string> {
+  const { buildDebianPreseed, optionsFromRecipeJson } = builder ?? (await gymBuilder());
   let preseed = buildDebianPreseed(optionsFromRecipeJson(recipeJson, { bootHost: burn.bootHost ?? `https://boot.${CONTROL}`, ...(burn.installerGitRef ? { installerGitRef: burn.installerGitRef } : {}) }));
   // Never touch production: the installer's progress beacons are hard-coded to it (luks-burn.ts).
   preseed = preseed.replace("d-i preseed/early_command string ", "d-i preseed/early_command string echo '127.0.0.1 flagshipserver.com' >> /etc/hosts; ");
