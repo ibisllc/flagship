@@ -219,7 +219,7 @@ struct VoiciSignInScreen: View {
                     Text("Check the code matches the one on the page")
                         .font(.footnote).foregroundStyle(.secondary)
                     Text(verbatim: code)
-                        .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                        .font(FS.font.scaled(34, weight: .semibold, design: .monospaced))
                         .accessibilityIdentifier("voici-signin-code")
                 }
             }

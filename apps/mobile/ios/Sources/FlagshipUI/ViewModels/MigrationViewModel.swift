@@ -55,6 +55,8 @@ public final class MigrationViewModel {
     private let mailbox: any SecretMailboxClient
     private let screens: any ScreensClient
     private let holdStore: MigrationHoldStore
+    /// The server keys this device pinned at first blessing (docs/first-contact.md).
+    private let pins: ServerKeyPins
     /// ONE biometric ceremony → the IRK (mailbox auth) + the admin root when
     /// this device holds one (the sensitive order signer, `orderKey ?? irk`).
     private let signer: @MainActor (String) async throws -> (irk: Curve25519.Signing.PrivateKey, orderKey: Curve25519.Signing.PrivateKey?)
@@ -69,6 +71,7 @@ public final class MigrationViewModel {
         serverFqdn: String,
         username: String,
         holdStore: MigrationHoldStore = MigrationHoldStore(),
+        pins: ServerKeyPins = ServerKeyPins(),
         signer: (@MainActor (String) async throws -> (irk: Curve25519.Signing.PrivateKey, orderKey: Curve25519.Signing.PrivateKey?))? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         randomNonce: @escaping () -> Data = { ServerMigrationFlow.random32() },
@@ -80,6 +83,7 @@ public final class MigrationViewModel {
         self.serverFqdn = serverFqdn
         self.username = username
         self.holdStore = holdStore
+        self.pins = pins
         self.now = now
         self.randomNonce = randomNonce
         self.pollIntervalNs = pollIntervalNs
@@ -153,7 +157,7 @@ public final class MigrationViewModel {
             }
             // The key this phone pinned at the server's first blessing; `.com`'s
             // directory may only refuse (docs/first-contact.md).
-            guard let pinned = ServerKeyPins().pinnedStkHex(serverFqdn) else {
+            guard let pinned = pins.pinnedStkHex(serverFqdn) else {
                 mode = .failed(String(localized: "Approve this server once from this phone first, then migrate it."))
                 return
             }

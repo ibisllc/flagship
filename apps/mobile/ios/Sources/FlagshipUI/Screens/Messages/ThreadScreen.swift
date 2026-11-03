@@ -207,7 +207,7 @@ struct ThreadScreen: View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("Reply", text: $draft, axis: .vertical)
                 .lineLimit(1...6)
-                .textFieldStyle(.roundedBorder)
+                .fsInputBox()
                 .accessibilityIdentifier("thread-compose")
                 .onChange(of: draft) { _, v in if v.count > 2_000 { draft = String(v.prefix(2_000)) } }
             Button {

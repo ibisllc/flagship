@@ -47,6 +47,13 @@ final class MigrationViewModelTests: XCTestCase {
         return MigrationHoldStore(defaults: defaults)
     }
 
+    /// This phone blessed the server once, so it holds the box's key (docs/first-contact.md).
+    private func pinnedPins(_ hex: String? = nil) -> ServerKeyPins {
+        let pins = ServerKeyPins.volatile()
+        pins.pin(HexUtil.decode(hex ?? stkHex)!, for: server)
+        return pins
+    }
+
     private func session(
         phase: String,
         newServerDomain: String? = nil,
@@ -69,6 +76,7 @@ final class MigrationViewModelTests: XCTestCase {
         mailbox: MockSecretMailboxClient? = nil,
         screens: MockScreensClient? = nil,
         holdStore: MigrationHoldStore? = nil,
+        pins: ServerKeyPins? = nil,
         orderKey: Curve25519.Signing.PrivateKey? = nil,
         onSign: (@MainActor () -> Void)? = nil
     ) -> MigrationViewModel {
@@ -80,6 +88,7 @@ final class MigrationViewModelTests: XCTestCase {
             serverFqdn: server,
             username: username,
             holdStore: holdStore ?? freshHoldStore(),
+            pins: pins ?? pinnedPins(),
             signer: { _ in onSign?(); return (irk, orderKey) },
             now: { 1700 },
             randomNonce: { Data(repeating: 7, count: 32) }
@@ -112,6 +121,24 @@ final class MigrationViewModelTests: XCTestCase {
         let vm = makeVM(migration: MockServerMigrationClient(), mailbox: MockSecretMailboxClient())
         await vm.load()
         if case .failed = vm.mode {} else { XCTFail("expected failed, got \(vm.mode)") }
+    }
+
+    func testLoadRefusesAServerThisPhoneNeverBlessed() async {
+        var signed = false
+        let vm = makeVM(migration: MockServerMigrationClient(), pins: .volatile(), onSign: { signed = true })
+        await vm.load()
+        if case .failed = vm.mode {} else { XCTFail("expected failed, got \(vm.mode)") }
+        XCTAssertNil(vm.oldStkPubHex, "the directory's key alone is never trusted")
+        XCTAssertTrue(vm.startBlocked)
+        XCTAssertFalse(signed)
+    }
+
+    func testLoadRefusesWhenTheDirectoryKeyDiffersFromThePin() async {
+        let vm = makeVM(migration: MockServerMigrationClient(), pins: pinnedPins(String(repeating: "cd", count: 32)))
+        await vm.load()
+        XCTAssertEqual(vm.mode, .failed(FirstContact.keyChangedText))
+        XCTAssertNil(vm.oldStkPubHex)
+        XCTAssertTrue(vm.startBlocked)
     }
 
     func testUnreadableBackupSignalGatesConservatively() async {
