@@ -312,7 +312,7 @@ export async function destroyIsoServer(o: { serverIds: string[]; fqdns: string[]
 }
 
 export function isoBox(acct: Account, r: IsoRecipe, srv: IsoServer): Box {
-  return { account: acct.username, serverName: r.serverName, fqdn: r.fqdn, serverId: srv.serverId, via: "gym-provision", online: false, serial: r.authCode.serial, ipv4: srv.ipv4 };
+  return { account: acct.username, serverName: r.serverName, fqdn: r.fqdn, serverId: srv.serverId, via: "gym-provision", ordersKey: "irk", online: false, serial: r.authCode.serial, ipv4: srv.ipv4 };
 }
 
 export function removeIso(path: string): void {

@@ -41,6 +41,9 @@ export interface Box {
   /** UpCloud server id when known (gym-provisioned boxes always; demo boxes once the Worker reports it). */
   serverId: string | null;
   via: "demo" | "gym-provision";
+  /** Which key the box verifies phone orders with: cloud-init boxes take the delegated key from their env
+   *  (FLAGSHIP_PSK_PUB_HEX); a box installed from the ISO has none and uses its config's owner IRK, as the apps sign. */
+  ordersKey?: "delegated" | "irk";
   online: boolean;
   session?: string;
   /** The AuthCode serial a gym-provisioned box registered with (its install events are keyed by it). */
@@ -342,7 +345,7 @@ export async function pair(acct: Account, box: Box): Promise<string> {
   if (box.session) return box.session;
   const token = bytesToHex(randomBytes(24));
   const order: PhoneOrder = { type: "add-paired-session", serverId: box.fqdn, token, issuedAt: Date.now() };
-  const sig = bytesToHex(signPhoneOrder(order, acct.keys.delegated));
+  const sig = bytesToHex(signPhoneOrder(order, box.ordersKey === "irk" ? acct.keys.irk : acct.keys.delegated));
   const r = await postJson(`https://${box.fqdn}/api/orders-from-user`, { request: order, signature: sig });
   assert(r.status === 200 || r.status === 204, `add-paired-session ${r.status}: ${short(r.text)}`);
   box.session = token;
