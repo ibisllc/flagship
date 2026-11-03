@@ -884,9 +884,9 @@ object ServerShare {
 
     /** Same characters as JS `String.prototype.trim` (WhiteSpace + LineTerminator). */
     private fun isJsSpace(c: Char): Boolean = when (c) {
-        '\t', '\n', '\u000b', '\u000c', '\r', ' ', ' ', ' ', ' ', ' ',
-        ' ', ' ', '　', '﻿' -> true
-        else -> c in ' '..' '
+        '\t', '\n', '\u000b', '\u000c', '\r', ' ', '\u00a0', '\u1680', '\u2028', '\u2029',
+        '\u202f', '\u205f', '\u3000', '\ufeff' -> true
+        else -> c in '\u2000'..'\u200a'
     }
 
     private fun jsTrim(s: String): String = s.trim(::isJsSpace)

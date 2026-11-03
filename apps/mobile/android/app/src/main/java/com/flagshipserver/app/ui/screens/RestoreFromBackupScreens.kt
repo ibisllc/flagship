@@ -16,6 +16,8 @@ import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -77,7 +79,7 @@ fun RestoreFromPhoneScreen(onPick: (PhoneBackupCopies.Copy) -> Unit, onBack: () 
     val context = LocalContext.current
     val app = LocalAppState.current
     val copies = remember { PhoneBackupCopies.from(context) }
-    val pods = app.pods.value
+    val pods by app.pods.collectAsState()
     // Servers of this account first (a server with no copy says so), then servers
     // that are gone but whose copies are still here.
     val known = pods.map { it.fqdn.lowercase() to it.name.ifEmpty { it.fqdn.substringBefore('.') } }

@@ -72,6 +72,8 @@ fun HomeTab() {
     val toasts = LocalToastCenter.current
     val pods by app.pods.collectAsState()
     val orderedPods by app.orderedPods.collectAsState()
+    val currentUser by app.currentUser.collectAsState()
+    val currentPodId by app.currentPodId.collectAsState()
     val scope = rememberCoroutineScope()
     val orderSaver = com.flagshipserver.app.core.rememberServerOrderSaver()
     // Run a reorder: UNDISPATCHED so the new order is on screen in the same
@@ -202,7 +204,7 @@ fun HomeTab() {
     }
     LaunchedEffect(nameDibsClient) { dibsWindow = runCatching { nameDibsClient.window() }.getOrNull() }
 
-    LaunchedEffect(app.currentPodId.value, vm) { vm.load() }
+    LaunchedEffect(currentPodId, vm) { vm.load() }
 
     // The pod-list reconcile + the account-level "which boxes are waiting for
     // approval?" feed now ride the app-scope LiveSync canal (the `/stream`
@@ -213,7 +215,7 @@ fun HomeTab() {
     // sign-in keeps the first paint fresh even before LiveSync's first tick
     // lands; the `reconciler`/`approvalWatcher` objects stay for pull-to-refresh
     // (`onRefresh` below forces one immediate directory read).
-    LaunchedEffect(app.currentUser.value) {
+    LaunchedEffect(currentUser) {
         reconciler.reconcile()
         // Prefer a live box-direct leadership read over the relay value the
         // reconcile applied — best-effort, on-demand (no new poller).
@@ -226,8 +228,8 @@ fun HomeTab() {
     // Silent on failure — we'd rather under-nudge / under-warn than
     // flash a banner on a transient network blip.
     val hasOnlinePod = pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
-    LaunchedEffect(hasOnlinePod, app.currentUser.value) {
-        val u = app.currentUser.value
+    LaunchedEffect(hasOnlinePod, currentUser) {
+        val u = currentUser
         if (!u.isNullOrEmpty()) {
             runCatching { server.hasCloudRecovery(u) }
                 .onSuccess { app.setHasCloudRecovery(it) }
@@ -568,8 +570,9 @@ fun HomeTab() {
         }
         composable("offline-control/{focus}") { entry ->
             val app = com.flagshipserver.app.core.LocalAppState.current
+            val user by app.currentUser.collectAsState()
             com.flagshipserver.app.ui.screens.OfflineControlScreen(
-                username = app.currentUser.value.orEmpty(),
+                username = user.orEmpty(),
                 focus = entry.arguments?.getString("focus")?.let(android.net.Uri::decode),
                 onBack = { nav.popBackStack() },
             )

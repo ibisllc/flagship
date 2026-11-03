@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.ui.shell.tabs
 
+import android.annotation.SuppressLint
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -27,6 +28,7 @@ import com.flagshipserver.app.core.LocalPodScope
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.PodScope
+import kotlinx.coroutines.flow.StateFlow
 
 private const val KEY_POD = "placement.pod"
 private const val KEY_PINNED = "placement.pinned"
@@ -50,6 +52,13 @@ fun NavController.markOnPod(podId: String, pinned: Boolean = false) {
         it[KEY_PINNED] = pinned
     }
 }
+
+// A screen inherits its server from every entry below it, and Navigation 2.8
+// exposes only the current and previous entries publicly: the whole stack is
+// readable only through this group-restricted StateFlow (present since 2.6).
+// Kept to this one accessor so a Navigation upgrade has one place to change.
+@SuppressLint("RestrictedApi")
+private fun NavController.backStackFlow(): StateFlow<List<NavBackStackEntry>> = currentBackStack
 
 private fun NavBackStackEntry.mark(): CreationPlacement.Mark? = runCatching {
     val id = savedStateHandle.get<String>(KEY_POD) ?: return@runCatching null
@@ -75,7 +84,7 @@ fun PodScoped(
     val globalBuild = LocalBuildClient.current
     val pods by app.pods.collectAsState()
     val leaderId by app.leaderPodId.collectAsState()
-    val stack by nav.currentBackStack.collectAsState()
+    val stack by nav.backStackFlow().collectAsState()
     @Suppress("UNUSED_VARIABLE") val version = state.version
 
     // While this screen animates out it has left the back stack: keep the

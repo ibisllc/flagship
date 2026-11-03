@@ -135,6 +135,7 @@ fun TrustedDevicesScreen(nav: NavController) {
     val state = vm.state.collectAsState().value
     val pendingRePair = vm.pendingRePair.collectAsState().value
     val accountDisplayName = vm.accountDisplayName.collectAsState().value
+    val currentUser = app.currentUser.collectAsState().value
     val scope = rememberCoroutineScope()
     var confirmReject by remember { mutableStateOf(false) }
     var rejectMessage by remember { mutableStateOf<String?>(null) }
@@ -186,8 +187,8 @@ fun TrustedDevicesScreen(nav: NavController) {
     ) {
         FSGroup(header = stringResource(R.string.account)) {
             FSRow(
-                title = accountDisplayName ?: "@${app.currentUser.value.orEmpty()}",
-                subtitle = "@${app.currentUser.value.orEmpty()}",
+                title = accountDisplayName ?: "@${currentUser.orEmpty()}",
+                subtitle = "@${currentUser.orEmpty()}",
                 icon = Icons.Outlined.AccountCircle,
                 iconTint = FS.colors.accent,
                 onClick = if (canManageNames) ({

@@ -196,7 +196,8 @@ fun CreateServerScreen(
     // Prefilled with the address the preview shows ("home", or the next
     // free one), so Next never says "Enter a subdomain." under a preview
     // that already names one (device bug M6).
-    val takenLabels = LocalAppState.current.pods.value.map { it.fqdn.substringBefore('.').lowercase() }
+    val podsNow by LocalAppState.current.pods.collectAsState()
+    val takenLabels = podsNow.map { it.fqdn.substringBefore('.').lowercase() }
     var name by rememberSaveable { mutableStateOf(preset?.name ?: ServerLabel.firstFree(takenLabels)) }
     var description by rememberSaveable { mutableStateOf("") }
     var qrText by remember { mutableStateOf("") }

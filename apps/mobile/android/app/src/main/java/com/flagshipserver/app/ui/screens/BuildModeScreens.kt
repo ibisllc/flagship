@@ -461,7 +461,8 @@ fun BuildGitScreen(nav: NavController) {
     val targetPod = podScope?.pod ?: appState.currentPod ?: appState.leaderPod
     val holder: BuildGitHolder = viewModel()
     val current = holder.vm
-    val vm = if (current != null && (holder.podId == targetPod?.podId || current.phase.value !is BuildGitViewModel.GitPhase.Idle)) {
+    val currentPhase = current?.phase?.collectAsState()?.value
+    val vm = if (current != null && (holder.podId == targetPod?.podId || currentPhase !is BuildGitViewModel.GitPhase.Idle)) {
         current
     } else {
         BuildGitViewModel(

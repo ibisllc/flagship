@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,8 +96,9 @@ fun RecoveryScreen(nav: NavController) {
     // A record from before `.com` checked its passkey (SEC-REPAIR-001): a quiet "Update" row.
     var passkeyLegacy by remember { mutableStateOf(false) }
     var showUpdate by remember { mutableStateOf(false) }
-    LaunchedEffect(app.currentUser.value) {
-        val u = app.currentUser.value ?: return@LaunchedEffect
+    val currentUser by app.currentUser.collectAsState()
+    LaunchedEffect(currentUser) {
+        val u = currentUser ?: return@LaunchedEffect
         passkeyLegacy = runCatching { flagshipServer.recoveryRecordState(u) }.getOrNull()?.let { !it.passkeyRequired } ?: false
     }
     if (showUpdate) {
