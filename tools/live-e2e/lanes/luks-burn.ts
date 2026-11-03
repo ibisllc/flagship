@@ -107,6 +107,27 @@ async function dnsBase(): Promise<{ servers: number; dns: number }> {
   return { servers: r.json?.servers?.length ?? -1, dns: r.json?.dnsWouldDelete ?? -1 };
 }
 
+/**
+ * A failed install holds at "FLAGSHIP INSTALL FAILED" with the last FATAL lines on the console and leaves its log on
+ * the target. Before teardown, screenshot that console, then open d-i's shell (Alt+F2) and print the log's tail
+ * (vnc-screenshot.py types only unshifted keys, which the command below needs no more of).
+ */
+async function consoleEvidence(serverId: string, user: string): Promise<void> {
+  const ra = await up("PUT", `/server/${serverId}`, { server: { remote_access_enabled: "yes", remote_access_type: "vnc" } });
+  if (ra.status >= 300) return log(`console evidence: VNC not enabled (${ra.status})`);
+  await sleep(5_000);
+  const py = join(import.meta.dirname, "vnc-screenshot.py");
+  const out = join(process.env.GYM_RUN_DIR || WORK, `luks-burn-${user}`);
+  mkdirSync(out, { recursive: true });
+  for (const [name, keys] of [
+    ["console.png", ["wait2"]],
+    ["bootstrap-log.png", ["alt+f2", "wait2", "enter", "wait2", "text:tail -n 45 /target/var/log/flagship-bootstrap.log", "enter", "wait3"]],
+  ] as const) {
+    const r = spawnSync("python3", [py, serverId, join(out, name), ...keys], { encoding: "utf8", timeout: 120_000 });
+    log(`console evidence ${name}: ${r.status === 0 ? join(out, name) : `failed (${(r.stderr || "").trim().split("\n").at(-1)})`}`);
+  }
+}
+
 async function main(): Promise<number> {
   if (!ADMIN) throw new Error("GYM_ADMIN_SECRET is not set (source .gym-secrets.env)");
   token = readFileSync(TOKEN_FILE, "utf8").trim();
@@ -305,6 +326,7 @@ async function main(): Promise<number> {
     ok = true;
   } catch (e) {
     log(`LANE FAILED: ${(e as Error).message}`);
+    if (serverId) await consoleEvidence(serverId, user);
   } finally {
     // 5. cleanup, always
     log("cleanup");

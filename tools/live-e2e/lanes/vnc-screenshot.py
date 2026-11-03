@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Screenshot (and optionally type into) the VNC console of an UpCloud server.
-Used to see a burn-lane server that has no serial output: it turns remote access on
-first (PUT /server/<uuid> {"server":{"remote_access_enabled":"yes","remote_access_type":"vnc"}}).
+Used to see a burn-lane server that has no serial output. Turn remote access on first
+(PUT /server/<uuid> {"server":{"remote_access_enabled":"yes","remote_access_type":"vnc"}}); this script does not.
   python3 vnc-screenshot.py <server uuid> out.png [enter|esc|ctrl+c|alt+f2|waitN|text:abc ...]
 Keys without shift only (no ( ) $ | _ or capitals). Reads the token from
 ~/.config/flagship/upcloud-token and never prints it."""
