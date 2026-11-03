@@ -319,8 +319,8 @@ meta_kickoff() {
   RUNBOOK="9. Publish the VM appliances"
   WHAT="Dispatches vm-appliance.yml for amd64 and arm64 now that the endorsement is on main, so the one to three hour builds run while you deploy."
   read -r -d '' CMDS <<'EOF' || true
-gh workflow run vm-appliance.yml --ref main -f arch=amd64 -f git_ref=main -f release=latest-endorsed
-gh workflow run vm-appliance.yml --ref main -f arch=arm64 -f git_ref=main -f release=latest-endorsed
+gh workflow run vm-appliance.yml --ref main -f arch=amd64 -f git_ref=main -f release=box-release
+gh workflow run vm-appliance.yml --ref main -f arch=arm64 -f git_ref=main -f release=box-release
 gh run list --workflow vm-appliance.yml --limit 4
 EOF
   GATE="Both runs show as queued or in progress on the pinned commit."
@@ -460,7 +460,7 @@ bash scripts/publish-iso-seed.sh <iso-seed run id>            (GitHub release as
 git add -- apps/com/wrangler.toml && git commit -m "Publish the USB seed"
 git push origin HEAD:main
 EOF
-  GATE="Each manifest's commit equals the endorsed release; its sha256 is recorded for the status file. FLAGSHIP_ISO_SEED is set with the seed's real url and size, and the seed sha256 equals the iso-seed.yml pin."
+  GATE="Each manifest's commit equals release/box-release.json's commit (the box artifact 0.3 recipes name); its sha256 is recorded for the status file. FLAGSHIP_ISO_SEED is set with the seed's real url and size, and the seed sha256 equals the iso-seed.yml pin."
   ROLLBACK="Re-point the manifest at the previous commit and redeploy .com; old R2 parts stay."
 }
 meta_redeployA() {
@@ -589,7 +589,7 @@ bash scripts/publish-vm-appliance.sh <arm64 run id>
 git add -- apps/web/public/downloads/FlagshipVMAppliance-arm64.json && git commit -m "Publish the rebuilt arm64 VM appliance"
 git push origin HEAD:main
 EOF
-  GATE="The arm64 manifest commit equals the endorsed release."
+  GATE="The arm64 manifest commit equals release/box-release.json's commit."
   ROLLBACK="Re-point the manifest at the previous commit and redeploy .com."
 }
 meta_redeployB() {
@@ -1487,8 +1487,8 @@ run_kickoff() {
   [ -n "$(st_get endorsed)" ] || warn "no endorsement is recorded in this run: the appliances bake the newest endorsed release, so a build started before the endorsement is stale"
   XA "$REPO" gh run list --workflow vm-appliance.yml --limit 4
   confirm "Dispatch the amd64 and arm64 appliance builds on main now?" || return 10
-  XA "$REPO" gh workflow run vm-appliance.yml --ref main -f arch=amd64 -f git_ref=main -f release=latest-endorsed
-  XA "$REPO" gh workflow run vm-appliance.yml --ref main -f arch=arm64 -f git_ref=main -f release=latest-endorsed
+  XA "$REPO" gh workflow run vm-appliance.yml --ref main -f arch=amd64 -f git_ref=main -f release=box-release
+  XA "$REPO" gh workflow run vm-appliance.yml --ref main -f arch=arm64 -f git_ref=main -f release=box-release
   st_w set applianceDispatchedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   sleep 6
   XA "$REPO" gh run list --workflow vm-appliance.yml --limit 4
@@ -1867,8 +1867,9 @@ publish_arch() {
   XA "$WT" env "PATH=$PATH" bash scripts/publish-vm-appliance.sh "$id"
   local mf="$WT/apps/web/public/downloads/FlagshipVMAppliance-$arch.json" commit sha
   commit=$(json_field commit < "$mf"); sha=$(json_field sha256 < "$mf")
-  local endorsed; endorsed=$(st_get endorsed)
-  if [ -n "$endorsed" ] && [ "$commit" != "$endorsed" ]; then warn "the $arch image bakes $(short "$commit"), not the endorsed $(short "$endorsed")"; confirm "Publish it anyway?" || return 11; fi
+  # 0.3 Studios use an appliance only when its commit equals the recipe's, i.e. box-release.json's commit.
+  local want; want=$(st_get artifactCommit); [ -n "$want" ] || want=$(json_field commit < "$WT/release/box-release.json")
+  if [ -n "$want" ] && [ "$commit" != "$want" ]; then warn "the $arch image bakes $(short "$commit"), not the box release $(short "$want") that 0.3 recipes name"; confirm "Publish it anyway?" || return 11; fi
   st_w set "appliance_$arch" "$sha"
   st_w set "applianceRun_$arch" "$id"
   st_w del deferred "$arch"
