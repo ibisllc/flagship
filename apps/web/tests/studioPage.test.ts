@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
 describe("/studio/ — desktop builder download and pairing guide", () => {
-  it("shows both available desktop downloads and direct phone-pairing steps", async () => {
+  it("shows every available desktop download and direct phone-pairing steps", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/studio/" });
 
@@ -10,6 +10,7 @@ describe("/studio/ — desktop builder download and pairing guide", () => {
     expect(r.body).toContain("Get Flagship Studio");
     expect(r.body).toContain('href="/download/mac"');
     expect(r.body).toContain('href="/download/windows"');
+    expect(r.body).toContain('href="/download/linux"');
     expect(r.body).toContain("Studio shows a QR code and a short pairing code");
     expect(r.body).toContain("Pair with Studio");
     expect(r.body).toContain("Already downloaded a recipe from the webapp?");
@@ -22,6 +23,7 @@ describe("/studio/ — desktop builder download and pairing guide", () => {
     expect(r.body).toContain("userAgentData?.platform");
     expect(r.body).toContain('data-platform="mac"');
     expect(r.body).toContain('data-platform="windows"');
+    expect(r.body).toContain('data-platform="linux"');
     expect(r.body).toContain("is-preferred");
   });
 });

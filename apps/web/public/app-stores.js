@@ -2,6 +2,23 @@
 // homepage and the open-in-app page (/open/) both render their store buttons
 // from this file, so the two can never disagree. A null url leaves the
 // button as an inert placeholder showing the store name.
+//
+// STUDIO_EXPERIMENTAL is the one switch per desktop platform for the
+// "Experimental" tag on the Flagship Studio downloads: every page, in every
+// language, marks the tag with data-studio-experimental="<platform>", and a
+// platform set to false here loses it everywhere. The tag stays in the HTML
+// (shown without JavaScript), so a platform is only ever un-tagged on purpose.
+(function () {
+  "use strict";
+  const STUDIO_EXPERIMENTAL = {
+    mac: false,
+    windows: true,
+    linux: true,
+  };
+  document.querySelectorAll("[data-studio-experimental]").forEach((el) => {
+    if (STUDIO_EXPERIMENTAL[el.getAttribute("data-studio-experimental")] === false) el.remove();
+  });
+})();
 (function () {
   "use strict";
   const STORES = {

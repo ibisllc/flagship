@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Download Flagship Studio for macOS or Windows and pair it with the Flagship app.">
+  <meta name="description" content="Download Flagship Studio for macOS, Windows or Linux and pair it with the Flagship app.">
   <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)">
   <title>Get Flagship Studio</title>
@@ -25,7 +25,7 @@
       color: var(--ink-muted);
     }
     body[data-mobile="true"] .mobile-note { display: block; }
-    .downloads { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-6) 0; }
+    .downloads { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); margin: var(--space-6) 0; }
     .download {
       display: flex;
       flex-direction: column;
@@ -83,7 +83,7 @@
     <h1>Build your server from your computer.</h1>
     <p class="lede">Studio pairs with the Flagship app, receives the server recipe your phone authorized, and writes the boot USB.</p>
 
-    <p class="mobile-note">Open <strong>flagshipserver.com/studio</strong> on the Mac or Windows computer you will use to create the server.</p>
+    <p class="mobile-note">Open <strong>flagshipserver.com/studio</strong> on the Mac, Windows or Linux computer you will use to create the server.</p>
 
     <div class="downloads" aria-label="Download Flagship Studio">
       <a class="download" data-platform="mac" href="/download/mac">
@@ -93,8 +93,13 @@
       </a>
       <a class="download" data-platform="windows" href="/download/windows">
         <span class="recommended">Recommended for this computer</span>
-        <strong>Download for Windows <em class="tag">Experimental</em></strong>
+        <strong>Download for Windows <em class="tag" data-studio-experimental="windows">Experimental</em></strong>
         <span>Windows 11 · ZIP · not yet proven on every PC</span>
+      </a>
+      <a class="download" data-platform="linux" href="/download/linux">
+        <span class="recommended">Recommended for this computer</span>
+        <strong>Download for Linux <em class="tag" data-studio-experimental="linux">Experimental</em></strong>
+        <span>x86-64 · AppImage · needs Node.js 22 or later, pkexec and xorriso</span>
       </a>
     </div>
 
@@ -104,7 +109,7 @@
       <li><div><strong>Write and boot the USB.</strong><p>Choose the target drive in Studio. Your phone approves the recipe; Studio handles the operating-system image and USB.</p></div></li>
     </ol>
 
-    <p class="footnote">Already downloaded a recipe from the webapp? Open or paste it in Studio. On Linux? <a href="/download/linux">Get the AppImage</a> <em class="tag">Experimental</em> (x86-64; needs Node.js 22 or later).</p>
+    <p class="footnote">Already downloaded a recipe from the webapp? Open or paste it in Studio.</p>
   </main>
 
   <footer class="colophon"><span>© 2026 Flagship · Patent Pending</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
@@ -114,11 +119,11 @@
       const source = String(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
       const mobile = /android|iphone|ipad|ipod/.test(source) || /android|iphone|ipad|ipod/i.test(navigator.userAgent);
       document.body.dataset.mobile = mobile ? "true" : "false";
-      const preferred = source.includes("win") ? "windows" : source.includes("mac") ? "mac" : "";
+      const preferred = mobile ? "" : source.includes("win") ? "windows" : source.includes("mac") ? "mac" : source.includes("linux") && !source.includes("cros") ? "linux" : "";
       if (preferred) document.querySelector(`[data-platform="${preferred}"]`)?.classList.add("is-preferred");
     })();
   </script>
-  <script src="/app-stores.js" defer></script>
+  <script src="/app-stores.js"></script>
   <script src="/i18n.js" defer></script>
   <script src="/motion.js" defer></script>
 </body>

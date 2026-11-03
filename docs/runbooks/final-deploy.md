@@ -1071,6 +1071,15 @@ different one. Then update the two URLs in
 "Experimental"; neither has been run on a real Windows PC or Linux desktop beyond the
 2026-10-18 Windows run recorded in AGENTS.md.
 
+**Dropping a platform's "Experimental" tag** (0.3: Windows, once its hardware tests
+pass) is one line: set the platform to `false` in `STUDIO_EXPERIMENTAL` at the top of
+`apps/web/public/app-stores.js` (e.g. `windows: false,`), then redeploy `.com` (step 7).
+Every page in every language marks the tag with `data-studio-experimental="<platform>"`,
+so no page or translation is edited. Update the pin in
+`apps/web/tests/marketingPages.test.ts` ("Studio platforms that have not passed a
+hardware run say so") in the same commit. The homepage shows no per-platform tag: it
+has a single "Download Flagship Studio on your computer" link to `/studio`.
+
 **Mac** (`scripts/release-studio.sh`, needs the notary credentials in the
 keychain and `wrangler` on PATH):
 

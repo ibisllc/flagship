@@ -220,27 +220,10 @@
       "index.html"
     ]
   },
-  "s1fb69e7dd2": {
-    "en": "Download Flagship Studio",
-    "kind": "attr",
-    "ctx": "div[aria-label]",
-    "pages": [
-      "index.html",
-      "studio/index.html"
-    ]
-  },
-  "sbcf5e0ec0c": {
-    "en": "<1>macOS</1>",
+  "sc9869e7c94": {
+    "en": "<1><2/><3>Download Flagship Studio on your computer</3><4/></1>",
     "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s02b85041f7": {
-    "en": "<1>Windows <2>Experimental</2></1>",
-    "kind": "text",
-    "ctx": "div",
+    "ctx": "p",
     "pages": [
       "index.html"
     ]
@@ -6525,8 +6508,8 @@
       "disambiguate.html"
     ]
   },
-  "scc56773e22": {
-    "en": "Download Flagship Studio for macOS or Windows and pair it with the Flagship app.",
+  "s35e1b57e37": {
+    "en": "Download Flagship Studio for macOS, Windows or Linux and pair it with the Flagship app.",
     "kind": "attr",
     "ctx": "meta[content]",
     "pages": [
@@ -6581,10 +6564,18 @@
       "studio/index.html"
     ]
   },
-  "s25a88ae782": {
-    "en": "Open <1>flagshipserver.com/studio</1> on the Mac or Windows computer you will use to create the server.",
+  "seb168dc1b8": {
+    "en": "Open <1>flagshipserver.com/studio</1> on the Mac, Windows or Linux computer you will use to create the server.",
     "kind": "text",
     "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s1fb69e7dd2": {
+    "en": "Download Flagship Studio",
+    "kind": "attr",
+    "ctx": "div[aria-label]",
     "pages": [
       "studio/index.html"
     ]
@@ -6599,6 +6590,14 @@
   },
   "sf3a3815c27": {
     "en": "<1> <2>Recommended for this computer</2> <3>Download for Windows <4>Experimental</4></3> <5>Windows 11 · ZIP · not yet proven on every PC</5> </1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "sa31b171250": {
+    "en": "<1> <2>Recommended for this computer</2> <3>Download for Linux <4>Experimental</4></3> <5>x86-64 · AppImage · needs Node.js 22 or later, pkexec and xorriso</5> </1>",
     "kind": "text",
     "ctx": "div",
     "pages": [
@@ -6653,8 +6652,8 @@
       "studio/index.html"
     ]
   },
-  "s0cadccf248": {
-    "en": "Already downloaded a recipe from the webapp? Open or paste it in Studio. On Linux? <1>Get the AppImage</1> <2>Experimental</2> (x86-64; needs Node.js 22 or later).",
+  "sf5ae643520": {
+    "en": "Already downloaded a recipe from the webapp? Open or paste it in Studio.",
     "kind": "text",
     "ctx": "p",
     "pages": [
