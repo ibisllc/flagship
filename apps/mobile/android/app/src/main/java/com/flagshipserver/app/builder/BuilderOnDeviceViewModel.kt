@@ -16,6 +16,7 @@ import com.flagshipserver.app.builder.iso.ArtifactPreflight
 import com.flagshipserver.app.builder.iso.IsoBaseCache
 import com.flagshipserver.app.builder.iso.IsoInjector
 import com.flagshipserver.app.builder.iso.IsoManifestClient
+import com.flagshipserver.app.builder.iso.OlderAppRecipe
 import com.flagshipserver.app.builder.iso.OkHttpBuilderHttp
 import com.flagshipserver.app.builder.iso.ParsedRecipe
 import com.flagshipserver.app.builder.iso.PreseedEngine
@@ -95,7 +96,10 @@ class BuilderOnDeviceViewModel(
         } else {
             val r = parsed.getOrThrow()
             _state.value = _state.value.copy(recipe = r)
-            if (r.expired) {
+            val olderApp = OlderAppRecipe.refusal(r)
+            if (olderApp != null) {
+                _state.value = _state.value.copy(phase = Phase.Error, error = olderApp)
+            } else if (r.expired) {
                 _state.value = _state.value.copy(
                     phase = Phase.Error,
                     error = FSStrings.get(R.string.this_recipe_has_expired_create_the),
@@ -108,9 +112,9 @@ class BuilderOnDeviceViewModel(
 
     /** Re-scan attached USB mass-storage devices; after a failed burn this is "Try again". */
     fun refreshDevices() {
-        // Only a recipe that can never burn (unreadable, expired) stays on its error.
+        // Only a recipe that can never burn (unreadable, expired, from an older app) stays on its error.
         val recipe = _state.value.recipe
-        if (recipe == null || recipe.expired) return
+        if (recipe == null || recipe.expired || OlderAppRecipe.isFromOlderApp(recipe.installerGitRef)) return
         val devices = UsbHost.enumerate(usb)
         val selected = _state.value.selected?.let { prev ->
             devices.firstOrNull { it.device.deviceId == prev.device.deviceId }
@@ -139,6 +143,7 @@ class BuilderOnDeviceViewModel(
         val s = _state.value
         val target = s.selected ?: return
         val recipe = s.recipe ?: return
+        if (OlderAppRecipe.isFromOlderApp(recipe.installerGitRef)) return
         if (s.phase in setOf(Phase.Downloading, Phase.Verifying, Phase.Injecting, Phase.Writing, Phase.Finalizing)) return
         if (!UsbHost.hasPermission(usb, target.device)) {
             _state.value = s.copy(phase = Phase.NeedPermission)

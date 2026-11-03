@@ -942,4 +942,8 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.</value>
     <comment>ArtifactPreflight.cs:23 (prose)</comment>
   </data>
+  <data name="recipeMadeByOlderApp" xml:space="preserve">
+    <value>This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.</value>
+    <comment>OlderAppRecipe.cs:16 (prose)</comment>
+  </data>
 </root>

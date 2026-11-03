@@ -3428,5 +3428,8 @@
   "android_security_updates": "Actualizaciones de seguridad de Android",
   "android_version_no_longer_gets_updates_detail": "Android %1$s ya no recibe actualizaciones de seguridad. Tu teléfono guarda la llave de tu cuenta y tus servidores: actualizar Android, o pasar a un teléfono más nuevo, los mantiene más seguros. Todo en Flagship sigue funcionando.",
   "box_release_not_published": "Este servidor aún no se puede instalar: su paquete de software no está publicado en flagshipserver.com. Actualiza la app Flagship o inténtalo de nuevo más tarde.",
-  "couldnt_check_box_release": "No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo."
+  "couldnt_check_box_release": "No se pudo comprobar si el paquete de software de este servidor está publicado en flagshipserver.com. Revisa tu conexión a internet e inténtalo de nuevo.",
+  "add_fingerprint_for_stronger_approvals": "Añadir una huella en los ajustes del teléfono hace que tus aprobaciones sean más seguras en esta versión de Android.",
+  "add_a_fingerprint": "Añadir una huella",
+  "recipe_made_by_older_app": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship y vuelve a crear el servidor."
 }

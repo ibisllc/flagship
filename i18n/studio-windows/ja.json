@@ -231,5 +231,6 @@
   "actions": "操作",
   "Beta": "ベータ",
   "softwarePackageNotPublished": "このサーバーはまだインストールできません。ソフトウェアパッケージが flagshipserver.com で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
-  "couldntCheckSoftwarePackage": "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。"
+  "couldntCheckSoftwarePackage": "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
+  "recipeMadeByOlderApp": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"
 }

@@ -466,3 +466,22 @@ def test_run_bake_logs_the_advisory_before_writing_on_chromeos():
         ll.stream == "stderr" and ll.text == container_env.USB_BURN_ADVISORY
         for ll in model.state.log_lines
     )
+
+
+def test_verify_refuses_a_recipe_from_an_older_app():
+    from vm import older_app_recipe
+
+    model = _model_with_fake_locate(node="/usr/bin/node", entry="/cli.ts")
+    model._on_verify_ok(json.dumps({"ok": True, "serverDomain": "home.alice.flagship.services",
+                                    "installerGitRef": "main", "signatureValid": True}))
+    assert model.state.verified is None
+    assert model.state.recipe_error == older_app_recipe.message()
+
+
+def test_verify_accepts_a_recipe_naming_an_exact_commit():
+    model = _model_with_fake_locate(node="/usr/bin/node", entry="/cli.ts")
+    model._on_verify_ok(json.dumps({"ok": True, "serverDomain": "home.alice.flagship.services",
+                                    "installerGitRef": "386e29c84899283c167c9ce983d2dc2acbaa4f11",
+                                    "signatureValid": True}))
+    assert model.state.verified is not None
+    assert model.state.recipe_error is None

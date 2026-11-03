@@ -14160,5 +14160,17 @@
   "couldnt_check_box_release": {
     "en": "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.",
     "ctx": "builder/iso/ArtifactPreflight.kt (prose)"
+  },
+  "add_fingerprint_for_stronger_approvals": {
+    "en": "Adding a fingerprint in your phone's settings makes your approvals stronger on this Android version.",
+    "ctx": "ui/components/OutdatedAndroidSliver.kt + SettingsScreen.kt (Android 10 with no fingerprint enrolled: only a fingerprint can protect each approval on its own there; calm advice, not an error)"
+  },
+  "add_a_fingerprint": {
+    "en": "Add a fingerprint",
+    "ctx": "ui/screens/SettingsScreen.kt (settings row title on Android 10 with no fingerprint; opens the phone's fingerprint setup)"
+  },
+  "recipe_made_by_older_app": {
+    "en": "This recipe was made by an older version of the Flagship app. Update the Flagship app, then create the server again.",
+    "ctx": "builder/iso/OlderAppRecipe.kt (prose; refusal when a recipe from an app older than 0.3 is loaded for a USB burn)"
   }
 }

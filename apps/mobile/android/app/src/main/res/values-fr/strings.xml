@@ -3431,4 +3431,7 @@
     <string name="android_version_no_longer_gets_updates_detail">Android %1$s ne reçoit plus de mises à jour de sécurité. Votre téléphone détient la clé de votre compte et de vos serveurs : mettre à jour Android, ou passer à un téléphone plus récent, les protège mieux. Tout fonctionne toujours dans Flagship.</string>
     <string name="box_release_not_published">Ce serveur ne peut pas encore être installé : son paquet logiciel n’est pas publié sur flagshipserver.com. Mettez à jour l’app Flagship ou réessayez plus tard.</string>
     <string name="couldnt_check_box_release">Impossible de vérifier que le paquet logiciel de ce serveur est publié sur flagshipserver.com. Vérifiez votre connexion Internet et réessayez.</string>
+    <string name="add_fingerprint_for_stronger_approvals">Ajouter une empreinte dans les réglages du téléphone renforce vos approbations sur cette version d’Android.</string>
+    <string name="add_a_fingerprint">Ajouter une empreinte</string>
+    <string name="recipe_made_by_older_app">Cette recette a été créée par une ancienne version de l’app Flagship. Mettez à jour l’app Flagship, puis recréez le serveur.</string>
 </resources>

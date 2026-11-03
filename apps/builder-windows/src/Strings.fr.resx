@@ -709,4 +709,7 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="couldntCheckSoftwarePackage" xml:space="preserve">
     <value>Impossible de vérifier que le paquet logiciel de ce serveur est publié sur flagshipserver.com. Vérifiez votre connexion Internet et réessayez.</value>
   </data>
+  <data name="recipeMadeByOlderApp" xml:space="preserve">
+    <value>Cette recette a été créée par une ancienne version de l’app Flagship. Mettez à jour l’app Flagship sur votre téléphone, puis recréez le serveur.</value>
+  </data>
 </root>

@@ -709,4 +709,7 @@ https://flagshipserver.com</value>
   <data name="couldntCheckSoftwarePackage" xml:space="preserve">
     <value>无法确认此服务器的软件包是否已在 flagshipserver.com 上发布。请检查网络连接后重试。</value>
   </data>
+  <data name="recipeMadeByOlderApp" xml:space="preserve">
+    <value>此配方由旧版 Flagship 应用创建。请在手机上更新 Flagship 应用，然后重新创建服务器。</value>
+  </data>
 </root>

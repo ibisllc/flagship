@@ -3428,5 +3428,8 @@
   "android_security_updates": "Android のセキュリティアップデート",
   "android_version_no_longer_gets_updates_detail": "Android %1$s には、セキュリティアップデートが提供されなくなりました。このスマートフォンはアカウントとサーバーの鍵を保管しています。Android を更新するか、新しいスマートフォンに移ると、より安全に守れます。Flagship の機能はすべてそのまま使えます。",
   "box_release_not_published": "このサーバーはまだインストールできません。ソフトウェアパッケージが flagshipserver.com で公開されていません。Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
-  "couldnt_check_box_release": "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。"
+  "couldnt_check_box_release": "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
+  "add_fingerprint_for_stronger_approvals": "スマートフォンの設定で指紋を追加すると、このバージョンの Android では承認がより安全になります。",
+  "add_a_fingerprint": "指紋を追加",
+  "recipe_made_by_older_app": "このレシピは古いバージョンの Flagship アプリで作成されました。Flagship アプリをアップデートしてから、サーバーを作り直してください。"
 }

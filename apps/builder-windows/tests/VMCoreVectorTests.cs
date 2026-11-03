@@ -247,6 +247,22 @@ public class VMCoreVectorTests
     }
 
     [Fact]
+    public void OlderAppRecipeMatchesVectors()
+    {
+        var section = Vectors.GetProperty("olderAppRecipe");
+        var cases = section.GetProperty("cases").EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var c in cases)
+        {
+            var refValue = c.GetProperty("installerGitRef");
+            var gitRef = refValue.ValueKind == JsonValueKind.Null ? null : refValue.GetString();
+            Assert.True(c.GetProperty("olderApp").GetBoolean() == OlderAppRecipe.IsFromOlderApp(gitRef),
+                c.GetProperty("name").GetString());
+        }
+        Assert.Equal(section.GetProperty("messages").GetProperty("studio").GetString(), OlderAppRecipe.Message);
+    }
+
+    [Fact]
     public async Task ArtifactPreflightMatchesVectors()
     {
         var section = Vectors.GetProperty("artifactPreflight");

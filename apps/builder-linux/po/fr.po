@@ -762,3 +762,7 @@ msgstr "Ce serveur ne peut pas encore être installé : son paquet logiciel n’
 #: vm/artifact_preflight.py:37 (prose)
 msgid "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
 msgstr "Impossible de vérifier que le paquet logiciel de ce serveur est publié sur flagshipserver.com. Vérifiez votre connexion Internet et réessayez."
+
+#: vm/older_app_recipe.py:21 (prose)
+msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."
+msgstr "Cette recette a été créée par une ancienne version de l’app Flagship. Mettez à jour l’app Flagship sur votre téléphone, puis recréez le serveur."

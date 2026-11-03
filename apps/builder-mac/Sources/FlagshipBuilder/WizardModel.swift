@@ -495,6 +495,11 @@ final class WizardModel: ObservableObject {
         guard let recipe = recipe else { return }
         do {
             let r = try RecipeLoader.load(contentsOf: recipe)
+            if let refusal = OlderAppRecipe.refusal(for: r) {
+                verified = nil
+                recipeError = refusal
+                return
+            }
             verified = VerifyResult(recipe: r)
             recipeError = nil
         } catch {
@@ -797,6 +802,10 @@ final class WizardModel: ObservableObject {
             reportOperationFailure(error)
             return
         }
+        if let refusal = OlderAppRecipe.refusal(for: parsed) {
+            reportOperationFailure(refusal)
+            return
+        }
 
         let host = HostResources.current()
         let cap = VMResourcePlan.maxVMCount(host: host)
@@ -940,6 +949,10 @@ final class WizardModel: ObservableObject {
             commit = try RecipeLoader.load(contentsOf: recipe).installerGitRef
         } catch {
             reportOperationFailure(error)
+            return false
+        }
+        if OlderAppRecipe.isFromOlderApp(installerGitRef: commit) {
+            reportOperationFailure(OlderAppRecipe.message)
             return false
         }
         let verdict = await ArtifactPreflight.check(commit: commit, arch: arch)

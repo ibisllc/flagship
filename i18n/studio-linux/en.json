@@ -819,5 +819,9 @@
   "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.": {
     "en": "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again.",
     "ctx": "vm/artifact_preflight.py:37 (prose)"
+  },
+  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": {
+    "en": "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.",
+    "ctx": "vm/older_app_recipe.py:21 (prose)"
   }
 }

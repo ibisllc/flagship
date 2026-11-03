@@ -3428,5 +3428,8 @@
   "android_security_updates": "Android-Sicherheitsupdates",
   "android_version_no_longer_gets_updates_detail": "Android %1$s bekommt keine Sicherheitsupdates mehr. Dein Telefon hält den Schlüssel zu deinem Konto und deinen Servern: Ein Android-Update oder ein neueres Telefon schützt sie besser. In Flagship funktioniert weiterhin alles.",
   "box_release_not_published": "Dieser Server kann noch nicht installiert werden: Sein Softwarepaket ist auf flagshipserver.com nicht veröffentlicht. Aktualisiere die Flagship-App oder versuche es später erneut.",
-  "couldnt_check_box_release": "Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut."
+  "couldnt_check_box_release": "Es konnte nicht geprüft werden, ob das Softwarepaket dieses Servers auf flagshipserver.com veröffentlicht ist. Prüfe deine Internetverbindung und versuche es erneut.",
+  "add_fingerprint_for_stronger_approvals": "Wenn du in den Telefoneinstellungen einen Fingerabdruck hinzufügst, werden deine Genehmigungen auf dieser Android-Version sicherer.",
+  "add_a_fingerprint": "Fingerabdruck hinzufügen",
+  "recipe_made_by_older_app": "Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App und erstelle den Server dann erneut."
 }

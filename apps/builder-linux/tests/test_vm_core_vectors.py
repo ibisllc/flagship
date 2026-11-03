@@ -297,3 +297,23 @@ def test_artifact_preflight_check_asks_the_control_plane_studio_follows():
     assert artifact_preflight.check(commit, "amd64", env={}, head=lambda _u: None) == artifact_preflight.UNREACHABLE
     assert artifact_preflight.check(commit, "amd64", env={}, head=lambda _u: 200) == artifact_preflight.PUBLISHED
     assert artifact_preflight.check("main", "amd64", env={}, head=lambda _u: pytest.fail("no request")) == artifact_preflight.MISSING
+
+
+# ---------------------------------------------------------------------------
+# olderAppRecipe — a recipe from an app older than 0.3 is refused at load time
+# ---------------------------------------------------------------------------
+
+from vm import older_app_recipe  # noqa: E402
+
+OLDER_APP = VECTORS["olderAppRecipe"]
+
+
+@pytest.mark.parametrize("case", OLDER_APP["cases"], ids=lambda c: c["name"])
+def test_older_app_recipe_rule(case):
+    assert older_app_recipe.is_from_older_app(case["installerGitRef"]) is case["olderApp"]
+
+
+def test_older_app_recipe_message():
+    assert older_app_recipe.message() == OLDER_APP["messages"]["studio"]
+    assert older_app_recipe.refusal("main") == OLDER_APP["messages"]["studio"]
+    assert older_app_recipe.refusal("386e29c84899283c167c9ce983d2dc2acbaa4f11") is None

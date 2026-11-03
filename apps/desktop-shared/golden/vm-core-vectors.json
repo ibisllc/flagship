@@ -495,5 +495,23 @@
       "missing": "This server can't be installed yet: its software package isn't published on flagshipserver.com. Update Flagship Studio and the Flagship app, or try again later.",
       "unreachable": "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
     }
+  },
+  "olderAppRecipe": {
+    "notes": "A recipe made by a Flagship app older than 0.3 (its signed install blob names installerGitRef 'main', a tag or nothing at all, never an exact commit) can't install: the bootstrap refuses any installerGitRef that is not an exact 40-character lowercase commit, because a branch or tag can move after the recipe is signed. Studio (Mac, Windows, Linux) and the phone's own USB burn (Android) check this when the recipe is loaded, after its signature verifies, and refuse with the message below, creating nothing (no VM, no ISO, no USB write); the owner rule (F9) is that an old client or recipe leads to a clear 'update' sentence, never a technical refusal. The rule: trim surrounding whitespace (the bootstrap does), then the ref must match ^[0-9a-f]{40}$; anything else, an absent ref (null) included, is from an older app. Each port shows the message in the owner's language from its i18n catalog; 'studio' is the English Studio text, 'phone' the English Android text (the phone that burns is the one to update).",
+    "cases": [
+      {"name": "a 0.3 recipe: an exact commit", "installerGitRef": "386e29c84899283c167c9ce983d2dc2acbaa4f11", "olderApp": false},
+      {"name": "an exact commit with surrounding whitespace", "installerGitRef": " 386e29c84899283c167c9ce983d2dc2acbaa4f11\n", "olderApp": false},
+      {"name": "a 0.2 recipe: the branch main", "installerGitRef": "main", "olderApp": true},
+      {"name": "a tag", "installerGitRef": "v0.1.0", "olderApp": true},
+      {"name": "a short hash", "installerGitRef": "386e29c84899", "olderApp": true},
+      {"name": "uppercase hex", "installerGitRef": "386E29C84899283C167C9CE983D2DC2ACBAA4F11", "olderApp": true},
+      {"name": "41 characters", "installerGitRef": "386e29c84899283c167c9ce983d2dc2acbaa4f110", "olderApp": true},
+      {"name": "empty", "installerGitRef": "", "olderApp": true},
+      {"name": "absent", "installerGitRef": null, "olderApp": true}
+    ],
+    "messages": {
+      "studio": "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.",
+      "phone": "This recipe was made by an older version of the Flagship app. Update the Flagship app, then create the server again."
+    }
   }
 }

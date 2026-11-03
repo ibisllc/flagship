@@ -709,4 +709,7 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="couldntCheckSoftwarePackage" xml:space="preserve">
     <value>このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。</value>
   </data>
+  <data name="recipeMadeByOlderApp" xml:space="preserve">
+    <value>このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。</value>
+  </data>
 </root>

@@ -761,3 +761,7 @@ msgstr ""
 #: vm/artifact_preflight.py:37 (prose)
 msgid "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
 msgstr ""
+
+#: vm/older_app_recipe.py:21 (prose)
+msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."
+msgstr ""

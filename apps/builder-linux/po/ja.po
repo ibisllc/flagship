@@ -762,3 +762,7 @@ msgstr "このサーバーはまだインストールできません。ソフト
 #: vm/artifact_preflight.py:37 (prose)
 msgid "Couldn't check that this server's software package is published on flagshipserver.com. Check your internet connection and try again."
 msgstr "このサーバーのソフトウェアパッケージが flagshipserver.com で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。"
+
+#: vm/older_app_recipe.py:21 (prose)
+msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."
+msgstr "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"

@@ -975,7 +975,13 @@ public sealed class Wizard : INotifyPropertyChanged
             catch (RecipeException e) { return (null, e.Message); }
             catch (Exception e) { return (null, e.Message); }
         });
-        if (result.recipe is Recipe r)
+        if (result.recipe is Recipe old && OlderAppRecipe.Refusal(old) is string refusal)
+        {
+            _parsedRecipe = null;
+            Verified = null;
+            RecipeError = refusal;
+        }
+        else if (result.recipe is Recipe r)
         {
             _parsedRecipe = r;
             Verified = new VerifyResult
@@ -1145,6 +1151,11 @@ public sealed class Wizard : INotifyPropertyChanged
                 AppendLog(LogStream.Stderr, e.Message);
                 return false;
             }
+        }
+        if (OlderAppRecipe.Refusal(recipe) is string olderApp)
+        {
+            AppendLog(LogStream.Stderr, olderApp);
+            return false;
         }
         ArtifactPreflight.Verdict verdict;
         try { verdict = await ArtifactPreflight.CheckAsync(recipe.InstallerGitRef.Trim(), arch, ct); }

@@ -301,6 +301,20 @@ final class VMCoreVectorTests: XCTestCase {
         XCTAssertEqual(verdict, .missing)
     }
 
+    // MARK: - Recipes made by an older app
+
+    func testOlderAppRecipeMatchesVectors() throws {
+        let section = try loadVectors()["olderAppRecipe"] as! [String: Any]
+        let cases = section["cases"] as! [[String: Any]]
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            XCTAssertEqual(OlderAppRecipe.isFromOlderApp(installerGitRef: c["installerGitRef"] as? String),
+                           c["olderApp"] as? Bool, c["name"] as? String ?? "")
+        }
+        let messages = section["messages"] as! [String: String]
+        XCTAssertEqual(OlderAppRecipe.message, messages["studio"])
+    }
+
     func testSealedBootSetUpMatchesVectors() throws {
         let section = try loadVectors()["sealedBootSetUp"] as! [String: Any]
         XCTAssertEqual(VMRecord.neverSetUpPhases, Set(section["neverSetUpPhases"] as! [String]))

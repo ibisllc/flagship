@@ -3368,5 +3368,8 @@
   "android_security_updates": "60a77206a77b",
   "android_version_no_longer_gets_updates_detail": "c933cd023bcd",
   "box_release_not_published": "20ecfa46b70d",
-  "couldnt_check_box_release": "a0fb0fc42f6d"
+  "couldnt_check_box_release": "a0fb0fc42f6d",
+  "add_fingerprint_for_stronger_approvals": "bcb550d4d5a9",
+  "add_a_fingerprint": "4447168070a8",
+  "recipe_made_by_older_app": "e3522de4a748"
 }

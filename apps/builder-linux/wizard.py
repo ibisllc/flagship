@@ -59,7 +59,7 @@ from pair_session import PairEvent, PairSession
 from pairing_watch import PairingWatch, timer_schedule
 from version import VERSION, display_version
 from wifi_store import WifiStore, default_backend
-from vm import artifact_preflight, host_arch, recipe_info, resource_plan, ssh_launch
+from vm import artifact_preflight, host_arch, older_app_recipe, recipe_info, resource_plan, ssh_launch
 from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
 from vm.config import VMConfig, VMProvisioningMode
 from vm.host_resources import HostResources
@@ -526,7 +526,14 @@ class WizardModel:
     def _on_verify_ok(self, stdout_text: str) -> None:
         parsed = parse_verify_json(stdout_text)
         if parsed is not None:
-            self.state.verified = VerifyInfo.from_dict(parsed)
+            info = VerifyInfo.from_dict(parsed)
+            refusal = older_app_recipe.refusal(info.installer_git_ref)
+            if refusal is not None:
+                # A recipe from an app older than 0.3 can never install: say so, create nothing.
+                self.state.verified = None
+                self.state.recipe_error = refusal
+            else:
+                self.state.verified = info
             self._notify()
 
     def _require_xorriso(self) -> bool:
