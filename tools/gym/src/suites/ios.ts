@@ -450,16 +450,16 @@ const TOTAL_DETAIL: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-detail-deadman-screen",
-    "D1: the dead-man (auto lock-down) card opens its screen; the enable toggle renders.",
-    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailDeadManScreenOpens",
+    "D1: the dead-man line (time limit, which replaced auto lock-down) shows its date and opens the editor.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailServingLineOpensEditor",
     {
       steps: [
         { kind: "launch", describe: "Open the Home pod's detail." },
-        { kind: "tap", describe: "Auto lock-down card.", handle: "sd-deadman-open" },
-        { kind: "assert", describe: "Dead-man enable toggle.", handle: "deadman-toggle" },
+        { kind: "tap", describe: "The time-limit line.", handle: "sd-serving-open" },
+        { kind: "assert", describe: "The grace picker.", handle: "serving-grace-picker" },
       ],
-      assertions: [{ describe: "Dead-man enable toggle present", handle: "deadman-toggle", expect: "present" }],
-      screenshots: [shot("server-detail-deadman-card", "The card."), shot("deadman-screen", "The lock-down screen.")],
+      assertions: [{ describe: "Grace picker present", handle: "serving-grace-picker", expect: "present" }],
+      screenshots: [shot("server-detail-serving-line", "The line."), shot("serving-editor", "The editor.")],
       dimension: "D1",
     },
   ),

@@ -898,7 +898,7 @@ final class GymSweepServerTests: GymSweepCase {
         openBackups(app, "-smoke-backups-ready")
         let policy = any(app, "sd-backups-policy")
         XCTAssertTrue(revealUp(app, policy))
-        XCTAssertEqual(policy.label, "Backup policy: On my phone · up to 32.0 GB")
+        XCTAssertEqual(policy.label, "Backup policy: On my devices · up to 32.0 GB")
         XCTAssertTrue(any(app, "sd-backups-usage").label.hasPrefix("Apps use 3.2 GB of 32.0 GB"))
         let change = app.buttons["sd-backups-policy-change"]
         XCTAssertTrue(reveal(app, change))

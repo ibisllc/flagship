@@ -990,10 +990,10 @@ const SERVER: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-server-deadman",
-    "Auto lock-down: on (every auto-unlock lease revoked at the boot worker first), window, Tighten now, On lapse, Keep unlocked, off: each an admin-signed order.",
-    SV + "test_deadManPolicyWindowLockoutAffirm",
-    ["sd-deadman-open", "deadman-toggle", "deadman-window-picker", "deadman-tighten", "deadman-lockout-picker", "deadman-affirm"],
-    ["revoked all leases home.", "signed deadman-policy by admin-root", "signed deadman-affirm by admin-root"],
+    "Time limit (the dead-man line, which replaced auto lock-down): it shows the date; 30 days + lock signs a serving policy under the admin root after revoking every auto-unlock lease; Never greys out locking.",
+    SV + "test_servingLineEditorAndNever",
+    ["sd-serving-open", "serving-grace-picker", "serving-lapse-lock", "serving-save"],
+    ["revoked all leases home.", "signed serving-policy by admin-root", "serving policy 30d lock-server gen 2", "serving policy indefinite stop-apps gen 3"],
   ),
   sweep(
     "ios-sweep-server-monitoring",
