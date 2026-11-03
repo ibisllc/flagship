@@ -27,7 +27,10 @@ final class AppRouteLinkTests: XCTestCase {
             ("account/re-pair?u=bright-maple", .accountDevices),
             ("account/activity", .accountActivity),
             ("settings/two-factor", .accountSecurity),
-            ("install-progress", .createServer),
+            ("install-progress", .installProgress(key: nil, serverFqdn: nil)),
+            ("install-progress?serial=01CAFE", .installProgress(key: "01CAFE", serverFqdn: nil)),
+            ("install-progress?serial=01CAFE&server=Home.u.flagship.services",
+             .installProgress(key: "01CAFE", serverFqdn: "home.u.flagship.services")),
         ]
         for (route, expected) in pairs {
             XCTAssertEqual(parse("flagship://\(route)"), expected, "flagship://\(route)")

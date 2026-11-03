@@ -20,6 +20,7 @@ struct InstallProgressLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: InstallProgressAttributes.self) { ctx in
             LockScreenView(attributes: ctx.attributes, state: ctx.state)
+                .widgetURL(Self.tapURL(ctx.attributes, ctx.state))
                 .activityBackgroundTint(Color(.systemBackground))
                 .activitySystemActionForegroundColor(Color.accentColor)
         } dynamicIsland: { ctx in
@@ -58,10 +59,15 @@ struct InstallProgressLiveActivity: Widget {
                 Image(systemName: ctx.state.currentStep.systemImageName)
                     .foregroundStyle(.tint)
             }
-            // No matching DeepLink for raw install yet — point at
-            // Home tab so the user lands on their pods after tap.
-            .widgetURL(PodStatusSnapshot.read().appRouteURL("create-server"))
+            // Every region opens the install this activity tracks.
+            .widgetURL(Self.tapURL(ctx.attributes, ctx.state))
         }
+    }
+
+    /// The tracked install's page (pending, or the server once live), named
+    /// by the install key the activity was started with.
+    static func tapURL(_ attributes: InstallProgressAttributes, _ state: InstallProgressAttributes.ContentState) -> URL {
+        PodStatusSnapshot.read().installProgressURL(key: attributes.serial, serverFqdn: state.serverFqdn)
     }
 }
 

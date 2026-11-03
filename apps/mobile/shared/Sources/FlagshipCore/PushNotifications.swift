@@ -92,6 +92,13 @@ public final class PushNotifications: NSObject {
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
         for key in ["deepLink", "flagship_url"] {
             if let raw = info[key] as? String, let url = URL(string: raw), let link = DeepLink.parse(url) {
+                // A provision-status push's link names no install; its serial does.
+                if case .installProgress(nil, let server) = link {
+                    let meta = info["meta"] as? [AnyHashable: Any]
+                    if let serial = (meta?["serial"] ?? info["serial"]) as? String, !serial.isEmpty {
+                        return .installProgress(key: serial, serverFqdn: server)
+                    }
+                }
                 return link
             }
         }
@@ -230,7 +237,8 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         // screen so a tap on the notification opens it.
         if let event = ProvisionPhaseBridge.parse(info) {
             ProvisionPhaseBridge.shared.onPhase?(event)
-            linker.enqueue(.createServer)
+            // The install this push is about, never a new create flow.
+            linker.enqueue(.installProgress(key: event.serial.isEmpty ? nil : event.serial, serverFqdn: nil))
             return
         }
         // A box waiting to start: the owner's `secret-request` push routes

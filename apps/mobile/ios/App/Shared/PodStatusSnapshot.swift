@@ -54,6 +54,16 @@ public struct PodStatusSnapshot: Codable, Sendable, Hashable {
         return URL(string: "https://\(controlHost ?? "flagshipserver.com")/app/\(route)\(q.isEmpty ? "" : "?\(q)")")!
     }
 
+    /// The install Live Activity's tap: `install-progress` naming the
+    /// install it tracks, so the app opens that server, never a new create
+    /// flow. A twin of `DeepLink.installProgressURL`.
+    public func installProgressURL(key: String, serverFqdn: String?) -> URL {
+        if let server = serverFqdn?.lowercased(), !server.isEmpty {
+            return appRouteURL("install-progress", query: ["serial": key, "server": server])
+        }
+        return appRouteURL("install-progress", query: ["serial": key])
+    }
+
     /// Empty snapshot — what the widget reads before the app has ever
     /// written one (fresh install, app never launched).
     public static let empty = PodStatusSnapshot()

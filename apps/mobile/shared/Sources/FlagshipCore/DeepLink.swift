@@ -14,6 +14,15 @@ public enum DeepLink: Equatable, Sendable {
     case serverDetail(podId: String)
     case appDetail(serviceId: String)
     case createServer
+    /// One install being followed (the install Live Activity, a
+    /// `provision-status` push): `key` is the install's key in
+    /// `InstallProgressBridge` (the order serial, or the server's address
+    /// when the phone holds no serial), `serverFqdn` the server once known.
+    /// Opens that server's pending page, or its page once it is live, and
+    /// Home when neither is on this device. Never a new create flow.
+    /// `https://<controlHost>/app/install-progress?serial=<key>&server=<fqdn>`
+    /// (the query Android's install notice and push links use).
+    case installProgress(key: String?, serverFqdn: String?)
     /// Open the recovery-setup flow on the Settings tab. Triggered
     /// in-app from the Home nudge (B9). Not parseable from a URL —
     /// it's an internal-only deep link.
@@ -154,6 +163,15 @@ public enum DeepLink: Equatable, Sendable {
     /// wrote a post or edited the page; it opens the page editor).
     case messages
     case pageEditor
+
+    /// The link the install Live Activity opens: `install-progress` naming
+    /// the install it tracks (`installProgress(key:serverFqdn:)`).
+    public static func installProgressURL(key: String, serverFqdn: String?) -> URL {
+        if let server = serverFqdn?.lowercased(), !server.isEmpty {
+            return appRouteURL("install-progress", query: ["serial": key, "server": server])
+        }
+        return appRouteURL("install-progress", query: ["serial": key])
+    }
 
     /// An in-app destination as an https app link,
     /// `https://<controlHost>/app/<route>[?query]`: the form every producer
@@ -353,9 +371,11 @@ public enum DeepLink: Equatable, Sendable {
             return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "two-factor"
                 ? .accountSecurity : nil
         case "install-progress":
-            // The provision-status push names no server in its link; the
-            // create flow is where a phone follows an install.
-            return .createServer
+            // The install Live Activity names the install it tracks; the
+            // provision-status push's link names none (the push's `serial`
+            // field does: `PushNotifications.link(forPush:)`).
+            func nonEmpty(_ v: String?) -> String? { v.flatMap { $0.isEmpty ? nil : $0 } }
+            return .installProgress(key: nonEmpty(params["serial"]), serverFqdn: nonEmpty(params["server"]?.lowercased()))
         case "messages":
             return .messages
         case "voici-sign-in":

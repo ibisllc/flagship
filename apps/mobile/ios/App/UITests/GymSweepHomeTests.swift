@@ -327,6 +327,22 @@ final class GymSweepHomeTests: GymSweepCase {
         waitGone(podRow(app, named: "Shed"))
     }
 
+    /// Tapping the install Live Activity opens the install it tracks (its
+    /// link names the order serial), never a new create flow; a link for an
+    /// install this phone no longer holds lands on Home.
+    func test_installLiveActivityLinkOpensItsPendingServer() throws {
+        let app = launch(admin: true, ["-smoke-pending-pod"])
+        XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 20))
+        app.open(URL(string: "flagship://install-progress?serial=GYMPENDING0001")!)
+        XCTAssertTrue(app.navigationBars["Pending"].waitForExistence(timeout: 15), "The tracked install's page opens.")
+        XCTAssertTrue(reveal(app, app.buttons["pending-cancel-order-button"]), "…the pending server's own page.")
+        shot(app, "install-link-pending-page")
+
+        app.open(URL(string: "flagship://install-progress?serial=NOSUCHORDER")!)
+        XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 15), "A gone install lands on Home.")
+        XCTAssertFalse(app.navigationBars["Pending"].exists)
+    }
+
     // MARK: Status paused / locked list
 
     func test_statusPausedUnlockReadsAgain() throws {

@@ -23,6 +23,9 @@ public struct HomeTab: View {
     /// IRK, so we don't fire it on every Home re-render). An explicit pull-
     /// to-refresh always re-runs it.
     @State private var didReconcileServerTruth = false
+    /// The first reconcile against `.com` finished: an install link that
+    /// still matches no server by then is for one this device doesn't hold.
+    @State private var serverTruthLoaded = false
     /// Account-level "which boxes are waiting for my unlock approval?" poller.
     /// Populates `app.boxRequestInbox` so the list / detail / checklist
     /// can read a per-server waiting state from ONE fetch (no N pollers).
@@ -54,6 +57,8 @@ public struct HomeTab: View {
         .task { dibsWindow = try? await nameDibs.window() }
         .onChange(of: linker.pending) { _, link in consume(link) }
         .task(id: linker.pending) { consume(linker.pending) }
+        // An install link that arrived before the server list did.
+        .onChange(of: app.pods.map(\.podId)) { _, _ in consume(linker.pending) }
     }
 
     /// The Home page a scanned or tapped share link opens (the accept
@@ -67,6 +72,23 @@ public struct HomeTab: View {
             return .provisionServerForBuilder(link: builderLink)
         }
         return nil
+    }
+
+    /// The page for one install being followed (the install Live Activity,
+    /// a provision-status push): the server whose order serial is `key`, or
+    /// whose address is `key` or `serverFqdn`. `.serverDetail` shows the
+    /// pending page while it installs and the server's page once it's live.
+    /// Nil when this device holds no such server.
+    static func installRoute(key: String?, serverFqdn: String?, pods: [PodInfo]) -> HomeRoute? {
+        if let key, !key.isEmpty,
+           let pod = pods.first(where: { $0.pendingAuthCodeSerial == key }) {
+            return .serverDetail(podId: pod.podId)
+        }
+        let names = Set([key, serverFqdn].compactMap { $0?.lowercased() }.filter { !$0.isEmpty })
+        guard !names.isEmpty,
+              let pod = pods.first(where: { !$0.fqdn.isEmpty && names.contains($0.fqdn.lowercased()) })
+        else { return nil }
+        return .serverDetail(podId: pod.podId)
     }
 
     /// The shared server a content-free start-up push most likely means: the
@@ -97,6 +119,20 @@ public struct HomeTab: View {
                 path.append(.provisionServer)
             }
             _ = linker.consume()
+        case .installProgress(let key, let serverFqdn):
+            // The install it names, never a new create flow.
+            restorePendingServers()
+            if let route = Self.installRoute(key: key, serverFqdn: serverFqdn, pods: app.pods) {
+                if path.last != route { path.append(route) }
+                _ = linker.consume()
+            } else if !serverTruthLoaded, key != nil || serverFqdn != nil {
+                // The server list is still loading; tried again when it lands.
+                break
+            } else {
+                // Cancelled, deleted, or not on this device: Home lists what is.
+                path.removeAll()
+                _ = linker.consume()
+            }
         case .builderPair:
             if let route = Self.route(for: link), path.last != route { path.append(route) }
             _ = linker.consume()
@@ -259,6 +295,8 @@ public struct HomeTab: View {
             if !didReconcileServerTruth {
                 didReconcileServerTruth = true
                 await reconcileServerTruth()
+                serverTruthLoaded = true
+                consume(linker.pending)
                 // Prefer a live box-direct leadership read over the relay value
                 // the reconcile applied — best-effort, on-demand (no new poller).
                 await preferDirectLeads()

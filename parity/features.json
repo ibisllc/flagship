@@ -408,7 +408,7 @@
       "title": "Push: provision-status drives install progress",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ProvisionPhaseBridge.swift", "provision-status"], ["apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift", "ActivityConfiguration"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ProvisionPhaseBridge.swift", "provision-status"], ["apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift", "ActivityConfiguration"], ["apps/mobile/shared/Sources/FlagshipCore/DeepLink.swift", "case \"install-progress\":"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/ProvisionPhasePush.kt", "provision-status"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"install-progress\" -> InstallProgress"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "provision-status"], ["apps/web/public/webapp/service-worker.js", "view=install-progress"]] }
       }
