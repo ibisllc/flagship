@@ -46,15 +46,21 @@
         <li><strong>服务器从一个已签名的软件包安装。</strong>新服务器在安装过程中不再从代码仓库下载代码。它会核实 Flagship 维护者提供的一个软件包的签名，然后在不再下载任何内容的情况下完成安装。</li>
       </ul>
 
+      <h2 id="voici">你自己的页面，以及访客发来的消息</h2>
+      <ul class="notes">
+        <li><strong>位于 voi.ci/你的用户名 的公开页面。</strong>包含照片、名字、简短介绍、你的链接和你的帖子。你在新的“消息”标签页中制作它。账户中的任何设备都可以写帖子，但只有管理员设备才能发布。第一次发布前，应用会提醒你：这个页面与你的应用和服务器使用同一个用户名，别人可以把它们联系起来。</li>
+        <li><strong>消息。</strong>打开“接收消息”后，拥有 Flagship 账户的人就可以从你的页面给你写信。他们用自己的 Flagship 应用登录 voi.ci。每个人都以专为你的页面生成的名字显示，例如“访客 4F3A”，绝不会显示其用户名，你也可以为他们改名。</li>
+        <li><strong>只有你和发送者能读。</strong>消息采用端到端加密，并使用抗量子加密，只发往你和发送者的设备。Flagship 只知道有人给你的页面写了信、时间和数量，不知道内容。</li>
+        <li><strong>屏蔽和举报。</strong>被屏蔽的访客不会收到通知，其消息也不再送达你。举报只会把那一条消息发给 Flagship。为了在不要求手机号的情况下减少垃圾消息，新账户每天只能发起少量对话，应用还会请 Apple 或 Google 确认一次它运行在真实设备上。详见<a href="/zh-hans/faq#messages">常见问题</a>。</li>
+      </ul>
+
       <h2 id="apps">运行更多类型的应用</h2>
       <ul class="notes">
-        <!-- TODO-RM new-box-stack: dedicated databases exist only on the arch-v2 (Podman) stack; remove the next item if newBoxStack is classic. -->
         <li><strong>每个应用都有自己的数据库服务器。</strong>在新服务器上，应用的数据库独立运行，拥有各自的内存、磁盘和连接数上限，因此一个繁忙的应用不会拖慢其他应用。</li>
         <li><strong>由多个部分组成的应用。</strong>一个应用最多可以由八个部分组成，例如一个 Web 服务器和一个后台任务进程，它们按顺序启动，并作为一个应用来计算：一次批准、一份可访问网站列表、一个数据库。</li>
         <li><strong>WebAssembly 应用。</strong>应用可以是一个小型 WebAssembly（WASI）程序。每个请求都在一个全新的副本中运行，并有严格的时间和内存限制。</li>
         <li><strong>为每个应用选择更新方式。</strong>默认是手动：每次更新都由你批准。分阶段会把经过检查的更新保留一周后再安装。自动则立即安装。分阶段和自动这两种方式，都只接受来自同一发布者、且不要求新权限的更新；其他更新都会等你决定。</li>
         <li><strong>应用可以请求与他人的应用通信。</strong>当别人服务器上的某个应用想给你的某个应用发送消息时，你会看到一个请求，并可以选择“允许”、“始终允许”或“拒绝”。你可以随时收回“始终允许”。</li>
-        <!-- TODO-RM app-browser: remove the next item if the release gym turns the app browser off. -->
         <li><strong>应用可以在你的服务器上使用网页浏览器，</strong>但只能访问你在安装时批准的网站，并且每个应用使用单独的浏览器。你的家庭网络和 Flagship 自身的服务始终无法访问。</li>
       </ul>
 
@@ -81,6 +87,19 @@
       </ul>
       <p class="limits">这只在你的服务器运行时有效。服务器重启后，仍需要 flagshipserver.com 才能解锁磁盘。创建账户、添加设备和恢复账户也仍需要 flagshipserver.com。</p>
 
+      <h2 id="time-limit">选择服务器在没有你的情况下运行多久</h2>
+      <ul class="notes">
+        <li><strong>每台服务器的时间限制。</strong>服务器页面会显示：如果没有管理员打开 Flagship，它保持在线到哪一天；或显示“无时间限制”。管理员可以选择 7 天、30 天或无时间限制，默认是无时间限制。在管理员设备上打开 Flagship，日期就会往后延。</li>
+        <li><strong>时间用完后，</strong>服务器上的应用会停止，直到有管理员打开 Flagship。你也可以让服务器自行锁定：它会在磁盘锁定的状态下重启，只有管理员在手机上批准后才会再次启动。</li>
+        <li><strong>由我们的中继强制执行，</strong>因此丢失或被盗的服务器无法自行继续提供你的应用。你仍然可以连上服务器本身，把它恢复过来。</li>
+      </ul>
+
+      <h2 id="phones-names">手机与名称</h2>
+      <ul class="notes">
+        <li><strong>支持 Android 10 及以上版本。</strong>Android 应用现在可在 Android 10 及以上版本运行，此前需要 Android 13。Google 已不再为 Android 10、11 和 12 提供安全更新，因此在这些手机上，应用会显示一条简短提示，建议你升级系统。所有功能照常可用。iPhone 和 iPad 仍需 iOS 18，Wear OS 仍需 Wear OS 4。</li>
+        <li><strong>名称为 3 到 30 个字符。</strong>账户名和 voi.ci 链接名使用字母、数字和连字符，长度为 3 到 30 个字符。应用在网址中的名称最多 30 个字符。与已有名称过于相似的名称会被拒绝。被放弃的名称会保留 30 天，之后任何人才能使用。</li>
+      </ul>
+
       <h2 id="languages">用你的语言使用 Flagship</h2>
       <p>应用、网页应用、本网站、Flagship Studio 以及你的服务器向访客展示的页面，现已提供英语、西班牙语、法语、德语、巴西葡萄牙语、日语和简体中文版本。通知会以你手机的语言送达。译文是机器生成的草稿，尚未经过母语人士审阅。如果某句话读起来不对，请发邮件至 <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> 告诉我们。</p>
 
@@ -98,7 +117,6 @@
         <!-- TODO-RM canary: remove the next item if release/catalog-root.json is not pinned in this release. -->
         <li><strong>更新会先推送到一小批服务器，</strong>只有在这些服务器运行正常后才会推送到更多服务器。</li>
         <li><strong>共享更新结果。</strong>服务器页面上有一个可选开关，默认关闭；开启后，每次更新都会向 Flagship 发送一份回执，说明更新是否成功。它不包含任何应用名称，也不包含任何内容。</li>
-        <!-- TODO-RM new-box-stack: if the release gym sets newBoxStack to classic, remove the next item. -->
         <li><strong>新服务器采用更新的基础架构。</strong>新服务器用 Podman 运行应用，并把密钥保存在用 Rust 编写的小型独立程序中。你已有的服务器保持当前配置不变。</li>
       </ul>
 
@@ -111,6 +129,7 @@
         <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
         <li><strong>审查发现的问题已修复。</strong>此版本修复了针对整个产品的一次安全审查中阻止发布级别的问题，以及我们自己的对抗性测试套件发现的 24 个问题；该测试套件现在每次发布都会运行。</li>
         <li><strong>抗量子基础工作。</strong>服务器和手机除了 Ed25519 密钥外还持有 ML-DSA-65 密钥，混合通道（ML-KEM-768 加 X25519）也已构建完成，iPhone 和 Android 上还有一个可选开启的“抗量子保护”设置。以上全部尚待外部审查。</li>
+        <li><strong>核对服务器运行的 Node.js。</strong>服务器有一部分运行在 Node.js 上，而且是 nodejs.org 的官方构建，从不是我们重新构建的版本。每台服务器的页面都有一张“运行时”卡片，比对它实际运行的版本与其发行版锁定的确切构建。<a href="/zh-hans/security/runtime">运行时页面</a>列出签名清单，并说明如何用 Node 自己的签名亲自核对。</li>
         <li><strong>不变的部分。</strong>TLS 依然在你自己的服务器上终止，所以我们读不到你的应用发送的内容。我们的中继能看到连接元数据：哪台服务器、什么时候、多少流量。AI 模型永远不会知道你是谁、你在哪里。</li>
       </ul>
 

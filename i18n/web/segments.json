@@ -4960,6 +4960,46 @@
       "blog/flagship-0-3.html"
     ]
   },
+  "s4745f657c6": {
+    "en": "Your own page, and messages from the people who visit it",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s95d92fdf9f": {
+    "en": "<1>A public page at voi.ci/your-username.</1> A photo, a name, a short bio, your links and your posts. You make it in the new Messages tab. Any device of your account can write posts; only an admin device publishes them. Before you publish for the first time, the app reminds you that the page shares your username with your apps and servers, so people can connect them.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s5a9c52bc0f": {
+    "en": "<1>Messages.</1> Turn on Accept messages and people with a Flagship account can write to you from your page. They sign in on voi.ci with their Flagship app. You see each of them under a name made for your page, like \"Visitor 4F3A\", never their username, and you can rename them.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s96284af4bb": {
+    "en": "<1>Only you and the sender can read them.</1> Messages are end-to-end encrypted, with post-quantum encryption, to your devices and the sender's. Flagship sees that someone wrote to your page, when and how much, not what they said.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s34feb57295": {
+    "en": "<1>Block and report.</1> A blocked visitor isn't told, and their messages stop reaching you. A report sends that one message to Flagship. To slow spam without asking for a phone number, a new account can start only a few conversations a day, and the app asks Apple or Google once to confirm it runs on a real device. More in the <2>FAQ</2>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
   "s0c5765be41": {
     "en": "Run more kinds of apps",
     "kind": "text",
@@ -5128,6 +5168,62 @@
       "blog/flagship-0-3.html"
     ]
   },
+  "s3a4a5c237a": {
+    "en": "Choose how long your server runs without you",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s4da1899292": {
+    "en": "<1>A time limit for each server.</1> Its page says \"Stays online until\" a date \"if no admin opens Flagship\", or \"No time limit\". An admin chooses 7 days, 30 days or no time limit. No time limit is the default. Opening Flagship on an admin device moves the date forward.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s95f03cf293": {
+    "en": "<1>When the time runs out,</1> the server's apps stop until an admin opens Flagship. You can also have the server lock itself: it restarts with its disk locked, and starts again only when an admin approves on their phone.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s52f3212ad5": {
+    "en": "<1>Our relay enforces it,</1> so a lost or stolen server can't keep serving your apps on its own. You can still reach the server itself to bring it back.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s8575af11b1": {
+    "en": "Phones and names",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s20e9419008": {
+    "en": "<1>Android 10 and later.</1> The Android app now runs on Android 10 and up; it needed Android 13 before. Google no longer sends security updates to Android 10, 11 or 12, so on those phones the app shows a short note suggesting an update. Everything still works. iPhone and iPad still need iOS 18, and Wear OS still needs Wear OS 4.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sf1dcd4fddb": {
+    "en": "<1>Names are 3 to 30 characters.</1> Account names and voi.ci link names use letters, numbers and hyphens, from 3 to 30 characters. An app's name in its web address is at most 30 characters. A name that looks too much like one already taken is refused. A name someone gives up is held for 30 days before anyone can take it.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
   "s34603a3e95": {
     "en": "Use Flagship in your language",
     "kind": "text",
@@ -5274,6 +5370,14 @@
   },
   "sd329c2c8a0": {
     "en": "<1>Quantum-safe groundwork.</1> Servers and phones hold ML-DSA-65 keys beside their Ed25519 keys, a hybrid channel (ML-KEM-768 with X25519) is built, and iPhone and Android have an opt-in Quantum-safe protection setting. All of it is pending external review.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s1a07eccf35": {
+    "en": "<1>Check the Node.js your server runs.</1> Part of the server runs on Node.js, and it is the official build from nodejs.org, never one we rebuilt. Each server's page has a Runtime card that compares what it runs with the exact build its release locks. The <2>runtime page</2> shows the signed list and how to check it yourself against Node's own signatures.",
     "kind": "text",
     "ctx": "li",
     "pages": [

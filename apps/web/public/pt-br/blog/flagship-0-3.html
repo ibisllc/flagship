@@ -46,15 +46,21 @@
         <li><strong>Os servidores são instalados a partir de um único pacote assinado.</strong> Um servidor novo não baixa mais código de um repositório durante a instalação. Ele verifica a assinatura de um pacote dos mantenedores do Flagship e depois o instala sem mais downloads.</li>
       </ul>
 
+      <h2 id="voici">Sua própria página, e mensagens de quem a visita</h2>
+      <ul class="notes">
+        <li><strong>Uma página pública em voi.ci/seu-usuario.</strong> Uma foto, um nome, uma bio curta, seus links e suas publicações. Você cria a página na nova aba Mensagens. Qualquer dispositivo da sua conta pode escrever publicações; só um dispositivo administrador as publica. Antes da primeira publicação, o app lembra que a página compartilha seu nome de usuário com seus apps e servidores, então as pessoas podem ligar uma coisa à outra.</li>
+        <li><strong>Mensagens.</strong> Ative Aceitar mensagens e pessoas com uma conta Flagship podem escrever para você pela sua página. Elas entram no voi.ci com o app Flagship delas. Você vê cada uma com um nome criado para a sua página, como "Visitante 4F3A", nunca pelo nome de usuário, e pode renomeá-las.</li>
+        <li><strong>Só você e quem escreveu podem ler.</strong> As mensagens têm criptografia de ponta a ponta, com criptografia pós-quântica, para os seus dispositivos e os de quem enviou. O Flagship vê que alguém escreveu para a sua página, quando e quanto, não o que foi dito.</li>
+        <li><strong>Bloquear e denunciar.</strong> Um visitante bloqueado não é avisado, e as mensagens dele deixam de chegar até você. Uma denúncia envia aquela mensagem ao Flagship. Para frear o spam sem pedir número de telefone, uma conta nova só pode começar poucas conversas por dia, e o app pede uma vez à Apple ou ao Google que confirme que ele roda em um dispositivo real. Mais nas <a href="/pt-br/faq#messages">perguntas frequentes</a>.</li>
+      </ul>
+
       <h2 id="apps">Rode mais tipos de apps</h2>
       <ul class="notes">
-        <!-- TODO-RM new-box-stack: dedicated databases exist only on the arch-v2 (Podman) stack; remove the next item if newBoxStack is classic. -->
         <li><strong>Cada app ganha seu próprio servidor de banco de dados.</strong> Nos servidores novos, o banco de dados de um app roda separado, com seus próprios limites de memória, disco e conexões, então um app muito ocupado não consegue deixar os outros lentos.</li>
         <li><strong>Apps feitos de várias partes.</strong> Um app pode ter até oito partes, como um servidor web e um processo em segundo plano, que iniciam em ordem e contam como um só app: uma aprovação, uma lista de sites que ele pode acessar, um banco de dados.</li>
         <li><strong>Apps WebAssembly.</strong> Um app pode ser um pequeno programa WebAssembly (WASI). Cada requisição roda em uma cópia nova com limites rígidos de tempo e memória.</li>
         <li><strong>Escolha como cada app é atualizado.</strong> Manual é o padrão: você aprova cada atualização. Escalonado segura uma atualização verificada por uma semana antes de instalá-la. Automático a instala na hora. As duas opções automáticas só aceitam atualizações do mesmo editor que não peçam novas permissões; todo o resto continua esperando por você.</li>
         <li><strong>Os apps podem pedir para conversar com os apps de outra pessoa.</strong> Quando um app no servidor de outra pessoa quer enviar mensagens para um dos seus, você vê um pedido e escolhe Permitir, Permitir sempre ou Negar. Você pode desfazer um Permitir sempre a qualquer momento.</li>
-        <!-- TODO-RM app-browser: remove the next item if the release gym turns the app browser off. -->
         <li><strong>Os apps podem usar um navegador web no seu servidor,</strong> mas só nos sites que você aprovou ao instalá-los, com um navegador separado para cada app. Sua rede doméstica e os serviços do próprio Flagship ficam sempre fora de alcance.</li>
       </ul>
 
@@ -81,6 +87,19 @@
       </ul>
       <p class="limits">Isso funciona enquanto seu servidor está rodando. Um servidor que reinicia ainda precisa de flagshipserver.com para desbloquear o disco. Criar uma conta, adicionar um dispositivo e recuperar uma conta também ainda precisam de flagshipserver.com.</p>
 
+      <h2 id="time-limit">Escolha por quanto tempo seu servidor funciona sem você</h2>
+      <ul class="notes">
+        <li><strong>Um limite de tempo para cada servidor.</strong> A página dele mostra até quando ele fica online se nenhum administrador abrir o Flagship, ou "Sem limite de tempo". Um administrador escolhe 7 dias, 30 dias ou sem limite de tempo. Sem limite de tempo é o padrão. Abrir o Flagship em um dispositivo administrador adia a data.</li>
+        <li><strong>Quando o tempo acaba,</strong> os apps do servidor param até um administrador abrir o Flagship. Você também pode fazer o servidor se bloquear: ele reinicia com o disco bloqueado e só volta a funcionar quando um administrador aprova no celular.</li>
+        <li><strong>Nosso relay garante isso,</strong> então um servidor perdido ou roubado não consegue continuar servindo seus apps sozinho. Você ainda consegue chegar ao próprio servidor para recuperá-lo.</li>
+      </ul>
+
+      <h2 id="phones-names">Celulares e nomes</h2>
+      <ul class="notes">
+        <li><strong>Android 10 ou mais recente.</strong> O app para Android agora roda no Android 10 em diante; antes ele precisava do Android 13. O Google não envia mais atualizações de segurança para o Android 10, 11 e 12, então nesses celulares o app mostra um aviso curto sugerindo uma atualização. Tudo continua funcionando. iPhone e iPad continuam precisando do iOS 18, e o Wear OS continua precisando do Wear OS 4.</li>
+        <li><strong>Os nomes têm de 3 a 30 caracteres.</strong> Nomes de conta e nomes de link do voi.ci usam letras, números e hifens, de 3 a 30 caracteres. O nome de um app no endereço web dele tem no máximo 30 caracteres. Um nome parecido demais com um já usado é recusado. Um nome que alguém abandona fica reservado por 30 dias antes que qualquer pessoa possa pegá-lo.</li>
+      </ul>
+
       <h2 id="languages">Use o Flagship no seu idioma</h2>
       <p>Os apps, o app web, este site, o Flagship Studio e as páginas que seu servidor mostra aos visitantes agora estão em inglês, espanhol, francês, alemão, português do Brasil, japonês e chinês simplificado. As notificações chegam no idioma do seu celular. As traduções são rascunhos feitos por máquina que falantes nativos ainda não revisaram. Se uma frase parecer errada, avise-nos em <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
 
@@ -98,7 +117,6 @@
         <!-- TODO-RM canary: remove the next item if release/catalog-root.json is not pinned in this release. -->
         <li><strong>As atualizações chegam primeiro a um pequeno grupo de servidores,</strong> e a mais servidores só quando esses estão saudáveis.</li>
         <li><strong>Compartilhar resultados das atualizações.</strong> Uma opção na página do seu servidor, desligada por padrão, envia ao Flagship um recibo por atualização dizendo se ela funcionou. Não cita nenhum app e não contém conteúdo.</li>
-        <!-- TODO-RM new-box-stack: if the release gym sets newBoxStack to classic, remove the next item. -->
         <li><strong>Uma base mais nova para servidores novos.</strong> Os servidores novos rodam os apps com Podman e guardam as chaves em programas pequenos e separados escritos em Rust. Os servidores que você já tem mantêm a configuração atual.</li>
       </ul>
 
@@ -111,6 +129,7 @@
         <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
         <li><strong>Achados da revisão corrigidos.</strong> Esta versão corrige os achados impeditivos de lançamento de uma revisão de segurança do produto inteiro e os 24 achados do nosso próprio conjunto de testes adversariais, que agora roda em cada versão.</li>
         <li><strong>Bases pós-quânticas.</strong> Servidores e celulares têm chaves ML-DSA-65 ao lado das chaves Ed25519, um canal híbrido (ML-KEM-768 com X25519) já está construído, e o iPhone e o Android têm uma configuração opcional, Proteção pós-quântica, que você pode ativar. Tudo isso está pendente de revisão externa.</li>
+        <li><strong>Confira o Node.js que seu servidor executa.</strong> Parte do servidor roda em Node.js, e é a versão oficial do nodejs.org, nunca uma que nós recompilamos. A página de cada servidor tem um cartão Ambiente de execução que compara o que ele executa com a versão exata que a release dele fixa. A <a href="/pt-br/security/runtime">página do ambiente de execução</a> mostra a lista assinada e como verificar você mesmo com as assinaturas do próprio Node.</li>
         <li><strong>O que não mudou.</strong> O TLS continua terminando no seu próprio servidor, então não conseguimos ler o que seus apps enviam. Nosso relay vê metadados de conexão: qual servidor, quando e quanto. Um modelo de IA nunca descobre quem você é nem onde está.</li>
       </ul>
 

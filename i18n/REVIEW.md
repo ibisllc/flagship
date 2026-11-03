@@ -88,3 +88,11 @@ reporter's preference" line (fr is long). On the open-in-app page, "Let a browse
 language). On the Studio page, the menu path "Add server → Pair with Studio" is translated literally: it should match
 the app's real labels (the English itself predates the current "Add a server" wording). On the status board, "Upstream",
 "Heap used", "Passthrough" and the pill words; pt-BR and de keep "Status" as is.
+
+**0.3 launch texts, added 2026-11-02 (drafted by an agent, needs native review).** In `i18n/web/<lang>.json`: the
+13 new segments of `blog/flagship-0-3.html` (voi.ci page and Messages, the server time limit, Android 10 and the name
+rules, the Node.js runtime check). In `store/listings/<lang>.json`: the new voi.ci, time limit, runtime, Android 10
+and names bullets in both stores' descriptions and What's new texts, and the rewritten Google Play What's new (500
+characters at most; `node scripts/store-assets/listings.mjs counts`). Review first: the end-to-end encryption
+sentence, "senders appear as visitors, never by name", and the time-limit sentence (it must match the server page's
+"If no admin opens Flagship for:" wording in each language).

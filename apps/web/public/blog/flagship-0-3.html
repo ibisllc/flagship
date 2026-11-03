@@ -58,15 +58,21 @@
         <li><strong>Servers install from one signed package.</strong> A new server no longer downloads code from a repository while it installs. It checks the signature of one package from Flagship's maintainers, then installs it with no further downloads.</li>
       </ul>
 
+      <h2 id="voici">Your own page, and messages from the people who visit it</h2>
+      <ul class="notes">
+        <li><strong>A public page at voi.ci/your-username.</strong> A photo, a name, a short bio, your links and your posts. You make it in the new Messages tab. Any device of your account can write posts; only an admin device publishes them. Before you publish for the first time, the app reminds you that the page shares your username with your apps and servers, so people can connect them.</li>
+        <li><strong>Messages.</strong> Turn on Accept messages and people with a Flagship account can write to you from your page. They sign in on voi.ci with their Flagship app. You see each of them under a name made for your page, like "Visitor 4F3A", never their username, and you can rename them.</li>
+        <li><strong>Only you and the sender can read them.</strong> Messages are end-to-end encrypted, with post-quantum encryption, to your devices and the sender's. Flagship sees that someone wrote to your page, when and how much, not what they said.</li>
+        <li><strong>Block and report.</strong> A blocked visitor isn't told, and their messages stop reaching you. A report sends that one message to Flagship. To slow spam without asking for a phone number, a new account can start only a few conversations a day, and the app asks Apple or Google once to confirm it runs on a real device. More in the <a href="/faq#messages">FAQ</a>.</li>
+      </ul>
+
       <h2 id="apps">Run more kinds of apps</h2>
       <ul class="notes">
-        <!-- TODO-RM new-box-stack: dedicated databases exist only on the arch-v2 (Podman) stack; remove the next item if newBoxStack is classic. -->
         <li><strong>Each app gets its own database server.</strong> On new servers an app's database runs on its own, with its own memory, disk and connection limits, so one busy app can't slow the others down.</li>
         <li><strong>Apps made of several parts.</strong> An app can be up to eight parts, such as a web server and a worker, that start in order and count as one app: one approval, one list of sites it may reach, one database.</li>
         <li><strong>WebAssembly apps.</strong> An app can be a small WebAssembly (WASI) program. Each request runs in a fresh copy with hard limits on time and memory.</li>
         <li><strong>Choose how each app updates.</strong> Manual is the default: you approve every update. Staged holds a checked update for a week before it installs. Automatic installs it at once. Both automatic choices only take updates from the same publisher that ask for no new permissions; anything else waits for you.</li>
         <li><strong>Apps can ask to talk to another person's apps.</strong> When an app on someone else's server wants to send messages to one of yours, you see a request and choose Allow, Always allow or Deny. You can take an Always allow back at any time.</li>
-        <!-- TODO-RM app-browser: remove the next item if the release gym turns the app browser off. -->
         <li><strong>Apps can use a web browser on your server,</strong> but only on the sites you approved when you installed them, with a separate browser for each app. Your home network and Flagship's own services are always out of reach.</li>
       </ul>
 
@@ -93,6 +99,19 @@
       </ul>
       <p class="limits">This works while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.</p>
 
+      <h2 id="time-limit">Choose how long your server runs without you</h2>
+      <ul class="notes">
+        <li><strong>A time limit for each server.</strong> Its page says "Stays online until" a date "if no admin opens Flagship", or "No time limit". An admin chooses 7 days, 30 days or no time limit. No time limit is the default. Opening Flagship on an admin device moves the date forward.</li>
+        <li><strong>When the time runs out,</strong> the server's apps stop until an admin opens Flagship. You can also have the server lock itself: it restarts with its disk locked, and starts again only when an admin approves on their phone.</li>
+        <li><strong>Our relay enforces it,</strong> so a lost or stolen server can't keep serving your apps on its own. You can still reach the server itself to bring it back.</li>
+      </ul>
+
+      <h2 id="phones-names">Phones and names</h2>
+      <ul class="notes">
+        <li><strong>Android 10 and later.</strong> The Android app now runs on Android 10 and up; it needed Android 13 before. Google no longer sends security updates to Android 10, 11 or 12, so on those phones the app shows a short note suggesting an update. Everything still works. iPhone and iPad still need iOS 18, and Wear OS still needs Wear OS 4.</li>
+        <li><strong>Names are 3 to 30 characters.</strong> Account names and voi.ci link names use letters, numbers and hyphens, from 3 to 30 characters. An app's name in its web address is at most 30 characters. A name that looks too much like one already taken is refused. A name someone gives up is held for 30 days before anyone can take it.</li>
+      </ul>
+
       <h2 id="languages">Use Flagship in your language</h2>
       <p>The apps, the web app, this website, Flagship Studio and the pages your server shows visitors are now in English, Spanish, French, German, Brazilian Portuguese, Japanese and Simplified Chinese. Notifications arrive in your phone's language. The translations are machine-made drafts that native speakers have not reviewed yet. If a sentence reads wrong, tell us at <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
 
@@ -110,7 +129,6 @@
         <!-- TODO-RM canary: remove the next item if release/catalog-root.json is not pinned in this release. -->
         <li><strong>Updates reach a small group of servers first,</strong> and more only once those are healthy.</li>
         <li><strong>Share update results.</strong> An optional switch on your server's page, off by default, sends Flagship one receipt per update saying whether it worked. It names no app and holds no content.</li>
-        <!-- TODO-RM new-box-stack: if the release gym sets newBoxStack to classic, remove the next item. -->
         <li><strong>A newer foundation for new servers.</strong> New servers run apps with Podman and keep their keys in small, separate programs written in Rust. Servers you already have keep their current setup.</li>
       </ul>
 
@@ -123,6 +141,7 @@
         <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
         <li><strong>Review findings fixed.</strong> This release fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release.</li>
         <li><strong>Quantum-safe groundwork.</strong> Servers and phones hold ML-DSA-65 keys beside their Ed25519 keys, a hybrid channel (ML-KEM-768 with X25519) is built, and iPhone and Android have an opt-in Quantum-safe protection setting. All of it is pending external review.</li>
+        <li><strong>Check the Node.js your server runs.</strong> Part of the server runs on Node.js, and it is the official build from nodejs.org, never one we rebuilt. Each server's page has a Runtime card that compares what it runs with the exact build its release locks. The <a href="/security/runtime.html">runtime page</a> shows the signed list and how to check it yourself against Node's own signatures.</li>
         <li><strong>What has not changed.</strong> TLS still ends on your own server, so we can't read what your apps send. Our relay sees connection metadata: which server, when, and how much. An AI model never learns who or where you are.</li>
       </ul>
 
