@@ -1304,6 +1304,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-11-03 (second): daemon.env names the recipe's .com (FLAGSHIP_CONTROL_PLANE_BASE_URL)
+      // and root's /etc/flagship/config.json; without them ISO boxes talked to production's .com.
       // Re-pinned 2026-11-03: the bootstrap puts /usr/local/bin on PATH (in-target lacks it, so flagship-tsx was not found).
       // Re-pinned 2026-10-25: the premounts mount FLAGSHIP_BOOT as ext4 after waiting for its link (bootFsMount.ts).
       // Re-pinned 2026-10-24: the bootstrap carries the verifier with the artifact's PQ half.
@@ -1323,7 +1325,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "fd34a53ed4d29e293c858c3fb5ab396c562f602f382becf8fc256c2c0b49cae7",
+      "dea0cc9b800589dfde8896bf1426ce038bfca90df63447c67df9e7fe0545fedc",
     );
   });
 

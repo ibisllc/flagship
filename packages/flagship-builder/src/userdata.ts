@@ -770,10 +770,36 @@ SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex
 # Daemon environment. server-daemon reads its two REQUIRED inputs
 # (FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX) from the process env
 # only; systemd loads this via EnvironmentFile= in the unit below.
+# FLAGSHIP_CONTROL_PLANE_BASE_URL pins the daemon to the .com that issued this
+# recipe: without it the daemon defaults to production, so a box from any other
+# control plane (the gym) claimed its entitlement, heartbeat and certificate there
+# and never came online. FLAGSHIP_CONFIG is root's copy of the owner keys: the root
+# steps (server-daemon setup.ts: debug access, the stack switch) read only that
+# file, never the daemon-owned install blob. Same as the cloud-init path
+# (control-plane demoCloudConfig.ts).
+case "$CONTROL_PLANE_BASE" in
+    https://*|http://*) ;;
+    *) echo "[flagship-bootstrap] FATAL: cannot derive the control plane from $REGISTRATION_URL"; exit 1 ;;
+esac
 mkdir -p /etc/flagship
+jq -ce 'def hex64: type == "string" and test("^[0-9a-fA-F]{64}$");
+    select((.serverDomain | type) == "string" and (.username | type) == "string"
+        and (.phoneDelegatedPubKey | hex64) and (.authCode.userPubKey | hex64))
+    | (if (.authCode.adminRootPubKey | hex64) then .authCode.adminRootPubKey
+       elif (.adminRootPubHex | hex64) then .adminRootPubHex else null end) as $root
+    | {serverId: .serverDomain, userId: .username,
+       bakPublicKey: (.phoneDelegatedPubKey | ascii_downcase),
+       irkPublicKey: (.authCode.userPubKey | ascii_downcase)}
+    + (if (.ownerAidPubHex | hex64) then {ownerAidPubHex: (.ownerAidPubHex | ascii_downcase)} else {} end)
+    + (if $root then {adminRootPubHex: ($root | ascii_downcase)} else {} end)' \\
+    "$BLOB_JSON" > /etc/flagship/config.json \\
+    || { echo "[flagship-bootstrap] FATAL: the install blob has no usable owner keys"; exit 1; }
+chmod 600 /etc/flagship/config.json
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
 FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
+FLAGSHIP_CONTROL_PLANE_BASE_URL=$CONTROL_PLANE_BASE
+FLAGSHIP_CONFIG=/etc/flagship/config.json
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
