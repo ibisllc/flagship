@@ -14,10 +14,10 @@ use ed25519_dalek::SigningKey;
 use flagship_crypto::relay_mesh::{
     self as m, AccountMove, AttachmentHolder, AttachmentItem, AttachmentKind, BoxAttachment,
     BridgeAuth, BridgeAuthCheck, HomeAttachment, MeshAuth, MeshCheckContext, MeshItem, MoveHint,
-    MoveHintCheck, MoveHintRateState, PhoneItem, PhoneRouteGrant, RebalanceRelay, RebalanceWindow,
-    RelayBlessing, RelayBlessingBody, RelayBlessingRequest, RelayDirectory, RelayDirectoryBody,
-    RelayDirectoryEntry, RelayKind, RelayLogApply, RelayLogEntry, RelayLogHead, RelayLogState,
-    RelayWithdraw,
+    MoveHintCheck, MoveHintRateState, PhoneItem, PhoneItemGrant, PhoneRouteGrant, RebalanceRelay,
+    RebalanceWindow, RelayBlessing, RelayBlessingBody, RelayBlessingRequest, RelayDirectory,
+    RelayDirectoryBody, RelayDirectoryEntry, RelayKind, RelayLogApply, RelayLogEntry, RelayLogHead,
+    RelayLogState, RelayWithdraw,
 };
 use flagship_crypto::serving::{
     Grace, OnLapse, PolicyHead, RevocationState, RouteClaim, ServingDecision, ServingInput,
@@ -247,12 +247,43 @@ fn route_claim(v: &Value) -> RouteClaim {
         issued_at: u("issuedAt"),
     }
 }
+fn proof_grants(v: &Value) -> Vec<PhoneItemGrant> {
+    let t = |o: &Value, k: &str| o[k].as_str().unwrap_or_default().to_owned();
+    v.as_array()
+        .map(|a| {
+            a.iter()
+                .map(|x| {
+                    let g = &x["grant"];
+                    PhoneItemGrant {
+                        grant_id: t(g, "grantId"),
+                        username: t(g, "username"),
+                        device_id: t(g, "deviceId"),
+                        device_pub_hex: t(g, "devicePubHex"),
+                        scopes: g["scopes"]
+                            .as_array()
+                            .map(|s| {
+                                s.iter()
+                                    .map(|y| y.as_str().unwrap_or_default().to_owned())
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        issued_at: g["issuedAt"].as_u64().unwrap_or_default(),
+                        expires_at: g["expiresAt"].as_u64().unwrap_or_default(),
+                        signature_hex: t(x, "signatureHex"),
+                        signer_root: t(x, "signerRoot"),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 fn phone_item(v: &Value) -> PhoneItem {
     PhoneItem {
         grant: grant(&v["grant"]),
         signature: s(v, "signature"),
         claim: route_claim(&v["claim"]),
         claim_signature: v["claimSignature"].as_str().unwrap_or_default().to_owned(),
+        grants: proof_grants(&v["grants"]),
     }
 }
 fn mesh_item(v: &Value) -> MeshItem {
@@ -689,11 +720,9 @@ fn unrevoke_is_a_new_reg_gen_like_ts() {
                 None,
             ));
             assert_eq!(
-                got,
-                a["expected"],
+                got, a["expected"],
                 "{} regGen {}",
-                step["name"],
-                a["attachment"]["regGen"]
+                step["name"], a["attachment"]["regGen"]
             );
         }
     }

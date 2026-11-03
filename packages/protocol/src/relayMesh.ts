@@ -44,7 +44,7 @@
  *   checks               checkBoxAttachment, checkLegacyAttachment, checkAttachmentItem, attachmentRefusalCode,
  *                        compareAttachments, checkWithdraw, withdrawCovers, checkBridgeAuth, checkMoveHint,
  *                        emptyMoveHintRateState, recordMoveHint, recordMoveTargetFailed, checkAccountMove,
- *                        checkPhoneItem, comparePhoneItems
+ *                        checkPhoneItem, comparePhoneItems, phoneItemGrants, checkPhoneEligibilityProof
  *   routing              accountHome, phoneLedgerRanking, isPhoneLedgerFor, rebalanceDecision
  *
  * The relay log's confidentiality is an open owner decision (public, or encrypted to a mesh key): nothing here assumes
@@ -55,7 +55,8 @@ import { sha256 } from "@noble/hashes/sha256";
 import { hex } from "./canonicalBase.js";
 import { ed } from "./edSync.js";
 import { authorizedCaKeysOrFailClosed, MAINTAINER_PINNED_MANDATE_HASH, type CaArtifactReject, type CaTrustChain } from "./maintainerCa.js";
-import { PHONE_ROUTE_LEASE_MS } from "./phoneRoute.js";
+import { requireMasterAdmin } from "./adminAuthority.js";
+import { PHONE_BEGIN_MAX_GRANTS, PHONE_ROUTE_LEASE_MS, type PhoneBeginGrant } from "./phoneRoute.js";
 import { canonicalRouteClaim, type RouteClaim, type ServingRevocations } from "./servingAuthority.js";
 import type { Bytes, Keypair } from "./types.js";
 
@@ -1339,6 +1340,11 @@ export interface PhoneItem {
   /** The phone's `route-claim/v1` for this generation (§8.3), and its signature under `grant.phoneRoutePub`. */
   claim: RouteClaim;
   claimSignature: string;
+  /**
+   * The phone's eligibility proof (§8.3): the admin-root-signed device grants for `grant.phoneRoutePub` it presented in
+   * `begin`, exactly as {@link phoneItemGrants} keeps them. Every relay checks one of them under the log's admin root.
+   */
+  grants: PhoneBeginGrant[];
 }
 export type AttachmentItem = BoxItem | LegacyItem;
 /** An item in an `announce` message (§6.3). Mailbox items (§7.6) are typed by their own module. */
@@ -1619,7 +1625,81 @@ export type PhoneItemRefusal =
   | "not-ledger"
   | "claim-mismatch"
   | "bad-signature"
-  | "bad-claim";
+  | "bad-claim"
+  | "not-eligible";
+
+const PHONE_GRANT_ID = /^[0-9a-fA-F][0-9a-fA-F-]{0,63}$/;
+const PHONE_GRANT_MAX_SCOPES = 16;
+const uintOk = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+/**
+ * One grant of a phone item's eligibility proof in exactly its wire shape (§8.3): a grant id the log can carry (so a
+ * `device-grant-revoke` reaches it), the device key is `phoneRoutePub`, lowercase hex, signed by the admin root.
+ */
+function isPhoneItemGrant(p: unknown, phoneRoutePub: string): p is PhoneBeginGrant {
+  if (typeof p !== "object" || p === null) return false;
+  const o = p as Record<string, unknown>;
+  const g = o.grant as Record<string, unknown> | null | undefined;
+  if (typeof g !== "object" || g === null) return false;
+  return (
+    typeof g.grantId === "string" && PHONE_GRANT_ID.test(g.grantId) &&
+    typeof g.username === "string" && typeof g.deviceId === "string" && g.devicePubHex === phoneRoutePub &&
+    Array.isArray(g.scopes) && g.scopes.length <= PHONE_GRANT_MAX_SCOPES && g.scopes.every((x) => typeof x === "string") &&
+    uintOk(g.issuedAt) && uintOk(g.expiresAt) &&
+    typeof o.signatureHex === "string" && HEX128.test(o.signatureHex) && o.signerRoot === "admin-root"
+  );
+}
+
+/**
+ * What P puts in its phone item (§8.3): of the first {@link PHONE_BEGIN_MAX_GRANTS} grants the phone presented in
+ * `begin`, those in the wire shape for this key, copied field by field.
+ */
+export function phoneItemGrants(presented: unknown, phoneRoutePub: string): PhoneBeginGrant[] {
+  const pub = phoneRoutePub.toLowerCase();
+  const out: PhoneBeginGrant[] = [];
+  for (const p of Array.isArray(presented) ? presented.slice(0, PHONE_BEGIN_MAX_GRANTS) : []) {
+    if (!isPhoneItemGrant(p, pub)) continue;
+    const g = p.grant;
+    out.push({
+      grant: { grantId: g.grantId, username: g.username, deviceId: g.deviceId, devicePubHex: g.devicePubHex, scopes: [...g.scopes], issuedAt: g.issuedAt, expiresAt: g.expiresAt },
+      signatureHex: p.signatureHex,
+      signerRoot: "admin-root",
+    });
+  }
+  return out;
+}
+
+/**
+ * §8.3: may `phoneRoutePub` hold the account's bare name, by its own proof? `malformed` unless 1 to
+ * {@link PHONE_BEGIN_MAX_GRANTS} grants in the wire shape for this key; `not-eligible` unless at least one of them,
+ * not revoked by the log (`device-grant-revoke`), is an unexpired `admin` grant naming the account that verifies under
+ * the log's admin root for the account (`requireMasterAdmin`), and the key is not that root. The ledger relay checks
+ * it before it signs a grant and every relay before it accepts a phone item.
+ */
+export function checkPhoneEligibilityProof(grants: unknown, account: string, phoneRoutePub: string, log: RelayLogState, now: number): "ok" | "malformed" | "not-eligible" {
+  if (!Array.isArray(grants) || grants.length < 1 || grants.length > PHONE_BEGIN_MAX_GRANTS) return "malformed";
+  if (!HEX64.test(phoneRoutePub) || !grants.every((p) => isPhoneItemGrant(p, phoneRoutePub))) return "malformed";
+  let h: string;
+  try {
+    h = accountHash(account);
+  } catch {
+    return "not-eligible";
+  }
+  const root = log.authorities.get(h)?.adminRootPub ?? null;
+  if (!root || root === phoneRoutePub) return "not-eligible";
+  for (const p of grants as PhoneBeginGrant[]) {
+    if (log.revokedGrants.has(relayLogGrantId(p.grant.grantId))) continue;
+    const g = p.grant;
+    const view = {
+      grant: { grantId: g.grantId, username: g.username, deviceId: g.deviceId, devicePubKey: fromHex(g.devicePubHex), scopes: g.scopes as never, issuedAt: g.issuedAt, expiresAt: g.expiresAt },
+      signatureHex: p.signatureHex,
+      signerRoot: "admin-root" as const,
+      revokedAt: null,
+    };
+    if (requireMasterAdmin(phoneRoutePub, account, root, [view], now).ok) return "ok";
+  }
+  return "not-eligible";
+}
 
 /** Is `relayId` among the first `PHONE_LEDGER_TOP_K` of the account's ledger ranking (§8.1)? */
 export function isPhoneLedgerFor(account: string, relayId: string, directory: RelayDirectoryBody | null, log: RelayLogState | null): boolean {
@@ -1637,7 +1717,9 @@ export function isPhoneLedgerFor(account: string, relayId: string, directory: Re
  * name; 0 when none), was announced by its `holderRelayId`, both relays are unrevoked `full` relays in the directory,
  * `ledgerRelayId` is among the first `PHONE_LEDGER_TOP_K` of the account's ledger ranking, the phone's route claim it
  * carries names the same hostname, key and generation (issued no later than the grant, within the skew), the ledger's
- * directory key signed the grant and the phone's key signed the claim.
+ * directory key signed the grant, the phone's key signed the claim, and the item's grants prove the key is an admin
+ * device of the account under the log's admin root ({@link checkPhoneEligibilityProof}; malformed grants are
+ * `malformed`).
  */
 export function checkPhoneItem(item: PhoneItem, announcerRelayId: string, ctx: MeshCheckContext, highestLive = 0): { ok: true } | { ok: false; reason: PhoneItemRefusal } {
   const g = item?.grant;
@@ -1650,6 +1732,9 @@ export function checkPhoneItem(item: PhoneItem, announcerRelayId: string, ctx: M
     claimMsg = canonicalRouteClaim(c);
     hexField("signature", item.signature, HEX128);
     hexField("claimSignature", item.claimSignature, HEX128);
+    if (!Array.isArray(item.grants) || item.grants.length < 1 || item.grants.length > PHONE_BEGIN_MAX_GRANTS || !item.grants.every((p) => isPhoneItemGrant(p, g.phoneRoutePub))) {
+      bad("grants", "must be 1 to 8 admin-root grants for the phone key");
+    }
   } catch {
     return { ok: false, reason: "malformed" };
   }
@@ -1671,6 +1756,7 @@ export function checkPhoneItem(item: PhoneItem, announcerRelayId: string, ctx: M
   }
   if (!edVerify(item.signature, msg, ledger.relayKey)) return { ok: false, reason: "bad-signature" };
   if (!edVerify(item.claimSignature, claimMsg, g.phoneRoutePub)) return { ok: false, reason: "bad-claim" };
+  if (checkPhoneEligibilityProof(item.grants, account, g.phoneRoutePub, ctx.log, ctx.now) !== "ok") return { ok: false, reason: "not-eligible" };
   return { ok: true };
 }
 

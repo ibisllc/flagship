@@ -33,7 +33,10 @@ import { bridgedSniMatches, PendingHandshakes } from "../src/tunnel/mesh/bridge.
 import { PhoneRoutes, type PhoneRouteLedgerClient, type PhoneSessionHandle } from "../src/tunnel/phoneRoute.js";
 import { AddressLimiter } from "../src/tunnel/phoneTunnel.js";
 import { clientHello } from "../../../tools/relay-conformance/harness.js";
-import { APEX, hex, keypair, MeshFixture } from "./support/meshFixture.js";
+import { adminProof, APEX, hex, keypair, MeshFixture } from "./support/meshFixture.js";
+
+/** The admin root every rig account's phone key is granted under (relay-mesh.md §8.3). */
+const ADMIN = keypair();
 
 function rig(relayIds: string[] = ["ra", "rb", "rc", "rd", "re"]) {
   const fx = new MeshFixture();
@@ -42,6 +45,7 @@ function rig(relayIds: string[] = ["ra", "rb", "rc", "rd", "re"]) {
   const relays = Object.fromEntries(relayIds.map((id) => [id, fx.addRelay(id)]));
   const entry = fx.addRelay("rx", "entry");
   fx.mintDirectory();
+  fx.authority("erin", hex(ADMIN.publicKey), hex(keypair().publicKey));
   const dir = new MeshDirectory({ servicesApex: APEX, caKeys: () => [fx.caPub], now: () => t });
   dir.offer(fx.directory);
   const feed = new MeshFeed({ servicesApex: APEX, logKey: fx.logPub, source: fx.source(), now: () => t });
@@ -51,9 +55,10 @@ function rig(relayIds: string[] = ["ra", "rb", "rc", "rd", "re"]) {
 }
 
 const phoneKey = keypair();
-const claimFor = (g: PhoneRouteGrant, k = phoneKey): { claim: RouteClaim; claimSignature: string } => {
-  const claim: RouteClaim = { account: g.hostname.split(".")[0]!, phoneRoutePub: g.phoneRoutePub, hostname: g.hostname, generation: g.generation, sessionNonce: "5e".repeat(16), issuedAt: g.issuedAt - 1_000 };
-  return { claim, claimSignature: hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, k.privateKey))) };
+const claimFor = (g: PhoneRouteGrant, k = phoneKey) => {
+  const account = g.hostname.split(".")[0]!;
+  const claim: RouteClaim = { account, phoneRoutePub: g.phoneRoutePub, hostname: g.hostname, generation: g.generation, sessionNonce: "5e".repeat(16), issuedAt: g.issuedAt - 1_000 };
+  return { claim, claimSignature: hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, k.privateKey))), grants: [adminProof(account, ADMIN, phoneKey, { now: g.issuedAt, grantId: "ad".repeat(16) })] };
 };
 function phoneItem(r: ReturnType<typeof rig>, account: string, o: { ledger: string; holder: string; generation: number; issuedAt?: number }): PhoneItem {
   const issuedAt = o.issuedAt ?? r.now();
@@ -62,8 +67,9 @@ function phoneItem(r: ReturnType<typeof rig>, account: string, o: { ledger: stri
 }
 
 describe("M3: a phone item's ledger, claim and generation", () => {
-  it("only a relay in the account's top k may sign its grant; the item must carry the phone's claim", () => {
+  it("only a relay in the account's top k may sign its grant; the item must carry the phone's claim", async () => {
     const r = rig();
+    await r.feed.poll();
     const rank = phoneLedgerRanking("erin", r.dir.current, r.feed.state);
     const inside = rank[0]!;
     const outside = rank[PHONE_LEDGER_TOP_K]!;
@@ -76,8 +82,9 @@ describe("M3: a phone item's ledger, claim and generation", () => {
     expect(r.store.offerPhone(good, inside)).toBe(true);
   });
 
-  it("a generation may not jump far above a live item; the memory follows the ledger relay and lapses", () => {
+  it("a generation may not jump far above a live item; the memory follows the ledger relay and lapses", async () => {
     const r = rig();
+    await r.feed.poll();
     const rank = phoneLedgerRanking("erin", r.dir.current, r.feed.state);
     const [l1, l2] = [rank[0]!, rank[1]!];
     expect(r.store.offerPhone(phoneItem(r, "erin", { ledger: l1, holder: l1, generation: 5 }), l1)).toBe(true);
@@ -100,8 +107,9 @@ describe("M3: the ledger relay", () => {
     return { relayId, sent, rejected: 0, send: (m: Record<string, unknown>) => void sent.push(m) };
   };
 
-  it("answers only full peers, only for accounts it ranks in the top k, and only claims the phone signed", () => {
+  it("answers only full peers, only for accounts it ranks in the top k, and only claims the phone signed", async () => {
     const r = rig();
+    await r.feed.poll();
     const rank = phoneLedgerRanking("erin", r.dir.current, r.feed.state);
     const self = rank[0]!;
     const holderId = rank[1]!;
@@ -114,6 +122,7 @@ describe("M3: the ledger relay", () => {
       onVacant: () => undefined,
       peerMayAsk: (id) => id !== "rx",
       servesAccount: (u) => phoneLedgerRanking(u, r.dir.current, r.feed.state).slice(0, PHONE_LEDGER_TOP_K).includes(self),
+      log: () => r.feed.state,
     });
     // An entry relay is not answered at all.
     const ent = fakePeer("rx");
@@ -139,15 +148,31 @@ describe("M3: the ledger relay", () => {
     const forged = claimFor(g, keypair());
     answerLedgerRequest(host, p as never, { type: "phone-claim", qid: "q6", hostname, generation: 1, holder, ...forged });
     expect(p.sent.at(-1)).toMatchObject({ qid: "q6", ok: false, code: "malformed" });
+    // §8.3 (security review 2026-11-03): a key the claim's own grants do not prove an admin device of the account.
+    const made = keypair();
+    const mg = { ...g, phoneRoutePub: hex(made.publicKey) };
+    const mh = { ...holder, phoneRoutePub: mg.phoneRoutePub };
+    const mc = claimFor(mg, made);
+    for (const [qid, grants] of [
+      ["q8", undefined],
+      ["q9", []],
+      ["q10", [adminProof("erin", made, made, { now: r.now() })]],
+      ["q11", [adminProof("erin", ADMIN, made, { now: r.now(), scopes: ["browse"] })]],
+      ["q12", mc.grants],
+    ] as const) {
+      answerLedgerRequest(host, p as never, { type: "phone-claim", qid, hostname, generation: 1, holder: mh, claim: mc.claim, claimSignature: mc.claimSignature, ...(grants ? { grants } : {}) });
+      expect(p.sent.at(-1), qid).toMatchObject({ qid, ok: false, code: "malformed" });
+    }
     answerLedgerRequest(host, p as never, { type: "phone-claim", qid: "q7", hostname, generation: 1, holder, ...claimFor(g) });
     expect(p.sent.at(-1)).toMatchObject({ qid: "q7", ok: true });
   });
 
   it("P announces every grant with the phone's claim, renewals included, and every relay accepts it", async () => {
     const r = rig();
+    await r.feed.poll();
     const rank = phoneLedgerRanking("erin", r.dir.current, r.feed.state);
     const self = rank[0]!;
-    const host = new PhoneLedgerHost({ selfRelayId: self, servicesApex: APEX, sign: (m) => ed.sign(m, r.relays[self]!.key.privateKey), now: r.now, maxSeenGeneration: () => 0, onVacant: () => undefined });
+    const host = new PhoneLedgerHost({ selfRelayId: self, servicesApex: APEX, sign: (m) => ed.sign(m, r.relays[self]!.key.privateKey), now: r.now, maxSeenGeneration: () => 0, onVacant: () => undefined, log: () => r.feed.state });
     const announced: PhoneItem[] = [];
     const client = new MeshPhoneLedgerClient({ selfRelayId: self, ledgerFor: () => ({ local: host }), announce: (it) => void announced.push(it), withdraw: () => undefined });
     const hostname = `erin.${APEX}`;
@@ -159,6 +184,7 @@ describe("M3: the ledger relay", () => {
     expect(announced).toHaveLength(2);
     for (const it of announced) {
       expect(it.claim).toEqual(c.claim);
+      expect(it.grants).toEqual(c.grants);
       expect(r.store.offerPhone(it, self)).toBe(true);
     }
   });

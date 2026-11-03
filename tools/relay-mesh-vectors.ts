@@ -601,12 +601,28 @@ const claimSig = (c: P.RouteClaim, k: Key = phone): string => {
     return "00".repeat(64);
   }
 };
-const phoneItemOf = (g: PhoneRouteGrant, k: Key = iad1, c: P.RouteClaim = claimOf(g), ck: Key = phone): PhoneItem => ({
+// The phone's eligibility proof (§8.3): an admin-root-signed `admin` device grant for its key; alice's admin root in
+// the log is admin2 (authorityGen 2).
+const proofOf = (dev: Key, o: { root?: Key; grantId?: string; username?: string; scopes?: string[]; issuedAt?: number; expiresAt?: number; signerRoot?: string } = {}): P.PhoneBeginGrant => {
+  const g = {
+    grantId: o.grantId ?? "a1".repeat(16),
+    username: o.username ?? "alice",
+    deviceId: dev.pub.slice(0, 32),
+    devicePubHex: dev.pub,
+    scopes: o.scopes ?? ["admin"],
+    issuedAt: o.issuedAt ?? T0 - DAY,
+    expiresAt: o.expiresAt ?? T0 + 30 * DAY,
+  };
+  const sig = P.signDeviceCapabilityGrant({ ...g, devicePubKey: dev.kp.publicKey, scopes: g.scopes as never }, (o.root ?? admin2).kp);
+  return { grant: g, signatureHex: hexOf(sig), signerRoot: (o.signerRoot ?? "admin-root") as "admin-root" };
+};
+const phoneItemOf = (g: PhoneRouteGrant, k: Key = iad1, c: P.RouteClaim = claimOf(g), ck: Key = phone, grants: P.PhoneBeginGrant[] = [proofOf(phone)]): PhoneItem => ({
   kind: "phone",
   grant: g,
   signature: sigBy(k, "phone-route-grant", g),
   claim: c,
   claimSignature: claimSig(c, ck),
+  grants,
 });
 const covers = [
   ["same attachment", withdrawBox, item("box", homeAtt), true],
@@ -745,19 +761,22 @@ const accountMoveCases = [
 const aliceRank = P.phoneLedgerRanking("alice", D, LOG);
 if (aliceRank.length <= P.PHONE_LEDGER_TOP_K || aliceRank.indexOf("iad1") >= P.PHONE_LEDGER_TOP_K) throw new Error(`alice's ledger ranking ${aliceRank} does not fit the phone vectors`);
 const outsider = aliceRank[P.PHONE_LEDGER_TOP_K]!;
-const phoneCase = (n: string, g: PhoneRouteGrant, w: string, o: { k?: Key; announcer?: string; highestLive?: number; claim?: Partial<P.RouteClaim>; ck?: Key; drop?: "claim" } = {}) => {
+const phoneCase = (n: string, g: PhoneRouteGrant, w: string, o: { k?: Key; announcer?: string; highestLive?: number; claim?: Partial<P.RouteClaim>; ck?: Key; drop?: "claim" | "grants"; grants?: P.PhoneBeginGrant[] } = {}) => {
   let it: PhoneItem;
+  const grants = o.grants ?? [proofOf(phone)];
   try {
-    it = phoneItemOf(g, o.k ?? iad1, claimOf(g, o.claim), o.ck ?? phone);
+    it = phoneItemOf(g, o.k ?? iad1, claimOf(g, o.claim), o.ck ?? phone, grants);
   } catch {
-    it = { kind: "phone", grant: g, signature: "00".repeat(64), claim: claimOf(g, o.claim), claimSignature: claimSig(claimOf(g, o.claim), o.ck ?? phone) };
+    it = { kind: "phone", grant: g, signature: "00".repeat(64), claim: claimOf(g, o.claim), claimSignature: claimSig(claimOf(g, o.claim), o.ck ?? phone), grants };
   }
   if (o.drop === "claim") delete (it as Partial<PhoneItem>).claim;
+  if (o.drop === "grants") delete (it as Partial<PhoneItem>).grants;
   const announcer = o.announcer ?? g.holderRelayId;
   const highestLive = o.highestLive ?? 0;
   return { name: n, item: it, announcer, highestLive, now: T0, expected: want(n, P.checkPhoneItem(it, announcer, ctx(), highestLive), w) };
 };
 const otherPhone = key("otherPhone", 32);
+const forger = key("forger", 33);
 const phoneItemCases = [
   phoneCase("ok", grant, "ok"),
   phoneCase("ok, holder is the ledger", { ...grant, holderRelayId: "iad1" }, "ok"),
@@ -783,8 +802,24 @@ const phoneItemCases = [
   phoneCase("claim signed by another key", grant, "bad-claim", { ck: otherPhone }),
   phoneCase("no claim", grant, "malformed", { drop: "claim" }),
   phoneCase("malformed", { ...grant, generation: 0 }, "malformed"),
+  // §8.3 (security review 2026-11-03): the item proves its key is an admin device of the account under the log's root.
+  phoneCase("forged key without a proof", { ...grant, phoneRoutePub: forger.pub }, "malformed", { ck: forger, drop: "grants" }),
+  phoneCase("forged key, empty proof", { ...grant, phoneRoutePub: forger.pub }, "malformed", { ck: forger, grants: [] }),
+  phoneCase("forged key under a made-up root", { ...grant, phoneRoutePub: forger.pub }, "not-eligible", { ck: forger, grants: [proofOf(forger, { root: forger })] }),
+  phoneCase("forged key under the old admin root", { ...grant, phoneRoutePub: forger.pub }, "not-eligible", { ck: forger, grants: [proofOf(forger, { root: admin })] }),
+  phoneCase("forged key with the phone's grant", { ...grant, phoneRoutePub: forger.pub }, "malformed", { ck: forger, grants: [proofOf(phone)] }),
+  phoneCase("non-admin device", grant, "not-eligible", { grants: [proofOf(phone, { scopes: ["browse", "manage-services"] })] }),
+  phoneCase("membership-signed grant", grant, "malformed", { grants: [proofOf(phone, { root: irk, signerRoot: "membership" })] }),
+  phoneCase("grant revoked in the log", grant, "not-eligible", { grants: [proofOf(phone, { grantId })] }),
+  phoneCase("a revoked and a live grant", grant, "ok", { grants: [proofOf(phone, { grantId }), proofOf(phone)] }),
+  phoneCase("expired grant", grant, "not-eligible", { grants: [proofOf(phone, { issuedAt: T0 - 2 * DAY, expiresAt: T0 })] }),
+  phoneCase("grant for another account", grant, "not-eligible", { grants: [proofOf(phone, { username: "bob" })] }),
+  phoneCase("uppercase grant id", grant, "ok", { grants: [proofOf(phone, { grantId: "A1".repeat(16) })] }),
+  phoneCase("grant id the log cannot carry", grant, "malformed", { grants: [proofOf(phone, { grantId: "g1".repeat(16) })] }),
+  phoneCase("the admin root as the phone key", { ...grant, phoneRoutePub: admin2.pub }, "not-eligible", { ck: admin2, grants: [proofOf(admin2)] }),
+  phoneCase("nine grants", grant, "malformed", { grants: Array.from({ length: 9 }, () => proofOf(phone)) }),
 ];
-const pi = (g: Partial<PhoneRouteGrant>): PhoneItem => ({ kind: "phone", grant: { ...grant, ...g }, signature: "00".repeat(64), claim: claimOf(grant), claimSignature: "00".repeat(64) });
+const pi = (g: Partial<PhoneRouteGrant>): PhoneItem => ({ kind: "phone", grant: { ...grant, ...g }, signature: "00".repeat(64), claim: claimOf(grant), claimSignature: "00".repeat(64), grants: [proofOf(phone)] });
 const comparePhone = [
   ["higher generation", pi({ generation: 5, issuedAt: 1 }), pi({}), 1],
   ["later issuedAt", pi({ issuedAt: grant.issuedAt + 1 }), pi({}), 1],

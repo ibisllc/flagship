@@ -6,12 +6,14 @@
  * L-signed phone route grant to every peer, and withdraws it when the phone leaves. Nothing about it reaches `.com`.
  *
  * Eligibility no longer comes from `.com`: the phone presents its own admin grant chain in `begin`, checked against
- * the log's admin root for the account and its `device-grant-revoke` entries.
+ * the log's admin root for the account and its `device-grant-revoke` entries. P carries those grants to L in the claim
+ * and in the phone item, and L and every relay check them again (§8.3), so a relay cannot claim a name by itself.
  */
 import { randomBytes } from "node:crypto";
 import {
   accountHash,
   canonicalRouteClaim,
+  checkPhoneEligibilityProof,
   emptyPhoneRouteEntry,
   RELAY_LOG_GRANT_ID,
   verifyServingRecord,
@@ -21,6 +23,7 @@ import {
   relayLogGrantId,
   signRelayMeshRecord,
   type LedgerResult,
+  type PhoneBeginGrant,
   type PhoneItem,
   type PhoneRouteEntry,
   type PhoneRouteGrant,
@@ -45,6 +48,8 @@ export interface PhoneLedgerHostOptions {
   peerMayAsk?: (relayId: string) => boolean;
   /** Is this relay among the account's top k (§8.1)? Absent: every account. */
   servesAccount?: (account: string) => boolean;
+  /** The applied relay log: a claim's grants must prove an admin device under its admin root (§8.3). */
+  log: () => RelayLogState;
 }
 
 export interface GrantedResult {
@@ -100,9 +105,9 @@ export class PhoneLedgerHost {
     this.ops++;
     const before = this.entry(op.hostname);
     if (!this.servesHostname(op.hostname)) return { result: { ok: false, code: "malformed", entry: before } };
-    if (op.op === "acquire" && (op.holder.relayId !== from || !claimMatches(op))) return { result: { ok: false, code: "malformed", entry: before } };
-    if (op.op !== "acquire" && before.holder && before.holder.relayId !== from) return { result: { ok: false, code: "not-holder", entry: before } };
     const now = this.now();
+    if (op.op === "acquire" && (op.holder.relayId !== from || !claimMatches(op) || !proofHolds(op, this.opts.log(), now))) return { result: { ok: false, code: "malformed", entry: before } };
+    if (op.op !== "acquire" && before.holder && before.holder.relayId !== from) return { result: { ok: false, code: "not-holder", entry: before } };
     const r = applyLedgerOp(before, op, now);
     if (!r.ok) {
       // The holder's lease lapsed under it: the route is vacant now (told once, on the failed renew).
@@ -159,6 +164,15 @@ function claimMatches(op: Extract<LedgerOp, { op: "acquire" }>): boolean {
   return verifyServingRecord("route-claim", c, op.claimSignature, c.phoneRoutePub);
 }
 
+/**
+ * §8.3: the claim's own grants prove its key is an admin device of the account under the log's admin root (security
+ * review 2026-11-03: a blessed full relay could otherwise have the ledger sign any vacant bare name to a key it made up).
+ */
+function proofHolds(op: Extract<LedgerOp, { op: "acquire" }>, log: RelayLogState, now: number): boolean {
+  const account = op.hostname.split(".")[0] ?? "";
+  return checkPhoneEligibilityProof(op.grants, account, op.holder.phoneRoutePub, log, now) === "ok";
+}
+
 // ── P: the holder's client of L ───────────────────────────────────────────
 
 export type LedgerTarget = { local: PhoneLedgerHost } | { peer: BridgePeer } | null;
@@ -179,7 +193,7 @@ export class MeshPhoneLedgerClient implements PhoneRouteLedgerClient {
   /** hostname → the newest grant this relay announced. */
   private readonly announced = new Map<string, number>();
   /** hostname → the phone's claim for the generation this relay holds (attached to every item it announces). */
-  private readonly claims = new Map<string, { generation: number; claim: RouteClaim; claimSignature: string }>();
+  private readonly claims = new Map<string, { generation: number; claim: RouteClaim; claimSignature: string; grants: PhoneBeginGrant[] }>();
 
   constructor(private readonly opts: MeshPhoneLedgerClientOptions) {}
 
@@ -202,12 +216,12 @@ export class MeshPhoneLedgerClient implements PhoneRouteLedgerClient {
     else res = parseGranted(await this.ask(t.peer, toWire(op)), op);
     if (!res) return null;
     if (op.op === "acquire" && res.result.ok && op.claim && op.claimSignature) {
-      this.claims.set(op.hostname, { generation: op.generation, claim: op.claim, claimSignature: op.claimSignature });
+      this.claims.set(op.hostname, { generation: op.generation, claim: op.claim, claimSignature: op.claimSignature, grants: op.grants ?? [] });
     }
     const held = this.claims.get(op.hostname);
     if (res.result.ok && res.grant && res.grantSignature && op.op !== "release" && held && held.generation === res.grant.generation) {
       this.announced.set(op.hostname, res.grant.issuedAt);
-      this.opts.announce({ kind: "phone", grant: res.grant, signature: res.grantSignature, claim: held.claim, claimSignature: held.claimSignature });
+      this.opts.announce({ kind: "phone", grant: res.grant, signature: res.grantSignature, claim: held.claim, claimSignature: held.claimSignature, grants: held.grants });
     } else if (op.op === "release" || (op.op === "renew" && !res.result.ok)) {
       if (held && held.generation === op.generation) this.claims.delete(op.hostname);
       const upTo = this.announced.get(op.hostname);
@@ -244,7 +258,7 @@ export class MeshPhoneLedgerClient implements PhoneRouteLedgerClient {
 }
 
 function toWire(op: LedgerOp): Record<string, unknown> {
-  if (op.op === "acquire") return { type: "phone-claim", hostname: op.hostname, generation: op.generation, holder: op.holder, claim: op.claim, claimSignature: op.claimSignature };
+  if (op.op === "acquire") return { type: "phone-claim", hostname: op.hostname, generation: op.generation, holder: op.holder, claim: op.claim, claimSignature: op.claimSignature, grants: op.grants };
   return { type: op.op === "renew" ? "phone-renew" : "phone-release", hostname: op.hostname, generation: op.generation, sessionId: op.sessionId };
 }
 
@@ -297,6 +311,7 @@ function fromWire(m: Record<string, unknown>): LedgerOp | null {
     if (!h || typeof h.relayId !== "string" || typeof h.sessionId !== "string" || typeof h.phoneRoutePub !== "string") return null;
     const claim = typeof m.claim === "object" && m.claim !== null ? (m.claim as RouteClaim) : undefined;
     const claimSignature = typeof m.claimSignature === "string" ? m.claimSignature : undefined;
+    const grants = Array.isArray(m.grants) ? (m.grants as PhoneBeginGrant[]) : undefined;
     return {
       op: "acquire",
       hostname: m.hostname,
@@ -304,6 +319,7 @@ function fromWire(m: Record<string, unknown>): LedgerOp | null {
       holder: { relayId: h.relayId, sessionId: h.sessionId, phoneRoutePub: h.phoneRoutePub },
       ...(claim ? { claim } : {}),
       ...(claimSignature ? { claimSignature } : {}),
+      ...(grants ? { grants } : {}),
     };
   }
   if (typeof m.sessionId !== "string") return null;

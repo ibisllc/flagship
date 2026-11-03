@@ -670,7 +670,7 @@ P → phone challenge {..., generation}; phone → P claim (unchanged route-clai
 P checks the claim signature and eligibility (grants under the log's admin root, grant ids not revoked, unexpired;
 a grant whose id does not match `RELAY_LOG_GRANT_ID` (lowercased) is ignored, since its revocation could never reach
 the log: `.com` refuses to mint such a grant)
-P → L {type:"phone-claim", qid, hostname, generation, holder:{relayId:P, sessionId, phoneRoutePub}, claim, claimSignature}
+P → L {type:"phone-claim", qid, hostname, generation, holder:{relayId:P, sessionId, phoneRoutePub}, claim, claimSignature, grants}
 L → P {type:"phone-claimed", qid, ok, code?, grant?, grantSignature?}          ledgerAcquire, unchanged rules
 P → L {type:"phone-renew", hostname, generation, sessionId}   every 15 s → new grant (60 s), or {ok:false, code}
 P → L {type:"phone-release", hostname, generation, sessionId}                 signed release checked by P first
@@ -686,8 +686,22 @@ dropped from the directory or retired takes its generations with it, and a hostn
 L answers `phone-*` only from peers that are `full`, unrevoked relays in its directory, and only for accounts whose top
 3 it is in (no directory at all: a lone relay is its own ledger). A `phone-claim` must carry the phone's
 `route-claim/v1` (`claim`, `claimSignature`) for exactly that hostname, generation and `holder.phoneRoutePub`, signed by
-that key; anything else is answered `malformed`. P keeps the claim and attaches it to every item it announces for the
-generation.
+that key, and the phone's eligibility proof (`grants`, below); anything else is answered `malformed`. P keeps the claim
+and the proof and attaches both to every item it announces for the generation.
+
+**Eligibility proof (security review 2026-11-03).** Before it signs a grant, L checks the claim's `grants` itself, and
+every relay checks the item's before it accepts it (`checkPhoneEligibilityProof`), so a blessed but compromised full
+relay cannot have any vacant bare name granted to a key it made up (or sign one itself as a top-3 ledger). `grants` is
+what P kept of the phone's `begin` chain (`phoneItemGrants`): of the first 8, those in the exact wire shape
+`{grant:{grantId, username, deviceId, devicePubHex, scopes, issuedAt, expiresAt}, signatureHex, signerRoot}` with
+`devicePubHex = phoneRoutePub`, `grantId` matching `RELAY_LOG_GRANT_ID` once lowercased (ASCII only), at most 16
+scopes, safe-integer times, 128 lowercase hex `signatureHex` and `signerRoot = "admin-root"`. A proof of 0 or more than
+8 grants, or with any grant out of that shape, is `malformed`. It holds when at least one grant, whose id the log has
+not revoked, is an unexpired grant naming the account with the `admin` scope that verifies
+(`flagship/device-capability-grant/v2`) under the log's current admin root for the account, and `phoneRoutePub` is not
+that root (`requireMasterAdmin`, one grant at a time); else L answers `malformed` and a receiver refuses
+`not-eligible`. Nothing changes for phones or boxes: the proof is the chain the phone already sends in `begin`. Relays
+must all run this version together (an item without `grants` is `malformed`).
 
 ### 8.3 Phone route grant
 
@@ -697,7 +711,7 @@ flagship/phone-route-grant/v1|<hostname>|<phoneRoutePub>|<generation>|<holderRel
 
 Signed by L's relay key, `notAfter = issuedAt + 60 s` (`PHONE_ROUTE_LEASE_MS`). P announces it to every peer as
 `{kind:"phone", grant:{...}, signature, claim:{account, phoneRoutePub, hostname, generation, sessionNonce, issuedAt},
-claimSignature}` at each renewal and withdraws it (§5.4) when the phone leaves. The claim is the phone's own signed
+claimSignature, grants:[...]}` at each renewal and withdraws it (§5.4) when the phone leaves. The claim is the phone's own signed
 `route-claim/v1` for this generation (the one P checked), so the phone signs what the item carries.
 
 ### 8.4 Visitors to the bare name
@@ -707,8 +721,9 @@ revoked, **among the first 3 of the account's ranking**), the announcing relay i
 its generation is at most `PHONE_GENERATION_MAX` (2^40) and at most `PHONE_GENERATION_MAX_JUMP` (8) above the highest
 generation among the live items the receiver already holds for the hostname, and its `claim` names the same account,
 hostname, `phoneRoutePub` and generation, was issued no later than the grant (+ 60 s skew) and verifies under
-`phoneRoutePub` (`checkPhoneItem`; refusals `generation-jump`, `not-ledger`, `claim-mismatch`, `bad-claim`). A legitimate
-jump larger than 8 (a relay that missed many claims in a partition) is accepted once the older items lapse (≤ 60 s).
+`phoneRoutePub`, and its `grants` prove `phoneRoutePub` an admin device of the account under the log's admin root
+(§8.2; `checkPhoneItem`; refusals `generation-jump`, `not-ledger`, `claim-mismatch`, `bad-claim`, `not-eligible`). A
+legitimate jump larger than 8 (a relay that missed many claims in a partition) is accepted once the older items lapse (≤ 60 s).
 Winner: higher generation, then later `issuedAt`. The entry relay forwards to the holder as for a box. The bare name
 still never resolves to a box.
 
@@ -932,6 +947,7 @@ holder roles. Same answers required on both.
 | MESH11 | Timing: local miss, mesh miss and holder refusal all close at the hold time (± 250 ms) |
 | MESH12 | Mailbox forwarded over a bridge |
 | MESH13 | Mesh off: S01–S20, P01–P06, M01–M03 unchanged |
+| MESH14 | A rogue full relay: L refuses claims without an admin device's proof; every relay refuses its own items for a made-up key, a key under a made-up root or a non-admin device, and routes an admin device's |
 
 ### 14.3 Ops
 
@@ -996,7 +1012,8 @@ Where the text above left a detail open, chunk A fixed it as follows (code: `pac
   2026-11-02 review the item carries the phone's route claim, the ledger must be in the account's top 3, and the
   generation is capped (`checkPhoneItem(item, announcer, ctx, highestLive)`); refusal order `malformed`,
   `not-bare-name`, `ttl-too-long`, `future`, `expired`, `generation-jump`, `wrong-holder`, `relay-revoked`,
-  `unknown-relay`, `not-full`, `not-ledger`, `claim-mismatch`, `bad-signature`, `bad-claim`.
+  `unknown-relay`, `not-full`, `not-ledger`, `claim-mismatch`, `bad-signature`, `bad-claim`, and since the 2026-11-03
+  review `not-eligible` (the item's admin grant proof, §8.2; its shape is part of `malformed`).
 - **Rebalancing** uses integer arithmetic (share ≥ 6/10, lead ≥ 3/10, load < 8/10). `T` is the entry relay with the
   most bytes other than the home (ties: the smaller id), never one with zero bytes; zero capacity counts as full load.
 - **HELLO / HELLO_ACK fields** live in `frames.ts`: HELLO `servingLeases` (≤ 8), HELLO_ACK `relayId` and

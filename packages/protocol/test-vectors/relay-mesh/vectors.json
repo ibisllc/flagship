@@ -86,6 +86,10 @@
     "otherPhone": {
       "seed": "2020202020202020202020202020202020202020202020202020202020202020",
       "pub": "4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8"
+    },
+    "forger": {
+      "seed": "2121212121212121212121212121212121212121212121212121212121212121",
+      "pub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b"
     }
   },
   "caKeys": [
@@ -6422,7 +6426,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": true
       },
@@ -6455,7 +6476,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": false
       },
@@ -6488,7 +6526,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": false
       }
@@ -8554,7 +8609,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8585,7 +8657,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "iad1",
         "highestLive": 0,
@@ -8616,7 +8705,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "9d151d70ea1ddccfb9a4d1d9c653e4d336a0a041164006859bd2f32093e268e9a42ca7a176f048f75395d717863f87e0187f814082c8f5826d41db8acb04770f"
+          "claimSignature": "9d151d70ea1ddccfb9a4d1d9c653e4d336a0a041164006859bd2f32093e268e9a42ca7a176f048f75395d717863f87e0187f814082c8f5826d41db8acb04770f",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 12,
@@ -8647,7 +8753,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 9,
@@ -8678,7 +8801,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "197ba0231de34aac49bfeabb83493b44bd25ae47260b1e49a21a9b90edc343989c9e917581147853e0f95f1710275470458bc848dad9e53b0324b0298c5c5509"
+          "claimSignature": "197ba0231de34aac49bfeabb83493b44bd25ae47260b1e49a21a9b90edc343989c9e917581147853e0f95f1710275470458bc848dad9e53b0324b0298c5c5509",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8710,7 +8850,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8742,7 +8899,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1800000060000
           },
-          "claimSignature": "65d2e1b82888a2278f371a7924e01f8ffb427ee98dcb339b8637cb175d9ab9e7390d09ea906c241144383d409e251dcb94c6152686306e54393a58ba6a479b0d"
+          "claimSignature": "65d2e1b82888a2278f371a7924e01f8ffb427ee98dcb339b8637cb175d9ab9e7390d09ea906c241144383d409e251dcb94c6152686306e54393a58ba6a479b0d",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8774,7 +8948,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999939000
           },
-          "claimSignature": "a792a35f7f202e135a85fb076c0fbbe3ce5b62ae7691b14292f4e19e523a2ac6221a252349e1a55d353dda9c95e1b7290ada4fad517716311556b8efd50d9609"
+          "claimSignature": "a792a35f7f202e135a85fb076c0fbbe3ce5b62ae7691b14292f4e19e523a2ac6221a252349e1a55d353dda9c95e1b7290ada4fad517716311556b8efd50d9609",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8806,7 +8997,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "9d151d70ea1ddccfb9a4d1d9c653e4d336a0a041164006859bd2f32093e268e9a42ca7a176f048f75395d717863f87e0187f814082c8f5826d41db8acb04770f"
+          "claimSignature": "9d151d70ea1ddccfb9a4d1d9c653e4d336a0a041164006859bd2f32093e268e9a42ca7a176f048f75395d717863f87e0187f814082c8f5826d41db8acb04770f",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 11,
@@ -8838,7 +9046,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "05f661c3ce901e9b95a65bdbc8f2df1cd883855bde554d98dd0c8540720bb5dfacf1aa7288a23a4af19060f5fd80d169045916726d7fe327cf27c8011b770005"
+          "claimSignature": "05f661c3ce901e9b95a65bdbc8f2df1cd883855bde554d98dd0c8540720bb5dfacf1aa7288a23a4af19060f5fd80d169045916726d7fe327cf27c8011b770005",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8870,7 +9095,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "iad1",
         "highestLive": 0,
@@ -8902,7 +9144,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -8934,7 +9193,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "rog1",
         "highestLive": 0,
@@ -8966,7 +9242,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ent1",
         "highestLive": 0,
@@ -8998,7 +9291,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9030,7 +9340,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9062,7 +9389,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "df367f8b16a827b8ddeb906608328dd44b93ff549a3598f45cb1b2b79982b3f4691f36305cd59fd9ed24cdfa719d3c53d52a440f5445f3760e566623bd66db0a"
+          "claimSignature": "df367f8b16a827b8ddeb906608328dd44b93ff549a3598f45cb1b2b79982b3f4691f36305cd59fd9ed24cdfa719d3c53d52a440f5445f3760e566623bd66db0a",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9094,7 +9438,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "33c48cca192f061a61bd8e5626834ffef24cc1aeaae8a7523c230a6728b6a90bc33f35cd0810be7fa00c0accc32810d951c8aed4c60718ccb7ed3e2ae999060d"
+          "claimSignature": "33c48cca192f061a61bd8e5626834ffef24cc1aeaae8a7523c230a6728b6a90bc33f35cd0810be7fa00c0accc32810d951c8aed4c60718ccb7ed3e2ae999060d",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9126,7 +9487,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "24c68d49b14e61d9dbc6e77055267045d63df6f4f2d1db23d34fb84c06b553813885108e699868217d7fe171ebc277e5caa442ced8a60b4030d4d72dd115d70a"
+          "claimSignature": "24c68d49b14e61d9dbc6e77055267045d63df6f4f2d1db23d34fb84c06b553813885108e699868217d7fe171ebc277e5caa442ced8a60b4030d4d72dd115d70a",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9158,7 +9536,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1800000050001
           },
-          "claimSignature": "1b0f4048666e73914023b7d223f49718a03d201118c5def3a2e16f4cae126e754795d752f3aab346e8656fe0d5f0f4cb85b31a31894e306b4d7b4b0592c0cb08"
+          "claimSignature": "1b0f4048666e73914023b7d223f49718a03d201118c5def3a2e16f4cae126e754795d752f3aab346e8656fe0d5f0f4cb85b31a31894e306b4d7b4b0592c0cb08",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9190,7 +9585,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9222,7 +9634,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "af10cd50f195e7ed965f8ba15c3112a5c65351a9efeadb2fffe6bae5e72b56af6ba9722125193c6e7c8412bed61a550233414a792decf16bb87aed5db147c307"
+          "claimSignature": "af10cd50f195e7ed965f8ba15c3112a5c65351a9efeadb2fffe6bae5e72b56af6ba9722125193c6e7c8412bed61a550233414a792decf16bb87aed5db147c307",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9246,7 +9675,24 @@
             "notAfter": 1800000050000
           },
           "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
-          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9278,7 +9724,860 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
+        }
+      },
+      {
+        "name": "forged key without a proof",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "dc649ac495a63e5272ad115a707b8b7cd29d487d6baafaaa87a7672ff885973d7dc2cbbd6f72378ae457fce169a4efef3d9c3217edbd93f58ed8a1c3fbfabc0a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "d901271b95d7785448f95f33aac89ce5fbd69edb07eda902ace705c399570902937dfb6b8c1d317b76eb61c32b7a567a4f948db009fc4d33fc0df7a34d8d2c0c"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
+        }
+      },
+      {
+        "name": "forged key, empty proof",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "dc649ac495a63e5272ad115a707b8b7cd29d487d6baafaaa87a7672ff885973d7dc2cbbd6f72378ae457fce169a4efef3d9c3217edbd93f58ed8a1c3fbfabc0a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "d901271b95d7785448f95f33aac89ce5fbd69edb07eda902ace705c399570902937dfb6b8c1d317b76eb61c32b7a567a4f948db009fc4d33fc0df7a34d8d2c0c",
+          "grants": []
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
+        }
+      },
+      {
+        "name": "forged key under a made-up root",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "dc649ac495a63e5272ad115a707b8b7cd29d487d6baafaaa87a7672ff885973d7dc2cbbd6f72378ae457fce169a4efef3d9c3217edbd93f58ed8a1c3fbfabc0a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "d901271b95d7785448f95f33aac89ce5fbd69edb07eda902ace705c399570902937dfb6b8c1d317b76eb61c32b7a567a4f948db009fc4d33fc0df7a34d8d2c0c",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "884b8857f4eaa1613c61504db34d4bea",
+                "devicePubHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "17e5c7318e51c056cae64aea83727da04a819c9066911e28b61bf39a2a419fdf16a431bdcd84b33b98c164c45bc48a9f0912cab630a5eb4b75b17100b9aba502",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "forged key under the old admin root",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "dc649ac495a63e5272ad115a707b8b7cd29d487d6baafaaa87a7672ff885973d7dc2cbbd6f72378ae457fce169a4efef3d9c3217edbd93f58ed8a1c3fbfabc0a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "d901271b95d7785448f95f33aac89ce5fbd69edb07eda902ace705c399570902937dfb6b8c1d317b76eb61c32b7a567a4f948db009fc4d33fc0df7a34d8d2c0c",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "884b8857f4eaa1613c61504db34d4bea",
+                "devicePubHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "057c73f603b3c590dd8a19923b9858873820ff19b287508b62fa68444cb680643e917c6c9b6ccdc088ba0c2244ef07a3664775db5b5cbf09bfeab2a05699bd04",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "forged key with the phone's grant",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "dc649ac495a63e5272ad115a707b8b7cd29d487d6baafaaa87a7672ff885973d7dc2cbbd6f72378ae457fce169a4efef3d9c3217edbd93f58ed8a1c3fbfabc0a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "d901271b95d7785448f95f33aac89ce5fbd69edb07eda902ace705c399570902937dfb6b8c1d317b76eb61c32b7a567a4f948db009fc4d33fc0df7a34d8d2c0c",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
+        }
+      },
+      {
+        "name": "non-admin device",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "browse",
+                  "manage-services"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "c596cc220579490f0d7b3bfffbbde6e0c2248376f6f2b8458e84b36406c52a5b37a38ca27afe9fdc53271815ce32d831afe2242c18a08194cb02a96032cae809",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "membership-signed grant",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "f6dcb7649d8d3a4a69ca8be6b5b5ecef018146dd3740e4d229e8f330f19dd01c67454fe5a93ff3a6e7f0c6379903df5d4760d95d9fdd63217b100f06e7064d0e",
+              "signerRoot": "membership"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
+        }
+      },
+      {
+        "name": "grant revoked in the log",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "bfd61547a900d1fa3fb6a13fa87a2430ec6309014f4371e2388f09a99bb2dbd9b69a4a560bc6dc869255d53a178399b07fe9e15cc2fdaa68b3c85bef61a3130a",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "a revoked and a live grant",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "bfd61547a900d1fa3fb6a13fa87a2430ec6309014f4371e2388f09a99bb2dbd9b69a4a560bc6dc869255d53a178399b07fe9e15cc2fdaa68b3c85bef61a3130a",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": true
+        }
+      },
+      {
+        "name": "expired grant",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799827200000,
+                "expiresAt": 1800000000000
+              },
+              "signatureHex": "f381a6a015e282096a466c906d8dde62006d0ce252b4d3c8f0ee5abf6a4af45dd25f12393c6ddbd09296fc7c043320f1ef74bb0adee29358de96a12ebd286505",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "grant for another account",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "bob",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "e1b98bbf4c5d5516e7268065aad005d8280f1ed16310ac80f7b9383d90717dfc2adbe601eb23db382d1d488556466181e8746446f53e7b8ed51749d1c6596c04",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "uppercase grant id",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "78d9fa2f83c23e62b98a53dd5cfcfdcee161695b58d311c30874a1a8fae7e636fd4ae11648b7e25928d9361f5f5ba4abd4c1388463ebf2707a10f204b76a440c",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": true
+        }
+      },
+      {
+        "name": "grant id the log cannot carry",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "g1g1g1g1g1g1g1g1g1g1g1g1g1g1g1g1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "bc8202b612be9ab0b4fc0c4e9fec7f5b6e0381285e5c301cd3e04f2f153f1f6fe211148db5bdb752a2fe8c35c06c9cc58da0fc030ceb8ff0d112a01e72b7200e",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
+        }
+      },
+      {
+        "name": "the admin root as the phone key",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "fb8274fe7523f1b7906717ae371b82e55e1fd7ba24ba0c6c3b1a58ed912f6ee0cafcfb5b3aebcd7033649a0d4c7d8c892e953fde599f99f3010b7898deb51600",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "4a6bb06797954ca1917bd56fe0b29962968c7f1f54fc7a05bedc367f6b52799afe579497a685849d30127d12e26578b8e1f6993fd952cc321008ff00109de208",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "4508a07aa941707f3eb2db94c8897a80",
+                "devicePubHex": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "988d6d48fed29c0bae3b6d314914dc7df9004d080c857a88df3b43f34cad9abb4339d153974d05c069c1e2dd560531617caef82cc4081ebadbfa1dc9f6567305",
+              "signerRoot": "admin-root"
+            }
+          ]
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-eligible"
+        }
+      },
+      {
+        "name": "nine grants",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            },
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "announcer": "ams1",
         "highestLive": 0,
@@ -9312,7 +10611,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "b": {
           "kind": "phone",
@@ -9334,7 +10650,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": 1
       },
@@ -9360,7 +10693,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "b": {
           "kind": "phone",
@@ -9382,7 +10732,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": 1
       },
@@ -9408,7 +10775,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "b": {
           "kind": "phone",
@@ -9430,7 +10814,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": 1
       },
@@ -9456,7 +10857,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "b": {
           "kind": "phone",
@@ -9478,7 +10896,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": -1
       },
@@ -9504,7 +10939,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "b": {
           "kind": "phone",
@@ -9526,7 +10978,24 @@
             "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
             "issuedAt": 1799999989000
           },
-          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "grants": [
+            {
+              "grant": {
+                "grantId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+                "username": "alice",
+                "deviceId": "43046bfe4092b3e94994eada15dcc20d",
+                "devicePubHex": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+                "scopes": [
+                  "admin"
+                ],
+                "issuedAt": 1799913600000,
+                "expiresAt": 1802592000000
+              },
+              "signatureHex": "432bd04c3bd7556ef32b23d6e567a94a7c92515cd49db5164a9c720c561c44c4998fec221cc2dd3d0447ae69f4d0deac6714cc98b71f79707df57ba71398440c",
+              "signerRoot": "admin-root"
+            }
+          ]
         },
         "expected": 0
       }

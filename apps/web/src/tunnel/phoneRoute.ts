@@ -29,7 +29,9 @@ import {
   ledgerRelease,
   ledgerRenew,
   liveEntry,
+  phoneItemGrants,
   type AdminGrantView,
+  type PhoneBeginGrant,
   type LedgerResult,
   type PhoneRouteEntry,
   type PhoneRouteHolder,
@@ -41,7 +43,7 @@ import type { RegisteredTunnel } from "./registry.js";
 // ── the ledger (`.com`'s; an in-memory one for one relay and tests) ──────
 
 export type LedgerOp =
-  | { op: "acquire"; hostname: string; generation: number; holder: PhoneRouteHolder; claim?: RouteClaim; claimSignature?: string }
+  | { op: "acquire"; hostname: string; generation: number; holder: PhoneRouteHolder; claim?: RouteClaim; claimSignature?: string; grants?: PhoneBeginGrant[] }
   | { op: "renew"; hostname: string; generation: number; sessionId: string }
   | { op: "release"; hostname: string; generation: number; sessionId: string };
 
@@ -440,6 +442,8 @@ export class PhoneRoutes {
       holder: { relayId: this.opts.relayId, sessionId: s.id, phoneRoutePub: c.phoneRoutePub },
       claim: c,
       claimSignature: signature,
+      // The phone's own proof, carried to the mesh ledger and in every phone item (relay-mesh.md §8.3).
+      grants: phoneItemGrants(s.presented, c.phoneRoutePub),
     });
     this.readCache.delete(offer.hostname);
     if (s.closed) {

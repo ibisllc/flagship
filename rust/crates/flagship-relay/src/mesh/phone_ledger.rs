@@ -12,9 +12,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use flagship_crypto::relay_mesh::{
-    PHONE_LEDGER_TOP_K, PHONE_ROUTE_GRANT_TTL_MS, PhoneItem, PhoneRouteGrant, RelayKind,
-    account_hash, check_phone_item, directory_relay, is_phone_ledger_for, phone_ledger_ranking,
-    phone_route_grant_canonical, relay_log_grant_id, relay_log_grant_id_ok, sign_canonical,
+    PHONE_LEDGER_TOP_K, PHONE_ROUTE_GRANT_TTL_MS, PhoneItem, PhoneItemGrant, PhoneRouteGrant,
+    RelayKind, account_hash, check_phone_eligibility_proof, check_phone_item, directory_relay,
+    is_phone_ledger_for, phone_ledger_ranking, phone_route_grant_canonical, relay_log_grant_id,
+    relay_log_grant_id_ok, sign_canonical,
 };
 use flagship_crypto::serving::{RouteClaim, route_claim_canonical, verify_canonical};
 use serde_json::{Value, json};
@@ -33,9 +34,13 @@ const LEDGER_WAIT: Duration = Duration::from_secs(5);
 pub struct Ledger {
     entries: HashMap<String, Entry>,
     next_qid: u64,
-    /// P: the phone's claim (and signature) behind each route this relay holds, carried in every item it announces.
-    own_claims: HashMap<String, (RouteClaim, String)>,
+    /// P: the phone's claim, its signature and its proof grants behind each route this relay holds, carried in every
+    /// item it announces.
+    own_claims: HashMap<String, OwnClaim>,
 }
+
+/// The phone's claim for a held route: the claim, its signature, the proof grants (§8.3).
+pub type OwnClaim = (RouteClaim, String, Vec<PhoneItemGrant>);
 
 /// L's check of the claim a `phone-claim` carries (§8.2): the phone's own `route-claim/v1` for exactly this hostname,
 /// generation and key, signed by that key.
@@ -304,7 +309,22 @@ impl Mesh {
                         &holder.phone_route_pub,
                     )
                 });
-                if holder.relay_id != from || !claim_ok || !self.may_lead(&account) {
+                // §8.3 (security review 2026-11-03): the claim's own grants prove its key is an admin device of the
+                // account under the log's admin root, or a blessed full relay could have any vacant name signed to it.
+                let proof_ok = wire::proof_grants_from_json(v.get("grants")).is_some_and(|g| {
+                    self.with_state(|st| {
+                        check_phone_eligibility_proof(
+                            &g,
+                            &account,
+                            &holder.phone_route_pub,
+                            &st.log,
+                            t,
+                        )
+                        .is_ok()
+                    })
+                    .unwrap_or(false)
+                });
+                if holder.relay_id != from || !claim_ok || !proof_ok || !self.may_lead(&account) {
                     return Some(refused("malformed", &e));
                 }
                 match ledger_acquire(&e, generation, &holder, t) {
@@ -434,7 +454,7 @@ impl Mesh {
 
     /// P: store and announce the grant L signed (checked like any phone item).
     /// `claim`: the phone's claim for a new route (an acquire); `None` on a renewal (the held route's claim).
-    fn adopt_own_grant(&self, reply: &Value, claim: Option<(RouteClaim, String)>) -> bool {
+    fn adopt_own_grant(&self, reply: &Value, claim: Option<OwnClaim>) -> bool {
         let (Some(g), Some(sig)) = (
             reply.get("grant").and_then(wire::grant_from_json),
             reply.get("grantSignature").and_then(Value::as_str),
@@ -442,7 +462,7 @@ impl Mesh {
             return false;
         };
         let fresh = claim.is_some();
-        let Some((claim, claim_signature)) = claim.or_else(|| {
+        let Some((claim, claim_signature, grants)) = claim.or_else(|| {
             self.0
                 .ledger
                 .lock()
@@ -456,6 +476,7 @@ impl Mesh {
             signature: sig.to_owned(),
             claim,
             claim_signature,
+            grants,
         };
         let me = self.relay_id().to_owned();
         let ok = self
@@ -469,7 +490,11 @@ impl Mesh {
             if fresh && let Ok(mut l) = self.0.ledger.lock() {
                 l.own_claims.insert(
                     item.grant.hostname.clone(),
-                    (item.claim.clone(), item.claim_signature.clone()),
+                    (
+                        item.claim.clone(),
+                        item.claim_signature.clone(),
+                        item.grants.clone(),
+                    ),
                 );
             }
             self.announce(wire::item_to_json(&wire::WireItem::Phone(item)));
@@ -593,18 +618,20 @@ impl PhoneCom for MeshPhoneCom {
                     holder,
                     claim,
                     claim_signature,
+                    grants,
                 } => {
                     let account = m.account_of_host(&hostname)?;
                     let msg = json!({"type": "phone-claim", "hostname": hostname, "generation": generation,
                         "holder": {"relayId": holder.relay_id, "sessionId": holder.session_id, "phoneRoutePub": holder.phone_route_pub},
-                        "claim": wire::claim_to_json(&claim), "claimSignature": claim_signature});
+                        "claim": wire::claim_to_json(&claim), "claimSignature": claim_signature,
+                        "grants": wire::proof_grants_to_json(&grants)});
                     let r = m.ledger_call(&account, msg).await?;
                     let g = r
                         .get("generation")
                         .and_then(Value::as_u64)
                         .unwrap_or(generation);
                     if r.get("ok") == Some(&Value::Bool(true))
-                        && m.adopt_own_grant(&r, Some((claim, claim_signature)))
+                        && m.adopt_own_grant(&r, Some((*claim, claim_signature, grants)))
                     {
                         return Some(LedgerResult::Ok(Entry {
                             generation,

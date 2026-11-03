@@ -19,31 +19,43 @@ import { MeshFeed } from "../src/tunnel/mesh/feed.js";
 import { meshServingFetcher, ServingGate, UNKNOWN_BOX, type ServingTunnelHandle } from "../src/tunnel/servingGate.js";
 import { RelayBlessingProvider, relayKeypairFromSeed } from "../src/tunnel/hubBlessingProvider.js";
 import { phoneRouteEligibility } from "@flagship/protocol";
-import { APEX, hex, keypair, MeshFixture } from "./support/meshFixture.js";
+import { adminProof, APEX, hex, keypair, MeshFixture } from "./support/meshFixture.js";
 import { lease, policy, type Ed } from "./support/serving.js";
 
 describe("phone ledger relay", () => {
-  it("offers the next generation above any seen, grants only to the asking holder, signs a grant every relay accepts", () => {
+  it("offers the next generation above any seen, grants only to the asking holder, signs a grant every relay accepts", async () => {
     const fx = new MeshFixture();
     let t = 1_000_000;
     fx.now = () => t;
     const L = fx.addRelay("ra");
     fx.addRelay("rb");
     fx.mintDirectory();
+    const admin = keypair();
+    fx.authority("carol", hex(admin.publicKey), hex(keypair().publicKey));
+    const feed = new MeshFeed({ servicesApex: APEX, logKey: fx.logPub, source: fx.source(), now: () => t });
+    await feed.poll();
     const vacant: Array<[string, number]> = [];
-    const host = new PhoneLedgerHost({ selfRelayId: "ra", servicesApex: APEX, sign: (m) => ed.sign(m, L.key.privateKey), now: () => t, maxSeenGeneration: () => 4, onVacant: (h, g) => vacant.push([h, g]) });
+    const host = new PhoneLedgerHost({ selfRelayId: "ra", servicesApex: APEX, sign: (m) => ed.sign(m, L.key.privateKey), now: () => t, maxSeenGeneration: () => 4, onVacant: (h, g) => vacant.push([h, g]), log: () => feed.state });
     expect(host.begin("carol")).toEqual({ hostname: `carol.${APEX}`, generation: 5, vacant: true });
     const phone = keypair();
     const holder = { relayId: "rb", sessionId: "s1", phoneRoutePub: hex(phone.publicKey) };
+    const grants = [adminProof("carol", admin, phone, { now: t })];
     const claimOf = (generation: number) => {
       const claim: RouteClaim = { account: "carol", phoneRoutePub: holder.phoneRoutePub, hostname: `carol.${APEX}`, generation, sessionNonce: "ab".repeat(16), issuedAt: t };
-      return { claim, claimSignature: hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, phone.privateKey))) };
+      return { claim, claimSignature: hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, phone.privateKey))), grants };
     };
     // rc may not claim for rb.
     expect(host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder, ...claimOf(5) }, "rc").result).toMatchObject({ ok: false, code: "malformed" });
+    // §8.3: a key the phone's own grants do not prove an admin device of the account is never granted.
+    const forged = keypair();
+    const fakeHolder = { ...holder, phoneRoutePub: hex(forged.publicKey) };
+    const fakeClaim: RouteClaim = { ...claimOf(5).claim, phoneRoutePub: fakeHolder.phoneRoutePub };
+    const fakeSig = hex(signServingRecord("route-claim", fakeClaim, (m) => ed.sign(m, forged.privateKey)));
+    for (const g of [undefined, [], [adminProof("carol", forged, forged, { now: t })], [adminProof("carol", admin, forged, { now: t, scopes: ["browse"] })]]) {
+      expect(host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder: fakeHolder, claim: fakeClaim, claimSignature: fakeSig, ...(g ? { grants: g } : {}) }, "rb").result).toMatchObject({ ok: false, code: "malformed" });
+    }
     const r = host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder, ...claimOf(5) }, "rb");
     expect(r.result.ok).toBe(true);
-    const feed = new MeshFeed({ servicesApex: APEX, logKey: fx.logPub, source: fx.source() });
     const item = { kind: "phone" as const, grant: r.grant!, signature: r.grantSignature!, ...claimOf(5) };
     expect(checkPhoneItem(item, "rb", { servicesApex: APEX, log: feed.state, directory: fx.directory, now: t })).toEqual({ ok: true });
     expect(host.begin("carol")).toMatchObject({ vacant: false, holderGeneration: 5 });

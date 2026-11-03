@@ -2107,6 +2107,142 @@ pub struct PhoneItem {
     /// The phone's `route-claim/v1` for this generation (§8.3) and its signature under `grant.phoneRoutePub`.
     pub claim: RouteClaim,
     pub claim_signature: String,
+    /// The phone's eligibility proof (§8.3): the admin-root-signed device grants for `grant.phoneRoutePub` it presented
+    /// in `begin`.
+    pub grants: Vec<PhoneItemGrant>,
+}
+
+/// One grant of a phone item's eligibility proof: `{grant:{grantId, username, deviceId, devicePubHex, scopes, issuedAt,
+/// expiresAt}, signatureHex, signerRoot}` (TS `PhoneBeginGrant`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhoneItemGrant {
+    pub grant_id: String,
+    pub username: String,
+    pub device_id: String,
+    pub device_pub_hex: String,
+    pub scopes: Vec<String>,
+    pub issued_at: u64,
+    pub expires_at: u64,
+    pub signature_hex: String,
+    pub signer_root: String,
+}
+
+/// Most grants a phone item carries (TS `PHONE_BEGIN_MAX_GRANTS`).
+pub const PHONE_ITEM_MAX_GRANTS: usize = 8;
+const PHONE_GRANT_MAX_SCOPES: usize = 16;
+const DEVICE_SCOPES: [&str; 9] = [
+    "browse",
+    "install-service",
+    "vibe-code",
+    "add-device",
+    "manage-services",
+    "revoke-others",
+    "demo-provision",
+    "admin",
+    "view-directory",
+];
+
+/// The wire shape of one proof grant for `phone_route_pub` (TS `isPhoneItemGrant`).
+#[must_use]
+pub fn phone_item_grant_ok(g: &PhoneItemGrant, phone_route_pub: &str) -> bool {
+    let id = g.grant_id.as_bytes();
+    (1..=64).contains(&id.len())
+        && id.first().is_some_and(u8::is_ascii_hexdigit)
+        && id.iter().all(|c| c.is_ascii_hexdigit() || *c == b'-')
+        && g.device_pub_hex == phone_route_pub
+        && g.scopes.len() <= PHONE_GRANT_MAX_SCOPES
+        && g.issued_at <= flagship_protocol::parse::MAX_SAFE_INTEGER
+        && g.expires_at <= flagship_protocol::parse::MAX_SAFE_INTEGER
+        && lower_hex(&g.signature_hex, 128)
+        && g.signer_root == "admin-root"
+}
+
+/// `canonicalDeviceCapabilityGrant` (deviceCapability.ts), `None` where it would throw.
+fn device_grant_canonical(g: &PhoneItemGrant) -> Option<String> {
+    for f in [&g.grant_id, &g.username, &g.device_id] {
+        if f.chars()
+            .any(|c| c == '|' || c <= '\u{1f}' || c == '\u{7f}')
+        {
+            return None;
+        }
+    }
+    if g.expires_at <= g.issued_at
+        || g.scopes.is_empty()
+        || !lower_hex(&g.device_id, 32)
+        || !lower_hex(&g.device_pub_hex, 64)
+    {
+        return None;
+    }
+    let mut idx: Vec<usize> = Vec::new();
+    for s in &g.scopes {
+        let i = DEVICE_SCOPES.iter().position(|x| x == s)?;
+        if idx.contains(&i) {
+            return None;
+        }
+        idx.push(i);
+    }
+    idx.sort_unstable();
+    let scopes: Vec<&str> = idx
+        .iter()
+        .filter_map(|i| DEVICE_SCOPES.get(*i).copied())
+        .collect();
+    Some(format!(
+        "flagship/device-capability-grant/v2|{}|{}|{}|{}|{}|{}|{}",
+        g.grant_id,
+        g.username,
+        g.device_id,
+        g.device_pub_hex,
+        scopes.join(","),
+        g.issued_at,
+        g.expires_at
+    ))
+}
+
+/// §8.3 (see `checkPhoneEligibilityProof`): `malformed` unless 1 to [`PHONE_ITEM_MAX_GRANTS`] grants in the wire shape
+/// for this key; `not-eligible` unless one of them, not revoked by the log, is an unexpired `admin` grant naming the
+/// account that verifies under the log's admin root for the account, and the key is not that root.
+///
+/// # Errors
+/// `malformed` or `not-eligible`.
+pub fn check_phone_eligibility_proof(
+    grants: &[PhoneItemGrant],
+    account: &str,
+    phone_route_pub: &str,
+    log: &RelayLogState,
+    now: u64,
+) -> Result<(), &'static str> {
+    if grants.is_empty()
+        || grants.len() > PHONE_ITEM_MAX_GRANTS
+        || !lower_hex(phone_route_pub, 64)
+        || !grants
+            .iter()
+            .all(|g| phone_item_grant_ok(g, phone_route_pub))
+    {
+        return Err("malformed");
+    }
+    let Ok(h) = account_hash(account) else {
+        return Err("not-eligible");
+    };
+    let Some(root) = log
+        .authorities
+        .get(&h)
+        .and_then(|a| a.admin_root_pub.as_deref())
+    else {
+        return Err("not-eligible");
+    };
+    if root == phone_route_pub {
+        return Err("not-eligible");
+    }
+    let user = account.to_lowercase();
+    let ok = grants.iter().any(|g| {
+        !log.revoked_grants
+            .contains_key(&relay_log_grant_id(&g.grant_id))
+            && g.username.to_lowercase() == user
+            && now < g.expires_at
+            && g.scopes.iter().any(|s| s == "admin")
+            && device_grant_canonical(g).is_some_and(|c| verify(&c, &g.signature_hex, root))
+    });
+    if ok { Ok(()) } else { Err("not-eligible") }
 }
 
 /// Is `relay_id` among the first [`PHONE_LEDGER_TOP_K`] of the account's ledger ranking (§8.1)?
@@ -2125,7 +2261,7 @@ pub fn is_phone_ledger_for(
 /// §8.4 (see `checkPhoneItem`). `highest_live` is the highest generation among the live items the caller holds for the
 /// name (0 when none). Reasons in order: `malformed`, `not-bare-name`, `ttl-too-long`, `future`, `expired`,
 /// `generation-jump`, `wrong-holder`, `relay-revoked`, `unknown-relay`, `not-full`, `not-ledger`, `claim-mismatch`,
-/// `bad-signature`, `bad-claim`.
+/// `bad-signature`, `bad-claim`, `not-eligible` (the item's grants, [`check_phone_eligibility_proof`]).
 ///
 /// # Errors
 /// The reason code.
@@ -2142,7 +2278,15 @@ pub fn check_phone_item(
     else {
         return Err("malformed");
     };
-    if !lower_hex(&item.signature, 128) || !lower_hex(&item.claim_signature, 128) {
+    if !lower_hex(&item.signature, 128)
+        || !lower_hex(&item.claim_signature, 128)
+        || item.grants.is_empty()
+        || item.grants.len() > PHONE_ITEM_MAX_GRANTS
+        || !item
+            .grants
+            .iter()
+            .all(|x| phone_item_grant_ok(x, &g.phone_route_pub))
+    {
         return Err("malformed");
     }
     if !is_bare_phone_name(&g.hostname, ctx.services_apex) {
@@ -2202,7 +2346,8 @@ pub fn check_phone_item(
     if !verify(&claim_canonical, &item.claim_signature, &g.phone_route_pub) {
         return Err("bad-claim");
     }
-    Ok(())
+    check_phone_eligibility_proof(&item.grants, account, &g.phone_route_pub, ctx.log, ctx.now)
+        .map_err(|_| "not-eligible")
 }
 
 /// `Greater` when `a` wins: higher generation, later `issuedAt`, smaller holder id.

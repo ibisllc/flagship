@@ -16,9 +16,11 @@ import {
   signRelayDirectory,
   signRelayLogEntry,
   signRelayMeshRecord,
+  signDeviceCapabilityGrant,
   DIRECTORY_TTL_MS,
   FEED_PAGE_ENTRIES,
   type Keypair,
+  type PhoneBeginGrant,
   type RelayBlessing,
   type RelayDirectory,
   type RelayDirectoryEntry,
@@ -40,6 +42,14 @@ export function keypair(): Keypair {
 
 export const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
 export const nonce32 = (): string => hex(crypto.getRandomValues(new Uint8Array(16)));
+
+/** A phone's eligibility proof (relay-mesh.md §8.3): an `admin` device grant for `device`, signed by `adminRoot`. */
+export function adminProof(account: string, adminRoot: Keypair, device: Keypair, o: { scopes?: string[]; grantId?: string; now?: number } = {}): PhoneBeginGrant {
+  const now = o.now ?? Date.now();
+  const g = { grantId: o.grantId ?? hex(crypto.getRandomValues(new Uint8Array(16))), username: account, deviceId: hex(device.publicKey).slice(0, 32), devicePubHex: hex(device.publicKey), scopes: o.scopes ?? ["admin"], issuedAt: now - 60_000, expiresAt: now + 30 * 86_400_000 };
+  const sig = signDeviceCapabilityGrant({ ...g, devicePubKey: device.publicKey, scopes: g.scopes as never }, adminRoot);
+  return { grant: g, signatureHex: hex(sig), signerRoot: "admin-root" };
+}
 
 export interface FixtureRelay {
   relayId: string;

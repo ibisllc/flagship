@@ -266,6 +266,7 @@ export class MeshNode {
         return !!r && r.relayKind === "full" && !this.feed.state.revokedRelays.has(id);
       },
       servesAccount: (account) => this.directory.current === null || isPhoneLedgerFor(account, self, this.directory.current, this.feed.state),
+      log: () => this.feed.state,
     });
     this.phoneClient = new MeshPhoneLedgerClient({
       selfRelayId: self,

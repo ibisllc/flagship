@@ -1,5 +1,5 @@
 /**
- * Relay mesh conformance (docs/architecture-v2/relay-mesh.md §14.2, MESH01-MESH13): three relays in one mesh with mixed
+ * Relay mesh conformance (docs/architecture-v2/relay-mesh.md §14.2, MESH01-MESH14): three relays in one mesh with mixed
  * runtimes, `ra`+`rb`+`rc` as TS+TS+Rust and Rust+Rust+TS, so every scenario that names an entry and a holder runs
  * TS→TS, TS→Rust, Rust→TS and Rust→Rust. Both relays read the same mock `.com` (mesh.ts): the relay log sealed to the
  * mesh key, the CA-signed directory, blessings issued with proof of possession. A harness peer (`aa-obs`, an admitted
@@ -15,8 +15,10 @@ import {
   pbMailboxEpoch,
   pbMailboxId,
   phoneLedgerRanking,
+  PHONE_ROUTE_GRANT_TTL_MS,
   signDeviceCapabilityGrant,
   signRelayMeshRecord,
+  signServingRecord,
   verifyRelayMeshRecord,
   type BoxAttachment,
   type Keypair,
@@ -75,12 +77,12 @@ const TOLERANCE_MS = 250;
 let n = 0;
 const uniq = (p: string) => `${p}${++n}`;
 
-function adminGrant(device: Uint8Array, account: string, signer: Keypair) {
+function adminGrant(device: Uint8Array, account: string, signer: Keypair, scopes: string[] = ["admin"]) {
   const now = Date.now();
   const grantId = hex(crypto.getRandomValues(new Uint8Array(32)));
-  const g = { grantId, username: account, deviceId: hex(device).slice(32), devicePubKey: ed.getPublicKey(device), scopes: ["admin"] as never, issuedAt: now - 60_000, expiresAt: now + 30 * 86_400_000 };
+  const g = { grantId, username: account, deviceId: hex(device).slice(32), devicePubKey: ed.getPublicKey(device), scopes: scopes as never, issuedAt: now - 60_000, expiresAt: now + 30 * 86_400_000 };
   const signatureHex = hex(signDeviceCapabilityGrant(g, signer));
-  return { grant: { grantId, username: account, deviceId: g.deviceId, devicePubHex: hex(g.devicePubKey), scopes: ["admin"], issuedAt: g.issuedAt, expiresAt: g.expiresAt }, signatureHex, signerRoot: "admin-root" };
+  return { grant: { grantId, username: account, deviceId: g.deviceId, devicePubHex: hex(g.devicePubKey), scopes, issuedAt: g.issuedAt, expiresAt: g.expiresAt }, signatureHex, signerRoot: "admin-root" };
 }
 
 for (const cfg of CONFIGS) {
@@ -750,6 +752,128 @@ for (const cfg of CONFIGS) {
     });
   });
 }
+
+/**
+ * MESH14 (security review 2026-11-03): a blessed but compromised full relay (`aa-rogue`, a harness peer; it sorts first,
+ * so it dials) cannot take an account's bare name with a key it made up. As P it asks each real relay, as the ledger, to
+ * grant a claim whose grants do not prove an admin device of the account: refused, an admin device's granted. As its
+ * own ledger (it is in every account's top k here) it announces items it signed: every real relay refuses a forged key,
+ * a key under a made-up root and a non-admin device, and routes the name to it only for an admin device's proof.
+ */
+describe("relay mesh conformance: a phone grant needs the phone's admin proof (MESH14)", () => {
+  const layout = RUST
+    ? [{ relayId: "ra", impl: "ts" as Impl }, { relayId: "rb", impl: "rust" as Impl }]
+    : [{ relayId: "ra", impl: "ts" as Impl }, { relayId: "rb", impl: "ts" as Impl }];
+  const com = new MeshCom();
+  let relays: Map<string, MeshRelay> | null = null;
+  const R = (id: string) => relays!.get(id)!;
+  const sims: PeerSim[] = [];
+  beforeAll(async () => {
+    com.admit("aa-rogue", "full", "iad");
+    for (const l of layout) com.admit(l.relayId, "full", "iad");
+    await com.start();
+    relays = await launchMesh(com, layout);
+  }, 60_000);
+  afterAll(async () => {
+    for (const s of sims) s.close();
+    await stopMesh(relays);
+    await com.stop();
+  });
+
+  const synced = () =>
+    waitFor(
+      async () => (await Promise.all(layout.map(async (l) => Number(((await meshStats(R(l.relayId))).state as { sequence?: number } | undefined)?.sequence ?? ((await meshStats(R(l.relayId))).feed as { sequence?: number } | undefined)?.sequence ?? -1)))).every((n) => n >= com.entries.length),
+      8_000,
+      "every relay applied the log",
+    );
+  const withAdmin = (name: string) => {
+    const a = com.account(name);
+    const admin = key();
+    com.append({ kind: "account-authority", accountHash: accountHash(a.username), adminRootPub: hex(admin.publicKey), irkPub: hex(a.irk.publicKey), authorityGen: 2 });
+    return { a, admin, bare: `${a.username}.${APEX}` };
+  };
+  const signedClaim = (account: string, bare: string, seed: Uint8Array, generation: number) => {
+    const claim = { account, phoneRoutePub: hex(ed.getPublicKey(seed)), hostname: bare, generation, sessionNonce: hex(crypto.getRandomValues(new Uint8Array(16))), issuedAt: Date.now() };
+    return { claim, claimSignature: hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, seed))) };
+  };
+
+  it("MESH14 the ledger grants and every relay accepts a phone item only with an admin device's proof under the log's root", async () => {
+    const rogueKey = com.specs.get("aa-rogue")!.key;
+    let q = 0;
+    for (const l of layout) {
+      const id = l.relayId;
+      const label = `${id}/${l.impl}`;
+      const { a, admin, bare } = withAdmin(uniq("mesh14l"));
+      await synced();
+      const sim = await joinAs(com, R(id), "aa-rogue");
+      sims.push(sim);
+      const made = crypto.getRandomValues(new Uint8Array(32));
+      const phone = crypto.getRandomValues(new Uint8Array(32));
+      const ask = async (seed: Uint8Array, grants: unknown) => {
+        const qid = `m14-${++q}`;
+        const holder = { relayId: "aa-rogue", sessionId: "s1", phoneRoutePub: hex(ed.getPublicKey(seed)) };
+        sim.send({ type: "phone-claim", qid, hostname: bare, generation: 1, holder, ...signedClaim(a.username, bare, seed, 1), ...(grants === undefined ? {} : { grants }) });
+        return sim.next((m) => m.type === "phone-claimed" && m.qid === qid, 4_000);
+      };
+      // As P, against this relay as the account's ledger.
+      for (const [why, seed, grants] of [
+        ["a made-up key, no proof", made, undefined],
+        ["a made-up key, an empty proof", made, []],
+        ["a made-up key under its own root", made, [adminGrant(made, a.username, { privateKey: made, publicKey: ed.getPublicKey(made) })]],
+        ["a non-admin device", phone, [adminGrant(phone, a.username, admin, ["browse"])]],
+        ["another device's grant", made, [adminGrant(phone, a.username, admin)]],
+      ] as const) {
+        expect(await ask(seed, grants), `${label} as ledger: ${why}`).toMatchObject({ ok: false, code: "malformed" });
+      }
+      const granted = await ask(phone, [adminGrant(phone, a.username, admin)]);
+      expect(granted, `${label} as ledger: an admin device`).toMatchObject({ ok: true, generation: 1 });
+      sim.close();
+    }
+
+    for (const l of layout) {
+      const id = l.relayId;
+      const label = `${id}/${l.impl}`;
+      const { a, admin, bare } = withAdmin(uniq("mesh14p"));
+      await synced();
+      const sim = await joinAs(com, R(id), "aa-rogue");
+      sims.push(sim);
+      const announce = (seed: Uint8Array, grants: unknown[], generation: number) => {
+        const now = Date.now();
+        const g = { hostname: bare, phoneRoutePub: hex(ed.getPublicKey(seed)), generation, holderRelayId: "aa-rogue", ledgerRelayId: "aa-rogue", issuedAt: now, notAfter: now + PHONE_ROUTE_GRANT_TTL_MS };
+        const item = { kind: "phone", grant: g, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, rogueKey.privateKey)), ...signedClaim(a.username, bare, seed, generation), grants };
+        sim.send({ type: "announce", items: [item] });
+      };
+      const made = crypto.getRandomValues(new Uint8Array(32));
+      const phone = crypto.getRandomValues(new Uint8Array(32));
+      const opens = () => sim.frames.filter((f) => f.type === FRAME_OPEN).length;
+      let gen = 0;
+      for (const [why, seed, grants] of [
+        ["a made-up key, no proof", made, []],
+        ["a made-up key under its own root", made, [adminGrant(made, a.username, { privateKey: made, publicKey: ed.getPublicKey(made) })]],
+        ["a non-admin device", phone, [adminGrant(phone, a.username, admin, ["browse"])]],
+      ] as const) {
+        const before = await rejectedFrom(R(id), "aa-rogue");
+        announce(seed, grants as unknown[], ++gen);
+        await waitFor(async () => (await rejectedFrom(R(id), "aa-rogue")) > before, 3_000, `${label} refused the item: ${why}`);
+        const o = opens();
+        await visit(R(id), bare, 600);
+        expect(opens(), `${label} routed ${why} to the rogue relay`).toBe(o);
+      }
+      const before = await rejectedFrom(R(id), "aa-rogue");
+      announce(phone, [adminGrant(phone, a.username, admin)], ++gen);
+      await waitFor(
+        async () => {
+          await visit(R(id), bare, 400);
+          return opens() > 0;
+        },
+        5_000,
+        `${label} routed an admin device's name to its holder`,
+      );
+      expect(await rejectedFrom(R(id), "aa-rogue")).toBe(before);
+      sim.close();
+    }
+  }, 60_000);
+});
 
 describe("relay mesh conformance: the .com outage rule (MESH09, shortened thresholds)", () => {
   const layout = RUST

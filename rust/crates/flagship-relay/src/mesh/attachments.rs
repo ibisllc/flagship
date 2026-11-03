@@ -966,6 +966,7 @@ mod tests {
                 issued_at: issued,
             },
             claim_signature: "ef".repeat(64),
+            grants: Vec::new(),
         }
     }
 

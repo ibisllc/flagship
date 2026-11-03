@@ -343,8 +343,10 @@ pub enum LedgerOp {
         generation: u64,
         holder: Holder,
         /// The phone's checked claim and its signature (a mesh ledger needs them, §8.2; `.com` is not sent them).
-        claim: RouteClaim,
+        claim: Box<RouteClaim>,
         claim_signature: String,
+        /// The phone's own eligibility proof, carried to the mesh ledger and in every phone item (relay-mesh.md §8.3).
+        grants: Vec<flagship_crypto::relay_mesh::PhoneItemGrant>,
     },
     Renew {
         hostname: String,
@@ -1058,7 +1060,11 @@ impl PhoneRoutes {
                     session_id: s.id.clone(),
                     phone_route_pub: c.phone_route_pub.clone(),
                 },
-                claim: c.clone(),
+                grants: crate::mesh::wire::phone_item_grants(
+                    s.st.lock().ok().and_then(|x| x.grants.clone()).as_ref(),
+                    &c.phone_route_pub,
+                ),
+                claim: Box::new(c.clone()),
                 claim_signature: signature.to_ascii_lowercase(),
             })
             .await;

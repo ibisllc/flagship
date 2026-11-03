@@ -21,7 +21,7 @@ import { MeshDirectory } from "../src/tunnel/mesh/directory.js";
 import { AttachmentStore } from "../src/tunnel/mesh/attachments.js";
 import { MeshFeed } from "../src/tunnel/mesh/feed.js";
 import { signLegacyAttachment } from "../src/tunnel/mesh/legacy.js";
-import { APEX, hex, keypair, MeshFixture } from "./support/meshFixture.js";
+import { adminProof, APEX, hex, keypair, MeshFixture } from "./support/meshFixture.js";
 
 function rig(o: { maxBoxItems?: number; maxPerRelay?: number } = {}) {
   const fx = new MeshFixture();
@@ -163,12 +163,20 @@ describe("attachment store", () => {
   });
 
   it("phone items: valid only from their holder under the ledger's key; winner by generation; generations remembered", async () => {
-    const { fx, store, ra, rb, now } = rig();
+    const { fx, store, ra, rb, now, sync } = rig();
+    const admin = keypair();
+    fx.authority("erin", hex(admin.publicKey), hex(keypair().publicKey));
+    await sync();
     const phone = keypair();
     const g = { hostname: `erin.${APEX}`, phoneRoutePub: hex(phone.publicKey), generation: 3, holderRelayId: "rb", ledgerRelayId: "ra", issuedAt: now(), notAfter: now() + PHONE_ROUTE_GRANT_TTL_MS };
     const claim = { account: "erin", phoneRoutePub: g.phoneRoutePub, hostname: g.hostname, generation: 3, sessionNonce: "ab".repeat(16), issuedAt: now() };
     const claimSignature = hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, phone.privateKey)));
-    const item: PhoneItem = { kind: "phone", grant: g, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, ra.key.privateKey)), claim, claimSignature };
+    const grants = [adminProof("erin", admin, phone, { now: now() })];
+    const item: PhoneItem = { kind: "phone", grant: g, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, ra.key.privateKey)), claim, claimSignature, grants };
+    // §8.3: the key must be an admin device of the account under the log's admin root.
+    expect(store.offerPhone({ ...item, grants: [] }, "rb")).toBe(false);
+    expect(store.offerPhone({ ...item, grants: [adminProof("erin", keypair(), phone, { now: now() })] }, "rb")).toBe(false);
+    expect(store.offerPhone({ ...item, grants: [adminProof("erin", admin, phone, { now: now(), scopes: ["browse"] })] }, "rb")).toBe(false);
     expect(store.offerPhone(item, "ra")).toBe(false); // announced by a relay that is not the holder
     expect(store.offerPhone({ ...item, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, rb.key.privateKey)) }, "rb")).toBe(false);
     expect(store.offerPhone(item, "rb")).toBe(true);

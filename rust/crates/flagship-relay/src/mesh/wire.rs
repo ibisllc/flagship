@@ -3,9 +3,10 @@
 //! answers `None` for anything that is not the shape, and the caller drops the item and counts it.
 
 use flagship_crypto::relay_mesh::{
-    AccountMove, AttachmentItem, AttachmentKind, BoxAttachment, MeshAuth, MoveHint, PhoneItem,
-    PhoneRouteGrant, RelayBlessing, RelayBlessingBody, RelayDirectory, RelayDirectoryBody,
-    RelayDirectoryEntry, RelayKind, RelayLogEntry, RelayLogHead, RelayWithdraw,
+    AccountMove, AttachmentItem, AttachmentKind, BoxAttachment, MeshAuth, MoveHint,
+    PHONE_ITEM_MAX_GRANTS, PhoneItem, PhoneItemGrant, PhoneRouteGrant, RelayBlessing,
+    RelayBlessingBody, RelayDirectory, RelayDirectoryBody, RelayDirectoryEntry, RelayKind,
+    RelayLogEntry, RelayLogHead, RelayWithdraw,
 };
 use flagship_crypto::serving::RouteClaim;
 use serde_json::{Map, Value, json};
@@ -265,6 +266,63 @@ pub fn claim_to_json(c: &RouteClaim) -> Value {
         "generation": c.generation, "sessionNonce": c.session_nonce, "issuedAt": c.issued_at})
 }
 
+/// One proof grant `{grant:{grantId, username, deviceId, devicePubHex, scopes, issuedAt, expiresAt}, signatureHex,
+/// signerRoot}` (§8.3).
+#[must_use]
+pub fn proof_grant_from_json(v: &Value) -> Option<PhoneItemGrant> {
+    let g = v.get("grant")?;
+    Some(PhoneItemGrant {
+        grant_id: s(g, "grantId")?,
+        username: s(g, "username")?,
+        device_id: s(g, "deviceId")?,
+        device_pub_hex: s(g, "devicePubHex")?,
+        scopes: strings(g, "scopes")?,
+        issued_at: n(g, "issuedAt")?,
+        expires_at: n(g, "expiresAt")?,
+        signature_hex: s(v, "signatureHex")?,
+        signer_root: s(v, "signerRoot")?,
+    })
+}
+
+/// A phone item's or claim's `grants` (at most [`PHONE_ITEM_MAX_GRANTS`], every one in shape), else `None`.
+#[must_use]
+pub fn proof_grants_from_json(v: Option<&Value>) -> Option<Vec<PhoneItemGrant>> {
+    let a = v?.as_array()?;
+    if a.len() > PHONE_ITEM_MAX_GRANTS {
+        return None;
+    }
+    a.iter().map(proof_grant_from_json).collect()
+}
+
+#[must_use]
+pub fn proof_grants_to_json(grants: &[PhoneItemGrant]) -> Value {
+    Value::Array(
+        grants
+            .iter()
+            .map(|g| {
+                json!({"grant": {"grantId": g.grant_id, "username": g.username, "deviceId": g.device_id,
+                    "devicePubHex": g.device_pub_hex, "scopes": g.scopes, "issuedAt": g.issued_at,
+                    "expiresAt": g.expires_at}, "signatureHex": g.signature_hex, "signerRoot": g.signer_root})
+            })
+            .collect(),
+    )
+}
+
+/// TS `phoneItemGrants`: of the first [`PHONE_ITEM_MAX_GRANTS`] grants the phone presented in `begin`, those in the
+/// wire shape for this key.
+#[must_use]
+pub fn phone_item_grants(presented: Option<&Value>, phone_route_pub: &str) -> Vec<PhoneItemGrant> {
+    let key = phone_route_pub.to_ascii_lowercase();
+    presented
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(PHONE_ITEM_MAX_GRANTS)
+        .filter_map(proof_grant_from_json)
+        .filter(|g| flagship_crypto::relay_mesh::phone_item_grant_ok(g, &key))
+        .collect()
+}
+
 /// One item of an `announce` or `answer` list (§6.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireItem {
@@ -280,7 +338,7 @@ pub enum WireItem {
     },
 }
 
-/// `{kind:"box"|"legacy", attachment, signature}`, `{kind:"phone", grant, signature, claim, claimSignature}` or
+/// `{kind:"box"|"legacy", attachment, signature}`, `{kind:"phone", grant, signature, claim, claimSignature, grants}` or
 /// `{kind:"mailbox", announce}`. A phone item without the phone's claim is not one (§8.3).
 #[must_use]
 pub fn item_from_json(v: &Value) -> Option<WireItem> {
@@ -300,6 +358,7 @@ pub fn item_from_json(v: &Value) -> Option<WireItem> {
             signature: s(v, "signature")?,
             claim: claim_from_json(v.get("claim")?)?,
             claim_signature: s(v, "claimSignature")?,
+            grants: proof_grants_from_json(v.get("grants"))?,
         })),
         "mailbox" => {
             let a = v.get("announce")?;
@@ -323,7 +382,8 @@ pub fn item_to_json(item: &WireItem) -> Value {
         }),
         WireItem::Phone(p) => {
             json!({"kind": "phone", "grant": grant_to_json(&p.grant), "signature": p.signature,
-                "claim": claim_to_json(&p.claim), "claimSignature": p.claim_signature})
+                "claim": claim_to_json(&p.claim), "claimSignature": p.claim_signature,
+                "grants": proof_grants_to_json(&p.grants)})
         }
         WireItem::Mailbox {
             pik_pub_hex,
