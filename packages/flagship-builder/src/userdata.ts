@@ -579,6 +579,8 @@ function buildBootstrapScriptPlain(args: BootstrapTemplateArgs): string {
 # Flagship first-boot bootstrap.
 # Runs once at install time under d-i's in-target chroot. Idempotent.
 set -uo pipefail
+# in-target runs with PATH=/usr/sbin:/usr/bin:/sbin:/bin, but the release's tools (flagship-tsx, node) are in /usr/local/bin.
+export PATH="/usr/local/sbin:/usr/local/bin:\${PATH:-/usr/sbin:/usr/bin:/sbin:/bin}"
 exec >>/var/log/flagship-bootstrap.log 2>&1
 date
 echo "[flagship-bootstrap] starting"
