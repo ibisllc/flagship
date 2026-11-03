@@ -3408,4 +3408,14 @@
     <string name="sandbox_firewall_not_started">no se ha iniciado</string>
     <string name="unknown_reason_lower">motivo desconocido</string>
     <string name="also_in_groups">también en %1$s</string>
+    <string name="access_list_at_most_rules">una lista de acceso puede tener como máximo %1$d reglas</string>
+    <string name="access_list_start_with_allow_or_deny">empieza la línea con «allow» o «deny»</string>
+    <string name="access_list_say_what_to_allow">indica qué permitir o denegar, p. ej. «allow example.com»</string>
+    <string name="access_list_one_host_per_line">un host por línea</string>
+    <string name="access_list_host_without_scheme">escribe solo el host, sin http:// ni https://</string>
+    <string name="access_list_host_without_path">escribe solo el host, sin ruta</string>
+    <string name="access_list_host_without_port">escribe solo el host, sin puerto</string>
+    <string name="access_list_wildcard_only_first">un * solo puede ir al principio de un host, como en *.example.com</string>
+    <string name="access_list_localhost_not_public">«localhost» no es un nombre de host público</string>
+    <string name="access_list_not_a_valid_host">«%1$s» no es un nombre de host válido</string>
 </resources>

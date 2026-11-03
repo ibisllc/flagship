@@ -90,3 +90,42 @@ describe("plural count placement", () => {
     expect(pluralArgProblem(en[0], en[1], "{0} までに復元（残り {1} 日）", "{0} までに復元（残り {1} 日）")).toBeNull();
   });
 });
+
+describe("hard-coded text gate (scripts/i18n-literals.mjs)", () => {
+  it("reads the wrappers' dry-run listing and honours only matching allow entries", async () => {
+    // @ts-expect-error plain .mjs
+    const { parseList, readAllow, allowedBy } = await import("./i18n-literals.mjs");
+    const hits = parseList('noise\nUNWRAPPED\twebapp/lib/x.js\t12\t"Save changes"\nUNWRAPPED\twebapp/lib/voiciText.js\t3\t"GitHub"\n', "apps/web/public/");
+    expect(hits).toEqual([
+      { file: "apps/web/public/webapp/lib/x.js", line: 12, text: "Save changes" },
+      { file: "apps/web/public/webapp/lib/voiciText.js", line: 3, text: "GitHub" },
+    ]);
+    const allow = readAllow();
+    expect(allowedBy(allow, "webapp", hits[0])).toBeNull();
+    expect(allowedBy(allow, "webapp", hits[1])).not.toBeNull();
+    // a brand table entry does not let a real word through
+    expect(allowedBy(allow, "webapp", { ...hits[1], text: "Email" })?.why).toContain("tr(");
+    expect(allowedBy(allow, "ios", hits[1])).toBeNull();
+  });
+
+  it("gives every allow entry a reason", async () => {
+    // @ts-expect-error plain .mjs
+    const { readAllow } = await import("./i18n-literals.mjs");
+    for (const a of readAllow()) expect(a.why?.length ?? 0).toBeGreaterThan(10);
+  });
+
+  it("catches prose outside t() on the voi.ci site, not ids, paths or comments", async () => {
+    // @ts-expect-error plain .mjs
+    const { hardCodedIn } = await import("../apps/voici-site/i18n.mjs");
+    const src = [
+      'h(doc, "p", {}, "Send me a message");',
+      'h(doc, "p", {}, t("Send me a message"));',
+      'const KEY = "voici-alerts:notice";',
+      "el.textContent = `Sent ${n} messages`;",
+      '// "A comment that reads like prose"',
+      'const d = `M${x} ${y}h1v1h-1z`;',
+      'const href = "https://voi.ci/Some path";',
+    ].join("\n");
+    expect(hardCodedIn("x.js", src)).toEqual([expect.stringContaining("x.js:1:"), expect.stringContaining("x.js:4:")]);
+  });
+});

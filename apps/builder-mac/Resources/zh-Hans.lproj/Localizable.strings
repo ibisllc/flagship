@@ -216,3 +216,7 @@
 "Refresh" = "刷新";
 "Choose drive to create boot disk (will be formatted)" = "选择要创建启动盘的驱动器（将被格式化）";
 "Learn more →" = "了解更多 →";
+"The image could not be handed to the helper." = "无法将映像交给辅助程序。";
+"The helper would not accept that disk." = "辅助程序不接受该磁盘。";
+"Couldn't unmount the disk: %@" = "无法卸载磁盘：%@";
+"Beta" = "Beta";

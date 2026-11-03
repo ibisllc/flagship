@@ -5,6 +5,8 @@
 //        Swift code that builds a plain String from a literal (error text, helper output, constants,
 //        arguments of our own components) is rewritten to String(localized: "…"). SwiftUI's own
 //        initialisers (Text, Label, Button, navigationTitle …) already treat a literal as a key and are left alone.
+//        --only <regex> limits it to the files whose path matches. --dry --list [--mac] prints what would be wrapped (UNWRAPPED<TAB>file<TAB>line<TAB>"text"), for
+//        scripts/i18n-literals.mjs, the gate against new hard-coded English.
 //   node scripts/i18n-ios.mjs harvest <DerivedData>
 //        reads the .stringsdata files the compiler writes (build with SWIFT_EMIT_LOC_STRINGS=YES) and
 //        updates i18n/<surface>/en.json — the keys, with the exact %@ / %lld format the compiler derived.
@@ -285,10 +287,12 @@ function foldConcats(src, lits) {
 }
 
 function wrap() {
-  const report = { wrapped: 0, skipped: [], decl: [] };
+  const report = { wrapped: 0, skipped: [], decl: [], list: [] };
   const plans = [];
+  const only = args.includes("--only") ? new RegExp(args[args.indexOf("--only") + 1]) : null; // wrap only the files whose path matches
   for (const file of listSwift()) {
     const rel = path.relative(ROOT, file);
+    if (only && !only.test(rel)) continue;
     const src = fs.readFileSync(file, "utf8");
     const regions = bodyRegions(src);
     const inserts = []; // { pos, text }
@@ -311,10 +315,12 @@ function wrap() {
         inserts.push({ pos: lit.end, text: ")", order: 0 });
       }
       report.wrapped++;
+      report.list.push(`UNWRAPPED\t${rel}\t${lineOf(src, lit.start)}\t${JSON.stringify(textOf(lit).replace(/\u0001/g, "%@"))}`);
     };
     for (const lit of foldConcats(src, scanSwift(src))) visit(lit);
     if (inserts.length || replaces.length) plans.push({ file, src, inserts: inserts.filter((x) => !replaces.some((r) => x.pos >= r.start && x.pos <= r.end)), replaces });
   }
+  if (flag("--list")) { if (report.list.length) console.log(report.list.join("\n")); return; }
   console.log(`${plans.length} files, ${report.wrapped} literals wrapped`);
   fs.writeFileSync("/tmp/i18n-ios-skipped.txt", report.skipped.join("\n"));
   console.log(`skipped capitalised literals: ${report.skipped.length} (/tmp/i18n-ios-skipped.txt)`);

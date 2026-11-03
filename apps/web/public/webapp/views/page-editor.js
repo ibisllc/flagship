@@ -87,6 +87,7 @@ function imageBytes(sha) {
 }
 
 function siteLabel(id) {
+  if (id === "email") return tr("Email");
   return VOICI_LINK_SITES.find((s) => s.id === id)?.label ?? "";
 }
 

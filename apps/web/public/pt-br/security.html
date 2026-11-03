@@ -66,7 +66,7 @@
         <h3>O que prometemos</h3>
         <ul class="bullets">
           <li>Todo o código crítico para a segurança (derivação de chaves, assinatura, criptografia, daemon, caminho de boot, clientes móveis) é público sob BUSL-1.1, que passa a ser Apache 2.0 em 2030-05-03.</li>
-          <li>A imagem de inicialização é gerada de forma reproduzível: você pode <a href="/security/iso-seed.html">verificar que os bytes correspondem ao Debian original</a>.</li>
+          <li>A imagem de inicialização é gerada de forma reproduzível: você pode <a href="/pt-br/security/iso-seed">verificar que os bytes correspondem ao Debian original</a>.</li>
           <li>Apenas primitivas padrão: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code> e, desde a 0.3, <code>ML-DSA-65</code> e <code>ML-KEM-768</code> em modo híbrido com as clássicas. Nada de criptografia caseira.</li>
           <li>Por padrão, o disco criptografado de um servidor só abre depois que o seu celular aprova, pela rede, a cada boot, então um servidor roubado continua bloqueado. O desbloqueio automático é uma opção que você ativa por servidor: com ela, o servidor liga sozinho depois de uma queda de energia, e um servidor roubado também ligaria. Se isso acontecer, revogue o servidor no app: no próximo boot ele não recebe nenhuma chave de desbloqueio e o relay deixa de servir os apps dele. Você também pode definir um prazo para que um servidor pare os apps, ou se bloqueie, quando nenhum administrador tiver aberto o Flagship por 7 ou 30 dias.</li>
           <li>O domínio de autenticação (<code>flagshipserver.com</code>) é separado do domínio de conteúdo do usuário (<code>*.flagship.services</code>) para que os apps dos usuários não alcancem cookies de sessão por confusão de subdomínios.</li>
@@ -196,7 +196,7 @@
         </ul>
 
         <h3>Hall da fama</h3>
-        <p>Os pesquisadores que nos relataram uma vulnerabilidade, e os commits que fecharam cada relato, estão no <a href="/security/hall-of-fame">hall da fama</a>.</p>
+        <p>Os pesquisadores que nos relataram uma vulnerabilidade, e os commits que fecharam cada relato, estão no <a href="/pt-br/security/hall-of-fame">hall da fama</a>.</p>
       </section>
 
       <section id="report">

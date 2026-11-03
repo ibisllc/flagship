@@ -20,7 +20,7 @@ internal static class StudioVersion
     {
         var parts = version.Split('.');
         if (parts.Length == 3 && parts[2] == "0" && int.TryParse(parts[0], out _) && int.TryParse(parts[1], out _))
-            return $"{parts[0]}.{parts[1]} {Label}";
+            return $"{parts[0]}.{parts[1]} {Strings.T(Label)}";
         return version;
     }
 

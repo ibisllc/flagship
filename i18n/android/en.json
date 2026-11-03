@@ -14067,5 +14067,45 @@
     "en": "also in %1$s",
     "ctx": "api/ScreensModels.kt (prose)",
     "args": 1
+  },
+  "access_list_at_most_rules": {
+    "en": "an access list can have at most %1$d rules",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_start_with_allow_or_deny": {
+    "en": "start the line with \"allow\" or \"deny\"",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_say_what_to_allow": {
+    "en": "say what to allow or deny, e.g. \"allow example.com\"",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_one_host_per_line": {
+    "en": "one host per line",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_host_without_scheme": {
+    "en": "write the host only, without http:// or https://",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_host_without_path": {
+    "en": "write the host only, without a path",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_host_without_port": {
+    "en": "write the host only, without a port",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_wildcard_only_first": {
+    "en": "a * may only start a host, as in *.example.com",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_localhost_not_public": {
+    "en": "\"localhost\" is not a public host name",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
+  },
+  "access_list_not_a_valid_host": {
+    "en": "\"%1$s\" is not a valid host name",
+    "ctx": "core/AppAccessList.kt (access-list line error)"
   }
 }

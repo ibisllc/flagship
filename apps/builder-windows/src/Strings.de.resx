@@ -697,4 +697,7 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="actions" xml:space="preserve">
     <value>Aktionen</value>
   </data>
+  <data name="Beta" xml:space="preserve">
+    <value>Beta</value>
+  </data>
 </root>

@@ -746,3 +746,7 @@ msgstr "A imagem de servidor pré-construída é para {0}, mas esta receita inst
 #, python-brace-format
 msgid "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free."
 msgstr "Não há espaço livre suficiente em disco para a imagem do servidor: precisa de {0:.1f} GB, há {1:.1f} GB livres."
+
+#: version.py (LABEL, looked up at run time)
+msgid "Beta"
+msgstr "Beta"

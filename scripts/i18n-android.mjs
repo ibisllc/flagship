@@ -6,6 +6,8 @@
 //        one-time (and re-runnable) migration: finds user-facing string literals in the Kotlin
 //        sources, writes them to i18n/<module>/en.json and res/values/strings.xml, and rewrites the
 //        code to read them (stringResource(...) inside UI, FSStrings.get(...) elsewhere).
+//        --dry --list prints what would be rewritten (UNWRAPPED<TAB>file<TAB>line<TAB>"text"), for
+//        scripts/i18n-literals.mjs, the gate against new hard-coded English.
 //   node scripts/i18n-android.mjs build [--module ...]    i18n/<module>/<lang>.json -> res/values-<lang>/strings.xml (every module unless --module)
 //   node scripts/i18n-android.mjs check                   fail on drift, bad placeholders, missing keys in a ga language
 //   node scripts/i18n-android.mjs dump|merge|status|lint  see scripts/lib/i18n-kv.mjs
@@ -467,7 +469,7 @@ function extract() {
   const byText = new Map(Object.entries(existing).map(([k, v]) => [v.en, k]));
   // hand-written entries that predate the extraction (manifest and widget metadata read them)
   const entries = { ...SEED[M.surface], ...existing };
-  const report = { rewritten: 0, files: 0, skipped: [], dynamic: [] };
+  const report = { rewritten: 0, files: 0, skipped: [], dynamic: [], list: [] };
   const plans = [];
 
   for (const file of kt) {
@@ -519,11 +521,13 @@ function extract() {
       const rep = `${call}(R.string.${key}${argsSrc.length ? ", " + argsSrc.join(", ") : ""})`;
       edits.push({ start: lit.start, end: lit.end, replacement: rep, nestedOf: lit });
       report.rewritten++;
+      report.list.push(`UNWRAPPED\t${path.relative(ROOT, file)}\t${lineOf(src, lit.start)}\t${JSON.stringify(text.replace(/\u0001/g, "%s"))}`);
     };
     for (const lit of lits) visit(lit);
     if (edits.length) plans.push({ file, rel, src, edits, inUi });
   }
 
+  if (flag("--list")) { if (report.list.length) console.log(report.list.join("\n")); return; }
   fs.writeFileSync("/tmp/i18n-android-accepted.json", JSON.stringify(Object.entries(entries).map(([k, v]) => ({ k, en: v.en, ctx: v.ctx })), null, 1));
   console.log(`${plans.length} files, ${report.rewritten} literals -> ${Object.keys(entries).length} resources`);
   fs.writeFileSync("/tmp/i18n-android-skipped.txt", report.skipped.join("\n"));

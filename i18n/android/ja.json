@@ -3405,5 +3405,15 @@
   "share_activity_server_update": "サーバーをアップデートしました",
   "sandbox_firewall_not_started": "起動していません",
   "unknown_reason_lower": "理由は不明です",
-  "also_in_groups": "%1$s でも"
+  "also_in_groups": "%1$s でも",
+  "access_list_at_most_rules": "アクセスリストのルールは最大 %1$d 件までです",
+  "access_list_start_with_allow_or_deny": "行は「allow」または「deny」で始めてください",
+  "access_list_say_what_to_allow": "許可または拒否する対象を指定してください。例：「allow example.com」",
+  "access_list_one_host_per_line": "1 行に 1 ホスト",
+  "access_list_host_without_scheme": "ホスト名のみを書いてください（http:// や https:// は不要）",
+  "access_list_host_without_path": "ホスト名のみを書いてください（パスは不要）",
+  "access_list_host_without_port": "ホスト名のみを書いてください（ポートは不要）",
+  "access_list_wildcard_only_first": "* はホストの先頭にのみ使えます（例：*.example.com）",
+  "access_list_localhost_not_public": "「localhost」は公開ホスト名ではありません",
+  "access_list_not_a_valid_host": "「%1$s」は有効なホスト名ではありません"
 }

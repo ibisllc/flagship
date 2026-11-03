@@ -793,5 +793,19 @@
   "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.": {
     "en": "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.",
     "ctx": "vm/appliance_cache.py:307 (prose)"
+  },
+  "VM {0}: this server's code is {1}": {
+    "en": "VM {0}: this server's code is {1}",
+    "ctx": "vm/manager.py:855 (prose)",
+    "translatable": false
+  },
+  "VM {0}: told your phone which server this is": {
+    "en": "VM {0}: told your phone which server this is",
+    "ctx": "vm/manager.py:879 (prose)",
+    "translatable": false
+  },
+  "Beta": {
+    "en": "Beta",
+    "ctx": "version.py (LABEL, looked up at run time)"
   }
 }

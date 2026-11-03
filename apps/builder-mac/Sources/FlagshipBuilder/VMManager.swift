@@ -468,7 +468,7 @@ final class VMManager: ObservableObject {
             guard let seen = ServerCodeSeen.parse(line, serverDomain: config.serverDomain) else { continue }
             if serverCodes[name] != seen.code {
                 serverCodes[name] = seen.code
-                log("VM \(name): this server's code is \(ServerCodeSeen.pretty(seen.code))")
+                log(String(localized: "VM \(name): this server's code is \(ServerCodeSeen.pretty(seen.code))"))
             }
             guard !codeReported.contains(name),
                   let serial = config.provisionStatusSerial,
@@ -488,7 +488,7 @@ final class VMManager: ObservableObject {
                     let status = (try? await URLSession.shared.data(for: req))?.1 as? HTTPURLResponse
                     if status?.statusCode == 200 {
                         StudioConfirmKeyFile.delete(layout: layout, name: name)
-                        self?.log("VM \(name): told your phone which server this is")
+                        self?.log(String(localized: "VM \(name): told your phone which server this is"))
                         return
                     }
                     if let code = status?.statusCode, (400..<500).contains(code), code != 404, code != 429 { return }

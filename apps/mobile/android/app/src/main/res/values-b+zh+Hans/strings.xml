@@ -3408,4 +3408,14 @@
     <string name="sandbox_firewall_not_started">它尚未启动</string>
     <string name="unknown_reason_lower">原因不明</string>
     <string name="also_in_groups">同时在 %1$s</string>
+    <string name="access_list_at_most_rules">访问列表最多可有 %1$d 条规则</string>
+    <string name="access_list_start_with_allow_or_deny">每行请以“allow”或“deny”开头</string>
+    <string name="access_list_say_what_to_allow">请说明要允许或拒绝什么，例如“allow example.com”</string>
+    <string name="access_list_one_host_per_line">每行一个主机</string>
+    <string name="access_list_host_without_scheme">只写主机名，不要带 http:// 或 https://</string>
+    <string name="access_list_host_without_path">只写主机名，不要带路径</string>
+    <string name="access_list_host_without_port">只写主机名，不要带端口</string>
+    <string name="access_list_wildcard_only_first">* 只能放在主机名开头，例如 *.example.com</string>
+    <string name="access_list_localhost_not_public">“localhost”不是公共主机名</string>
+    <string name="access_list_not_a_valid_host">“%1$s”不是有效的主机名</string>
 </resources>

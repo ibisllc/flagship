@@ -227,5 +227,6 @@
   "returnToPairingHome": "Zurück zum Kopplungsbeginn",
   "wiFiNetworkNameOptional": "WLAN-Netzwerkname (optional)",
   "wiFiPasswordOptional": "WLAN-Passwort (optional)",
-  "actions": "Aktionen"
+  "actions": "Aktionen",
+  "Beta": "Beta"
 }

@@ -71,10 +71,10 @@ public enum StrictReentry {
         guard i.nonceHex.count == 64, lowerHex(i.nonceHex) else { throw Refusal(code: "bad-input", sentence: "strict-reentry: the nonce must be 32 bytes of hex") }
         guard i.leftStrictAt >= 0, i.checkedAt >= 0, i.deviceCount >= 0 else { throw Refusal(code: "bad-input", sentence: "strict-reentry: bad number") }
         guard i.devices.count == i.deviceCount, i.deviceCount > 0 else {
-            throw Refusal(code: "devices-not-enrolled", sentence: "Every device on the account needs its post-quantum key before strict comes back.")
+            throw Refusal(code: "devices-not-enrolled", sentence: String(localized: "Every device on the account needs its post-quantum key before strict comes back."))
         }
         guard i.recoveryChecked, let recAt = i.recoveryCheckedAt else {
-            throw Refusal(code: "recovery-not-checked", sentence: "Test your recovery before turning strict on again.")
+            throw Refusal(code: "recovery-not-checked", sentence: String(localized: "Test your recovery before turning strict on again."))
         }
         let head = "\(tag)|\(i.account)|\(i.scope.kind.rawValue)|\(i.scope.id)|\(i.leftStrictAt)"
         let devices = try i.devices.map(line).sorted()

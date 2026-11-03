@@ -15,6 +15,7 @@
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
+  <script src="/i18n.js" defer></script>
 </head>
   <body>
     <header class="topbar">
@@ -37,6 +38,12 @@
         For the first year, a name that matches a registered <code>.com</code> is held for whoever controls that domain.
       </p>
       <p id="dibs-status" class="lede" aria-live="polite">Checking whether the dibs window is open…</p>
+      <div id="dibs-messages" hidden>
+        <p data-dibs="open">The dibs window is open until <time data-date></time>.</p>
+        <p data-dibs="soon">The dibs window opens on <time data-date></time> and runs for a year.</p>
+        <p data-dibs="closed">The dibs window closed on <time data-date></time> — every free name is now open to everyone.</p>
+        <p data-dibs="unset">The dibs window hasn't been announced yet.</p>
+      </div>
 
       <h2>How it works</h2>
       <ul class="bullets">
@@ -64,14 +71,27 @@
       </p>
     </main>
     <script>
+      // Every sentence is in the page (#dibs-messages) so scripts/i18n-web.mjs translates it; this only picks one and fills in the date.
       (function () {
         var el = document.getElementById("dibs-status");
-        function fmt(ms) { return new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }); }
+        var lang = document.documentElement.getAttribute("lang") || undefined;
+        function show(kind, ms) {
+          var tpl = document.querySelector('#dibs-messages [data-dibs="' + kind + '"]');
+          el.textContent = "";
+          if (!tpl) return;
+          var c = tpl.cloneNode(true);
+          var d = c.querySelector("[data-date]");
+          if (d && ms) {
+            d.textContent = new Date(ms).toLocaleDateString(lang, { year: "numeric", month: "long", day: "numeric" });
+            d.setAttribute("datetime", new Date(ms).toISOString().slice(0, 10));
+          }
+          while (c.firstChild) el.appendChild(c.firstChild);
+        }
         fetch("/api/name-dibs/window").then(function (r) { return r.json(); }).then(function (w) {
-          if (w.open) el.textContent = "The dibs window is open until " + fmt(w.end) + ".";
-          else if (w.configured && Date.now() < w.start) el.textContent = "The dibs window opens on " + fmt(w.start) + " and runs for a year.";
-          else if (w.configured) el.textContent = "The dibs window closed on " + fmt(w.end) + " — every free name is now open to everyone.";
-          else el.textContent = "The dibs window hasn't been announced yet.";
+          if (w.open) show("open", w.end);
+          else if (w.configured && Date.now() < w.start) show("soon", w.start);
+          else if (w.configured) show("closed", w.end);
+          else show("unset");
         }).catch(function () { el.textContent = ""; });
       })();
     </script>

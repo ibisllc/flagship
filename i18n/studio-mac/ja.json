@@ -215,5 +215,9 @@
   "No removable drives detected": "リムーバブルドライブが見つかりません",
   "Refresh": "更新",
   "Choose drive to create boot disk (will be formatted)": "起動ディスクを作成するドライブを選んでください（フォーマットされます）",
-  "Learn more →": "詳しく見る →"
+  "Learn more →": "詳しく見る →",
+  "The image could not be handed to the helper.": "イメージをヘルパーに渡せませんでした。",
+  "The helper would not accept that disk.": "ヘルパーがそのディスクを受け付けませんでした。",
+  "Couldn't unmount the disk: %@": "ディスクをアンマウントできませんでした: %@",
+  "Beta": "ベータ"
 }

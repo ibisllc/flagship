@@ -446,6 +446,39 @@ function lint(segs) {
   return problems;
 }
 
+// ---- coverage -------------------------------------------------------------------------------
+
+// Every English page is either localised (`pages`) or English-only with a reason (`englishOnly`), so
+// a new page can't ship English-only by accident. Generated language folders and trees with their own
+// runtime localisation (`ownI18n`) are not walked; a page whose <html lang> isn't the source is ignored.
+function coverageProblems() {
+  const problems = [];
+  const listed = new Set(pageList());
+  const englishOnly = new Map((pagesCfg.englishOnly || []).map((e) => [e.src, e.why]));
+  const skipDirs = new Set([...targets.map((l) => l.webPath), ...(pagesCfg.ownI18n || []).map((t) => t.dir)]);
+  for (const [src, why] of englishOnly) {
+    if (!why || !String(why).trim()) problems.push(`i18n/web/pages.json: englishOnly "${src}" needs a reason ("why")`);
+    if (listed.has(src)) problems.push(`i18n/web/pages.json: "${src}" is in both pages and englishOnly`);
+    if (!fs.existsSync(path.join(PUBLIC, src))) problems.push(`i18n/web/pages.json: englishOnly "${src}" does not exist`);
+  }
+  const walkDir = (rel) => {
+    for (const ent of fs.readdirSync(path.join(PUBLIC, rel), { withFileTypes: true })) {
+      const r = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) {
+        if (!rel && skipDirs.has(ent.name)) continue;
+        if (ent.name.startsWith(".") || ent.name === "node_modules") continue;
+        walkDir(r);
+      } else if (ent.name.endsWith(".html") && !listed.has(r) && !englishOnly.has(r)) {
+        const lang = readPage(r).match(/<html\b[^>]*\blang="([^"]+)"/i)?.[1];
+        if (lang && lang !== locales.source) continue;
+        problems.push(`apps/web/public/${r} is an English page that is not localised: add it to "pages" in i18n/web/pages.json, or to "englishOnly" with the reason`);
+      }
+    }
+  };
+  walkDir("");
+  return problems;
+}
+
 // ---- commands -------------------------------------------------------------------------------
 
 const cmd = process.argv[2];
@@ -507,6 +540,7 @@ if (cmd === "extract") {
     const have = fs.existsSync(r.file) ? fs.readFileSync(r.file, "utf8") : null;
     if (have !== r.html) problems.push(`${path.relative(ROOT, r.file)} is stale: run \`node scripts/i18n-web.mjs build\``);
   }
+  problems.push(...coverageProblems());
   if (problems.length) { console.error(problems.join("\n")); console.error(`\n${problems.length} problem(s)`); process.exit(1); }
   console.log("i18n-web: ok");
 } else {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move Flagship Studio for Linux's user-facing text behind gettext.
 
-    python3 scripts/i18n_linux.py wrap [--dry]
+    python3 scripts/i18n_linux.py wrap [--dry [--list]]
 
 Reads the Python sources of apps/builder-linux with the `ast` module (so f-strings, implicit string
 concatenation and docstrings are understood, not guessed at), wraps every user-facing string in
@@ -105,6 +105,8 @@ class Collector(ast.NodeVisitor):
         if id(node) in self.docstrings:
             return False, "docstring"
         p = self.parent(node)
+        if isinstance(p, ast.Call) and dotted(p.func) in ("tr", "trn", "i18n.tr", "i18n.trn"):
+            return False, "already wrapped"
         if isinstance(p, (ast.Compare,)) or (isinstance(p, ast.Dict) and node in p.keys) or isinstance(p, ast.Subscript):
             return False, "comparison/key"
         if isinstance(p, ast.JoinedStr):
@@ -140,7 +142,7 @@ class Collector(ast.NodeVisitor):
             ok, why = self.accept(node, node.value)
             if ok:
                 self.found.append((node, node.value, why))
-            elif re.match(r"^[A-Z][\s\S]{2,}", node.value) and why not in ("code-like", "brand", "docstring"):
+            elif re.match(r"^[A-Z][\s\S]{2,}", node.value) and why not in ("code-like", "brand", "docstring", "already wrapped"):
                 self.skipped.append(f"{self.rel}:{node.lineno} [{why}] {node.value[:90]!r}")
 
     def visit_JoinedStr(self, node: ast.JoinedStr) -> None:
@@ -174,6 +176,7 @@ def offset(line_starts: list[int], line: int, col: int, src_bytes: bytes) -> int
 
 def main() -> None:
     dry = "--dry" in sys.argv
+    listing = "--list" in sys.argv  # with --dry: UNWRAPPED<TAB>file<TAB>line<TAB>"text" for scripts/i18n-literals.mjs
     entries: dict[str, dict[str, str]] = {}
     all_skipped: list[str] = []
     total = 0
@@ -205,6 +208,8 @@ def main() -> None:
                 new = f"tr({orig})"
                 key = template
             entries.setdefault(key, {"en": key, "ctx": f"{rel}:{node.lineno} ({why})"})
+            if listing:
+                print(f"UNWRAPPED\tapps/builder-linux/{rel}\t{node.lineno}\t{json.dumps(template, ensure_ascii=False)}")
             edits.append((lo, hi, new))
             total += 1
         if not dry:
@@ -217,6 +222,8 @@ def main() -> None:
                 imp = "from i18n import tr\n"  # apps/builder-linux is on sys.path (flagship-builder.py, tests/conftest.py)
                 out = out[: m.end()] + "\n" + imp + out[m.end():] if m else imp + out
             path.write_text(out, encoding="utf-8")
+    if listing:
+        return
     print(f"{total} strings -> {len(entries)} msgids")
     Path("/tmp/i18n-linux-skipped.txt").write_text("\n".join(all_skipped))
     if not dry:

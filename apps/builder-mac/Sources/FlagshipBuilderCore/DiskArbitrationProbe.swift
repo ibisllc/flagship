@@ -148,7 +148,7 @@ public enum DiskArbitrationProbe {
             if let dissenter {
                 let status = DADissenterGetStatus(dissenter)
                 let why = (DADissenterGetStatusString(dissenter) as String?) ?? String(format: "status 0x%x", status)
-                r.error = "Couldn't unmount the disk: \(why)"
+                r.error = String(localized: "Couldn't unmount the disk: \(why)")
             }
             r.done.signal()
         }, ctx)

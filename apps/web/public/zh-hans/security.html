@@ -66,7 +66,7 @@
         <h3>我们的承诺</h3>
         <ul class="bullets">
           <li>所有对安全至关重要的代码（密钥派生、签名、加密、守护进程、启动路径、移动客户端）均以 BUSL-1.1 公开，并将于 2030-05-03 转为 Apache 2.0。</li>
-          <li>启动镜像以可复现的方式构建:你可以<a href="/security/iso-seed.html">核实其字节与原版 Debian 一致</a>。</li>
+          <li>启动镜像以可复现的方式构建:你可以<a href="/zh-hans/security/iso-seed">核实其字节与原版 Debian 一致</a>。</li>
           <li>只使用标准原语：<code>Ed25519</code>、<code>X25519</code>、<code>AES-256-GCM</code>、<code>HKDF-SHA-256</code>，以及从 0.3 起与经典算法混合使用的 <code>ML-DSA-65</code> 和 <code>ML-KEM-768</code>。绝无自制密码学。</li>
           <li>默认情况下，服务器的加密磁盘每次启动都要等你的手机通过网络批准后才会打开，所以被盗的服务器始终处于锁定状态。自动解锁是按服务器开启的选项：开启后，服务器在断电后会自行启动，被盗的服务器也一样。遇到这种情况，请在应用中撤销该服务器：它下次启动时拿不到解锁密钥，中继也会停止为它的应用提供服务。你还可以设置期限：如果 7 天或 30 天内没有管理员打开 Flagship，服务器就停止它的应用，或将自己锁定。</li>
           <li>认证域名（<code>flagshipserver.com</code>）与用户内容域名（<code>*.flagship.services</code>）相互分离，因此用户应用无法通过子域名混淆获取会话 Cookie。</li>
@@ -196,7 +196,7 @@
         </ul>
 
         <h3>名人堂</h3>
-        <p>向我们报告漏洞的研究人员，以及修复每份报告的提交，都列在<a href="/security/hall-of-fame">名人堂</a>中。</p>
+        <p>向我们报告漏洞的研究人员，以及修复每份报告的提交，都列在<a href="/zh-hans/security/hall-of-fame">名人堂</a>中。</p>
       </section>
 
       <section id="report">

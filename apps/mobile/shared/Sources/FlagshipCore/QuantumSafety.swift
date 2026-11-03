@@ -17,12 +17,12 @@ public enum QuantumSafety {
     /// The sentence each loss code stands for, shown before the owner signs.
     public static func lossText(_ code: String) -> String {
         switch code {
-        case "classical-signatures-accepted": return "Orders signed only with today's (classical) signatures will be accepted again."
-        case "classical-key-exchange-accepted": return "Connections that use only classical key exchange will be accepted again."
-        case browserLoss: return "Browsers can reach it. A browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate."
-        case connectorLoss: return "This service's own connection is classical, so what it is sent could be read by a future quantum computer."
-        case "firmware-root-classical": return "The server's firmware and boot chain are still checked with classical keys."
-        case "legacy-recovery-path": return "An older recovery path that is not quantum-safe stays open."
+        case "classical-signatures-accepted": return String(localized: "Orders signed only with today's (classical) signatures will be accepted again.")
+        case "classical-key-exchange-accepted": return String(localized: "Connections that use only classical key exchange will be accepted again.")
+        case browserLoss: return String(localized: "Browsers can reach it. A browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.")
+        case connectorLoss: return String(localized: "This service's own connection is classical, so what it is sent could be read by a future quantum computer.")
+        case "firmware-root-classical": return String(localized: "The server's firmware and boot chain are still checked with classical keys.")
+        case "legacy-recovery-path": return String(localized: "An older recovery path that is not quantum-safe stays open.")
         default: return code
         }
     }
@@ -170,11 +170,11 @@ public enum QuantumSafety {
         /// What is still missing, one sentence each, in the order to fix them.
         public var missing: [String] {
             var out: [String] = []
-            if !thisDeviceIsAdmin { out.append("Only an admin device of this account can turn this on.") }
-            if !thisDeviceBound { out.append("This device's post-quantum key isn't registered yet. Unlock the app once while online.") }
-            if devicesBound < devices { out.append("\(devices - devicesBound) of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.") }
-            if !recoveryChecked { out.append("Save and test your account recovery first.") }
-            if !serverBound { out.append("This server hasn't registered its post-quantum key yet. Update it first.") }
+            if !thisDeviceIsAdmin { out.append(String(localized: "Only an admin device of this account can turn this on.")) }
+            if !thisDeviceBound { out.append(String(localized: "This device's post-quantum key isn't registered yet. Unlock the app once while online.")) }
+            if devicesBound < devices { out.append(String(localized: "\(devices - devicesBound) of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.")) }
+            if !recoveryChecked { out.append(String(localized: "Save and test your account recovery first.")) }
+            if !serverBound { out.append(String(localized: "This server hasn't registered its post-quantum key yet. Update it first.")) }
             return out
         }
     }
@@ -213,12 +213,12 @@ public enum QuantumSafety {
     /// The services a server sends things to: each AI provider (Flagship Inference and the
     /// owner's own keys) and the push services.
     public static func connectors(aiProviders: [String]) -> [Connector] {
-        var out = [Connector(id: "ai-flagship-inference", name: "Flagship Inference", detail: "Builds your apps with a hosted model. Prompts and code go over the provider's own TLS.", protection: .classical)]
+        var out = [Connector(id: "ai-flagship-inference", name: String(localized: "Flagship Inference"), detail: String(localized: "Builds your apps with a hosted model. Prompts and code go over the provider's own TLS."), protection: .classical)]
         for p in Array(Set(aiProviders.map { $0.lowercased() })).sorted() where p != "flagship-inference" {
-            out.append(Connector(id: "ai-\(p)", name: p.capitalized, detail: "Your own AI key. Prompts and code go over the provider's own TLS.", protection: .classical))
+            out.append(Connector(id: "ai-\(p)", name: p.capitalized, detail: String(localized: "Your own AI key. Prompts and code go over the provider's own TLS."), protection: .classical))
         }
-        out.append(Connector(id: "push-apns", name: "Apple push", detail: "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel.", protection: .contentFree))
-        out.append(Connector(id: "push-fcm", name: "Google push", detail: "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel.", protection: .contentFree))
+        out.append(Connector(id: "push-apns", name: String(localized: "Apple push"), detail: String(localized: "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel."), protection: .contentFree))
+        out.append(Connector(id: "push-fcm", name: String(localized: "Google push"), detail: String(localized: "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel."), protection: .contentFree))
         return out
     }
 

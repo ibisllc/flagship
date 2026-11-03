@@ -64,7 +64,7 @@ public struct QuantumSafetyScreen: View {
                     Image(systemName: "server.rack").foregroundColor(c.textMuted)
                     Text(s.name).font(FS.font.h4()).foregroundColor(c.text)
                     Spacer()
-                    Text(s.strict ? "Strict" : "Compatibility")
+                    Text(s.strict ? String(localized: "Strict") : String(localized: "Compatibility"))
                         .font(FS.font.caption()).foregroundColor(s.strict ? c.success : c.textMuted)
                         .accessibilityIdentifier("qs-status-\(s.fqdn)")
                 }
@@ -76,8 +76,8 @@ public struct QuantumSafetyScreen: View {
     @ViewBuilder
     private func strictDetails(_ s: QuantumSafetyViewModel.ServerRow, c: FSColors) -> some View {
         Text(s.replayed?.browsersAllowed == true
-             ? "Browsers can still reach it. A browser uses post-quantum key exchange, but the server's identity is proven with a classical certificate."
-             : "Only the Flagship app reaches it. Browsers are refused.")
+             ? String(localized: "Browsers can still reach it. A browser uses post-quantum key exchange, but the server's identity is proven with a classical certificate.")
+             : String(localized: "Only the Flagship app reaches it. Browsers are refused."))
             .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
         if !s.apps.isEmpty {
             Text("Apps on this server").font(FS.font.bodySm()).foregroundColor(c.text).padding(.top, FS.space.s2)

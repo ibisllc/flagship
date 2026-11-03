@@ -227,5 +227,6 @@
   "returnToPairingHome": "Voltar ao início do pareamento",
   "wiFiNetworkNameOptional": "Nome da rede Wi-Fi (opcional)",
   "wiFiPasswordOptional": "Senha do Wi-Fi (opcional)",
-  "actions": "Ações"
+  "actions": "Ações",
+  "Beta": "Beta"
 }

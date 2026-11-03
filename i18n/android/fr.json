@@ -3405,5 +3405,15 @@
   "share_activity_server_update": "a mis à jour le serveur",
   "sandbox_firewall_not_started": "elle n’a pas démarré",
   "unknown_reason_lower": "raison inconnue",
-  "also_in_groups": "aussi dans %1$s"
+  "also_in_groups": "aussi dans %1$s",
+  "access_list_at_most_rules": "une liste d’accès peut contenir au plus %1$d règles",
+  "access_list_start_with_allow_or_deny": "commencez la ligne par « allow » ou « deny »",
+  "access_list_say_what_to_allow": "indiquez quoi autoriser ou refuser, p. ex. « allow example.com »",
+  "access_list_one_host_per_line": "un hôte par ligne",
+  "access_list_host_without_scheme": "écrivez uniquement l’hôte, sans http:// ni https://",
+  "access_list_host_without_path": "écrivez uniquement l’hôte, sans chemin",
+  "access_list_host_without_port": "écrivez uniquement l’hôte, sans port",
+  "access_list_wildcard_only_first": "un * ne peut commencer qu’un hôte, comme dans *.example.com",
+  "access_list_localhost_not_public": "« localhost » n’est pas un nom d’hôte public",
+  "access_list_not_a_valid_host": "« %1$s » n’est pas un nom d’hôte valide"
 }

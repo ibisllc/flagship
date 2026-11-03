@@ -227,5 +227,6 @@
   "returnToPairingHome": "返回配对首页",
   "wiFiNetworkNameOptional": "Wi-Fi 网络名称（可选）",
   "wiFiPasswordOptional": "Wi-Fi 密码（可选）",
-  "actions": "操作"
+  "actions": "操作",
+  "Beta": "Beta"
 }

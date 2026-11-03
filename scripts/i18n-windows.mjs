@@ -3,6 +3,8 @@
 //
 //   node scripts/i18n-windows.mjs wrap [--dry]    one-time: C# string literals -> Strings.T("key") / Strings.F("key", args),
 //                                                  XAML text attributes -> {local:Str key}; writes i18n/studio-windows/en.json
+//        wrap --dry --list prints what would be wrapped (UNWRAPPED<TAB>file<TAB>line<TAB>"text"), for
+//        scripts/i18n-literals.mjs, the gate against new hard-coded English.
 //   node scripts/i18n-windows.mjs build [--drafts] i18n/studio-windows/*.json -> src/Strings.resx and src/Strings.<culture>.resx
 //   node scripts/i18n-windows.mjs check | dump | merge | status | lint
 //
@@ -208,7 +210,7 @@ function wrap() {
   const exclude = new Set(fs.existsSync(EXCLUDE_FILE) ? JSON.parse(fs.readFileSync(EXCLUDE_FILE, "utf8")) : []);
   const entries = { ...readEn(SURFACE) };
   const byText = new Map(Object.entries(entries).map(([k, v]) => [v.en, k]));
-  const report = { wrapped: 0, skipped: [] };
+  const report = { wrapped: 0, skipped: [], list: [] };
   const key = (template, ctx) => {
     let k = byText.get(template);
     if (!k) {
@@ -246,10 +248,12 @@ function wrap() {
       }
       else edits.push({ start: lit.start, end: lit.end, text: exprs.length ? `Strings.F("${k}", ${inner})` : `Strings.T("${k}")` });
       report.wrapped++;
+      report.list.push(`UNWRAPPED\tapps/builder-windows/src/${rel}\t${lineOf(src, lit.start)}\t${JSON.stringify(plainOf(lit))}`);
     };
     for (const lit of scanCs(src)) visit(lit);
     if (edits.length) plans.push({ file, rel, src, edits });
   }
+  if (args.includes("--list")) { if (report.list.length) console.log(report.list.join("\n")); return; }
   console.log(`${plans.length} files, ${report.wrapped} literals -> ${Object.keys(entries).length} resources`);
   fs.writeFileSync("/tmp/i18n-windows-skipped.txt", report.skipped.join("\n"));
   console.log(`skipped capitalised literals: ${report.skipped.length} (/tmp/i18n-windows-skipped.txt)`);

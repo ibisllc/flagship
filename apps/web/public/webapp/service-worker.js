@@ -450,7 +450,9 @@
 //  v191: internet-access alerts (wants to reach, suggests an access list, the answered toast) name the app by
 //       its display name, else its slug in words, never the bare slug (lib/appDisplayName.js
 //       accessRequestAppName).
-const SHELL_VERSION = "v191";
+//  v192: the page editor's link-site caption for an email link reads "Email" in the browser's language (i18n
+//       catalog), not the English label from the shared voi.ci link table.
+const SHELL_VERSION = "v192";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

@@ -49,7 +49,8 @@
       "help.html",
       "security.html",
       "open-source.html",
-      "adapters.html"
+      "adapters.html",
+      "security/hall-of-fame.html"
     ]
   },
   "se164d2e5bf": {
@@ -65,7 +66,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sd8e067f833": {
@@ -123,7 +128,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s3980fa6732": {
@@ -246,7 +255,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "se24f793bf9": {
@@ -616,7 +629,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sb893166c94": {
@@ -632,7 +649,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s311aed55dd": {
@@ -648,7 +669,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "se31f2cd95d": {
@@ -672,7 +697,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s0ea994bede": {
@@ -688,7 +717,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sa3c3c380ee": {
@@ -704,7 +737,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s8104119722": {
@@ -720,7 +757,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s5452a6ca48": {
@@ -736,7 +777,9 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s26e5d747c2": {
@@ -752,7 +795,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s4725b42d57": {
@@ -768,7 +815,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s326d2af3a8": {
@@ -784,7 +835,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s2a8b102c74": {
@@ -800,7 +855,8 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sc7470806c3": {
@@ -816,7 +872,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s661cf4f411": {
@@ -832,7 +892,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s82cd1953ed": {
@@ -848,7 +912,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s52d369c9d8": {
@@ -864,7 +932,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sfbb821f74f": {
@@ -880,7 +952,9 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sef298c20e8": {
@@ -911,7 +985,11 @@
       "open-source.html",
       "adapters.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sd034a70edb": {
@@ -921,7 +999,11 @@
     "pages": [
       "faq.html",
       "open-source.html",
-      "adapters.html"
+      "adapters.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html",
+      "security/hall-of-fame.html"
     ]
   },
   "se6e98cec67": {
@@ -969,7 +1051,8 @@
     "kind": "text",
     "ctx": "nav",
     "pages": [
-      "faq.html"
+      "faq.html",
+      "dibs.html"
     ]
   },
   "s49ac43cf44": {
@@ -2285,7 +2368,8 @@
     "kind": "text",
     "ctx": "nav",
     "pages": [
-      "security.html"
+      "security.html",
+      "security/hall-of-fame.html"
     ]
   },
   "s29ecfca8c0": {
@@ -3007,7 +3091,8 @@
     "kind": "text",
     "ctx": "h3",
     "pages": [
-      "security.html"
+      "security.html",
+      "security/hall-of-fame.html"
     ]
   },
   "sba026addff": {
@@ -3295,7 +3380,10 @@
     "pages": [
       "docs/index.html",
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "dibs.html",
+      "security/runtime.html",
+      "security/iso-seed.html"
     ]
   },
   "s1d34362df3": {
@@ -3699,7 +3787,8 @@
     "kind": "text",
     "ctx": "dt",
     "pages": [
-      "docs/index.html"
+      "docs/index.html",
+      "security/iso-seed.html"
     ]
   },
   "s413750e99c": {
@@ -5137,6 +5226,704 @@
     "ctx": "p",
     "pages": [
       "blog/flagship-0-3.html"
+    ]
+  },
+  "s65e3d8599d": {
+    "en": "Own the .com? Claim the matching Flagship name first — for one year, .com holders have dibs.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s3b40f96536": {
+    "en": "Name dibs · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "sa239624549": {
+    "en": "Own the .com? Claim your name first.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "se7be3faa30": {
+    "en": "Every Flagship account gets a random name to start with, and anyone can switch to a name of their own. For the first year, a name that matches a registered <1>.com</1> is held for whoever controls that domain.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      ".com"
+    ],
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "se10eb7df0c": {
+    "en": "Checking whether the dibs window is open…",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s25aa348b16": {
+    "en": "The dibs window is open until <1/>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s00241cb63e": {
+    "en": "The dibs window opens on <1/> and runs for a year.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "sae479ea992": {
+    "en": "The dibs window closed on <1/> — every free name is now open to everyone.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s57e442e1e8": {
+    "en": "The dibs window hasn't been announced yet.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "sb878d70d03": {
+    "en": "How it works",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s317278c835": {
+    "en": "<1>.com only.</1> If you control <2>acme.com</2>, you can claim the Flagship name <3>acme</3>. Other endings (.net, .org, country domains) get no special claim.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "acme.com",
+      "acme"
+    ],
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s3a15418c4e": {
+    "en": "<1>Prove it, once.</1> In the app, go to <2>Settings → Claim your .com name</2>. You'll get a short code to publish in one of two places:",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s823882162e": {
+    "en": "The code is tied to your account's key, so nobody else can reuse it.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "sb0e2258910": {
+    "en": "a DNS <1>TXT</1> record at <2>_flagship-claim.acme.com</2>, or",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "TXT",
+      "_flagship-claim.acme.com"
+    ],
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s9707196b94": {
+    "en": "a text file at <1>https://acme.com/.well-known/flagship-claim</1>.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "https://acme.com/.well-known/flagship-claim"
+    ],
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "se7c7857480": {
+    "en": "<1>First proof wins.</1> If two accounts prove the same domain, the first verified claim gets the name. There is no appeal process.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s70cf8933b6": {
+    "en": "<1>$20, once.</1> Claiming a held name costs $20 (an ordinary name change is $10). Your servers move to the new name with you.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "sdfdf549dbc": {
+    "en": "Everyone else",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "sc5b4238d69": {
+    "en": "You can buy any name that's free and isn't held for a <1>.com</1> holder, any time — including during the window. When the year ends, held names open up to everyone, first come, first served.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      ".com"
+    ],
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s36026106a3": {
+    "en": "Why",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s838c57f0c0": {
+    "en": "Names on Flagship are yours for good — we never take one back. Giving domain holders a head start means nobody can grab a brand's name before the brand has heard of us, without us ever having to judge who deserves a name.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "dibs.html"
+    ]
+  },
+  "s96962519c1": {
+    "en": "Verify the Node runtime · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s34007bda50": {
+    "en": "Verify the Node runtime",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s315e2eb5d2": {
+    "en": "Part of every Flagship server is written in TypeScript and runs on Node.js. Your server runs <1>the official Node.js binary</1>, exactly as the Node.js project publishes it at <2>nodejs.org</2>: never a copy we rebuilt. Below is the exact version and checksum each Flagship release locks, signed by Flagship's release keys, so you can check your server against it and check both against Node's own signed list.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "nodejs.org"
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sa917ba6016": {
+    "en": "<1>What this proves, and what it does not.</1> Matching checksums prove your server runs the same bytes the Node.js project signed and Flagship approved. They do not prove those bytes were built from Node's published source: that needs a reproducible build, a separate claim.",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sae54754e06": {
+    "en": "The current signed runtime manifest",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s810c86a91c": {
+    "en": "Loading the signed manifest…",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "se5c07790fb": {
+    "en": "No runtime manifest is published yet. Each release still carries its own signed runtime lock (below).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sa52eaaac9e": {
+    "en": "The manifest could not be loaded. Fetch it yourself: <1><2>/api/runtime/manifest</2></1>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "/api/runtime/manifest"
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s2e5cd56d21": {
+    "en": "Runtime",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sdabfb11929": {
+    "en": "Node.js <1/>",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      ""
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s14817c39ad": {
+    "en": "Flagship release",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s0b57ed18ba": {
+    "en": "Security floor",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sd2d4914d2f": {
+    "en": "<1/> (no Flagship server runs an older Node)",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      ""
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s02843aebfe": {
+    "en": "Sequence",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s66f775bf79": {
+    "en": "<1/> (only ever goes up; a server refuses an older one)",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      ""
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s71b7ad4557": {
+    "en": "Valid until",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sb26fbaf38b": {
+    "en": "<1/> (a server stops trusting it after this date)",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      ""
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sf7cdd60099": {
+    "en": "Lock digest",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "seb5f404bf1": {
+    "en": "Node's signing key",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s34d8821b1a": {
+    "en": "Platform",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s0af8c11d9e": {
+    "en": "Official archive and SHA-256",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s79aeb93e54": {
+    "en": "Executable SHA-256",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s97b5fe2836": {
+    "en": "<1>Machine-readable signed manifest (JSON)</1>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sea14b101e2": {
+    "en": "Check it yourself",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s3ce9b129f4": {
+    "en": "1. Download the official archive and Node's signed checksum list, and check Node's signature with a key you got from <1>github.com/nodejs/release-keys</1>, not from us:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sc3195bd124": {
+    "en": "2. Check Flagship's signature on the manifest with the release keys pinned in the source repository (the key never comes from this site), and that the lock it carries is the one it signs:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s5d0185e201": {
+    "en": "3. On your own server (with debug access turned on from its page in the Flagship app), hash the Node that is running and compare it with the executable SHA-256 above:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s38e728c797": {
+    "en": "The Flagship app shows the same comparison on each server's page, under <1>Runtime</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s6d21569d6e": {
+    "en": "How a server uses it",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s05341d2a25": {
+    "en": "The runtime lock (<1>release/runtime-lock.json</1>) is part of every signed release. A release whose bundled Node is not the locked binary is refused before it is switched on.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "release/runtime-lock.json"
+    ],
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sd32d6fb248": {
+    "en": "The server fetches this manifest, checks it against the release keys it already pins, refuses an older sequence or an expired manifest, and keeps the last one it accepted if this site is down. A missing manifest never stops a healthy server.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "sedbfc5cd47": {
+    "en": "A new runtime is installed only when the archive's own checksum, Node's signed list and Flagship's signed manifest all agree; otherwise the running one stays.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s2e184f53d7": {
+    "en": "The full design: <1>the updater's runtime module</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s8657f61da4": {
+    "en": "<1>Verify the boot seed</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security/runtime.html",
+      "security/iso-seed.html"
+    ]
+  },
+  "sfc4ed2cc79": {
+    "en": "<1>Verify the Node runtime</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security/runtime.html"
+    ]
+  },
+  "s6356b818bd": {
+    "en": "<1>© 2026 Flagship · BUSL-1.1 → Apache 2.0 on 2030-05-03</1> <2><3>Privacy</3> · <4>Terms</4> · <5>flagshipserver.com</5></2>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "security/runtime.html",
+      "security/iso-seed.html"
+    ]
+  },
+  "sa164d540f8": {
+    "en": "Verify the boot seed · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s218c23142f": {
+    "en": "Verify the boot seed",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "se782cbe5fe": {
+    "en": "When you burn a Flagship installer from the mobile app, it writes a Debian <1>seed</1> image we derive from the official Debian netinst — then appends your recipe as a small partition. The seed carries no personal data and is <2>reproducible</2>: you can rebuild it from the public Debian ISO and confirm, byte for byte, that it is exactly stock Debian plus a published, auditable change. Nothing to trust on our word.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "sbf32df0691": {
+    "en": "<1>Why a seed at all?</1> A phone can't rewrite an 800&nbsp;MB ISO in place. So we make the one structural edit — telling the installer to auto-configure from a labeled partition — <2>once</2>, centrally and reproducibly, and the app only writes your recipe onto that partition. Your recipe never leaves your device; the seed is the same for everyone.",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s6e1bfc5fac": {
+    "en": "What the seed changes vs. stock Debian",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s480c30e04e": {
+    "en": "The default boot entry (BIOS and UEFI) auto-starts the installer with <1>auto=true priority=critical preseed/file=/cdrom/flagship/preseed.cfg</1>.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "auto=true priority=critical preseed/file=/cdrom/flagship/preseed.cfg"
+    ],
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s4f38ce56c0": {
+    "en": "A generic, recipe-free <1>preseed.cfg</1> is added at <2>/flagship/preseed.cfg</2>; at install time it loads your recipe from the partition the app appends (labeled <3>FLAGSHIP</3>).",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "preseed.cfg",
+      "/flagship/preseed.cfg",
+      "FLAGSHIP"
+    ],
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "se92fc96906": {
+    "en": "Nothing else. The El&nbsp;Torito / isohybrid boot equipment is replayed byte-for-byte, so it still boots on BIOS and UEFI.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "sbb7acb9ebb": {
+    "en": "The pinned hashes",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s7e73229a14": {
+    "en": "Artifact",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s4459b93c26": {
+    "en": "Stock base — Debian 13.6.0 amd64 netinst<1/><2>official Debian signed <3>SHA256SUMS</3></2>",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      "SHA256SUMS"
+    ],
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "sd360cf5e92": {
+    "en": "Flagship seed (derived from the above)",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s4cd9ba79e3": {
+    "en": "The seed hash is re-pinned together with the stock base on each Debian point release.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s5274c02f4d": {
+    "en": "Reproduce it yourself",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s2708518a8f": {
+    "en": "The derivation is a single script — <1>iso-seed/build-seed.sh</1> — using only <2>xorriso</2>. Given the same stock base, it produces the exact seed hash above with the <3>xorriso</3> shipped in Debian 12 or 13 (newer releases lay the image out differently, so run it in a Debian container), and our CI rebuilds it under both on every change:",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "xorriso",
+      "xorriso"
+    ],
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "sa7c7e28faf": {
+    "en": "How your recipe is applied — and why it can't be swapped",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s0669564f1b": {
+    "en": "The seed is generic, so it can't target any particular box. Your recipe — a Debian preseed carrying your phone's <1>signed</1> install blob — is written onto the appended partition. The installed system trusts your phone's signature and nothing else; <2>flagshipserver.com</2> is never in that trust path. The builder checks that the preseed it writes embeds <3>your</3> signature before it lays it down, so no server can substitute a different recipe.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s77dbd714c8": {
+    "en": "The full spec",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "sf86b68bb5b": {
+    "en": "The complete design — the partition layout, the installer chain-load, the trust model, and the reproducibility guarantees — lives in the repository at <1>docs/iso-seed-and-on-device-burn.md</1>. Audit it, build it, verify it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/iso-seed.html"
+    ]
+  },
+  "s60153f4ded": {
+    "en": "Hall of fame · Security · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sc302ebc92f": {
+    "en": "Researchers who reported a vulnerability in Flagship, and the commits that closed each one.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sefd58307d1": {
+    "en": "Researchers who reported a vulnerability to us, with the commits that closed it. Credited in whatever form each reporter asks for: name, handle, or anonymous, with a link if they want one. Listed without attribution until they have told us their preference; we never publish a name we have not been given.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s3d124389fc": {
+    "en": "Found something? <1>Report it</1>; the <2>disclosure policy</2> says what to expect.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
     ]
   }
 }

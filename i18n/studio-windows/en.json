@@ -914,5 +914,9 @@
   "actions": {
     "en": "Actions",
     "ctx": "MainWindow.xaml ToolTip"
+  },
+  "Beta": {
+    "en": "Beta",
+    "ctx": "StudioVersion.cs (StudioVersion.Label, looked up at run time)"
   }
 }

@@ -57,7 +57,7 @@ object AppAccessList {
                 is LineResult.Ok -> {
                     if (rules.size >= MAX_RULES) {
                         // Reported once, on the first rule past the limit.
-                        if (!tooMany) errors += LineError(n, "an access list can have at most $MAX_RULES rules")
+                        if (!tooMany) errors += LineError(n, FSStrings.get(R.string.access_list_at_most_rules, MAX_RULES))
                         tooMany = true
                     } else {
                         rules += r.rule
@@ -154,9 +154,9 @@ object AppAccessList {
         fun err(message: String) = LineResult.Err(LineError(line, message))
         val words = body.split(WHITESPACE)
         val action = words[0].lowercase()
-        if (action != ALLOW && action != DENY) return err("start the line with \"allow\" or \"deny\"")
-        if (words.size < 2) return err("say what to allow or deny, e.g. \"allow example.com\"")
-        if (words.size > 2) return err("one host per line")
+        if (action != ALLOW && action != DENY) return err(FSStrings.get(R.string.access_list_start_with_allow_or_deny))
+        if (words.size < 2) return err(FSStrings.get(R.string.access_list_say_what_to_allow))
+        if (words.size > 2) return err(FSStrings.get(R.string.access_list_one_host_per_line))
         return when (val t = target(words[1])) {
             is Target.Ok -> LineResult.Ok(Rule(line, action, t.value))
             is Target.Bad -> err(t.message)
@@ -171,21 +171,21 @@ object AppAccessList {
     private fun target(typed: String): Target {
         val t = typed.lowercase()
         if (t == ALL) return Target.Ok(ALL)
-        if (SCHEME.containsMatchIn(t)) return Target.Bad("write the host only, without http:// or https://")
-        if (t.contains('/')) return Target.Bad("write the host only, without a path")
+        if (SCHEME.containsMatchIn(t)) return Target.Bad(FSStrings.get(R.string.access_list_host_without_scheme))
+        if (t.contains('/')) return Target.Bad(FSStrings.get(R.string.access_list_host_without_path))
         if (isIpLiteral(t)) return Target.Bad(FSStrings.get(R.string.ip_addresses_cant_be_allowed_or))
-        if (t.contains(':')) return Target.Bad("write the host only, without a port")
+        if (t.contains(':')) return Target.Bad(FSStrings.get(R.string.access_list_host_without_port))
         if (t == "*") return Target.Bad("write \"all\" instead of \"*\"")
         val wildcard = t.startsWith("*.")
         var host = if (wildcard) t.substring(2) else t
-        if (host.contains('*')) return Target.Bad("a * may only start a host, as in *.example.com")
+        if (host.contains('*')) return Target.Bad(FSStrings.get(R.string.access_list_wildcard_only_first))
         // One trailing dot is the DNS root: "example.com." is "example.com".
         host = host.removeSuffix(".")
         if (host == "localhost" || host.endsWith(".localhost")) {
-            return Target.Bad("\"localhost\" is not a public host name")
+            return Target.Bad(FSStrings.get(R.string.access_list_localhost_not_public))
         }
         if (host.length > 253 || !HOST.matches(host) || NUMERIC.matches(host)) {
-            return Target.Bad("\"$typed\" is not a valid host name")
+            return Target.Bad(FSStrings.get(R.string.access_list_not_a_valid_host, typed))
         }
         return Target.Ok(if (wildcard) "*.$host" else host)
     }

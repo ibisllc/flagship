@@ -66,7 +66,7 @@
         <h3>Was wir versprechen</h3>
         <ul class="bullets">
           <li>Der gesamte sicherheitskritische Code (Schlüsselableitung, Signatur, Verschlüsselung, Daemon, Boot-Pfad, mobile Clients) ist unter BUSL-1.1 öffentlich, die am 2030-05-03 zu Apache 2.0 wird.</li>
-          <li>Das Boot-Image wird reproduzierbar gebaut: Du kannst <a href="/security/iso-seed.html">prüfen, dass die Bytes dem unveränderten Debian entsprechen</a>.</li>
+          <li>Das Boot-Image wird reproduzierbar gebaut: Du kannst <a href="/de/security/iso-seed">prüfen, dass die Bytes dem unveränderten Debian entsprechen</a>.</li>
           <li>Nur Standardprimitive: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code> und seit 0.3 <code>ML-DSA-65</code> und <code>ML-KEM-768</code>, hybrid kombiniert mit den klassischen Verfahren. Keine selbstgebastelte Kryptografie.</li>
           <li>Standardmäßig öffnet sich die verschlüsselte Festplatte eines Servers bei jedem Start erst, wenn dein Telefon das über das Netz genehmigt. Ein gestohlener Server bleibt also gesperrt. Die automatische Entsperrung schaltest du pro Server ein: Damit startet der Server nach einem Stromausfall von selbst, und ein gestohlener würde das auch. Passiert das, widerrufe den Server in der App: Beim nächsten Start bekommt er keinen Entsperrschlüssel, und das Relay liefert seine Apps nicht mehr aus. Du kannst auch eine Frist setzen, damit ein Server seine Apps stoppt oder sich sperrt, wenn 7 oder 30 Tage lang kein Administrator Flagship geöffnet hat.</li>
           <li>Die Authentifizierungsdomain (<code>flagshipserver.com</code>) ist von der Domain für Nutzerinhalte (<code>*.flagship.services</code>) getrennt, damit Nutzer-Apps nicht durch Subdomain-Verwechslung an Sitzungs-Cookies gelangen.</li>
@@ -196,7 +196,7 @@
         </ul>
 
         <h3>Hall of Fame</h3>
-        <p>Forschende, die uns eine Schwachstelle gemeldet haben, und die Commits, die jede Meldung geschlossen haben, stehen in der <a href="/security/hall-of-fame">Hall of Fame</a>.</p>
+        <p>Forschende, die uns eine Schwachstelle gemeldet haben, und die Commits, die jede Meldung geschlossen haben, stehen in der <a href="/de/security/hall-of-fame">Hall of Fame</a>.</p>
       </section>
 
       <section id="report">

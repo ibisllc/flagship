@@ -227,5 +227,6 @@
   "returnToPairingHome": "Retour à l’accueil de l’association",
   "wiFiNetworkNameOptional": "Nom du réseau Wi-Fi (facultatif)",
   "wiFiPasswordOptional": "Mot de passe Wi-Fi (facultatif)",
-  "actions": "Actions"
+  "actions": "Actions",
+  "Beta": "Bêta"
 }

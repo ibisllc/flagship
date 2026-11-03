@@ -45,3 +45,28 @@ new "voi.ci pages & Messages" section of `faq.html` (questions on what a page is
 report and block, the Apple/Google device check). The legal pages (terms, privacy, abuse) stay English-only on purpose
 (`i18n/web/pages.json`). Review first the answer on what Flagship can read, and keep the in-app names it quotes
 ("Accept messages", "Requests", "Report this page") identical to the app's and the voi.ci site's translations.
+
+**New 0.3 website pages (`i18n/web`, 2026-11-02, drafted by an agent, needs native review).** 80 segments of four pages
+added in 0.3 that had shipped English-only: `dibs.html` (the .com name-dibs window, 21), `security/runtime.html` and
+`security/iso-seed.html` (verify the Node runtime and the boot seed, 55 between them, their shared footer included) and
+the framing prose of `security/hall-of-fame.html` (4; the write-ups stay English, `lang="en"`). The dibs status
+sentences now live in the page (`#dibs-messages`) and the script only fills in the date (`<1/>`, formatted in the page's
+language). Review first: the four dibs status lines (the date lands where `<1/>` is; check each reads with a long date),
+"There is no appeal process.", the "$20, once." line (currency format), the dibs-window word, which must match the apps'
+(es "ventana de reserva", fr "période de réservation", de "Vorrangfenster", pt-BR "janela de prioridade", ja "優先期間",
+zh-Hans "优先认领期"), and on the runtime page "What this proves, and what it does not." and the table headings ("Security
+floor", "Lock digest", "Sequence"). The seed is "imagen base" / "image de base" / "Seed" / "imagem-base" / "シード" /
+"种子镜像"; "lock" (runtime lock) is kept as "lock" in pt-BR and de, "bloqueo"/"verrou" in es/fr: pick one per language.
+`node scripts/i18n-web.mjs check` now fails on any English page under `apps/web/public` that is in neither `pages` nor
+`englishOnly` (with a reason) in `i18n/web/pages.json`.
+
+**Hard-coded strings moved into the catalogs (2026-11-02, drafted by an agent, needs native review).** Found by the new
+gate (`scripts/i18n-literals.mjs`, part of `npm run i18n`). iOS (`i18n/ios`): 49 strings of the quantum-safe protection
+screen, its refusals and the quantum-safe connection errors (37 reuse Android's wording for the same English; new are the
+nine in `PqBoxChannel.swift`/`QuantumSafety.swift` such as "This server only accepts quantum-safe connections, …", "An
+older recovery path that is not quantum-safe stays open." and "Apple push"), plus "Trust its new key" and "Email" (the
+voi.ci page editor's caption for a mail link; also new in `i18n/webapp`). Studio for Mac (`i18n/studio-mac`): "The image
+could not be handed to the helper.", "The helper would not accept that disk.", "Couldn't unmount the disk: %@" (de uses
+"aushängen"; check it reads as unmount, not eject). The Studios' version label "Beta" (`studio-mac`, `studio-linux`,
+`studio-windows`) reuses the iPhone app's translation. Android (`i18n/android`, keys `access_list_*`): the ten access-list
+line errors ("one host per line" …), copied from the iPhone app's reviewed wording.

@@ -12,7 +12,7 @@ public enum StudioVersion {
         guard let v = bundleVersion, !v.isEmpty else { return "dev" }
         let parts = v.split(separator: ".")
         guard parts.count == 3, parts.allSatisfy({ Int($0) != nil }), parts[2] == "0" else { return v }
-        return "\(parts[0]).\(parts[1]) \(label)"
+        return "\(parts[0]).\(parts[1]) \(String(localized: String.LocalizationValue(label)))"
     }
 
     public static var current: String {

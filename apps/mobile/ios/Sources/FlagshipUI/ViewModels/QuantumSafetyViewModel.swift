@@ -58,7 +58,7 @@ public final class QuantumSafetyViewModel {
 
     public func load(aiProviders: [String] = []) async {
         guard let client = PqIdentityBindingService.client, !user.isEmpty else {
-            phase = .failed("Quantum-safe protection isn't available on this account.")
+            phase = .failed(String(localized: "Quantum-safe protection isn't available on this account."))
             return
         }
         phase = .loading
@@ -132,10 +132,10 @@ public final class QuantumSafetyViewModel {
     private func reentryEvidence(scope: PolicyScope, server fqdn: String) async throws -> StrictReentryEvidence {
         guard let client = PqIdentityBindingService.client,
               let head = try? await client.fetchPolicy(username: user, scope: scope).chain.last?.change else {
-            throw QuantumSafetyRefusal("Couldn't read this server's protection history. Check your connection and try again.")
+            throw QuantumSafetyRefusal(String(localized: "Couldn't read this server's protection history. Check your connection and try again."))
         }
         guard let box = BoxKeyPins.shared.verifiedBoxPqBinding(username: user, serverDomain: fqdn) else {
-            throw QuantumSafetyRefusal("This device hasn't checked the server's post-quantum key yet. Open the server once, then try again.")
+            throw QuantumSafetyRefusal(String(localized: "This device hasn't checked the server's post-quantum key yet. Open the server once, then try again."))
         }
         let t = now()
         let inputs = StrictReentry.Inputs(account: user, scope: scope, leftStrictAt: head.issuedAt, devices: verified.devices,
@@ -152,7 +152,7 @@ public final class QuantumSafetyViewModel {
         guard a.appOnly == allowed else { return true }
         busy = true; defer { busy = false }
         do {
-            let s = try await signer(reason: allowed ? "Let browsers reach \(a.name)" : "Keep browsers away from \(a.name)")
+            let s = try await signer(reason: allowed ? String(localized: "Let browsers reach \(a.name)") : String(localized: "Keep browsers away from \(a.name)"))
             let pub = QSHex.hex([UInt8](s.edKey.publicKey.rawRepresentation))
             let scope = QuantumSafety.serviceScope(server: fqdn, service: serviceId)
             let state = a.replayed?.state ?? AssurancePolicy.legacyState(scope)
@@ -166,11 +166,11 @@ public final class QuantumSafetyViewModel {
                                                     signerKind: s.kind, signerKeyId: pub, now: now(), reentry: reentry)
             }
             try await signAndPost(change, s)
-            message = allowed ? "Browsers can reach \(a.name) again, within 15 minutes." : "Only the Flagship app reaches \(a.name) now, within 15 minutes."
+            message = allowed ? String(localized: "Browsers can reach \(a.name) again, within 15 minutes.") : String(localized: "Only the Flagship app reaches \(a.name) now, within 15 minutes.")
             await load()
             return true
         } catch {
-            message = (error as? QuantumSafetyRefusal)?.sentence ?? "\(a.name) wasn't changed."
+            message = (error as? QuantumSafetyRefusal)?.sentence ?? String(localized: "\(a.name) wasn't changed.")
             return false
         }
     }
@@ -181,14 +181,14 @@ public final class QuantumSafetyViewModel {
         if Keystore.hasAdminRoot, await PqKeyStore.shared.key(for: PqIdentity(role: .adminRoot, subjectId: user, edKey: key)) != nil {
             return (.adminRoot, key, .adminRoot, user)
         }
-        guard let dev = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId) else { throw QuantumSafetyRefusal("Unlock the app and try again.") }
+        guard let dev = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId) else { throw QuantumSafetyRefusal(String(localized: "Unlock the app and try again.")) }
         return (.adminDevice, dev, .device, deviceId)
     }
 
     private func signAndPost(_ change: AssurancePolicyChange, _ s: (kind: PolicySignerKind, edKey: Curve25519.Signing.PrivateKey, role: PqBindingRole, subject: String)) async throws {
-        guard let client = PqIdentityBindingService.client else { throw QuantumSafetyRefusal("Not available on this account.") }
+        guard let client = PqIdentityBindingService.client else { throw QuantumSafetyRefusal(String(localized: "Not available on this account.")) }
         guard let held = await PqKeyStore.shared.key(for: PqIdentity(role: s.role, subjectId: s.subject, edKey: s.edKey)) else {
-            throw QuantumSafetyRefusal("This device's post-quantum key isn't ready. Unlock the app once while online, then try again.")
+            throw QuantumSafetyRefusal(String(localized: "This device's post-quantum key isn't ready. Unlock the app once while online, then try again."))
         }
         let env = try QuantumSafety.hybridEnvelope(message: try AssurancePolicy.canonical(change), edPublicKey: [UInt8](s.edKey.publicKey.rawRepresentation),
                                                    edSign: { [UInt8](try s.edKey.signature(for: Data($0))) }, held: held)
@@ -203,7 +203,7 @@ public final class QuantumSafetyViewModel {
         guard let row = servers.first(where: { $0.fqdn == fqdn }) else { return false }
         busy = true; defer { busy = false }
         do {
-            let s = try await signer(reason: "Turn on quantum-safe protection for \(row.name)")
+            let s = try await signer(reason: String(localized: "Turn on quantum-safe protection for \(row.name)"))
             let pub = QSHex.hex([UInt8](s.edKey.publicKey.rawRepresentation))
             let scope = PolicyScope(kind: .installation, id: fqdn)
             let state = row.replayed?.state ?? AssurancePolicy.legacyState(scope)
@@ -219,11 +219,11 @@ public final class QuantumSafetyViewModel {
                 try await signAndPost(QuantumSafety.strictChange(account: user, scope: cs, from: held, browsersAllowed: false, peers: [fqdn],
                                                                  signerKind: s.kind, signerKeyId: pub, now: now(), reentry: connectorReentry), s)
             }
-            message = "Quantum-safe protection is on for \(row.name). It takes effect when the server next checks in, within 15 minutes."
+            message = String(localized: "Quantum-safe protection is on for \(row.name). It takes effect when the server next checks in, within 15 minutes.")
             await load()
             return true
         } catch {
-            message = (error as? QuantumSafetyRefusal)?.sentence ?? "Quantum-safe protection wasn't changed."
+            message = (error as? QuantumSafetyRefusal)?.sentence ?? String(localized: "Quantum-safe protection wasn't changed.")
             return false
         }
     }
@@ -233,26 +233,26 @@ public final class QuantumSafetyViewModel {
         guard let row = servers.first(where: { $0.fqdn == fqdn }), let state = row.replayed?.state else { return false }
         busy = true; defer { busy = false }
         do {
-            let s = try await signer(reason: "Turn off quantum-safe protection for \(row.name)")
+            let s = try await signer(reason: String(localized: "Turn off quantum-safe protection for \(row.name)"))
             let pub = QSHex.hex([UInt8](s.edKey.publicKey.rawRepresentation))
             try await signAndPost(QuantumSafety.compatibilityChange(account: user, scope: state.scope, from: state, loss: QuantumSafety.leavingStrictLoss,
                                                                     peers: [fqdn], signerKind: s.kind, signerKeyId: pub, now: now()), s)
-            message = "\(row.name) is back to compatibility. Turning strict on again later needs a fresh check of every device and your recovery."
+            message = String(localized: "\(row.name) is back to compatibility. Turning strict on again later needs a fresh check of every device and your recovery.")
             await load()
             return true
         } catch {
-            message = (error as? QuantumSafetyRefusal)?.sentence ?? "Quantum-safe protection wasn't changed."
+            message = (error as? QuantumSafetyRefusal)?.sentence ?? String(localized: "Quantum-safe protection wasn't changed.")
             return false
         }
     }
 
     static func sentence(for code: String) -> String {
         switch code {
-        case "not-prepared": return "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first."
-        case "classical-signer-refused", "strict-requires-hybrid", "strict-requires-binding": return "This device's post-quantum key isn't registered yet. Unlock the app once while online, then try again."
-        case "stale-generation", "fork": return "Another device changed this at the same time. Refresh and try again."
-        case "reentry-incomplete": return "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery."
-        case "network": return "Couldn't reach flagshipserver.com. Check your connection and try again."
+        case "not-prepared": return String(localized: "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first.")
+        case "classical-signer-refused", "strict-requires-hybrid", "strict-requires-binding": return String(localized: "This device's post-quantum key isn't registered yet. Unlock the app once while online, then try again.")
+        case "stale-generation", "fork": return String(localized: "Another device changed this at the same time. Refresh and try again.")
+        case "reentry-incomplete": return String(localized: "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery.")
+        case "network": return String(localized: "Couldn't reach flagshipserver.com. Check your connection and try again.")
         default: return "flagshipserver.com didn't accept the change (\(code))."
         }
     }

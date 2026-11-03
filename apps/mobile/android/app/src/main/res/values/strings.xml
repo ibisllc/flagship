@@ -3412,4 +3412,14 @@
     <string name="sandbox_firewall_not_started">it hasn\'t started</string>
     <string name="unknown_reason_lower">unknown reason</string>
     <string name="also_in_groups">also in %1$s</string>
+    <string name="access_list_at_most_rules">an access list can have at most %1$d rules</string>
+    <string name="access_list_start_with_allow_or_deny">start the line with \"allow\" or \"deny\"</string>
+    <string name="access_list_say_what_to_allow">say what to allow or deny, e.g. \"allow example.com\"</string>
+    <string name="access_list_one_host_per_line">one host per line</string>
+    <string name="access_list_host_without_scheme">write the host only, without http:// or https://</string>
+    <string name="access_list_host_without_path">write the host only, without a path</string>
+    <string name="access_list_host_without_port">write the host only, without a port</string>
+    <string name="access_list_wildcard_only_first">a * may only start a host, as in *.example.com</string>
+    <string name="access_list_localhost_not_public">\"localhost\" is not a public host name</string>
+    <string name="access_list_not_a_valid_host">\"%1$s\" is not a valid host name</string>
 </resources>

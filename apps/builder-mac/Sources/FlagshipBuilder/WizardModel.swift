@@ -717,13 +717,13 @@ final class WizardModel: ObservableObject {
         let bsd = String(disk.deviceNode.dropFirst("/dev/".count))
         let staged = await HelperClient.stageImage(conn, imageURL: preparedURL)
         guard !staged.imageID.isEmpty else {
-            reportOperationFailure(staged.message.isEmpty ? "The image could not be handed to the helper." : staged.message)
+            reportOperationFailure(staged.message.isEmpty ? String(localized: "The image could not be handed to the helper.") : staged.message)
             return
         }
-        appendLog(stream: .stdout, text: "+ staged the image for the helper (sha256 \(staged.sha256.prefix(16))…)")
+        appendLog(stream: .stdout, text: String(localized: "+ staged the image for the helper (sha256 \(staged.sha256.prefix(16))…)"))
         let registered = await HelperClient.registerMedia(conn, bsdName: bsd)
         guard !registered.mediaID.isEmpty else {
-            reportOperationFailure(registered.message.isEmpty ? "The helper would not accept that disk." : registered.message)
+            reportOperationFailure(registered.message.isEmpty ? String(localized: "The helper would not accept that disk.") : registered.message)
             return
         }
         // The write blocks its connection while it runs, so progress is read on a second one.

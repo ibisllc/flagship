@@ -3216,5 +3216,6 @@
   "You can start {0} new conversation a day. Try again {1}.": "Du kannst {0} neue Unterhaltung pro Tag beginnen. Versuch es {1} noch einmal.",
   "You can start {0} new conversations a day. Try again {1}.": "Du kannst {0} neue Unterhaltungen pro Tag beginnen. Versuch es {1} noch einmal.",
   "You have a reply on voi.ci/{0}": "Du hast eine Antwort auf voi.ci/{0}",
-  "{0} rule": "{0} Regel"
+  "{0} rule": "{0} Regel",
+  "Email": "E-Mail"
 }

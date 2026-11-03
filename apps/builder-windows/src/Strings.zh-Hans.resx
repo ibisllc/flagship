@@ -697,4 +697,7 @@ https://flagshipserver.com</value>
   <data name="actions" xml:space="preserve">
     <value>操作</value>
   </data>
+  <data name="Beta" xml:space="preserve">
+    <value>Beta</value>
+  </data>
 </root>

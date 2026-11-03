@@ -11,7 +11,8 @@ import path from "node:path";
 import fs from "node:fs";
 import { ROOT, locales, targets, readEn, readTr } from "./lib/i18n-kv.mjs";
 
-const run = (script, ...a) => spawnSync("node", [path.join(ROOT, "scripts", script), ...a], { encoding: "utf8" });
+// a script path is under scripts/ unless it names another folder (the voi.ci site keeps its own next to its sources)
+const run = (script, ...a) => spawnSync("node", [path.join(ROOT, script.includes("/") ? script : path.join("scripts", script)), ...a], { encoding: "utf8" });
 const CHECKS = [
   ["web", "i18n-web.mjs", ["check"]],
   ["webapp (PWA)", "i18n-pwa.mjs", ["check"]],
@@ -22,6 +23,9 @@ const CHECKS = [
   ["server", "i18n-server.mjs", ["check"]],
   ["box pages", "i18n-box.mjs", ["check"]],
   ["store art", "i18n-store.mjs", ["check"]],
+  ["voi.ci site", "apps/voici-site/i18n.mjs", ["check"]],
+  // no new hard-coded English in any surface (owner rule 2026-11-02); scripts/i18n-literals.allow.json holds the exceptions
+  ["hard-coded text", "i18n-literals.mjs", ["check"]],
 ];
 
 if (process.argv[2] === "status") {

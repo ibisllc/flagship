@@ -5,7 +5,7 @@
 //   node apps/voici-site/i18n.mjs build     compile i18n/voici-site/<code>.json into apps/voici-site/src/strings.js
 //   node apps/voici-site/i18n.mjs check     exit 1 on drift: a string missing from en.json or from a ga language,
 //                                           placeholders that differ, a t() whose first argument isn't a literal,
-//                                           or a stale strings.js
+//                                           text a person reads that is not in t() (hardCodedText), or a stale strings.js
 import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,35 @@ export function extractStrings() {
   return { strings: out, bad };
 }
 
+// Text a person reads must go through t(): a literal that reads as a sentence or a label (a capital, then words, or
+// sentence punctuation) and is not t()'s first argument fails `check`. KEEP lists the ones that stay as written.
+const PROSE = /^[A-Z][a-z']+(?:[ ,][^\s]+)+$|^[A-Z][a-z]{2,}[.!?…]$/;
+const LITERAL = /(?<![\w.$])(t\(\s*)?(["'`])((?:(?!\2)[^\\\n]|\\.)*)\2/g;
+const KEEP = new Map([
+  // the worker's fallback when IndexedDB holds no notice; flagship-web's enableReplyAlerts stores the localized
+  // {title, body} (t("You have a reply on voi.ci.")) before it subscribes, so a visitor never sees this one
+  ["sw.js", new Set(["You have a reply on voi.ci."])],
+]);
+/** The hard-coded text in one source file's lines (`f` names the file in the messages and in KEEP). */
+export function hardCodedIn(f, source) {
+  const out = [];
+  source.split("\n").forEach((line, i) => {
+    if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+    for (const m of line.matchAll(LITERAL)) {
+      if (m[1]) continue;
+      const text = m[3].replace(/\$\{[^}]*\}/g, "0");
+      if (PROSE.test(text) && !/^[\w.-]+\/|https?:|^[A-Z][\w-]*$/.test(text) && !KEEP.get(f)?.has(m[3])) out.push(`${f}:${i + 1}: hard-coded text, wrap it in t(): ${JSON.stringify(m[3]).slice(0, 90)}`);
+    }
+  });
+  return out;
+}
+export function hardCodedText() {
+  return readdirSync(SRC)
+    .filter((x) => x.endsWith(".js") && !["strings.js", "i18n.js", "config.js"].includes(x))
+    .sort()
+    .flatMap((f) => hardCodedIn(f, readFileSync(join(SRC, f), "utf8")));
+}
+
 const tokens = (s) => [...s.matchAll(/\{\d+\}/g)].map((m) => m[0]).sort().join(",");
 const read = (code) => {
   const f = join(SURFACE, `${code}.json`);
@@ -62,7 +91,7 @@ export function stringsModule() {
 export function checkI18n() {
   const problems = [];
   const { strings, bad } = extractStrings();
-  problems.push(...bad);
+  problems.push(...bad, ...hardCodedText());
   const en = read("en");
   for (const s of strings.keys()) if (!(s in en)) problems.push(`not in i18n/voici-site/en.json: ${JSON.stringify(s)}`);
   for (const s of Object.keys(en)) if (!strings.has(s)) problems.push(`unused in en.json: ${JSON.stringify(s)}`);

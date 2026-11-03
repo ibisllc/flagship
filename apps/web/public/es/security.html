@@ -66,7 +66,7 @@
         <h3>Lo que prometemos</h3>
         <ul class="bullets">
           <li>Todo el código crítico para la seguridad (derivación de claves, firma, cifrado, daemon, ruta de arranque, clientes móviles) es público bajo BUSL-1.1, que pasa a ser Apache 2.0 el 2030-05-03.</li>
-          <li>La imagen de arranque se compila de forma reproducible: puedes <a href="/security/iso-seed.html">verificar que los bytes coinciden con Debian original</a>.</li>
+          <li>La imagen de arranque se compila de forma reproducible: puedes <a href="/es/security/iso-seed">verificar que los bytes coinciden con Debian original</a>.</li>
           <li>Solo primitivas estándar: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code> y, desde la 0.3, <code>ML-DSA-65</code> y <code>ML-KEM-768</code> en modo híbrido con las clásicas. Nada de criptografía casera.</li>
           <li>De forma predeterminada, el disco cifrado de un servidor solo se abre cuando tu teléfono lo aprueba, a través de la red, en cada arranque, así que un servidor robado sigue bloqueado. El desbloqueo automático es una opción que activas por servidor: con ella, el servidor arranca solo después de un corte de luz, y uno robado también lo haría. Si eso ocurre, revoca el servidor en la app: en su siguiente arranque no recibe ninguna clave de desbloqueo y el relé deja de servir sus apps. También puedes fijar un plazo para que un servidor detenga sus apps, o se bloquee, cuando ningún administrador haya abierto Flagship en 7 o 30 días.</li>
           <li>El dominio de autenticación (<code>flagshipserver.com</code>) está separado del dominio de contenido de usuario (<code>*.flagship.services</code>) para que las apps de usuario no puedan alcanzar las cookies de sesión mediante confusión de subdominios.</li>
@@ -196,7 +196,7 @@
         </ul>
 
         <h3>Salón de la fama</h3>
-        <p>Los investigadores que nos informaron de una vulnerabilidad, y los commits que cerraron cada informe, están en el <a href="/security/hall-of-fame">cuadro de honor</a>.</p>
+        <p>Los investigadores que nos informaron de una vulnerabilidad, y los commits que cerraron cada informe, están en el <a href="/es/security/hall-of-fame">cuadro de honor</a>.</p>
       </section>
 
       <section id="report">

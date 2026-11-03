@@ -1,0 +1,25 @@
+{
+  "_about": "Literals the surface wrappers would wrap that are NOT text a person reads in their language, so they stay as written (scripts/i18n-literals.mjs, run by `npm run i18n`). Each entry: surface, file (repo path, or /regex/), optional text (exact, or /regex/; placeholders as the wrapper prints them: %@ Apple, %s Android, {0} elsewhere), and why. Keep it short: user-facing text goes in i18n/<surface>/ instead. An entry that matches nothing fails the check, so the list cannot rot.",
+  "allow": [
+    { "surface": "webapp", "file": "apps/web/public/webapp/lib/voiciText.js", "text": "/^(?!Email$).+$/", "why": "brand names of the voi.ci link table (GitHub, Mastodon …); the file is byte-identical to packages/flagship-web's protocol copy" },
+    { "surface": "webapp", "file": "apps/web/public/webapp/lib/voiciText.js", "text": "Email", "why": "shared protocol table; the page editor shows tr(\"Email\") instead (views/page-editor.js siteLabel)" },
+    { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipCore/VoiciText.swift", "text": "/^(?!Email$|Visitor $).+$/", "why": "brand names of the voi.ci link table, a port of the shared protocol" },
+    { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipCore/VoiciText.swift", "text": "Email", "why": "shared protocol table; PageEditorScreen shows String(localized: \"Email\")" },
+    { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipCore/VoiciText.swift", "text": "Visitor ", "why": "default argument only; MessagesStore passes the localized \"Visitor \" prefix" },
+    { "surface": "android", "file": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciText.kt", "why": "brand names of the voi.ci link table and the default pseudonym prefix argument, a port of the shared protocol" },
+    { "surface": "ios", "file": "/^apps/mobile/(shared/Sources/FlagshipAPI/Client/MockScreensClient|ios/Sources/FlagshipUI/Gym/)/", "why": "DEBUG-only mock box answers and gym seams (#if DEBUG; scripts/ios-release-clean.mjs keeps them out of Release); they stand in for the box's own English wire text" },
+    { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipCore/PhoneRoute.swift", "why": "HTTP status lines, reason phrases and a Set-Cookie header the phone serves" },
+    { "surface": "android", "file": "/^apps/mobile/android/app/src/main/java/com/flagshipserver/app/phoneroute/Phone(Endpoint|Route)\\.kt$/", "why": "HTTP status lines, reason phrases and a Set-Cookie header the phone serves" },
+    { "surface": "ios", "file": "/^apps/mobile/shared/Sources/FlagshipAPI/Client/(FlagshipServerClient|SecretMailboxClient)\\.swift$/", "text": "/^\\{\"error\":/", "why": "a JSON error body the client synthesises for its own decoder" },
+    { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BrowserGrantCenter.swift", "text": "/^\\{\"error\":/", "why": "a JSON error body sent back to the box (wire text)" },
+    { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift", "text": "Intel", "why": "vendor name beside NVIDIA and AMD" },
+    { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift", "text": "/^(Linux x86-64|Linux ARM64|%@ --version)$/", "why": "platform names and a shell command the owner copies" },
+    { "surface": "android", "file": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/RuntimeVerification.kt", "text": "/^(Linux x86-64|Linux ARM64|%s --version)$/", "why": "platform names and a shell command the owner copies" },
+    { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift", "text": "%@ · voi.ci/%@", "why": "name · URL, no words" },
+    { "surface": "android", "file": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/MessagesScreens.kt", "text": "voi.ci/%s · %s", "why": "URL · name, no words" },
+    { "surface": "android", "file": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciMedia.kt", "text": "Flagship link preview", "why": "HTTP User-Agent header value" },
+    { "surface": "android", "file": "/^apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/(ServingAuthority|voici/VoiciMessages|voici/VoiciOwner)\\.kt$/", "text": "/^%s(: (bad input|malformed op|bad field)| must be lowercase hex of the right length)$/", "why": "protocol validation exceptions (developer text; the screens map them to their own sentences)" },
+    { "surface": "studio-mac", "file": "apps/builder-mac/Sources/FlagshipBuilderCore/DiskArbitrationProbe.swift", "text": "BSD Name", "why": "an IOKit property key" },
+    { "surface": "studio-windows", "file": "apps/builder-windows/src/StudioVersion.cs", "text": "Beta", "why": "the release label scripts/check-versions.mjs stamps; Display shows it through Strings.T(Label) (i18n/studio-windows key \"Beta\")" }
+  ]
+}

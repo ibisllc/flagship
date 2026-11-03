@@ -852,7 +852,7 @@ class VMManager:
                         continue
                     if self.server_codes.get(name) != seen.code:
                         self.server_codes[name] = seen.code
-                        self.log(f"VM {name}: this server's code is {server_code_seen.pretty(seen.code)}")
+                        self.log(tr("VM {0}: this server's code is {1}").format(name, server_code_seen.pretty(seen.code)))
                         self.on_change()
                     self._report_server_seen(config, seen)
                     return
@@ -876,7 +876,7 @@ class VMManager:
             status = self._seen_post(url, payload)
             if status == 200:
                 server_code_seen.delete_key(layout, name)
-                self.log(f"VM {name}: told your phone which server this is")
+                self.log(tr("VM {0}: told your phone which server this is").format(name))
                 return
             if 400 <= status < 500 and status not in (404, 429):
                 return

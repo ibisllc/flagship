@@ -13467,5 +13467,193 @@
   "an access list can have at most %lld rules": {
     "en": "an access list can have at most %lld rules",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:67"
+  },
+  "Trust its new key": {
+    "en": "Trust its new key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:793"
+  },
+  "Quantum-safe protection isn't available on this account.": {
+    "en": "Quantum-safe protection isn't available on this account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:61"
+  },
+  "Couldn't read this server's protection history. Check your connection and try again.": {
+    "en": "Couldn't read this server's protection history. Check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:135"
+  },
+  "This device hasn't checked the server's post-quantum key yet. Open the server once, then try again.": {
+    "en": "This device hasn't checked the server's post-quantum key yet. Open the server once, then try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:138"
+  },
+  "Let browsers reach %@": {
+    "en": "Let browsers reach %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:155"
+  },
+  "Keep browsers away from %@": {
+    "en": "Keep browsers away from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:155"
+  },
+  "Browsers can reach %@ again, within 15 minutes.": {
+    "en": "Browsers can reach %@ again, within 15 minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:169"
+  },
+  "Only the Flagship app reaches %@ now, within 15 minutes.": {
+    "en": "Only the Flagship app reaches %@ now, within 15 minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:169"
+  },
+  "%@ wasn't changed.": {
+    "en": "%@ wasn't changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:173"
+  },
+  "Unlock the app and try again.": {
+    "en": "Unlock the app and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:184"
+  },
+  "Not available on this account.": {
+    "en": "Not available on this account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:189"
+  },
+  "This device's post-quantum key isn't ready. Unlock the app once while online, then try again.": {
+    "en": "This device's post-quantum key isn't ready. Unlock the app once while online, then try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:191"
+  },
+  "Turn on quantum-safe protection for %@": {
+    "en": "Turn on quantum-safe protection for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:206"
+  },
+  "Quantum-safe protection is on for %@. It takes effect when the server next checks in, within 15 minutes.": {
+    "en": "Quantum-safe protection is on for %@. It takes effect when the server next checks in, within 15 minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:222"
+  },
+  "Quantum-safe protection wasn't changed.": {
+    "en": "Quantum-safe protection wasn't changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:226"
+  },
+  "Turn off quantum-safe protection for %@": {
+    "en": "Turn off quantum-safe protection for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:236"
+  },
+  "%@ is back to compatibility. Turning strict on again later needs a fresh check of every device and your recovery.": {
+    "en": "%@ is back to compatibility. Turning strict on again later needs a fresh check of every device and your recovery.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:240"
+  },
+  "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first.": {
+    "en": "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:251"
+  },
+  "This device's post-quantum key isn't registered yet. Unlock the app once while online, then try again.": {
+    "en": "This device's post-quantum key isn't registered yet. Unlock the app once while online, then try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:252"
+  },
+  "Another device changed this at the same time. Refresh and try again.": {
+    "en": "Another device changed this at the same time. Refresh and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:253"
+  },
+  "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery.": {
+    "en": "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:254"
+  },
+  "Couldn't reach flagshipserver.com. Check your connection and try again.": {
+    "en": "Couldn't reach flagshipserver.com. Check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/QuantumSafetyViewModel.swift:255"
+  },
+  "This server is quantum-safe, but this device hasn't checked its post-quantum key yet. Open the server once while online.": {
+    "en": "This server is quantum-safe, but this device hasn't checked its post-quantum key yet. Open the server once while online.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PqBoxChannel.swift:82"
+  },
+  "This server only accepts quantum-safe connections, and this device's post-quantum key isn't ready. Unlock the app and try again.": {
+    "en": "This server only accepts quantum-safe connections, and this device's post-quantum key isn't ready. Unlock the app and try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PqBoxChannel.swift:85"
+  },
+  "The server refused this device's quantum-safe connection. Check that the device is still on the account.": {
+    "en": "The server refused this device's quantum-safe connection. Check that the device is still on the account.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PqBoxChannel.swift:91"
+  },
+  "The server's quantum-safe connection did not complete.": {
+    "en": "The server's quantum-safe connection did not complete.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PqBoxChannel.swift:97"
+  },
+  "The server's quantum-safe answer could not be read.": {
+    "en": "The server's quantum-safe answer could not be read.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PqBoxChannel.swift:129"
+  },
+  "The server keeps closing the quantum-safe connection. Try again.": {
+    "en": "The server keeps closing the quantum-safe connection. Try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PqBoxChannel.swift:135"
+  },
+  "Orders signed only with today's (classical) signatures will be accepted again.": {
+    "en": "Orders signed only with today's (classical) signatures will be accepted again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:20"
+  },
+  "Connections that use only classical key exchange will be accepted again.": {
+    "en": "Connections that use only classical key exchange will be accepted again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:21"
+  },
+  "Browsers can reach it. A browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.": {
+    "en": "Browsers can reach it. A browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:22"
+  },
+  "This service's own connection is classical, so what it is sent could be read by a future quantum computer.": {
+    "en": "This service's own connection is classical, so what it is sent could be read by a future quantum computer.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:23"
+  },
+  "The server's firmware and boot chain are still checked with classical keys.": {
+    "en": "The server's firmware and boot chain are still checked with classical keys.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:24"
+  },
+  "An older recovery path that is not quantum-safe stays open.": {
+    "en": "An older recovery path that is not quantum-safe stays open.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:25"
+  },
+  "Only an admin device of this account can turn this on.": {
+    "en": "Only an admin device of this account can turn this on.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:173"
+  },
+  "This device's post-quantum key isn't registered yet. Unlock the app once while online.": {
+    "en": "This device's post-quantum key isn't registered yet. Unlock the app once while online.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:174"
+  },
+  "%lld of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.": {
+    "en": "%lld of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:175"
+  },
+  "Save and test your account recovery first.": {
+    "en": "Save and test your account recovery first.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:176"
+  },
+  "This server hasn't registered its post-quantum key yet. Update it first.": {
+    "en": "This server hasn't registered its post-quantum key yet. Update it first.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:177"
+  },
+  "Builds your apps with a hosted model. Prompts and code go over the provider's own TLS.": {
+    "en": "Builds your apps with a hosted model. Prompts and code go over the provider's own TLS.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:216"
+  },
+  "Your own AI key. Prompts and code go over the provider's own TLS.": {
+    "en": "Your own AI key. Prompts and code go over the provider's own TLS.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:218"
+  },
+  "Apple push": {
+    "en": "Apple push",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:220"
+  },
+  "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel.": {
+    "en": "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:220"
+  },
+  "Google push": {
+    "en": "Google push",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/QuantumSafety.swift:221"
+  },
+  "Every device on the account needs its post-quantum key before strict comes back.": {
+    "en": "Every device on the account needs its post-quantum key before strict comes back.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/StrictReentry.swift:74"
+  },
+  "Test your recovery before turning strict on again.": {
+    "en": "Test your recovery before turning strict on again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/StrictReentry.swift:77"
+  },
+  "Email": {
+    "en": "Email",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:135"
   }
 }

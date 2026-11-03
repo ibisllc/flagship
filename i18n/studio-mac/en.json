@@ -976,5 +976,37 @@
   "Learn more →": {
     "en": "Learn more →",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1437"
+  },
+  "VM %@: this server's code is %@": {
+    "en": "VM %@: this server's code is %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:471",
+    "translatable": false
+  },
+  "VM %@: told your phone which server this is": {
+    "en": "VM %@: told your phone which server this is",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:491",
+    "translatable": false
+  },
+  "+ staged the image for the helper (sha256 %@…)": {
+    "en": "+ staged the image for the helper (sha256 %@…)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:723",
+    "translatable": false
+  },
+  "The image could not be handed to the helper.": {
+    "en": "The image could not be handed to the helper.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:720"
+  },
+  "The helper would not accept that disk.": {
+    "en": "The helper would not accept that disk.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:726"
+  },
+  "Couldn't unmount the disk: %@": {
+    "en": "Couldn't unmount the disk: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/DiskArbitrationProbe.swift:151"
+  },
+  "Beta": {
+    "en": "Beta",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift (StudioVersion.label, looked up at run time)",
+    "manual": true
   }
 }

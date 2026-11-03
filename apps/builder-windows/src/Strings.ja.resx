@@ -697,4 +697,7 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="actions" xml:space="preserve">
     <value>操作</value>
   </data>
+  <data name="Beta" xml:space="preserve">
+    <value>ベータ</value>
+  </data>
 </root>

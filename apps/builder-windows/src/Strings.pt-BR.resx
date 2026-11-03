@@ -697,4 +697,7 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="actions" xml:space="preserve">
     <value>Ações</value>
   </data>
+  <data name="Beta" xml:space="preserve">
+    <value>Beta</value>
+  </data>
 </root>

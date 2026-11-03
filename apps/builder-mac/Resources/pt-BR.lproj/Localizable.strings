@@ -216,3 +216,7 @@
 "Refresh" = "Atualizar";
 "Choose drive to create boot disk (will be formatted)" = "Escolha a unidade para criar o disco de boot (será formatada)";
 "Learn more →" = "Saiba mais →";
+"The image could not be handed to the helper." = "Não foi possível entregar a imagem ao assistente.";
+"The helper would not accept that disk." = "O assistente não aceitou esse disco.";
+"Couldn't unmount the disk: %@" = "Não foi possível desmontar o disco: %@";
+"Beta" = "Beta";

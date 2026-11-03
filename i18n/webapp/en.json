@@ -13165,5 +13165,9 @@
   "{0} rule": {
     "en": "{0} rule",
     "ctx": "webapp/lib/appAccess.js:321"
+  },
+  "Email": {
+    "en": "Email",
+    "ctx": "webapp/views/page-editor.js:90"
   }
 }

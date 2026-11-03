@@ -3216,5 +3216,6 @@
   "You can start {0} new conversation a day. Try again {1}.": "新しい会話は 1 日 {0} 件まで開始できます。{1}にもう一度お試しください。",
   "You can start {0} new conversations a day. Try again {1}.": "新しい会話は 1 日 {0} 件まで開始できます。{1}にもう一度お試しください。",
   "You have a reply on voi.ci/{0}": "voi.ci/{0} に返信があります",
-  "{0} rule": "{0} 件のルール"
+  "{0} rule": "{0} 件のルール",
+  "Email": "メール"
 }

@@ -103,7 +103,7 @@ struct PageEditorScreen: View {
             HStack(spacing: 16) {
                 AvatarView(sha: avatar, bytes: avatarBytes, size: 64)
                 VStack(alignment: .leading, spacing: 6) {
-                    PhotosPicker(selection: $photo, matching: .images) { Text(avatar == nil ? "Add photo" : "Change photo") }
+                    PhotosPicker(selection: $photo, matching: .images) { Text(avatar == nil ? String(localized: "Add photo") : String(localized: "Change photo")) }
                         .accessibilityIdentifier("page-photo")
                     if avatar != nil {
                         Button("Remove photo", role: .destructive) { avatar = nil; avatarBytes = nil }
@@ -132,7 +132,7 @@ struct PageEditorScreen: View {
                     }
                     Spacer()
                     if let site = l.site, let label = VoiciText.linkSites.first(where: { $0.id == site })?.label {
-                        Text(verbatim: label).font(.caption).foregroundStyle(.secondary)
+                        Text(verbatim: site == "email" ? String(localized: "Email") : label).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }

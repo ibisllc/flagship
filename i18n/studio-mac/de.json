@@ -215,5 +215,9 @@
   "No removable drives detected": "Keine Wechseldatenträger erkannt",
   "Refresh": "Aktualisieren",
   "Choose drive to create boot disk (will be formatted)": "Wähle das Laufwerk für die Boot-Disk (wird formatiert)",
-  "Learn more →": "Mehr erfahren →"
+  "Learn more →": "Mehr erfahren →",
+  "The image could not be handed to the helper.": "Das Image konnte nicht an das Hilfsprogramm übergeben werden.",
+  "The helper would not accept that disk.": "Das Hilfsprogramm hat diesen Datenträger nicht angenommen.",
+  "Couldn't unmount the disk: %@": "Der Datenträger konnte nicht ausgehängt werden: %@",
+  "Beta": "Beta"
 }

@@ -3216,5 +3216,6 @@
   "You can start {0} new conversation a day. Try again {1}.": "你每天可以开始 {0} 个新对话。请在{1}再试。",
   "You can start {0} new conversations a day. Try again {1}.": "你每天可以开始 {0} 个新对话。请在{1}再试。",
   "You have a reply on voi.ci/{0}": "你在 voi.ci/{0} 有一条回复",
-  "{0} rule": "{0} 条规则"
+  "{0} rule": "{0} 条规则",
+  "Email": "电子邮件"
 }

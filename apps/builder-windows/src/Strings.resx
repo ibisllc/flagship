@@ -926,4 +926,8 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Actions</value>
     <comment>MainWindow.xaml ToolTip</comment>
   </data>
+  <data name="Beta" xml:space="preserve">
+    <value>Beta</value>
+    <comment>StudioVersion.cs (StudioVersion.Label, looked up at run time)</comment>
+  </data>
 </root>

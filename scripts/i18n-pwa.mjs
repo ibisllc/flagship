@@ -13,6 +13,8 @@
 //        (lib/i18n.js translates that subtree at start-up). Idempotent: wrapped text is skipped.
 //        Skipped candidates go to /tmp/i18n-pwa-skipped.txt. The recovery page's JavaScript and index.html follow
 //        the same rules (its static text is translated by recoveryI18n.js at start-up).
+//        --dry --list prints what would be wrapped (UNWRAPPED<TAB>file<TAB>line<TAB>"text") and changes nothing:
+//        scripts/i18n-literals.mjs turns that into the gate against new hard-coded English.
 //   node scripts/i18n-pwa.mjs build     i18n/webapp/<lang>.json -> webapp/i18n/<lang>.json (ga languages only; --drafts for all)
 //                                       and lib/i18nLocales.js; recovery/i18n/<lang>.json (only the keys the recovery
 //                                       page uses: that origin can load only its own files) and recovery/recoveryI18nLocales.js
@@ -117,6 +119,7 @@ function looksLabel(t) {
 
 const entries = {}; // key -> ctx
 const skipped = [];
+const unwrapped = []; // what `extract` would wrap, for `extract --dry --list` (scripts/i18n-literals.mjs)
 
 function transformFile(file) {
   const src = fs.readFileSync(file, "utf8");
@@ -152,6 +155,7 @@ function transformFile(file) {
 
   function note(key, n) {
     if (!(key in entries)) entries[key] = { en: key, ctx: `${ctxPath}:${lineOf(n.getStart(sf))}` };
+    unwrapped.push(`UNWRAPPED\t${ctxPath}\t${lineOf(n.getStart(sf))}\t${JSON.stringify(key)}`);
   }
   const q = (s) => JSON.stringify(s);
 
@@ -643,6 +647,7 @@ if (cmd === "extract") {
       if (!dry) fs.writeFileSync(f, r.out);
     }
   }
+  if (args.includes("--list")) { if (unwrapped.length) console.log(unwrapped.join("\n")); process.exit(process.exitCode ?? 0); }
   const existing = readEn(SURFACE);
   const statics = staticEntries();
   const called = harvestCalls();

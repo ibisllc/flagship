@@ -745,3 +745,7 @@ msgstr ""
 #, python-brace-format
 msgid "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free."
 msgstr ""
+
+#: version.py (LABEL, looked up at run time)
+msgid "Beta"
+msgstr ""
