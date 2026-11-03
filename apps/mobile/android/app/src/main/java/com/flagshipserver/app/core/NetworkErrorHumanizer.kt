@@ -74,6 +74,11 @@ object NetworkErrorHumanizer {
             t is com.flagshipserver.app.keystore.BiometricCancelled ->
                 Classified(Kind.BIOMETRIC, FSStrings.get(R.string.cancelled_try_again_when_youre_ready))
             t is com.flagshipserver.app.keystore.BiometricFailed -> Classified(Kind.BIOMETRIC, biometricSentence(t))
+            // The account key is sealed and the session is locked, or the key behind it is gone:
+            // their messages are already the person's sentence (string resources).
+            t is com.flagshipserver.app.keystore.SessionLockedException ||
+                t is com.flagshipserver.app.keystore.AccountKeyUnreadableException ->
+                Classified(Kind.BIOMETRIC, t.message ?: FSStrings.get(R.string.this_app_session_isnt_unlocked))
             t is HttpException -> classifyStatus(t.status)
             t is HasHttpStatus -> classifyStatus(t.httpStatus)
             isOffline(t) -> Classified(

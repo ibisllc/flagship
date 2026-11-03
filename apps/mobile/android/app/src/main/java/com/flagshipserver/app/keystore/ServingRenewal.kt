@@ -41,7 +41,8 @@ object ServingRenewal {
     /** The admin root without a prompt: only while the biometric session is fresh. */
     fun silentAdminRoot(): Ed25519Sign? {
         if (BiometricAuthority.current()?.isFresh() != true) return null
-        return Keystore.adminRootSeed()?.let { Ed25519Sign(it) }
+        // Sealed and the session key closed: no root this time (the next unlock renews).
+        return runCatching { Keystore.adminRootSeed() }.getOrNull()?.let { Ed25519Sign(it) }
     }
 
     /** A renewer for the signed-in account on an admin device, else null. */

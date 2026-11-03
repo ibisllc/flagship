@@ -89,6 +89,23 @@ class BiometricAuthority internal constructor(
     }
 
     /**
+     * The session is open but its prompt did not open the session key (it could not carry the
+     * key's cipher this time), and a sealed account seed is needed: ask once more with the prompt
+     * that carries it. No-op without a foreground activity, or when the key is already open.
+     */
+    suspend fun reopenKeys(title: String, subtitle: String) {
+        val p = prompter ?: return
+        if (PqSessionKek.isOpen()) return
+        mutex.withLock {
+            if (PqSessionKek.isOpen()) return
+            com.flagshipserver.app.core.ErrorLog.step("biometric", "reopen keys ($subtitle)")
+            p.prompt(title, subtitle)
+            fresh = true
+        }
+        notifyUnlocked()
+    }
+
+    /**
      * Non-prompting query: true iff the biometric session is already fresh, so a
      * derive can proceed WITHOUT a prompt. The automatic (reconcile/background)
      * deposit path checks this so it never *initiates* a biometric — it rides an

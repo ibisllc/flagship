@@ -352,6 +352,16 @@
       "reason": "The session KEK wrapping is Android's own storage format for its PQ seeds (pq-suites.md §18); iOS opens its seeds with the session's LAContext and the webapp holds no PQ seeds. Nothing is exchanged in this format."
     },
     {
+      "check": "signed-tags",
+      "key": "ios:flagship/seed-vault/v1",
+      "reason": "The seed-vault AAD is Android's own storage format for the account seed and admin root sealed under the session KEK (SeedVault.kt); iOS keeps them under its Secure Enclave key with .userPresence and the webapp holds them in memory. Nothing is exchanged in this format."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/seed-vault/v1",
+      "reason": "The seed-vault AAD is Android's own storage format for the account seed and admin root sealed under the session KEK (SeedVault.kt); iOS keeps them under its Secure Enclave key with .userPresence and the webapp holds them in memory. Nothing is exchanged in this format."
+    },
+    {
       "check": "push-categories",
       "key": "ios:none",
       "reason": "Not a push category: adapterVetting.ts's review verdict says category \"none\" for an adapter with no finding, and no push is sent for it."

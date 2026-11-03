@@ -30,7 +30,7 @@ class VoiciKeystoreKeyring(
     override fun holdsSensitiveKey(account: VoiciAccountKeys): Boolean {
         val root = Keystore.adminRootPubHex()
         if (account.adminRootPub != null) return root == account.adminRootPub || forceAdmin()
-        return umk() != null
+        return Keystore.hasUmkSeed() || umk() != null
     }
 
     override fun sensitiveNeedsPrompt(): Boolean = Keystore.sensitiveSigningNeedsPrompt()

@@ -391,6 +391,13 @@ class MainActivity : FragmentActivity() {
             )
         }
         BiometricAuthority.onSessionUnlocked = {
+            // Keep the account device key at hand for silent read tokens once the unlock opened the
+            // sealed account seed (iOS keeps it the same way, docs/account-read-token.md).
+            val keepUser = appState.currentUser.value
+            val keepDevice = appState.activeProfile?.deviceId?.lowercase()
+            if (!keepUser.isNullOrEmpty() && keepDevice != null && !appState.isDemoAccountNow()) {
+                runCatching { Keystore.sessionAccountDeviceKey(keepUser, keepDevice) }
+            }
             // Renewal on use: the unlock that opens the admin root delegates the serving renewal key once.
             com.flagshipserver.app.keystore.ServingRenewal.sessionUnlocked()
             com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
@@ -1018,7 +1025,10 @@ private fun AppRoot(
 
     // docs/account-gone.md: .com says this device's own account no longer exists.
     val goneName by com.flagshipserver.app.core.AccountGone.gone.collectAsState()
-    val showAccountGone = goneName != null && isPaired && isUnlocked
+    // An unlock found the sealed account key unreadable (the screen lock was removed): the same
+    // full-screen treatment, leading to the account's recovery (AccountKeyLostScreen).
+    val keyLost by com.flagshipserver.app.keystore.SeedVault.lost.collectAsState()
+    val showAccountGone = (goneName != null || keyLost) && isPaired && isUnlocked
 
     // Keep the global operations sliver's deploy feeder in sync with the pod
     // list (mirror of iOS ContentView's syncDeployOperations on every pod
@@ -1169,7 +1179,9 @@ private fun AppRoot(
             com.flagshipserver.app.ui.shell.BiometricLockScreen()
         }
         if (showAccountGone && !showUpdateLock) {
-            goneName?.let { com.flagshipserver.app.ui.shell.AccountGoneScreen(it) }
+            val gone = goneName
+            if (gone != null) com.flagshipserver.app.ui.shell.AccountGoneScreen(gone)
+            else com.flagshipserver.app.ui.shell.AccountKeyLostScreen()
         }
         if (showUpdateLock && updateLock != null) {
             com.flagshipserver.app.ui.shell.UpdateLockScreen(

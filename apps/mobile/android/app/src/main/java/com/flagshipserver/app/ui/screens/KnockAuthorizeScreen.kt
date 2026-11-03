@@ -79,7 +79,7 @@ fun KnockAuthorizeScreen(
                 if (user.isNullOrEmpty() || deviceId == null || !Keystore.hasUmkSeed()) {
                     null
                 } else {
-                    BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+                    com.flagshipserver.app.keystore.Keystore.ensureUnlocked(reason)
                     val umk = Keystore.currentUmkSeed()
                     Keystore.accountDeviceSigner(umk, user, deviceId) to Keystore.accountDevicePublicKey(umk, user, deviceId)
                 }

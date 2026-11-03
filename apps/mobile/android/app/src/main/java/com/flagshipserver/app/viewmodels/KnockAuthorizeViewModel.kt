@@ -74,7 +74,7 @@ class KnockAuthorizeViewModel(
     private val sharedServers: suspend (fetch: Boolean) -> List<Pair<String, String>> = { emptyList() },
     /** The share's member key (signer + pub), shown only to that share's server. */
     private val shareKey: suspend (shareId: String, reason: String) -> Pair<Ed25519Sign, ByteArray> = { id, r ->
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = r)
+        com.flagshipserver.app.keystore.Keystore.ensureUnlocked(r)
         val umk = Keystore.loadOrCreateUmkSeed()
         ServerShare.deriveShareMemberKey(umk, id) to ServerShare.deriveShareMemberPub(umk, id)
     },

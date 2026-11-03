@@ -1,8 +1,9 @@
 // Which keys can mint an account read token right now without a prompt
-// (docs/account-read-token.md). The account device key never needs one on
-// Android; the IRK only when the biometric session is already fresh (or no
-// activity is bound, where deriveIRK skips the gate anyway). A poll calls
-// this, so it must never raise BiometricPrompt.
+// (docs/account-read-token.md). The account device key never needs one once
+// it is kept on the device (joined devices; others keep it at their first
+// unlock, as iOS does); the IRK only when the session is open (the account
+// seed is sealed behind the unlock, SeedVault). A poll calls this, so it must
+// never raise BiometricPrompt, and a locked session simply yields fewer signers.
 
 package com.flagshipserver.app.keystore
 
@@ -22,24 +23,29 @@ object KeystoreReadTokenSigners {
         profile: Profile?,
         hasUmk: () -> Boolean = Keystore::hasUmkSeed,
         authority: () -> BiometricAuthority? = BiometricAuthority::current,
-        device: (umk: ByteArray, deviceId: String) -> ReadTokenSigner.Device = { umk, deviceId ->
-            ReadTokenSigner.Device(
-                deviceId = deviceId,
-                signer = Keystore.accountDeviceSigner(umk, username, deviceId),
-                pubHex = HexUtil.encode(Keystore.accountDevicePublicKey(umk, username, deviceId)),
-            )
+        device: (umk: ByteArray?, deviceId: String) -> ReadTokenSigner.Device? = { _, deviceId ->
+            Keystore.sessionAccountDeviceKey(username, deviceId)?.let { key ->
+                ReadTokenSigner.Device(deviceId = deviceId, signer = key.signer, pubHex = key.pubHex)
+            }
         },
-        umk: () -> ByteArray = Keystore::currentUmkSeed,
+        umk: () -> ByteArray? = { null },
         irk: suspend () -> IrkMaterial = { KeystoreIrkAccess().resolve(FSStrings.get(R.string.refresh_server_status)) },
     ): List<ReadTokenSigner> {
         if (!hasUmk() || !username.equals(currentUser, ignoreCase = true)) return emptyList()
         val out = ArrayList<ReadTokenSigner>(2)
         val deviceId = profile?.deviceId.orEmpty()
-        if (DEVICE_ID.matches(deviceId)) out.add(device(umk(), deviceId))
+        if (DEVICE_ID.matches(deviceId)) runCatching { device(umk(), deviceId) }.getOrNull()?.let(out::add)
         val gate = authority()
         if (gate == null || gate.isFresh()) {
-            val m = irk()
-            out.add(ReadTokenSigner.Irk(m.signer, m.pubHex))
+            // Locked (the seed is sealed and the session key closed): no IRK signer this time.
+            val m = try {
+                irk()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            m?.let { out.add(ReadTokenSigner.Irk(it.signer, it.pubHex)) }
         }
         return out
     }

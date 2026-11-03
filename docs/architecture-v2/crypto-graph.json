@@ -16,7 +16,7 @@
    "algorithms": [
     "HKDF-SHA256"
    ],
-   "location": "phone keystore (iOS keychain, Android Keystore/EncryptedSharedPreferences); browser memory in the webapp",
+   "location": "phone keystore (iOS keychain .userPresence; Android: sealed under the session KEK an auth-per-use Keystore key opens, SeedVault); browser memory in the webapp",
    "pq": "symmetric",
    "owner": "unassigned (native/web)",
    "evidence": [
@@ -76,15 +76,16 @@
   {
    "id": "key.android-keystore",
    "kind": "key",
-   "label": "Android Keystore AES (StrongBox) for the UMK seed",
+   "label": "Android Keystore AES session key (user authentication per use) sealing the UMK, admin root and PQ seeds",
    "algorithms": [
     "AES-256-GCM"
    ],
-   "location": "Android Keystore",
+   "location": "Android Keystore (StrongBox when available); the session KEK it wraps is in memory only while the app is unlocked",
    "pq": "symmetric",
    "owner": "unassigned (native/web)",
    "evidence": [
-    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/Keystore.kt:17"
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/SeedVault.kt:14",
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/PqSessionKek.kt:160"
    ]
   },
   {

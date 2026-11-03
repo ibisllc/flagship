@@ -118,7 +118,7 @@ class ServiceAccessViewModel(
         if (id == null || !Keystore.hasUmkSeed()) {
             null
         } else {
-            BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = r)
+            com.flagshipserver.app.keystore.Keystore.ensureUnlocked(r)
             Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, id)
         }
     },

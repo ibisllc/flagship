@@ -32,7 +32,7 @@ class DebugAccessViewModel(
     /** A biometric that runs for EVERY grant, even in an unlocked session (one per grant, like an admin invite). */
     private val confirmGrant: suspend (reason: String) -> Unit = { r -> BiometricAuthority.confirmNow(r) },
     /** The admin root (the IRK on an account that pins none), read after [confirmGrant]: the session is fresh, so no second prompt. */
-    private val adminKey: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminRootSeed()?.let { Ed25519Sign(it) } ?: Keystore.adminSigningKey(r) },
+    private val adminKey: suspend (reason: String) -> Ed25519Sign = { r -> runCatching { Keystore.adminRootSeed() }.getOrNull()?.let { Ed25519Sign(it) } ?: Keystore.adminSigningKey(r) },
     /** Turning off may ride the unlocked session. */
     private val revokeSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },

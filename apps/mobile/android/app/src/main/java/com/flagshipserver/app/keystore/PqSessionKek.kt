@@ -26,6 +26,9 @@ import javax.crypto.spec.SecretKeySpec
  * unlocked ([clear] on lock, background and sign-out), exactly like the account key the same
  * prompt releases, so a hybrid signature never needs a second prompt and never outlives the
  * session. Without a KEK (no vault, a phone that cannot make the key) the old wrapping applies.
+ *
+ * The same KEK seals the account seeds ([SeedVault]: the UMK and the admin root), so the one unlock
+ * prompt opens everything the session signs with, and nothing opens them while it is locked.
  */
 object PqSessionKek {
     @Volatile var vault: PqKekVault? = null
@@ -54,12 +57,20 @@ object PqSessionKek {
             .getOrNull() ?: return
         kek?.fill(0)
         kek = k
+        // Seal the account seeds still in the old storage first (migration), then the PQ rewrap.
+        Keystore.sessionKekOpened(k)
         runCatching { onOpened?.invoke() }
     }
+
+    /** The KEK's key opens only with a strong biometric (made on Android 10) and none is enrolled
+     *  now: nothing it seals opens until a fingerprint is enrolled again. */
+    fun needsStrongBiometric(strongBiometric: Boolean): Boolean =
+        runCatching { vault?.needsStrongBiometric(strongBiometric) == true }.getOrDefault(false)
 
     fun clear() {
         kek?.fill(0)
         kek = null
+        Keystore.sessionClosed()
     }
 
     /** Test seam: open with a known KEK. */
@@ -88,6 +99,8 @@ interface PqKekVault {
      *  without a strong biometric), so the prompt must not carry its cipher; [begin] is then
      *  called after the prompt succeeded. */
     fun opensAfterPrompt(strongBiometric: Boolean): Boolean = false
+    /** True when the key opens only with a strong biometric and none is enrolled now. */
+    fun needsStrongBiometric(strongBiometric: Boolean): Boolean = false
     /** Returns the 32-byte KEK, creating and storing it on [Pending.creating]. */
     fun finish(p: Pending, authenticated: Cipher): ByteArray
 }
@@ -231,6 +244,8 @@ class KeystorePqKekVault(
 
     override fun opensAfterPrompt(strongBiometric: Boolean): Boolean = plan(strongBiometric).opensAfterPrompt
 
+    override fun needsStrongBiometric(strongBiometric: Boolean): Boolean = plan(strongBiometric) == PqKekPlan.UNAVAILABLE
+
     override fun begin(strongBiometric: Boolean): PqKekVault.Pending {
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         val strong = strongBiometric && !prefs.getBoolean(perUseRefusedKey, false)
@@ -250,7 +265,10 @@ class KeystorePqKekVault(
                     c.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, b.copyOfRange(0, IV_LEN)))
                 } catch (e: KeyPermanentlyInvalidatedException) {
                     // The key is gone for good (the screen lock was removed): what it wrapped can't
-                    // be recovered. Start a new KEK; seeds under the old one stay locked.
+                    // be recovered. Start a new KEK; seeds under the old one stay locked. The account
+                    // seeds sealed under it ([SeedVault]) no longer open either: their records are
+                    // kept, the unlock finds them unreadable and the app shows the account-key-lost
+                    // screen, which leads to the account's recovery (never a silent delete).
                     com.flagshipserver.app.core.ErrorLog.step("pq-kek", "key permanently invalidated; making a new one")
                     deleteKey(currentAlias())
                     prefs.edit().remove(blobKey).remove(aliasKey).remove(upgradeFailedKey).commit()
@@ -277,7 +295,9 @@ class KeystorePqKekVault(
         }
         val kek = ByteArray(32).also(SecureRandom()::nextBytes)
         val ct = authenticated.doFinal(kek)
-        prefs.edit().putString(blobKey, PqHex.encode(authenticated.iv + ct)).commit()
+        // The account seeds are sealed under this KEK as soon as it opens: it must be on disk first,
+        // or the next session could not open what this one sealed.
+        check(prefs.edit().putString(blobKey, PqHex.encode(authenticated.iv + ct)).commit()) { "the session key could not be saved" }
         return kek
     }
 

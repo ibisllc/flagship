@@ -12,7 +12,7 @@ import com.flagshipserver.app.core.IrkAccess
 import com.flagshipserver.app.core.IrkMaterial
 import com.flagshipserver.app.core.WatchDelegateSigner
 
-class SessionLockedException : Exception(FSStrings.get(R.string.this_app_session_isnt_unlocked))
+class SessionLockedException(message: String = FSStrings.get(R.string.this_app_session_isnt_unlocked)) : Exception(message)
 
 class SessionIrkAccess(
     private val sessionUnlocked: () -> Boolean = { isSessionUnlocked() },
@@ -24,8 +24,10 @@ class SessionIrkAccess(
     }
 
     companion object {
-        /** True while a biometric-authenticated session is open in the app. */
-        fun isSessionUnlocked(): Boolean = BiometricAuthority.current()?.isFresh() == true
+        /** True while a biometric-authenticated session is open in the app and its keys are
+         *  open (the account seed sealed under the session key needs that key open too). */
+        fun isSessionUnlocked(): Boolean =
+            BiometricAuthority.current()?.isFresh() == true && !Keystore.sensitiveSigningNeedsPrompt()
 
         /** The enrolled watch-delegate key, or null when Quick approve is off on
          *  this device (never mints one). */

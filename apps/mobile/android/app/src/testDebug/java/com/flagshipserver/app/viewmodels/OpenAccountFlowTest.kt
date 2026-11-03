@@ -69,7 +69,7 @@ class OpenAccountFlowTest {
             username = username,
             // StrongBox is unavailable on the JVM path — skip the
             // hardware key gen; the seed + claim are what's load-bearing.
-            ensureHardwareUmk = {},
+            openKeySession = {},
         )
 
     // ─── 1. OPEN ACCOUNT ────────────────────────────────────────────

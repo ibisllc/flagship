@@ -4,8 +4,6 @@ import com.flagshipserver.app.core.FSStrings
 import com.flagshipserver.app.R
 import android.content.Context
 import android.content.SharedPreferences
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.flagshipserver.app.core.HexUtil
@@ -13,33 +11,29 @@ import com.flagshipserver.app.core.ServerKeys
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.X25519
 import java.security.SecureRandom
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Generates and holds the User Master Key inside Android Keystore (with
- * StrongBox when available), plus derived secrets that the rest of the
- * app needs:
- *   - IRK (Ed25519) — signs every IRK-bound canonical message.
- *   - PushX25519 — per-device ECDH keypair for encrypted push payloads.
- *
- * The IRK is derived deterministically from the UMK via HKDF-SHA256;
- * we cache the derived seed in EncryptedSharedPreferences so we don't
- * have to round-trip through the AndroidKeyStore + biometric prompt on
- * every send. The Push X25519 keypair lives there too.
- *
- * Why not store everything in AndroidKeyStore: Ed25519 isn't a first-
- * class KeyStore algorithm on every device; for parity with the iOS
- * CryptoKit code-path we keep raw seed bytes wrapped under an AES-GCM
- * KeyStore key (EncryptedSharedPreferences does this internally).
+ * Holds this phone's account keys, per profile:
+ *   - the account seed (UMK) and the admin master root: seed-class, sealed under the session KEK
+ *     that only the unlock prompt opens ([SeedVault], the Android twin of iOS's `.userPresence`
+ *     Keychain custody). Read only while the app session is unlocked; locked, a read throws
+ *     [SessionLockedException] and background work waits for the next unlock.
+ *   - keys derived from the UMK (IRK, AID, per-app ids, SWK, CGK, the account device key): computed
+ *     when needed; the IRK seed is cached in memory for the session only, its public half on disk.
+ *   - device-local keys that must work without a prompt, as on iOS (AfterFirstUnlockThisDeviceOnly):
+ *     the push X25519 key, the watch-delegate key, a joined device's stored account device key, the
+ *     ACME account scalar, read tokens, pins. These stay in EncryptedSharedPreferences.
+ * Ed25519 isn't a first-class Keystore algorithm on every device, so the seeds are raw bytes kept
+ * under Keystore-held keys rather than Keystore keys themselves.
  */
 object Keystore {
-    private const val UMK_ALIAS = "com.flagship.umk"
-    private const val ANDROID_KEY_STORE = "AndroidKeyStore"
 
     private const val FILE_NAME = "flagship-keystore"
     private const val KEY_UMK_SEED = "umk.seed"
     private const val KEY_IRK_SEED = "irk.seed"
+    /** The IRK's public half per version (not secret), so showing it never needs the unlock. */
+    private const val KEY_IRK_PUB = "irk.pub"
     private const val KEY_PUSH_X25519_PRIV = "push.x25519.priv"
     private const val KEY_PUSH_TOKEN_ID = "push.tokenId"
     /** #28 — exportable ECDSA P-256 ACME account-key scalar (32 bytes,
@@ -80,7 +74,6 @@ object Keystore {
 
     private val rng = SecureRandom()
     @Volatile private var prefs: SharedPreferences? = null
-    /** For [generateUMK]'s strong-biometric check (KeyAuthSpec). */
     @Volatile private var appContext: Context? = null
     @Volatile private var activeProfileId: String? = null
     /** The PQ identity keys' entries (PqKeyPrefs) and the held assurance policy (QuantumSafetyStore). */
@@ -177,59 +170,150 @@ object Keystore {
         return "$base.$pid"
     }
 
-    /** Generate the UMK in AndroidKeyStore (with StrongBox if available).
-     *  This is the symmetric "anchor" key; in production it would wrap
-     *  the cached seeds. Stub left over from the scaffolding step. */
-    fun generateUMK(useStrongBox: Boolean = true): SecretKey {
-        // Accept a strong biometric OR the device credential (PIN / pattern /
-        // password) to unlock the key — device-agnostic, and usable on phones
-        // with a screen lock but no enrolled biometric. 0: auth for every use
-        // (Android 10: a strong biometric per use when one is enrolled, else a
-        // short window; see KeyAuthSpec).
-        val strong = appContext?.let { KeyAuthSpec.strongBiometricEnrolled(it) } ?: false
-        return try {
-            generateUmkKey(useStrongBox, strong)
-        } catch (e: Exception) {
-            // Android 10 can refuse a per-use key (it checks the biometric itself): keep the window.
-            if (!strong || android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) throw e
-            generateUmkKey(useStrongBox, strongBiometric = false)
+    // ---- Seed custody (SeedVault) -----------------------------------------
+
+    /** The IRK seeds derived this session, per profile and version. Memory only: dropped with the
+     *  session ([sessionClosed]); old builds kept them on disk, which [SeedVault.migrate] removes. */
+    private val irkSeeds = ConcurrentHashMap<String, ByteArray>()
+
+    private fun irkCacheKey(version: Int) = "${activeProfileTag()}|$version"
+
+    /** Read a seed-class [slot] of the active profile, or null when absent. Throws
+     *  [SessionLockedException] while the session is locked and [AccountKeyUnreadableException]
+     *  when the sealed record no longer opens (the Keystore key behind it is gone). */
+    private fun readSeed(slot: String): ByteArray? {
+        val kek = PqSessionKek.current()
+        try {
+            return when (val r = SeedVault.read(requirePrefs(), slot, kek)) {
+                SeedVault.Read.Absent -> null
+                is SeedVault.Read.Legacy -> r.bytes
+                is SeedVault.Read.Opened -> r.bytes
+                SeedVault.Read.Locked -> throw lockedException()
+                SeedVault.Read.Unreadable -> {
+                    SeedVault.markLost(true)
+                    throw AccountKeyUnreadableException()
+                }
+            }
+        } finally {
+            kek?.fill(0)
         }
     }
 
-    private fun generateUmkKey(useStrongBox: Boolean, strongBiometric: Boolean): SecretKey {
-        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-        val builder = KeyGenParameterSpec.Builder(
-            UMK_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .setIsStrongBoxBacked(useStrongBox)
-        KeyAuthSpec.require(builder, 0, strongBiometric)
-        gen.init(builder.build())
-        return gen.generateKey()
+    private fun writeSeed(slot: String, value: ByteArray) {
+        val kek = PqSessionKek.current()
+        try {
+            val sealed = SeedVault.write(requirePrefs(), slot, value, kek)
+            if (!sealed) com.flagshipserver.app.core.ErrorLog.step("seed-vault", "kept in the old storage until the next unlock (${slot.substringBefore('.')})")
+        } finally {
+            kek?.fill(0)
+        }
+    }
+
+    private fun lockedException(): SessionLockedException {
+        val ctx = appContext
+        val needsFingerprint = ctx != null && PqSessionKek.needsStrongBiometric(KeyAuthSpec.strongBiometricEnrolled(ctx))
+        return if (needsFingerprint) SessionLockedException(FSStrings.get(R.string.add_your_fingerprint_again_to_open_account_key))
+        else SessionLockedException()
+    }
+
+    /**
+     * Open the session before a seed is read: the unlock prompt (once per session), and, when the
+     * seeds are sealed but this session's prompt did not open the KEK (a prompt that could not carry
+     * the key, a transient Keystore error), one more prompt that carries it. Without a bound activity
+     * (background) nothing is asked; the read then throws [SessionLockedException] and the work waits.
+     */
+    private suspend fun openSession(title: String, reason: String) {
+        val authority = BiometricAuthority.current() ?: return
+        authority.ensureFresh(title = title, subtitle = reason)
+        if (PqSessionKek.isOpen() || !anySealedSeed()) return
+        val ctx = appContext
+        if (ctx != null && PqSessionKek.needsStrongBiometric(KeyAuthSpec.strongBiometricEnrolled(ctx))) return
+        authority.reopenKeys(title = title, subtitle = reason)
+    }
+
+    /** Open the session (one prompt at most) so a following [currentUmkSeed] / [adminRootSeed]
+     *  read succeeds, for flows that read the seed directly instead of through a derive. */
+    suspend fun ensureUnlocked(reason: String = FSStrings.get(R.string.authorize_flagship)) =
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
+
+    private fun anySealedSeed(): Boolean {
+        val p = prefs ?: return false
+        return SeedVault.isSealed(p, pkey(KEY_UMK_SEED)) || SeedVault.isSealed(p, adminRootSeedKey())
+    }
+
+    /** The session KEK just opened (an unlock): move seeds still in the old storage under it, then
+     *  check every sealed seed opens. Called by [PqSessionKek.finish]; never prompts. */
+    internal fun sessionKekOpened(kek: ByteArray) {
+        val p = prefs ?: return
+        runCatching {
+            val steps = SeedVault.migrate(p, kek)
+            for ((slot, step) in steps) {
+                com.flagshipserver.app.core.ErrorLog.step("seed-vault", "migrate ${slot.substringBefore('.')}: $step")
+                if (slot.startsWith(SeedVault.ADMIN_ROOT)) rememberAdminRootPub(slot.removePrefix(SeedVault.ADMIN_ROOT))
+            }
+            val unreadable = SeedVault.unreadableSlots(p, kek)
+            if (unreadable.isNotEmpty()) com.flagshipserver.app.core.ErrorLog.step("seed-vault", "unreadable: ${unreadable.size}")
+            SeedVault.markLost(unreadable.isNotEmpty())
+        }.onFailure { com.flagshipserver.app.core.ErrorLog.step("seed-vault", "migrate failed: ${it.javaClass.simpleName}") }
+    }
+
+    /** The session ended (lock, background, sign-out): forget the derived seeds held in memory. */
+    internal fun sessionClosed() {
+        irkSeeds.values.forEach { it.fill(0) }
+        irkSeeds.clear()
+    }
+
+    /** True when this phone's account seeds are sealed under the session key (the custody iOS's
+     *  `.userPresence` gives), false while they are still in the old storage. */
+    fun seedsAreSealed(): Boolean = prefs?.let { SeedVault.isSealed(it, pkey(KEY_UMK_SEED)) } == true
+
+    /**
+     * The person chose to restore their account after [SeedVault.lost]: the sealed records that no
+     * longer open are deleted (no key exists that could open them), and the active profile's other
+     * secrets with them when its account seed was among them. Returns true when the active profile
+     * lost its account seed, so the caller signs out to the welcome screen's recovery.
+     */
+    fun forgetUnreadableSeeds(): Boolean {
+        val p = requirePrefs()
+        val kek = PqSessionKek.current() ?: return false
+        try {
+            val unreadable = SeedVault.unreadableSlots(p, kek)
+            val activeLost = pkey(KEY_UMK_SEED) in unreadable
+            val e = p.edit()
+            for (slot in unreadable) {
+                e.remove(SeedVault.sealedKey(slot))
+                if (slot.startsWith(SeedVault.ADMIN_ROOT)) e.remove("admin.root.pub" + slot.removePrefix(SeedVault.ADMIN_ROOT))
+            }
+            e.commit()
+            if (activeLost) wipe()
+            SeedVault.markLost(false)
+            return activeLost
+        } finally {
+            kek.fill(0)
+        }
     }
 
     /** Return a 32-byte UMK seed for the active profile, creating it on
-     *  first call. */
+     *  first call. Never mints while one exists, even a locked or unreadable
+     *  one: it throws instead (see [readSeed]). */
     fun loadOrCreateUmkSeed(): ByteArray {
-        val p = requirePrefs()
-        val umkKey = pkey(KEY_UMK_SEED)
-        p.getString(umkKey, null)?.let { hex ->
-            HexUtil.decode(hex)?.let { return it }
-        }
+        readSeed(pkey(KEY_UMK_SEED))?.takeIf { it.size == 32 }?.let { return it }
+        if (SeedVault.has(requirePrefs(), pkey(KEY_UMK_SEED))) error("corrupt account seed")
         val seed = ByteArray(32).also(rng::nextBytes)
-        p.edit().putString(umkKey, HexUtil.encode(seed)).apply()
+        writeSeed(pkey(KEY_UMK_SEED), seed)
         return seed
     }
+
+    /** The UMK when it can be read without a prompt (the session is open, or the seed is still in
+     *  the old storage), else null. Never mints. */
+    fun umkSeedIfOpen(): ByteArray? = runCatching { readSeed(pkey(KEY_UMK_SEED)) }.getOrNull()
 
     /** True when this device already holds a UMK seed for the active
      *  profile — a real identity that survives process death. The launch
      *  path reads this to restore the session instead of forcing a fresh
-     *  sign-in. Unlike [loadOrCreateUmkSeed] it never mints one. */
-    fun hasUmkSeed(): Boolean =
-        requirePrefs().getString(pkey(KEY_UMK_SEED), null) != null
+     *  sign-in. Unlike [loadOrCreateUmkSeed] it never mints one, and it
+     *  needs no unlock (sealed or not, the seed is there). */
+    fun hasUmkSeed(): Boolean = SeedVault.has(requirePrefs(), pkey(KEY_UMK_SEED))
 
     /**
      * E4 — atomically install a pre-existing UMK seed. Used by Wipe
@@ -245,22 +329,30 @@ object Keystore {
     fun installUmk(seed: ByteArray) {
         require(seed.size == 32) { "UMK seed must be 32 bytes" }
         val p = requirePrefs()
+        writeSeed(pkey(KEY_UMK_SEED), seed)
         val editor = p.edit()
-        editor.putString(pkey(KEY_UMK_SEED), HexUtil.encode(seed))
         // Reset version slots — fresh UMK ⇒ fresh v1 derivation.
         editor.putString(pkey(KEY_IRK_VERSION), "1")
         editor.remove(pkey(KEY_IRK_PENDING_VERSION))
-        // Sweep the ACTIVE profile's per-version IRK seed caches; they're
-        // derived from the OLD UMK and would otherwise survive into the
-        // new identity. Other profiles' caches are untouched.
+        // Sweep the ACTIVE profile's IRK caches (old builds' on-disk seeds, the public halves);
+        // they're derived from the OLD UMK. Other profiles' caches are untouched.
+        sweepIrkCaches(p, editor)
+        editor.commit()
+        dropActiveIrkSeeds()
+    }
+
+    private fun sweepIrkCaches(p: SharedPreferences, editor: SharedPreferences.Editor) {
         val seedCachePrefix = "${pkey(KEY_IRK_SEED)}.v"
+        val pubCachePrefix = "${pkey(KEY_IRK_PUB)}.v"
         for (key in p.all.keys) {
-            if (key.startsWith(seedCachePrefix)) editor.remove(key)
+            if (key.startsWith(seedCachePrefix) || key.startsWith(pubCachePrefix)) editor.remove(key)
         }
-        // Also drop the legacy single-slot IRK seed if a pre-versioned
-        // install left it lying around — same correctness logic.
         editor.remove(pkey(KEY_IRK_SEED))
-        editor.apply()
+    }
+
+    private fun dropActiveIrkSeeds() {
+        val prefix = "${activeProfileTag()}|"
+        irkSeeds.keys.filter { it.startsWith(prefix) }.forEach { irkSeeds.remove(it)?.fill(0) }
     }
 
     /** E4 — read the current UMK seed. Used by the Wipe ceremony to
@@ -283,6 +375,28 @@ object Keystore {
         else com.flagshipserver.app.core.AccountMetadata.deriveAccountDeviceKey(umk, accountId, deviceId)
     }
 
+    /**
+     * This device's account device key without a prompt: the stored one (joined devices, or kept
+     * at an earlier unlock), else derived from the UMK while the session is open and then kept on
+     * the device for silent read tokens (docs/account-read-token.md; iOS keeps it the same way,
+     * device-local, readable after first unlock). Null while locked with nothing kept.
+     */
+    fun sessionAccountDeviceKey(accountId: String, deviceId: String): AccountDeviceKey? {
+        if (!Regex("^[0-9a-f]{32}$").matches(deviceId)) return null
+        val stored = requirePrefs().getString(pkey("account.device.seed.$deviceId"), null)?.let(HexUtil::decode)
+            ?.takeIf { it.size == 32 }
+        val seed = stored ?: run {
+            val umk = umkSeedIfOpen() ?: return null
+            com.flagshipserver.app.core.AccountMetadata.deriveAccountDeviceSeed(umk, accountId, deviceId).also {
+                umk.fill(0)
+                storeAccountDeviceSeed(deviceId, it)
+            }
+        }
+        return AccountDeviceKey(Ed25519Sign(seed), HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey))
+    }
+
+    class AccountDeviceKey(val signer: Ed25519Sign, val pubHex: String)
+
     fun accountDevicePublicKey(umk: ByteArray, accountId: String, deviceId: String): ByteArray {
         val stored = requirePrefs().getString(pkey("account.device.seed.$deviceId"), null)
             ?.let(HexUtil::decode)
@@ -304,27 +418,27 @@ object Keystore {
      *  Caches per-version so subsequent calls don't re-HKDF. */
     suspend fun deriveIRK(reason: String, version: Int): Ed25519Sign {
         require(version >= 1) { "IRK version must be >= 1" }
-        BiometricAuthority.current()?.ensureFresh(
-            title = FSStrings.get(R.string.authorize_flagship),
-            subtitle = reason,
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
+        return Ed25519Sign(irkSeed(version))
+    }
+
+    /** The IRK seed at [version]: this session's memory copy, else HKDF(UMK) (which needs the
+     *  session open when the UMK is sealed), remembered for the session with its public half. */
+    private fun irkSeed(version: Int): ByteArray {
+        irkSeeds[irkCacheKey(version)]?.let { return it.copyOf() }
+        val umk = loadOrCreateUmkSeed()
+        val derived = hkdf(
+            umk,
+            salt = "flagship/irk/v$version".toByteArray(),
+            info = "ed25519-seed".toByteArray(),
+            length = 32,
         )
-        val p = requirePrefs()
-        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
-        val seedHex = p.getString(cacheKey, null)
-        val seed = if (seedHex != null) {
-            HexUtil.decode(seedHex) ?: error("corrupt IRK seed (v$version)")
-        } else {
-            val umk = loadOrCreateUmkSeed()
-            val derived = hkdf(
-                umk,
-                salt = "flagship/irk/v$version".toByteArray(),
-                info = "ed25519-seed".toByteArray(),
-                length = 32,
-            )
-            p.edit().putString(cacheKey, HexUtil.encode(derived)).apply()
-            derived
-        }
-        return Ed25519Sign(seed)
+        umk.fill(0)
+        irkSeeds[irkCacheKey(version)] = derived.copyOf()
+        val pub = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(derived).publicKey)
+        val pubKey = "${pkey(KEY_IRK_PUB)}.v$version"
+        if (requirePrefs().getString(pubKey, null) != pub) requirePrefs().edit().putString(pubKey, pub).apply()
+        return derived
     }
 
     /** Current IRK HKDF version active for sign/verify against
@@ -357,31 +471,23 @@ object Keystore {
     }
 
     /** Public-key half of the IRK at the current version, hex-encoded: the key
-     *  [deriveIRK] signs with. It reads the per-version cache [deriveIRK]
-     *  writes (the un-versioned slot only on a v1 install from before
-     *  versions, which nothing writes any more). */
+     *  [deriveIRK] signs with. Read from its on-disk public cache (no unlock needed);
+     *  derived (behind the session) the first time. */
     suspend fun irkPubHex(): String {
-        // deriveIRK caches the seed per version ("irk.seed.v<N>"); the old
-        // unversioned slot is never written, so reading it threw a
-        // NullPointerException and broke create server and every other
-        // caller on a fresh account.
         val version = currentIrkVersion()
-        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
-        if (requirePrefs().getString(cacheKey, null) == null) deriveIRK("init", version)
+        requirePrefs().getString("${pkey(KEY_IRK_PUB)}.v$version", null)?.let { return it }
+        deriveIRK("init", version)
         val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(requireIrkSeedForVersion(version))
         return HexUtil.encode(pair.publicKey)
     }
 
-    /** C7 — read the cached IRK seed for a specific version. Used by
-     *  the ReplaceDeviceViewModel to compute pubkeys for OLD + NEW
-     *  versions during a rotation ceremony. Caller is expected to
-     *  have just called deriveIRK(version) so the cache slot is
-     *  populated; throws if the slot is missing. */
+    /** C7 — the IRK seed for a specific version, for callers that need the
+     *  raw seed (rotation ceremonies, the boot relay). Derived from the UMK
+     *  when this session hasn't yet; throws [SessionLockedException] while the
+     *  session is locked (call [deriveIRK] first to open it). */
     fun requireIrkSeedForVersion(version: Int): ByteArray {
-        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
-        val hex = requirePrefs().getString(cacheKey, null)
-            ?: error("no IRK seed cached for v$version — call deriveIRK first")
-        return HexUtil.decode(hex) ?: error("corrupt IRK seed (v$version)")
+        require(version >= 1) { "IRK version must be >= 1" }
+        return irkSeed(version)
     }
 
     /** Stable Account Identity Key (AID) signer for service-access gating
@@ -390,13 +496,13 @@ object Keystore {
      *  friend to sign the redeem/visit. Biometric-gated. Distinct from the
      *  versioned IRK. */
     suspend fun deriveAccountId(reason: String = FSStrings.get(R.string.authorize_flagship)): Ed25519Sign {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return ServerKeys.deriveAccountId(loadOrCreateUmkSeed())
     }
 
     /** The stable AID Ed25519 PUBLIC key (hex). Biometric-gated. */
     suspend fun accountIdPubHex(reason: String = FSStrings.get(R.string.authorize_flagship)): String {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return HexUtil.encode(ServerKeys.deriveAccountIdPub(loadOrCreateUmkSeed()))
     }
 
@@ -405,13 +511,13 @@ object Keystore {
      *  knock / acceptance signer they present to that app, never the global
      *  AID. Biometric-gated. */
     suspend fun deriveAppAccountId(appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): Ed25519Sign {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return ServerKeys.deriveAppAccountId(loadOrCreateUmkSeed(), appRef)
     }
 
     /** The per-app id's PUBLIC key (hex). Biometric-gated. */
     suspend fun appAccountIdPubHex(appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): String {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return HexUtil.encode(ServerKeys.deriveAppAccountIdPub(loadOrCreateUmkSeed(), appRef))
     }
 
@@ -419,7 +525,7 @@ object Keystore {
      *  bundle — `HKDF(umk, "flagship/household-key/v1")` (via ServerKeys).
      *  Biometric-gated. */
     suspend fun deriveHouseholdKey(reason: String = FSStrings.get(R.string.authorize_flagship)): ByteArray {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return ServerKeys.deriveHouseholdKey(loadOrCreateUmkSeed())
     }
 
@@ -427,7 +533,7 @@ object Keystore {
      *  server-id independent, so any device of the account can back up a server
      *  or import a backup onto a server with a different name. Biometric-gated. */
     suspend fun deriveServerArchiveKey(archiveId: String, reason: String = FSStrings.get(R.string.authorize_flagship)): ByteArray {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return com.flagshipserver.app.core.ServerArchive.deriveKey(loadOrCreateUmkSeed(), archiveId)
             ?: throw IllegalStateException("server archive key")
     }
@@ -436,13 +542,16 @@ object Keystore {
      *  scheduled backups (docs/server-backup-and-clone.md, "Scheduled backups").
      *  Biometric-gated (the same session as the deposit's signature). */
     suspend fun mintServerArchiveKeys(count: Int, reason: String = FSStrings.get(R.string.authorize_flagship)): List<com.flagshipserver.app.core.ArchiveKey> {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
         return com.flagshipserver.app.core.ArchiveKeys.mint(loadOrCreateUmkSeed(), count)
     }
 
     /** True when signing a sensitive order now would show the biometric prompt
      *  (the session hasn't been opened yet); background work then waits for a tap. */
-    fun sensitiveSigningNeedsPrompt(): Boolean = BiometricAuthority.current()?.isFresh() == false
+    fun sensitiveSigningNeedsPrompt(): Boolean {
+        val authority = BiometricAuthority.current() ?: return false
+        return !authority.isFresh() || (!PqSessionKek.isOpen() && anySealedSeed())
+    }
 
     data class X25519KeyPair(val privateKey: ByteArray, val publicKey: ByteArray)
 
@@ -633,47 +742,69 @@ object Keystore {
     // pub read + raw-seed read (for the escrow upload) are NOT gated, mirroring
     // acmeAccountKeyScalar / the push key.
 
-    private fun adminRootSeedKey() = pkey("admin.root.seed")
+    private fun adminRootSeedKey() = pkey(SeedVault.ADMIN_ROOT)
+    /** The admin root's public half (not secret), so showing it or checking this device is an
+     *  admin needs no unlock (iOS keeps `adminRootPub` the same way). */
+    private fun adminRootPubKey() = pkey("admin.root.pub")
+
+    private fun storeAdminRoot(seed: ByteArray): String {
+        val pub = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+        requirePrefs().edit().putString(adminRootPubKey(), pub).commit()
+        writeSeed(adminRootSeedKey(), seed)
+        return pub
+    }
+
+    /** After a migration sealed the admin root of the profile with [profileSuffix] ("" or
+     *  ".<profile>"), record its public half if an older build never did. */
+    private fun rememberAdminRootPub(profileSuffix: String) {
+        val p = prefs ?: return
+        val pubKey = "admin.root.pub$profileSuffix"
+        if (p.getString(pubKey, null) != null) return
+        val kek = PqSessionKek.current() ?: return
+        try {
+            val r = SeedVault.read(p, SeedVault.ADMIN_ROOT + profileSuffix, kek)
+            val seed = (r as? SeedVault.Read.Opened)?.bytes ?: (r as? SeedVault.Read.Legacy)?.bytes ?: return
+            if (seed.size == 32) p.edit().putString(pubKey, HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)).commit()
+        } finally {
+            kek.fill(0)
+        }
+    }
 
     /** Mint + persist a fresh random admin master root for the active profile
      *  (first-device-at-account-creation). Idempotent: an existing root is
      *  never clobbered. Returns the admin-root PUBLIC key hex. */
     fun generateAdminRoot(): String {
-        val p = requirePrefs()
-        val key = adminRootSeedKey()
-        p.getString(key, null)?.let { hex ->
-            HexUtil.decode(hex)?.let { return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(it).publicKey) }
+        if (hasAdminRoot()) {
+            adminRootPubHex()?.let { return it }
+            readSeed(adminRootSeedKey())?.let { return storeAdminRoot(it) }
         }
         val seed = ByteArray(32).also(rng::nextBytes)
-        p.edit().putString(key, HexUtil.encode(seed)).apply()
-        return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+        return storeAdminRoot(seed)
     }
 
     /** True when this device holds the admin master root (⇒ this device is a
      *  bare-root master admin). The signing gate [adminSigningKey] reads this
-     *  to choose admin-root vs the legacy owner-IRK fallback. */
-    fun hasAdminRoot(): Boolean =
-        requirePrefs().getString(adminRootSeedKey(), null) != null
+     *  to choose admin-root vs the legacy owner-IRK fallback. Needs no unlock. */
+    fun hasAdminRoot(): Boolean = SeedVault.has(requirePrefs(), adminRootSeedKey())
 
     /** The admin-root PUBLIC key hex if held on this device, else null (no
-     *  mint). Published to `.com` at account creation + pinned into the recipe
+     *  mint, no unlock). Published to `.com` at account creation + pinned into the recipe
      *  AuthCode so fresh boxes anchor it. */
     fun adminRootPubHex(): String? {
-        val seedHex = requirePrefs().getString(adminRootSeedKey(), null) ?: return null
-        val seed = HexUtil.decode(seedHex) ?: return null
-        return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+        if (!hasAdminRoot()) return null
+        requirePrefs().getString(adminRootPubKey(), null)?.let { return it }
+        // An older build kept no public half: derive it when the seed can be read now.
+        val seed = runCatching { readSeed(adminRootSeedKey()) }.getOrNull() ?: return null
+        val pub = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+        requirePrefs().edit().putString(adminRootPubKey(), pub).apply()
+        return pub
     }
 
     /** Biometric-gated admin-root SIGNER (like deriveIRK). Errors when absent —
      *  callers gate on [hasAdminRoot] first (or use [adminSigningKey]). */
     suspend fun adminRootKey(reason: String = FSStrings.get(R.string.authorize_a_sensitive_change)): Ed25519Sign {
-        BiometricAuthority.current()?.ensureFresh(
-            title = FSStrings.get(R.string.authorize_flagship),
-            subtitle = reason,
-        )
-        val seedHex = requirePrefs().getString(adminRootSeedKey(), null)
-            ?: error("no admin root on this device")
-        val seed = HexUtil.decode(seedHex) ?: error("corrupt admin root seed")
+        openSession(FSStrings.get(R.string.authorize_flagship), reason)
+        val seed = readSeed(adminRootSeedKey()) ?: error("no admin root on this device")
         return Ed25519Sign(seed)
     }
 
@@ -686,24 +817,25 @@ object Keystore {
         return Ed25519Sign(seed)
     }
 
-    /** Raw read of the 32-byte admin-root seed (no mint, no biometric) — for
-     *  the recovery-credential escrow upload (D-3). Null when absent, so a
-     *  missing root never forces one into existence. */
-    fun adminRootSeed(): ByteArray? {
-        val hex = requirePrefs().getString(adminRootSeedKey(), null) ?: return null
-        return HexUtil.decode(hex)
-    }
+    /** Raw read of the 32-byte admin-root seed (no mint, no prompt) — for
+     *  the recovery-credential escrow upload (D-3) and work riding an unlocked
+     *  session. Null when absent, so a missing root never forces one into
+     *  existence; throws [SessionLockedException] while the session is locked. */
+    fun adminRootSeed(): ByteArray? = readSeed(adminRootSeedKey())
 
     /** Install a recovered admin-root seed into the active profile — credential
      *  recovery re-establishing admin from the escrowed root. */
     fun importAdminRoot(seed: ByteArray) {
         require(seed.size == 32) { "admin root seed must be 32 bytes" }
-        requirePrefs().edit().putString(adminRootSeedKey(), HexUtil.encode(seed)).apply()
+        storeAdminRoot(seed)
     }
 
     /** Drop the active profile's admin root (the gym plays a non-admin device). */
     fun forgetAdminRoot() {
-        requirePrefs().edit().remove(adminRootSeedKey()).apply()
+        val e = requirePrefs().edit()
+        SeedVault.remove(e, adminRootSeedKey())
+        e.remove(adminRootPubKey())
+        e.commit()
     }
 
     /**
@@ -823,7 +955,7 @@ object Keystore {
     fun wipe() {
         val p = requirePrefs()
         val editor = p.edit()
-        editor.remove(pkey(KEY_UMK_SEED))
+        SeedVault.remove(editor, pkey(KEY_UMK_SEED))
         editor.remove(pkey(KEY_IRK_SEED))
         editor.remove(pkey(KEY_PUSH_X25519_PRIV))
         editor.remove(pkey(KEY_PUSH_TOKEN_ID))
@@ -838,19 +970,21 @@ object Keystore {
         // Slice D — drop the admin master root so a removed device retains NO
         // administrative authority (the security invariant: authority is
         // device-local + revoked with the device).
-        editor.remove(adminRootSeedKey())
+        SeedVault.remove(editor, adminRootSeedKey())
+        editor.remove(adminRootPubKey())
         val readTokenPrefix = "${pkey(KEY_READ_TOKEN)}.u."
+        // This profile's kept account device key ("account.device.seed.<id>[.<profile>]").
+        val deviceSeed = Regex("^account\\.device\\.seed\\.[0-9a-f]{32}" + (activeProfileId?.let { Regex.escape(".$it") } ?: "") + "$")
         for (key in p.all.keys) {
-            if (key.startsWith(readTokenPrefix)) editor.remove(key)
+            if (key.startsWith(readTokenPrefix) || deviceSeed.matches(key)) editor.remove(key)
         }
         // Per-version IRK caches (C7) — sweep every "<irk.seed key>.vN"
         // entry the rotation primitive might have written FOR THE ACTIVE
         // PROFILE. Other profiles' caches survive.
-        val seedCachePrefix = "${pkey(KEY_IRK_SEED)}.v"
-        for (key in p.all.keys) {
-            if (key.startsWith(seedCachePrefix)) editor.remove(key)
-        }
-        editor.apply()
+        sweepIrkCaches(p, editor)
+        editor.commit()
+        dropActiveIrkSeeds()
+        SeedVault.markLost(false)
         wipePq(activeProfileId ?: "-")
     }
 
@@ -895,14 +1029,17 @@ object Keystore {
         val bases = listOf(
             KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
             KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION,
-            KEY_ACME_ACCOUNT_SCALAR, "admin.root.seed", KEY_READ_TOKEN,
+            KEY_ACME_ACCOUNT_SCALAR, SeedVault.ADMIN_ROOT, KEY_READ_TOKEN, KEY_IRK_PUB, "admin.root.pub", "account.device.seed",
+            SeedVault.sealedKey(KEY_UMK_SEED), SeedVault.sealedKey(SeedVault.ADMIN_ROOT),
         )
         for (key in p.all.keys) {
             if (key == KEY_ACTIVE_PROFILE) { editor.remove(key); continue }
             if (bases.any { key == it || key.startsWith("$it.") }) editor.remove(key)
         }
-        editor.apply()
+        editor.commit()
         activeProfileId = null
+        sessionClosed()
+        SeedVault.markLost(false)
         wipePq(null)
     }
 

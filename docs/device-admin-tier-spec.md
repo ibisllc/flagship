@@ -107,8 +107,9 @@ backup as a UMK derivation, and is sealed device-local to each admin device.
   - Webapp: `apps/web/public/webapp/keystore.js` (IRK derivation at line ~240)
     + `apps/web/public/webapp/lib/openAccount.js` (`openAccount`, lines ~89-118).
 - **Sealed** device-local (NOT iCloud-synced, unlike the membership account key):
-  iOS Keychain without `kSecAttrSynchronizable`; Android EncryptedSharedPreferences
-  / StrongBox; webapp non-exportable IndexedDB CryptoKey. This is the
+  iOS Keychain without `kSecAttrSynchronizable`; Android sealed under the
+  session KEK an auth-per-use Keystore key opens (`SeedVault`, 2026-11-02;
+  older installs move there at their first unlock); webapp non-exportable IndexedDB CryptoKey. This is the
   "sealed per admin device" custody the cert worklist already assumes
   (`per-user-cert-worklist.md:61`). Contrast the membership account key, which
   IS synced — that's the membership-vs-authority line in custody terms.
@@ -541,8 +542,10 @@ No retroactive migration. Sequence:
 - iOS: `apps/mobile/ios/Sources/Flagship/Keystore.swift` — add
   `generateAdminRoot()` + `installAdminRoot()` beside `generateUMK`/`installUMK`
   (~131-150); seal device-local (Keychain, NO `kSecAttrSynchronizable`).
-- Android: `.../app/keystore/Keystore.kt` — add `generateAdminRoot()` beside
-  `generateUMK` (~157); EncryptedSharedPreferences / StrongBox.
+- Android: `.../app/keystore/Keystore.kt` — `generateAdminRoot()` beside
+  `loadOrCreateUmkSeed`; both seeds sealed under the session KEK that an
+  auth-per-use Keystore key opens at the unlock prompt (`SeedVault.kt`, the
+  twin of iOS `.userPresence`), public half kept beside it.
 - Webapp: `apps/web/public/webapp/keystore.js` (beside IRK at ~240) +
   `apps/web/public/webapp/lib/openAccount.js` (`openAccount` ~89-118) — mint the
   master root, store non-exportable in IndexedDB, POST `admin_root_pub_hex` in

@@ -8,7 +8,7 @@ import com.google.crypto.tink.subtle.Ed25519Sign
 /** The share flows' keys from this device's keystore, each behind the biometric gate. */
 class KeystoreShareKeys : ShareKeys {
     override suspend fun umk(reason: String): ByteArray {
-        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
+        com.flagshipserver.app.keystore.Keystore.ensureUnlocked(reason)
         return Keystore.loadOrCreateUmkSeed()
     }
 

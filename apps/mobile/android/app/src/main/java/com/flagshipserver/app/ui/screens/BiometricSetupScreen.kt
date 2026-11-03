@@ -105,14 +105,9 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
                 // selection, so this is belt-and-braces for the create
                 // path's earliest key generation.
                 Keystore.setActiveProfile(username)
-                // Mint the UMK in StrongBox-backed AndroidKeyStore (best
-                // effort — fall back to a software key when StrongBox is
-                // absent) and ensure the cached seed that backs the IRK.
-                // The standalone username claim happens in the next
-                // (open-account) step.
-                runCatching { Keystore.generateUMK(useStrongBox = true) }
-                    .recoverCatching { Keystore.generateUMK(useStrongBox = false) }
-                runCatching { Keystore.loadOrCreateUmkSeed() }
+                // The account seed is minted in the next (open-account)
+                // step, after its prompt opens the session key that seals it
+                // (SeedVault); the standalone username claim happens there.
                 onContinue()
             },
             block = true,

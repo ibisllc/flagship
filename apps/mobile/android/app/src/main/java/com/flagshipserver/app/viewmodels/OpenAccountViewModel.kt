@@ -9,10 +9,10 @@
 // later, repeatable resource added from Home.
 //
 // Mirror of the iOS open-account step (FlagshipUI/Onboarding +
-// CreateServerViewModel claim extraction). The UMK lives in
-// StrongBox-backed AndroidKeyStore (Keystore.generateUMK); the cached
-// 32-byte seed Keystore.loadOrCreateUmkSeed mints is what backs the IRK
-// HKDF, matching the iOS CryptoKit code-path.
+// CreateServerViewModel claim extraction). The 32-byte seed
+// Keystore.loadOrCreateUmkSeed mints backs the IRK HKDF, matching the iOS
+// CryptoKit code-path; it is sealed under the session key the unlock prompt
+// opens from an auth-bound AndroidKeyStore key (SeedVault).
 //
 // See docs/login-and-account-redesign.md (principles 1 + 6, Phase 2).
 
@@ -55,16 +55,13 @@ class OpenAccountViewModel(
     val username: String,
     /** Wall-clock injectable for deterministic canonical-bytes tests. */
     private val now: () -> Long = { System.currentTimeMillis() },
-    /** Ensure the UMK exists. BiometricSetupScreen normally mints the
-     *  StrongBox AES anchor key one step earlier; this is the
-     *  belt-and-braces fallback so the open-account step still works if
-     *  the user reaches it directly. Behind a seam because StrongBox is
-     *  unavailable on the JVM/Robolectric test path — the load-bearing
-     *  seed + claim are exercised verbatim either way. */
-    private val ensureHardwareUmk: () -> Unit = {
-        runCatching { Keystore.generateUMK(useStrongBox = true) }
-            .recoverCatching { Keystore.generateUMK(useStrongBox = false) }
-        Unit
+    /** Open the key session before the account seed and admin root are
+     *  minted: the unlock prompt carries the session key's cipher, so both are
+     *  sealed under it from the start (SeedVault) instead of waiting in the old
+     *  storage for the next unlock. Behind a seam because the JVM test path has
+     *  no AndroidKeyStore; the seed + claim are exercised verbatim either way. */
+    private val openKeySession: suspend () -> Unit = {
+        Keystore.ensureUnlocked(FSStrings.get(R.string.open_your_flagship_account))
     },
 ) : ViewModel() {
 
@@ -112,9 +109,9 @@ class OpenAccountViewModel(
             //    additional accounts never collide.
             Keystore.setActiveProfile(username)
 
-            // 1. Ensure the UMK exists. The StrongBox AES anchor key +
-            //    the cached 32-byte seed that backs the IRK HKDF.
-            ensureHardwareUmk()
+            // 1. Ensure the UMK exists (the 32-byte seed that backs the IRK
+            //    HKDF), sealed under the session key the prompt just opened.
+            openKeySession()
             val umk = Keystore.loadOrCreateUmkSeed()
 
             // 1b. Slice D — mint this account's ADMIN MASTER ROOT on the FIRST
