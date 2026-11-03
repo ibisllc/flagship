@@ -37,7 +37,7 @@
 
 use crate::ed25519_strict;
 use crate::entitlements::verify as ed_verify_hex;
-use crate::serving::RevocationState;
+use crate::serving::{RevocationState, RouteClaim, route_claim_canonical};
 use ed25519_dalek::SigningKey;
 use flagship_protocol::canonical_v1::CanonicalV1;
 use flagship_protocol::error::ProtocolError;
@@ -87,6 +87,9 @@ pub const MESH_PEER_OVER_LIMIT_MS: u64 = 60_000;
 pub const MESH_PEER_CUT_MS: u64 = 10 * MIN;
 pub const MESH_DIAL_TIMEOUT_MS: u64 = 5_000;
 pub const MESH_HANDSHAKE_STEP_MS: u64 = 5_000;
+/// `/mesh` handshakes not yet authenticated, across the relay and from one client address (§6.1).
+pub const MESH_HANDSHAKE_MAX_PENDING: u64 = 64;
+pub const MESH_HANDSHAKE_MAX_PENDING_PER_IP: u64 = 4;
 pub const MESH_PING_MS: u64 = 10_000;
 pub const MESH_PEER_DOWN_MS: u64 = 30_000;
 pub const MESH_BACKOFF_MIN_MS: u64 = 1_000;
@@ -133,6 +136,14 @@ pub const MOVE_FAILED_TARGET_MS: u64 = HOUR;
 pub const ACCOUNT_MOVE_HINT_SPACING_MS: u64 = 2_000;
 /// Equal to the phone ledger lease (`PHONE_ROUTE_LEASE_MS`, 60 s).
 pub const PHONE_ROUTE_GRANT_TTL_MS: u64 = 60_000;
+/// Only the first `PHONE_LEDGER_TOP_K` relays of an account's ledger ranking may sign its phone route grants (§8.1).
+pub const PHONE_LEDGER_TOP_K: u64 = 3;
+/// A phone item's generation may be at most this far above the highest live one a relay holds for the name (§8.4).
+pub const PHONE_GENERATION_MAX_JUMP: u64 = 8;
+/// No phone item's generation may exceed this (so a ledger can always offer the next one).
+pub const PHONE_GENERATION_MAX: u64 = 1 << 40;
+/// A relay forgets a hostname's highest seen generation this long after the last item for it lapsed (§8.2).
+pub const PHONE_GENERATION_MEMORY_MS: u64 = HOUR;
 pub const RELAY_LOG_ZERO_TIP: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
 pub const RELAY_LOG_TIP_HISTORY: u64 = 1_024;
@@ -2091,11 +2102,30 @@ pub fn phone_route_grant_canonical(g: &PhoneRouteGrant) -> Result<String, MeshEr
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhoneItem {
     pub grant: PhoneRouteGrant,
+    /// The ledger relay's signature over the grant.
     pub signature: String,
+    /// The phone's `route-claim/v1` for this generation (§8.3) and its signature under `grant.phoneRoutePub`.
+    pub claim: RouteClaim,
+    pub claim_signature: String,
 }
 
-/// §8.4 (see `checkPhoneItem`). Reasons in order: `malformed`, `not-bare-name`, `ttl-too-long`, `future`, `expired`,
-/// `wrong-holder`, `relay-revoked`, `unknown-relay`, `not-full`, `bad-signature`.
+/// Is `relay_id` among the first [`PHONE_LEDGER_TOP_K`] of the account's ledger ranking (§8.1)?
+#[must_use]
+pub fn is_phone_ledger_for(
+    account: &str,
+    relay_id: &str,
+    directory: Option<&RelayDirectoryBody>,
+    log: Option<&RelayLogState>,
+) -> bool {
+    let k = usize::try_from(PHONE_LEDGER_TOP_K).unwrap_or(usize::MAX);
+    phone_ledger_ranking(account, directory, log)
+        .is_ok_and(|r| r.iter().take(k).any(|id| id == relay_id))
+}
+
+/// §8.4 (see `checkPhoneItem`). `highest_live` is the highest generation among the live items the caller holds for the
+/// name (0 when none). Reasons in order: `malformed`, `not-bare-name`, `ttl-too-long`, `future`, `expired`,
+/// `generation-jump`, `wrong-holder`, `relay-revoked`, `unknown-relay`, `not-full`, `not-ledger`, `claim-mismatch`,
+/// `bad-signature`, `bad-claim`.
 ///
 /// # Errors
 /// The reason code.
@@ -2103,11 +2133,18 @@ pub fn check_phone_item(
     item: &PhoneItem,
     announcer_relay_id: &str,
     ctx: &MeshCheckContext<'_>,
+    highest_live: u64,
 ) -> Result<(), &'static str> {
     let g = &item.grant;
-    let Ok(canonical) = phone_route_grant_canonical(g) else {
+    let c = &item.claim;
+    let (Ok(canonical), Ok(claim_canonical)) =
+        (phone_route_grant_canonical(g), route_claim_canonical(c))
+    else {
         return Err("malformed");
     };
+    if !lower_hex(&item.signature, 128) || !lower_hex(&item.claim_signature, 128) {
+        return Err("malformed");
+    }
     if !is_bare_phone_name(&g.hostname, ctx.services_apex) {
         return Err("not-bare-name");
     }
@@ -2119,6 +2156,12 @@ pub fn check_phone_item(
     }
     if g.not_after <= ctx.now {
         return Err("expired");
+    }
+    if g.generation > PHONE_GENERATION_MAX
+        || (highest_live > 0
+            && g.generation > highest_live.saturating_add(PHONE_GENERATION_MAX_JUMP))
+    {
+        return Err("generation-jump");
     }
     if announcer_relay_id != g.holder_relay_id {
         return Err("wrong-holder");
@@ -2137,8 +2180,27 @@ pub fn check_phone_item(
     if ledger.relay_kind != RelayKind::Full || holder.relay_kind != RelayKind::Full {
         return Err("not-full");
     }
+    let account = g
+        .hostname
+        .strip_suffix(ctx.services_apex)
+        .and_then(|h| h.strip_suffix('.'))
+        .unwrap_or_default();
+    if !is_phone_ledger_for(account, &g.ledger_relay_id, ctx.directory, Some(ctx.log)) {
+        return Err("not-ledger");
+    }
+    if c.account != account
+        || c.hostname != g.hostname
+        || c.phone_route_pub != g.phone_route_pub
+        || c.generation != g.generation
+        || c.issued_at > g.issued_at.saturating_add(MESH_CLOCK_SKEW_MS)
+    {
+        return Err("claim-mismatch");
+    }
     if !verify(&canonical, &item.signature, &ledger.relay_key) {
         return Err("bad-signature");
+    }
+    if !verify(&claim_canonical, &item.claim_signature, &g.phone_route_pub) {
+        return Err("bad-claim");
     }
     Ok(())
 }

@@ -45,7 +45,7 @@
  *                        compareAttachments, checkWithdraw, withdrawCovers, checkBridgeAuth, checkMoveHint,
  *                        emptyMoveHintRateState, recordMoveHint, recordMoveTargetFailed, checkAccountMove,
  *                        checkPhoneItem, comparePhoneItems
- *   routing              accountHome, phoneLedgerRanking, rebalanceDecision
+ *   routing              accountHome, phoneLedgerRanking, isPhoneLedgerFor, rebalanceDecision
  *
  * The relay log's confidentiality is an open owner decision (public, or encrypted to a mesh key): nothing here assumes
  * either. The records below are the plaintext a relay verifies; an encryption layer, if chosen, wraps the published
@@ -56,7 +56,7 @@ import { hex } from "./canonicalBase.js";
 import { ed } from "./edSync.js";
 import { authorizedCaKeysOrFailClosed, MAINTAINER_PINNED_MANDATE_HASH, type CaArtifactReject, type CaTrustChain } from "./maintainerCa.js";
 import { PHONE_ROUTE_LEASE_MS } from "./phoneRoute.js";
-import type { ServingRevocations } from "./servingAuthority.js";
+import { canonicalRouteClaim, type RouteClaim, type ServingRevocations } from "./servingAuthority.js";
 import type { Bytes, Keypair } from "./types.js";
 
 // ── tags ──────────────────────────────────────────────────────────────────
@@ -113,6 +113,9 @@ export const MESH_PEER_CUT_MS = 10 * MIN;
 /** Bridges. */
 export const MESH_DIAL_TIMEOUT_MS = 5_000;
 export const MESH_HANDSHAKE_STEP_MS = 5_000;
+/** `/mesh` handshakes not yet authenticated, across the relay and from one client address (§6.1). */
+export const MESH_HANDSHAKE_MAX_PENDING = 64;
+export const MESH_HANDSHAKE_MAX_PENDING_PER_IP = 4;
 export const MESH_PING_MS = 10_000;
 export const MESH_PEER_DOWN_MS = 30_000;
 export const MESH_BACKOFF_MIN_MS = 1_000;
@@ -174,6 +177,14 @@ export const MOVE_FAILED_TARGET_MS = HOUR;
 export const ACCOUNT_MOVE_HINT_SPACING_MS = 2_000;
 /** A phone route grant lives exactly the ledger lease (`PHONE_ROUTE_LEASE_MS`); renewed every `PHONE_ROUTE_RENEW_MS`. */
 export const PHONE_ROUTE_GRANT_TTL_MS = PHONE_ROUTE_LEASE_MS;
+/** Only the first `PHONE_LEDGER_TOP_K` relays of an account's ledger ranking may sign its phone route grants (§8.1). */
+export const PHONE_LEDGER_TOP_K = 3;
+/** A phone item's generation may be at most this far above the highest live one a relay holds for the name (§8.4). */
+export const PHONE_GENERATION_MAX_JUMP = 8;
+/** No phone item's generation may exceed this (so a ledger can always offer the next one). */
+export const PHONE_GENERATION_MAX = 2 ** 40;
+/** A relay forgets a hostname's highest seen generation this long after the last item for it lapsed (§8.2). */
+export const PHONE_GENERATION_MEMORY_MS = HOUR;
 /** The relay log's tip before any entry. */
 export const RELAY_LOG_ZERO_TIP = "0".repeat(64);
 /** How many recent entry hashes a `RelayLogState` keeps to match a head that is behind its tip. */
@@ -1323,7 +1334,11 @@ export interface LegacyItem {
 export interface PhoneItem {
   kind: "phone";
   grant: PhoneRouteGrant;
+  /** The ledger relay's signature over the grant. */
   signature: string;
+  /** The phone's `route-claim/v1` for this generation (§8.3), and its signature under `grant.phoneRoutePub`. */
+  claim: RouteClaim;
+  claimSignature: string;
 }
 export type AttachmentItem = BoxItem | LegacyItem;
 /** An item in an `announce` message (§6.3). Mailbox items (§7.6) are typed by their own module. */
@@ -1596,23 +1611,45 @@ export type PhoneItemRefusal =
   | "ttl-too-long"
   | "future"
   | "expired"
+  | "generation-jump"
   | "wrong-holder"
   | "relay-revoked"
   | "unknown-relay"
   | "not-full"
-  | "bad-signature";
+  | "not-ledger"
+  | "claim-mismatch"
+  | "bad-signature"
+  | "bad-claim";
+
+/** Is `relayId` among the first `PHONE_LEDGER_TOP_K` of the account's ledger ranking (§8.1)? */
+export function isPhoneLedgerFor(account: string, relayId: string, directory: RelayDirectoryBody | null, log: RelayLogState | null): boolean {
+  try {
+    return phoneLedgerRanking(account, directory, log).slice(0, PHONE_LEDGER_TOP_K).includes(relayId);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * A phone item is valid when the grant is well-formed for a bare name under the apex, lasts at most
- * `PHONE_ROUTE_GRANT_TTL_MS`, is live, was announced by its `holderRelayId`, both relays are unrevoked `full` relays
- * in the directory, and `ledgerRelayId`'s directory key signed it.
+ * `PHONE_ROUTE_GRANT_TTL_MS`, is live, its generation is at most `PHONE_GENERATION_MAX` and at most
+ * `PHONE_GENERATION_MAX_JUMP` above `highestLive` (the highest generation among the live items the caller holds for the
+ * name; 0 when none), was announced by its `holderRelayId`, both relays are unrevoked `full` relays in the directory,
+ * `ledgerRelayId` is among the first `PHONE_LEDGER_TOP_K` of the account's ledger ranking, the phone's route claim it
+ * carries names the same hostname, key and generation (issued no later than the grant, within the skew), the ledger's
+ * directory key signed the grant and the phone's key signed the claim.
  */
-export function checkPhoneItem(item: PhoneItem, announcerRelayId: string, ctx: MeshCheckContext): { ok: true } | { ok: false; reason: PhoneItemRefusal } {
+export function checkPhoneItem(item: PhoneItem, announcerRelayId: string, ctx: MeshCheckContext, highestLive = 0): { ok: true } | { ok: false; reason: PhoneItemRefusal } {
   const g = item?.grant;
+  const c = item?.claim;
   let msg: Bytes;
+  let claimMsg: Bytes;
   try {
     if (item?.kind !== "phone") bad("kind", "must be phone");
     msg = canonicalPhoneRouteGrant(g);
+    claimMsg = canonicalRouteClaim(c);
+    hexField("signature", item.signature, HEX128);
+    hexField("claimSignature", item.claimSignature, HEX128);
   } catch {
     return { ok: false, reason: "malformed" };
   }
@@ -1620,13 +1657,20 @@ export function checkPhoneItem(item: PhoneItem, announcerRelayId: string, ctx: M
   if (g.notAfter - g.issuedAt > PHONE_ROUTE_GRANT_TTL_MS) return { ok: false, reason: "ttl-too-long" };
   if (g.issuedAt > ctx.now + MESH_CLOCK_SKEW_MS) return { ok: false, reason: "future" };
   if (g.notAfter <= ctx.now) return { ok: false, reason: "expired" };
+  if (g.generation > PHONE_GENERATION_MAX || (highestLive > 0 && g.generation > highestLive + PHONE_GENERATION_MAX_JUMP)) return { ok: false, reason: "generation-jump" };
   if (announcerRelayId !== g.holderRelayId) return { ok: false, reason: "wrong-holder" };
   if (ctx.log.revokedRelays.has(g.ledgerRelayId) || ctx.log.revokedRelays.has(g.holderRelayId)) return { ok: false, reason: "relay-revoked" };
   const ledger = directoryRelay(ctx.directory, g.ledgerRelayId);
   const holder = directoryRelay(ctx.directory, g.holderRelayId);
   if (!ledger || !holder) return { ok: false, reason: "unknown-relay" };
   if (ledger.relayKind !== "full" || holder.relayKind !== "full") return { ok: false, reason: "not-full" };
+  const account = g.hostname.slice(0, -(ctx.servicesApex.length + 1));
+  if (!isPhoneLedgerFor(account, g.ledgerRelayId, ctx.directory, ctx.log)) return { ok: false, reason: "not-ledger" };
+  if (c.account !== account || c.hostname !== g.hostname || c.phoneRoutePub !== g.phoneRoutePub || c.generation !== g.generation || c.issuedAt > g.issuedAt + MESH_CLOCK_SKEW_MS) {
+    return { ok: false, reason: "claim-mismatch" };
+  }
   if (!edVerify(item.signature, msg, ledger.relayKey)) return { ok: false, reason: "bad-signature" };
+  if (!edVerify(item.claimSignature, claimMsg, g.phoneRoutePub)) return { ok: false, reason: "bad-claim" };
   return { ok: true };
 }
 

@@ -9,8 +9,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use flagship_crypto::relay_mesh::{
     AttachmentItem, AttachmentKind, HomeAttachment, MESH_STORE_MAX_BOX_ITEMS,
-    MESH_STORE_MAX_PER_RELAY, MESH_STORE_MAX_PHONE_ITEMS, MeshItem, PhoneItem, RelayWithdraw,
-    account_of_pod_name, compare_attachments, compare_phone_items, name_hash, withdraw_covers,
+    MESH_STORE_MAX_PER_RELAY, MESH_STORE_MAX_PHONE_ITEMS, MeshItem, PHONE_GENERATION_MEMORY_MS,
+    PhoneItem, RelayWithdraw, account_of_pod_name, compare_attachments, compare_phone_items,
+    name_hash, withdraw_covers,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +50,10 @@ pub struct Store {
     /// bare hostname → one item per holder relay.
     phones: HashMap<String, Vec<PhoneItem>>,
     by_account: HashMap<String, BTreeSet<String>>,
+    /// bare hostname → ledger relay → (highest generation it signed, the latest `notAfter` seen with it): what a new
+    /// ledger relay starts above (§8.2). Forgotten per relay when it is dropped, and per entry
+    /// `PHONE_GENERATION_MEMORY_MS` after its `notAfter`.
+    generations: HashMap<String, HashMap<String, (u64, u64)>>,
     /// nameHash → serverFqdn, for the log's `box-register` entries (which name a hash only).
     by_hash: HashMap<String, String>,
     per_relay: HashMap<String, usize>,
@@ -66,6 +71,7 @@ impl Store {
             boxes: HashMap::new(),
             phones: HashMap::new(),
             by_account: HashMap::new(),
+            generations: HashMap::new(),
             by_hash: HashMap::new(),
             per_relay: HashMap::new(),
             box_count: 0,
@@ -196,8 +202,48 @@ impl Store {
         self.remove_box_where(name, |i| i.attachment.relay_id == relay) > 0
     }
 
+    fn remember_generation(&mut self, item: &PhoneItem) {
+        let g = &item.grant;
+        if !self.generations.contains_key(&g.hostname)
+            && self.generations.len() >= self.caps.phone_items
+        {
+            let oldest = self
+                .generations
+                .iter()
+                .map(|(h, m)| (h, m.values().map(|(_, u)| *u).max().unwrap_or(0)))
+                .min_by_key(|(_, u)| *u)
+                .map(|(h, _)| h.clone());
+            if let Some(h) = oldest {
+                self.generations.remove(&h);
+            }
+        }
+        let e = self
+            .generations
+            .entry(g.hostname.clone())
+            .or_default()
+            .entry(g.ledger_relay_id.clone())
+            .or_insert((0, 0));
+        e.0 = e.0.max(g.generation);
+        e.1 = e.1.max(g.not_after);
+    }
+
+    /// §8.4: the highest generation among the live phone items held for a host (0 when none).
+    #[must_use]
+    pub fn highest_live(&self, host: &str, now: u64) -> u64 {
+        self.phones
+            .get(host)
+            .and_then(|l| {
+                l.iter()
+                    .filter(|i| i.grant.not_after > now)
+                    .map(|i| i.grant.generation)
+                    .max()
+            })
+            .unwrap_or(0)
+    }
+
     /// Insert a checked phone item.
     pub fn insert_phone(&mut self, item: PhoneItem) -> Inserted {
+        self.remember_generation(&item);
         let host = item.grant.hostname.clone();
         let holder = item.grant.holder_relay_id.clone();
         if let Some(list) = self.phones.get_mut(&host)
@@ -270,6 +316,10 @@ impl Store {
         for h in hosts {
             self.remove_phone(&h, relay);
         }
+        self.generations.retain(|_, m| {
+            m.remove(relay);
+            !m.is_empty()
+        });
     }
 
     /// Keep only the box items `keep` accepts (re-checked after the log or the directory changed).
@@ -309,6 +359,10 @@ impl Store {
             self.remove_box_where(&n, |i| i.attachment.not_after <= now);
         }
         self.retain_phones(|p| p.grant.not_after > now);
+        self.generations.retain(|_, m| {
+            m.retain(|_, (_, until)| until.saturating_add(PHONE_GENERATION_MEMORY_MS) > now);
+            !m.is_empty()
+        });
     }
 
     /// §5.2: the winning unexpired attachment for a name.
@@ -350,13 +404,20 @@ impl Store {
         )
     }
 
-    /// The highest generation in any phone item for a host (a new ledger relay starts above it).
+    /// The highest generation remembered for a host (a new ledger relay starts above it, §8.2).
     #[must_use]
     pub fn max_phone_generation(&self, host: &str) -> u64 {
-        self.phones
+        let items = self
+            .phones
             .get(host)
             .and_then(|l| l.iter().map(|i| i.grant.generation).max())
-            .unwrap_or(0)
+            .unwrap_or(0);
+        let seen = self
+            .generations
+            .get(host)
+            .and_then(|m| m.values().map(|(g, _)| *g).max())
+            .unwrap_or(0);
+        items.max(seen)
     }
 
     /// §7.3 inputs: the account's winning, unexpired attachments, and whether any of them is legacy.
@@ -582,7 +643,8 @@ impl Mesh {
                 };
                 let ok = self
                     .with_ctx(|ctx, store| {
-                        if check_phone_item(&p, &announcer, ctx).is_err() {
+                        let highest = store.highest_live(&p.grant.hostname, ctx.now);
+                        if check_phone_item(&p, &announcer, ctx, highest).is_err() {
                             return false;
                         }
                         store.insert_phone(p.clone());
@@ -614,9 +676,15 @@ impl Mesh {
                 let Some(ids) = crate::mailbox::verify_announcements(&list, now()) else {
                     return false;
                 };
+                // The announcement does not name the relay: the first holder keeps the id until it withdraws it (§7.6).
                 self.with_state(|s| {
                     for id in ids {
-                        s.remote_mailboxes.insert(id, (from.to_owned(), epoch));
+                        let l = s.remote_mailboxes.entry(id).or_default();
+                        if let Some(e) = l.iter_mut().find(|(r, _)| r == from) {
+                            e.1 = epoch;
+                        } else if l.len() < MAILBOX_CANDIDATES_MAX {
+                            l.push((from.to_owned(), epoch));
+                        }
                     }
                 });
                 true
@@ -683,6 +751,52 @@ impl Mesh {
         }
     }
 
+    /// Boxes here stopped holding these mailboxes: forget them and tell every peer (`mailbox-withdraw`, §7.6).
+    pub fn on_mailbox_withdraw(&self, ids: &[String]) {
+        if ids.is_empty() {
+            return;
+        }
+        self.with_state(|s| {
+            for id in ids {
+                s.local_mail.remove(id);
+            }
+        });
+        for chunk in ids.chunks(MAILBOX_WITHDRAW_MAX) {
+            self.broadcast(&serde_json::json!({"type": "mailbox-withdraw", "ids": chunk}));
+        }
+    }
+
+    /// A peer's `mailbox-withdraw`: removes only the mailbox ids that peer holds. False when it is not the shape.
+    pub(crate) fn accept_mailbox_withdraw(&self, v: &Value, from: &str) -> bool {
+        let Some(ids) = v.get("ids").and_then(Value::as_array) else {
+            return false;
+        };
+        if ids.len() > MAILBOX_WITHDRAW_MAX {
+            return false;
+        }
+        self.with_state(|s| {
+            for id in ids.iter().filter_map(Value::as_str) {
+                if let Some(l) = s.remote_mailboxes.get_mut(id) {
+                    l.retain(|(r, _)| r != from);
+                    if l.is_empty() {
+                        s.remote_mailboxes.remove(id);
+                    }
+                }
+            }
+        });
+        true
+    }
+
+    /// A peer's bridge went down: the mailboxes it held are no longer reachable through it.
+    pub(crate) fn forget_mailboxes_of(&self, relay: &str) {
+        self.with_state(|s| {
+            s.remote_mailboxes.retain(|_, l| {
+                l.retain(|(r, _)| r != relay);
+                !l.is_empty()
+            });
+        });
+    }
+
     pub(crate) fn local_mailbox_items(&self) -> Vec<Value> {
         self.with_state(|s| s.local_mail.values().map(wire::item_to_json).collect())
             .unwrap_or_default()
@@ -691,8 +805,13 @@ impl Mesh {
     /// The relay whose box holds this mailbox, when it is not here.
     #[must_use]
     pub fn mailbox_holder(&self, id: &str) -> Option<String> {
-        self.with_state(|s| s.remote_mailboxes.get(id).map(|(r, _)| r.clone()))
-            .flatten()
+        self.with_state(|s| {
+            s.remote_mailboxes
+                .get(id)
+                .and_then(|l| l.first())
+                .map(|(r, _)| r.clone())
+        })
+        .flatten()
     }
 
     /// Carry a mailbox request to the relay whose box holds it (§7.6, §15.4.1): `OPEN {kind:"pb-mail", length}`, the
@@ -799,6 +918,11 @@ impl Mesh {
     }
 }
 
+/// Most mailbox ids in one `mailbox-withdraw` (§7.6).
+pub const MAILBOX_WITHDRAW_MAX: usize = 500;
+/// Relays remembered as waiting to hold one mailbox id after its first holder.
+const MAILBOX_CANDIDATES_MAX: usize = 4;
+
 /// A bridged mailbox envelope's limit (§7.6: "the same 1 MiB cap").
 const BRIDGED_MAIL_MAX: usize = 1024 * 1024;
 
@@ -813,6 +937,58 @@ mod tests {
     use flagship_crypto::relay_mesh::{BoxAttachment, PhoneRouteGrant};
 
     const APEX: &str = "flagship.services";
+
+    fn phone(
+        holder: &str,
+        ledger: &str,
+        generation: u64,
+        issued: u64,
+        not_after: u64,
+    ) -> PhoneItem {
+        let hostname = format!("alice.{APEX}");
+        PhoneItem {
+            grant: PhoneRouteGrant {
+                hostname: hostname.clone(),
+                phone_route_pub: "ab".repeat(32),
+                generation,
+                holder_relay_id: holder.into(),
+                ledger_relay_id: ledger.into(),
+                issued_at: issued,
+                not_after,
+            },
+            signature: "cd".repeat(64),
+            claim: flagship_crypto::serving::RouteClaim {
+                account: "alice".into(),
+                phone_route_pub: "ab".repeat(32),
+                hostname,
+                generation,
+                session_nonce: "5e".repeat(16),
+                issued_at: issued,
+            },
+            claim_signature: "ef".repeat(64),
+        }
+    }
+
+    #[test]
+    fn generation_memory_is_per_ledger_dropped_with_it_and_forgotten() {
+        let host = format!("alice.{APEX}");
+        let mut s = Store::new("iad1", APEX, Caps::default());
+        s.insert_phone(phone("ams1", "rog1", 900, 10, 70));
+        s.insert_phone(phone("fra1", "iad1", 5, 10, 70));
+        assert_eq!(s.highest_live(&host, 20), 900);
+        assert_eq!(s.highest_live(&host, 70), 0, "nothing live");
+        s.sweep(70);
+        assert_eq!(
+            s.max_phone_generation(&host),
+            900,
+            "remembered after the items lapse"
+        );
+        // The rogue ledger is retired: its generations go with it.
+        s.remove_relay("rog1");
+        assert_eq!(s.max_phone_generation(&host), 5);
+        s.sweep(70 + PHONE_GENERATION_MEMORY_MS);
+        assert_eq!(s.max_phone_generation(&host), 0, "forgotten");
+    }
 
     fn item(relay: &str, kind: AttachmentKind, reg_gen: u64, issued: u64) -> AttachmentItem {
         AttachmentItem {
@@ -887,18 +1063,7 @@ mod tests {
         assert_eq!(s.box_count(), 2);
         assert!(s.winner(&format!("a.alice.{APEX}"), 2).is_some());
         assert!(s.winner(&format!("b.alice.{APEX}"), 6).is_none());
-        let p = |holder: &str, generation: u64| PhoneItem {
-            grant: PhoneRouteGrant {
-                hostname: format!("alice.{APEX}"),
-                phone_route_pub: "ab".repeat(32),
-                generation,
-                holder_relay_id: holder.into(),
-                ledger_relay_id: "iad1".into(),
-                issued_at: 10,
-                not_after: 70,
-            },
-            signature: "cd".repeat(64),
-        };
+        let p = |holder: &str, generation: u64| phone(holder, "iad1", generation, 10, 70);
         s.insert_phone(p("ams1", 1));
         s.insert_phone(p("fra1", 2));
         assert_eq!(s.phone_count(), 1);

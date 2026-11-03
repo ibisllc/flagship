@@ -51,7 +51,7 @@ const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")
 async function openAccount(storage: InMemoryStorage): Promise<void> {
   await storage.usernameOffers.record(username, "signup-device", NOW);
   const grant: DeviceCapabilityGrant = {
-    grantId: "primary-grant",
+    grantId: "0001-aaaa",
     username,
     deviceId,
     devicePubKey: device.publicKey,
@@ -87,7 +87,7 @@ async function openAccount(storage: InMemoryStorage): Promise<void> {
 
 async function addSecondDevice(storage: InMemoryStorage, scopes: DeviceCapabilityGrant["scopes"] = ["browse", "view-directory"]) {
   const grant: DeviceCapabilityGrant = {
-    grantId: "second-grant",
+    grantId: "0002-bbbb",
     username,
     deviceId: secondDeviceId,
     devicePubKey: second.publicKey,

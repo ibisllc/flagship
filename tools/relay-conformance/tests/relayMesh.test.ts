@@ -346,6 +346,35 @@ for (const cfg of CONFIGS) {
       b.close();
     });
 
+    it("MESH05b review 2026-11-02: a holder routes by the visitor's ClientHello, not the OPEN label; an entry relay cannot use the phone ledger", async () => {
+      const a = com.account(uniq("sni"));
+      const b = mk(new MeshBox(com.box(a, "home"), "SNI"));
+      await synced();
+      await attached(b, "rb");
+      const sim = await peer("rb");
+      const before = b.streams.size;
+      // The OPEN names the box, but the visitor's hello names another name: refused, never reaches the box.
+      const sid = sim.open(b.pod, { sni: b.pod, kind: "tls", hop: 1 }, clientHello(`other.${a.username}.${APEX}`));
+      expect((await sim.next((m) => m.type === "refuse" && m.stream === sid, 3_000)).code).toBe("not-holder");
+      await sleep(200);
+      expect(b.streams.size).toBe(before);
+      // The matching hello is served.
+      const ok = sim.open(b.pod);
+      await waitFor(() => sim.frames.some((f) => f.type === FRAME_DATA && f.streamId === ok), 3_000, "holder answered the matching hello");
+      sim.close();
+      // aa-obs is an entry relay: every relay ignores its phone ledger requests and counts them.
+      for (const id of IDS) {
+        const obs = await peer(id);
+        const rejected = await rejectedFrom(R(id), "aa-obs");
+        obs.send({ type: "phone-begin", qid: "q-entry", account: a.username });
+        obs.send({ type: "phone-claim", qid: "q-entry2", hostname: `${a.username}.${APEX}`, generation: 1, holder: { relayId: "aa-obs", sessionId: "s", phoneRoutePub: "ab".repeat(32) } });
+        await waitFor(async () => (await rejectedFrom(R(id), "aa-obs")) >= rejected + 2, 3_000, `${label(id)} counted both`);
+        expect(obs.msgs.some((m) => m.qid === "q-entry" || m.qid === "q-entry2"), `${label(id)} answered an entry relay`).toBe(false);
+        obs.close();
+      }
+      b.close();
+    });
+
     it("MESH06 move hint: a real mesh box (the daemon's client) follows a co-locate hint make-before-break; tampered hints are refused by the box", async () => {
       // The account's home is rc (its first box); a second box lands on ra and is hinted to co-locate.
       const a = com.account(uniq("mv"));

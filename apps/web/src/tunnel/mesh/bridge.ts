@@ -20,6 +20,8 @@ import {
   MESH_BACKOFF_MIN_MS,
   MESH_CONTROL_MAX_BYTES,
   MESH_DIAL_TIMEOUT_MS,
+  MESH_HANDSHAKE_MAX_PENDING,
+  MESH_HANDSHAKE_MAX_PENDING_PER_IP,
   MESH_HANDSHAKE_STEP_MS,
   MESH_PEER_CUT_MS,
   MESH_PEER_DOWN_MS,
@@ -38,7 +40,21 @@ import {
   type MeshHello,
   type RelayBlessing,
 } from "@flagship/protocol";
-import { decodeFrame, encodeFrame, FRAME_CLOSE, FRAME_CLOSE_REMOTE, FRAME_DATA, FRAME_OPEN, type Frame } from "@flagship/tunnel-protocol";
+import { decodeFrame, encodeFrame, FRAME_CLOSE, FRAME_CLOSE_REMOTE, FRAME_DATA, FRAME_OPEN, parseClientHelloSni, type Frame } from "@flagship/tunnel-protocol";
+import { AddressLimiter, clientAddress } from "../phoneTunnel.js";
+
+/** `/mesh` handshakes not yet authenticated: 4 per client address, 64 in all (§6.1; security review 2026-11-02). */
+export class PendingHandshakes extends AddressLimiter {
+  constructor() {
+    super(MESH_HANDSHAKE_MAX_PENDING_PER_IP, MESH_HANDSHAKE_MAX_PENDING);
+  }
+}
+
+/** §6.4: the SNI in a bridged stream's first DATA (the visitor's ClientHello) must be the OPEN's own. */
+export function bridgedSniMatches(openSni: string, first: Uint8Array): boolean {
+  const r = parseClientHelloSni(first);
+  return r.kind === "ok" && r.sni !== null && r.sni.toLowerCase() === openSni.toLowerCase();
+}
 
 export const MESH_PATH = "/mesh";
 /** `stream-credit-v1` (relay-transport.md §1): mandatory on bridges. */
@@ -637,6 +653,7 @@ export class BridgeManager {
   private readonly dialing = new Map<string, { timer: ReturnType<typeof setTimeout> | null; attempt: number; busy: boolean }>();
   private readonly cutUntil = new Map<string, number>();
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: 2 * MESH_CONTROL_MAX_BYTES });
+  private readonly pending = new PendingHandshakes();
   private tick: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
   readonly handshakeFailures: Record<string, number> = {};
@@ -647,7 +664,20 @@ export class BridgeManager {
   attach(httpServer: HttpServer): () => void {
     const onUpgrade = (req: IncomingMessage, socket: NetDuplex, head: Buffer): void => {
       if (req.url !== MESH_PATH) return;
-      this.wss.handleUpgrade(req, socket, head, (ws) => void this.accept(ws));
+      const address = clientAddress(req);
+      if (!this.pending.tryAdd(address)) {
+        this.handshakeFailures.busy = (this.handshakeFailures.busy ?? 0) + 1;
+        socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+        return;
+      }
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        this.pending.done(address);
+      };
+      socket.once("close", release);
+      this.wss.handleUpgrade(req, socket, head, (ws) => void this.accept(ws).finally(release));
     };
     httpServer.on("upgrade", onUpgrade);
     return () => httpServer.off("upgrade", onUpgrade);

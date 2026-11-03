@@ -199,6 +199,9 @@ final class PhoneEndpointResponderTests: XCTestCase {
             let sig = try PhoneRoute.signEd25519(try PhoneRoute.canonicalPresence(account: "alice", devicePub: device, hostname: host, issuedAt: at), key: signer)
             return body(ep.respond(head("GET", "/", ["x-flagship-presence-device": device, "x-flagship-presence-at": String(at), "x-flagship-presence-sig": sig]), body: Data()))
         }
+        // Before the device book is known nothing is recorded; a key outside it is never recorded.
+        XCTAssertTrue(try hello(t, signer: key).contains(#""recorded":false"#))
+        ep.setAccountDevices([device])
         XCTAssertTrue(try hello(t, signer: key).contains(#""recorded":true"#))
         XCTAssertEqual(ep.lastSeen(accountDevices: [device])[device], t)
         // A validly signed hello from a key outside the account's device book is never listed.
@@ -207,6 +210,22 @@ final class PhoneEndpointResponderTests: XCTestCase {
         XCTAssertTrue(try hello(t - 61_000, signer: key).contains(#""recorded":false"#))
         XCTAssertTrue(try hello(t, signer: Curve25519.Signing.PrivateKey()).contains(#""recorded":false"#))
         XCTAssertEqual(status(ep.respond(head("GET", "/", [:]), body: Data())), 200)
+    }
+
+    func testHellosFromKeysOutsideTheDeviceBookCannotFloodTheList() throws {
+        let t: Int64 = 1_800_000_000_000
+        let ep = PhoneEndpointResponder(account: "alice", hostname: host, phoneRoutePub: String(repeating: "ab", count: 32), now: { t })
+        let mine = Curve25519.Signing.PrivateKey()
+        let device = HexUtil.encode(mine.publicKey.rawRepresentation)
+        ep.setAccountDevices([device])
+        func hello(_ key: Curve25519.Signing.PrivateKey) throws -> String {
+            let pub = HexUtil.encode(key.publicKey.rawRepresentation)
+            let sig = try PhoneRoute.signEd25519(try PhoneRoute.canonicalPresence(account: "alice", devicePub: pub, hostname: host, issuedAt: t), key: key)
+            return body(ep.respond(head("GET", "/", ["x-flagship-presence-device": pub, "x-flagship-presence-at": String(t), "x-flagship-presence-sig": sig]), body: Data()))
+        }
+        XCTAssertTrue(try hello(mine).contains(#""recorded":true"#))
+        for _ in 0..<40 { XCTAssertTrue(try hello(Curve25519.Signing.PrivateKey()).contains(#""recorded":false"#)) }
+        XCTAssertEqual(ep.lastSeen(accountDevices: [device])[device], t)
     }
 
     func testRequestReader() throws {

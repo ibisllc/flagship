@@ -8,6 +8,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { p256 } from "@noble/curves/nist.js";
+import * as P from "../packages/protocol/src/phoneRoute.js";
 import {
   barePhoneAccount,
   canonicalCertificateOrder,
@@ -245,6 +246,14 @@ const out = {
     adminRootPub: hexOf(adminRoot.publicKey),
     deviceGrants: { username: "alice", grants: listed },
     message: beginMessage,
+  },
+  relayLimits: {
+    about: "What every relay (TS and Rust) enforces on /phone-tunnel (security review 2026-11-02, M4; relay-mesh.md §8.2).",
+    PHONE_TUNNEL_MAX_PER_IP: P.PHONE_TUNNEL_MAX_PER_IP,
+    PHONE_BEGIN_BURST: P.PHONE_BEGIN_BURST,
+    PHONE_BEGIN_PER_MINUTE: P.PHONE_BEGIN_PER_MINUTE,
+    PHONE_LEDGER_READ_CACHE_MS: P.PHONE_LEDGER_READ_CACHE_MS,
+    PHONE_ELIGIBILITY_CACHE_MS: P.PHONE_ELIGIBILITY_CACHE_MS,
   },
 };
 const dir = "packages/protocol/test-vectors/phone-route";

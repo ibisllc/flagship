@@ -43,11 +43,12 @@ public enum PhoneRouteController {
                                    deviceKey: deviceKey, leafKey: { PhoneTlsKey.leafKey(pem: $0) })
             guard !Task.isCancelled, let pem = certs.current(user), let identity = try? key.identity(account: user, chainPem: pem),
                   let hub = await tunnelHub(base), let url = URL(string: TunnelFrames.phoneTunnelURL(hub)), !Task.isCancelled else { return }
-            let grants = await beginGrants(base, account: user, devicePub: HexUtil.encode(deviceKey.publicKey.rawRepresentation))
+            let (grants, devices) = await beginGrants(base, account: user, devicePub: HexUtil.encode(deviceKey.publicKey.rawRepresentation))
             guard !Task.isCancelled,
                   let c = try? PhoneTunnelClient(url: url, account: user, apex: apex, deviceKey: deviceKey, identity: identity, grants: grants,
                                                  onState: { s in Task { @MainActor in state = s } }) else { return }
             client = c
+            c.responder.setAccountDevices(devices)
             // The voi.ci operations (docs/voici-and-messages.md §8.2): live and deliver, answered by Messages.
             c.responder.setWebInbox(MessagesStore.shared.phoneInbox)
             MessagesStore.shared.updatePhoneInbox()
@@ -79,16 +80,18 @@ public enum PhoneRouteController {
         return (200..<300).contains(http.statusCode)
     }
 
-    /// This device's admin grants from `.com` (`/api/users/:u/device-grants`, read token), for the tunnel's `begin`.
-    /// Empty when they can't be read: a relay without the mesh doesn't need them, a mesh relay then refuses the claim.
-    static func beginGrants(_ base: URL, account: String, devicePub: String) async -> [[String: Any]] {
+    /// This device's admin grants from `.com` (`/api/users/:u/device-grants`, read token), for the tunnel's `begin`, and
+    /// the account's device keys (the endpoint records hellos only from these). Empty when they can't be read: a relay
+    /// without the mesh doesn't need the grants, a mesh relay then refuses the claim.
+    static func beginGrants(_ base: URL, account: String, devicePub: String) async -> ([[String: Any]], Set<String>) {
         let u = account.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? account
         var req = URLRequest(url: base.appendingPathComponent("api/users/\(u)/device-grants"), timeoutInterval: 10)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         if let token = await ServerShareServices.readTokens.token(for: account) { req.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
         guard let (data, res) = try? await URLSession.shared.gatedData(for: req), (res as? HTTPURLResponse)?.statusCode == 200,
-              let body = try? JSONSerialization.jsonObject(with: data) else { return [] }
-        return PhoneRoute.beginGrants(body, account: account, devicePub: devicePub, now: Int64(Date().timeIntervalSince1970 * 1000))
+              let body = try? JSONSerialization.jsonObject(with: data) else { return ([], []) }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return (PhoneRoute.beginGrants(body, account: account, devicePub: devicePub, now: now), PhoneRoute.accountDeviceKeys(body, account: account, now: now))
     }
 
     private static func tunnelHub(_ base: URL) async -> String? {

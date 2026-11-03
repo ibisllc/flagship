@@ -14,6 +14,7 @@ import {
   MESH_STORE_MAX_BOX_ITEMS,
   MESH_STORE_MAX_PER_RELAY,
   MESH_STORE_MAX_PHONE_ITEMS,
+  PHONE_GENERATION_MEMORY_MS,
   nameHash,
   withdrawCovers,
   type AttachmentCheck,
@@ -68,6 +69,8 @@ export interface AttachmentStoreStats {
 }
 
 const itemKey = (relayId: string, kind: string): string => `${relayId}|${kind}`;
+/** Relays remembered per mailbox id: the holder and its successors (§7.6). */
+export const MAILBOX_HOLDERS_MAX = 4;
 
 export class AttachmentStore {
   /** serverFqdn → `<relayId>|<kind>` → the newest item of that relay and kind. */
@@ -79,12 +82,20 @@ export class AttachmentStore {
   /** hostname → holderRelayId → item. */
   private readonly phones = new Map<string, Map<string, StoredPhone>>();
   private phoneCount = 0;
-  /** hostname → the highest generation seen in any phone item (a new ledger relay starts above it, §8.2). */
-  private readonly phoneGenerations = new Map<string, number>();
+  /**
+   * hostname → signing ledger relay → the highest generation seen in its phone items and until when the newest lives
+   * (a new ledger relay starts above it, §8.2). Kept per ledger so a retired relay's generations go with it; forgotten
+   * `PHONE_GENERATION_MEMORY_MS` after the last item lapsed.
+   */
+  private readonly phoneGenerations = new Map<string, Map<string, { generation: number; until: number }>>();
   /** `<kind>|<subject>|<relayId>` → the latest withdrawn issuedAt: an older item from that relay arriving late is ignored. */
   private readonly tombstones = new Map<string, { upTo: number; at: number }>();
-  /** mailboxId → its holder. */
-  private readonly mailboxes = new Map<string, MailboxItem & { epoch: number }>();
+  /**
+   * mailboxId → the relays that announced it, in order, at most `MAILBOX_HOLDERS_MAX` (§7.6: the announcement does not
+   * name the relay). The first is the holder; the next takes over only when it withdraws, its bridge goes or it is
+   * retired (security review 2026-11-02: never a takeover by a later announcement).
+   */
+  private readonly mailboxes = new Map<string, Array<MailboxItem & { epoch: number }>>();
   /** Items already verified (kind, signature): a duplicate from another peer costs no verify. */
   private readonly seen = new Set<string>();
   private readonly rejected: Record<string, number> = {};
@@ -244,13 +255,17 @@ export class AttachmentStore {
   // ── phone items (§8.3, §8.4) ────────────────────────────────────────────
 
   offerPhone(item: PhoneItem, announcer: string): boolean {
-    const c = checkPhoneItem(item, announcer, this.opts.ctx());
+    const ctx = this.opts.ctx();
+    const host = typeof item?.grant?.hostname === "string" ? item.grant.hostname : "";
+    let highestLive = 0;
+    for (const s of this.phones.get(host)?.values() ?? []) if (s.item.grant.notAfter > ctx.now) highestLive = Math.max(highestLive, s.item.grant.generation);
+    const c = checkPhoneItem(item, announcer, ctx, highestLive);
     if (!c.ok) {
       this.count(announcer, `phone-${c.reason}`);
       return false;
     }
     const g = item.grant;
-    this.phoneGenerations.set(g.hostname, Math.max(this.phoneGenerations.get(g.hostname) ?? 0, g.generation));
+    this.rememberGeneration(g);
     const tomb = this.tombstones.get(`phone|${g.hostname}|${g.holderRelayId}`);
     if (tomb && g.issuedAt <= tomb.upTo) return false;
     let per = this.phones.get(g.hostname);
@@ -277,7 +292,27 @@ export class AttachmentStore {
   }
 
   maxPhoneGeneration(hostname: string): number {
-    return this.phoneGenerations.get(hostname) ?? 0;
+    let max = 0;
+    for (const v of this.phoneGenerations.get(hostname)?.values() ?? []) max = Math.max(max, v.generation);
+    return max;
+  }
+
+  private rememberGeneration(g: PhoneItem["grant"]): void {
+    let per = this.phoneGenerations.get(g.hostname);
+    if (!per) {
+      const cap = this.opts.maxPhoneItems ?? MESH_STORE_MAX_PHONE_ITEMS;
+      if (this.phoneGenerations.size >= cap) {
+        let oldest: { host: string; until: number } | null = null;
+        for (const [h, m] of this.phoneGenerations) {
+          const until = Math.max(...[...m.values()].map((v) => v.until));
+          if (!oldest || until < oldest.until) oldest = { host: h, until };
+        }
+        if (oldest) this.phoneGenerations.delete(oldest.host);
+      }
+      this.phoneGenerations.set(g.hostname, (per = new Map()));
+    }
+    const had = per.get(g.ledgerRelayId);
+    per.set(g.ledgerRelayId, { generation: Math.max(had?.generation ?? 0, g.generation), until: Math.max(had?.until ?? 0, g.notAfter) });
   }
 
   dropPhone(item: PhoneItem): void {
@@ -291,6 +326,7 @@ export class AttachmentStore {
 
   // ── mailboxes (§7.6) ────────────────────────────────────────────────────
 
+  /** A valid announcement: true (kept as holder or, behind the first, as a successor). */
   offerMailbox(item: MailboxItem, from: string): boolean {
     const a = item?.announce;
     const ann: MailboxAnnouncement = { pikPubHex: a?.pikPubHex, epoch: a?.epoch, sigHex: item?.signature };
@@ -299,17 +335,36 @@ export class AttachmentStore {
       this.count(from, "mailbox");
       return false;
     }
-    this.mailboxes.set(ids[0]!, { ...item, epoch: a.epoch });
+    const id = ids[0]!;
+    const it = { kind: "mailbox" as const, announce: item.announce, signature: item.signature, relayId: item.relayId, epoch: a.epoch };
+    const list = this.mailboxes.get(id) ?? [];
+    const at = list.findIndex((m) => m.relayId === it.relayId);
+    if (at >= 0) list[at] = it;
+    else if (list.length < MAILBOX_HOLDERS_MAX) list.push(it);
+    this.mailboxes.set(id, list);
     return true;
+  }
+
+  /** `mailbox-withdraw` from `from`: removes `from` from these ids only (the next relay, if any, becomes the holder). */
+  withdrawMailboxes(ids: readonly string[], from: string): void {
+    for (const id of ids) this.removeMailboxRelay(id, from);
+  }
+
+  private removeMailboxRelay(id: string, relayId: string): void {
+    const list = this.mailboxes.get(id);
+    if (!list) return;
+    const rest = list.filter((m) => m.relayId !== relayId);
+    if (rest.length === 0) this.mailboxes.delete(id);
+    else this.mailboxes.set(id, rest);
   }
 
   /** The relay holding a mailbox, or null. */
   mailboxRelay(id: string): string | null {
-    return this.mailboxes.get(id)?.relayId ?? null;
+    return this.mailboxes.get(id)?.[0]?.relayId ?? null;
   }
 
   dropMailboxesOf(relayId: string): void {
-    for (const [id, m] of this.mailboxes) if (m.relayId === relayId) this.mailboxes.delete(id);
+    for (const id of [...this.mailboxes.keys()]) this.removeMailboxRelay(id, relayId);
   }
 
   // ── what the log and directory force ────────────────────────────────────
@@ -350,6 +405,10 @@ export class AttachmentStore {
       if (per.size === 0) this.phones.delete(host);
       this.opts.onChange?.("phone", host);
     }
+    for (const [host, per] of [...this.phoneGenerations]) {
+      per.delete(relayId);
+      if (per.size === 0) this.phoneGenerations.delete(host);
+    }
     this.dropMailboxesOf(relayId);
   }
 
@@ -366,10 +425,14 @@ export class AttachmentStore {
       }
       if (per.size === 0) this.phones.delete(host);
     }
+    for (const [host, per] of [...this.phoneGenerations]) {
+      for (const [k, v] of [...per]) if (v.until + PHONE_GENERATION_MEMORY_MS <= now) per.delete(k);
+      if (per.size === 0) this.phoneGenerations.delete(host);
+    }
     // A tombstone outlives every item it can cover (the longest TTL is 30 min).
     for (const [k, t] of this.tombstones) if (now - t.at > 60 * 60_000) this.tombstones.delete(k);
     const epoch = Math.floor(now / (7 * 24 * 60 * 60_000));
-    for (const [id, m] of this.mailboxes) if (m.epoch < epoch - 1) this.mailboxes.delete(id);
+    for (const [id, list] of this.mailboxes) if (list[0]!.epoch < epoch - 1) this.mailboxes.delete(id);
     if (this.seen.size > 4 * (this.opts.maxBoxItems ?? MESH_STORE_MAX_BOX_ITEMS)) this.seen.clear();
   }
 
@@ -379,7 +442,7 @@ export class AttachmentStore {
     const out: Array<AttachmentItem | PhoneItem | MailboxItem> = [];
     for (const per of this.boxes.values()) for (const s of per.values()) if (s.item.attachment.notAfter > now) out.push(s.item);
     for (const per of this.phones.values()) for (const s of per.values()) if (s.item.grant.notAfter > now) out.push(s.item);
-    for (const m of this.mailboxes.values()) out.push({ kind: "mailbox", announce: m.announce, signature: m.signature, relayId: m.relayId });
+    for (const list of this.mailboxes.values()) for (const m of list) out.push({ kind: "mailbox", announce: m.announce, signature: m.signature, relayId: m.relayId });
     return out;
   }
 

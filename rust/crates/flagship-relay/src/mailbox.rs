@@ -94,21 +94,44 @@ impl std::fmt::Debug for MailboxRegistry {
 
 impl MailboxRegistry {
     /// Points these mailbox ids at a tunnel. A later announcement for the same id wins, and ids the owner no longer announces
-    /// are dropped.
-    pub fn register(&self, ids: &[String], owner: u64, deliver: &Arc<dyn MailDeliver>) {
-        if let Ok(mut r) = self.routes.lock() {
-            r.retain(|id, (o, _)| *o != owner || ids.contains(id));
-            for id in ids {
-                r.insert(id.clone(), (owner, Arc::clone(deliver)));
-            }
+    /// are dropped. Returns the ids this owner held and no longer does (the mesh withdraws them, relay-mesh.md §7.6).
+    pub fn register(
+        &self,
+        ids: &[String],
+        owner: u64,
+        deliver: &Arc<dyn MailDeliver>,
+    ) -> Vec<String> {
+        let Ok(mut r) = self.routes.lock() else {
+            return Vec::new();
+        };
+        let gone: Vec<String> = r
+            .iter()
+            .filter(|(id, (o, _))| *o == owner && !ids.contains(id))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in &gone {
+            r.remove(id);
         }
+        for id in ids {
+            r.insert(id.clone(), (owner, Arc::clone(deliver)));
+        }
+        gone
     }
 
-    /// The tunnel closed.
-    pub fn drop_owner(&self, owner: u64) {
-        if let Ok(mut r) = self.routes.lock() {
-            r.retain(|_, (o, _)| *o != owner);
+    /// The tunnel closed. Returns the ids it held.
+    pub fn drop_owner(&self, owner: u64) -> Vec<String> {
+        let Ok(mut r) = self.routes.lock() else {
+            return Vec::new();
+        };
+        let gone: Vec<String> = r
+            .iter()
+            .filter(|(_, (o, _))| *o == owner)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in &gone {
+            r.remove(id);
         }
+        gone
     }
 
     #[must_use]

@@ -1336,6 +1336,8 @@ impl SimPhone {
                 .unwrap();
             if v["type"] == ty
                 || (ty == "granted|refused" && (v["type"] == "granted" || v["type"] == "refused"))
+                || (ty == "challenge|refused"
+                    && (v["type"] == "challenge" || v["type"] == "refused"))
             {
                 return v;
             }
@@ -1399,22 +1401,23 @@ async fn the_bare_name_has_one_holder_across_relays() {
         (Some("refused"), Some("route-held")),
         "{r}"
     );
-    // …and a phone that presents no grants is not eligible (§13.1).
+    // …and a phone that presents no grants is not eligible (§13.1): refused at `begin`, before any generation is
+    // revealed (security review 2026-11-02).
     let mut p3 = SimPhone::connect(w.node("aa1").r().hub_addr, &host).await;
     p3.send(&json!({"type": "begin", "account": "alice"}));
-    let ch = p3.next_of("challenge").await;
-    let c = RouteClaim {
-        account: "alice".into(),
-        phone_route_pub: pubhex(&d2),
-        hostname: host.clone(),
-        generation: ch["generation"].as_u64().unwrap(),
-        session_nonce: ch["sessionNonce"].as_str().unwrap().into(),
-        issued_at: now(),
-    };
-    p3.send(&json!({"type": "claim", "claim": {"account": c.account, "phoneRoutePub": c.phone_route_pub,
-        "hostname": c.hostname, "generation": c.generation, "sessionNonce": c.session_nonce, "issuedAt": c.issued_at},
-        "signature": sig(&d2, &route_claim_canonical(&c).unwrap())}));
-    assert_eq!(p3.next_of("refused").await["code"], "not-eligible");
+    let r = p3.next_of("challenge|refused").await;
+    assert_eq!(
+        (r["type"].as_str(), r["code"].as_str()),
+        (Some("refused"), Some("not-eligible")),
+        "{r}"
+    );
+    assert!(r.get("generation").is_none(), "{r}");
+    // A grant with an id the log cannot carry does not count either.
+    let mut odd = device_grant(&a, &d2, 2);
+    odd["grant"]["grantId"] = json!("not-a-log-id!");
+    p3.send(&json!({"type": "begin", "account": "alice", "grants": [odd]}));
+    let r = p3.next_of("challenge|refused").await;
+    assert_eq!(r["code"], "not-eligible", "{r}");
     // The first phone leaves: the standby hears the vacancy across relays and takes the route.
     drop(p1);
     let v = p2.next_of("route-vacant").await;
@@ -1670,6 +1673,129 @@ async fn a_mailbox_on_another_relay_is_reached_over_the_bridge() {
     assert_eq!((status, body.as_slice()), (200, b"reply:sealed".as_slice()));
     let (status, _) = post_mail(w.node("bb1").r().hub_addr, &"ab".repeat(16), b"x").await;
     assert_eq!(status, 404);
+
+    // The same (self-authenticating) announcement through another relay does not take the mailbox over: the first
+    // holder keeps it until it withdraws it (security review 2026-11-02, §7.6).
+    let stk2 = key(0x32);
+    let pod2 = format!("cabin.alice.{APEX}");
+    w.com.register(&pod2, &stk2);
+    synced(&w).await;
+    let (mut b2, _) = SimBox::connect(
+        w.node("cc1").r().hub_addr,
+        &a,
+        &pod2,
+        &stk2,
+        &BoxOpts {
+            mesh: true,
+            ..BoxOpts::default()
+        },
+    )
+    .await;
+    b2.attach("cc1").await;
+    let ann2 = payload::MailboxAnnouncement {
+        pik_pub_hex: pubhex(&pik),
+        epoch: epoch as f64,
+        sig_hex: sig(
+            &pik,
+            &flagship_relay::mailbox::canonical_announce(&pubhex(&pik), epoch),
+        ),
+    };
+    b2.send(&payload::mailbox_announce_frame(&[ann2]).unwrap());
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assert_eq!(
+        w.node("bb1").mesh.mailbox_holder(&id).as_deref(),
+        Some("aa1"),
+        "the first holder keeps it"
+    );
+    // aa1's box leaves: aa1 withdraws the id, and the relay that announced it next holds it.
+    b.close();
+    eventually("aa1 withdrew; cc1 holds it", || {
+        w.node("bb1").mesh.mailbox_holder(&id).as_deref() == Some("cc1")
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn phone_tunnels_and_begins_are_capped_per_address() {
+    let w = world(Tune::default()).await;
+    let a = alice();
+    let host = format!("alice.{APEX}");
+    w.com.account(&a);
+    synced(&w).await;
+    let hub = w.node("bb1").r().hub_addr;
+    // One phone: its begins come out of its address's budget (refused not-eligible: it presents no grants).
+    let mut p = SimPhone::connect(hub, &host).await;
+    for _ in 0..flagship_relay::phone::PHONE_BEGIN_BURST {
+        p.send(&json!({"type": "begin", "account": "alice"}));
+        assert_eq!(p.next_of("refused").await["code"], "not-eligible");
+    }
+    p.send(&json!({"type": "begin", "account": "alice"}));
+    assert_eq!(p.next_of("refused").await["code"], "busy");
+    // Tunnels from one address: the cap, then 503 before the upgrade.
+    let mut held = vec![p];
+    for _ in 1..flagship_relay::phone::PHONE_TUNNEL_MAX_PER_IP {
+        held.push(SimPhone::connect(hub, &host).await);
+    }
+    let over = tokio_tungstenite::connect_async(format!("ws://{hub}/phone-tunnel")).await;
+    let Err(tokio_tungstenite::tungstenite::Error::Http(r)) = over else {
+        panic!("the tunnel past the cap was not refused");
+    };
+    assert_eq!(r.status().as_u16(), 503);
+    // A tunnel that closes frees its place.
+    drop(held.pop());
+    let mut ok = false;
+    for _ in 0..50 {
+        if tokio_tungstenite::connect_async(format!("ws://{hub}/phone-tunnel"))
+            .await
+            .is_ok()
+        {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(ok, "a closed tunnel frees its place");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unauthenticated_mesh_handshakes_are_capped_per_address() {
+    let w = world(Tune::default()).await;
+    let hub = w.node("bb1").r().hub_addr;
+    let mut pending = Vec::new();
+    for _ in 0..rm::MESH_HANDSHAKE_MAX_PENDING_PER_IP {
+        let (ws, _) = tokio_tungstenite::connect_async(format!("ws://{hub}/mesh"))
+            .await
+            .unwrap();
+        pending.push(ws);
+    }
+    let over = tokio_tungstenite::connect_async(format!("ws://{hub}/mesh")).await;
+    let Err(tokio_tungstenite::tungstenite::Error::Http(r)) = over else {
+        panic!("the handshake past the cap was not refused");
+    };
+    assert_eq!(r.status().as_u16(), 503);
+    // Another client address (Fly-Client-IP) has its own allowance.
+    let mut req = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(
+        format!("ws://{hub}/mesh"),
+    )
+    .unwrap();
+    req.headers_mut()
+        .insert("fly-client-ip", "203.0.113.9".parse().unwrap());
+    assert!(tokio_tungstenite::connect_async(req).await.is_ok());
+    // The real bridges were never in the way: they authenticated long ago.
+    assert_eq!(w.node("bb1").mesh.peer_ids().len(), 2);
+}
+
+#[test]
+fn the_holder_reads_the_sni_from_the_visitors_client_hello() {
+    let sni = format!("home.alice.{APEX}");
+    assert_eq!(
+        flagship_relay::mesh::bridge::hello_sni(&client_hello(&sni)).as_deref(),
+        Some(sni.as_str())
+    );
+    assert_eq!(
+        flagship_relay::mesh::bridge::hello_sni(b"not a hello"),
+        None
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

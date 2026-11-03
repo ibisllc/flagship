@@ -477,6 +477,45 @@ describe("feed files (§4.5, §4.5.1)", () => {
   });
 });
 
+describe("signer stall (§4.6; security review 2026-11-02)", () => {
+  it("a row unsigned for more than 60 s stops fresh heads and raises an alarm; signed again, heads resume", async () => {
+    const w = await setup();
+    const errors: string[] = [];
+    const orig = console.error;
+    console.error = (m: unknown) => void errors.push(String(m));
+    try {
+      await admit(w, "iad1", RELAY_A);
+      await w.feed.feed().publishRelayFeed();
+      const keys = keysOf(w, "iad1", RELAY_A);
+      const first = await openHead(w, keys);
+      if (!("head" in first)) throw new Error("head did not open");
+      // A row the signer cannot carry (a policy head whose policy is not JSON).
+      await relayLogAppend(w.db, { kind: "policy-head", at: w.now(), src: "not json", f1: BOX, f2: "1", f3: "1", f4: null }, w.now()).run();
+      w.tick(5_000);
+      await w.feed.feed().publishRelayFeed();
+      const second = await openHead(w, keys);
+      if (!("head" in second)) throw new Error("head did not open");
+      expect(second.head.head.issuedAt).toBe(first.head.head.issuedAt + 5_000);
+      w.tick(61_000);
+      expect(await w.feed.feed().publishRelayFeed()).toBeNull();
+      const stalled = await openHead(w, keys);
+      if (!("head" in stalled)) throw new Error("head did not open");
+      expect(stalled.head.head.issuedAt).toBe(second.head.head.issuedAt);
+      expect(errors.some((e) => e.includes("relay-log-signer-stalled"))).toBe(true);
+      // The alarm keeps firing, so the head comes back once the row is gone or signable.
+      await w.db.prepare("DELETE FROM relay_log WHERE signature IS NULL").run();
+      w.tick(5_000);
+      await w.feed.feed().publishRelayFeed();
+      const resumed = await openHead(w, keys);
+      if (!("head" in resumed)) throw new Error("head did not open");
+      expect(resumed.head.head.issuedAt).toBe(w.now());
+    } finally {
+      console.error = orig;
+      w.close();
+    }
+  });
+});
+
 // ── mesh-key epochs ──────────────────────────────────────────────────────
 
 describe("mesh key rotation", () => {

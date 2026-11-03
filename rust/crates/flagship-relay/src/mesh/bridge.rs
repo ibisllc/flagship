@@ -275,6 +275,14 @@ impl Peer {
         }
     }
 
+    /// `refuse` for a stream already accepted here (its own CLOSE follows from the tunnel).
+    pub(crate) fn refuse_quietly(&self, stream: u32, code: &str) {
+        if let Ok(mut s) = self.st.lock() {
+            s.refused_here = s.refused_here.saturating_add(1);
+        }
+        self.send_json(&json!({"type": "refuse", "stream": stream, "code": code}));
+    }
+
     pub(crate) fn expect_refusal(&self, stream: u32) -> oneshot::Receiver<String> {
         let (tx, rx) = oneshot::channel();
         if let Ok(mut s) = self.st.lock() {
@@ -493,10 +501,12 @@ impl Mesh {
             .is_ok_and(|b| b.get(relay).is_some_and(|until| *until > t))
     }
 
-    /// Accept a `/mesh` WebSocket (the acceptor side of §6.2), then run the bridge until it closes.
-    pub async fn accept_bridge<S>(&self, mut ws: WebSocketStream<S>)
+    /// Accept a `/mesh` WebSocket (the acceptor side of §6.2), then run the bridge until it closes. `pending` is held
+    /// until the handshake ends (it counts against the pending-handshake caps, §6.1).
+    pub async fn accept_bridge<S, G>(&self, mut ws: WebSocketStream<S>, pending: G)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        G: Send,
     {
         let step = self.0.cfg.bridge.step;
         let ns = random_hex(32);
@@ -540,6 +550,7 @@ impl Mesh {
                 ))
                 .await;
         }
+        drop(pending);
         self.run_link(ws, &peer, false).await;
     }
 
@@ -732,10 +743,16 @@ impl Mesh {
             }
         }
         peer.close(1000, "closed");
-        if let Ok(mut peers) = self.0.peers.lock()
+        let current = if let Ok(mut peers) = self.0.peers.lock()
             && peers.get(peer_id).is_some_and(|x| Arc::ptr_eq(x, &peer))
         {
             peers.remove(peer_id);
+            true
+        } else {
+            false
+        };
+        if current {
+            self.forget_mailboxes_of(peer_id);
         }
         let _ = tokio::time::timeout(Duration::from_secs(2), writer).await;
         self.log(&format!("bridge down: {peer_id}"));
@@ -860,8 +877,10 @@ impl Mesh {
                             m.not_after > t
                                 || t.saturating_sub(m.accepted_at) < ms(me.0.cfg.min_move)
                         });
-                        s.remote_mailboxes.retain(|_, (_, epoch)| {
-                            epoch.saturating_add(1) >= crate::mailbox::mailbox_epoch(t)
+                        let current = crate::mailbox::mailbox_epoch(t);
+                        s.remote_mailboxes.retain(|_, l| {
+                            l.retain(|(_, epoch)| epoch.saturating_add(1) >= current);
+                            !l.is_empty()
                         });
                     });
                     if let Ok(mut b) = me.0.banned.lock() {
@@ -992,12 +1011,19 @@ impl Mesh {
                     return peer.refuse(id, "not-holder");
                 };
                 let entry = peer.relay_id.clone();
+                let peer = Arc::clone(peer);
                 tokio::spawn(async move {
                     let first = tokio::time::timeout(FIRST_DATA_WAIT, h.down.pop()).await;
                     let Ok(Some(first)) = first else {
                         h.tunnel.close_stream(h.id);
                         return;
                     };
+                    // Route by what the visitor sent, never the peer's label alone (§6.4).
+                    if hello_sni(&first).as_deref() != Some(sni.to_ascii_lowercase().as_str()) {
+                        peer.refuse_quietly(h.id, "not-holder");
+                        h.tunnel.close_stream(h.id);
+                        return;
+                    }
                     h.tunnel.consumed(h.id, first.len());
                     let (local, remote) = tokio::io::duplex(64 * 1024);
                     tokio::spawn(async move {
@@ -1225,6 +1251,9 @@ impl Mesh {
             "phone-begin" | "phone-claim" | "phone-renew" | "phone-release" | "phone-vacant" => {
                 self.on_phone_message(peer, v);
             }
+            "mailbox-withdraw" if !self.accept_mailbox_withdraw(v, &peer.relay_id) => {
+                peer.reject();
+            }
             _ => {}
         }
     }
@@ -1358,5 +1387,15 @@ where
     h.down.end();
     if !down_done {
         let _ = tokio::time::timeout(Duration::from_secs(30), down).await;
+    }
+}
+
+/// The SNI of a complete ClientHello in `first` (the entry's first `DATA`, §6.4); `None` when it is not one.
+#[must_use]
+pub fn hello_sni(first: &[u8]) -> Option<String> {
+    let mut r = crate::sni::ClientHelloReader::new(crate::sni::SniLimits::default());
+    match r.push(first) {
+        crate::sni::SniStatus::Done(info) => info.sni.clone(),
+        _ => None,
     }
 }

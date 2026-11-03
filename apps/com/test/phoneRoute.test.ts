@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handlePhoneRouteLedger, phoneEligibilityAccount, tryPhoneRouteRoute, type LedgerStorage } from "../src/phoneRoute.js";
+import { handlePhoneRouteLedger, phoneEligibilityAccount, PHONE_ROUTE_RATE, PhoneRouteMeter, tryPhoneRouteRoute, type LedgerStorage } from "../src/phoneRoute.js";
 
 const SECRET = "s3cret";
 const auth = { authorization: `Bearer ${SECRET}` };
@@ -73,6 +73,30 @@ describe("eligibility read", () => {
     const r = await tryPhoneRouteRoute(new Request("https://x/api/internal/phone-route/alice/eligibility"), env as never, deps);
     expect(r!.status).toBe(401);
     expect((await tryPhoneRouteRoute(new Request("https://x/api/internal/phone-route/bob/eligibility", { headers: auth }), env as never, deps))!.status).toBe(404);
+  });
+
+  it("meters the internal routes per account and hostname (security review 2026-11-02, M4)", async () => {
+    let now = 1_000;
+    let reads = 0;
+    const counted = { ...grants, listForUser: async () => (reads++, grants.listForUser()) };
+    const fetched: string[] = [];
+    const ns = { idFromName: () => "one", get: () => ({ fetch: async (r: Request) => (fetched.push(r.method), new Response("{}")) }) };
+    const e = { SERVICES_CONTROL_SECRET: SECRET, SERVING_FEED: ns };
+    const d = { usernames, grants: counted, identities, now: () => now, meter: new PhoneRouteMeter() } as never;
+    const elig = () => tryPhoneRouteRoute(new Request("https://x/api/internal/phone-route/alice/eligibility", { headers: auth }), e as never, d);
+    for (let i = 0; i < PHONE_ROUTE_RATE.eligibilityPerMinute; i++) expect((await elig())!.status).toBe(200);
+    const over = await elig();
+    expect(over!.status).toBe(429);
+    expect(await over!.json()).toMatchObject({ code: "phone-route-busy" });
+    expect(reads).toBe(PHONE_ROUTE_RATE.eligibilityPerMinute);
+    // Another account is not held back; a minute later the account is served again.
+    expect((await tryPhoneRouteRoute(new Request("https://x/api/internal/phone-route/bob/eligibility", { headers: auth }), e as never, d))!.status).toBe(404);
+    now += 60_000;
+    expect((await elig())!.status).toBe(200);
+    const read = () => tryPhoneRouteRoute(new Request(`https://x/api/internal/phone-route/ledger?hostname=${H}`, { headers: auth }), e as never, d);
+    for (let i = 0; i < PHONE_ROUTE_RATE.ledgerReadPerMinute; i++) expect((await read())!.status).toBe(200);
+    expect((await read())!.status).toBe(429);
+    expect(fetched).toHaveLength(PHONE_ROUTE_RATE.ledgerReadPerMinute);
   });
 
   it("knows which writes may end a phone's eligibility", () => {

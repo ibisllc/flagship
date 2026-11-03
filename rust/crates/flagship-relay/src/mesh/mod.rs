@@ -191,8 +191,10 @@ pub(crate) struct State {
     /// accountHash → the move this relay accepted.
     pub moves: HashMap<String, AcceptedMove>,
     pub local: HashMap<String, LocalBox>,
-    /// Mailbox ids announced by peers' boxes: id → (relayId, epoch).
-    pub remote_mailboxes: HashMap<String, (String, u64)>,
+    /// Mailbox ids announced by peers' boxes: id → the announcing relays in the order they first announced it (relayId,
+    /// epoch). The first is the holder (the announcement names no relay, §7.6); the others take over, in order, once it
+    /// withdraws the id or its bridge goes down.
+    pub remote_mailboxes: HashMap<String, Vec<(String, u64)>>,
     /// Mailbox announcements of this relay's boxes, by mailbox id (part of the dump to a new peer).
     pub local_mail: HashMap<String, wire::WireItem>,
     pub draining: bool,

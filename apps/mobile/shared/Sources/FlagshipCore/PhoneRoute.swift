@@ -145,6 +145,21 @@ public enum PhoneRoute {
         return out.prefix(beginMaxGrants).map(\.wire)
     }
 
+    /// The account's device book from the same `/device-grants` body: every live (unrevoked, unexpired) grant's device
+    /// key, lower-case. The phone endpoint records hellos only from these.
+    public static func accountDeviceKeys(_ body: Any?, account: String, now: Int64) -> Set<String> {
+        let listed = ((body as? [String: Any])?["grants"] as? [Any]) ?? []
+        let user = account.lowercased()
+        var out = Set<String>()
+        for raw in listed {
+            guard let g = raw as? [String: Any], (g["username"] as? String)?.lowercased() == user,
+                  let pub = (g["devicePubHex"] as? String)?.lowercased(), pub.utf8.count == 64, pub.allSatisfy(\.isHexDigit),
+                  let exp = g["expiresAt"] as? NSNumber, exp.int64Value > now, g["revokedAt"] == nil || g["revokedAt"] is NSNull else { continue }
+            out.insert(pub)
+        }
+        return out
+    }
+
     /// `{type:"begin", account, grants}`; a relay without the mesh ignores `grants`.
     public static func beginMessage(account: String, grants: [[String: Any]]) -> [String: Any] {
         ["type": "begin", "account": account.lowercased(), "grants": grants]
@@ -340,6 +355,8 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
     private let now: () -> Int64
     private let lock = NSLock()
     private var seen: [String: Int64] = [:]
+    /// The account's device keys (its device book); a hello is recorded only from one of them.
+    private var accountDevices: Set<String> = []
     private weak var web: (any PhoneWebInbox)?
     private var inFlight = 0
 
@@ -347,14 +364,29 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
     /// A hello proves only that its own key signed it, so only keys in the account's device book are returned.
     public func lastSeen(accountDevices: Set<String>) -> [String: Int64] { lock.withLock { seen.filter { accountDevices.contains($0.key) } } }
 
-    /// Record a signed hello (`GET /` with the presence headers): this account's bare name, fresh, signed by the key.
+    /// The account's device keys (from `/device-grants`). Hellos are recorded only from these, so hellos signed by any
+    /// other key cannot push real devices out of the list (security review 2026-11-02).
+    public func setAccountDevices(_ devices: Set<String>) {
+        lock.withLock {
+            accountDevices = Set(devices.map { $0.lowercased() })
+            seen = seen.filter { accountDevices.contains($0.key) }
+        }
+    }
+
+    /// Record a signed hello (`GET /` with the presence headers): a device of the account, this account's bare name,
+    /// fresh, signed by the key.
     private func hello(_ head: HttpHead) -> Bool {
-        guard let device = head.header("x-flagship-presence-device"), let at = Int64(head.header("x-flagship-presence-at") ?? ""),
+        guard let device = head.header("x-flagship-presence-device")?.lowercased(),
+              lock.withLock({ accountDevices.contains(device) }),
+              let at = Int64(head.header("x-flagship-presence-at") ?? ""),
               let sig = head.header("x-flagship-presence-sig"), abs(at - now()) <= PhoneRoute.claimSkewMs,
               let bytes = try? PhoneRoute.canonicalPresence(account: account, devicePub: device, hostname: hostname, issuedAt: at),
               ServingAuthority.verifyEd25519(bytes, signatureHex: sig, publicKeyHex: device) else { return false }
-        if seen.count >= 32, seen[device] == nil, let oldest = seen.min(by: { $0.value < $1.value })?.key { seen[oldest] = nil }
-        seen[device] = now()
+        let t = now()
+        lock.withLock {
+            if seen.count >= 32, seen[device] == nil, let oldest = seen.min(by: { $0.value < $1.value })?.key { seen[oldest] = nil }
+            seen[device] = t
+        }
         return true
     }
 

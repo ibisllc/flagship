@@ -31,6 +31,15 @@ export const PHONE_ROUTE_STANDBY_POLL_MS = 15_000;
 export const PHONE_ROUTE_ELIGIBILITY_RECHECK_MS = 30_000;
 /** On revocation, open streams to the phone are closed within this. */
 export const PHONE_ROUTE_REVOKE_CLOSE_MS = 5_000;
+/** `/phone-tunnel` connections a relay keeps open from one client address (security review 2026-11-02, M4). */
+export const PHONE_TUNNEL_MAX_PER_IP = 8;
+/** `begin`s a relay takes from one client address: a token bucket of this burst, refilled at this rate per minute. */
+export const PHONE_BEGIN_BURST = 10;
+export const PHONE_BEGIN_PER_MINUTE = 20;
+/** A relay reuses a ledger read for one hostname this long. */
+export const PHONE_LEDGER_READ_CACHE_MS = 2_000;
+/** A relay reuses `.com`'s eligibility answer for one account this long. */
+export const PHONE_ELIGIBILITY_CACHE_MS = 5_000;
 /** A held phone certificate is reordered this long before it expires. */
 export const PHONE_CERT_RENEW_BEFORE_MS = 30 * 86_400_000;
 /** After a failed order, the next one waits at least this long. */

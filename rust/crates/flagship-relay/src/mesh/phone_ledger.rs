@@ -12,9 +12,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use flagship_crypto::relay_mesh::{
-    PHONE_ROUTE_GRANT_TTL_MS, PhoneItem, PhoneRouteGrant, account_hash, check_phone_item,
-    phone_ledger_ranking, phone_route_grant_canonical, sign_canonical,
+    PHONE_LEDGER_TOP_K, PHONE_ROUTE_GRANT_TTL_MS, PhoneItem, PhoneRouteGrant, RelayKind,
+    account_hash, check_phone_item, directory_relay, is_phone_ledger_for, phone_ledger_ranking,
+    phone_route_grant_canonical, relay_log_grant_id, relay_log_grant_id_ok, sign_canonical,
 };
+use flagship_crypto::serving::{RouteClaim, route_claim_canonical, verify_canonical};
 use serde_json::{Value, json};
 
 use super::{Mesh, now, wire};
@@ -31,6 +33,26 @@ const LEDGER_WAIT: Duration = Duration::from_secs(5);
 pub struct Ledger {
     entries: HashMap<String, Entry>,
     next_qid: u64,
+    /// P: the phone's claim (and signature) behind each route this relay holds, carried in every item it announces.
+    own_claims: HashMap<String, (RouteClaim, String)>,
+}
+
+/// L's check of the claim a `phone-claim` carries (§8.2): the phone's own `route-claim/v1` for exactly this hostname,
+/// generation and key, signed by that key.
+#[must_use]
+pub fn claim_matches(
+    claim: &RouteClaim,
+    signature: &str,
+    hostname: &str,
+    generation: u64,
+    phone_route_pub: &str,
+) -> bool {
+    let account = hostname.split('.').next().unwrap_or_default();
+    claim.hostname == hostname
+        && claim.account == account
+        && claim.generation == generation
+        && claim.phone_route_pub == phone_route_pub
+        && verify_canonical(&route_claim_canonical(claim), signature, phone_route_pub)
 }
 
 fn live(e: &Entry, now: u64) -> Entry {
@@ -134,7 +156,32 @@ impl Mesh {
             .map(str::to_owned)
     }
 
-    /// §8.1: the first reachable `full` relay in the account's ranking (self, or a live bridge).
+    /// Is `relay` a `full`, unrevoked relay in the directory (the only peers a ledger answers, §8.2)?
+    #[must_use]
+    pub fn is_full_relay(&self, relay: &str) -> bool {
+        self.with_state(|s| {
+            !s.log.revoked_relays.contains_key(relay)
+                && directory_relay(s.directory.as_ref().map(|d| &d.body), relay)
+                    .is_some_and(|r| r.relay_kind == RelayKind::Full)
+        })
+        .unwrap_or(false)
+    }
+
+    /// May this relay act as the account's ledger (§8.1)? Only among its first `PHONE_LEDGER_TOP_K`; a lone `full` relay
+    /// without a directory is its own.
+    #[must_use]
+    pub fn may_lead(&self, account: &str) -> bool {
+        let me = self.relay_id().to_owned();
+        self.with_state(|s| match s.directory.as_ref() {
+            None => true,
+            Some(d) => is_phone_ledger_for(account, &me, Some(&d.body), Some(&s.log)),
+        })
+        .unwrap_or(false)
+            && self.is_full()
+    }
+
+    /// §8.1: the first reachable relay among the first `PHONE_LEDGER_TOP_K` of the account's ranking (self, or a live
+    /// bridge).
     #[must_use]
     pub fn ledger_relay(&self, account: &str) -> Option<String> {
         let me = self.relay_id().to_owned();
@@ -149,6 +196,7 @@ impl Mesh {
         }
         ranking
             .into_iter()
+            .take(usize::try_from(PHONE_LEDGER_TOP_K).unwrap_or(usize::MAX))
             .find(|r| *r == me || self.peer(r).is_some_and(|p| p.is_synced()))
     }
 
@@ -212,7 +260,9 @@ impl Mesh {
         match v.get("type").and_then(Value::as_str)? {
             "phone-begin" => {
                 let account = s("account")?;
-                if self.ledger_relay(&account).as_deref() != Some(self.relay_id()) {
+                if self.ledger_relay(&account).as_deref() != Some(self.relay_id())
+                    || !self.may_lead(&account)
+                {
                     return Some(
                         json!({"type": "phone-begun", "qid": qid, "ok": false, "code": "not-ledger"}),
                     );
@@ -239,7 +289,22 @@ impl Mesh {
                 };
                 let e = self.entry(&host);
                 let refused = |code: &str, e: &Entry| json!({"type": "phone-claimed", "qid": qid, "ok": false, "code": code, "generation": e.generation});
-                if holder.relay_id != from || self.account_of_host(&host).is_none() {
+                let Some(account) = self.account_of_host(&host) else {
+                    return Some(refused("malformed", &e));
+                };
+                let claim = v.get("claim").and_then(wire::claim_from_json);
+                let claim_ok = claim.as_ref().is_some_and(|c| {
+                    claim_matches(
+                        c,
+                        v.get("claimSignature")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default(),
+                        &host,
+                        generation,
+                        &holder.phone_route_pub,
+                    )
+                });
+                if holder.relay_id != from || !claim_ok || !self.may_lead(&account) {
                     return Some(refused("malformed", &e));
                 }
                 match ledger_acquire(&e, generation, &holder, t) {
@@ -257,6 +322,14 @@ impl Mesh {
             }
             "phone-renew" => {
                 let host = s("hostname")?;
+                if !self
+                    .account_of_host(&host)
+                    .is_some_and(|a| self.may_lead(&a))
+                {
+                    return Some(
+                        json!({"type": "phone-claimed", "qid": qid, "ok": false, "code": "malformed"}),
+                    );
+                }
                 let generation = v.get("generation").and_then(Value::as_u64).unwrap_or(0);
                 let session = s("sessionId").unwrap_or_default();
                 let e = self.entry(&host);
@@ -278,6 +351,14 @@ impl Mesh {
             }
             "phone-release" => {
                 let host = s("hostname")?;
+                if !self
+                    .account_of_host(&host)
+                    .is_some_and(|a| self.may_lead(&a))
+                {
+                    return Some(
+                        json!({"type": "phone-claimed", "qid": qid, "ok": false, "code": "malformed"}),
+                    );
+                }
                 let generation = v.get("generation").and_then(Value::as_u64).unwrap_or(0);
                 let session = s("sessionId").unwrap_or_default();
                 let e = self.entry(&host);
@@ -308,6 +389,10 @@ impl Mesh {
 
     /// A phone message on a bridge: L's requests, or L's vacancy notice.
     pub(crate) fn on_phone_message(&self, peer: &super::bridge::Peer, v: &Value) {
+        if !self.is_full_relay(&peer.relay_id) {
+            peer.reject();
+            return;
+        }
         if v.get("type").and_then(Value::as_str) == Some("phone-vacant") {
             let (Some(h), Some(g)) = (
                 v.get("hostname").and_then(Value::as_str),
@@ -348,24 +433,45 @@ impl Mesh {
     }
 
     /// P: store and announce the grant L signed (checked like any phone item).
-    fn adopt_own_grant(&self, reply: &Value) -> bool {
+    /// `claim`: the phone's claim for a new route (an acquire); `None` on a renewal (the held route's claim).
+    fn adopt_own_grant(&self, reply: &Value, claim: Option<(RouteClaim, String)>) -> bool {
         let (Some(g), Some(sig)) = (
             reply.get("grant").and_then(wire::grant_from_json),
             reply.get("grantSignature").and_then(Value::as_str),
         ) else {
             return false;
         };
+        let fresh = claim.is_some();
+        let Some((claim, claim_signature)) = claim.or_else(|| {
+            self.0
+                .ledger
+                .lock()
+                .ok()
+                .and_then(|l| l.own_claims.get(&g.hostname).cloned())
+        }) else {
+            return false;
+        };
         let item = PhoneItem {
             grant: g,
             signature: sig.to_owned(),
+            claim,
+            claim_signature,
         };
         let me = self.relay_id().to_owned();
         let ok = self
             .with_ctx(|ctx, store| {
-                check_phone_item(&item, &me, ctx).map(|()| store.insert_phone(item.clone()))
+                let highest = store.highest_live(&item.grant.hostname, ctx.now);
+                check_phone_item(&item, &me, ctx, highest)
+                    .map(|()| store.insert_phone(item.clone()))
             })
             .is_some_and(|r| r.is_ok());
         if ok {
+            if fresh && let Ok(mut l) = self.0.ledger.lock() {
+                l.own_claims.insert(
+                    item.grant.hostname.clone(),
+                    (item.claim.clone(), item.claim_signature.clone()),
+                );
+            }
             self.announce(wire::item_to_json(&wire::WireItem::Phone(item)));
         }
         ok
@@ -373,6 +479,9 @@ impl Mesh {
 
     /// P: drop and withdraw this relay's phone item for a host.
     fn withdraw_own_phone(&self, host: &str) {
+        if let Ok(mut l) = self.0.ledger.lock() {
+            l.own_claims.remove(host);
+        }
         let me = self.relay_id().to_owned();
         let issued = self
             .with_state(|s| {
@@ -413,6 +522,11 @@ impl Mesh {
             .take(8)
             .filter_map(|g| {
                 let mut o = g.get("grant")?.as_object()?.clone();
+                // A grant whose id the log cannot carry could never be revoked there: it does not count.
+                let id = o.get("grantId").and_then(Value::as_str)?;
+                if !relay_log_grant_id_ok(&relay_log_grant_id(id)) {
+                    return None;
+                }
                 o.insert("signatureHex".into(), g.get("signatureHex")?.clone());
                 o.insert(
                     "signerRoot".into(),
@@ -421,7 +535,7 @@ impl Mesh {
                 let revoked_now = o
                     .get("grantId")
                     .and_then(Value::as_str)
-                    .map(flagship_crypto::relay_mesh::relay_log_grant_id)
+                    .map(relay_log_grant_id)
                     .is_some_and(|id| revoked.contains(&id));
                 if revoked_now {
                     o.insert("revokedAt".into(), json!(1));
@@ -477,17 +591,21 @@ impl PhoneCom for MeshPhoneCom {
                     hostname,
                     generation,
                     holder,
+                    claim,
+                    claim_signature,
                 } => {
                     let account = m.account_of_host(&hostname)?;
-                    let r = m
-                        .ledger_call(&account, json!({"type": "phone-claim", "hostname": hostname, "generation": generation,
-                            "holder": {"relayId": holder.relay_id, "sessionId": holder.session_id, "phoneRoutePub": holder.phone_route_pub}}))
-                        .await?;
+                    let msg = json!({"type": "phone-claim", "hostname": hostname, "generation": generation,
+                        "holder": {"relayId": holder.relay_id, "sessionId": holder.session_id, "phoneRoutePub": holder.phone_route_pub},
+                        "claim": wire::claim_to_json(&claim), "claimSignature": claim_signature});
+                    let r = m.ledger_call(&account, msg).await?;
                     let g = r
                         .get("generation")
                         .and_then(Value::as_u64)
                         .unwrap_or(generation);
-                    if r.get("ok") == Some(&Value::Bool(true)) && m.adopt_own_grant(&r) {
+                    if r.get("ok") == Some(&Value::Bool(true))
+                        && m.adopt_own_grant(&r, Some((claim, claim_signature)))
+                    {
                         return Some(LedgerResult::Ok(Entry {
                             generation,
                             holder: Some(holder),
@@ -513,7 +631,7 @@ impl PhoneCom for MeshPhoneCom {
                             "generation": generation, "sessionId": session_id}),
                         )
                         .await?;
-                    if r.get("ok") == Some(&Value::Bool(true)) && m.adopt_own_grant(&r) {
+                    if r.get("ok") == Some(&Value::Bool(true)) && m.adopt_own_grant(&r, None) {
                         return Some(LedgerResult::Ok(Entry {
                             generation,
                             holder: None,
@@ -581,6 +699,41 @@ mod tests {
             session_id: s.into(),
             phone_route_pub: "ab".repeat(32),
         }
+    }
+
+    #[test]
+    fn the_ledger_takes_only_the_phones_own_claim_for_exactly_that_route() {
+        let phone = ed25519_dalek::SigningKey::from_bytes(&[31; 32]);
+        let other = ed25519_dalek::SigningKey::from_bytes(&[32; 32]);
+        let pubhex = |k: &ed25519_dalek::SigningKey| {
+            flagship_crypto::trust::hex(k.verifying_key().as_bytes())
+        };
+        let host = "alice.flagship.services";
+        let c = RouteClaim {
+            account: "alice".into(),
+            phone_route_pub: pubhex(&phone),
+            hostname: host.into(),
+            generation: 4,
+            session_nonce: "5e".repeat(16),
+            issued_at: 1,
+        };
+        let sig = sign_canonical(&phone, &route_claim_canonical(&c).unwrap());
+        let pk = pubhex(&phone);
+        assert!(claim_matches(&c, &sig, host, 4, &pk));
+        assert!(!claim_matches(&c, &sig, host, 5, &pk), "another generation");
+        assert!(
+            !claim_matches(&c, &sig, "bob.flagship.services", 4, &pk),
+            "another host"
+        );
+        assert!(
+            !claim_matches(&c, &sig, host, 4, &pubhex(&other)),
+            "another key"
+        );
+        let forged = sign_canonical(&other, &route_claim_canonical(&c).unwrap());
+        assert!(
+            !claim_matches(&c, &forged, host, 4, &pk),
+            "not the phone's signature"
+        );
     }
 
     #[test]

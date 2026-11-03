@@ -10,6 +10,8 @@ import {
   ed,
   PHONE_ROUTE_LEASE_MS,
   signDeviceCapabilityGrant,
+  signServingRecord,
+  type RouteClaim,
   type ServingPolicy,
 } from "@flagship/protocol";
 import { meshPhoneEligibility, PhoneLedgerHost } from "../src/tunnel/mesh/phoneLedger.js";
@@ -31,17 +33,22 @@ describe("phone ledger relay", () => {
     const vacant: Array<[string, number]> = [];
     const host = new PhoneLedgerHost({ selfRelayId: "ra", servicesApex: APEX, sign: (m) => ed.sign(m, L.key.privateKey), now: () => t, maxSeenGeneration: () => 4, onVacant: (h, g) => vacant.push([h, g]) });
     expect(host.begin("carol")).toEqual({ hostname: `carol.${APEX}`, generation: 5, vacant: true });
-    const holder = { relayId: "rb", sessionId: "s1", phoneRoutePub: hex(keypair().publicKey) };
+    const phone = keypair();
+    const holder = { relayId: "rb", sessionId: "s1", phoneRoutePub: hex(phone.publicKey) };
+    const claimOf = (generation: number) => {
+      const claim: RouteClaim = { account: "carol", phoneRoutePub: holder.phoneRoutePub, hostname: `carol.${APEX}`, generation, sessionNonce: "ab".repeat(16), issuedAt: t };
+      return { claim, claimSignature: hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, phone.privateKey))) };
+    };
     // rc may not claim for rb.
-    expect(host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder }, "rc").result).toMatchObject({ ok: false, code: "malformed" });
-    const r = host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder }, "rb");
+    expect(host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder, ...claimOf(5) }, "rc").result).toMatchObject({ ok: false, code: "malformed" });
+    const r = host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 5, holder, ...claimOf(5) }, "rb");
     expect(r.result.ok).toBe(true);
     const feed = new MeshFeed({ servicesApex: APEX, logKey: fx.logPub, source: fx.source() });
-    const item = { kind: "phone" as const, grant: r.grant!, signature: r.grantSignature! };
+    const item = { kind: "phone" as const, grant: r.grant!, signature: r.grantSignature!, ...claimOf(5) };
     expect(checkPhoneItem(item, "rb", { servicesApex: APEX, log: feed.state, directory: fx.directory, now: t })).toEqual({ ok: true });
     expect(host.begin("carol")).toMatchObject({ vacant: false, holderGeneration: 5 });
     // A second claim while held: route-held. The lease lapses: the sweep tells everyone it is vacant.
-    expect(host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 6, holder: { ...holder, sessionId: "s2" } }, "rb").result).toMatchObject({ ok: false, code: "route-held" });
+    expect(host.apply({ op: "acquire", hostname: `carol.${APEX}`, generation: 6, holder: { ...holder, sessionId: "s2" }, ...claimOf(6) }, "rb").result).toMatchObject({ ok: false, code: "route-held" });
     t += PHONE_ROUTE_LEASE_MS + 1;
     host.sweep();
     expect(vacant).toEqual([[`carol.${APEX}`, 5]]);

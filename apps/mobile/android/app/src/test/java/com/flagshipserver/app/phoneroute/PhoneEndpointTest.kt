@@ -199,6 +199,22 @@ class PhoneEndpointTest {
         assertEquals(1, delivered.size)
     }
 
+    @Test fun hellosFromKeysOutsideTheDeviceBookCannotFloodTheList() {
+        val now = 1_800_000_000_000L
+        val ep = PhoneEndpoint("alice", HOST, pub, now = { now })
+        val mine = ByteArray(32) { 9 }
+        val device = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(mine).publicKey)
+        ep.setAccountDevices(setOf(device))
+        fun hello(seed: ByteArray): String {
+            val p = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+            val sig = PhoneRoute.sign(PhoneRoute.canonicalPresence("alice", p, HOST, now), Ed25519Sign(seed))
+            return body(ep.respond(req("GET", "/", "x-flagship-presence-device" to p, "x-flagship-presence-at" to now.toString(), "x-flagship-presence-sig" to sig).first, ByteArray(0)))
+        }
+        assertTrue(hello(mine).contains("\"recorded\":true"))
+        for (i in 0 until 40) assertTrue(hello(ByteArray(32) { (i + 20).toByte() }).contains("\"recorded\":false"))
+        assertEquals(now, ep.lastSeen(setOf(device))[device])
+    }
+
     @Test fun aSignedHelloIsRecordedAndAnythingElseIsNot() {
         var now = 1_800_000_000_000L
         val ep = PhoneEndpoint("alice", HOST, pub, now = { now })
@@ -208,6 +224,9 @@ class PhoneEndpointTest {
             val sig = PhoneRoute.sign(PhoneRoute.canonicalPresence("alice", device, host, at), Ed25519Sign(key))
             return ep.respond(req("GET", "/", "x-flagship-presence-device" to device, "x-flagship-presence-at" to at.toString(), "x-flagship-presence-sig" to sig).first, ByteArray(0))
         }
+        // Before the device book is known nothing is recorded.
+        assertTrue(body(hello(now)).contains("\"recorded\":false"))
+        ep.setAccountDevices(setOf(device))
         val ok = hello(now)
         assertEquals(200, status(ok))
         assertTrue(body(ok).contains("\"recorded\":true"))

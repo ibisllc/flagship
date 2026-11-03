@@ -11,6 +11,7 @@ import {
   PHONE_ROUTE_GRANT_TTL_MS,
   signRelayDirectory,
   signRelayMeshRecord,
+  signServingRecord,
   type BoxAttachment,
   type BoxItem,
   type PhoneItem,
@@ -163,8 +164,11 @@ describe("attachment store", () => {
 
   it("phone items: valid only from their holder under the ledger's key; winner by generation; generations remembered", async () => {
     const { fx, store, ra, rb, now } = rig();
-    const g = { hostname: `erin.${APEX}`, phoneRoutePub: hex(keypair().publicKey), generation: 3, holderRelayId: "rb", ledgerRelayId: "ra", issuedAt: now(), notAfter: now() + PHONE_ROUTE_GRANT_TTL_MS };
-    const item: PhoneItem = { kind: "phone", grant: g, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, ra.key.privateKey)) };
+    const phone = keypair();
+    const g = { hostname: `erin.${APEX}`, phoneRoutePub: hex(phone.publicKey), generation: 3, holderRelayId: "rb", ledgerRelayId: "ra", issuedAt: now(), notAfter: now() + PHONE_ROUTE_GRANT_TTL_MS };
+    const claim = { account: "erin", phoneRoutePub: g.phoneRoutePub, hostname: g.hostname, generation: 3, sessionNonce: "ab".repeat(16), issuedAt: now() };
+    const claimSignature = hex(signServingRecord("route-claim", claim, (m) => ed.sign(m, phone.privateKey)));
+    const item: PhoneItem = { kind: "phone", grant: g, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, ra.key.privateKey)), claim, claimSignature };
     expect(store.offerPhone(item, "ra")).toBe(false); // announced by a relay that is not the holder
     expect(store.offerPhone({ ...item, signature: signRelayMeshRecord("phone-route-grant", g, (m) => ed.sign(m, rb.key.privateKey)) }, "rb")).toBe(false);
     expect(store.offerPhone(item, "rb")).toBe(true);

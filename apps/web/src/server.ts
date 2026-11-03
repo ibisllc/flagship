@@ -839,6 +839,7 @@ export async function wireMeshRelay(o: {
     node.setMailboxes(mb);
     mb.setRemote({
       onAnnounce: (list) => node.announceMailboxes(list),
+      onWithdraw: (ids) => node.withdrawMailboxes(ids),
       has: (id) => node.store.mailboxRelay(id) !== null,
       deliver: (id, env) => node.deliverRemote(id, env),
     });

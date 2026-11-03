@@ -35,6 +35,8 @@ export interface PhoneRouteDeps {
   grants: DeviceCapabilityGrantStorage;
   identities?: DeviceIdentityStorage;
   now?: () => number;
+  /** Tests pass their own; the isolate shares one. */
+  meter?: PhoneRouteMeter;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -59,6 +61,40 @@ function internalRefusal(request: Request, env: ServingEnv): Response | null {
   return null;
 }
 
+/**
+ * A cheap per-isolate meter on the internal routes (security review 2026-11-02, M4): a relay's `begin` fan-out must
+ * not turn into a D1 read per grant or a Durable Object call per anonymous phone. The relays cache their reads for
+ * seconds, so a real phone never comes near these.
+ */
+export const PHONE_ROUTE_RATE = { eligibilityPerMinute: 30, ledgerReadPerMinute: 60, ledgerWritePerMinute: 60, maxKeys: 10_000 } as const;
+
+export class PhoneRouteMeter {
+  private readonly buckets = new Map<string, { tokens: number; at: number }>();
+
+  take(key: string, perMinute: number, now: number): boolean {
+    const b = this.buckets.get(key) ?? { tokens: perMinute, at: now };
+    b.tokens = Math.min(perMinute, b.tokens + ((now - b.at) * perMinute) / 60_000);
+    b.at = now;
+    if (!this.buckets.has(key) && this.buckets.size >= PHONE_ROUTE_RATE.maxKeys) {
+      for (const [k, v] of this.buckets) if (now - v.at >= 60_000) this.buckets.delete(k);
+      if (this.buckets.size >= PHONE_ROUTE_RATE.maxKeys) return false;
+    }
+    this.buckets.set(key, b);
+    if (b.tokens < 1) return false;
+    b.tokens -= 1;
+    return true;
+  }
+}
+
+const meter = new PhoneRouteMeter();
+
+function busy(): Response {
+  return new Response(JSON.stringify({ error: "phone-route-busy", code: "phone-route-busy" }), {
+    status: 429,
+    headers: { "content-type": "application/json", "cache-control": "no-store", "retry-after": "5" },
+  });
+}
+
 export function isPhoneRoutePath(path: string): boolean {
   return path === PHONE_ROUTE_LEDGER_PATH || ELIGIBILITY.test(path);
 }
@@ -79,9 +115,10 @@ export async function tryPhoneRouteRoute(request: Request, env: ServingEnv, deps
     } catch {
       return refuse(400, "phone-route-malformed");
     }
+    const now = (deps.now ?? Date.now)();
+    if (!(deps.meter ?? meter).take(`elig:${u}`, PHONE_ROUTE_RATE.eligibilityPerMinute, now)) return busy();
     const user = await deps.usernames.get(u);
     if (!user) return refuse(404, "account-not-found");
-    const now = (deps.now ?? Date.now)();
     const rows = (await deps.grants.listForUser(u)).filter((g) => g.revokedAt == null && g.expiresAt > now);
     const grants: Array<Record<string, unknown>> = [];
     for (const g of rows) {
@@ -111,11 +148,25 @@ export async function tryPhoneRouteRoute(request: Request, env: ServingEnv, deps
   if (path === PHONE_ROUTE_LEDGER_PATH && (method === "GET" || method === "POST")) {
     const ns = env.SERVING_FEED;
     if (!ns) return refuse(503, "phone-route-not-configured");
+    const now = (deps.now ?? Date.now)();
+    const m2 = deps.meter ?? meter;
     const stub = ns.get(ns.idFromName(SERVING_FEED_NAME));
     const target = `https://serving-feed/phone-route${url.search}`;
-    if (method === "GET") return stub.fetch(new Request(target, { method: "GET" }));
+    if (method === "GET") {
+      const host = (url.searchParams.get("hostname") ?? "").toLowerCase().slice(0, 253);
+      if (!m2.take(`read:${host}`, PHONE_ROUTE_RATE.ledgerReadPerMinute, now)) return busy();
+      return stub.fetch(new Request(target, { method: "GET" }));
+    }
     const body = await request.text();
     if (body.length > MAX_BODY) return refuse(413, "phone-route-malformed");
+    let host = "";
+    try {
+      const h = (JSON.parse(body) as { hostname?: unknown }).hostname;
+      host = typeof h === "string" ? h.toLowerCase().slice(0, 253) : "";
+    } catch {
+      host = "";
+    }
+    if (!m2.take(`write:${host}`, PHONE_ROUTE_RATE.ledgerWritePerMinute, now)) return busy();
     return stub.fetch(new Request(target, { method: "POST", body }));
   }
   return null;

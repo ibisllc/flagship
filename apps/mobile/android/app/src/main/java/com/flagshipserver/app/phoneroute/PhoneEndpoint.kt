@@ -202,9 +202,21 @@ class PhoneEndpoint(
      *  A hello proves only that its own key signed it, so only keys in the account's device book are returned. */
     fun lastSeen(accountDevices: Set<String>): Map<String, Long> = seen.filterKeys { it in accountDevices }
 
-    /** Record a signed hello (`GET /` with the presence headers): this account's bare name, fresh, signed by the key. */
+    @Volatile private var accountDevices: Set<String> = emptySet()
+
+    /** The account's device keys (from `/device-grants`). Hellos are recorded only from these, so hellos signed by any
+     *  other key cannot push real devices out of the list (security review 2026-11-02). */
+    fun setAccountDevices(devices: Set<String>) {
+        val book = devices.map { it.lowercase() }.toSet()
+        accountDevices = book
+        seen.keys.retainAll(book)
+    }
+
+    /** Record a signed hello (`GET /` with the presence headers): a device of the account, this account's bare name,
+     *  fresh, signed by the key. */
     private fun hello(head: HttpHead): Boolean {
-        val device = head.header("x-flagship-presence-device") ?: return false
+        val device = head.header("x-flagship-presence-device")?.lowercase() ?: return false
+        if (device !in accountDevices) return false
         val at = head.header("x-flagship-presence-at")?.toLongOrNull() ?: return false
         val sig = head.header("x-flagship-presence-sig") ?: return false
         if (kotlin.math.abs(at - now()) > PhoneRoute.CLAIM_SKEW_MS) return false

@@ -862,7 +862,10 @@ impl Drop for Session {
             b.detach();
         }
         if let Some(reg) = &self.ctx.mailboxes {
-            reg.drop_owner(self.tunnel.id);
+            let gone = reg.drop_owner(self.tunnel.id);
+            if let Some(m) = &self.ctx.mesh {
+                m.on_mailbox_withdraw(&gone);
+            }
         }
         // The tunnel closed: drop every upstream without telling the box.
         if let Some(o) = &self.outbound {
@@ -1007,8 +1010,9 @@ impl Session {
                 {
                     let deliver: Arc<dyn crate::mailbox::MailDeliver> =
                         Arc::new(TunnelMail(self.tunnel.clone()));
-                    reg.register(&ids, self.tunnel.id, &deliver);
+                    let gone = reg.register(&ids, self.tunnel.id, &deliver);
                     if let Some(m) = &self.ctx.mesh {
+                        m.on_mailbox_withdraw(&gone);
                         m.on_mailbox_announce(&list);
                     }
                 }

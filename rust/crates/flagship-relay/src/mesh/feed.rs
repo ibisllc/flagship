@@ -650,7 +650,9 @@ impl Mesh {
                 });
             }
             if !fx.relays.is_empty() {
-                store.retain_phones(|p| check_phone_item(p, &p.grant.holder_relay_id, ctx).is_ok());
+                store.retain_phones(|p| {
+                    check_phone_item(p, &p.grant.holder_relay_id, ctx, 0).is_ok()
+                });
             }
             relay_log_revocations(ctx.log)
         });

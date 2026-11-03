@@ -868,5 +868,13 @@
         }
       ]
     }
+  },
+  "relayLimits": {
+    "about": "What every relay (TS and Rust) enforces on /phone-tunnel (security review 2026-11-02, M4; relay-mesh.md §8.2).",
+    "PHONE_TUNNEL_MAX_PER_IP": 8,
+    "PHONE_BEGIN_BURST": 10,
+    "PHONE_BEGIN_PER_MINUTE": 20,
+    "PHONE_LEDGER_READ_CACHE_MS": 2000,
+    "PHONE_ELIGIBILITY_CACHE_MS": 5000
   }
 }

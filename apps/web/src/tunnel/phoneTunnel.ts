@@ -6,6 +6,7 @@
  * phone; the relay only splices. Routing decisions live in phoneRoute.ts.
  */
 import type { IncomingMessage, Server as HttpServer } from "node:http";
+import { isIP } from "node:net";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import {
@@ -18,7 +19,7 @@ import {
   MAX_FRAME_PAYLOAD,
   type Frame,
 } from "@flagship/tunnel-protocol";
-import { PHONE_TUNNEL_PING_MS, PHONE_TUNNEL_SILENCE_MS } from "@flagship/protocol";
+import { PHONE_TUNNEL_MAX_PER_IP, PHONE_TUNNEL_PING_MS, PHONE_TUNNEL_SILENCE_MS } from "@flagship/protocol";
 import type { PhoneRoutes, PhoneSession, PhoneSessionHandle } from "./phoneRoute.js";
 import type { RegisteredTunnel, StreamCallbacks } from "./registry.js";
 
@@ -29,9 +30,53 @@ const MAX_CONTROL_PER_MINUTE = 30;
 const QUEUE_HIGH_BYTES = MAX_FRAME_PAYLOAD;
 const QUEUE_LOW_BYTES = 256 * 1024;
 
+/**
+ * The client address of an upgrade: `Fly-Client-IP` when Fly's proxy set it (the hub port sits behind Fly's TLS
+ * handler, so the socket peer is the proxy), else the socket peer.
+ */
+export function clientAddress(req: IncomingMessage): string {
+  const fly = req.headers["fly-client-ip"];
+  const v = typeof fly === "string" ? fly.trim().toLowerCase() : "";
+  if (v.length > 0 && v.length <= 64 && isIP(v) !== 0) return v;
+  return req.socket.remoteAddress ?? "?";
+}
+
+/** At most `max` things at once per client address (security review 2026-11-02: phone tunnels, `/mesh` handshakes). */
+export class AddressLimiter {
+  private readonly held = new Map<string, number>();
+  private total = 0;
+
+  constructor(
+    private readonly max: number,
+    private readonly maxTotal = Number.POSITIVE_INFINITY,
+  ) {}
+
+  tryAdd(address: string): boolean {
+    const n = this.held.get(address) ?? 0;
+    if (n >= this.max || this.total >= this.maxTotal) return false;
+    this.held.set(address, n + 1);
+    this.total++;
+    return true;
+  }
+
+  done(address: string): void {
+    const n = this.held.get(address);
+    if (n === undefined) return;
+    this.total--;
+    if (n <= 1) this.held.delete(address);
+    else this.held.set(address, n - 1);
+  }
+
+  count(address: string): number {
+    return this.held.get(address) ?? 0;
+  }
+}
+
 export interface PhoneTunnelOptions {
   pingMs?: number;
   silenceMs?: number;
+  /** Open phone tunnels per client address (default `PHONE_TUNNEL_MAX_PER_IP`). */
+  maxPerAddress?: number;
 }
 
 export interface PhoneTunnelHandle {
@@ -42,12 +87,28 @@ export interface PhoneTunnelHandle {
 export function startPhoneTunnel(httpServer: HttpServer, routes: PhoneRoutes, opts: PhoneTunnelOptions = {}): PhoneTunnelHandle {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 2 * MAX_FRAME_PAYLOAD });
   const sockets = new Set<WsSocket>();
+  const perAddress = new AddressLimiter(opts.maxPerAddress ?? PHONE_TUNNEL_MAX_PER_IP);
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
     if (req.url !== PHONE_TUNNEL_PATH) return;
+    const address = clientAddress(req);
+    if (!perAddress.tryAdd(address)) {
+      socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nRetry-After: 5\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      perAddress.done(address);
+    };
+    socket.once("close", release);
     wss.handleUpgrade(req, socket, head, (ws) => {
       sockets.add(ws);
-      ws.on("close", () => sockets.delete(ws));
-      attachPhone(ws, routes, opts);
+      ws.on("close", () => {
+        sockets.delete(ws);
+        release();
+      });
+      attachPhone(ws, routes, opts, address);
     });
   };
   httpServer.on("upgrade", onUpgrade);
@@ -59,7 +120,7 @@ export function startPhoneTunnel(httpServer: HttpServer, routes: PhoneRoutes, op
   return Object.assign(stop, { connectionCount: () => sockets.size });
 }
 
-function attachPhone(ws: WsSocket, routes: PhoneRoutes, opts: PhoneTunnelOptions): void {
+function attachPhone(ws: WsSocket, routes: PhoneRoutes, opts: PhoneTunnelOptions, address: string): void {
   const streams = new Map<number, StreamCallbacks>();
   let nextStream = 1;
   let queued = 0;
@@ -125,7 +186,7 @@ function attachPhone(ws: WsSocket, routes: PhoneRoutes, opts: PhoneTunnelOptions
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) ws.close(code, reason);
     },
   };
-  session = routes.attach(handle);
+  session = routes.attach(handle, address);
 
   const pingMs = opts.pingMs ?? PHONE_TUNNEL_PING_MS;
   const silenceMs = opts.silenceMs ?? PHONE_TUNNEL_SILENCE_MS;

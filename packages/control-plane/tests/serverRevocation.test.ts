@@ -481,7 +481,7 @@ async function mintDeviceGrant(
 ): Promise<string> {
   const issuedAt = opts.issuedAt ?? Date.now();
   const expiresAt = opts.expiresAt ?? issuedAt + 90 * 24 * 3_600_000;
-  const grantId = opts.grantId ?? `grant-${Math.random().toString(36).slice(2)}`;
+  const grantId = opts.grantId ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
   const deviceId = opts.deviceId ?? bytesToHex(device.publicKey.slice(0, 16));
   await storage.deviceIdentities.put({
     accountId: USERNAME,
@@ -754,7 +754,7 @@ describe("POST /api/server-registry/revoke — device-authorized path (signerPub
     );
     const bobDevice = makeKey();
     const grant: DeviceCapabilityGrant = {
-      grantId: "bob-grant",
+      grantId: "b0b-0001",
       username: "bob",
       deviceId: bytesToHex(bobDevice.publicKey.slice(0, 16)),
       devicePubKey: bobDevice.publicKey,

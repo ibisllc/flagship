@@ -25,6 +25,9 @@ import {
   ACCOUNT_MOVE_HINT_SPACING_MS,
   FEED_HEAD_MINT_MS,
   phoneLedgerRanking,
+  directoryRelay,
+  isPhoneLedgerFor,
+  PHONE_LEDGER_TOP_K,
   relayLogBox,
   relayLogRevocations,
   signRelayMeshRecord,
@@ -46,7 +49,7 @@ import type { ServingGate } from "../servingGate.js";
 import type { PhoneRoutes } from "../phoneRoute.js";
 import type { MailboxRegistry } from "../mailboxRelay.js";
 import { AttachmentStore, type MailboxItem, type WithdrawItem } from "./attachments.js";
-import { BridgeManager, type BridgePeer, type BridgeStream } from "./bridge.js";
+import { BridgeManager, bridgedSniMatches, type BridgePeer, type BridgeStream } from "./bridge.js";
 import { MeshDirectory } from "./directory.js";
 import { MeshFeed, type FeedSource } from "./feed.js";
 import { AccountHomes } from "./home.js";
@@ -256,6 +259,13 @@ export class MeshNode {
         this.bridges.broadcast({ type: "phone-vacant", hostname, generation });
         this.phoneRoutes?.pushed(hostname, generation, true);
       },
+      // §8.2 (security review 2026-11-02, M3): only full, unrevoked relays of the directory may ask, and only for
+      // accounts whose top k this relay is in (a lone relay with no directory is its own ledger).
+      peerMayAsk: (id) => {
+        const r = directoryRelay(this.directory.current, id);
+        return !!r && r.relayKind === "full" && !this.feed.state.revokedRelays.has(id);
+      },
+      servesAccount: (account) => this.directory.current === null || isPhoneLedgerFor(account, self, this.directory.current, this.feed.state),
     });
     this.phoneClient = new MeshPhoneLedgerClient({
       selfRelayId: self,
@@ -654,6 +664,9 @@ export class MeshNode {
 
   private onPeerDown(p: BridgePeer, why: string): void {
     this.log(`[mesh] bridge down: ${p.relayId} (${why})`);
+    // Its mailboxes are unreachable now; the next relay that announced one holds it (§7.6).
+    this.store.dropMailboxesOf(p.relayId);
+
   }
 
   private onControl(p: BridgePeer, m: Record<string, unknown>): void {
@@ -719,6 +732,10 @@ export class MeshNode {
       case "phone-begun":
       case "phone-claimed":
         return this.phoneClient.onReply(m);
+      case "mailbox-withdraw":
+        if (Array.isArray(m.ids) && m.ids.length <= MESH_ANNOUNCE_BATCH_MAX) this.store.withdrawMailboxes(m.ids.filter((x): x is string => typeof x === "string"), p.relayId);
+        else p.rejected++;
+        return;
       case "phone-vacant":
         if (typeof m.hostname === "string" && typeof m.generation === "number") this.phoneRoutes?.pushed(m.hostname, m.generation, true);
         return;
@@ -797,9 +814,11 @@ export class MeshNode {
     };
     if (s.kind === "pb-mail") return void this.serveMailStream(p, s, refuse);
     if (!this.routerEntry) return refuse("not-holder");
-    // The entry sends the peeked ClientHello as the first DATA; route once it is here.
+    // The entry sends the peeked ClientHello as the first DATA; route once it is here, by the SNI the visitor sent
+    // (§6.4: a peer's OPEN label alone never picks the tunnel).
     s.once("data", (first: Buffer) => {
       s.pause();
+      if (s.kind === "tls" && !bridgedSniMatches(s.sni, first)) return refuse("not-holder");
       this.routerEntry!(s, s.sni, new Uint8Array(first.buffer, first.byteOffset, first.byteLength), { entry: p.relayId, refuse });
     });
   }
@@ -809,6 +828,11 @@ export class MeshNode {
   /** Announce mailboxes a local tunnel proved (called by the mailbox registry). */
   announceMailboxes(list: MailboxAnnouncement[]): void {
     for (const a of list) this.queueAnnounce({ kind: "mailbox", announce: { pikPubHex: a.pikPubHex, epoch: a.epoch }, signature: a.sigHex, relayId: this.opts.relayId });
+  }
+
+  /** Local tunnels stopped holding these mailboxes: tell every peer, so another relay's holder can take them (§7.6). */
+  withdrawMailboxes(ids: string[]): void {
+    for (let i = 0; i < ids.length; i += MESH_ANNOUNCE_BATCH_MAX) this.bridges.broadcast({ type: "mailbox-withdraw", ids: ids.slice(i, i + MESH_ANNOUNCE_BATCH_MAX) });
   }
 
   /** Deliver to a mailbox held by a peer: `OPEN kind:"pb-mail"`, the envelope, then the reply (status u32 BE + body). */
@@ -1057,7 +1081,7 @@ export class MeshNode {
     } catch {
       return null;
     }
-    for (const id of ranking) {
+    for (const id of ranking.slice(0, PHONE_LEDGER_TOP_K)) {
       if (id === this.opts.relayId) return { local: this.phoneHost };
       const p = this.bridges.peer(id);
       if (p) return { peer: p };

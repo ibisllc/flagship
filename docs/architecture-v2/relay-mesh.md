@@ -366,6 +366,9 @@ or from any peer (heads are verifiable wherever they come from).
 - Not fresh for 60 s (`HEAD_REFUSE_NEW_MS`): every new HELLO and phone `begin` is answered "try again" (1013), and
   `/api/health` is 503 (the LB stops sending new boxes and visitors).
 - Not fresh for 10 min (`HEAD_CLOSE_ALL_MS`): every tunnel is closed 1013 `serving-feed-lost`, as today.
+- `.com` stops minting heads while a log row has stayed unsigned for more than 60 s (`RELAY_LOG_UNSIGNED_STALL_MS`),
+  logging `relay-log-signer-stalled` on every attempt: a revocation the signer cannot carry must make the relays go
+  stale (fail closed), never leave them fresh without it (security review 2026-11-02, Low).
 - Entry duties need freshness too: a relay that is not fresh refuses to forward to a mesh holder (delayed drop), because
   it cannot know about revocations, except for an exempt box (below).
 
@@ -472,6 +475,11 @@ relay with the bytewise-smaller relayId dials; the other only accepts (if both c
 the smaller id stays). Dial timeout 5 s; reconnect with full-jitter backoff 1 s → 60 s. Text messages are JSON control
 (≤ 1 MiB); binary messages are v1 frames, exactly one per message, as on `/phone-tunnel`.
 
+An acceptor keeps at most 64 handshakes that have not yet authenticated (`MESH_HANDSHAKE_MAX_PENDING`) and at most 4
+from one client address (`MESH_HANDSHAKE_MAX_PENDING_PER_IP`; the address is `Fly-Client-IP` when Fly's proxy set it,
+else the socket peer). Over either cap the upgrade is answered 503 before any WebSocket work (security review
+2026-11-02, Low).
+
 ### 6.2 Handshake
 
 ```text
@@ -510,7 +518,8 @@ what is checked; the blessing only has to exist and be valid.
 {type:"blessing", blessing}                                     a peer returns a restarted relay its own last blessing
 {type:"load", tunnels, capacity, draining}                       every 30 s
 {type:"account-move", move, signature}                           §10.3
-{type:"phone-begin"|"phone-claim"|"phone-renew"|"phone-release"|"phone-vacant", ...}   §8
+{type:"phone-begin"|"phone-claim"|"phone-renew"|"phone-release"|"phone-vacant", ...}   §8; L answers `full` peers only
+{type:"mailbox-withdraw", ids:[...]}                             §7.6; removes only the sender's own mailboxes
 {type:"refuse", stream, code}                                    then CLOSE; codes below
 ```
 
@@ -523,7 +532,9 @@ it. Bad items are dropped and counted per peer (`/api/stats` `mesh.peers[].rejec
 - `OPEN` payload on a bridge is JSON `{sni, kind:"tls"|"pb-mail", hop:1}`; then `DATA`, `CLOSE`, and `STREAM_CREDIT`
   (0x06) with the `stream-credit-v1` rules from `relay-transport.md` §1, mandatory on bridges (both ends are new code):
   256 KiB initial window per direction, credit returned at ≥ a quarter window.
-- The entry relay sends the peeked ClientHello bytes as the first `DATA`, then pipes.
+- The entry relay sends the peeked ClientHello bytes as the first `DATA`, then pipes. For `kind:"tls"` the holder
+  parses the SNI from that first `DATA` and refuses the stream `not-holder` unless it is exactly `OPEN.sni`
+  (lowercased): routing follows the bytes the visitor sent, never the peer's label alone (security review 2026-11-02).
 - `refuse` codes: `not-holder` (no winning attachment here), `apps-off` (serving gate), `revoked`, `busy` (a cap),
   `stale` (the holder is not fresh), `hop` (an OPEN without `hop:1`).
 - Caps per peer: 2,000 OPENs per second (token bucket, burst 4,000), 20,000 open streams, 64 MiB queued; past a queue
@@ -594,7 +605,12 @@ per-source limits it already has (pending hellos, delayed drops). The entry rela
 ### 7.6 Peer-backup mailboxes and ACME
 
 - `/pb/m/<id>` lands on any relay (LB). The holder announces each PIK-signed mailbox announcement it accepted, in its
-  `announce` stream (`{kind:"mailbox", announce, signature}`; self-authenticating, TTL as today). A relay without the
+  `announce` stream (`{kind:"mailbox", announce, signature, relayId}`; self-authenticating, TTL as today). The
+  announcement does not name the relay, so a receiver keeps the **first** holder of a mailbox id (security review
+  2026-11-02): it remembers the relays that announced an id in order (at most 4); the first is the holder, and a later
+  one takes over only when that holder sends `{type:"mailbox-withdraw", ids:[...]}` (≤ 500 ids; it sends one whenever
+  a local tunnel stops holding mailboxes), its bridge goes down, it is retired, or the epoch moves on. A withdrawal
+  only removes the sending peer from those ids; a held second announcement is not a rejection. A relay without the
   mailbox forwards the HTTP request over the bridge as an `OPEN kind:"pb-mail"` stream (request bytes, then response
   bytes, the same 1 MiB cap). Same one-hop rule.
 - Let's Encrypt's TLS-ALPN-01 validators hit `<server>.<user>.<apex>:443` from several vantage points, which the LB may
@@ -606,8 +622,11 @@ per-source limits it already has (pending hellos, delayed drops). The entry rela
 ### 8.1 Phone ledger relay
 
 For account `u`: rank the directory's `full` relays by `sha256hex(accountHash(u) + "|" + relayId)` descending
-(rendezvous hashing); the ledger relay is the first one this relay can reach (self, or a live bridge). Every relay
-computes the same ranking; they differ only under a partition (§11).
+(rendezvous hashing); the ledger relay is the first one **of the first `PHONE_LEDGER_TOP_K` = 3** this relay can reach
+(self, or a live bridge). Every relay computes the same ranking; they differ only under a partition (§11). A relay
+outside an account's top 3 is never its ledger: P does not ask it, it refuses to act as one, and no relay accepts a
+grant it signed (§8.4). When none of the top 3 is reachable the bare name is unavailable (security review 2026-11-02,
+M3: before this any `full` relay could sign any account's grant).
 
 ### 8.2 Flow
 
@@ -618,14 +637,25 @@ messages to the phone are unchanged except `begin` gains the phone's eligibility
 phone → {type:"begin", account, grants:[{grant, signatureHex, signerRoot}]}   its own admin grant chain (new field)
 ```
 
+P answers `begin` only after eligibility (security review 2026-11-02, Low): the presented chain must hold at least one
+admin grant the log's admin root signed and has not revoked (§8.2 checks), else `refused not-eligible` and the ledger
+is not asked, so no generation is revealed to an unauthenticated caller. Every relay (mesh or not) caps `/phone-tunnel`
+at 8 open tunnels per client address (`PHONE_TUNNEL_MAX_PER_IP`, 503 before the upgrade) and `begin`s at 20 a minute
+per address, burst 10 (`PHONE_BEGIN_PER_MINUTE`, `PHONE_BEGIN_BURST`; over: `refused busy`), keeps a ledger read for
+2 s per hostname (`PHONE_LEDGER_READ_CACHE_MS`) and, on a relay that reads eligibility from `.com`, an eligibility
+answer for 5 s per account (`PHONE_ELIGIBILITY_CACHE_MS`). `.com` meters its internal phone-route routes per account
+and hostname in the isolate (security review 2026-11-02, M4).
+
 P and the ledger relay L (P itself when P = L) exchange, over the bridge:
 
 ```text
 P → L {type:"phone-begin", qid, account}
 L → P {type:"phone-begun", qid, generation, vacant, holderGeneration?}        generation = the next one to offer
 P → phone challenge {..., generation}; phone → P claim (unchanged route-claim/v1)
-P checks the claim signature and eligibility (grants under the log's admin root, grant ids not revoked, unexpired)
-P → L {type:"phone-claim", qid, hostname, generation, holder:{relayId:P, sessionId, phoneRoutePub}}
+P checks the claim signature and eligibility (grants under the log's admin root, grant ids not revoked, unexpired;
+a grant whose id does not match `RELAY_LOG_GRANT_ID` (lowercased) is ignored, since its revocation could never reach
+the log: `.com` refuses to mint such a grant)
+P → L {type:"phone-claim", qid, hostname, generation, holder:{relayId:P, sessionId, phoneRoutePub}, claim, claimSignature}
 L → P {type:"phone-claimed", qid, ok, code?, grant?, grantSignature?}          ledgerAcquire, unchanged rules
 P → L {type:"phone-renew", hostname, generation, sessionId}   every 15 s → new grant (60 s), or {ok:false, code}
 P → L {type:"phone-release", hostname, generation, sessionId}                 signed release checked by P first
@@ -634,7 +664,15 @@ L → all {type:"phone-vacant", hostname, generation}                           
 
 L runs `ledgerAcquire`, `ledgerRenew`, `ledgerRelease` and `liveEntry` from `packages/protocol/src/phoneRoute.ts` on its
 own in-memory table; nothing about it goes to `.com`. A new L (the previous one gone) starts a hostname's generation at
-the highest generation in any phone item it has seen, plus one.
+the highest generation in any phone item it has seen, plus one. That memory is kept per signing ledger relay: a relay
+dropped from the directory or retired takes its generations with it, and a hostname's memory is forgotten
+`PHONE_GENERATION_MEMORY_MS` (1 h) after its last item lapsed (at most 20,000 hostnames).
+
+L answers `phone-*` only from peers that are `full`, unrevoked relays in its directory, and only for accounts whose top
+3 it is in (no directory at all: a lone relay is its own ledger). A `phone-claim` must carry the phone's
+`route-claim/v1` (`claim`, `claimSignature`) for exactly that hostname, generation and `holder.phoneRoutePub`, signed by
+that key; anything else is answered `malformed`. P keeps the claim and attaches it to every item it announces for the
+generation.
 
 ### 8.3 Phone route grant
 
@@ -643,13 +681,21 @@ flagship/phone-route-grant/v1|<hostname>|<phoneRoutePub>|<generation>|<holderRel
 ```
 
 Signed by L's relay key, `notAfter = issuedAt + 60 s` (`PHONE_ROUTE_LEASE_MS`). P announces it to every peer as
-`{kind:"phone", grant:{...}, signature}` at each renewal and withdraws it (§5.4) when the phone leaves.
+`{kind:"phone", grant:{...}, signature, claim:{account, phoneRoutePub, hostname, generation, sessionNonce, issuedAt},
+claimSignature}` at each renewal and withdraws it (§5.4) when the phone leaves. The claim is the phone's own signed
+`route-claim/v1` for this generation (the one P checked), so the phone signs what the item carries.
 
 ### 8.4 Visitors to the bare name
 
 A phone item is valid when its signature verifies under the directory key of `ledgerRelayId` (a `full` relay, not
-revoked), the announcing relay is `holderRelayId`, and `notAfter > now`. Winner: higher generation, then later
-`issuedAt`. The entry relay forwards to the holder as for a box. The bare name still never resolves to a box.
+revoked, **among the first 3 of the account's ranking**), the announcing relay is `holderRelayId`, `notAfter > now`,
+its generation is at most `PHONE_GENERATION_MAX` (2^40) and at most `PHONE_GENERATION_MAX_JUMP` (8) above the highest
+generation among the live items the receiver already holds for the hostname, and its `claim` names the same account,
+hostname, `phoneRoutePub` and generation, was issued no later than the grant (+ 60 s skew) and verifies under
+`phoneRoutePub` (`checkPhoneItem`; refusals `generation-jump`, `not-ledger`, `claim-mismatch`, `bad-claim`). A legitimate
+jump larger than 8 (a relay that missed many claims in a partition) is accepted once the older items lapse (≤ 60 s).
+Winner: higher generation, then later `issuedAt`. The entry relay forwards to the holder as for a box. The bare name
+still never resolves to a box.
 
 Eligibility revocation: a `device-grant-revoke` for the holder's grant makes P close the phone tunnel 4403 and end its
 visitor streams within 5 s (`PHONE_ROUTE_REVOKE_CLOSE_MS`) and release at L; L refuses renewals for it.
@@ -761,7 +807,7 @@ to its account's best other `full` relay (lowest load, same region first), sprea
 | **Rogue relay floods queries or OPENs** | Per-peer token buckets (§6.4, §7.2); over the limit: `busy`. A peer over its limit for 60 s straight is cut for 10 min and flagged in stats |
 | **Rogue relay floods announcements** | Per-relay store cap (100,000); verification cost bounded by the cache; only boxes that really attached to it can be announced |
 | **Rogue relay holds a phone route** | It can only hold one after a phone really claimed there and L granted it; grants last 60 s and need L's renewals |
-| **Rogue `full` relay as phone ledger** | Can refuse claims (route unavailable for accounts it ranks first for) or grant to a relay that does not hold the phone (black-hole). Cannot serve as the phone: TLS ends on the phone's certificate |
+| **Rogue `full` relay as phone ledger** | Only for accounts whose top 3 it is in (§8.1); grants it signs for any other account are refused everywhere. There it can refuse claims or grant to a relay that does not hold the phone (black-hole), and only for a key that signed a route claim for that generation; it cannot jump a generation more than 8 past a live item, and its generations are forgotten when it is retired. It still could mint a claim with a key of its own for a top-3 account (relays do not check the phone's admin grant chain on items); TLS ends on the phone's certificate |
 | **Rogue `full` relay announces legacy attachments** | Can attract old boxes' visitors (§5.3). Accepted for 0.3: all `full` relays are Flagship's |
 | **Stolen box key** | The thief can already HELLO as the box; now also sign attachments. Ended by the owner's revoke: a `box-revoke` makes every fresh relay refuse its attachments and HELLOs |
 | **Replayed attachment after re-registration** | regGen / key no longer match the log's `box-register`: invalid |
@@ -931,7 +977,11 @@ Where the text above left a detail open, chunk A fixed it as follows (code: `pac
   state (`{lastLocalityAt, coLocateAt, failedTargets}`) pure.
 - **Account moves** need a `full`, unrevoked target in the directory and the home's directory key.
 - **Phone items** need both the ledger and the holder to be unrevoked `full` relays in the directory, a grant of at
-  most 60 s, and `issuedAt ≤ now + 60 s`. Equal generation and `issuedAt`: the smaller holder id wins.
+  most 60 s, and `issuedAt ≤ now + 60 s`. Equal generation and `issuedAt`: the smaller holder id wins. Since the
+  2026-11-02 review the item carries the phone's route claim, the ledger must be in the account's top 3, and the
+  generation is capped (`checkPhoneItem(item, announcer, ctx, highestLive)`); refusal order `malformed`,
+  `not-bare-name`, `ttl-too-long`, `future`, `expired`, `generation-jump`, `wrong-holder`, `relay-revoked`,
+  `unknown-relay`, `not-full`, `not-ledger`, `claim-mismatch`, `bad-signature`, `bad-claim`.
 - **Rebalancing** uses integer arithmetic (share ≥ 6/10, lead ≥ 3/10, load < 8/10). `T` is the entry relay with the
   most bytes other than the home (ties: the smaller id), never one with zero bytes; zero capacity counts as full load.
 - **HELLO / HELLO_ACK fields** live in `frames.ts`: HELLO `servingLeases` (≤ 8), HELLO_ACK `relayId` and
@@ -1232,7 +1282,9 @@ Env (both relays): `FLAGSHIP_MESH=on|off` (default off), `FLAGSHIP_RELAY_ID`, `F
 | mesh key | 32 bytes per epoch; AES-256-GCM, 12-byte nonce; head and pages sealed, directory and key files clear |
 | rebalance | every 60 min ± 10; ≥ 64 MiB or 500 streams; share ≥ 0.6 and ≥ home + 0.3; target load < 0.8 |
 | moves | account move TTL 10 min, ≥ 6 h apart; box `locality` ≥ 6 h; `co-locate` ≥ 10 min, ≤ 6 / 24 h; dial 10 s; old tunnel grace 30 s; failed target ignored 1 h |
-| phone | grant 60 s, renew 15 s (existing constants) |
+| phone | grant 60 s, renew 15 s (existing constants); ledger top-k 3; generation jump ≤ 8, ≤ 2^40, remembered 1 h after the last item lapsed |
+| phone tunnel (every relay) | 8 per client address; `begin` 20 a minute per address (burst 10); ledger read cached 2 s per hostname; `.com` eligibility cached 5 s per account |
+| `/mesh` handshakes | 64 pending in all, 4 per client address |
 
 ## 16. Risks and open points
 

@@ -39,6 +39,14 @@
       "seed": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
       "pub": "d9bf2148748a85c89da5aad8ee0b0fc2d105fd39d41a4c796536354f0ae2900c"
     },
+    "fra1": {
+      "seed": "1010101010101010101010101010101010101010101010101010101010101010",
+      "pub": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84"
+    },
+    "sin1": {
+      "seed": "1111111111111111111111111111111111111111111111111111111111111111",
+      "pub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+    },
     "boxHome": {
       "seed": "1515151515151515151515151515151515151515151515151515151515151515",
       "pub": "d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da"
@@ -74,6 +82,10 @@
     "admin2": {
       "seed": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
       "pub": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff"
+    },
+    "otherPhone": {
+      "seed": "2020202020202020202020202020202020202020202020202020202020202020",
+      "pub": "4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8"
     }
   },
   "caKeys": [
@@ -107,6 +119,8 @@
     "MESH_CLOCK_SKEW_MS": 60000,
     "MESH_CONTROL_MAX_BYTES": 1048576,
     "MESH_DIAL_TIMEOUT_MS": 5000,
+    "MESH_HANDSHAKE_MAX_PENDING": 64,
+    "MESH_HANDSHAKE_MAX_PENDING_PER_IP": 4,
     "MESH_HANDSHAKE_STEP_MS": 5000,
     "MESH_LOAD_FRESH_MS": 60000,
     "MESH_LOAD_INTERVAL_MS": 30000,
@@ -136,6 +150,10 @@
     "MOVE_HINT_TTL_MS": 600000,
     "MOVE_LOCALITY_MIN_MS": 21600000,
     "MOVE_OLD_TUNNEL_GRACE_MS": 30000,
+    "PHONE_GENERATION_MAX": 1099511627776,
+    "PHONE_GENERATION_MAX_JUMP": 8,
+    "PHONE_GENERATION_MEMORY_MS": 3600000,
+    "PHONE_LEDGER_TOP_K": 3,
     "PHONE_ROUTE_GRANT_TTL_MS": 60000,
     "REBALANCE_BUCKET_MS": 60000,
     "REBALANCE_INTERVAL_MS": 3600000,
@@ -546,13 +564,35 @@
             "192.0.2.1"
           ],
           "ipv6": []
+        },
+        {
+          "relayId": "fra1",
+          "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+          "tunnelHost": "fra1.tunnel.flagship.services",
+          "relayKind": "full",
+          "region": "fra",
+          "ipv4": [
+            "192.0.2.16"
+          ],
+          "ipv6": []
+        },
+        {
+          "relayId": "sin1",
+          "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+          "tunnelHost": "sin1.tunnel.flagship.services",
+          "relayKind": "full",
+          "region": "sin",
+          "ipv4": [
+            "192.0.2.17"
+          ],
+          "ipv6": []
         }
       ],
       "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "signatures": [
         {
           "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-          "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+          "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
         }
       ]
     },
@@ -560,10 +600,12 @@
       "iad1 66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a iad1.tunnel.flagship.services full iad 149.248.216.86 2a09:8280:1::110:d2b6:0",
       "ams1 0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d ams1.tunnel.flagship.services full ams - 2a09:8280:1::2",
       "ent1 91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a ent1.tunnel.flagship.services entry fra 198.51.100.2,203.0.113.7 -",
-      "old1 0beef5a9e679e6a3e134fe27837bff32c7cb5f5d44ea09bcb0e542bad6a4c0cc old1.tunnel.flagship.services full iad 192.0.2.1 -"
+      "old1 0beef5a9e679e6a3e134fe27837bff32c7cb5f5d44ea09bcb0e542bad6a4c0cc old1.tunnel.flagship.services full iad 192.0.2.1 -",
+      "fra1 5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84 fra1.tunnel.flagship.services full fra 192.0.2.16 -",
+      "sin1 d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737 sin1.tunnel.flagship.services full sin 192.0.2.17 -"
     ],
-    "entriesSha256": "e55479a9b4e659b9409e0344f1dd415aacb2f69a5debde987dc6b6c1c491a5bd",
-    "canonical": "flagship/relay-directory/v1|flagship.services|3|1799996400000|1800601200000|e55479a9b4e659b9409e0344f1dd415aacb2f69a5debde987dc6b6c1c491a5bd"
+    "entriesSha256": "8cfd335f55de409448e92d85a304be33f801219e236011e6c78acae559b97253",
+    "canonical": "flagship/relay-directory/v1|flagship.services|3|1799996400000|1800601200000|8cfd335f55de409448e92d85a304be33f801219e236011e6c78acae559b97253"
   },
   "canonicalErrors": [
     {
@@ -737,6 +779,28 @@
             "region": "iad",
             "ipv4": [
               "192.0.2.1"
+            ],
+            "ipv6": []
+          },
+          {
+            "relayId": "fra1",
+            "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "tunnelHost": "fra1.tunnel.flagship.services",
+            "relayKind": "full",
+            "region": "fra",
+            "ipv4": [
+              "192.0.2.16"
+            ],
+            "ipv6": []
+          },
+          {
+            "relayId": "sin1",
+            "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+            "tunnelHost": "sin1.tunnel.flagship.services",
+            "relayKind": "full",
+            "region": "sin",
+            "ipv4": [
+              "192.0.2.17"
             ],
             "ipv6": []
           }
@@ -3164,13 +3228,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3240,13 +3326,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3316,13 +3424,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3392,13 +3522,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3468,13 +3620,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3537,7 +3711,7 @@
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3607,13 +3781,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3683,13 +3879,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3759,13 +3977,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
           "signatures": [
             {
               "pubkey": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
-              "sig": "b1f6d0c85db406350bfe513cd91c038b07f198b5f45e409d42bef4c0c9612e05ba66efc34e511be2e177103a1ea07603de5256f963be778b25f812d9d290170a"
+              "sig": "fafe69c48cdd7c40cdafdad11b998051770feba38b0045867890e9b86236e212304afd1ab839583dc9fafae150f01e4d219da2af223b490bb138722a25a35c0f"
             }
           ]
         },
@@ -3835,13 +4075,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -3913,13 +4175,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -4063,13 +4347,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -4131,13 +4437,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -4195,13 +4523,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -4263,13 +4613,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -4327,13 +4699,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -4396,13 +4790,35 @@
                 "192.0.2.1"
               ],
               "ipv6": []
+            },
+            {
+              "relayId": "fra1",
+              "relayKey": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "tunnelHost": "fra1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "fra",
+              "ipv4": [
+                "192.0.2.16"
+              ],
+              "ipv6": []
+            },
+            {
+              "relayId": "sin1",
+              "relayKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+              "tunnelHost": "sin1.tunnel.flagship.services",
+              "relayKind": "full",
+              "region": "sin",
+              "ipv4": [
+                "192.0.2.17"
+              ],
+              "ipv6": []
             }
           ],
           "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
           "signatures": [
             {
               "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-              "sig": "c274879d700fec2ffa547e6a10d7ea02ba8ed99f1290109a1c0e6b18949554af4361f7891954cf16ca97bdb6733fd7871e637027caa3e00869366d66d7fe930b"
+              "sig": "76c9176c9557e76155191ae2ddfdbde7f2b56629195f11d886c531f8d4e445ebc947d008c556b329ae7b37f1b6392e97dfc626889f4d5ed8d50c64eca3036907"
             }
           ]
         },
@@ -5435,7 +5851,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a"
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "expected": true
       },
@@ -5459,7 +5884,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "5f601eee1e62efb4f05195a262fcbc4b78e7339fab84d3cd26650754e4b0edb0f05f9a700fdcde1dcac49083b60a0d1eea0a34f1e763d10476dc691001566d00"
+          "signature": "5f601eee1e62efb4f05195a262fcbc4b78e7339fab84d3cd26650754e4b0edb0f05f9a700fdcde1dcac49083b60a0d1eea0a34f1e763d10476dc691001566d00",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "expected": false
       },
@@ -5483,7 +5917,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a"
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "expected": false
       }
@@ -7540,9 +7983,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a"
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": true
@@ -7561,9 +8014,81 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "5f601eee1e62efb4f05195a262fcbc4b78e7339fab84d3cd26650754e4b0edb0f05f9a700fdcde1dcac49083b60a0d1eea0a34f1e763d10476dc691001566d00"
+          "signature": "5f601eee1e62efb4f05195a262fcbc4b78e7339fab84d3cd26650754e4b0edb0f05f9a700fdcde1dcac49083b60a0d1eea0a34f1e763d10476dc691001566d00",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "iad1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": true
+        }
+      },
+      {
+        "name": "ok, within the jump",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 20,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "a4b0125cd6b2852c50457e510bccd50a45f72f64e437872195554b78bc9b7a675a8b940e4582a479012549b7e4d86fa340bdb52f1b55540e953d692328ac3e03",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 20,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "9d151d70ea1ddccfb9a4d1d9c653e4d336a0a041164006859bd2f32093e268e9a42ca7a176f048f75395d717863f87e0187f814082c8f5826d41db8acb04770f"
+        },
+        "announcer": "ams1",
+        "highestLive": 12,
+        "now": 1800000000000,
+        "expected": {
+          "ok": true
+        }
+      },
+      {
+        "name": "ok, below the highest live",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+        },
+        "announcer": "ams1",
+        "highestLive": 9,
         "now": 1800000000000,
         "expected": {
           "ok": true
@@ -7582,9 +8107,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "d2707a17f5f9d7baef692643da9935b77e8ab53e168550be9fdaa80cf60f3b8db3a7e9daad859dcda6edd7e8be1fb271c96b9810df4a1bfc524c2381fdb3d605"
+          "signature": "d2707a17f5f9d7baef692643da9935b77e8ab53e168550be9fdaa80cf60f3b8db3a7e9daad859dcda6edd7e8be1fb271c96b9810df4a1bfc524c2381fdb3d605",
+          "claim": {
+            "account": "home",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "home.alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "197ba0231de34aac49bfeabb83493b44bd25ae47260b1e49a21a9b90edc343989c9e917581147853e0f95f1710275470458bc848dad9e53b0324b0298c5c5509"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7604,9 +8139,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050001
           },
-          "signature": "a2ab47fe9a531eb246804e351b7f7f8b4017ed327360a5c4d39d3515e7d14547a1b334a150bd19088cc09a85ef52484b5bb0cccd359de6181b0d26e79a09a30e"
+          "signature": "a2ab47fe9a531eb246804e351b7f7f8b4017ed327360a5c4d39d3515e7d14547a1b334a150bd19088cc09a85ef52484b5bb0cccd359de6181b0d26e79a09a30e",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7626,9 +8171,19 @@
             "issuedAt": 1800000061000,
             "notAfter": 1800000100000
           },
-          "signature": "b22e2ddea5f63d122a6fef57419ec37e34c1f77e1ea51550c4fb3a773ca4ac59a2c0733e045bca897ff2bfbf9e3139fb39e5f09d82d1fb47ebfad7225995e701"
+          "signature": "b22e2ddea5f63d122a6fef57419ec37e34c1f77e1ea51550c4fb3a773ca4ac59a2c0733e045bca897ff2bfbf9e3139fb39e5f09d82d1fb47ebfad7225995e701",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1800000060000
+          },
+          "claimSignature": "65d2e1b82888a2278f371a7924e01f8ffb427ee98dcb339b8637cb175d9ab9e7390d09ea906c241144383d409e251dcb94c6152686306e54393a58ba6a479b0d"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7648,13 +8203,87 @@
             "issuedAt": 1799999940000,
             "notAfter": 1800000000000
           },
-          "signature": "d5d2d2a14464da519fd862ddccca6ddf2e4d980a11e954c5a82b412386f8e5de3610249db096719047ed555615e94f5bcb729fd181e0e6c8226821625744fa08"
+          "signature": "d5d2d2a14464da519fd862ddccca6ddf2e4d980a11e954c5a82b412386f8e5de3610249db096719047ed555615e94f5bcb729fd181e0e6c8226821625744fa08",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999939000
+          },
+          "claimSignature": "a792a35f7f202e135a85fb076c0fbbe3ce5b62ae7691b14292f4e19e523a2ac6221a252349e1a55d353dda9c95e1b7290ada4fad517716311556b8efd50d9609"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
           "reason": "expired"
+        }
+      },
+      {
+        "name": "jump above the highest live",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 20,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "a4b0125cd6b2852c50457e510bccd50a45f72f64e437872195554b78bc9b7a675a8b940e4582a479012549b7e4d86fa340bdb52f1b55540e953d692328ac3e03",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 20,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "9d151d70ea1ddccfb9a4d1d9c653e4d336a0a041164006859bd2f32093e268e9a42ca7a176f048f75395d717863f87e0187f814082c8f5826d41db8acb04770f"
+        },
+        "announcer": "ams1",
+        "highestLive": 11,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "generation-jump"
+        }
+      },
+      {
+        "name": "generation above the cap",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 1099511627777,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "3cdd34b222548f9c4b94a0546ec5d3fbe0f0b7296700f169f36f2a5f1276135e6bc8e42cdcef9a04e97a9998899ce91a78643f0deac98a225568a5d0df39bf0c",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 1099511627777,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "05f661c3ce901e9b95a65bdbc8f2df1cd883855bde554d98dd0c8540720bb5dfacf1aa7288a23a4af19060f5fd80d169045916726d7fe327cf27c8011b770005"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "generation-jump"
         }
       },
       {
@@ -7670,9 +8299,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a"
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "iad1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7692,9 +8331,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "73f9603acdc04533c1ee8a0283295ce88bcdf6f33a81ca5a103cc8ca0baa783d3d16e2e52788908dc2a513d248fe70e9e69523ba6a691feb691ed63890604406"
+          "signature": "73f9603acdc04533c1ee8a0283295ce88bcdf6f33a81ca5a103cc8ca0baa783d3d16e2e52788908dc2a513d248fe70e9e69523ba6a691feb691ed63890604406",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7714,9 +8363,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "5aafdcf023d8e3e63ea4227363459c2bc2d483d0fdb36021b9693d29ab40a420d2f5e10f3a141a2ab184236a508e3509c11a2d81e4e5afff6b9931d61610e500"
+          "signature": "5aafdcf023d8e3e63ea4227363459c2bc2d483d0fdb36021b9693d29ab40a420d2f5e10f3a141a2ab184236a508e3509c11a2d81e4e5afff6b9931d61610e500",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "rog1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7736,9 +8395,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "ced4fa4bd3857463a37e815db9bf5cfad7a75c1fc6dd3cd0e2114ae7b123741bc94551214610c1f1f46b00c0705e3590fa3f45076844103e9e6aa41fc0a05f0d"
+          "signature": "ced4fa4bd3857463a37e815db9bf5cfad7a75c1fc6dd3cd0e2114ae7b123741bc94551214610c1f1f46b00c0705e3590fa3f45076844103e9e6aa41fc0a05f0d",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "ent1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7758,13 +8427,183 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "1895c4e0594906f54711f5dad6cb4ad9f220abffa42eadd6f9a78a692152ed8cd2cfdc83ac39ab5a00d5f9b41751c9fde6426a5059a9ece1e1a55181135b4b0e"
+          "signature": "1895c4e0594906f54711f5dad6cb4ad9f220abffa42eadd6f9a78a692152ed8cd2cfdc83ac39ab5a00d5f9b41751c9fde6426a5059a9ece1e1a55181135b4b0e",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
           "reason": "not-full"
+        }
+      },
+      {
+        "name": "ledger outside the account's top k",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "fra1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "19f9f2d68d4b0412c12b6df14c39e170bdbac28f32a89efb5e0a7c6337d120269ff30d180811b61d92b52feebe01f00f1a45c25897857ae42b22c573d85cab0a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "not-ledger"
+        }
+      },
+      {
+        "name": "claim for another generation",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 5,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "df367f8b16a827b8ddeb906608328dd44b93ff549a3598f45cb1b2b79982b3f4691f36305cd59fd9ed24cdfa719d3c53d52a440f5445f3760e566623bd66db0a"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "claim-mismatch"
+        }
+      },
+      {
+        "name": "claim for another key",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "33c48cca192f061a61bd8e5626834ffef24cc1aeaae8a7523c230a6728b6a90bc33f35cd0810be7fa00c0accc32810d951c8aed4c60718ccb7ed3e2ae999060d"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "claim-mismatch"
+        }
+      },
+      {
+        "name": "claim for another account",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "bob",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "bob.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "24c68d49b14e61d9dbc6e77055267045d63df6f4f2d1db23d34fb84c06b553813885108e699868217d7fe171ebc277e5caa442ced8a60b4030d4d72dd115d70a"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "claim-mismatch"
+        }
+      },
+      {
+        "name": "claim issued after the grant",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1800000050001
+          },
+          "claimSignature": "1b0f4048666e73914023b7d223f49718a03d201118c5def3a2e16f4cae126e754795d752f3aab346e8656fe0d5f0f4cb85b31a31894e306b4d7b4b0592c0cb08"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "claim-mismatch"
         }
       },
       {
@@ -7780,13 +8619,79 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "f6599c25d9e8fc2403b8bb45cbfaa8321b9c1d0c849f062379590899b0d83eb88edf6e12018acf6ffbc1007b38a96bc1acd8c15b084be3aba94393f664951d06"
+          "signature": "f6599c25d9e8fc2403b8bb45cbfaa8321b9c1d0c849f062379590899b0d83eb88edf6e12018acf6ffbc1007b38a96bc1acd8c15b084be3aba94393f664951d06",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
           "reason": "bad-signature"
+        }
+      },
+      {
+        "name": "claim signed by another key",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "af10cd50f195e7ed965f8ba15c3112a5c65351a9efeadb2fffe6bae5e72b56af6ba9722125193c6e7c8412bed61a550233414a792decf16bb87aed5db147c307"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "bad-claim"
+        }
+      },
+      {
+        "name": "no claim",
+        "item": {
+          "kind": "phone",
+          "grant": {
+            "hostname": "alice.flagship.services",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "generation": 4,
+            "holderRelayId": "ams1",
+            "ledgerRelayId": "iad1",
+            "issuedAt": 1799999990000,
+            "notAfter": 1800000050000
+          },
+          "signature": "95f568fc005202eabab5b0fc463129d6b35553e5ec47beda03f9c97c0d079fe04473434d187a221fe01779add0da039e9c00e88eeb6b5ded8493ef0466b9d10a",
+          "claimSignature": "b4643fcad61e06760df42d0361b1ac5562b645425fbf561cc76f5b0597c7a1cb0ca4500814c8f823c85c9a38198f5f1a4fef9f88dc0a82f23da0ad0f95495206"
+        },
+        "announcer": "ams1",
+        "highestLive": 0,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "malformed"
         }
       },
       {
@@ -7802,9 +8707,19 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 0,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "announcer": "ams1",
+        "highestLive": 0,
         "now": 1800000000000,
         "expected": {
           "ok": false,
@@ -7826,7 +8741,16 @@
             "issuedAt": 1,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "b": {
           "kind": "phone",
@@ -7839,7 +8763,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "expected": 1
       },
@@ -7856,7 +8789,16 @@
             "issuedAt": 1799999990001,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "b": {
           "kind": "phone",
@@ -7869,7 +8811,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "expected": 1
       },
@@ -7886,7 +8837,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "b": {
           "kind": "phone",
@@ -7899,7 +8859,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "expected": 1
       },
@@ -7916,7 +8885,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "b": {
           "kind": "phone",
@@ -7929,7 +8907,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "expected": -1
       },
@@ -7946,7 +8933,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "b": {
           "kind": "phone",
@@ -7959,7 +8955,16 @@
             "issuedAt": 1799999990000,
             "notAfter": 1800000050000
           },
-          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "claim": {
+            "account": "alice",
+            "phoneRoutePub": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+            "hostname": "alice.flagship.services",
+            "generation": 4,
+            "sessionNonce": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "issuedAt": 1799999989000
+          },
+          "claimSignature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "expected": 0
       }
@@ -8136,7 +9141,9 @@
         "withLog": true,
         "expected": [
           "ams1",
-          "iad1"
+          "iad1",
+          "sin1",
+          "fra1"
         ]
       },
       {
@@ -8145,14 +9152,18 @@
         "expected": [
           "ams1",
           "iad1",
-          "old1"
+          "old1",
+          "sin1",
+          "fra1"
         ]
       },
       {
         "account": "bob",
         "withLog": true,
         "expected": [
+          "fra1",
           "ams1",
+          "sin1",
           "iad1"
         ]
       },
@@ -8160,8 +9171,10 @@
         "account": "bob",
         "withLog": false,
         "expected": [
+          "fra1",
           "old1",
           "ams1",
+          "sin1",
           "iad1"
         ]
       },
@@ -8170,6 +9183,8 @@
         "withLog": true,
         "expected": [
           "iad1",
+          "sin1",
+          "fra1",
           "ams1"
         ]
       },
@@ -8179,6 +9194,8 @@
         "expected": [
           "old1",
           "iad1",
+          "sin1",
+          "fra1",
           "ams1"
         ]
       },
@@ -8187,7 +9204,9 @@
         "withLog": true,
         "expected": [
           "ams1",
-          "iad1"
+          "iad1",
+          "fra1",
+          "sin1"
         ]
       },
       {
@@ -8196,7 +9215,9 @@
         "expected": [
           "old1",
           "ams1",
-          "iad1"
+          "iad1",
+          "fra1",
+          "sin1"
         ]
       }
     ],

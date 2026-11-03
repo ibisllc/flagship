@@ -163,7 +163,7 @@ describe("relay mesh vectors", () => {
     for (const c of k.accountMove) {
       expect(P.checkAccountMove({ move: c.move, signature: c.signature, expectedHome: c.expectedHome, lastAcceptedAt: c.lastAcceptedAt, ctx: ctx(c.now) }), c.name).toEqual(c.expected);
     }
-    for (const c of k.phoneItem) expect(P.checkPhoneItem(c.item, c.announcer, ctx(c.now)), c.name).toEqual(c.expected);
+    for (const c of k.phoneItem) expect(P.checkPhoneItem(c.item, c.announcer, ctx(c.now), c.highestLive), c.name).toEqual(c.expected);
     for (const c of k.comparePhoneItems) expect(Math.sign(P.comparePhoneItems(c.a, c.b)), c.name).toBe(c.expected);
   });
 

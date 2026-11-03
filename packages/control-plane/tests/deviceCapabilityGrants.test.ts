@@ -106,7 +106,7 @@ function mintGrant(args: {
   const scopes = args.scopes ?? ["browse", "install-service"];
   const issuedAt = args.issuedAt ?? 1_000_000;
   const expiresAt = args.expiresAt ?? issuedAt + 90 * 24 * 3_600_000;
-  const grantId = args.grantId ?? "grant-uuid-1";
+  const grantId = args.grantId ?? "0f8fad5b-d9cb-469f-a165-70867728950e";
   const grant: DeviceCapabilityGrant = {
     grantId,
     username: args.username ?? USER,
@@ -161,6 +161,18 @@ describe("handleMintDeviceGrant", () => {
     expect(r.status).toBe(403);
   });
 
+  it("rejects a grant id the relay log could not carry (its revocation would never reach the relays)", async () => {
+    const h = await mkHarness();
+    for (const grantId of ["grant-1", "zz", "-0a", "0".repeat(65), "0a_1"]) {
+      const m = mintGrant({ userIrk: h.userIrk, grantId });
+      expect((await handleMintDeviceGrant(h.deps, m.body)).status, grantId).toBe(400);
+      expect(await h.deps.storage.get(grantId)).toBeUndefined();
+    }
+    // The apps' UUIDs, upper-case included, are fine.
+    const ok = mintGrant({ userIrk: h.userIrk, grantId: "0F8FAD5B-D9CB-469F-A165-70867728950E" });
+    expect((await handleMintDeviceGrant(h.deps, ok.body)).status).toBe(200);
+  });
+
   it("rejects an expired grant with 400", async () => {
     const h = await mkHarness();
     const m = mintGrant({
@@ -186,11 +198,11 @@ describe("handleMintDeviceGrant", () => {
 
   it("cannot bind an existing immutable deviceId to another key", async () => {
     const h = await mkHarness();
-    const a = mintGrant({ userIrk: h.userIrk, grantId: "g-1" });
+    const a = mintGrant({ userIrk: h.userIrk, grantId: "0a-1" });
     expect((await handleMintDeviceGrant(h.deps, a.body)).status).toBe(200);
     const b = mintGrant({
       userIrk: h.userIrk,
-      grantId: "g-2",
+      grantId: "0a-2",
       devicePub: makeKey().publicKey,
     });
     const r = await handleMintDeviceGrant(h.deps, b.body);
@@ -251,11 +263,11 @@ describe("handleRevokeDeviceGrant", () => {
       irkPubHex: hex(makeKey().publicKey),
       claimedAt: 1,
     });
-    const m = mintGrant({ userIrk: h.userIrk, grantId: "g-1" });
+    const m = mintGrant({ userIrk: h.userIrk, grantId: "0a-1" });
     await handleMintDeviceGrant(h.deps, m.body);
     const body = revokeBody({
       userIrk: h.userIrk,
-      grantId: "g-1",
+      grantId: "0a-1",
       username: "bob",
     });
     const r = await handleRevokeDeviceGrant(h.deps, body);
@@ -264,9 +276,9 @@ describe("handleRevokeDeviceGrant", () => {
 
   it("403 on bad signature", async () => {
     const h = await mkHarness();
-    const m = mintGrant({ userIrk: h.userIrk, grantId: "g-1" });
+    const m = mintGrant({ userIrk: h.userIrk, grantId: "0a-1" });
     await handleMintDeviceGrant(h.deps, m.body);
-    const body = revokeBody({ userIrk: h.userIrk, grantId: "g-1" });
+    const body = revokeBody({ userIrk: h.userIrk, grantId: "0a-1" });
     body.signature = hex(new Uint8Array(64));
     const r = await handleRevokeDeviceGrant(h.deps, body);
     expect(r.status).toBe(403);
@@ -274,15 +286,15 @@ describe("handleRevokeDeviceGrant", () => {
 
   it("marks the grant revoked", async () => {
     const h = await mkHarness();
-    const m = mintGrant({ userIrk: h.userIrk, grantId: "g-1" });
+    const m = mintGrant({ userIrk: h.userIrk, grantId: "0a-1" });
     await handleMintDeviceGrant(h.deps, m.body);
 
-    const body = revokeBody({ userIrk: h.userIrk, grantId: "g-1" });
+    const body = revokeBody({ userIrk: h.userIrk, grantId: "0a-1" });
     const r = await handleRevokeDeviceGrant(h.deps, body);
     expect(r.status).toBe(200);
     expect((r.body as { revokedAt: number }).revokedAt).toBe(h.clock.now);
 
-    expect((await h.deps.storage.get("g-1"))?.revokedAt).toBe(h.clock.now);
+    expect((await h.deps.storage.get("0a-1"))?.revokedAt).toBe(h.clock.now);
   });
 });
 

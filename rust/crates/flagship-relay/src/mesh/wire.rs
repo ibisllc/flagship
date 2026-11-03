@@ -7,6 +7,7 @@ use flagship_crypto::relay_mesh::{
     PhoneRouteGrant, RelayBlessing, RelayBlessingBody, RelayDirectory, RelayDirectoryBody,
     RelayDirectoryEntry, RelayKind, RelayLogEntry, RelayLogHead, RelayWithdraw,
 };
+use flagship_crypto::serving::RouteClaim;
 use serde_json::{Map, Value, json};
 
 use crate::json::write_str;
@@ -245,6 +246,25 @@ pub fn grant_to_json(g: &PhoneRouteGrant) -> Value {
         "notAfter": g.not_after})
 }
 
+/// The phone's `route-claim/v1` as JSON (§8.3): `{account, phoneRoutePub, hostname, generation, sessionNonce, issuedAt}`.
+#[must_use]
+pub fn claim_from_json(v: &Value) -> Option<RouteClaim> {
+    Some(RouteClaim {
+        account: s(v, "account")?,
+        phone_route_pub: s(v, "phoneRoutePub")?,
+        hostname: s(v, "hostname")?,
+        generation: n(v, "generation")?,
+        session_nonce: s(v, "sessionNonce")?,
+        issued_at: n(v, "issuedAt")?,
+    })
+}
+
+#[must_use]
+pub fn claim_to_json(c: &RouteClaim) -> Value {
+    json!({"account": c.account, "phoneRoutePub": c.phone_route_pub, "hostname": c.hostname,
+        "generation": c.generation, "sessionNonce": c.session_nonce, "issuedAt": c.issued_at})
+}
+
 /// One item of an `announce` or `answer` list (§6.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireItem {
@@ -260,7 +280,8 @@ pub enum WireItem {
     },
 }
 
-/// `{kind:"box"|"legacy", attachment, signature}`, `{kind:"phone", grant, signature}` or `{kind:"mailbox", announce}`.
+/// `{kind:"box"|"legacy", attachment, signature}`, `{kind:"phone", grant, signature, claim, claimSignature}` or
+/// `{kind:"mailbox", announce}`. A phone item without the phone's claim is not one (§8.3).
 #[must_use]
 pub fn item_from_json(v: &Value) -> Option<WireItem> {
     let kind = s(v, "kind")?;
@@ -277,6 +298,8 @@ pub fn item_from_json(v: &Value) -> Option<WireItem> {
         "phone" => Some(WireItem::Phone(PhoneItem {
             grant: grant_from_json(v.get("grant")?)?,
             signature: s(v, "signature")?,
+            claim: claim_from_json(v.get("claim")?)?,
+            claim_signature: s(v, "claimSignature")?,
         })),
         "mailbox" => {
             let a = v.get("announce")?;
@@ -299,7 +322,8 @@ pub fn item_to_json(item: &WireItem) -> Value {
             "attachment": attachment_to_json(&a.attachment), "signature": a.signature,
         }),
         WireItem::Phone(p) => {
-            json!({"kind": "phone", "grant": grant_to_json(&p.grant), "signature": p.signature})
+            json!({"kind": "phone", "grant": grant_to_json(&p.grant), "signature": p.signature,
+                "claim": claim_to_json(&p.claim), "claimSignature": p.claim_signature})
         }
         WireItem::Mailbox {
             pik_pub_hex,
@@ -461,6 +485,33 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn phone_items_carry_the_phones_claim_both_ways() {
+        let v: Value = serde_json::from_str(MESH).unwrap();
+        let ok = v["checks"]["phoneItem"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "ok")
+            .unwrap();
+        let item = &ok["item"];
+        let p = match item_from_json(item) {
+            Some(WireItem::Phone(p)) => p,
+            other => unreachable!("a vector phone item parses: {other:?}"),
+        };
+        assert_eq!(p.claim.generation, p.grant.generation);
+        assert_eq!(&item_to_json(&WireItem::Phone(p)), item);
+        let mut bare = item.clone();
+        bare.as_object_mut().unwrap().remove("claim");
+        assert!(
+            item_from_json(&bare).is_none(),
+            "no claim: not a phone item"
+        );
+        let mut nosig = item.clone();
+        nosig.as_object_mut().unwrap().remove("claimSignature");
+        assert!(item_from_json(&nosig).is_none());
     }
 
     #[test]

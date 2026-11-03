@@ -276,6 +276,18 @@ export const pageOf = (sequence: number): number => Math.floor(sequence / FEED_P
  * holding the top are rewritten (all of them when `state` is null or `force` is "all"; at least the tail page after an
  * epoch change or with `force` "tail"). A page whose last slot is filled is final and cached as immutable.
  */
+/**
+ * A log row unsigned for longer than this stops head minting (relay-mesh.md §4.6; security review 2026-11-02): a
+ * revocation the signer cannot carry must make the relays go stale (fail closed), never leave them fresh without it.
+ */
+export const RELAY_LOG_UNSIGNED_STALL_MS = 60_000;
+
+export class RelayLogSignerStalled extends Error {
+  constructor(readonly sequence: number, readonly ageMs: number) {
+    super(`relay log row ${sequence} has been unsigned for ${ageMs} ms; no fresh head is minted`);
+  }
+}
+
 export async function publishRelayFeed(o: {
   env: RelayFeedEnv;
   db: D1Database;
@@ -292,9 +304,16 @@ export async function publishRelayFeed(o: {
   const meta = await db
     .prepare(
       "SELECT (SELECT MAX(epoch) FROM relay_mesh_epochs) AS epoch, (SELECT MAX(version) FROM relay_directories) AS dv, " +
-        "(SELECT MAX(sequence) FROM relay_log WHERE signature IS NOT NULL) AS top",
+        "(SELECT MAX(sequence) FROM relay_log WHERE signature IS NOT NULL) AS top, " +
+        "(SELECT MIN(created_at) FROM relay_log WHERE signature IS NULL) AS stuckSince, " +
+        "(SELECT MIN(sequence) FROM relay_log WHERE signature IS NULL) AS stuckSeq",
     )
-    .first<{ epoch: number | null; dv: number | null; top: number | null }>();
+    .first<{ epoch: number | null; dv: number | null; top: number | null; stuckSince: number | null; stuckSeq: number | null }>();
+  if (meta?.stuckSince != null && now - meta.stuckSince > RELAY_LOG_UNSIGNED_STALL_MS) {
+    const ageMs = now - meta.stuckSince;
+    console.error(JSON.stringify({ event: "relay-log-signer-stalled", alarm: true, sequence: meta.stuckSeq, ageMs }));
+    throw new RelayLogSignerStalled(meta.stuckSeq ?? 0, ageMs);
+  }
   const epoch = meta?.epoch ?? 1;
   const top = meta?.top ?? 0;
   const meshKey = deriveMeshEpochKey(seed, apex, epoch);

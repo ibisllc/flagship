@@ -68,6 +68,8 @@ const ams1 = key("ams1", 12);
 const ent1 = key("ent1", 13);
 const old1 = key("old1", 14);
 const rog1 = key("rog1", 15);
+const fra1 = key("fra1", 16);
+const sin1 = key("sin1", 17);
 const boxHome = key("boxHome", 21);
 const boxCabin = key("boxCabin", 22);
 const boxOld = key("boxOld", 23);
@@ -77,7 +79,7 @@ const phone = key("phone", 31);
 const admin = key("admin", 41);
 const irk = key("irk", 42);
 const admin2 = key("admin2", 43);
-const relayKeys: Record<string, Key> = { iad1, ams1, ent1, old1, rog1 };
+const relayKeys: Record<string, Key> = { iad1, ams1, ent1, old1, rog1, fra1, sin1 };
 const CA_KEYS = [ca.pub];
 
 /** Assert the TS answer is the intended one, then return it. */
@@ -139,6 +141,8 @@ const relays: RelayDirectoryEntry[] = [
   entry("ams1", "full", "ams", [], ["2a09:8280:1::2"]),
   entry("ent1", "entry", "fra", ["203.0.113.7", "198.51.100.2"], []),
   entry("old1", "full", "iad", ["192.0.2.1"], []),
+  entry("fra1", "full", "fra", ["192.0.2.16"], []),
+  entry("sin1", "full", "sin", ["192.0.2.17"], []),
 ];
 const dirBody = { servicesApex: APEX, directoryVersion: 3, issuedAt: T0 - HOUR, expiresAt: T0 - HOUR + P.DIRECTORY_TTL_MS, relays };
 const D: RelayDirectory = P.signRelayDirectory(dirBody, ca.kp);
@@ -442,7 +446,7 @@ const directoryChecks = [
   ["no CA keys", D, T0, APEX, [], "no-authorized-ca-keys"],
   ["relay list tampered", { ...D, relays: relays.slice(0, 3) }, T0, APEX, CA_KEYS, "signature-unverified"],
   ["address tampered", { ...D, relays: [{ ...relays[0]!, ipv4: ["192.0.2.66"] }, ...relays.slice(1)] }, T0, APEX, CA_KEYS, "signature-unverified"],
-  ["address order is not signed", { ...D, relays: [{ ...relays[2]!, ipv4: [...relays[2]!.ipv4].reverse() }, relays[0], relays[1], relays[3]] }, T0, APEX, CA_KEYS, { ok: true, expired: false }],
+  ["address order is not signed", { ...D, relays: [{ ...relays[2]!, ipv4: [...relays[2]!.ipv4].reverse() }, relays[0], relays[1], ...relays.slice(3)] }, T0, APEX, CA_KEYS, { ok: true, expired: false }],
   ["by another CA", P.signRelayDirectory(dirBody, ca2.kp), T0, APEX, CA_KEYS, "signature-unverified"],
   ["malformed", { ...D, directoryVersion: 0 }, T0, APEX, CA_KEYS, "malformed"],
 ].map(([n, d, now, apex, ks, w]) => {
@@ -538,7 +542,29 @@ const withdrawCases = [
   })();
   return { name: n, withdraw: w0, signature: sig, now: T0, expected: want(n as string, P.checkWithdraw(w0 as RelayWithdraw, sig, ctx()), w) };
 });
-const phoneItemOf = (g: PhoneRouteGrant, k: Key = iad1): PhoneItem => ({ kind: "phone", grant: g, signature: sigBy(k, "phone-route-grant", g) });
+const claimOf = (g: PhoneRouteGrant, over: Partial<P.RouteClaim> = {}): P.RouteClaim => ({
+  account: g.hostname.split(".")[0]!,
+  phoneRoutePub: g.phoneRoutePub,
+  hostname: g.hostname,
+  generation: g.generation,
+  sessionNonce: "5e".repeat(16),
+  issuedAt: g.issuedAt - 1_000,
+  ...over,
+});
+const claimSig = (c: P.RouteClaim, k: Key = phone): string => {
+  try {
+    return hexOf(P.signServingRecord("route-claim", c, k.sign));
+  } catch {
+    return "00".repeat(64);
+  }
+};
+const phoneItemOf = (g: PhoneRouteGrant, k: Key = iad1, c: P.RouteClaim = claimOf(g), ck: Key = phone): PhoneItem => ({
+  kind: "phone",
+  grant: g,
+  signature: sigBy(k, "phone-route-grant", g),
+  claim: c,
+  claimSignature: claimSig(c, ck),
+});
 const covers = [
   ["same attachment", withdrawBox, item("box", homeAtt), true],
   ["older attachment", withdrawBox, item("box", { ...homeAtt, issuedAt: T0 - 2 * MIN }), true],
@@ -673,32 +699,49 @@ const accountMoveCases = [
 ];
 
 // phone items
-const phoneCase = (n: string, g: PhoneRouteGrant, w: string, o: { k?: Key; announcer?: string } = {}) => {
+const aliceRank = P.phoneLedgerRanking("alice", D, LOG);
+if (aliceRank.length <= P.PHONE_LEDGER_TOP_K || aliceRank.indexOf("iad1") >= P.PHONE_LEDGER_TOP_K) throw new Error(`alice's ledger ranking ${aliceRank} does not fit the phone vectors`);
+const outsider = aliceRank[P.PHONE_LEDGER_TOP_K]!;
+const phoneCase = (n: string, g: PhoneRouteGrant, w: string, o: { k?: Key; announcer?: string; highestLive?: number; claim?: Partial<P.RouteClaim>; ck?: Key; drop?: "claim" } = {}) => {
   let it: PhoneItem;
   try {
-    it = phoneItemOf(g, o.k ?? iad1);
+    it = phoneItemOf(g, o.k ?? iad1, claimOf(g, o.claim), o.ck ?? phone);
   } catch {
-    it = { kind: "phone", grant: g, signature: "00".repeat(64) };
+    it = { kind: "phone", grant: g, signature: "00".repeat(64), claim: claimOf(g, o.claim), claimSignature: claimSig(claimOf(g, o.claim), o.ck ?? phone) };
   }
+  if (o.drop === "claim") delete (it as Partial<PhoneItem>).claim;
   const announcer = o.announcer ?? g.holderRelayId;
-  return { name: n, item: it, announcer, now: T0, expected: want(n, P.checkPhoneItem(it, announcer, ctx()), w) };
+  const highestLive = o.highestLive ?? 0;
+  return { name: n, item: it, announcer, highestLive, now: T0, expected: want(n, P.checkPhoneItem(it, announcer, ctx(), highestLive), w) };
 };
+const otherPhone = key("otherPhone", 32);
 const phoneItemCases = [
   phoneCase("ok", grant, "ok"),
   phoneCase("ok, holder is the ledger", { ...grant, holderRelayId: "iad1" }, "ok"),
+  phoneCase("ok, within the jump", { ...grant, generation: 20 }, "ok", { highestLive: 20 - P.PHONE_GENERATION_MAX_JUMP }),
+  phoneCase("ok, below the highest live", grant, "ok", { highestLive: 9 }),
   phoneCase("pod name", { ...grant, hostname: name("home") }, "not-bare-name"),
   phoneCase("ttl too long", { ...grant, notAfter: grant.issuedAt + P.PHONE_ROUTE_GRANT_TTL_MS + 1 }, "ttl-too-long"),
   phoneCase("future", { ...grant, issuedAt: T0 + 61_000, notAfter: T0 + 100_000 }, "future"),
   phoneCase("expired", { ...grant, issuedAt: T0 - 60_000, notAfter: T0 }, "expired"),
+  phoneCase("jump above the highest live", { ...grant, generation: 20 }, "generation-jump", { highestLive: 20 - P.PHONE_GENERATION_MAX_JUMP - 1 }),
+  phoneCase("generation above the cap", { ...grant, generation: P.PHONE_GENERATION_MAX + 1 }, "generation-jump"),
   phoneCase("announced by another relay", grant, "wrong-holder", { announcer: "iad1" }),
   phoneCase("revoked ledger", { ...grant, ledgerRelayId: "old1" }, "relay-revoked", { k: old1 }),
   phoneCase("unknown holder", { ...grant, holderRelayId: "rog1" }, "unknown-relay"),
   phoneCase("entry holder", { ...grant, holderRelayId: "ent1" }, "not-full"),
   phoneCase("entry ledger", { ...grant, ledgerRelayId: "ent1" }, "not-full", { k: ent1 }),
+  phoneCase("ledger outside the account's top k", { ...grant, ledgerRelayId: outsider }, "not-ledger", { k: relayKeys[outsider] }),
+  phoneCase("claim for another generation", grant, "claim-mismatch", { claim: { generation: grant.generation + 1 } }),
+  phoneCase("claim for another key", grant, "claim-mismatch", { claim: { phoneRoutePub: otherPhone.pub }, ck: otherPhone }),
+  phoneCase("claim for another account", grant, "claim-mismatch", { claim: { account: "bob", hostname: `bob.${APEX}` } }),
+  phoneCase("claim issued after the grant", grant, "claim-mismatch", { claim: { issuedAt: grant.issuedAt + P.MESH_CLOCK_SKEW_MS + 1 } }),
   phoneCase("signed by the holder", grant, "bad-signature", { k: ams1 }),
+  phoneCase("claim signed by another key", grant, "bad-claim", { ck: otherPhone }),
+  phoneCase("no claim", grant, "malformed", { drop: "claim" }),
   phoneCase("malformed", { ...grant, generation: 0 }, "malformed"),
 ];
-const pi = (g: Partial<PhoneRouteGrant>): PhoneItem => ({ kind: "phone", grant: { ...grant, ...g }, signature: "00".repeat(64) });
+const pi = (g: Partial<PhoneRouteGrant>): PhoneItem => ({ kind: "phone", grant: { ...grant, ...g }, signature: "00".repeat(64), claim: claimOf(grant), claimSignature: "00".repeat(64) });
 const comparePhone = [
   ["higher generation", pi({ generation: 5, issuedAt: 1 }), pi({}), 1],
   ["later issuedAt", pi({ issuedAt: grant.issuedAt + 1 }), pi({}), 1],

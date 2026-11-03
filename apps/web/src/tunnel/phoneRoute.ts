@@ -20,6 +20,10 @@ import {
   checkRouteRelease,
   PHONE_ROUTE_LEASE_MS,
   PHONE_ROUTE_RENEW_MS,
+  PHONE_BEGIN_BURST,
+  PHONE_BEGIN_PER_MINUTE,
+  PHONE_ELIGIBILITY_CACHE_MS,
+  PHONE_LEDGER_READ_CACHE_MS,
   emptyPhoneRouteEntry,
   ledgerAcquire,
   ledgerRelease,
@@ -37,7 +41,7 @@ import type { RegisteredTunnel } from "./registry.js";
 // ── the ledger (`.com`'s; an in-memory one for one relay and tests) ──────
 
 export type LedgerOp =
-  | { op: "acquire"; hostname: string; generation: number; holder: PhoneRouteHolder }
+  | { op: "acquire"; hostname: string; generation: number; holder: PhoneRouteHolder; claim?: RouteClaim; claimSignature?: string }
   | { op: "renew"; hostname: string; generation: number; sessionId: string }
   | { op: "release"; hostname: string; generation: number; sessionId: string };
 
@@ -114,7 +118,8 @@ export function comPhoneRouteLedger(opts: { comBaseUrl: string; secret: string; 
       return b ? parseEntry(b.entry) : null;
     },
     async apply(op) {
-      const b = await call({ method: "POST", body: JSON.stringify(op) });
+      const wire = op.op === "acquire" ? { op: op.op, hostname: op.hostname, generation: op.generation, holder: op.holder } : op;
+      const b = await call({ method: "POST", body: JSON.stringify(wire) });
       const entry = b ? parseEntry(b.entry) : null;
       if (!b || !entry) return null;
       if (b.ok === true) return { ok: true, entry };
@@ -136,7 +141,10 @@ export interface PhoneEligibilityRecord {
  * Null: `.com` could not be asked. `presented` is the grant chain the phone sent in `begin` (relay mesh, relay-mesh.md
  * §8.2: a mesh relay checks the phone's own grants against the log instead of asking `.com`); `.com`'s fetch ignores it.
  */
-export type PhoneEligibilityFetch = (account: string, presented?: unknown) => Promise<PhoneEligibilityRecord | null>;
+export type PhoneEligibilityFetch = ((account: string, presented?: unknown) => Promise<PhoneEligibilityRecord | null>) & {
+  /** Drop any cached answer (a revocation push names the account, or none: every account). */
+  forget?: (account?: string) => void;
+};
 
 const HEX = /^[0-9a-f]*$/;
 
@@ -170,10 +178,17 @@ export function parsePhoneEligibility(body: unknown): PhoneEligibilityRecord | n
   return { adminRootPub, grants };
 }
 
-/** `.com`'s eligibility read (`/api/internal/phone-route/:u/eligibility`, the services control secret). */
-export function comPhoneEligibility(opts: { comBaseUrl: string; secret: string; fetchImpl?: typeof fetch; timeoutMs?: number }): PhoneEligibilityFetch {
+/**
+ * `.com`'s eligibility read (`/api/internal/phone-route/:u/eligibility`, the services control secret). A successful
+ * answer is reused for `PHONE_ELIGIBILITY_CACHE_MS` per account (security review 2026-11-02, M4: one D1 read per grant
+ * on `.com` for every `begin`); a revocation push forgets it.
+ */
+export function comPhoneEligibility(opts: { comBaseUrl: string; secret: string; fetchImpl?: typeof fetch; timeoutMs?: number; now?: () => number; cacheMs?: number }): PhoneEligibilityFetch {
   const base = opts.comBaseUrl.replace(/\/+$/, "");
-  return async (account) => {
+  const now = opts.now ?? (() => Date.now());
+  const cacheMs = opts.cacheMs ?? PHONE_ELIGIBILITY_CACHE_MS;
+  const cache = new Map<string, { at: number; rec: PhoneEligibilityRecord }>();
+  const fetchOne = async (account: string): Promise<PhoneEligibilityRecord | null> => {
     try {
       const res = await (opts.fetchImpl ?? fetch)(`${base}/api/internal/phone-route/${encodeURIComponent(account)}/eligibility`, {
         headers: { authorization: `Bearer ${opts.secret}` },
@@ -186,6 +201,18 @@ export function comPhoneEligibility(opts: { comBaseUrl: string; secret: string; 
       return null;
     }
   };
+  const read = async (account: string): Promise<PhoneEligibilityRecord | null> => {
+    const t = now();
+    const hit = cache.get(account);
+    if (hit && t - hit.at < cacheMs) return hit.rec;
+    const rec = await fetchOne(account);
+    if (rec) {
+      if (cache.size >= 10_000) for (const [k, v] of cache) if (t - v.at >= cacheMs) cache.delete(k);
+      if (cache.size < 10_000) cache.set(account, { at: t, rec });
+    }
+    return rec;
+  };
+  return Object.assign(read, { forget: (account?: string) => (account === undefined ? cache.clear() : void cache.delete(account.toLowerCase())) });
 }
 
 // ── sessions ─────────────────────────────────────────────────────────────
@@ -231,6 +258,8 @@ interface Held {
 export class PhoneSession {
   readonly id = randomBytes(16).toString("hex");
   offer: { account: string; hostname: string; nonce: string; generation: number; expiresAt: number } | null = null;
+  /** The client address the tunnel came from (per-address `begin` budget). */
+  address = "";
   held: Held | null = null;
   /** Refused while another phone held the route: told when it becomes vacant. */
   standby: string | null = null;
@@ -286,6 +315,10 @@ export class PhoneRoutes {
   private readonly standbys = new Map<string, { sessions: Set<PhoneSession>; poll: unknown; notified: number }>();
   private readonly refused: Record<string, number> = {};
   private readonly lost: Record<string, number> = {};
+  /** Per client address `begin` budget (security review 2026-11-02, M4). */
+  private readonly beginBudget = new Map<string, { tokens: number; at: number }>();
+  /** hostname → a ledger read reused for `PHONE_LEDGER_READ_CACHE_MS`. */
+  private readonly readCache = new Map<string, { at: number; entry: PhoneRouteEntry }>();
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (t: unknown) => void;
@@ -316,8 +349,9 @@ export class PhoneRoutes {
     return this.opts.relayId;
   }
 
-  attach(handle: PhoneSessionHandle): PhoneSession {
+  attach(handle: PhoneSessionHandle, address = ""): PhoneSession {
     const s = new PhoneSession(handle);
+    s.address = address;
     this.sessions.add(s);
     return s;
   }
@@ -361,8 +395,15 @@ export class PhoneRoutes {
     }
     if (grants !== undefined) s.presented = grants;
     if (s.held && this.holders.get(s.held.hostname) === s) return this.refuse(s, "holding", { generation: s.held.generation });
+    if (!this.takeBegin(s.address)) return this.refuse(s, "busy");
+    // Only an account with an eligible admin device (in the phone's own chain on a mesh relay) gets a challenge: the
+    // ledger is not asked and no generation is revealed before that (security review 2026-11-02).
+    const any = await this.anyEligible(account, s.presented);
+    if (s.closed) return;
+    if (any === null) return this.refuse(s, "unavailable");
+    if (!any) return this.refuse(s, "not-eligible");
     const hostname = phoneHostname(account, this.apex);
-    const entry = await this.opts.ledger.read(hostname);
+    const entry = await this.readLedger(hostname);
     if (s.closed) return;
     if (!entry) return this.refuse(s, "unavailable");
     const now = this.now();
@@ -391,12 +432,16 @@ export class PhoneRoutes {
     if (s.closed) return;
     if (elig === null) return this.refuse(s, "unavailable");
     if (!elig.ok) return this.refuse(s, "not-eligible");
+    this.readCache.delete(offer.hostname);
     const r = await this.opts.ledger.apply({
       op: "acquire",
       hostname: offer.hostname,
       generation: offer.generation,
       holder: { relayId: this.opts.relayId, sessionId: s.id, phoneRoutePub: c.phoneRoutePub },
+      claim: c,
+      claimSignature: signature,
     });
+    this.readCache.delete(offer.hostname);
     if (s.closed) {
       if (r?.ok) void this.opts.ledger.apply({ op: "release", hostname: offer.hostname, generation: offer.generation, sessionId: s.id });
       return;
@@ -457,6 +502,7 @@ export class PhoneRoutes {
   /** The feed: the ledger committed `generation` for `hostname` (a new holder) or it became vacant. */
   pushed(hostname: string, generation: number, vacant: boolean): void {
     const host = hostname.toLowerCase();
+    this.readCache.delete(host);
     if (vacant) return this.notifyVacant(host, generation);
     // A newer holder elsewhere means this one's lease had lapsed: it is not the holder any more.
     const s = this.holders.get(host);
@@ -470,12 +516,14 @@ export class PhoneRoutes {
 
   /** The relay log revoked a device grant (mesh: the log names no account): re-check every held route now. */
   recheckAll(): Promise<void> {
+    this.opts.eligibility.forget?.();
     return Promise.all([...this.holders.values()].map((s) => this.recheck(s))).then(() => undefined);
   }
 
   /** The feed says a device or admin grant of `username` changed: re-check every route of the account now. */
   eligibilityChanged(username: string): Promise<void> {
     const u = username.toLowerCase();
+    this.opts.eligibility.forget?.(u);
     return Promise.all([...this.holders.values()].filter((s) => s.held?.account === u).map((s) => this.recheck(s))).then(() => undefined);
   }
 
@@ -540,10 +588,46 @@ export class PhoneRoutes {
 
   /** Tell every standby of `hostname` on this relay that it is free: the first valid claim wins in the ledger. */
   private notifyVacant(hostname: string, generation: number): void {
+    this.readCache.delete(hostname);
     const st = this.standbys.get(hostname);
     if (!st) return;
     st.notified = Math.max(st.notified, generation + 1);
     for (const s of st.sessions) if (!s.closed) s.handle.send({ type: "route-vacant", hostname, generation });
+  }
+
+  /** Does the account have any key that may claim (a pre-check before a challenge)? Null: eligibility unavailable. */
+  private async anyEligible(account: string, presented: unknown): Promise<boolean | null> {
+    const rec = await this.opts.eligibility(account, presented);
+    if (!rec) return null;
+    const now = this.now();
+    return rec.grants.some((g) => g.revokedAt == null && phoneRouteEligibility(Buffer.from(g.grant.devicePubKey).toString("hex"), account, rec.adminRootPub, rec.grants, now).ok);
+  }
+
+  private takeBegin(address: string): boolean {
+    const now = this.now();
+    const b = this.beginBudget.get(address) ?? { tokens: PHONE_BEGIN_BURST, at: now };
+    b.tokens = Math.min(PHONE_BEGIN_BURST, b.tokens + ((now - b.at) * PHONE_BEGIN_PER_MINUTE) / 60_000);
+    b.at = now;
+    if (this.beginBudget.size >= 100_000 && !this.beginBudget.has(address)) {
+      for (const [k, v] of this.beginBudget) if (v.tokens + ((now - v.at) * PHONE_BEGIN_PER_MINUTE) / 60_000 >= PHONE_BEGIN_BURST) this.beginBudget.delete(k);
+      if (this.beginBudget.size >= 100_000) return false;
+    }
+    this.beginBudget.set(address, b);
+    if (b.tokens < 1) return false;
+    b.tokens -= 1;
+    return true;
+  }
+
+  private async readLedger(hostname: string): Promise<PhoneRouteEntry | null> {
+    const now = this.now();
+    const hit = this.readCache.get(hostname);
+    if (hit && now - hit.at < PHONE_LEDGER_READ_CACHE_MS) return hit.entry;
+    const entry = await this.opts.ledger.read(hostname);
+    if (entry) {
+      if (this.readCache.size >= 10_000) for (const [k, v] of this.readCache) if (now - v.at >= PHONE_LEDGER_READ_CACHE_MS) this.readCache.delete(k);
+      if (this.readCache.size < 10_000) this.readCache.set(hostname, { at: now, entry });
+    }
+    return entry;
   }
 
   private async eligible(account: string, phoneRoutePub: string, presented: unknown): Promise<{ ok: true; expiresAt: number } | { ok: false } | null> {

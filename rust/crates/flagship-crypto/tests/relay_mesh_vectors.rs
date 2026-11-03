@@ -20,8 +20,8 @@ use flagship_crypto::relay_mesh::{
     RelayWithdraw,
 };
 use flagship_crypto::serving::{
-    Grace, OnLapse, PolicyHead, RevocationState, ServingDecision, ServingInput, ServingLease,
-    ServingPolicy, SignedLease, serving_decision_at_head,
+    Grace, OnLapse, PolicyHead, RevocationState, RouteClaim, ServingDecision, ServingInput,
+    ServingLease, ServingPolicy, SignedLease, serving_decision_at_head,
 };
 use serde_json::{Value, json};
 use std::cmp::Ordering;
@@ -235,10 +235,24 @@ fn grant(v: &Value) -> PhoneRouteGrant {
         not_after: n(v, "notAfter"),
     }
 }
+fn route_claim(v: &Value) -> RouteClaim {
+    let t = |k: &str| v[k].as_str().unwrap_or_default().to_owned();
+    let u = |k: &str| v[k].as_u64().unwrap_or_default();
+    RouteClaim {
+        account: t("account"),
+        phone_route_pub: t("phoneRoutePub"),
+        hostname: t("hostname"),
+        generation: u("generation"),
+        session_nonce: t("sessionNonce"),
+        issued_at: u("issuedAt"),
+    }
+}
 fn phone_item(v: &Value) -> PhoneItem {
     PhoneItem {
         grant: grant(&v["grant"]),
         signature: s(v, "signature"),
+        claim: route_claim(&v["claim"]),
+        claim_signature: v["claimSignature"].as_str().unwrap_or_default().to_owned(),
     }
 }
 fn mesh_item(v: &Value) -> MeshItem {
@@ -389,6 +403,11 @@ fn constants_match() {
         ("MESH_CONTROL_MAX_BYTES", m::MESH_CONTROL_MAX_BYTES as u64),
         ("MESH_DIAL_TIMEOUT_MS", m::MESH_DIAL_TIMEOUT_MS),
         ("MESH_HANDSHAKE_STEP_MS", m::MESH_HANDSHAKE_STEP_MS),
+        ("MESH_HANDSHAKE_MAX_PENDING", m::MESH_HANDSHAKE_MAX_PENDING),
+        (
+            "MESH_HANDSHAKE_MAX_PENDING_PER_IP",
+            m::MESH_HANDSHAKE_MAX_PENDING_PER_IP,
+        ),
         ("MESH_LOAD_FRESH_MS", m::MESH_LOAD_FRESH_MS),
         ("MESH_LOAD_INTERVAL_MS", m::MESH_LOAD_INTERVAL_MS),
         ("MESH_LOG_PUSH_MAX", m::MESH_LOG_PUSH_MAX as u64),
@@ -436,6 +455,10 @@ fn constants_match() {
         ("MOVE_LOCALITY_MIN_MS", m::MOVE_LOCALITY_MIN_MS),
         ("MOVE_OLD_TUNNEL_GRACE_MS", m::MOVE_OLD_TUNNEL_GRACE_MS),
         ("PHONE_ROUTE_GRANT_TTL_MS", m::PHONE_ROUTE_GRANT_TTL_MS),
+        ("PHONE_LEDGER_TOP_K", m::PHONE_LEDGER_TOP_K),
+        ("PHONE_GENERATION_MAX_JUMP", m::PHONE_GENERATION_MAX_JUMP),
+        ("PHONE_GENERATION_MAX", m::PHONE_GENERATION_MAX),
+        ("PHONE_GENERATION_MEMORY_MS", m::PHONE_GENERATION_MEMORY_MS),
         ("REBALANCE_BUCKET_MS", m::REBALANCE_BUCKET_MS),
         ("REBALANCE_INTERVAL_MS", m::REBALANCE_INTERVAL_MS),
         ("REBALANCE_JITTER_MS", m::REBALANCE_JITTER_MS),
@@ -882,6 +905,7 @@ fn bridges_hints_moves_phones() {
             &phone_item(&c["item"]),
             &s(c, "announcer"),
             &w.ctx(n(c, "now")),
+            n(c, "highestLive"),
         ));
         assert_eq!(got, c["expected"], "{}", c["name"]);
     }

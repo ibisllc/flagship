@@ -3,9 +3,11 @@
 //! Custom-domain pushes (a Pro feature on its own branch) and the gossip fan-out (dropped by owner decision: no relay broadcast) are
 //! not served.
 
+use std::collections::HashMap;
 use std::convert::Infallible;
-use std::sync::Arc;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
@@ -38,6 +40,72 @@ pub struct HttpApp {
     pub header_timeout: Duration,
     started: Instant,
     mail_in_flight: AtomicUsize,
+    /// Open `/phone-tunnel`s per client address (relay-mesh.md §8.2).
+    phone_slots: Arc<Mutex<Slots>>,
+    /// `/mesh` handshakes not yet authenticated, in all and per client address (§6.1).
+    mesh_pending: Arc<Mutex<Slots>>,
+}
+
+/// Counts of something held per client address, released when its [`Slot`] drops.
+#[derive(Debug, Default)]
+pub struct Slots {
+    total: usize,
+    per: HashMap<String, usize>,
+}
+
+/// One held unit of a [`Slots`] count.
+#[derive(Debug)]
+pub struct Slot {
+    slots: Arc<Mutex<Slots>>,
+    key: String,
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        if let Ok(mut s) = self.slots.lock() {
+            s.total = s.total.saturating_sub(1);
+            if let Some(c) = s.per.get_mut(&self.key) {
+                *c = c.saturating_sub(1);
+                if *c == 0 {
+                    s.per.remove(&self.key);
+                }
+            }
+        }
+    }
+}
+
+/// Take one unit for `key` unless the address already holds `per_key` or all hold `total`.
+#[must_use]
+pub fn take_slot(slots: &Arc<Mutex<Slots>>, key: &str, per_key: u64, total: u64) -> Option<Slot> {
+    let mut s = slots.lock().ok()?;
+    let have = s.per.get(key).copied().unwrap_or(0);
+    if have as u64 >= per_key || s.total as u64 >= total {
+        return None;
+    }
+    s.total = s.total.saturating_add(1);
+    s.per.insert(key.to_owned(), have.saturating_add(1));
+    Some(Slot {
+        slots: Arc::clone(slots),
+        key: key.to_owned(),
+    })
+}
+
+/// The client's address: `Fly-Client-IP` when Fly's proxy set it (TLS ends at Fly's edge), else the socket peer.
+#[must_use]
+pub fn client_address(req: &Request<Incoming>, peer: Option<SocketAddr>) -> String {
+    req.headers()
+        .get("fly-client-ip")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<IpAddr>().ok())
+        .or_else(|| peer.map(|p| p.ip()))
+        .map_or_else(|| "?".to_owned(), |ip| ip.to_string())
+}
+
+fn busy() -> Resp {
+    let mut r = error(StatusCode::SERVICE_UNAVAILABLE, "busy");
+    r.headers_mut()
+        .insert("retry-after", HeaderValue::from_static("5"));
+    r
 }
 
 impl std::fmt::Debug for HttpApp {
@@ -66,6 +134,8 @@ impl HttpApp {
             header_timeout,
             started: Instant::now(),
             mail_in_flight: AtomicUsize::new(0),
+            phone_slots: Arc::new(Mutex::new(Slots::default())),
+            mesh_pending: Arc::new(Mutex::new(Slots::default())),
         })
     }
 }
@@ -260,7 +330,7 @@ fn tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
     r
 }
 
-fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
+fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>, client: &str) -> Resp {
     let Some(routes) = app.hub.phone.clone() else {
         return error(StatusCode::NOT_FOUND, "not found");
     };
@@ -270,16 +340,26 @@ fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
     let Some(accept) = upgrade_ok(&req) else {
         return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
     };
+    let Some(slot) = take_slot(
+        &app.phone_slots,
+        client,
+        crate::phone::PHONE_TUNNEL_MAX_PER_IP,
+        u64::MAX,
+    ) else {
+        return busy();
+    };
     let cfg = app.hub.cfg.clone();
     let ws_cfg = WebSocketConfig::default()
         .max_message_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64))
         .max_frame_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64));
     let on_upgrade = hyper::upgrade::on(&mut req);
+    let client = client.to_owned();
     tokio::spawn(async move {
+        let _slot = slot;
         if let Ok(up) = on_upgrade.await {
             let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
                 .await;
-            crate::phone::run_phone_tunnel(ws, routes, cfg).await;
+            crate::phone::run_phone_tunnel(ws, routes, cfg, client).await;
         }
     });
     let mut r = Response::new(Full::new(Bytes::new()));
@@ -295,12 +375,20 @@ fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
 }
 
 /// `/mesh`: a peer relay's bridge (relay-mesh.md §6); 404 with the mesh off.
-fn mesh_bridge(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
+fn mesh_bridge(app: &Arc<HttpApp>, mut req: Request<Incoming>, client: &str) -> Resp {
     let Some(mesh) = app.hub.mesh.clone() else {
         return error(StatusCode::NOT_FOUND, "not found");
     };
     let Some(accept) = upgrade_ok(&req) else {
         return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
+    };
+    let Some(pending) = take_slot(
+        &app.mesh_pending,
+        client,
+        flagship_crypto::relay_mesh::MESH_HANDSHAKE_MAX_PENDING_PER_IP,
+        flagship_crypto::relay_mesh::MESH_HANDSHAKE_MAX_PENDING,
+    ) else {
+        return busy();
     };
     let ws_cfg = WebSocketConfig::default()
         .max_message_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64))
@@ -310,7 +398,7 @@ fn mesh_bridge(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
         if let Ok(up) = on_upgrade.await {
             let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
                 .await;
-            mesh.accept_bridge(ws).await;
+            mesh.accept_bridge(ws, pending).await;
         }
     });
     let mut r = Response::new(Full::new(Bytes::new()));
@@ -395,13 +483,23 @@ async fn mailbox(app: &Arc<HttpApp>, id: &str, req: Request<Incoming>) -> Resp {
     }
 }
 
-async fn handle(app: Arc<HttpApp>, req: Request<Incoming>) -> Result<Resp, Infallible> {
+async fn handle(
+    app: Arc<HttpApp>,
+    req: Request<Incoming>,
+    peer: Option<SocketAddr>,
+) -> Result<Resp, Infallible> {
     let path = req.uri().path().to_owned();
     let method = req.method().clone();
     Ok(match (method, path.as_str()) {
         (_, TUNNEL_PATH) => tunnel(&app, req),
-        (_, crate::phone::PHONE_TUNNEL_PATH) => phone_tunnel(&app, req),
-        (_, crate::mesh::bridge::MESH_PATH) => mesh_bridge(&app, req),
+        (_, crate::phone::PHONE_TUNNEL_PATH) => {
+            let client = client_address(&req, peer);
+            phone_tunnel(&app, req, &client)
+        }
+        (_, crate::mesh::bridge::MESH_PATH) => {
+            let client = client_address(&req, peer);
+            mesh_bridge(&app, req, &client)
+        }
         (Method::GET, "/api/health") => health(&app),
         (Method::GET, "/api/stats") => stats(&app, &req),
         (Method::POST, p) if p.starts_with("/pb/m/") => {
@@ -414,9 +512,10 @@ async fn handle(app: Arc<HttpApp>, req: Request<Incoming>) -> Result<Resp, Infal
 /// Serves one connection until it closes (a tunnel upgrade keeps it open as a WebSocket).
 pub async fn serve_connection(sock: TcpStream, app: Arc<HttpApp>) {
     let _ = sock.set_nodelay(true);
+    let peer = sock.peer_addr().ok();
     let timeout = app.header_timeout;
     let svc_app = Arc::clone(&app);
-    let svc = service_fn(move |req| handle(Arc::clone(&svc_app), req));
+    let svc = service_fn(move |req| handle(Arc::clone(&svc_app), req, peer));
     let conn = hyper::server::conn::http1::Builder::new()
         .timer(TokioTimer::new())
         .header_read_timeout(timeout)

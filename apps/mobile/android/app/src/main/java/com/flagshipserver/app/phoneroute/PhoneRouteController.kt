@@ -91,13 +91,14 @@ object PhoneRouteController {
             certs.ensure(user, apex, key, deviceKey, devicePub)
             val chain = certs.current(user) ?: return@launch
             val hub = tunnelHub(http) ?: return@launch
-            val grants = beginGrants(http, user, devicePub)
+            val (grants, devices) = beginGrants(http, user, devicePub)
             val ep = PhoneEndpoint(
                 user, PhoneRoute.hostname(user, apex), devicePub,
                 web = VoiciPhoneWebHandler,
                 origins = if (Endpoints.voiciOrigin == "https://voi.ci") com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_WEB_ORIGINS
                 else com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_WEB_ORIGINS_GYM,
             )
+            ep.setAccountDevices(devices)
             val c = PhoneTunnelClient(
                 okHttp = http,
                 url = PhoneTunnelClient.phoneTunnelUrl(hub),
@@ -133,16 +134,18 @@ object PhoneRouteController {
      * This device's admin grants from `.com` (`/api/users/:u/device-grants`, read token), for the tunnel's `begin`.
      * Empty when they can't be read: a relay without the mesh doesn't need them, a mesh relay then refuses the claim.
      */
-    private suspend fun beginGrants(http: OkHttpClient, account: String, devicePub: String): List<kotlinx.serialization.json.JsonObject> = runCatching {
+    private suspend fun beginGrants(http: OkHttpClient, account: String, devicePub: String): Pair<List<kotlinx.serialization.json.JsonObject>, Set<String>> = runCatching {
         val url = "${Endpoints.controlBaseUrl.trimEnd('/')}/api/users/${java.net.URLEncoder.encode(account.lowercase(), "UTF-8")}/device-grants"
         AccountReadTokens.authorize(account) { auth ->
             val req = Request.Builder().url(url).get().apply { auth.forEach { (k, v) -> header(k, v) } }.build()
             http.newCall(req).execute().use { res ->
-                if (!res.isSuccessful) return@use emptyList<kotlinx.serialization.json.JsonObject>()
-                PhoneRoute.beginGrants(Json.parseToJsonElement(res.body?.string().orEmpty()), account, devicePub, System.currentTimeMillis())
+                if (!res.isSuccessful) return@use Pair(emptyList<kotlinx.serialization.json.JsonObject>(), emptySet<String>())
+                val body = Json.parseToJsonElement(res.body?.string().orEmpty())
+                val now = System.currentTimeMillis()
+                Pair(PhoneRoute.beginGrants(body, account, devicePub, now), PhoneRoute.accountDeviceKeys(body, account, now))
             }
         }
-    }.getOrDefault(emptyList())
+    }.getOrDefault(Pair(emptyList(), emptySet()))
 
     private fun tunnelHub(http: OkHttpClient): String? = runCatching {
         http.newCall(Request.Builder().url("${Endpoints.controlBaseUrl}/api/services/endpoints").get().build()).execute().use { res ->

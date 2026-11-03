@@ -37,6 +37,17 @@ pub const CHALLENGE_TTL_MS: u64 = 30_000;
 const MAX_CONTROL_BYTES: usize = 16 * 1024;
 const MAX_CONTROL_PER_MINUTE: u32 = 30;
 const TAG_ROUTE_CLAIM: &str = "flagship/route-claim/v1";
+/// `/phone-tunnel` connections kept open from one client address (security review 2026-11-02, M4; relay-mesh.md §8.2).
+pub const PHONE_TUNNEL_MAX_PER_IP: u64 = 8;
+/// `begin`s taken from one client address: a token bucket of this burst, refilled at this rate per minute.
+pub const PHONE_BEGIN_BURST: u64 = 10;
+pub const PHONE_BEGIN_PER_MINUTE: u64 = 20;
+/// A ledger read for one hostname is reused this long (`begin` only).
+pub const PHONE_LEDGER_READ_CACHE_MS: u64 = 2_000;
+/// `.com`'s eligibility answer for one account is reused this long.
+pub const PHONE_ELIGIBILITY_CACHE_MS: u64 = 5_000;
+/// Past this many entries a per-address or per-name map drops what has gone idle.
+const CACHE_PRUNE_AT: usize = 10_000;
 const TAG_ROUTE_RELEASE: &str = "flagship/route-release/v1";
 
 #[derive(Debug, Clone, Copy)]
@@ -331,6 +342,9 @@ pub enum LedgerOp {
         hostname: String,
         generation: u64,
         holder: Holder,
+        /// The phone's checked claim and its signature (a mesh ledger needs them, §8.2; `.com` is not sent them).
+        claim: RouteClaim,
+        claim_signature: String,
     },
     Renew {
         hostname: String,
@@ -351,6 +365,7 @@ impl LedgerOp {
                 hostname,
                 generation,
                 holder,
+                ..
             } => json!({"op": "acquire", "hostname": hostname, "generation": generation,
                 "holder": {"relayId": holder.relay_id, "sessionId": holder.session_id, "phoneRoutePub": holder.phone_route_pub}}),
             Self::Renew {
@@ -558,6 +573,8 @@ struct SessState {
 #[derive(Debug)]
 pub struct PhoneSession {
     pub id: String,
+    /// The client address the tunnel came from (the `begin` budget is per address).
+    pub client: String,
     pub tunnel: Arc<Tunnel>,
     out: mpsc::UnboundedSender<PhoneOut>,
     st: Mutex<SessState>,
@@ -600,6 +617,35 @@ struct RoutesState {
     standbys: HashMap<String, Standby>,
     refused: BTreeMap<String, u64>,
     lost: BTreeMap<String, u64>,
+    /// client address → (tokens, last refill) of its `begin` budget.
+    begins: HashMap<String, (f64, Instant)>,
+    /// hostname → a recent ledger read (`begin` only).
+    reads: HashMap<String, (Instant, Entry)>,
+    /// account → a recent `.com` eligibility answer.
+    eligibility: HashMap<String, (Instant, Eligibility)>,
+}
+
+impl RoutesState {
+    /// One token of the address's `begin` budget, if it has one.
+    fn take_begin(&mut self, client: &str) -> bool {
+        let rate = PHONE_BEGIN_PER_MINUTE as f64 / 60.0;
+        let burst = PHONE_BEGIN_BURST as f64;
+        let t = Instant::now();
+        if self.begins.len() >= CACHE_PRUNE_AT {
+            self.begins.retain(|_, (tok, at)| {
+                *tok + t.saturating_duration_since(*at).as_secs_f64() * rate < burst
+            });
+        }
+        let (tok, at) = self.begins.entry(client.to_owned()).or_insert((burst, t));
+        *tok = (*tok + t.saturating_duration_since(*at).as_secs_f64() * rate).min(burst);
+        *at = t;
+        if *tok >= 1.0 {
+            *tok -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /// Mesh mode: does the relay take new phone routes now?
@@ -696,7 +742,57 @@ impl PhoneRoutes {
                 let grants = s.st.lock().ok().and_then(|x| x.grants.clone());
                 Some(grants.and_then(|g| f(account, &g)).unwrap_or_default())
             }
-            None => self.0.com.eligibility(account).await,
+            None => {
+                let cached = self.0.st.lock().ok().and_then(|st| {
+                    st.eligibility.get(account).and_then(|(at, e)| {
+                        (at.elapsed() < Duration::from_millis(PHONE_ELIGIBILITY_CACHE_MS))
+                            .then(|| e.clone())
+                    })
+                });
+                if cached.is_some() {
+                    return cached;
+                }
+                let e = self.0.com.eligibility(account).await?;
+                if let Ok(mut st) = self.0.st.lock() {
+                    if st.eligibility.len() >= CACHE_PRUNE_AT {
+                        st.eligibility.retain(|_, (at, _)| {
+                            at.elapsed() < Duration::from_millis(PHONE_ELIGIBILITY_CACHE_MS)
+                        });
+                    }
+                    st.eligibility
+                        .insert(account.to_owned(), (Instant::now(), e.clone()));
+                }
+                Some(e)
+            }
+        }
+    }
+
+    /// A ledger read for `begin`, reused for [`PHONE_LEDGER_READ_CACHE_MS`].
+    async fn read_cached(&self, hostname: &str) -> Option<Entry> {
+        let fresh = Duration::from_millis(PHONE_LEDGER_READ_CACHE_MS);
+        let cached = self.0.st.lock().ok().and_then(|st| {
+            st.reads
+                .get(hostname)
+                .and_then(|(at, e)| (at.elapsed() < fresh).then(|| e.clone()))
+        });
+        if cached.is_some() {
+            return cached;
+        }
+        let e = self.0.com.read(hostname).await?;
+        if let Ok(mut st) = self.0.st.lock() {
+            if st.reads.len() >= CACHE_PRUNE_AT {
+                st.reads.retain(|_, (at, _)| at.elapsed() < fresh);
+            }
+            st.reads
+                .insert(hostname.to_owned(), (Instant::now(), e.clone()));
+        }
+        Some(e)
+    }
+
+    /// The ledger moved for a hostname: the next `begin` reads it again.
+    fn forget_read(&self, hostname: &str) {
+        if let Ok(mut st) = self.0.st.lock() {
+            st.reads.remove(hostname);
         }
     }
 
@@ -740,9 +836,11 @@ impl PhoneRoutes {
         &self,
         tunnel: Arc<Tunnel>,
         out: mpsc::UnboundedSender<PhoneOut>,
+        client: &str,
     ) -> Arc<PhoneSession> {
         let s = Arc::new(PhoneSession {
             id: random_hex(16),
+            client: client.to_owned(),
             tunnel,
             out,
             st: Mutex::new(SessState::default()),
@@ -863,8 +961,33 @@ impl PhoneRoutes {
         {
             return self.refuse(s, "holding", Some(h.generation));
         }
+        if !self
+            .0
+            .st
+            .lock()
+            .is_ok_and(|mut st| st.take_begin(&s.client))
+        {
+            return self.refuse(s, "busy", None);
+        }
+        // Eligibility first: an account with no eligible admin device in what the phone (or `.com`) shows learns no
+        // generation and costs no ledger read (security review 2026-11-02).
+        let elig = self.eligibility_for(s, account).await;
+        if s.closed() {
+            return;
+        }
+        let Some(elig) = elig else {
+            return self.refuse(s, "unavailable", None);
+        };
+        let t0 = now();
+        if !elig
+            .grants
+            .iter()
+            .any(|g| eligible(&g.device_pub_hex, account, &elig, t0).is_ok())
+        {
+            return self.refuse(s, "not-eligible", None);
+        }
         let hostname = phone_hostname(account, &self.0.apex);
-        let entry = self.0.com.read(&hostname).await;
+        let entry = self.read_cached(&hostname).await;
         if s.closed() {
             return;
         }
@@ -935,8 +1058,11 @@ impl PhoneRoutes {
                     session_id: s.id.clone(),
                     phone_route_pub: c.phone_route_pub.clone(),
                 },
+                claim: c.clone(),
+                claim_signature: signature.to_ascii_lowercase(),
             })
             .await;
+        self.forget_read(&offer.hostname);
         if s.closed() {
             if matches!(r, Some(LedgerResult::Ok(_))) {
                 let _ = self
@@ -1060,6 +1186,7 @@ impl PhoneRoutes {
                 session_id: s.id.clone(),
             })
             .await;
+        self.forget_read(&h.hostname);
         if s.closed()
             || !self.holds(s, &h.hostname)
             || s.held().is_none_or(|x| x.generation != h.generation)
@@ -1097,6 +1224,7 @@ impl PhoneRoutes {
     /// The feed: the ledger committed `generation` for `hostname` (a new holder) or it became vacant.
     pub fn pushed(&self, hostname: &str, generation: u64, vacant: bool) {
         let host = hostname.to_lowercase();
+        self.forget_read(&host);
         if vacant {
             return self.notify_vacant(&host, generation);
         }
@@ -1117,6 +1245,9 @@ impl PhoneRoutes {
     /// The feed says a device or admin grant of `username` changed: re-check every route of the account now.
     pub async fn eligibility_changed(&self, username: &str) {
         let u = username.to_lowercase();
+        if let Ok(mut st) = self.0.st.lock() {
+            st.eligibility.remove(&u);
+        }
         let all: Vec<Arc<PhoneSession>> = self
             .0
             .st
@@ -1259,6 +1390,7 @@ impl PhoneRoutes {
 
     /// Tell every standby of `hostname` on this relay that it is free: the first valid claim wins in the ledger.
     fn notify_vacant(&self, hostname: &str, generation: u64) {
+        self.forget_read(hostname);
         let waiting: Vec<Arc<PhoneSession>> = {
             let Ok(mut st) = self.0.st.lock() else { return };
             let Some(sb) = st.standbys.get_mut(hostname) else {
@@ -1360,13 +1492,17 @@ enum Job {
 }
 
 /// One `/phone-tunnel` WebSocket until it closes.
-pub async fn run_phone_tunnel<S>(ws: WebSocketStream<S>, routes: PhoneRoutes, cfg: Arc<HubConfig>)
-where
+pub async fn run_phone_tunnel<S>(
+    ws: WebSocketStream<S>,
+    routes: PhoneRoutes,
+    cfg: Arc<HubConfig>,
+    client: String,
+) where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let tunnel = Tunnel::new(cfg);
     let (tx, mut rx) = mpsc::unbounded_channel::<PhoneOut>();
-    let session = routes.attach(Arc::clone(&tunnel), tx.clone());
+    let session = routes.attach(Arc::clone(&tunnel), tx.clone(), &client);
     let (mut sink, mut stream) = ws.split();
     let _ = tx.send(PhoneOut::Text(
         json!({"type": "hello", "relayId": routes.relay_id(), "serverTime": now()}).to_string(),
@@ -1524,6 +1660,34 @@ mod tests {
 
     const VECTORS: &str =
         include_str!("../../../../packages/protocol/test-vectors/phone-route/vectors.json");
+
+    #[test]
+    fn relay_limits_agree_with_typescript() {
+        let v: Value = serde_json::from_str(VECTORS).unwrap();
+        let l = &v["relayLimits"];
+        for (k, ours) in [
+            ("PHONE_TUNNEL_MAX_PER_IP", PHONE_TUNNEL_MAX_PER_IP),
+            ("PHONE_BEGIN_BURST", PHONE_BEGIN_BURST),
+            ("PHONE_BEGIN_PER_MINUTE", PHONE_BEGIN_PER_MINUTE),
+            ("PHONE_LEDGER_READ_CACHE_MS", PHONE_LEDGER_READ_CACHE_MS),
+            ("PHONE_ELIGIBILITY_CACHE_MS", PHONE_ELIGIBILITY_CACHE_MS),
+        ] {
+            assert_eq!(l[k].as_u64(), Some(ours), "{k}");
+        }
+    }
+
+    #[test]
+    fn the_begin_budget_is_per_address_burst_then_refused() {
+        let mut st = RoutesState::default();
+        for _ in 0..PHONE_BEGIN_BURST {
+            assert!(st.take_begin("192.0.2.1"));
+        }
+        assert!(!st.take_begin("192.0.2.1"), "past the burst");
+        assert!(
+            st.take_begin("192.0.2.2"),
+            "another address has its own budget"
+        );
+    }
 
     #[test]
     fn claims_and_releases_agree_with_typescript() {

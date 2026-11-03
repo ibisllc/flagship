@@ -27,6 +27,7 @@ import { selectCurrentBindings } from "./accountPqTrust.js";
 import {
   DEVICE_SCOPES,
   isSensitiveScope,
+  RELAY_LOG_GRANT_ID,
   verifyDeviceCapabilityGrant,
   verifyDeviceCapabilityGrantFast,
   verifyRevokeDeviceCapabilityGrant,
@@ -135,6 +136,11 @@ export async function handleMintDeviceGrant(
     !HEX128.test(body.signature)
   ) {
     return malformed("malformed body");
+  }
+  // The relay log carries a revocation only for an id of this shape (hex digits and dashes, as the apps' UUIDs): a
+  // grant it could not carry would never be revoked on the relays (security review 2026-11-02).
+  if (!RELAY_LOG_GRANT_ID.test(g.grantId.toLowerCase())) {
+    return malformed("grantId must be a UUID or hex (hex digits and dashes, at most 64)");
   }
   const scopes = parseScopes(g.scopes);
   if (!scopes || scopes.length === 0) {

@@ -34,6 +34,8 @@ export function verifyMailboxAnnouncements(list: MailboxAnnouncement[], now: num
  */
 export interface RemoteMailboxes {
   onAnnounce(list: MailboxAnnouncement[]): void;
+  /** Local tunnels stopped holding these ids (the mesh withdraws them, so a peer's holder can take over). */
+  onWithdraw?(ids: string[]): void;
   has(id: string): boolean;
   deliver(id: string, envelope: Uint8Array): Promise<{ status: number; body: Uint8Array } | null>;
 }
@@ -49,14 +51,28 @@ export class MailboxRegistry {
 
   /** Point these mailbox ids at a tunnel. A later announcement for the same id wins. `list`: the proofs (mesh). */
   register(ids: string[], owner: object, deliver: MailDeliver, list?: MailboxAnnouncement[]): void {
-    for (const [id, r] of this.routes) if (r.owner === owner && !ids.includes(id)) this.routes.delete(id);
+    const gone: string[] = [];
+    for (const [id, r] of this.routes) {
+      if (r.owner === owner && !ids.includes(id)) {
+        this.routes.delete(id);
+        gone.push(id);
+      }
+    }
     for (const id of ids) this.routes.set(id, { owner, deliver });
+    if (gone.length > 0) this.remote?.onWithdraw?.(gone);
     if (list && this.remote) this.remote.onAnnounce(list);
   }
 
   /** The tunnel closed. */
   drop(owner: object): void {
-    for (const [id, r] of this.routes) if (r.owner === owner) this.routes.delete(id);
+    const gone: string[] = [];
+    for (const [id, r] of this.routes) {
+      if (r.owner === owner) {
+        this.routes.delete(id);
+        gone.push(id);
+      }
+    }
+    if (gone.length > 0) this.remote?.onWithdraw?.(gone);
   }
 
   has(id: string): boolean {

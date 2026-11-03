@@ -11,6 +11,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -161,6 +162,24 @@ object PhoneRoute {
         }
         out.sortWith(compareByDescending<Triple<Long, String, JsonObject>> { it.first }.thenBy { it.second })
         return out.take(BEGIN_MAX_GRANTS).map { it.third }
+    }
+
+    /** The account's device book from the same `/device-grants` body: every live (unrevoked, unexpired) grant's
+     *  device key, lower-case. The phone endpoint records hellos only from these. */
+    fun accountDeviceKeys(body: JsonElement?, account: String, now: Long): Set<String> {
+        val listed = ((body as? JsonObject)?.get("grants") as? JsonArray) ?: return emptySet()
+        val user = account.lowercase()
+        val out = HashSet<String>()
+        for (raw in listed) {
+            val g = raw as? JsonObject ?: continue
+            val username = (g["username"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: continue
+            val pub = (g["devicePubHex"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.lowercase() ?: continue
+            val expiresAt = (g["expiresAt"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: continue
+            val revoked = g["revokedAt"]?.let { it !is JsonNull } ?: false
+            if (username.lowercase() != user || !Regex("^[0-9a-f]{64}$").matches(pub) || expiresAt <= now || revoked) continue
+            out += pub
+        }
+        return out
     }
 
     /** `{type:"begin", account, grants}`; a relay without the mesh ignores `grants`. */
