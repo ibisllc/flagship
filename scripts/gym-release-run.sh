@@ -154,7 +154,8 @@ for STACK in $STACKS; do
 done
 # Standalone lanes (opt-in), under this run's lock.
 LANES_FAILED=0 LANES_SKIPPED=0
-for L in ${GYM_RELEASE_LANES//,/ }; do
+LANES="${GYM_RELEASE_LANES:-}"
+for L in ${LANES//,/ }; do
   NAME="${L%%:*}"; LARG=""; [ "$NAME" != "$L" ] && LARG="${L#*:}"
   [ -f "$REPO/tools/live-e2e/lanes/$NAME.ts" ] || { echo "✗ no lane tools/live-e2e/lanes/$NAME.ts"; LANES_FAILED=1; continue; }
   echo "── lane: $NAME${LARG:+ $LARG}"

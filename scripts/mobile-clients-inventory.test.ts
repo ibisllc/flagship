@@ -41,6 +41,7 @@ const ALLOWED: Record<string, string> = {
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/LiveDevicePairingRelay.kt": "defaults for the control apex's pairing relay",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/PhoneAlertClient.kt": "default for the control apex's alert inbox",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/builder/iso/OkHttpBuilderHttp.kt": "downloads installer media from the public mirrors",
+  "apps/mobile/android/app/src/main/java/com/flagshipserver/app/builder/iso/ArtifactPreflight.kt": "HEAD to the control apex for the box-release manifest before a burn; never a box",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/PeerRestoreSources.kt": "reads one record from the control apex",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RescueTransport.kt": "the rescue connection to the owner's own box on the LAN: it trusts the box's pinned KEY, not the CA pin the factory enforces (accepts any certificate only to read its hash, then requires the signed hello to name it, then that exact hash)",
   "apps/mobile/ios/Sources/FlagshipUI/Services/RescueTransport.swift": "the rescue connection to the owner's own box on the LAN: key-bound trust (certificate hash named by the signed hello), see the Android twin",

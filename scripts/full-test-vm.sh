@@ -35,7 +35,7 @@ vm_toolchains "$REPO" "$OUT/setup.log"
 # cargo-deny is built on the VM; a flaky crates.io fetch once left the suite with "no such command: deny"
 # and a false red, so retry and keep the output where setup.log is.
 for attempt in 1 2 3; do
-  "${VM_SSH[@]}" '/root/.cargo/bin/cargo install --locked cargo-deny' >>"$OUT/setup.log" 2>&1 && break
+  "${VM_SSH[@]}" '/root/.cargo/bin/rustup default stable >/dev/null 2>&1; /root/.cargo/bin/cargo install --locked cargo-deny' >>"$OUT/setup.log" 2>&1 && break
   say "cargo-deny install failed (attempt $attempt)"
   sleep 10
 done
