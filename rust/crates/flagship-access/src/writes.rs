@@ -85,8 +85,10 @@ pub fn write_durable(path: &Path, text: &str) -> io::Result<()> {
             .open(&tmp)?;
         f.write_all(text.as_bytes())?;
         f.sync_all()?;
-        if let Some(m) = &meta {
-            // Root writes for the daemon's account: the daemon must still read (and, under TypeScript, write) it.
+        // Root writes for the daemon's account: the daemon must still read (and, under TypeScript, write) it. A new
+        // file takes its folder's owner (the daemon's), as the old one's would.
+        let owner = meta.or_else(|| fs::metadata(dir).ok());
+        if let Some(m) = &owner {
             let _ = std::os::unix::fs::fchown(&f, Some(m.uid()), Some(m.gid()));
         }
     }

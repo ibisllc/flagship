@@ -26,7 +26,7 @@ import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { composeServiceId } from "@flagship/protocol";
 import { writeFileDurable } from "../durableFile.js";
-import { assignAddress, dialsContainersDirectly, publishAndWatch, releaseAddressFor, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
+import { assignAddress, dialsContainersDirectly, publishAndWatch, reassignAddress, releaseAddressFor, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
 import { endpoints, nextGeneration, type EndpointKey } from "../endpoints.js";
 import type { PostgresAdmin } from "./admin.js";
 import { registerDedicatedPort } from "./appSql.js";
@@ -338,7 +338,7 @@ export class DedicatedPostgres {
     await this.deps.volumes.prepare(dedicatedVolume(e.key), e.limits.diskBytes);
     const network = this.deps.network ?? "flagship-apps";
     const direct = dialsContainersDirectly();
-    const address = direct ? await assignAddress(this.deps.cmd, network, `db:${e.key}`) : undefined;
+    let address = direct ? await assignAddress(this.deps.cmd, network, `db:${e.key}`) : undefined;
     // A start or restart is a new incarnation: nothing keeps talking to the old one.
     stopEndpoint(dedicatedServiceId(e.key), "live");
     let generation = nextGeneration();
@@ -352,20 +352,32 @@ export class DedicatedPostgres {
         await this.deps.cmd.run("docker", ["start", container]);
       } else {
         const sandbox = (await this.deps.sandboxArgs?.().catch(() => [])) ?? [];
-        await this.deps.cmd.run(
-          "docker",
-          dedicatedRunArgs({
-            key: e.key,
-            port: e.port,
-            adminPassword: e.adminPassword,
-            limits: e.limits,
-            sandbox,
-            network,
-            generation,
-            ...(address ? { address } : {}),
-            ...(this.deps.image ? { image: this.deps.image } : {}),
-          }),
-        );
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await this.deps.cmd.run(
+              "docker",
+              dedicatedRunArgs({
+                key: e.key,
+                port: e.port,
+                adminPassword: e.adminPassword,
+                limits: e.limits,
+                sandbox,
+                network,
+                generation,
+                ...(address ? { address } : {}),
+                ...(this.deps.image ? { image: this.deps.image } : {}),
+              }),
+            );
+            break;
+          } catch (err) {
+            // As an app's run (serviceRunner): a container the pool did not place (one the Rust controller made) holds
+            // the address; the engine names it, and the instance takes another.
+            const taken = address && attempt < 4 ? /requested ip address (\d{1,3}(?:\.\d{1,3}){3}) is already allocated/.exec(String((err as Error).message)) : null;
+            if (!taken) throw err;
+            await this.deps.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
+            address = await reassignAddress(this.deps.cmd, network, `db:${e.key}`, taken[1]!);
+          }
+        }
       }
     } else {
       const had = await this.generationOf(container);

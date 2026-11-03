@@ -98,6 +98,9 @@ const DEFAULT_PROPAGATION_MS = 10_000;
 const CHALLENGE_QUIET_MS = 90_000;
 /** A pending order no poll has touched for this long is not in flight (its device polls every few seconds). */
 const ABANDONED_ORDER_MS = 120_000;
+/** The order `f` was followed by a certificate for the same device and class. */
+const LATER_ISSUED =
+  "EXISTS (SELECT 1 FROM certificate_orders i WHERE i.device_pub = f.device_pub AND i.class = f.class AND i.status = 'issued' AND i.created_at > f.created_at)";
 const LOCK_MS = 30_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
@@ -521,8 +524,10 @@ async function limits(
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE names = ? AND status = 'issued' AND created_at > ?", o.key, s.now - WEEK_MS),
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE zone = ? AND status = 'issued' AND created_at > ?", o.zone, s.now - WEEK_MS),
     serviceBudget(s),
-    count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE username = ? AND created_at > ?", o.account, s.now - 86_400_000),
-    count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE username = ? AND status = 'failed' AND acme_ordered_at > ?", o.account, s.now - 86_400_000),
+    // An order the same device followed with a certificate is not held against the account: every new box's first
+    // order is routinely superseded by its second, so three servers would otherwise spend the day's abandoned budget.
+    count(s, `SELECT COUNT(*) AS n FROM certificate_orders f WHERE username = ? AND created_at > ? AND NOT (status = 'failed' AND ${LATER_ISSUED})`, o.account, s.now - 86_400_000),
+    count(s, `SELECT COUNT(*) AS n FROM certificate_orders f WHERE username = ? AND status = 'failed' AND acme_ordered_at > ? AND NOT ${LATER_ISSUED}`, o.account, s.now - 86_400_000),
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE names = ? AND status = 'failed' AND error_code = 'issuance-acme-failed' AND updated_at > ?", o.key, s.now - 3_600_000),
   ]);
   const over =

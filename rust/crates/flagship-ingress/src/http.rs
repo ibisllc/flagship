@@ -388,6 +388,26 @@ pub fn forward_request_headers(
     out
 }
 
+/// The app sees the name it was routed by (as the TS proxy's `routedHost`): a client-written Host or
+/// X-Forwarded-Host never names another app to it (H5). The box is the only hop, so it states the
+/// scheme and host itself.
+pub fn with_routed_host(
+    headers: Vec<(String, String)>,
+    routed_host: &str,
+) -> Vec<(String, String)> {
+    if routed_host.is_empty() {
+        return headers;
+    }
+    let mut out: Vec<(String, String)> = headers
+        .into_iter()
+        .filter(|(k, _)| k != "host" && k != "x-forwarded-host" && k != "x-forwarded-proto")
+        .collect();
+    out.insert(0, ("host".into(), routed_host.to_owned()));
+    out.push(("x-forwarded-host".into(), routed_host.to_owned()));
+    out.push(("x-forwarded-proto".into(), "https".into()));
+    out
+}
+
 /// Serialise a request head for the app. Node's `http.request` adds `Host: <ip>:<port>` when
 /// the client sent none (HTTP/1.0); so does this.
 pub fn encode_request_head(
@@ -818,6 +838,28 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
             .collect()
+    }
+
+    #[test]
+    fn the_app_is_told_the_routed_host_not_the_clients() {
+        let out = with_routed_host(
+            h(&[
+                ("host", "b.box.example"),
+                ("x-forwarded-host", "b.box.example"),
+                ("x-forwarded-proto", "http"),
+                ("accept", "*/*"),
+            ]),
+            "a.box.example",
+        );
+        assert_eq!(
+            out,
+            h(&[
+                ("host", "a.box.example"),
+                ("accept", "*/*"),
+                ("x-forwarded-host", "a.box.example"),
+                ("x-forwarded-proto", "https")
+            ])
+        );
     }
 
     #[test]

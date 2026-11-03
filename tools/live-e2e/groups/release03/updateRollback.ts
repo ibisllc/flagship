@@ -134,8 +134,11 @@ export const updateRollback: Group = {
       if (!rolled) return;
 
       await rec.check("the box went down while the drill release ran (it was really installed and started)", async () => {
-        assert(sawDown, "the box answered the whole time: the drill release may never have been switched to");
-        return "down, then back on the previous release";
+        if (sawDown) return "down, then back on the previous release";
+        // The drill can crash-loop and roll back between two 20 s polls; the guard's own counted starts prove it ran.
+        const ev = classifyGuardJournal(await journal(acct, b, 8000));
+        assert(ev.rustStarts > 0, "the box answered the whole time and the guard counted no start: the drill release may never have been switched to");
+        return `never seen down between polls, but the guard counted ${ev.rustStarts} starts of the drill release`;
       });
 
       await rec.check("the box serves again on the previous release (front page + a paired session)", async () => {

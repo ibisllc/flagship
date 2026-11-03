@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -48,6 +48,25 @@ function sandbox(binaryBody = "#!/bin/bash\nexit 0\n", pinned?: string) {
 }
 
 describe("flagship-rust-select", () => {
+  it("makes the access state's folder before flagship-access's sandbox is built (Rust is its one writer)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rust-select-access-"));
+    dirs.push(root);
+    const release = join(root, "release");
+    mkdirSync(join(release, "installer/rust"), { recursive: true });
+    const body = "#!/bin/bash\nexit 0\n";
+    writeFileSync(join(release, "installer/rust/flagship-access"), body);
+    chmodSync(join(release, "installer/rust/flagship-access"), 0o755);
+    writeFileSync(join(release, "installer/rust/PINS.json"), JSON.stringify({ binaries: { "flagship-access": createHash("sha256").update(body).digest("hex") } }));
+    writeFileSync(join(root, "arch-v2.json"), JSON.stringify({ version: 1, rust: "on", engine: "podman" }));
+    const accessDataDir = join(root, "data", "flagship-access");
+    const paths = { releasePath: release, configPath: join(root, "arch-v2.json"), engineActivePath: join(root, "engine-active"), stateDir: join(root, "state"), runDir: join(root, "run"), accessDataDir };
+    writeFileSync(join(root, "select.sh"), rustSelectScript(paths));
+    const r = spawnSync("bash", [join(root, "select.sh"), "select", "access"], { encoding: "utf8" });
+    expect(r.stdout).toContain("access: rust");
+    expect(statSync(accessDataDir).isDirectory()).toBe(true);
+    expect(statSync(accessDataDir).mode & 0o777).toBe(0o700);
+  });
+
   it("chooses the pinned Rust binary and confirms it once its socket appears", () => {
     const s = sandbox();
     expect(s.select("select", "keyd").status).toBe(0);

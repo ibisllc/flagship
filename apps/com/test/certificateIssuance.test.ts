@@ -635,6 +635,32 @@ describe("one account cannot spend the CA budget by superseding its own orders",
   });
 });
 
+describe("a superseded first order followed by a certificate is not abandoned", () => {
+  it("lets an account with many servers, each of whose first order was replaced, still order for a new box", async () => {
+    const w = await setup();
+    try {
+      // Each earlier box's first order reached the CA and was superseded; its next order was issued.
+      const row = (id: number, device: string, status: string, at: number) =>
+        w.db
+          .prepare(
+            "INSERT INTO certificate_orders (order_id, request_id, device_pub, username, server_domain, class, reg_gen, names, zone, csr_b64, csr_spki_sha256, order_json, signature, status, step, acme_ordered_at, error_code, created_at, updated_at) VALUES (?, ?, ?, 'alice', ?, 'control', 1, ?, ?, 'x', 'x', '{}', 'x', ?, 'done', ?, ?, ?, ?)",
+          )
+          .bind(String(id).padStart(32, "0"), `r${id}`, device, `b${id}.alice.${APEX}`, `b${id}.alice.${APEX}`, `alice.${APEX}`, status, at, status === "failed" ? "issuance-superseded" : null, at, at)
+          .run();
+      const n = ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay + 2;
+      for (let i = 0; i < n; i++) {
+        const device = hex(ed.getPublicKey(seed(100 + i)));
+        await row(2 * i + 1, device, "failed", w.clock.t - 60_000 + i);
+        await row(2 * i + 2, device, "issued", w.clock.t - 30_000 + i);
+      }
+      const r = await ask(w, { cls: "control", names: [SERVER] });
+      expect(r.res.status, JSON.stringify(r.json)).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+});
+
 describe("the issuance sweep runs on its own (cron), not only inside other people's orders", () => {
   it("revokes a box's certificates once the box is removed, with no other order arriving", async () => {
     const w = await setup();

@@ -105,6 +105,8 @@ pub struct Session {
     pub upgrade: bool,
     pub target: SocketAddrV4,
     pub injection: Injection,
+    /// The name the connection was routed by (the TLS SNI): the app's Host, never the client's.
+    pub routed_host: String,
     /// Bytes after the head the client already sent.
     pub rest: Vec<u8>,
     /// Held open for the connection's life; its end cancels the connection.
@@ -232,6 +234,7 @@ pub async fn route(first: &[u8], sni: &str, cfg: &ProxyConfig) -> Route {
             upgrade,
             target,
             injection,
+            routed_host: sni.to_owned(),
             lease,
         })),
         _ => Route::Daemon,
@@ -288,6 +291,7 @@ where
         upgrade,
         target,
         injection,
+        routed_host,
         rest,
         mut lease,
     } = s;
@@ -295,7 +299,17 @@ where
         let mut b = [0u8; 1];
         let _ = lease.read(&mut b).await;
     };
-    let exchange = exchange(client, head, body, upgrade, target, injection, rest, cfg);
+    let exchange = exchange(
+        client,
+        head,
+        body,
+        upgrade,
+        target,
+        injection,
+        &routed_host,
+        rest,
+        cfg,
+    );
     tokio::select! {
         () = exchange => {}
         () = cancelled => {}
@@ -312,6 +326,7 @@ async fn exchange<C>(
     upgrade: bool,
     target: SocketAddrV4,
     injection: Injection,
+    routed_host: &str,
     rest: Vec<u8>,
     cfg: &ProxyConfig,
 ) where
@@ -353,7 +368,10 @@ async fn exchange<C>(
     {
         return;
     }
-    let headers = http::forward_request_headers(&head.headers, &injection, upgrade, body);
+    let headers = http::with_routed_host(
+        http::forward_request_headers(&head.headers, &injection, upgrade, body),
+        routed_host,
+    );
     let wire = http::encode_request_head(&head.method, &head.target, &headers, &target.to_string());
     if write_flush(&mut up, &wire).await.is_err() {
         let r = http::plain_response(

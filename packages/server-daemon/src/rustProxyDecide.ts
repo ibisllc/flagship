@@ -38,8 +38,8 @@ export type DecideAnswer =
 export interface DecideDeps {
   /** The app the SNI names, as the TLS handler resolves it. */
   appForSni(sni: string): InstalledService | undefined;
-  /** The TS proxy's options for that app (gates, prepare, upstream, limiter). */
-  options(app: InstalledService): AppConnectionOptions;
+  /** The TS proxy's options for that app (gates, prepare, upstream, limiter), routed by `sni`. */
+  options(app: InstalledService, sni: string): AppConnectionOptions;
   /** The owner's proxy setting (rustStack/ownership.ts): off ⇒ every request is the daemon's. */
   enabled(): boolean;
 }
@@ -103,7 +103,7 @@ async function decideInner(
   if (!app) return daemon("not an app");
   const pathOnly = req.target.split("?")[0]!;
   if (BOX_PATHS.some((p) => pathOnly.startsWith(p))) return daemon("a box path");
-  const opts = deps.options(app);
+  const opts = deps.options(app, req.sni);
   const http: HttpRequest = { method: req.method, path: req.target, headers: { ...req.headers }, body: Buffer.alloc(0) };
   // The gates and the decision see the head only; any that answers sends the whole request to the
   // daemon, which runs them again with the body.

@@ -467,7 +467,7 @@ export const voici: Group = {
         for (const d of ["default-src 'none'", "script-src 'self'", "frame-ancestors 'none'", "img-src 'self' blob:"]) assert(csp.includes(d), `CSP lacks ${d}: ${csp}`);
         assert(shell.headers.get("x-frame-options") === "DENY", "no X-Frame-Options: DENY");
         const at = await http(`${VOICI_ORIGIN}/@${user}`);
-        assert(at.status === 301 && at.headers.get("location") === `/${user}`, `/@${user} ${at.status} ${at.headers.get("location")}`);
+        assert(at.status === 301 && new URL(at.headers.get("location") ?? "", VOICI_ORIGIN).href === new URL(`/${user}`, VOICI_ORIGIN).href, `/@${user} ${at.status} ${at.headers.get("location")}`);
         const stale = await postJson(`${API}/api/voici/pages/${user}/publish`, { index: published });
         assert(stale.status === 409 && stale.json?.code === "seq-conflict", `republishing seq 1: ${stale.status} ${short(stale.text)}`);
         const files = await tryHttp(`${FILES_ORIGIN}/v1/u/${user}.json`);
@@ -478,9 +478,9 @@ export const voici: Group = {
       // ── one namespace (docs/voici-namespace-spec.md) ──────────────────────────────────────────────────────────
       await rec.check("one namespace: T1 capitals and a trailing slash 301 to voi.ci/<u>; T7 /@<u> 301s to it; a code minted for O redirects but /@<code> is a 404 (T10, D10); a reserved word, an unknown name and /@<unknown> are the same 404 shell; the site lives under /-/ (D11) and /_/ is gone", async () => {
         const upper = await http(`${VOICI_ORIGIN}/${user.toUpperCase()}/`);
-        assert(upper.status === 301 && upper.headers.get("location") === `/${user}`, `/${user.toUpperCase()}/ ${upper.status} ${upper.headers.get("location")}`);
+        assert(upper.status === 301 && new URL(upper.headers.get("location") ?? "", VOICI_ORIGIN).href === new URL(`/${user}`, VOICI_ORIGIN).href, `/${user.toUpperCase()}/ ${upper.status} ${upper.headers.get("location")}`);
         const at = await http(`${VOICI_ORIGIN}/@${user}`);
-        assert(at.status === 301 && at.headers.get("location") === `/${user}`, `/@${user} ${at.status} ${at.headers.get("location")}`);
+        assert(at.status === 301 && new URL(at.headers.get("location") ?? "", VOICI_ORIGIN).href === new URL(`/${user}`, VOICI_ORIGIN).href, `/@${user} ${at.status} ${at.headers.get("location")}`);
         // A one-off code (IRK-signed shorten): a digit first, CODE_LENGTH 6 (D2, D3); it 302s, and /@ never names it.
         const target = `${API}/`;
         const req = { username: user, targetUrl: target, issuedAt: Date.now() };

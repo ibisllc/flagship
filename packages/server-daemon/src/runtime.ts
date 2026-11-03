@@ -1150,7 +1150,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             const label = leftmostLabel(sni, opts.serverFqdn) ?? tier2ServiceLabel(sni, opts.serverFqdn);
             return label && servicePlatformRef.current ? servicePlatformRef.current.byLabel(label) : undefined;
           },
-          options: (app) =>
+          // routedHost as on the TS path: the access authority, the origin check and the app's Host follow the SNI.
+          options: (app, sni) =>
             appConnectionOptions(app, {
               gates: appGates,
               injector: opts.custodian,
@@ -1158,6 +1159,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
               apiKeys: appApiKeysRef.current,
               identity: appIdentityRef.current,
               limiter: appConnLimiter,
+              routedHost: sni,
             }),
         },
         opts.opaqueTls.socketGroup,

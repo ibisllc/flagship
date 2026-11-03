@@ -33,6 +33,8 @@ export const BROKER_UNIT_PATH = "/etc/systemd/system/flagship-broker.service";
 export const CORE_UNIT_PATH = "/etc/systemd/system/flagship-core.service";
 export const ACCESS_UNIT_PATH = "/etc/systemd/system/flagship-access.service";
 export const ACCESS_SOCKET_PATH = "/run/flagship-access/access.sock";
+/** The access state and journal's folder (the daemon's `${dataDir}/data/flagship-access`). */
+export const ACCESS_DATA_DIR = "/var/flagship/data/flagship-access";
 export const KEYD_RUST_DROPIN_PATH = "/etc/systemd/system/flagship-keyd.service.d/30-rust.conf";
 export const BROKER_V1_SOCKET = "/run/flagship-broker/privd.sock";
 export const BROKER_TYPED_SOCKET = "/run/flagship-broker/broker.sock";
@@ -58,6 +60,8 @@ export interface RustScriptPaths {
   engineActivePath?: string;
   stateDir?: string;
   runDir?: string;
+  /** The access state's folder, made before flagship-access's sandbox (tests point it elsewhere). */
+  accessDataDir?: string;
 }
 
 /** The daemon's account once it gives up root (packages/privd unit.ts DAEMON_USER). */
@@ -70,7 +74,8 @@ export function rustSelectScript(opts: RustScriptPaths = {}): string {
   const engineActive = opts.engineActivePath ?? "/var/lib/flagship/engine-active";
   const stateDir = opts.stateDir ?? RUST_STATE_DIR;
   const runDir = opts.runDir ?? RUST_RUN_DIR;
-  for (const p of [release, config, engineActive, stateDir, runDir]) if (!SAFE_PATH.test(p)) throw new Error(`unsafe path ${p}`);
+  const accessData = opts.accessDataDir ?? ACCESS_DATA_DIR;
+  for (const p of [release, config, engineActive, stateDir, runDir, accessData]) if (!SAFE_PATH.test(p)) throw new Error(`unsafe path ${p}`);
   return `#!/bin/bash
 # Flagship Rust path selector (installed by the daemon; rustStack/units.ts). Never prints a key.
 set -u
@@ -148,6 +153,12 @@ select)
                 [ -n "$core_uid" ] && echo "FLAGSHIP_BROKER_TYPED_UIDS=$core_uid"
             } > "$run/$comp.env" ;;
         access)
+            # Rust is the one writer of the access state: its folder must exist before the sandbox is built (a
+            # ReadWritePaths entry that is missing then stays out of reach), owned by the daemon, which reads it.
+            if [ ! -d '${accessData}' ]; then
+                mkdir -p "$(dirname '${accessData}')" && mkdir -m 0700 '${accessData}' \
+                    && { [ -z "$daemon_uid" ] || chown ${DAEMON_ACCOUNT}:${DAEMON_ACCOUNT} '${accessData}'; }
+            fi
             echo "FLAGSHIP_ACCESS_ALLOW_UIDS=0\${daemon_uid:+,$daemon_uid}" > "$run/$comp.env" ;;
         core)
             echo "FLAGSHIP_CORE_ALLOW_UIDS=0\${daemon_uid:+,$daemon_uid}" > "$run/$comp.env" ;;
@@ -364,7 +375,7 @@ RuntimeDirectory=flagship-access
 RuntimeDirectoryMode=0750
 Environment=FLAGSHIP_ACCESS_SOCKET=${ACCESS_SOCKET_PATH}
 ${UNSET_ENV_LINE}
-ReadWritePaths=-/var/flagship/data/flagship-access
+ReadWritePaths=-${ACCESS_DATA_DIR}
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
