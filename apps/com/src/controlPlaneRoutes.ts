@@ -217,6 +217,7 @@ import {
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
   handleFetchWrappedUmkWithToken,
+  accountUnderStrict,
   handleUploadWebauthnRecovery,
   handleGetUserIdentity,
   handlePutUserIdentity,
@@ -2419,6 +2420,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
           passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
+          accountUnderStrict: recoveryStrict(storage),
         },
         await readJson(request),
       ),
@@ -2443,6 +2445,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
           passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
+          accountUnderStrict: recoveryStrict(storage),
           // Mint the recovery-session proof alongside the ciphertext:
           // this call is where the passphrase gate is actually passed,
           // so it is the only honest place to attest it. The follow-on
@@ -2462,6 +2465,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
+          accountUnderStrict: recoveryStrict(storage),
         },
         decodeURIComponent(m[1]!),
       ),
@@ -2930,9 +2934,15 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_HEALTH))) {
     return finish(
       await handlePostServerHealth(
-        { servers: storage.servers, serverHealth: storage.serverHealth, serverBootKeys: storage.serverBootKeys },
+        {
+          servers: storage.servers,
+          serverHealth: storage.serverHealth,
+          serverBootKeys: storage.serverBootKeys,
+          daemonStatus: storage.daemonStatus,
+          pqTrust: storage.pqTrust,
+        },
         decodeURIComponent(m[1]!),
-        (await readJson(request)) as { report?: unknown; signature?: unknown } | undefined,
+        (await readJson(request)) as { report?: unknown; signature?: unknown; pqSignature?: unknown } | undefined,
       ),
     );
   }
@@ -4200,4 +4210,9 @@ function hexDecode(s: string): Uint8Array {
     out[i] = v;
   }
   return out;
+}
+
+/** B2 #13: strict assurance on any of an account's scopes, for the cloud-recovery routes. */
+function recoveryStrict(storage: D1Storage): (username: string) => Promise<boolean> {
+  return (username) => accountUnderStrict({ servers: storage.servers, pqTrust: storage.pqTrust, identities: storage.deviceIdentities }, username);
 }

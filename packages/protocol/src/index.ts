@@ -55,6 +55,7 @@ export * from "./releaseMetadata.js";
 export * from "./updateReceipt.js";
 export * from "./chatWire.js";
 export * from "./serverWildcardGrant.js";
+export * from "./boxHealth.js";
 export * from "./enrollment.js";
 export * from "./browserGrant.js";
 export * from "./aiRepairConsent.js";

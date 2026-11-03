@@ -10,7 +10,9 @@ import {
   recoveryPasskeyPolicy,
   verifyPasskeyAssertion,
 } from "../src/passkeyAssertion.js";
+import { UPDATE_APP_SENTENCES } from "../src/clientUpdate.js";
 import {
+  accountUnderStrict,
   handleFetchWebauthnRecovery,
   handleFetchWrappedUmkWithToken,
   handleRecoveryChallenge,
@@ -72,7 +74,7 @@ async function world() {
   await storage.usernames.put({ username: v.username, irkPubHex: hex(irk.publicKey), claimedAt: 1 });
   const fetchToken = crypto.getRandomValues(new Uint8Array(32));
   const deps = { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery, recoveryProofSecret: SECRET, passkeyPolicy: policy, now: () => NOW };
-  const upload = async (credentialIdHex: string, extra: Record<string, unknown> = {}) => {
+  const upload = async (credentialIdHex: string, extra: Record<string, unknown> = {}, d: Parameters<typeof handleUploadWebauthnRecovery>[0] = deps) => {
     const existing = await storage.webauthnRecovery.get(v.username);
     const wrapped = new Uint8Array([1, 2, 3, 4]);
     const claim: RecoveryRecordV2 = {
@@ -82,7 +84,7 @@ async function world() {
       policy: "passkey-and-passphrase", generation: existing ? (existing.signed?.generation ?? 0) + 1 : 1,
       nonceHex: hex(crypto.getRandomValues(new Uint8Array(16))), priorDigestHex: existing ? (existing.signed?.digestHex ?? "legacy") : "genesis", issuedAt: NOW,
     };
-    return handleUploadWebauthnRecovery(deps, { claim, signature: hex(signRecoveryRecord(claim, irk)), wrappedUmk: Buffer.from(wrapped).toString("base64"), ...extra });
+    return handleUploadWebauthnRecovery(d, { claim, signature: hex(signRecoveryRecord(claim, irk)), wrappedUmk: Buffer.from(wrapped).toString("base64"), ...extra });
   };
   const fetch = (passkey?: unknown) => handleFetchWrappedUmkWithToken(deps, v.username, { fetchToken: hex(fetchToken), issuedAt: NOW, ...(passkey ? { passkey } : {}) });
   return { storage, deps, upload, fetch };
@@ -140,5 +142,64 @@ describe("recovery passkey: the routes", () => {
     await w.upload(ES.credentialIdHex, { passkeyAttestationObject: ES.attestationObject });
     const noSecret = await handleFetchWrappedUmkWithToken({ ...w.deps, recoveryProofSecret: undefined } as never, v.username, { fetchToken: "00".repeat(32), issuedAt: NOW, passkey: ES.fetchPasskeyField });
     expect(noSecret.status).toBe(503);
+  });
+});
+
+describe("B2 #13: under strict, recovery takes the passkey path only", () => {
+  const SERVER = `home.${v.username}.flagship.services`;
+  async function strictWorld() {
+    const w = await world();
+    await w.storage.servers.put({ serverDomain: SERVER, username: v.username, identityPubKeyHex: "ab".repeat(32), registeredAt: 1 });
+    await w.storage.pqTrust.putPolicy({ scopeKind: "installation", scopeId: SERVER, profile: "strict", rollout: "enforced", generation: 1, headDigest: "00".repeat(32), enforcedEver: true, updatedAt: 1 });
+    const strictDeps = { ...w.deps, accountUnderStrict: (u: string) => accountUnderStrict({ servers: w.storage.servers, pqTrust: w.storage.pqTrust, identities: w.storage.deviceIdentities }, u) };
+    return { ...w, strictDeps };
+  }
+
+  it("sees strict on any of the account's servers or devices, and nothing else", async () => {
+    const w = await world();
+    const deps = { servers: w.storage.servers, pqTrust: w.storage.pqTrust, identities: w.storage.deviceIdentities };
+    expect(await accountUnderStrict(deps, v.username)).toBe(false);
+    await w.storage.servers.put({ serverDomain: SERVER, username: v.username, identityPubKeyHex: "ab".repeat(32), registeredAt: 1 });
+    await w.storage.pqTrust.putPolicy({ scopeKind: "installation", scopeId: SERVER, profile: "compatibility", rollout: "enforced", generation: 1, headDigest: "00".repeat(32), enforcedEver: true, updatedAt: 1 });
+    expect(await accountUnderStrict(deps, v.username)).toBe(false);
+    await w.storage.pqTrust.putPolicy({ scopeKind: "installation", scopeId: SERVER, profile: "strict", rollout: "enforced", generation: 2, headDigest: "00".repeat(32), enforcedEver: true, updatedAt: 1 });
+    expect(await accountUnderStrict(deps, v.username)).toBe(true);
+  });
+
+  it("refuses to release a record without a passkey on the passphrase alone", async () => {
+    const w = await strictWorld();
+    await w.upload(ES.credentialIdHex); // a record from before: no passkey key
+    const fetch = (passkey?: unknown) =>
+      handleFetchWrappedUmkWithToken(w.strictDeps, v.username, { fetchToken: "00".repeat(32), issuedAt: NOW, ...(passkey ? { passkey } : {}) });
+    const r = await fetch(ES.fetchPasskeyField);
+    expect(r.status).toBe(403);
+    expect(r.body).toMatchObject({ code: "passkey-required-strict" });
+    expect(JSON.stringify(r.body)).not.toContain("wrappedUmk\":");
+    // A 0.2 app (no passkey field) gets the same update sentence as on a passkey record.
+    const old = await fetch();
+    expect(old.status).toBe(403);
+    expect(old.body).toMatchObject({ code: "passkey-required", error: UPDATE_APP_SENTENCES.recoveryPasskey });
+    expect((await handleFetchWebauthnRecovery(w.strictDeps, v.username)).body).toMatchObject({ passkeyRequired: true });
+  });
+
+  it("refuses a new record without a passkey key (no step back to passphrase-only)", async () => {
+    const w = await strictWorld();
+    const bare = await w.upload(ES.credentialIdHex, {}, w.strictDeps);
+    expect(bare.status).toBe(403);
+    expect(bare.body).toMatchObject({ code: "passkey-required-strict" });
+    expect(await w.storage.webauthnRecovery.get(v.username)).toBeUndefined();
+    expect((await w.upload(ES.credentialIdHex, { passkeyAttestationObject: ES.attestationObject }, w.strictDeps)).status).toBe(200);
+    // A rewrite of the same credential by an older client keeps the key it already has, so it is not a step back.
+    expect((await w.upload(ES.credentialIdHex, {}, w.strictDeps)).status).toBe(200);
+    expect((await w.storage.webauthnRecovery.get(v.username))?.passkey).toBeDefined();
+    expect((await w.upload("ab".repeat(16), {}, w.strictDeps)).status).toBe(403);
+  });
+
+  it("still releases a passkey record with its passkey under strict", async () => {
+    const w = await strictWorld();
+    await w.upload(ES.credentialIdHex, { passkeyAttestationObject: ES.attestationObject });
+    const r = await handleFetchWrappedUmkWithToken(w.strictDeps, v.username, { fetchToken: "00".repeat(32), issuedAt: NOW, passkey: ES.fetchPasskeyField });
+    // The passkey is checked first; the (wrong) fetch token is refused after it, not the passkey.
+    expect(r.body).not.toMatchObject({ code: "passkey-required-strict" });
   });
 });

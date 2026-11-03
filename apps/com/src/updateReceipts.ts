@@ -9,6 +9,8 @@
  *   GET  /api/admin/canary?days=30[&release=<commit>]   (x-admin-secret) the counts, per release,
  *                                        cohort and profile, for `npm run canary`.
  *
+ * Storage is bounded per day (MAX_RECEIPTS_PER_DAY, MAX_NEW_COUNT_ROWS_PER_DAY) and pruned by the cron, exactly by day.
+ *
  * Receipts are anonymous, so they can be forged: a flood can make a release look better or worse than it
  * is. The canary therefore stops on bad news and widens only by an operator's decision, with the gym, the
  * maintainers' boxes and the observation time as the other gates (runbook "What receipts cannot prove").
@@ -24,6 +26,11 @@ export const CANARY_REPORT_PATH = "/api/admin/canary";
 /** Arrival days of counts kept; resend nonces only need to outlive a box's retries. */
 export const RECEIPT_COUNT_RETENTION_DAYS = 400;
 export const RECEIPT_NONCE_RETENTION_DAYS = 14;
+/** Receipts taken per arrival day (bounds the nonce table to this x RECEIPT_NONCE_RETENTION_DAYS rows). */
+export const MAX_RECEIPTS_PER_DAY = 5000;
+/** Count rows a day may add (a release x cohort x profile is one row; a real day has a few dozen). Bounds the counts
+ *  table to this x RECEIPT_COUNT_RETENTION_DAYS rows. */
+export const MAX_NEW_COUNT_ROWS_PER_DAY = 300;
 const MAX_BODY = 1024;
 
 export interface UpdateReceiptEnv {
@@ -49,20 +56,44 @@ export async function handleUpdateReceipt(request: Request, env: UpdateReceiptEn
   if (!r) return json({ error: "not a receipt" }, 400);
   const today = day(now);
   const db = env.DB;
+  // Storage is bounded per day whatever callers send: a receipt cap (the nonce table), and a cap on the count rows a
+  // day may add (each made-up release, cohort or profile would be a new row). A refused receipt is not spent, so a
+  // box's retry on a later day still counts.
+  const taken = await db.prepare("SELECT COUNT(*) AS n FROM update_receipt_nonces WHERE day = ?").bind(today).first<{ n: number }>();
+  if ((taken?.n ?? 0) >= MAX_RECEIPTS_PER_DAY) return full();
   const fresh = await db.prepare("INSERT OR IGNORE INTO update_receipt_nonces (nonce, day) VALUES (?, ?)").bind(r.nonce, today).run();
   if (!fresh.meta?.changes) return json({ ok: true, duplicate: true }, 200);
   const o = receiptOutcome(r);
-  await db
+  const add = [o === "passed" ? 1 : 0, o === "rolled-back" ? 1 : 0, o === "stuck" ? 1 : 0] as const;
+  const bumped = await db
     .prepare(
-      "INSERT INTO update_receipt_counts (release_commit, cohort, arch, stack, day, passed, rolled_back, stuck) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
-        "ON CONFLICT(release_commit, cohort, arch, stack, day) DO UPDATE SET passed = passed + excluded.passed, " +
-        "rolled_back = rolled_back + excluded.rolled_back, stuck = stuck + excluded.stuck",
+      "UPDATE update_receipt_counts SET passed = passed + ?, rolled_back = rolled_back + ?, stuck = stuck + ? " +
+        "WHERE release_commit = ? AND cohort = ? AND arch = ? AND stack = ? AND day = ?",
     )
-    .bind(r.release, r.cohort, r.arch, r.stack, today, o === "passed" ? 1 : 0, o === "rolled-back" ? 1 : 0, o === "stuck" ? 1 : 0)
+    .bind(...add, r.release, r.cohort, r.arch, r.stack, today)
     .run();
-  // Prune now and then (a nonce starting with "0" is about one receipt in 16): no cron needed.
-  if (r.nonce.startsWith("0")) await pruneUpdateReceipts(db, now);
+  if (!bumped.meta?.changes) {
+    const rows = await db.prepare("SELECT COUNT(*) AS n FROM update_receipt_counts WHERE day = ?").bind(today).first<{ n: number }>();
+    if ((rows?.n ?? 0) >= MAX_NEW_COUNT_ROWS_PER_DAY) {
+      await db.prepare("DELETE FROM update_receipt_nonces WHERE nonce = ?").bind(r.nonce).run();
+      return full();
+    }
+    await db
+      .prepare(
+        "INSERT INTO update_receipt_counts (release_commit, cohort, arch, stack, day, passed, rolled_back, stuck) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+          "ON CONFLICT(release_commit, cohort, arch, stack, day) DO UPDATE SET passed = passed + excluded.passed, " +
+          "rolled_back = rolled_back + excluded.rolled_back, stuck = stuck + excluded.stuck",
+      )
+      .bind(r.release, r.cohort, r.arch, r.stack, today, ...add)
+      .run();
+  }
+  // No pruning here: it used to run when the caller's own nonce started with "0", which put it in the caller's hands.
+  // The cron prunes (cronPlan "prune-update-receipts"), by day only.
   return json({ ok: true }, 202);
+}
+
+function full(): Response {
+  return json({ error: "Receipts are full for today. Try again tomorrow.", code: "receipts-full" }, 503);
 }
 
 export async function pruneUpdateReceipts(db: D1Database, now: Date = new Date()): Promise<void> {

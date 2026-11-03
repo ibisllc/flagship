@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { TAG_BOX_HEALTH } from "@flagship/protocol";
 
 /**
  * The box health reporter: a systemd timer, separate from the daemon, that
@@ -10,6 +11,9 @@ import { dirname } from "node:path";
  * is exactly when an owner needs to know why a server went quiet. The daemon
  * installs (and refreshes) the units at startup, so an existing box picks the
  * reporter up with its next update. Only numbers and enums leave the box.
+ *
+ * It signs `flagship/box-health/v1|<report>` (protocol boxHealth.ts), never the bare JSON: once a server has sent a
+ * tagged report (or a heartbeat at boxLevel >= 3), `.com` refuses its untagged ones.
  */
 export const HEALTH_SCRIPT_PATH = "/usr/local/sbin/flagship-health-report.sh";
 export const HEALTH_SERVICE_PATH = "/etc/systemd/system/flagship-health.service";
@@ -60,7 +64,7 @@ at=$(( $(date +%s) * 1000 ))
 report="{\\"v\\":1,\\"domain\\":\\"${domain}\\",\\"at\\":$at,\\"uptimeS\\":$uptime_s,\\"memTotalMB\\":$mem_total,\\"memAvailMB\\":$mem_avail,\\"swapUsedMB\\":$swap_used,\\"oomKills\\":$oom,\\"daemon\\":{\\"state\\":\\"$state\\",\\"restarts\\":$restarts,\\"lastExit\\":$last_exit},\\"tunnel\\":$tunnel,\\"diskUsedPct\\":$disk}"
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-printf '%s' "$report" > "$tmp"
+printf '%s|%s' '${TAG_BOX_HEALTH}' "$report" > "$tmp"
 sig=$(openssl pkeyutl -sign -inkey ${key} -rawin -in "$tmp" | xxd -p | tr -d '\\n')
 [ \${#sig} -eq 128 ] || exit 0
 body=$(jq -cn --arg r "$report" --arg s "$sig" '{report:$r, signature:$s}')

@@ -12,6 +12,8 @@
  *                  (relayDirectory.ts; nothing while the mesh is off), and the
  *                  names registry's upkeep (held usernames past their 30 days are
  *                  released, new reserved words added; voiciNamesCron.ts). Cheap and constant.
+ *                  Also the canary receipts' pruning (updateReceipts.ts; no longer triggered
+ *                  by a caller-chosen nonce).
  *   `*\/10 * * * *` every ten minutes: the demo poller every tick, plus ONE
  *                  more thing, rotated:
  *                    even ticks      a window of the CT scan (CT_USERS_PER_TICK
@@ -25,7 +27,9 @@
  * at 75 accounts, as before); the re-pair and quarantine ladders, the
  * suggestion queue refill (two candidate names a time), the eviction GC, the
  * custom voi.ci name upkeep, the voi.ci pages and mailbox collection and the stale ACME TXT sweep run every hour instead of every ten (their thresholds are hours or days; the
- * TXT sweep only removes records older than an hour).
+ * TXT sweep only removes records older than an hour). The issuance sweep (certificateIssuance.ts
+ * runIssuanceSweep: abandoned orders, CA revocation of certificates whose holder lost its authority, a
+ * window of issued certificates re-authorized per run) runs hourly with the suggestion group.
  */
 
 export type CronJobId =
@@ -46,7 +50,9 @@ export type CronJobId =
   | "voici-names"
   | "voici-gc"
   | "relay-directory"
-  | "names";
+  | "names"
+  | "issuance-sweep"
+  | "prune-update-receipts";
 
 export interface CronPlan {
   jobs: CronJobId[];
@@ -70,7 +76,8 @@ const TEN_MIN_MS = 10 * 60_000;
 
 const MINOR_GROUPS: CronJobId[][] = [
   ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep"],
-  ["suggestions", "eviction-gc"],
+  // issuance-sweep: a few D1 reads per certificate it re-checks, and CA calls only for one it revokes (capped per run).
+  ["suggestions", "eviction-gc", "issuance-sweep"],
   // voici-names reads each name's account servers and their heartbeats; voici-gc is one D1 batch and one R2 delete:
   // pieces no index has listed for 30 days, mail past 180 days, old drafts and revocations (voiciRoutes.ts).
   ["voici-names", "voici-gc"],
@@ -78,7 +85,9 @@ const MINOR_GROUPS: CronJobId[][] = [
 
 export function cronPlan(cron: string, scheduledTime: number): CronPlan {
   if (cron === SIX_HOURLY_CRON) {
-    return { jobs: ["custom-domain-verify", "ca-lease-warning", "prune-rate-limit-log", "prune-late-logs", "relay-directory", "names"] };
+    return {
+      jobs: ["custom-domain-verify", "ca-lease-warning", "prune-rate-limit-log", "prune-late-logs", "relay-directory", "names", "prune-update-receipts"],
+    };
   }
   if (cron === TEN_MINUTE_CRON) {
     const d = new Date(scheduledTime);

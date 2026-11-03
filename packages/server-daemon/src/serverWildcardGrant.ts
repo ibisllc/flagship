@@ -9,8 +9,17 @@
  *
  * The box checks the signature itself against the account's sensitive-order key before keeping it,
  * then restarts so the next certificate names `*.<user>.<apex>`.
+ *
+ * Age (protocol serverWildcardGrant.ts): `.com` takes a grant for SERVER_WILDCARD_GRANT_MAX_AGE_MS. From
+ * SERVER_WILDCARD_GRANT_RENEW_AFTER_MS the box answers `granted: false`, so an unlocked admin device signs a fresh
+ * one; a renewal is used at once (no restart). An expired grant, or one older than the grant held, is refused.
  */
-import { verifyServerWildcardGrant, type ServerWildcardGrant } from "@flagship/protocol";
+import {
+  SERVER_WILDCARD_GRANT_RENEW_AFTER_MS,
+  serverWildcardGrantInDate,
+  verifyServerWildcardGrant,
+  type ServerWildcardGrant,
+} from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { keepCorruptAside, readStateFile, writeFileDurable } from "./durableFile.js";
 import type { SensitiveAuthority } from "./egress/approvals.js";
@@ -30,6 +39,7 @@ export interface WildcardGrantOptions {
   /** The box's registered identity key, 64 lowercase hex. */
   stkPubHex: string;
   authority: () => SensitiveAuthority;
+  now?: () => number;
 }
 
 export class ServerWildcardGrantStore {
@@ -79,11 +89,19 @@ export class ServerWildcardGrantStore {
     return this.grant;
   }
 
+  /** True while the kept grant is not yet due for renewal (what GET reports as `granted`). */
+  fresh(): boolean {
+    const now = (this.o.now ?? Date.now)();
+    return this.grant !== null && now - this.grant.issuedAt < SERVER_WILDCARD_GRANT_RENEW_AFTER_MS;
+  }
+
   /** Keep a new grant. Returns true for the box's first one: its certificate then needs the new name (the caller restarts). */
   async accept(g: StoredWildcardGrant): Promise<boolean> {
     if (!this.verifies(g)) throw new Error("not signed by the account's admin");
     const same = this.grant?.issuedAt === g.issuedAt && this.grant.signatureHex === g.signatureHex.toLowerCase();
     if (same) return false;
+    if (!serverWildcardGrantInDate(g.issuedAt, (this.o.now ?? Date.now)())) throw new Error("the grant has expired");
+    if (this.grant && g.issuedAt <= this.grant.issuedAt) throw new Error("an older grant than the one held");
     const had = this.grant !== null;
     this.grant = { issuedAt: g.issuedAt, signatureHex: g.signatureHex.toLowerCase() };
     await writeFileDurable(this.o.path, JSON.stringify(this.grant), 0o600);
@@ -94,7 +112,8 @@ export class ServerWildcardGrantStore {
 export function buildServerWildcardGrantHttp(o: { store: ServerWildcardGrantStore; onFirstGrant: () => void }) {
   return async function handle(path: string, method: string, req: HttpRequest): Promise<HttpResponse | null> {
     if (path !== SERVER_WILDCARD_GRANT_PATH) return null;
-    if (method === "GET") return { status: 200, headers: J, body: JSON.stringify({ granted: o.store.current() !== null }) };
+    // `granted: false` once the grant is due, so the apps' upkeep signs a fresh one.
+    if (method === "GET") return { status: 200, headers: J, body: JSON.stringify({ granted: o.store.fresh() }) };
     if (method !== "POST") return { status: 405, headers: J, body: JSON.stringify({ error: "method not allowed" }) };
     let b: { issuedAt?: unknown; signature?: unknown };
     try {
@@ -107,7 +126,7 @@ export function buildServerWildcardGrantHttp(o: { store: ServerWildcardGrantStor
     try {
       first = await o.store.accept({ issuedAt: b.issuedAt as number, signatureHex: b.signature });
     } catch {
-      return { status: 403, headers: J, body: JSON.stringify({ error: "that grant was not signed by the account's admin" }) };
+      return { status: 403, headers: J, body: JSON.stringify({ error: "that grant was not signed by the account's admin, has expired, or is older than the one held" }) };
     }
     if (first) o.onFirstGrant();
     return { status: 200, headers: J, body: JSON.stringify({ ok: true, restarting: first }) };

@@ -135,8 +135,14 @@ export const ISSUANCE_LIMITS = {
   perZonePerWeek: 40,
   /** New ACME orders by the service per 3 hours (LE: 300 per account). */
   serviceOrdersPer3h: 250,
+  /** Of those, what orders that are not a due renewal may use: the rest is kept for renewals, so a burst of new or
+   *  abandoned orders can never stop certificates already in use from renewing. */
+  serviceNewOrdersPer3h: 150,
   /** Orders per Flagship account per day (our own budget, so one account cannot drain the service's). */
   perAccountPerDay: 20,
+  /** Orders the CA saw that ended without a certificate (superseded, timed out, failed) per account per day: a
+   *  device that keeps replacing or abandoning orders stops here instead of spending the service's budget. */
+  perAccountAbandonedOrdersPerDay: 5,
   /** Failed validations per name set per hour (LE: 5 per identifier per account). */
   failuresPerNameSetPerHour: 3,
   /** How long a `rateLimited` answer from the CA stops every order, at least. */

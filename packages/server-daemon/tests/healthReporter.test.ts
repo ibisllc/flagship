@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ed } from "@flagship/protocol";
+import { canonicalBoxHealthReport, ed, TAG_BOX_HEALTH } from "@flagship/protocol";
 import {
   HEALTH_SCRIPT_PATH,
   HEALTH_TIMER_PATH,
@@ -77,6 +77,28 @@ describe("box health reporter", () => {
       const sig = execFileSync(OPENSSL3, ["pkeyutl", "-sign", "-inkey", join(dir, "key.pem"), "-rawin", "-in", join(dir, "r")]);
       expect(sig.length).toBe(64);
       expect(ed.verify(new Uint8Array(sig), new TextEncoder().encode(report), ed.getPublicKey(seed))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("signs the tagged flagship/box-health/v1 bytes, not the bare report (B2 #2)", () => {
+    const script = buildHealthReportScript({ ...ARGS, keyPath: "/boot/identity.pem" });
+    expect(script).toContain(`printf '%s|%s' '${TAG_BOX_HEALTH}' "$report" > "$tmp"`);
+    expect(script).not.toContain(`printf '%s' "$report" > "$tmp"`);
+    // The JSON body still carries the bare report: .com rebuilds the tagged bytes from it.
+    expect(script).toContain("{report:$r, signature:$s}");
+  });
+
+  it("writes exactly the bytes .com verifies (the script's own printf, under bash)", () => {
+    const script = buildHealthReportScript({ ...ARGS, keyPath: "/boot/identity.pem" });
+    const line = script.split("\n").find((l) => l.startsWith("printf '%s|%s'"))!;
+    const dir = mkdtempSync(join(tmpdir(), "health-tag-"));
+    try {
+      const report = '{"v":1,"domain":"home2.harry.flagship.services","at":1}';
+      execFileSync("bash", ["-c", `report='${report}'; tmp=${join(dir, "m")}; ${line}`]);
+      const written = execFileSync("cat", [join(dir, "m")]);
+      expect(Buffer.from(written).equals(Buffer.from(canonicalBoxHealthReport(report)))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

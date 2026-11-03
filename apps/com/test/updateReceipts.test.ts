@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { endpointFor, LIMITS } from "../src/rateLimit.js";
-import { buildCanaryReport, handleCanaryReport, handleUpdateReceipt, pruneUpdateReceipts } from "../src/updateReceipts.js";
+import {
+  buildCanaryReport,
+  handleCanaryReport,
+  handleUpdateReceipt,
+  MAX_NEW_COUNT_ROWS_PER_DAY,
+  MAX_RECEIPTS_PER_DAY,
+  pruneUpdateReceipts,
+} from "../src/updateReceipts.js";
+import { cronPlan, SIX_HOURLY_CRON } from "../src/cronPlan.js";
 
 const A = "0123456789abcdef0123456789abcdef01234567";
 const B = "fedcba9876543210fedcba9876543210fedcba98";
@@ -84,6 +92,57 @@ describe("POST /api/update-receipts", () => {
       await pruneUpdateReceipts(db, new Date("2026-10-24T00:00:00Z"));
       expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_nonces").get()).toEqual({ c: 0 });
       expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_counts").get()).toEqual({ c: 0 });
+    }),
+  );
+});
+
+describe("B2 #11: pruning and storage are not the caller's to steer", () => {
+  it(
+    "a caller's nonce never triggers pruning: receipts are pruned by the cron, by day, exactly",
+    withDb(async (db, raw) => {
+      const old = new Date("2025-01-01T00:00:00Z");
+      await handleUpdateReceipt(post(receipt()), { DB: db }, old);
+      // A receipt whose nonce starts with "0" used to run the prune inline.
+      const r = await handleUpdateReceipt(post(receipt({ nonce: "0".repeat(32) })), { DB: db });
+      expect(r.status).toBe(202);
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_counts WHERE day = '2025-01-01'").get()).toEqual({ c: 1 });
+      expect(cronPlan(SIX_HOURLY_CRON, Date.UTC(2026, 10, 2, 6)).jobs).toContain("prune-update-receipts");
+      // The cron's prune removes exactly what is past retention and nothing newer.
+      await pruneUpdateReceipts(db, new Date("2026-10-24T00:00:00Z"));
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_counts WHERE day = '2025-01-01'").get()).toEqual({ c: 0 });
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_counts").get()).toEqual({ c: 1 });
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_nonces WHERE nonce = ?").get("0".repeat(32))).toEqual({ c: 1 });
+    }),
+  );
+
+  it(
+    "stops taking receipts for the day once the day's cap is reached, without counting them",
+    withDb(async (db, raw) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const ins = raw.raw.prepare("INSERT INTO update_receipt_nonces (nonce, day) VALUES (?, ?)");
+      for (let i = 0; i < MAX_RECEIPTS_PER_DAY; i++) ins.run(i.toString(16).padStart(32, "0"), today);
+      const r = await handleUpdateReceipt(post(receipt()), { DB: db });
+      expect(r.status).toBe(503);
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_counts").get()).toEqual({ c: 0 });
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_nonces").get()).toEqual({ c: MAX_RECEIPTS_PER_DAY });
+    }),
+  );
+
+  it(
+    "bounds the new count rows a day can add (made-up releases), while known ones still count",
+    withDb(async (db, raw) => {
+      const today = new Date().toISOString().slice(0, 10);
+      expect((await handleUpdateReceipt(post(receipt()), { DB: db })).status).toBe(202);
+      const ins = raw.raw.prepare("INSERT INTO update_receipt_counts (release_commit, cohort, arch, stack, day, passed) VALUES (?, '5', 'amd64', 'classic', ?, 1)");
+      for (let i = 1; i < MAX_NEW_COUNT_ROWS_PER_DAY; i++) ins.run(i.toString(16).padStart(40, "0"), today);
+      const fresh = await handleUpdateReceipt(post(receipt({ release: B })), { DB: db });
+      expect(fresh.status).toBe(503);
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_counts WHERE release_commit = ?").get(B)).toEqual({ c: 0 });
+      // The refused receipt's nonce is not spent, so the box's retry tomorrow still counts.
+      expect(raw.raw.prepare("SELECT COUNT(*) AS c FROM update_receipt_nonces").get()).toEqual({ c: 1 });
+      const known = await handleUpdateReceipt(post(receipt()), { DB: db });
+      expect(known.status).toBe(202);
+      expect(raw.raw.prepare("SELECT passed FROM update_receipt_counts WHERE release_commit = ?").get(A)).toEqual({ passed: 2 });
     }),
   );
 });

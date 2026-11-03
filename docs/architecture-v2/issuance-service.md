@@ -53,7 +53,11 @@ All JSON, `no-store`. Errors are `{ "error": "<sentence>", "code": "<code>" }` (
   re-registered). A phone sends 0.
 - `serverWildcardGrant` (apps only, optional) is the grant the box already holds (`serverWildcardGrant.ts`). It must
   verify under the account's admin root (else IRK) for this server and this box key; an invalid one is refused, not
-  ignored.
+  ignored. It is taken for 180 days from its `issuedAt` (`SERVER_WILDCARD_GRANT_MAX_AGE_MS`) and only when signed
+  after the box's last revocation (the `revocation_log` entry that ended an earlier registration generation), so a
+  grant never carries over to a later generation. The signed bytes are unchanged: the box answers `granted: false`
+  from day 90 so an unlocked admin device signs a fresh one (the apps' existing upkeep), uses a renewal at once, and
+  orders without the account wildcard once its grant is past 180 days.
 - `issuedAt` within 5 minutes of `.com`'s clock. A repeated `requestId` from the same device returns the existing
   order (safe to retry a lost answer); a different body under a used `requestId` is refused.
 - CSR keys: ECDSA P-256 or P-384, or RSA of 2048 to 4096 bits. Signature checked.
@@ -95,7 +99,10 @@ device's orders.
 - **Limits the service enforces before Let's Encrypt would** (`429 issuance-rate-limited` with `retryAfterMs`):
   4 certificates per exact name set per 7 days (LE: 5), 40 per account zone `<user>.<apex>` per 7 days (LE: 50 per
   registered domain; the apex is a public suffix), 250 new orders per 3 hours for the service (LE: 300 per account),
-  20 orders per Flagship account per day, 3 failed validations per name set per hour (LE: 5). A `rateLimited` answer
+  of which orders that are not a due renewal may use 150 (the rest is kept for renewals; checked again just before
+  the CA sees an order), 20 orders per Flagship account per day, 5 orders per account per day that the CA saw and
+  that ended without a certificate (superseded, timed out, failed; so a device cannot spend the service's budget by
+  replacing or abandoning orders), 3 failed validations per name set per hour (LE: 5). A `rateLimited` answer
   from the CA stops every order for the time it names (its `Retry-After`, at least 1 hour).
 - **Back-off on the device.** On 429 wait `retryAfterMs` (or until `dueAt`); on 5xx or a failed order back off
   exponentially from 15 minutes to 6 hours with jitter. Keep serving the certificate you have meanwhile.
@@ -147,8 +154,11 @@ certificate in the chain is signed by the next one (ECDSA P-256/P-384 or RSA, th
 ### Revocation of a removed device's certificates
 
 When a box is revoked, deleted or re-registered with another key or generation (or a phone's device is removed),
-the service revokes at the CA every unexpired certificate it delivered to it (a sweep that runs with later orders;
-reason 5). The relay's revocation already ended its routes; this ends its Web PKI authority too. The box's own
+the service revokes at the CA every unexpired certificate it delivered to it (reason 5). The sweep runs hourly from the
+cron (`issuance-sweep`, `runIssuanceSweep`) as well as with later orders, and also re-authorizes a window of issued
+certificates each run: a phone that is no longer an admin device, an account wildcard grant that no longer verifies
+(the admin key changed), and an apps certificate whose serving lease has been gone for 30 days lose theirs too. A
+revoked certificate no longer counts as the device's current one, so it may order again at once. The relay's revocation already ended its routes; this ends its Web PKI authority too. The box's own
 `revokeCurrentCert` is gone: the box holds no ACME account.
 
 ## 7. Retired

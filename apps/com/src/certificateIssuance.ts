@@ -42,6 +42,7 @@ import {
 import {
   canonicalCertificateOrder,
   emptyRevocationState,
+  serverWildcardGrantInDate,
   servingDecision,
   verifyServerWildcardGrant,
   verifyServingRecord,
@@ -177,6 +178,8 @@ interface AcmeState {
   authz: Array<{ url: string; identifier: string; status: string; challengeUrl?: string; recordId?: string }>;
   /** The wildcard grant the request carried, so later re-checks see the same names. */
   grant?: { issuedAt: number; signature: string } | null;
+  /** A due renewal of a certificate the device holds: it may use the part of the service budget kept for renewals. */
+  renewal?: boolean;
 }
 
 // ── authorization (checked at the request, before answering, before finalizing and after issuance) ──
@@ -199,6 +202,9 @@ async function authorize(
   apex: string,
   now: number,
   r: { class: CertificateOrder["class"]; device: string; regGen: number; account: string; server: string | null; grant: AcmeState["grant"] },
+  /** The grant's age limit applies to ordering; the sweep re-checks an issued certificate without it (its own
+   *  lifetime bounds it). */
+  opts: { grantAge: boolean } = { grantAge: true },
 ): Promise<AuthResult> {
   const user = await deps.usernames.get(r.account);
   if (!user) return { ok: false, code: "issuance-unknown-device" };
@@ -229,6 +235,14 @@ async function authorize(
         hexBytes(signer),
       );
     if (!valid) return { ok: false, code: "issuance-wildcard-grant" };
+    if (opts.grantAge && !serverWildcardGrantInDate(r.grant.issuedAt, now)) return { ok: false, code: "issuance-wildcard-grant" };
+    // Bound to the registration generation: a grant signed before the box was last revoked (an earlier generation,
+    // since un-revoking starts a new one) does not carry over.
+    const lastRevoked = await db
+      .prepare("SELECT MAX(revoked_at) AS t FROM revocation_log WHERE kind = 'box' AND account = ? AND subject = ?")
+      .bind(r.account, r.device)
+      .first<{ t: number | null }>();
+    if (lastRevoked?.t != null && r.grant.issuedAt <= lastRevoked.t) return { ok: false, code: "issuance-wildcard-grant" };
     accountWildcard = true;
   }
   const bundle = await servingBundle(db, r.account, r.device);
@@ -444,7 +458,7 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
   const key = namesKey(names);
   const zone = `${account}.${s.apex}`;
   const limited = await limits(s, { device: order.device, cls: order.class, key, zone, account, spki: csr.spkiSha256 });
-  if (limited) return limited;
+  if (limited instanceof Response) return limited;
 
   await supersedePending(s, order.device, order.class);
   const orderId = toHex(crypto.getRandomValues(new Uint8Array(16)));
@@ -467,7 +481,7 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
       csr.spkiSha256,
       orderJson,
       signature,
-      JSON.stringify({ finalize: "", authz: [], grant } satisfies AcmeState),
+      JSON.stringify({ finalize: "", authz: [], grant, renewal: limited.renewal } satisfies AcmeState),
       s.now,
       s.now,
     )
@@ -476,21 +490,22 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
   return json({ orderId, status: "pending", step: "new", class: order.class, names, pollAfterMs: POLL_MS }, 202);
 }
 
-/** H7: refuse what is not due, and stay under the CA's limits. Null when the order may go ahead. */
+/** H7: refuse what is not due, and stay under the CA's limits. A refusal, or whether the order is a due renewal. */
 async function limits(
   s: Service,
   o: { device: string; cls: string; key: string; zone: string; account: string; spki: string },
-): Promise<Response | null> {
+): Promise<Response | { renewal: boolean }> {
   const backoff = await s.db.prepare("SELECT until FROM issuance_backoff WHERE scope = 'ca' AND until > ?").bind(s.now).first<{ until: number }>();
   if (backoff) return refuse("issuance-rate-limited", { retryAfterMs: backoff.until - s.now });
 
   const prev = await s.db
     .prepare(
-      "SELECT names, csr_spki_sha256, not_before, not_after FROM certificate_orders WHERE device_pub = ? AND class = ? AND status = 'issued' AND not_after > ? " +
-        "ORDER BY not_after DESC LIMIT 1",
+      "SELECT names, csr_spki_sha256, not_before, not_after FROM certificate_orders o WHERE device_pub = ? AND class = ? AND status = 'issued' AND not_after > ? " +
+        "AND NOT EXISTS (SELECT 1 FROM certificate_revocations r WHERE r.order_id = o.order_id) ORDER BY not_after DESC LIMIT 1",
     )
     .bind(o.device, o.cls, s.now)
     .first<{ names: string; csr_spki_sha256: string; not_before: number; not_after: number }>();
+  const renewal = !!prev && s.now >= renewalDueAt({ notBefore: prev.not_before, notAfter: prev.not_after });
   if (prev && prev.names === o.key) {
     const dueAt = renewalDueAt({ notBefore: prev.not_before, notAfter: prev.not_after });
     if (s.now < dueAt) {
@@ -502,11 +517,12 @@ async function limits(
     }
   }
 
-  const [nameSet, zone, service, account, failures] = await Promise.all([
+  const [nameSet, zone, [service, serviceNew], account, abandoned, failures] = await Promise.all([
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE names = ? AND status = 'issued' AND created_at > ?", o.key, s.now - WEEK_MS),
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE zone = ? AND status = 'issued' AND created_at > ?", o.zone, s.now - WEEK_MS),
-    count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE acme_ordered_at > ?", s.now - 3 * 3_600_000),
+    serviceBudget(s),
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE username = ? AND created_at > ?", o.account, s.now - 86_400_000),
+    count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE username = ? AND status = 'failed' AND acme_ordered_at > ?", o.account, s.now - 86_400_000),
     count(s, "SELECT COUNT(*) AS n FROM certificate_orders WHERE names = ? AND status = 'failed' AND error_code = 'issuance-acme-failed' AND updated_at > ?", o.key, s.now - 3_600_000),
   ]);
   const over =
@@ -516,18 +532,34 @@ async function limits(
         ? WEEK_MS
         : failures >= ISSUANCE_LIMITS.failuresPerNameSetPerHour
           ? 3_600_000
-          : service >= ISSUANCE_LIMITS.serviceOrdersPer3h
+          : serviceFull(service, serviceNew, renewal)
             ? 3 * 3_600_000
-            : account >= ISSUANCE_LIMITS.perAccountPerDay
+            : account >= ISSUANCE_LIMITS.perAccountPerDay || abandoned >= ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay
               ? 86_400_000
               : 0;
   if (over > 0) {
-    console.warn(JSON.stringify({ event: "issuance-limit", nameSet, zone, service, account, failures }));
+    console.warn(JSON.stringify({ event: "issuance-limit", nameSet, zone, service, serviceNew, renewal, account, abandoned, failures }));
     // The window slides, so the earliest it can clear is not known without the rows; tell the device the window's
     // length as an upper bound (devices also back off on their own).
     return refuse("issuance-rate-limited", { retryAfterMs: over });
   }
-  return null;
+  return { renewal };
+}
+
+/** ACME orders the CA saw in the last 3 hours: all of them, and those that were not a due renewal. */
+async function serviceBudget(s: Service): Promise<[number, number]> {
+  const r = await s.db
+    .prepare(
+      "SELECT COUNT(*) AS n, SUM(CASE WHEN json_valid(acme_json) AND json_extract(acme_json, '$.renewal') = 1 THEN 0 ELSE 1 END) AS fresh " +
+        "FROM certificate_orders WHERE acme_ordered_at > ?",
+    )
+    .bind(s.now - 3 * 3_600_000)
+    .first<{ n: number; fresh: number | null }>();
+  return [r?.n ?? 0, r?.fresh ?? 0];
+}
+
+function serviceFull(total: number, fresh: number, renewal: boolean): boolean {
+  return total >= ISSUANCE_LIMITS.serviceOrdersPer3h || (!renewal && fresh >= ISSUANCE_LIMITS.serviceNewOrdersPer3h);
 }
 
 async function count(s: Service, sql: string, ...args: unknown[]): Promise<number> {
@@ -542,11 +574,11 @@ async function supersedePending(s: Service, device: string, cls: string): Promis
   for (const row of r.results ?? []) await fail(s, row, "issuance-superseded", null);
 }
 
-/** Old pending orders whose device stopped polling still hold DNS records; clear a few per request. */
-async function housekeeping(s: Service): Promise<void> {
+/** Old pending orders whose device stopped polling still hold DNS records; clear a few per request (and per sweep). */
+async function housekeeping(s: Service, max = { stale: 3, orphaned: 2 }): Promise<void> {
   const stale = await s.db
-    .prepare("SELECT * FROM certificate_orders WHERE status = 'pending' AND created_at < ? LIMIT 3")
-    .bind(s.now - ORDER_TIMEOUT_MS)
+    .prepare("SELECT * FROM certificate_orders WHERE status = 'pending' AND created_at < ? LIMIT ?")
+    .bind(s.now - ORDER_TIMEOUT_MS, max.stale)
     .all<OrderRow>();
   for (const row of stale.results ?? []) await fail(s, row, "issuance-timeout", null);
   // A removed box or device keeps no certificate: the service ordered it, so the service revokes it at the CA
@@ -559,9 +591,9 @@ async function housekeeping(s: Service): Promise<void> {
         "WHERE o.status = 'issued' AND o.not_after > ? AND o.chain_pem IS NOT NULL " +
         "AND NOT EXISTS (SELECT 1 FROM certificate_revocations r WHERE r.order_id = o.order_id) " +
         "AND ((o.class <> 'phone' AND (sv.server_domain IS NULL OR sv.revoked_at IS NOT NULL OR lower(sv.identity_pubkey_hex) <> o.device_pub OR sv.reg_gen <> o.reg_gen)) " +
-        "  OR (o.class = 'phone' AND (d.device_id IS NULL OR d.revoked_at IS NOT NULL))) LIMIT 2",
+        "  OR (o.class = 'phone' AND (d.device_id IS NULL OR d.revoked_at IS NOT NULL))) LIMIT ?",
     )
-    .bind(s.now)
+    .bind(s.now, max.orphaned)
     .all<{ order_id: string; chain_pem: string }>();
   for (const o of orphaned.results ?? []) {
     const leaf = pemBlocks(o.chain_pem)[0];
@@ -674,9 +706,12 @@ async function stepNew(s: Service, row: OrderRow, st: AcmeState, client: AcmeCli
     await save(s, row, {});
     return;
   }
+  // Orders queue while the budget is open; the CA only sees one while it still is.
+  const [total, fresh] = await serviceBudget(s);
+  if (serviceFull(total, fresh, st.renewal === true)) return fail(s, row, "issuance-rate-limited", "the service's order budget is spent", st);
   const order = await client.newOrder(names);
   await save(s, row, { acme_order_url: order.url, acme_ordered_at: s.now }, true);
-  const next: AcmeState = { finalize: order.finalize, authz: [], grant: st.grant ?? null };
+  const next: AcmeState = { finalize: order.finalize, authz: [], grant: st.grant ?? null, ...(st.renewal ? { renewal: true } : {}) };
   try {
     for (const url of order.authorizations) {
       const a = await client.get<{ identifier: { value: string }; status: string; wildcard?: boolean; challenges: Array<{ type: string; url: string; token: string }> }>(url);
@@ -827,7 +862,7 @@ async function queueRevocation(s: Service, orderId: string, leaf: Uint8Array, re
 async function revokeAtCa(s: Service, orderId: string, leaf: Uint8Array, reason: string): Promise<void> {
   try {
     const client = await acmeClient(s);
-    await client.revoke(leaf, reason === "revoked-during-order" ? 5 : 4);
+    await client.revoke(leaf, reason === "revoked-during-order" || reason === "authority-lost" ? 5 : 4);
     await s.db.prepare("UPDATE certificate_revocations SET status = 'revoked', attempts = attempts + 1, updated_at = ? WHERE order_id = ?").bind(s.now, orderId).run();
   } catch (e) {
     const done = e instanceof AcmeError && e.type === "urn:ietf:params:acme:error:alreadyRevoked";
@@ -843,6 +878,89 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+// ── the sweep (cron) ──────────────────────────────────────────────────────
+
+/** Issued certificates the sweep re-authorizes per run (each is a few D1 reads; a revocation adds CA calls). */
+export const SWEEP_CERTS_PER_RUN = 8;
+/** At most this many CA revocations per run (each is a few subrequests). */
+const SWEEP_REVOCATIONS_PER_RUN = 3;
+/** An apps certificate outlives a lapsed serving lease this long before it is revoked (the owner may come back). */
+export const LAPSED_LEASE_REVOKE_MS = 30 * 86_400_000;
+const SWEEP_CURSOR = "sweep-cursor";
+const LEASE_LAPSE: ReadonlySet<string> = new Set(["no-lease", "lease-expired", "policy-stale", "policy-signature"]);
+
+/**
+ * Why an issued certificate's holder lost the authority it was issued under, or null while it still has it. A box that
+ * was removed, re-registered or moved to another key, a phone that is no longer an admin device, an account wildcard
+ * grant that no longer verifies, and an app lease gone for LAPSED_LEASE_REVOKE_MS all end it.
+ */
+async function lostAuthority(s: Service, row: OrderRow): Promise<string | null> {
+  const st = stateOf(row);
+  const a = await authorize(
+    s.db,
+    s.deps,
+    s.apex,
+    s.now,
+    { class: row.class, device: row.device_pub, regGen: row.reg_gen, account: row.username, server: row.server_domain, grant: st.grant ?? null },
+    { grantAge: false },
+  );
+  if (a.ok) return null;
+  if (a.code !== "issuance-no-serving") return a.code === "issuance-malformed" ? null : a.code;
+  const reason = String(a.extra?.reason ?? "");
+  if (!LEASE_LAPSE.has(reason)) return `issuance-no-serving:${reason}`;
+  const lease = await s.db
+    .prepare("SELECT MAX(not_after) AS t FROM serving_leases WHERE username = ? AND box_pub = ?")
+    .bind(row.username, row.device_pub)
+    .first<{ t: number | null }>();
+  const since = Math.max(row.created_at, lease?.t ?? 0);
+  return s.now - since > LAPSED_LEASE_REVOKE_MS ? `issuance-no-serving:${reason}` : null;
+}
+
+/**
+ * The cron half of the service (cronPlan "issuance-sweep"): time out abandoned orders, revoke at the CA the
+ * certificates of removed boxes and devices, retry a queued revocation, and re-authorize a window of issued
+ * certificates (walking all of them over successive runs), revoking those whose holder lost its authority. It used to
+ * run only inside other people's orders, so a quiet service never revoked anything.
+ */
+export async function runIssuanceSweep(env: IssuanceEnv, deps: IssuanceDeps): Promise<{ checked: number; revoked: number } | null> {
+  const now = (deps.now ?? Date.now)();
+  const svcP = service(env, deps, now);
+  if (!svcP) return null;
+  const s = await svcP;
+  await housekeeping(s, { stale: 10, orphaned: SWEEP_REVOCATIONS_PER_RUN });
+  const cursor =
+    (await s.db.prepare("SELECT reason FROM issuance_backoff WHERE scope = ?").bind(SWEEP_CURSOR).first<{ reason: string | null }>())?.reason ?? "";
+  const rows =
+    (
+      await s.db
+        .prepare(
+          "SELECT * FROM certificate_orders o WHERE o.status = 'issued' AND o.not_after > ? AND o.chain_pem IS NOT NULL AND o.order_id > ? " +
+            "AND NOT EXISTS (SELECT 1 FROM certificate_revocations r WHERE r.order_id = o.order_id) ORDER BY o.order_id LIMIT ?",
+        )
+        .bind(s.now, cursor, SWEEP_CERTS_PER_RUN)
+        .all<OrderRow>()
+    ).results ?? [];
+  let revoked = 0;
+  let last: string | null = null;
+  for (const row of rows) {
+    if (revoked >= SWEEP_REVOCATIONS_PER_RUN) break;
+    last = row.order_id;
+    const why = await lostAuthority(s, row);
+    if (!why) continue;
+    const leaf = pemBlocks(row.chain_pem ?? "")[0];
+    if (!leaf) continue;
+    console.warn(JSON.stringify({ event: "issuance-authority-lost", orderId: row.order_id, class: row.class, why }));
+    await queueRevocation(s, row.order_id, leaf, "authority-lost");
+    revoked++;
+  }
+  // Start again from the top once a run reached the end; otherwise carry on after the last row looked at.
+  const next = rows.length < SWEEP_CERTS_PER_RUN && last === (rows.at(-1)?.order_id ?? null) ? "" : (last ?? cursor);
+  await s.db
+    .prepare("INSERT INTO issuance_backoff (scope, until, reason) VALUES (?, 0, ?) ON CONFLICT(scope) DO UPDATE SET reason = excluded.reason")
+    .bind(SWEEP_CURSOR, next)
+    .run();
+  return { checked: rows.length, revoked };
+}
 
 // ── residual authority (docs/runbooks/issuance-migration.md) ──────────────
 

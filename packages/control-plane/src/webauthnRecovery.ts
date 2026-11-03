@@ -1,6 +1,7 @@
 import { appUpdateRequired, isLegacyRecoveryEnvelope } from "./clientUpdate.js";
 import {
   checkRecoveryEvolution,
+  strictInForce,
   recoveryRecordDigest,
   verifyRecoveryRecord,
   type RecoveryEscrowChange,
@@ -8,10 +9,14 @@ import {
   type StoredRecoveryState,
 } from "@flagship/protocol";
 import type {
+  DeviceIdentityStorage,
+  PqTrustStorage,
+  ServerStorage,
   UsernameStorage,
   WebauthnRecoveryRecord,
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
+import { policyStateOf } from "./accountPqTrust.js";
 import { hexToBytes } from "./hex.js";
 import { mintRecoveryProof } from "./recoveryProof.js";
 import {
@@ -76,6 +81,45 @@ export interface WebauthnRecoveryDeps {
    * it a record that holds a passkey key cannot be fetched (fail closed).
    */
   passkeyPolicy?: PasskeyPolicy;
+  /**
+   * B2 #13: whether the account has strict assurance in force on any of its scopes (`accountUnderStrict`).
+   * Under strict a record is released only through the passkey path, and a record without the passkey's key is
+   * neither released nor written. Absent ⇒ not strict.
+   */
+  accountUnderStrict?: (username: string) => Promise<boolean>;
+}
+
+/**
+ * True when strict assurance is in force on any of the account's scopes: one of its servers (installation, and
+ * the `<server>:<name>` service/data/connector scopes are under a server the owner already made strict at the
+ * installation in every flow we offer) or one of its live devices.
+ */
+export async function accountUnderStrict(
+  deps: { servers: Pick<ServerStorage, "listForUser">; pqTrust: Pick<PqTrustStorage, "getPolicy">; identities?: Pick<DeviceIdentityStorage, "listForAccount"> },
+  username: string,
+): Promise<boolean> {
+  const u = username.toLowerCase();
+  const [servers, devices] = await Promise.all([
+    deps.servers.listForUser(u),
+    deps.identities ? deps.identities.listForAccount(u) : Promise.resolve([]),
+  ]);
+  const scopes: Array<{ kind: "installation" | "device"; id: string }> = [
+    ...servers.filter((sv) => !sv.revokedAt).map((sv) => ({ kind: "installation" as const, id: sv.serverDomain.toLowerCase() })),
+    ...devices.filter((d) => d.revokedAt == null).map((d) => ({ kind: "device" as const, id: d.deviceId })),
+  ];
+  const recs = await Promise.all(scopes.map((sc) => deps.pqTrust.getPolicy(sc.kind, sc.id)));
+  return recs.some((rec, i) => rec !== null && strictInForce(policyStateOf(rec, scopes[i]!)));
+}
+
+/** Under strict, the answer to a fetch or a write that would leave a record released on the passphrase alone. */
+function strictNeedsPasskey(): HandlerResponse {
+  return {
+    status: 403,
+    body: {
+      error: "This account's security setting needs a passkey for recovery. Set up recovery again with a passkey from an admin device.",
+      code: "passkey-required-strict",
+    },
+  };
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -278,6 +322,7 @@ export async function handleUploadWebauthnRecovery(
     passkey = existing.passkey;
   }
 
+  if (!passkey && deps.accountUnderStrict && (await deps.accountUnderStrict(claim.username))) return strictNeedsPasskey();
   if ((await sha256Hex(umk.bytes)) !== claim.wrappedUmkDigestHex) {
     return forbidden("the wrapped UMK is not the one that was signed");
   }
@@ -350,6 +395,7 @@ export async function handleFetchWebauthnRecovery(
 ): Promise<HandlerResponse> {
   const rec = await deps.webauthnRecovery.get(username);
   if (!rec) return notFound("no recovery record");
+  const strict = !rec.passkey && deps.accountUnderStrict ? await deps.accountUnderStrict(username) : false;
   const wrappedBytes = base64DecodeBytes(rec.wrappedUmkB64) ?? new Uint8Array();
   const wrappedUmkHash = await sha256Hex(wrappedBytes);
   return {
@@ -364,7 +410,9 @@ export async function handleFetchWebauthnRecovery(
       hasFetchTokenGate: !!rec.fetchTokenHashHex,
       // SEC-REPAIR-001: true ⇒ the fetch needs a passkey assertion over a fresh challenge; false ⇒
       // a record from before (passphrase only), which the apps offer to update once.
-      passkeyRequired: !!rec.passkey,
+      // Under strict a record without the key can't be fetched at all (`passkeyStrictMissing`).
+      passkeyRequired: !!rec.passkey || strict,
+      ...(strict ? { passkeyStrictMissing: true } : {}),
       // N03: where the signed history stands. `legacy` rows carry unsigned escrow extras and are
       // replaced by a v2 record on the owner's next enrolment.
       legacy: !rec.signed,
@@ -414,6 +462,13 @@ export async function handleFetchWrappedUmkWithToken(
   }
   const rec = await deps.webauthnRecovery.get(username);
   if (!rec) return notFound("no recovery record");
+  // B2 #13: under strict the passphrase alone never releases a record. A record without the passkey's key has no
+  // passkey path, so it is refused; a 0.2 app (no passkey field) hears the same update sentence as on a passkey record.
+  if (!rec.passkey && deps.accountUnderStrict && (await deps.accountUnderStrict(username))) {
+    const p = b.passkey as { challenge?: unknown } | undefined;
+    if (!p || typeof p !== "object" || typeof p.challenge !== "string") return appUpdateRequired(403, "recoveryPasskey", "passkey-required");
+    return strictNeedsPasskey();
+  }
   // SEC-REPAIR-001: a record that holds the passkey's key releases nothing without that passkey's
   // signature over a challenge `.com` issued for this account.
   if (rec.passkey) {

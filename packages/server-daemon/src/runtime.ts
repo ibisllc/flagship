@@ -105,6 +105,8 @@ export interface DaemonRuntimeOptions {
   crossOwnerChat?: import("./chat/system.js").CrossOwnerChat;
   /** The admin's grant for `*.<user>.<apex>` on this box's certificate (serverWildcardGrant.ts). */
   serverWildcardGrant?: { issuedAt: number; signatureHex: string };
+  /** The grant held now (a renewal replaces it without a restart); falls back to `serverWildcardGrant`. */
+  serverWildcardGrantNow?: () => { issuedAt: number; signatureHex: string } | undefined;
   /** Server FQDN, e.g. "home.alice.flagship.services". */
   serverFqdn: string;
   /**
@@ -1343,7 +1345,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     boxPubHex: Buffer.from(opts.custodian.boxPublicKey()).toString("hex"),
     signAsBox: (m) => opts.custodian.signAsBox(m),
     regGen: () => opts.regGen?.() ?? 1,
-    wildcardGrant: () => opts.serverWildcardGrant,
+    wildcardGrant: () => (opts.serverWildcardGrantNow ? opts.serverWildcardGrantNow() : opts.serverWildcardGrant),
     csr:
       keydTls?.csr
         ? keydCsrSource({ tlsCreateKey: (n) => keydTls.acme.tlsCreateKey(n), tlsCsr: (h) => keydTls.csr!(h) })

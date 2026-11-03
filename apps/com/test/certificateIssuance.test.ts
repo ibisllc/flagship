@@ -9,6 +9,7 @@ import { D1Storage, type D1Database } from "@flagship/storage";
 import {
   ed,
   signDeviceCapabilityGrant,
+  SERVER_WILDCARD_GRANT_MAX_AGE_MS,
   signServerWildcardGrant,
   signServingRecord,
   type CertificateOrder,
@@ -16,7 +17,9 @@ import {
   type ServingPolicy,
 } from "@flagship/protocol";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
-import { tryIssuanceRoute, type IssuanceDeps, type IssuanceEnv } from "../src/certificateIssuance.js";
+import { runIssuanceSweep, tryIssuanceRoute, type IssuanceDeps, type IssuanceEnv } from "../src/certificateIssuance.js";
+import { cronPlan, TEN_MINUTE_CRON } from "../src/cronPlan.js";
+import { ISSUANCE_LIMITS } from "@flagship/control-plane";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { accountKeyPem, FakeAcme, FakeDns, makeCsr } from "./support/fakeAcme.js";
 
@@ -555,6 +558,182 @@ describe("configuration", () => {
       const acct = (await tryIssuanceRoute(new Request(`${ORIGIN}/api/certificates/account`), w.env, w.deps))!;
       expect(acct.status).toBe(200);
       expect(String(((await acct.json()) as { accountUri: string }).accountUri)).toMatch(/^https:\/\/ca\.test\/acct\//);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+// ── B2 / issuance Lows (2026-11-02 review) ─────────────────────────────────
+
+async function seedAcmeOrders(w: World, n: number, o: { username?: string; status?: "failed" | "issued"; acmeJson?: string; errorCode?: string | null } = {}) {
+  const user = o.username ?? "mallory";
+  for (let i = 0; i < n; i++) {
+    await w.db
+      .prepare(
+        "INSERT INTO certificate_orders (order_id, request_id, device_pub, username, server_domain, class, reg_gen, names, zone, csr_b64, csr_spki_sha256, order_json, signature, status, step, acme_json, acme_ordered_at, error_code, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, NULL, 'phone', 0, ?, ?, '', ?, '{}', '', ?, 'done', ?, ?, ?, ?, ?)",
+      )
+      .bind(rid(), rid(), "dd".repeat(32), user, `${user}${i}.${APEX}`, `${user}${i}.${APEX}`, "ff".repeat(32), o.status ?? "failed", o.acmeJson ?? "{}", w.clock.t - 60_000, o.errorCode === undefined ? "issuance-superseded" : o.errorCode, w.clock.t - 60_000, w.clock.t - 60_000)
+      .run();
+  }
+}
+
+describe("the service-wide order budget keeps room for renewals", () => {
+  it("refuses a first certificate once new orders used their share, but still lets a due renewal through", async () => {
+    const w = await setup();
+    try {
+      const first = await issue(w, { cls: "control", names: [SERVER] });
+      expect(first.done.status).toBe("issued");
+      w.clock.t += 61 * 86_400_000;
+      await seedAcmeOrders(w, ISSUANCE_LIMITS.serviceNewOrdersPer3h);
+      const fresh = await ask(w, { cls: "apps", names: [`*.${SERVER}`] });
+      expect(fresh.res.status).toBe(429);
+      expect(fresh.json.code).toBe("issuance-rate-limited");
+      const renewal = await issue(w, { cls: "control", names: [SERVER] });
+      expect(renewal.done.status).toBe("issued");
+    } finally {
+      w.close();
+    }
+  });
+
+  it("re-checks the budget before the CA sees an order queued while it was open", async () => {
+    const w = await setup();
+    try {
+      const r = await ask(w, { cls: "phone", names: [`alice.${APEX}`] });
+      expect(r.res.status).toBe(202);
+      await seedAcmeOrders(w, ISSUANCE_LIMITS.serviceNewOrdersPer3h);
+      const done = await drive(w, String(r.json.orderId));
+      expect(done).toMatchObject({ status: "failed", code: "issuance-rate-limited" });
+      expect(w.ca.orders.size).toBe(0);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+describe("one account cannot spend the CA budget by superseding its own orders", () => {
+  it("stops a device that keeps replacing orders the CA already saw", async () => {
+    const w = await setup();
+    try {
+      const codes: unknown[] = [];
+      for (let i = 0; i < ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay + 3; i++) {
+        const r = await ask(w, { cls: "phone", names: [`alice.${APEX}`] });
+        codes.push(r.json.code ?? r.res.status);
+        if (r.res.status !== 202) break;
+        await poll(w, String(r.json.orderId)); // the CA sees the order
+      }
+      expect(codes.at(-1)).toBe("issuance-rate-limited");
+      const atCa = await w.db.prepare("SELECT COUNT(*) AS n FROM certificate_orders WHERE username = 'alice' AND acme_ordered_at IS NOT NULL").first<{ n: number }>();
+      expect(atCa!.n).toBeLessThanOrEqual(ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay + 1);
+      // The order still in flight was not superseded by the refused one.
+      const pending = await w.db.prepare("SELECT COUNT(*) AS n FROM certificate_orders WHERE username = 'alice' AND status = 'pending'").first<{ n: number }>();
+      expect(pending!.n).toBe(1);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+describe("the issuance sweep runs on its own (cron), not only inside other people's orders", () => {
+  it("revokes a box's certificates once the box is removed, with no other order arriving", async () => {
+    const w = await setup();
+    try {
+      await issue(w, { cls: "control", names: [SERVER] });
+      await w.db.prepare("UPDATE servers SET revoked_at = ? WHERE server_domain = ?").bind(w.clock.t, SERVER).run();
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(1);
+      expect(w.ca.revoked[0]!.reason).toBe(5);
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(1);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("revokes a phone certificate once its device loses the admin grant", async () => {
+    const w = await setup();
+    try {
+      expect((await issue(w, { cls: "phone", names: [`alice.${APEX}`] })).done.status).toBe("issued");
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(0);
+      await w.db.prepare("UPDATE device_capability_grants SET revoked_at = ? WHERE grant_id = 'g-admin'").bind(w.clock.t).run();
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(1);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("revokes an apps certificate whose wildcard grant no longer verifies (the admin key changed)", async () => {
+    const w = await setup();
+    try {
+      expect((await issue(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`], grant: true })).done.status).toBe("issued");
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(0);
+      await w.db.prepare("UPDATE usernames SET admin_root_pub_hex = ? WHERE username = 'alice'").bind(hex(ed.getPublicKey(seed(77)))).run();
+      expect((await w.storage.usernames.get("alice"))!.adminRootPubHex).toBe(hex(ed.getPublicKey(seed(77))));
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(1);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("revokes an apps certificate only after the serving lease has been gone a long while", async () => {
+    const w = await setup();
+    try {
+      expect((await issue(w, { cls: "apps", names: [`*.${SERVER}`] })).done.status).toBe("issued");
+      const p: ServingPolicy = { account: "alice", box: BOX, regGen: 1, policyGen: 1, grace: "7d", onLapse: "stop-apps", scopeSha256: "ab".repeat(32), issuedAt: w.clock.t };
+      await w.db
+        .prepare("INSERT INTO serving_policies (username, box_pub, reg_gen, policy_gen, record_json, signature, updated_at) VALUES ('alice', ?, 1, 1, ?, ?, ?)")
+        .bind(BOX, JSON.stringify(p), hex(signServingRecord("serving-policy", p, (m) => ed.sign(m, ADMIN))), w.clock.t)
+        .run();
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(0);
+      w.clock.t += 31 * 86_400_000;
+      await runIssuanceSweep(w.env, w.deps);
+      expect(w.ca.revoked).toHaveLength(1);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("is a cron job, every hour", () => {
+    const hour = Date.UTC(2026, 10, 2, 6);
+    const runs = Array.from({ length: 6 }, (_, i) => cronPlan(TEN_MINUTE_CRON, hour + i * 600_000)).filter((p) => p.jobs.includes("issuance-sweep"));
+    expect(runs).toHaveLength(1);
+  });
+});
+
+describe("the server wildcard grant has an age limit and is bound to the registration", () => {
+  const grantAt = (issuedAt: number) => ({
+    issuedAt,
+    signature: hex(signServerWildcardGrant({ username: "alice", serverDomain: SERVER, stkPubHex: BOX, issuedAt }, (m) => ed.sign(m, ADMIN))),
+  });
+  const both = [`*.${SERVER}`, `*.alice.${APEX}`];
+
+  it("refuses a grant older than its age limit", async () => {
+    const w = await setup();
+    try {
+      const old = await ask(w, { cls: "apps", names: both, grant: grantAt(w.clock.t - SERVER_WILDCARD_GRANT_MAX_AGE_MS - 1000) });
+      expect(old.json.code).toBe("issuance-wildcard-grant");
+      expect((await ask(w, { cls: "apps", names: both, grant: grantAt(w.clock.t - SERVER_WILDCARD_GRANT_MAX_AGE_MS + 60_000) })).res.status).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("refuses a grant signed before the box's last revocation (an earlier registration generation)", async () => {
+    const w = await setup();
+    try {
+      const before = grantAt(w.clock.t - 10_000);
+      await w.db.prepare("UPDATE servers SET revoked_at = ? WHERE server_domain = ?").bind(w.clock.t - 5_000, SERVER).run();
+      await w.db.prepare("UPDATE servers SET revoked_at = NULL WHERE server_domain = ?").bind(SERVER).run();
+      const regGen = (await w.db.prepare("SELECT reg_gen FROM servers WHERE server_domain = ?").bind(SERVER).first<{ reg_gen: number }>())!.reg_gen;
+      expect(regGen).toBe(2);
+      expect((await ask(w, { cls: "apps", names: both, regGen, grant: before })).json.code).toBe("issuance-wildcard-grant");
+      expect((await ask(w, { cls: "apps", names: both, regGen, grant: grantAt(w.clock.t - 1000) })).res.status).toBe(202);
     } finally {
       w.close();
     }

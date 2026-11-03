@@ -50,9 +50,11 @@ import { protectedAccountsFrom } from "./prodReap.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { pruneLateLogs, type LateLogBucket } from "./legacyLateLogs.js";
 import { runVoiciGcCron } from "./voiciRoutes.js";
+import { runIssuanceSweep, type IssuanceEnv } from "./certificateIssuance.js";
+import { pruneUpdateReceipts } from "./updateReceipts.js";
 import type { VoiciBucket } from "@flagship/control-plane";
 
-export interface ScheduledEnv {
+export interface ScheduledEnv extends IssuanceEnv {
   DB?: D1Database;
   /** .services :8443 base (wrangler.toml) — custom-domain verifier
    *  pushes confirmed/invalidated redirections here (#79B/#87). */
@@ -177,7 +179,18 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runRelayDirectoryCron(env as unknown as RelayDirectoryEnv, now);
     case "names":
       return runNamesCron(env, now);
+    case "issuance-sweep":
+      return runIssuanceSweepCron(env, now);
+    case "prune-update-receipts":
+      return env.DB ? pruneUpdateReceipts(env.DB, now) : null;
   }
+}
+
+/** The issuance service's sweep (certificateIssuance.ts): no-op until the service is configured. */
+export async function runIssuanceSweepCron(env: ScheduledEnv, now: Date): Promise<unknown> {
+  if (!env.DB || !env.ISSUANCE_ACME_ACCOUNT_KEY) return null;
+  const storage = new D1Storage(env.DB);
+  return runIssuanceSweep(env, { usernames: storage.usernames, grants: storage.deviceCapabilityGrants, now: () => now.getTime() });
 }
 
 /** Remove only ACME TXT records older than one hour. */

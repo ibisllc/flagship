@@ -1,6 +1,8 @@
-import { ed } from "@flagship/protocol";
-import type { AuthCodeStorage, ServerBootKeyStorage, ServerHealthStorage, ServerStorage } from "@flagship/storage";
+import { canonicalBoxHealthReport, ed, strictInForce, TAG_BOX_HEALTH } from "@flagship/protocol";
+import type { AuthCodeStorage, DaemonStatusStorage, PqTrustStorage, ServerBootKeyStorage, ServerHealthStorage, ServerStorage } from "@flagship/storage";
 import { currentBootKeyBinding } from "./bootKeys.js";
+import { MIN_BOX_LEVEL, parseBoxLevel } from "./boxUpdateRequired.js";
+import { gateBoxMessage, installationPolicy, verifiedStoredStkBinding } from "./pqKeyBindings.js";
 import { HEX128, hexToBytes } from "./hex.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -84,13 +86,48 @@ export interface ServerHealthDeps {
   serverHealth: ServerHealthStorage;
   /** A box with a boot key signs its health with it (the timer runs outside the daemon and keyd). */
   serverBootKeys?: ServerBootKeyStorage;
+  /** The stored heartbeat: a box that reported `boxLevel` >= 3 signs tagged reports, so its untagged ones are refused. */
+  daemonStatus?: Pick<DaemonStatusStorage, "get">;
+  /** The critical-signature gate's inputs (installation policy, the STK's hybrid binding). */
+  pqTrust?: Pick<PqTrustStorage, "forServer">;
   now?: () => number;
 }
 
+/** Marks a stored report that arrived tagged: from then on the server's untagged reports are refused. */
+const STORED_TAG_KEY = "tag";
+
+function storedWasTagged(reportJson: string | undefined): boolean {
+  if (!reportJson) return false;
+  try {
+    return (JSON.parse(reportJson) as Record<string, unknown>)[STORED_TAG_KEY] === TAG_BOX_HEALTH;
+  } catch {
+    return false;
+  }
+}
+
+/** True once the server has shown it is a 0.3 box: a tagged report on file, or a heartbeat at `boxLevel` >= 3. */
+async function signsTagged(deps: ServerHealthDeps, domain: string, prevJson: string | undefined): Promise<boolean> {
+  if (storedWasTagged(prevJson)) return true;
+  const status = deps.daemonStatus ? await deps.daemonStatus.get(domain) : undefined;
+  if (!status?.reportJson) return false;
+  try {
+    const level = parseBoxLevel((JSON.parse(status.reportJson) as Record<string, unknown>).boxLevel);
+    return level !== null && level >= MIN_BOX_LEVEL;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * POST /api/server/<d>/health. A 0.3 box signs `flagship/box-health/v1|<report>` (protocol boxHealth.ts) with its
+ * STK or its bound boot key, and the signature goes through the critical-signature gate like the heartbeat's. A 0.2
+ * box signed the bare report JSON: that is taken only while the server has never sent a tagged report or a heartbeat
+ * at `boxLevel` >= 3 (no downgrade), and never on a strict installation.
+ */
 export async function handlePostServerHealth(
   deps: ServerHealthDeps,
   serverDomain: string,
-  body: { report?: unknown; signature?: unknown } | undefined,
+  body: { report?: unknown; signature?: unknown; pqSignature?: unknown } | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   if (typeof body?.report !== "string" || body.report.length > 4096 ||
       typeof body.signature !== "string" || !HEX128.test(body.signature)) {
@@ -101,22 +138,53 @@ export async function handlePostServerHealth(
   if (!server) return forbidden("unknown server");
   if (server.revokedAt) return forbidden("server revoked");
   // The signature covers the exact report bytes; parse only after it checks out.
-  const signed = new TextEncoder().encode(body.report);
   const sig = hexToBytes(body.signature);
-  let sigOk = ed.verify(sig, signed, hexToBytes(server.identityPubKeyHex));
-  if (!sigOk && deps.serverBootKeys) {
-    const boot = await currentBootKeyBinding({ servers: deps.servers, serverBootKeys: deps.serverBootKeys }, domain);
-    sigOk = boot !== null && ed.verify(sig, signed, hexToBytes(boot.bootKeyPubHex));
+  const stkHex = server.identityPubKeyHex.toLowerCase();
+  // Read together (one D1 batch on the Worker).
+  const [boot, pq, prev] = await Promise.all([
+    deps.serverBootKeys ? currentBootKeyBinding({ servers: deps.servers, serverBootKeys: deps.serverBootKeys }, domain) : Promise.resolve(null),
+    deps.pqTrust ? deps.pqTrust.forServer(domain) : Promise.resolve(null),
+    deps.serverHealth.get(domain),
+  ]);
+  const keys = [stkHex, ...(boot ? [boot.bootKeyPubHex.toLowerCase()] : [])];
+  const now = (deps.now ?? Date.now)();
+  const policy = pq ? installationPolicy(pq.policy, domain) : null;
+
+  const taggedBytes = canonicalBoxHealthReport(body.report);
+  const signer = keys.find((k) => ed.verify(sig, taggedBytes, hexToBytes(k)));
+  let tagged = false;
+  if (signer) {
+    if (policy && (body.pqSignature !== undefined || strictInForce(policy))) {
+      const refused = gateBoxMessage({
+        message: taggedBytes,
+        purpose: TAG_BOX_HEALTH,
+        classicalSignatureHex: body.signature,
+        pqSignature: body.pqSignature,
+        stkPubHex: signer,
+        // Only the STK has a hybrid binding; a boot-key report has none (so strict refuses it).
+        binding: signer === stkHex ? verifiedStoredStkBinding(pq!.stkBinding, domain, stkHex, now) : null,
+        policy,
+      });
+      if (refused) return forbidden(`signature refused: ${refused}`);
+    }
+    tagged = true;
+  } else {
+    const legacyBytes = new TextEncoder().encode(body.report);
+    if (!keys.some((k) => ed.verify(sig, legacyBytes, hexToBytes(k)))) return forbidden("invalid signature");
+    if (policy && strictInForce(policy)) return forbidden("signature refused: strict-requires-hybrid");
+    if (await signsTagged(deps, domain, prev?.reportJson)) {
+      return forbidden("untagged health report refused: this server signs tagged reports");
+    }
   }
-  if (!sigOk) return forbidden("invalid signature");
   const report = parseBoxHealthReport(body.report);
   if (!report) return malformed("malformed health report");
   if (report.domain !== domain) return forbidden("report is for another server");
-  const now = (deps.now ?? Date.now)();
   if (Math.abs(now - report.at) > HEALTH_MAX_SKEW_MS) return forbidden("stale or future report");
-  const prev = await deps.serverHealth.get(domain);
   if (prev && report.at <= prev.reportedAt) return forbidden("replayed report");
-  await deps.serverHealth.put({ serverDomain: domain, reportJson: body.report, reportedAt: report.at, receivedAt: now });
+  const reportJson = tagged
+    ? JSON.stringify({ ...(JSON.parse(body.report) as Record<string, unknown>), [STORED_TAG_KEY]: TAG_BOX_HEALTH })
+    : body.report;
+  await deps.serverHealth.put({ serverDomain: domain, reportJson, reportedAt: report.at, receivedAt: now });
   return ok({ ok: true });
 }
 

@@ -2067,6 +2067,7 @@ async function main(): Promise<void> {
       custodian,
       ...(crossOwnerChat ? { crossOwnerChat } : {}),
       ...(wildcardGrant ? { serverWildcardGrant: wildcardGrant } : {}),
+      ...(wildcardGrants ? { serverWildcardGrantNow: () => wildcardGrants.current() ?? undefined } : {}),
       ...(servingStore ? { regGen: () => servingStore.view().regGen } : {}),
       ...(opaqueTls ? { opaqueTls } : {}),
       ...(rustOnBox ? { rustCore: { mode: () => reconcilerMode } } : {}),

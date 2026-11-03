@@ -1,6 +1,6 @@
 import acme from "acme-client";
 import { createHash, createPrivateKey, randomBytes, X509Certificate } from "node:crypto";
-import { signServingRecord, type CertificateOrder } from "@flagship/protocol";
+import { serverWildcardGrantInDate, signServingRecord, type CertificateOrder } from "@flagship/protocol";
 
 /**
  * The box's side of `.com`'s certificate issuance service (docs/architecture-v2/issuance-service.md). The box makes
@@ -134,7 +134,14 @@ export class ServiceIssuer {
   }
 
   names(cls: BoxCertClass): string[] {
-    return boxClassNames(this.o.serverFqdn, cls, cls === "apps" && this.o.wildcardGrant() !== undefined);
+    return boxClassNames(this.o.serverFqdn, cls, cls === "apps" && this.grant() !== undefined);
+  }
+
+  /** The admin's grant while `.com` still takes it (serverWildcardGrantInDate); past its age the box orders without
+   *  the account wildcard instead of being refused, and the apps' upkeep brings a fresh grant. */
+  private grant(): { issuedAt: number; signatureHex: string } | undefined {
+    const g = this.o.wildcardGrant();
+    return g && serverWildcardGrantInDate(g.issuedAt, (this.o.now ?? Date.now)()) ? g : undefined;
   }
 
   /** An order this box placed and has not yet got an answer for (resumed by the next `issue`). */
@@ -172,7 +179,7 @@ export class ServiceIssuer {
       requestId: randomBytes(16).toString("hex"),
       issuedAt: now(),
     };
-    const grant = cls === "apps" ? this.o.wildcardGrant() : undefined;
+    const grant = cls === "apps" ? this.grant() : undefined;
     const body = JSON.stringify({
       account,
       server: this.o.serverFqdn.toLowerCase(),
