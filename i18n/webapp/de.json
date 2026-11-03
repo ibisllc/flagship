@@ -3235,5 +3235,6 @@
   "The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.": "Die Festplatte, für die dieses Installationsprogramm erstellt wurde ({0}), ist nicht in diesem Computer. Es wurde nichts gelöscht.",
   "The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.": "Die Festplatte, für die dieses Installationsprogramm erstellt wurde ({0}), passt auf mehr als eine Festplatte in diesem Computer. Es wurde nichts gelöscht.",
   "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Erstelle das Installationsprogramm mit demselben Rezept neu, trage unter „Datenträger für die Installation“ eine der Festplatten ein, die der Computer auf seinem Bildschirm angezeigt hat, und starte den Computer damit.",
-  "This server didn't finish installing.": "Dieser Server wurde nicht fertig installiert."
+  "This server didn't finish installing.": "Dieser Server wurde nicht fertig installiert.",
+  "Couldn't sign out of that website. Try again.": "Abmelden von dieser Website fehlgeschlagen. Versuch es noch einmal."
 }

@@ -349,24 +349,27 @@ export async function handleVoiciSend(deps: VoiciMailboxDeps, bodyText: string):
         retryAfterSec = 86_400;
         return "rate-limited";
       }
-      if (isNew && deps.limitNewConversation) {
-        const busy = await deps.limitNewConversation(page.pageId);
-        if (busy !== null) {
-          retryAfterSec = busy;
-          return "page-busy" as VoiciCheckRefusal;
-        }
-      }
       return null;
     },
   }, outer.envelope);
   if (!verdict.ok) {
     if (verdict.code === "blocked") return accepted(outer.envelope.msgId, null);
     const code = verdict.code as string;
-    if (code === "rate-limited" || code === "page-busy") return voiciRefusal(429, code, { retryAfterSec: retryAfterSec || 60 });
+    if (code === "rate-limited") return voiciRefusal(429, code, { retryAfterSec: retryAfterSec || 60 });
     if (code === "awaiting-reply") return voiciRefusal(429, code);
     return voiciRefusal(SEND_STATUS[verdict.code] ?? 403, verdict.code);
   }
   const env = verdict.envelope;
+  // One attestation (one pseudonym P, renewals included) writes to one page only, or a single first-contact allowance
+  // would open conversations on every page; nothing here names the account.
+  const boundPage = await deps.voici.bindPseudonymPage(env.from, page.pageId, now);
+  if (boundPage !== page.pageId) return voiciRefusal(403, "bad-attestation");
+  // The page's new-conversation budget is spent only by an envelope that verified (security review: a forged one
+  // must not use it up for everyone).
+  if ((isNew as boolean) && deps.limitNewConversation) {
+    const busy = await deps.limitNewConversation(page.pageId);
+    if (busy !== null) return voiciRefusal(429, "page-busy", { retryAfterSec: busy || 60 });
+  }
   const s = stats as Awaited<ReturnType<VoiciStorage["convStats"]>> | null;
   const request = !acceptedConv && (s?.replies ?? 0) === 0;
   const push = !body.direct && (!request || s?.lastPushedAt == null || s.lastPushedAt <= now - HOUR);
@@ -552,15 +555,16 @@ export const VOICI_REVOCATION_MAX_MS = 30 * DAY;
 
 /**
  * Body {revoke:{delegatePub, issuedAt}, signature} with either {delegation, delegationSig} (the delegation names the
- * pseudonym and its page) or {principalPub}. The pseudonym P signs the revoke. P must also show the browser key B is
- * really its own: a stored message P sent with B, or `delegateSig`, B's P-256 signature over the same revoke bytes;
- * otherwise 404 unknown-delegate and nothing is stored, since anyone can sign a delegation to somebody else's B.
- * The revocation ends P's delegation to B only (it is keyed by (B, P)), its reply alerts in P's conversation with that
- * page go, and it is kept until the delegation's expiry, at most VOICI_REVOCATION_MAX_MS.
+ * pseudonym and its page) or {principalPub, pageId?}. The pseudonym P signs the revoke, and that is enough to store it:
+ * a revocation is keyed by (B, P), so it ends P's own delegation to B and nobody else's, whoever B belongs to.
+ * Only when P also shows B is really its own (a stored message P sent with B, or `delegateSig`, B's P-256 signature
+ * over the same revoke bytes) is it filed under that page, where the owner's inbox lists it; anyone can sign a
+ * delegation to somebody else's B, and that must not put B on a page's list. B's reply alerts in P's conversation
+ * with the page named (or proven) go. It is kept until the delegation's expiry, at most VOICI_REVOCATION_MAX_MS.
  */
 export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
-  const b = body as { revoke?: unknown; signature?: unknown; delegation?: unknown; delegationSig?: unknown; principalPub?: unknown; delegateSig?: unknown };
+  const b = body as { revoke?: unknown; signature?: unknown; delegation?: unknown; delegationSig?: unknown; principalPub?: unknown; pageId?: unknown; delegateSig?: unknown };
   const r = parseWebDelegationRevoke(b?.revoke);
   if (!r || typeof b.signature !== "string") return voiciRefusal(400, "malformed");
   if (b.delegateSig !== undefined && typeof b.delegateSig !== "string") return voiciRefusal(400, "malformed");
@@ -577,23 +581,24 @@ export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): P
     expiresAt = Math.min(d.expiresAt, expiresAt);
   } else {
     if (!isLowerHex(b.principalPub, 32)) return voiciRefusal(400, "malformed");
+    if (b.pageId !== undefined && !isLowerHex(b.pageId, 16)) return voiciRefusal(400, "malformed");
     principalPub = b.principalPub;
+    claimedPage = typeof b.pageId === "string" ? b.pageId : "";
   }
   if (!verifyWebDelegationRevoke(r, b.signature, principalPub)) return voiciRefusal(403, "bad-signature");
-  // B is P's: B signed this revoke itself, or P stored a message sent with B (on the page the delegation names).
-  let pageId = "";
+  let provenPage = "";
   if (typeof b.delegateSig === "string") {
     if (!claimedPage) return voiciRefusal(400, "malformed");
     if (!(await p256VerifyFast(b.delegateSig, canonicalWebDelegationRevoke(r), r.delegatePub))) return voiciRefusal(403, "bad-signature");
-    pageId = claimedPage;
+    provenPage = claimedPage;
   } else {
     const sentOn = await deps.voici.delegatePage(principalPub, r.delegatePub);
-    if (sentOn && (!claimedPage || sentOn === claimedPage)) pageId = sentOn;
+    if (sentOn && (!claimedPage || sentOn === claimedPage)) provenPage = sentOn;
   }
-  if (!pageId) return voiciRefusal(404, "unknown-delegate");
+  const alertsPage = provenPage || claimedPage;
   await Promise.all([
-    expiresAt > now ? deps.voici.revokeDelegate({ delegatePub: r.delegatePub, pageId, principalPub, expiresAt, revokedAt: now }) : null,
-    deps.voici.deleteAlertsForDelegate(r.delegatePub, voiciConv(pageId, principalPub)),
+    expiresAt > now ? deps.voici.revokeDelegate({ delegatePub: r.delegatePub, pageId: provenPage, principalPub, expiresAt, revokedAt: now }) : null,
+    alertsPage ? deps.voici.deleteAlertsForDelegate(r.delegatePub, voiciConv(alertsPage, principalPub)) : null,
   ]);
   return okNoStore({ ok: true });
 }

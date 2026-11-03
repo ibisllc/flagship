@@ -30,6 +30,7 @@ import {
   VOICI_WEB_ORIGIN,
   type VoiciMessageReport,
   type VoiciPageReport,
+  voiciNameKey,
 } from "@flagship/protocol";
 import type { D1Database } from "@flagship/storage";
 import type { DeviceIntegrity, IntegrityPlatform } from "./deviceIntegrity.js";
@@ -104,9 +105,13 @@ export function json(body: unknown, status: number, headers: Record<string, stri
 
 // ── reads other chunks use ────────────────────────────────────────────────
 
-/** Banned from Messages and pages (§9.3): no attestations, no publishes. */
+/** A ban row's name as the names registry folds it (migration 0127): a ban holds every name that shares its safety key. */
+const BAN_KEY = "replace(replace(replace(lower(username), '-', ''), '0', 'o'), '1', 'l')";
+
+/** Banned from Messages and pages (§9.3): no attestations, no publishes. Matched on the name's safety key, and kept
+ *  when the account is deleted, so the name (or one too close to it) claimed again later is still banned. */
 export async function isAccountBanned(db: D1Database, username: string): Promise<boolean> {
-  return !!(await db.prepare("SELECT 1 AS x FROM voici_bans WHERE username = ?1").bind(username.toLowerCase()).first());
+  return !!(await db.prepare(`SELECT 1 AS x FROM voici_bans WHERE ${BAN_KEY} = ?1 LIMIT 1`).bind(voiciNameKey(username)).first());
 }
 
 /** A pseudonym Flagship banned from a confirmed report: its sends are dropped at once (§9.3). */
@@ -119,13 +124,13 @@ export async function isTakenDown(db: D1Database, username: string): Promise<{ r
   return await db.prepare("SELECT reason FROM voici_takedowns WHERE username = ?1").bind(username.toLowerCase()).first<{ reason: string }>();
 }
 
-/** Account deletion (§10.3): this chunk's rows for the account. Bans and takedowns go too (the name may be reclaimed). */
+/** Account deletion (§10.3): this chunk's rows for the account. A ban stays: it follows the name, not the account,
+ *  until an operator lifts it (`unban`), so deleting the account and claiming the name again does not clear it. */
 export async function deleteVoiciAbuseAccount(db: D1Database, username: string): Promise<void> {
   const u = username.toLowerCase();
   await db.batch([
     db.prepare("DELETE FROM messages_enrollments WHERE username = ?1").bind(u),
     db.prepare("DELETE FROM messages_attest_counters WHERE username = ?1").bind(u),
-    db.prepare("DELETE FROM voici_bans WHERE username = ?1").bind(u),
     db.prepare("DELETE FROM voici_takedowns WHERE username = ?1").bind(u),
   ]);
 }
@@ -497,11 +502,12 @@ export async function handleVoiciAdmin(request: Request, env: VoiciAbuseEnv, dep
   if (sub === "unban") {
     const o = body as { username?: unknown } | null;
     if (!o || typeof o.username !== "string" || !USERNAME.test(o.username) || !exactKeys(o as Record<string, unknown>, ["username"])) return json({ error: "malformed", code: "malformed" }, 400);
-    const ban = await db.prepare("SELECT report_id FROM voici_bans WHERE username = ?1").bind(o.username).first<{ report_id: string | null }>();
-    if (!ban) return json({ error: "not banned", code: "not-found" }, 404);
+    const key = voiciNameKey(o.username);
+    const bans = (await db.prepare(`SELECT report_id FROM voici_bans WHERE ${BAN_KEY} = ?1`).bind(key).all<{ report_id: string | null }>()).results ?? [];
+    if (!bans.length) return json({ error: "not banned", code: "not-found" }, 404);
     await db.batch([
-      db.prepare("DELETE FROM voici_bans WHERE username = ?1").bind(o.username),
-      db.prepare("DELETE FROM voici_banned_pseudonyms WHERE report_id = ?1").bind(ban.report_id ?? ""),
+      db.prepare(`DELETE FROM voici_bans WHERE ${BAN_KEY} = ?1`).bind(key),
+      ...bans.map((b) => db.prepare("DELETE FROM voici_banned_pseudonyms WHERE report_id = ?1").bind(b.report_id ?? "")),
     ]);
     const device = markDevice(db, deps.integrity, o.username, false, now);
     later(device);

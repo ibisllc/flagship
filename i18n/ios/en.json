@@ -13703,5 +13703,9 @@
   "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": {
     "en": "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift"
+  },
+  "Couldn't sign out of that website. Try again.": {
+    "en": "Couldn't sign out of that website. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:617"
   }
 }

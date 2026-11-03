@@ -289,13 +289,15 @@ object VoiciOwner {
         ),
     )
 
-    /** `{revoke:{delegatePub, issuedAt}, principalPub, signature}` (§6.4; B1 finds the page from P's stored messages). */
-    fun revokeBody(visitor: VoiciVisitorKeys, delegatePub: String, now: Long): JsonObject {
+    /** `{revoke:{delegatePub, issuedAt}, principalPub, pageId, signature}` (§6.4): P's signature is enough; the page
+     *  says where the browser's reply alerts go. */
+    fun revokeBody(visitor: VoiciVisitorKeys, pageId: String, delegatePub: String, now: Long): JsonObject {
         val r = WebDelegationRevoke(delegatePub, now)
         return JsonObject(
             mapOf(
                 "revoke" to r.toJson(),
                 "principalPub" to JsonPrimitive(visitor.pseudonymPub),
+                "pageId" to JsonPrimitive(pageId),
                 "signature" to JsonPrimitive(WebDelegations.signWebDelegationRevoke(r, visitor.pseudonym.seed)),
             ),
         )

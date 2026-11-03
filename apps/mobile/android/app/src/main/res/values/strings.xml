@@ -3454,4 +3454,5 @@
     <string name="install_disk_stop_ambiguous">The disk this installer was made for (%1$s) matches more than one disk in this computer. Nothing was erased.</string>
     <string name="install_disk_stop_advice">Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.</string>
     <string name="setup_stopped_cancel_or_contact">Cancel this order to free the name and create the server again, or contact us and we\'ll look at it.</string>
+    <string name="voici_err_sign_out">Couldn\'t sign out of that website. Try again.</string>
 </resources>

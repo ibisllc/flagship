@@ -76,8 +76,9 @@ public protocol VoiciComClient: Sendable {
     func send(envelope: JSONValue, direct: Bool) async throws
     func block(username: String, block: VoiciBlock, signature: String) async throws
     func report(report: JSONValue, signature: String) async throws
-    /// Sign one browser out: the revoke by P and the delegation it ends (`.com` keeps no P ↔ browser mapping).
-    func revoke(_ r: WebDelegationRevoke, signature: String, delegation: JSONValue, delegationSig: String) async throws
+    /// Sign one browser out: the revoke by P (§6.4). P's signature is enough; the delegation it ends, when this device
+    /// kept it, lets `.com` list the sign-out on the page, else `principalPub` and the page go with it.
+    func revoke(_ r: WebDelegationRevoke, signature: String, principalPub: String, pageId: String, delegation: JSONValue?, delegationSig: String?) async throws
     func messagesState(username: String) async throws -> JSONValue?
     func putMessagesState(username: String, blob: SealedMessagesState, device: VoiciDeviceSigner) async throws
     /// `integrity` nil for `deviceCheckRef` "none"; `previous` is the attestation a renewal names.
@@ -256,9 +257,9 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
         try await call(try json("POST", VoiciComPaths.reports, ["report": report, "signature": .string(signature)]))
     }
 
-    public func revoke(_ r: WebDelegationRevoke, signature: String, delegation: JSONValue, delegationSig: String) async throws {
-        try await call(try json("POST", VoiciComPaths.revoke, ["revoke": r.json, "signature": .string(signature),
-                                                               "delegation": delegation, "delegationSig": .string(delegationSig)]))
+    public func revoke(_ r: WebDelegationRevoke, signature: String, principalPub: String, pageId: String, delegation: JSONValue?, delegationSig: String?) async throws {
+        try await call(try json("POST", VoiciComPaths.revoke, VoiciSignOut.body(r, signature: signature, principalPub: principalPub, pageId: pageId,
+                                                                                delegation: delegation, delegationSig: delegationSig)))
     }
 
     /// `{state: {version, nonce, ct} | null}`.
@@ -319,5 +320,24 @@ public struct VoiciThreadFetch: Equatable, Sendable {
               since.utf8.allSatisfy({ (0x30...0x39).contains($0) || (0x41...0x5a).contains($0) || (0x61...0x7a).contains($0) || $0 == 0x5f || $0 == 0x2d }),
               issuedAt >= 0 else { throw CanonicalJsonError("\(Self.tag): bad field") }
         return CanonicalJson.join([Self.tag, conv, since, String(issuedAt)])
+    }
+}
+
+/// "Sign out" of a website (§6.4): the revoke P signs and the body `.com` takes. Any answer but 2xx is a failure.
+public enum VoiciSignOut {
+    public static func body(_ r: WebDelegationRevoke, signature: String, principalPub: String, pageId: String, delegation: JSONValue?, delegationSig: String?) -> JSONValue {
+        if let delegation, let delegationSig {
+            return ["revoke": r.json, "signature": .string(signature), "delegation": delegation, "delegationSig": .string(delegationSig)]
+        }
+        return ["revoke": r.json, "signature": .string(signature), "principalPub": .string(principalPub), "pageId": .string(pageId)]
+    }
+
+    /// Signs `delegatePub` out for the pseudonym (`seed`) on `pageId`; throws `VoiciComError` on any refusal.
+    public static func send(_ client: VoiciComClient, pageId: String, delegatePub: String, pseudonymSeed: [UInt8],
+                            kept: (delegation: JSONValue, signature: String)?, now: Int64) async throws {
+        let r = WebDelegationRevoke(delegatePub: delegatePub, issuedAt: now)
+        let principalPub = CanonicalJson.hex(try CanonicalJson.ed25519PublicKey(seed: pseudonymSeed))
+        try await client.revoke(r, signature: try WebDelegations.signWebDelegationRevoke(r, principalSeed: pseudonymSeed), principalPub: principalPub,
+                                pageId: pageId, delegation: kept?.delegation, delegationSig: kept?.signature)
     }
 }

@@ -3449,4 +3449,5 @@
     <string name="install_disk_stop_ambiguous">此安装程序所针对的磁盘(%1$s)与这台电脑中的多块磁盘相符。没有擦除任何内容。</string>
     <string name="install_disk_stop_advice">请用同一份配方重新制作安装程序,在“安装到的磁盘”中填写电脑屏幕上列出的某块磁盘,然后用它启动电脑。</string>
     <string name="setup_stopped_cancel_or_contact">取消此订单即可释放名称并重新创建服务器,或联系我们,我们会帮你查看。</string>
+    <string name="voici_err_sign_out">无法从该网站退出。请重试。</string>
 </resources>

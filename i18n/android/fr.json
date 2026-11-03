@@ -3446,5 +3446,6 @@
   "install_disk_stop_missing": "Le disque pour lequel cet installateur a été créé (%1$s) n'est pas dans cet ordinateur. Rien n'a été effacé.",
   "install_disk_stop_ambiguous": "Le disque pour lequel cet installateur a été créé (%1$s) correspond à plusieurs disques de cet ordinateur. Rien n'a été effacé.",
   "install_disk_stop_advice": "Recréez l'installateur avec la même recette, remplissez « Disque où installer » avec l'un des disques que l'ordinateur a affichés à l'écran, puis démarrez l'ordinateur dessus.",
-  "setup_stopped_cancel_or_contact": "Annulez cette commande pour libérer le nom et recréer le serveur, ou contactez-nous et nous regarderons."
+  "setup_stopped_cancel_or_contact": "Annulez cette commande pour libérer le nom et recréer le serveur, ou contactez-nous et nous regarderons.",
+  "voici_err_sign_out": "Impossible de se déconnecter de ce site web. Réessayez."
 }

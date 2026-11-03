@@ -28,6 +28,7 @@ object VoiciCopy {
             in TEXT_CODES -> R.string.voici_err_text
             "rate-limited" -> R.string.voici_err_rate_limited
             "awaiting-reply" -> R.string.voici_err_awaiting_reply
+            "sign-out-failed" -> R.string.voici_err_sign_out
             else -> R.string.voici_err_network
         },
     )

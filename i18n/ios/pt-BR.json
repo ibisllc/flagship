@@ -3175,5 +3175,6 @@
   "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "Este computador não tem um disco interno de 8 GB ou mais para instalar, então o instalador parou. Nada foi apagado.",
   "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": "O disco para o qual este instalador foi criado (%@) não está neste computador. Nada foi apagado.",
   "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": "O disco para o qual este instalador foi criado (%@) corresponde a mais de um disco neste computador. Nada foi apagado.",
-  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Crie o instalador de novo com a mesma receita, preencha \"Disco onde instalar\" com um dos discos que o computador mostrou na tela e inicie o computador por ele."
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Crie o instalador de novo com a mesma receita, preencha \"Disco onde instalar\" com um dos discos que o computador mostrou na tela e inicie o computador por ele.",
+  "Couldn't sign out of that website. Try again.": "Não foi possível sair desse site. Tente novamente."
 }

@@ -275,8 +275,12 @@ export async function revokeSignedInSite(site, deps = {}) {
   const r = await f(`${deps.apex ?? controlApex()}/api/voici/web/revoke`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ revoke, principalPub: hex(p.publicKey), signature }),
+    body: JSON.stringify({ revoke, principalPub: hex(p.publicKey), pageId: site.pageId, signature }),
   });
-  if (!r.ok && r.status !== 404) throw new VoiciError("failed");
+  if (!r.ok) {
+    const body = await r.json().catch(() => null);
+    const retryAfterSec = typeof body?.retryAfterSec === "number" ? body.retryAfterSec : undefined;
+    throw new VoiciError(r.status === 429 ? "rate-limited" : "sign-out-failed", { status: r.status, retryAfterSec });
+  }
   await (deps.updateState ?? updateMessagesState)((s) => ({ ...s, signedInSites: s.signedInSites.filter((x) => x.delegatePub !== site.delegatePub) }), deps);
 }

@@ -3174,5 +3174,6 @@
   "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "このコンピューターにはインストール先となる 8 GB 以上の内蔵ディスクがないため、インストーラーは停止しました。何も消去されていません。",
   "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": "このインストーラーの作成時に指定したディスク (%@) はこのコンピューターにありません。何も消去されていません。",
   "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": "このインストーラーの作成時に指定したディスク (%@) は、このコンピューターの複数のディスクに一致します。何も消去されていません。",
-  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "同じレシピでインストーラーを作り直し、「インストール先のディスク」にコンピューターの画面に表示されたディスクのいずれかを入力してから、そのインストーラーでコンピューターを起動してください。"
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "同じレシピでインストーラーを作り直し、「インストール先のディスク」にコンピューターの画面に表示されたディスクのいずれかを入力してから、そのインストーラーでコンピューターを起動してください。",
+  "Couldn't sign out of that website. Try again.": "そのウェブサイトからサインアウトできませんでした。もう一度お試しください。"
 }

@@ -3449,4 +3449,5 @@
     <string name="install_disk_stop_ambiguous">Le disque pour lequel cet installateur a été créé (%1$s) correspond à plusieurs disques de cet ordinateur. Rien n\'a été effacé.</string>
     <string name="install_disk_stop_advice">Recréez l\'installateur avec la même recette, remplissez « Disque où installer » avec l\'un des disques que l\'ordinateur a affichés à l\'écran, puis démarrez l\'ordinateur dessus.</string>
     <string name="setup_stopped_cancel_or_contact">Annulez cette commande pour libérer le nom et recréer le serveur, ou contactez-nous et nous regarderons.</string>
+    <string name="voici_err_sign_out">Impossible de se déconnecter de ce site web. Réessayez.</string>
 </resources>

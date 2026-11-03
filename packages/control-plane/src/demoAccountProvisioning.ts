@@ -44,6 +44,8 @@ export interface CleanupDemoAccountDeps {
   demos: DemoUsersStorage;
   destroyServer(serverId: string): Promise<void>;
   cleanupDns?: (username: string) => Promise<void>;
+  /** voi.ci pages and Messages: the page, its public index, mailbox, drafts and state go before the name is freed. */
+  voiciPages?: { deleteAccount(username: string): Promise<unknown> };
 }
 
 export interface DemoAccountProvisioningDeps {
@@ -280,6 +282,15 @@ export async function handleCleanupDemoAccount(
     }
     dnsCleanup = "failed";
   }
+  let voiciCleanup: "ok" | "failed" | "none" = deps.voiciPages ? "ok" : "none";
+  try {
+    await deps.voiciPages?.deleteAccount(username);
+  } catch {
+    if (!force) {
+      return { status: 502, body: { error: "voi.ci cleanup failed; retry with the same identifiers" } };
+    }
+    voiciCleanup = "failed";
+  }
   if (!(await deps.provisioning.cleanup(username, body.idempotencyKey))) {
     return conflict("demo cleanup target changed");
   }
@@ -288,6 +299,7 @@ export async function handleCleanupDemoAccount(
     deleted: true,
     providerDestroy,
     dnsCleanup,
+    voiciCleanup,
     ...(providerDestroy === "failed" ? { orphanedServerId: row.activeServerId } : {}),
   });
 }

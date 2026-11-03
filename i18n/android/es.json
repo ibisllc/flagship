@@ -3446,5 +3446,6 @@
   "install_disk_stop_missing": "El disco para el que se creó este instalador (%1$s) no está en este ordenador. No se borró nada.",
   "install_disk_stop_ambiguous": "El disco para el que se creó este instalador (%1$s) coincide con más de un disco de este ordenador. No se borró nada.",
   "install_disk_stop_advice": "Vuelve a crear el instalador con la misma receta, rellena «Disco donde instalar» con uno de los discos que el ordenador mostró en su pantalla y arranca el ordenador desde él.",
-  "setup_stopped_cancel_or_contact": "Cancela este pedido para liberar el nombre y volver a crear el servidor, o escríbenos y lo revisaremos."
+  "setup_stopped_cancel_or_contact": "Cancela este pedido para liberar el nombre y volver a crear el servidor, o escríbenos y lo revisaremos.",
+  "voici_err_sign_out": "No se pudo cerrar la sesión en ese sitio web. Inténtalo de nuevo."
 }

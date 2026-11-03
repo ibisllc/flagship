@@ -67,6 +67,8 @@ export function voiciErrorText(e) {
       return tr("Your Messages settings couldn't be opened on this device.");
     case "too-large":
       return tr("That's too big to publish.");
+    case "sign-out-failed":
+      return tr("Couldn't sign out of that website. Try again.");
     default:
       return tr("Something went wrong. Try again.");
   }

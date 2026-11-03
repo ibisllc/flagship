@@ -158,6 +158,8 @@ export interface VoiciStorage {
   deleteMessagesBefore(before: number, limit: number): Promise<number>;
   /** The page a pseudonym's browser key wrote to, from a stored message, if any. */
   delegatePage(fromPub: string, delegatePub: string): Promise<string | null>;
+  /** Binds the pseudonym to `pageId` unless it is bound already (migration 0129); returns the page it is bound to. */
+  bindPseudonymPage(pseudonymPub: string, pageId: string, at: number): Promise<string>;
 
   /** Newest issuedAt wins; false when a newer or equal order is stored. */
   setBlock(rec: VoiciBlockRecord, at: number): Promise<boolean>;
@@ -165,7 +167,8 @@ export interface VoiciStorage {
   listBlocked(pageId: string): Promise<string[]>;
 
   /** Keyed by (delegatePub, principalPub): one pseudonym's revocation never ends another's delegation to the same
-   *  browser key. A second revocation keeps the later expiry. */
+   *  browser key. A second revocation keeps the later expiry; `pageId` "" (not proven to be P's on a page) is filled
+   *  in by a later one that names a page. */
   revokeDelegate(rec: VoiciRevokedDelegate): Promise<void>;
   isRevoked(delegatePub: string, principalPub: string, now: number): Promise<boolean>;
   listRevoked(pageId: string, now: number): Promise<string[]>;
@@ -195,7 +198,7 @@ export interface VoiciStorage {
   /** The browser key's alerts in one conversation (the one its revoked delegation was for). */
   deleteAlertsForDelegate(delegatePub: string, conv: string): Promise<number>;
 
-  /** Account deletion (§10.3): the page, its mailbox, reply alerts, blocks, revocations, drafts and the state blob go; its pieces
+  /** Account deletion (§10.3): the page, its mailbox, reply alerts, blocks, revocations, pseudonym bindings, drafts and the state blob go; its pieces
    *  are left for the cron to delete (unreferenced at 0). Returns the page id, if there was a page. */
   deleteAccount(username: string): Promise<string | null>;
 }
@@ -557,6 +560,14 @@ export class D1VoiciStorage implements VoiciStorage {
     return r?.page_id ?? null;
   }
 
+  async bindPseudonymPage(pseudonymPub: string, pageId: string, at: number) {
+    const [, read] = await this.db.batch([
+      this.db.prepare("INSERT OR IGNORE INTO voici_pseudonym_pages (pseudonym_pub, page_id, bound_at) VALUES (?1, ?2, ?3)").bind(pseudonymPub, pageId, at),
+      this.db.prepare("SELECT page_id FROM voici_pseudonym_pages WHERE pseudonym_pub = ?1").bind(pseudonymPub),
+    ]);
+    return ((read?.results ?? []) as { page_id: string }[])[0]?.page_id ?? pageId;
+  }
+
   async setBlock(rec: VoiciBlockRecord, at: number) {
     const res = await this.db
       .prepare(
@@ -589,8 +600,9 @@ export class D1VoiciStorage implements VoiciStorage {
     await this.db
       .prepare(
         "INSERT INTO voici_revoked_keys (delegate_pub, principal_pub, page_id, expires_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5) " +
-          "ON CONFLICT (delegate_pub, principal_pub) DO UPDATE SET expires_at = excluded.expires_at, revoked_at = excluded.revoked_at " +
-          "WHERE excluded.expires_at > voici_revoked_keys.expires_at",
+          "ON CONFLICT (delegate_pub, principal_pub) DO UPDATE SET expires_at = max(excluded.expires_at, voici_revoked_keys.expires_at), " +
+          "revoked_at = excluded.revoked_at, page_id = CASE WHEN voici_revoked_keys.page_id = '' THEN excluded.page_id ELSE voici_revoked_keys.page_id END " +
+          "WHERE excluded.expires_at > voici_revoked_keys.expires_at OR (voici_revoked_keys.page_id = '' AND excluded.page_id <> '')",
       )
       .bind(rec.delegatePub, rec.principalPub, rec.pageId, rec.expiresAt, rec.revokedAt)
       .run();
@@ -773,6 +785,7 @@ export class D1VoiciStorage implements VoiciStorage {
         this.db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_blocks WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_revoked_keys WHERE page_id = ?1").bind(page.pageId),
+        this.db.prepare("DELETE FROM voici_pseudonym_pages WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("UPDATE voici_pieces SET unreferenced_at = 0 WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_pages WHERE username = ?1").bind(username),
       );
@@ -791,6 +804,7 @@ export class InMemoryVoiciStorage implements VoiciStorage {
   private nextId = 1;
   private blocks = new Map<string, VoiciBlockRecord>();
   private revoked = new Map<string, VoiciRevokedDelegate>();
+  private pseudonymPages = new Map<string, string>();
   private drafts = new Map<string, VoiciDraftRecord>();
   private states = new Map<string, MessagesStateRecord>();
   private alerts: VoiciAlertRecord[] = [];
@@ -976,6 +990,11 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return this.messages.find((m) => m.fromPub === fromPub && m.delegatePub === delegatePub)?.pageId ?? null;
   }
 
+  async bindPseudonymPage(pseudonymPub: string, pageId: string, _at: number) {
+    if (!this.pseudonymPages.has(pseudonymPub)) this.pseudonymPages.set(pseudonymPub, pageId);
+    return this.pseudonymPages.get(pseudonymPub)!;
+  }
+
   async setBlock(rec: VoiciBlockRecord, _at: number) {
     const k = InMemoryVoiciStorage.pk(rec.pageId, rec.pseudonymPub);
     const cur = this.blocks.get(k);
@@ -1003,7 +1022,10 @@ export class InMemoryVoiciStorage implements VoiciStorage {
   async revokeDelegate(rec: VoiciRevokedDelegate) {
     const k = InMemoryVoiciStorage.rk(rec.delegatePub, rec.principalPub);
     const cur = this.revoked.get(k);
-    if (!cur || rec.expiresAt > cur.expiresAt) this.revoked.set(k, { ...(cur ?? rec), expiresAt: rec.expiresAt, revokedAt: rec.revokedAt });
+    if (!cur) this.revoked.set(k, { ...rec });
+    else if (rec.expiresAt > cur.expiresAt || (cur.pageId === "" && rec.pageId !== "")) {
+      this.revoked.set(k, { ...cur, pageId: cur.pageId || rec.pageId, expiresAt: Math.max(cur.expiresAt, rec.expiresAt), revokedAt: rec.revokedAt });
+    }
   }
 
   async isRevoked(delegatePub: string, principalPub: string, now: number) {
@@ -1134,6 +1156,7 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     await this.deleteAlertsForPage(page.pageId);
     for (const [k, b] of this.blocks) if (b.pageId === page.pageId) this.blocks.delete(k);
     for (const [k, r] of this.revoked) if (r.pageId === page.pageId) this.revoked.delete(k);
+    for (const [k, id] of this.pseudonymPages) if (id === page.pageId) this.pseudonymPages.delete(k);
     await this.unreferenceAllPieces(page.pageId, 0);
     this.pages.delete(username);
     return page.pageId;

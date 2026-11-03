@@ -499,10 +499,12 @@ The **thread statement** binds T to P: `flagship/voici-thread-key/v1|<pageId>|<P
 
 Revocation: the app lists "Websites you're signed in to" (Settings → Messages) from the Messages state blob;
 "Sign out" signs `flagship/web-delegation-revoke/v1|<delegatePub>|<issuedAt>` with P and posts it to
-`POST /api/voici/web/revoke`. `.com` stores it only once B is proven P's (a stored message P sent with B, or
-`delegateSig`, B's own P-256 signature over the same bytes; else 404 `unknown-delegate`), and then refuses B for P
-only: a revocation is keyed by (B, P), so one pseudonym can never sign another's browser out. It is kept until the
-delegation's expiry, at most 30 days (no delegation outlives its attestation). The phone learns
+`POST /api/voici/web/revoke` (with the page's id, so the browser's reply alerts there go too). P's signature is
+enough to store it: a revocation is keyed by (B, P) and refuses B for P only (sends and thread fetches), so one
+pseudonym can never sign another's browser out. It is filed under the page, where the owner's inbox lists it, only
+once B is proven P's (a stored message P sent with B, or `delegateSig`, B's own P-256 signature over the same bytes);
+otherwise it is stored page-less. It is kept until the delegation's expiry, at most 30 days (no delegation outlives
+its attestation). The apps treat any answer but 2xx as a failed sign-out and keep the site in the list. The phone learns
 revocations from the mailbox fetch (`revoked: [delegatePub]`) and refuses them on direct delivery.
 
 ### 6.5 The QR pipe
@@ -666,7 +668,8 @@ Send checks, cheapest first (filters on the claimed `from` only ever drop): size
 `acceptsMessages`, not taken down → `from` not blocked by this page, not a banned pseudonym, delegation not revoked
 → rate limits (§9.4) → signatures: delegation by P, attestation by the CA chain (cached per isolate), its abuse-tag
 hash, thread statement, envelope by B; for replies the page's ownerSignPub → `(conv, msgId)` unique, `sentAt` fresh →
-store → push. The body is never opened by `.com`.
+the pseudonym bound to this page → the page's new-conversation budget (only now, so a forged envelope cannot spend
+it) → store → push. The body is never opened by `.com`.
 
 F: bodies and answers as the webapp and the iOS client use them: send `{envelope, direct}`; the inbox answers
 `{items:[{envelope, storedAt, fetchedAt?, direct}], cursor, blocks:[Ppub], revoked:[delegatePub]}`; block
@@ -708,8 +711,8 @@ Alerts: opt-in browser reply alerts (owner decision 2026-11-02; migration **0125
   `{"kind":"voici-reply","u":"<page username>"}`. The service worker shows a fixed text the site stored, localized, at
   subscribe time ("voi.ci" / "You have a reply on voi.ci.") and on a tap opens `https://voi.ci/<u>` (its own origin;
   `u` must match the username rule). A 404/410 from the push service deletes the row.
-- **Gone.** Off; 404/410; sign-out of that browser key (`/api/voici/web/revoke`, only when the key is proven the
-  pseudonym's); the delegation's expiry and conversations with no mail left (`voici-gc` hourly); a takedown
+- **Gone.** Off; 404/410; sign-out of that browser key (`/api/voici/web/revoke`, in the pseudonym's conversation
+  with the page the revoke names or proves); the delegation's expiry and conversations with no mail left (`voici-gc` hourly); a takedown
   (`removeVoiciPageObjects`, B2's `takedownStep`); account deletion (`deleteAccount`).
 - **Service worker.** `apps/voici-site/src/sw.js` is in the build and its MANIFEST (not modulepreloaded: a classic
   script); `.com` serves this build's copy at the fixed `https://voi.ci/-/sw.js` (`cache-control: no-cache`, the
@@ -780,6 +783,9 @@ blocked pseudonym's sends are dropped before any signature check; the browser se
 - **Ban** (`POST /api/admin/voici/ban`): D1 `voici_bans`; the reported pseudonym goes into `voici_banned_pseudonyms`
   at once; `.com` refuses the account's attestation requests and renewals from then on, so its other pseudonyms stop
   within 30 days (D8); its devices are marked (§9.5) on their next contact. The account itself keeps its servers.
+  A ban follows the name, not the account: it is matched on the name's safety key (as the names registry folds it,
+  so `mal-lory`'s ban also holds `mallory`), and deleting the account does not lift it, so the name claimed again
+  after its 30-day hold (by anyone) is still banned until an operator runs `unban`.
 - **Appeal**: `apps/web/public/abuse.html` gains the appeal address and form; the owner answers with `unban` or
   `restore`. The banned app shows "Your account can't send messages. If you think this is a mistake, tell us."
 
@@ -791,7 +797,8 @@ blocked pseudonym's sends are dropped before any signature check; the browser se
 | Messages per conversation before the owner replies or taps Accept | 3, then refused `awaiting-reply` |
 | After that, per conversation | 30/hour, 200/day |
 | Replies by the owner | no product limit (the per-IP brake only) |
-| New conversations into one page | 200/day (protects the owner; then `page-busy`) |
+| New conversations into one page | 200/day (protects the owner; then `page-busy`), counted only for an envelope whose signatures and attestation verified |
+| Pages one pseudonym (one attestation and its renewals) writes to | 1: bound at its first accepted send (D1 `voici_pseudonym_pages`, migration 0129, no account named); another page refuses it `bad-attestation` |
 | Sends per IP | 60/hour |
 | Sign-in pipes per IP | the existing `qr-pipe-upgrade` budget |
 | Page publishes per account | 100/day; pieces 50 MiB/day |
@@ -911,7 +918,9 @@ loses nothing on the owner's devices.
 ### 10.3 Deletion
 
 Account deletion: page, pieces, drafts, mailbox rows (both directions for its page), state blob, enrollment rows.
-A deleted visitor's pseudonyms simply stop.
+A deleted visitor's pseudonyms simply stop. Every path that frees a name does this before the name can be claimed
+again: the account's own deletion, the admin reclaim of a dormant name, and a demo account's cleanup. A voi.ci ban is
+kept (§9.3).
 
 ### 10.4 AI rule
 
@@ -1136,9 +1145,10 @@ today's behaviour until `VOICI_ENABLED = "on"` (prod `"off"` in wrangler.toml; t
   `{items:[{id, envelope, storedAt, fetchedAt, direct}], next, more}`; `since`/`next` are decimal row ids ("" = start).
 - **Inbox**: answer `{pageId, items:[{id, envelope, storedAt, fetchedAt, direct}], cursor, more, blocks:[Ppub],
   revoked:[delegatePub]}`, at most 200 a call; what it returns is marked delivered.
-- **Revoke**: `{revoke, signature}` with `{delegation, delegationSig}` or `{principalPub}`. With only `principalPub`
-  the page comes from a stored message of that pseudonym signed with that key (D1 keeps each message's browser key
-  for this); without one the key is refused page-less for 30 days.
+- **Revoke**: `{revoke, signature}` with `{delegation, delegationSig}` or `{principalPub, pageId?}`. With only
+  `principalPub` the page comes from a stored message of that pseudonym signed with that key (D1 keeps each message's
+  browser key for this); without one the key is refused page-less for 30 days (`pageId` only says where its reply
+  alerts go).
 - **State**: GET answers the blob `{version, nonce, ct}` or 404 `not-found`; PUT takes the blob (or `{state}`) with
   the device headers; 409 `version-conflict` carries `state`.
 - **CORS**: exactly `VOICI_WEB_ORIGIN`, no credentials, on the §4.4 routes and `POST /api/voici/reports`; a preflight

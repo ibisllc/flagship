@@ -122,6 +122,29 @@ final class VoiciOwnerTests: XCTestCase {
         XCTAssertTrue(l.admit(from: "b", now: now))
         XCTAssertTrue(l.admit(from: "a", now: now + 60_001))
     }
+
+    /// Sign-out (§6.4): P's revoke with the page when no delegation was kept, the delegation when it was; any refusal,
+    /// 404 included, throws so the app keeps the site and says so.
+    func testSignOutSendsPsRevokeAndFailsOnAnyRefusal() async throws {
+        let m = try mock()
+        let p = try VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: VoiciMessages.deriveMessagesSecret(umk: umk), pageId: pageId)
+        let b = "04" + String(repeating: "ab", count: 64)
+        try await VoiciSignOut.send(m, pageId: pageId, delegatePub: b, pseudonymSeed: p.seed, kept: nil, now: now)
+        let body = try XCTUnwrap(m.revokes.last)
+        XCTAssertEqual(body["pageId"]?.string, pageId)
+        XCTAssertEqual(body["principalPub"]?.string, CanonicalJson.hex(p.publicKey))
+        XCTAssertNil(body["delegation"])
+        for status in [404, 403, 500] {
+            m.revokeRefusal = (status, "unknown-delegate")
+            do {
+                try await VoiciSignOut.send(m, pageId: pageId, delegatePub: b, pseudonymSeed: p.seed, kept: nil, now: now)
+                XCTFail("a \(status) must not read as signed out")
+            } catch let e as VoiciComError {
+                XCTAssertEqual(e.status, status)
+            }
+        }
+        XCTAssertEqual(m.revokes.count, 1)
+    }
 }
 
 final class VoiciSignInLinkTests: XCTestCase {

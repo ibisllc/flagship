@@ -18,7 +18,8 @@ import {
   isUnread,
   voiciWebOrigin,
 } from "../public/webapp/lib/voiciOwner.js";
-import { approveSignIn, parseVoiciSignInLink, pagePseudonym } from "../public/webapp/lib/voiciSignIn.js";
+import { approveSignIn, parseVoiciSignInLink, pagePseudonym, revokeSignedInSite } from "../public/webapp/lib/voiciSignIn.js";
+import { voiciErrorText } from "../public/webapp/lib/voiciCopy.js";
 import { canonicalVoiciThreadFetch, checkReplies, markReplySeen, rememberVisitedPage, threadFetchBody } from "../public/webapp/lib/voiciReplies.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -283,6 +284,42 @@ describe("Sign in with Flagship from the webapp", () => {
     expect(checked.ok).toBe(true);
     expect(recorded.signedInSites).toEqual([{ pageId: PAGE, delegatePub: request.delegatePub, at: NOW }]);
     await expect(approveSignIn(parsed, { ...request, origin: "https://evil.example" }, { session, now: () => NOW, origin: "https://voi.ci" })).rejects.toMatchObject({ code: "bad-request" });
+  });
+});
+
+describe("signing a website out", () => {
+  const site = { pageId: "0f".repeat(16), delegatePub: "04" + "ab".repeat(64), at: 1 };
+  const run = async (status: number, body: unknown = {}) => {
+    const sent: any[] = [];
+    let updated = 0;
+    const fetch = async (url: string, init: any) => {
+      sent.push({ url, body: JSON.parse(init.body) });
+      return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    };
+    const out = await revokeSignedInSite(site, { fetch, session, now: () => NOW, apex: "https://flagshipserver.com", updateState: async () => void updated++ })
+      .then(() => null)
+      .catch((e: any) => e);
+    return { sent, updated, error: out };
+  };
+
+  it("sends P's revoke with the page and drops the site on 200", async () => {
+    const r = await run(200, { ok: true });
+    expect(r.error).toBeNull();
+    expect(r.updated).toBe(1);
+    const { p } = pagePseudonym(UMK, site.pageId);
+    expect(r.sent[0].url).toBe("https://flagshipserver.com/api/voici/web/revoke");
+    expect(r.sent[0].body).toMatchObject({ principalPub: P.hex(p.publicKey), pageId: site.pageId, revoke: { delegatePub: site.delegatePub, issuedAt: NOW } });
+  });
+
+  it("treats any other answer, a 404 included, as a failed sign-out with a readable sentence", async () => {
+    for (const status of [404, 403, 500]) {
+      const r = await run(status, { code: "unknown-delegate" });
+      expect(r.updated).toBe(0);
+      expect(r.error?.code).toBe("sign-out-failed");
+      expect(voiciErrorText(r.error)).toBe("Couldn't sign out of that website. Try again.");
+    }
+    const limited = await run(429, { code: "rate-limited", retryAfterSec: 60 });
+    expect([limited.updated, limited.error?.code]).toEqual([0, "rate-limited"]);
   });
 });
 

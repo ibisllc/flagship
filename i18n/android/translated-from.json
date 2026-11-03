@@ -3386,5 +3386,6 @@
   "install_disk_stop_missing": "f30272a6fd4b",
   "install_disk_stop_ambiguous": "2dac857ce719",
   "install_disk_stop_advice": "8e999256567e",
-  "setup_stopped_cancel_or_contact": "e4ec1d5b2ed0"
+  "setup_stopped_cancel_or_contact": "e4ec1d5b2ed0",
+  "voici_err_sign_out": "99ca96927239"
 }

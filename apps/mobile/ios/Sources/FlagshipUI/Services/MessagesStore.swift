@@ -600,24 +600,22 @@ public final class MessagesStore {
         await editState { s in s.readUpTo[c.conv] = last.msgId }
     }
 
-    /// Websites this account is signed in to (as a visitor): sign one out (§6.4).
-    /// The revoke needs the delegation it ends, which only the device that approved the sign-in keeps; on another
-    /// device the site leaves the list and the browser's sign-in runs out with its delegation (at most 30 days).
+    /// Websites this account is signed in to (as a visitor): sign one out (§6.4). P's signature is enough for `.com`
+    /// to refuse that browser, so any device can do it; the delegation, where this device kept it, also lists the
+    /// sign-out on the page. The site leaves the list only once `.com` said yes.
     public func signOut(site: MessagesState.SignedInSite) async {
         guard let client, let umk = Keystore.messagesUMKIfCached(),
               let p = try? VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: VoiciMessages.deriveMessagesSecret(umk: Array(umk)), pageId: site.pageId)
         else { return }
-        if let kept = VoiciSignInBook.delegation(site.delegatePub) {
-            let r = WebDelegationRevoke(delegatePub: site.delegatePub, issuedAt: now())
-            do {
-                try await client.revoke(r, signature: try WebDelegations.signWebDelegationRevoke(r, principalSeed: p.seed),
-                                        delegation: kept.delegation, delegationSig: kept.signature)
-            } catch let e as VoiciComError where e.status >= 400 && e.status < 500 && e.code != "rate-limited" {
-                // Already ended or refused as stale: nothing left to revoke.
-            } catch {
-                lastError = Self.sentence(error)
-                return
-            }
+        do {
+            try await VoiciSignOut.send(client, pageId: site.pageId, delegatePub: site.delegatePub, pseudonymSeed: p.seed,
+                                        kept: VoiciSignInBook.delegation(site.delegatePub), now: now())
+        } catch let e as VoiciComError where e.status == 0 || e.code == "rate-limited" {
+            lastError = Self.sentence(e)
+            return
+        } catch {
+            lastError = String(localized: "Couldn't sign out of that website. Try again.")
+            return
         }
         await editState { s in s.signedInSites.removeAll { $0.delegatePub == site.delegatePub } }
     }

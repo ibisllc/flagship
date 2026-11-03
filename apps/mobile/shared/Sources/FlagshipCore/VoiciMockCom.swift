@@ -27,6 +27,8 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
     public var attestRefusal: (code: String, retryAfterSec: Int?)?
     /// Refuse every write with this code (the network is down: "network").
     public var failWrites: String?
+    /// Answer the next revoke with this refusal.
+    public var revokeRefusal: (status: Int, code: String)?
     public var now: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
 
     public init() {}
@@ -140,14 +142,23 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
         w { reports.append(["report": report, "signature": .string(signature)]) }
     }
 
-    public func revoke(_ r: WebDelegationRevoke, signature: String, delegation: JSONValue, delegationSig: String) async throws {
+    public func revoke(_ r: WebDelegationRevoke, signature: String, principalPub: String, pageId: String, delegation: JSONValue?, delegationSig: String?) async throws {
         try down()
-        guard let d = WebDelegations.parseWebDelegation(delegation), d.delegatePub == r.delegatePub,
-              let bytes = try? WebDelegations.canonicalWebDelegation(d), CanonicalJson.ed25519VerifyHex(delegationSig, bytes, d.principalPub),
-              WebDelegations.verifyWebDelegationRevoke(r, signature: signature, principalPub: d.principalPub) else {
+        if let refusal = w({ () -> (status: Int, code: String)? in defer { revokeRefusal = nil }; return revokeRefusal }) {
+            throw VoiciComError(status: refusal.status, code: refusal.code)
+        }
+        var principal = principalPub
+        if let delegation {
+            guard let d = WebDelegations.parseWebDelegation(delegation), d.delegatePub == r.delegatePub, let delegationSig,
+                  let bytes = try? WebDelegations.canonicalWebDelegation(d), CanonicalJson.ed25519VerifyHex(delegationSig, bytes, d.principalPub) else {
+                throw VoiciComError(status: 403, code: "bad-delegation")
+            }
+            principal = d.principalPub
+        }
+        guard WebDelegations.verifyWebDelegationRevoke(r, signature: signature, principalPub: principal) else {
             throw VoiciComError(status: 403, code: "bad-signature")
         }
-        w { revokes.append(r.json) }
+        w { revokes.append(VoiciSignOut.body(r, signature: signature, principalPub: principalPub, pageId: pageId, delegation: delegation, delegationSig: delegationSig)) }
     }
 
     public func messagesState(username: String) async throws -> JSONValue? { w { states[username.lowercased()] } }

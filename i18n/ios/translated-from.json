@@ -3172,5 +3172,6 @@
   "This computer has no built-in disk of 8 GB or more to install on, so the installer stopped. Nothing was erased.": "b1dfce81846a",
   "The disk this installer was made for (%@) isn't in this computer. Nothing was erased.": "26421ceafbe7",
   "The disk this installer was made for (%@) matches more than one disk in this computer. Nothing was erased.": "f4cf42bc75d1",
-  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "8e999256567e"
+  "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "8e999256567e",
+  "Couldn't sign out of that website. Try again.": "99ca96927239"
 }

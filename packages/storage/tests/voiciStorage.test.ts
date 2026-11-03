@@ -187,6 +187,38 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
     }
   });
 
+  it("files a revocation not yet proven on a page under none, and under the page a later one proves", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      const d = "04" + "ab".repeat(64);
+      await s.voici.revokeDelegate({ delegatePub: d, pageId: "", principalPub: "aa".repeat(32), expiresAt: 999, revokedAt: 1 });
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 50)).toBe(true);
+      expect(await s.voici.listRevoked(PAGE, 50)).toEqual([]);
+      await s.voici.revokeDelegate({ delegatePub: d, pageId: PAGE, principalPub: "aa".repeat(32), expiresAt: 500, revokedAt: 2 });
+      expect(await s.voici.listRevoked(PAGE, 50)).toEqual([d]);
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 600)).toBe(true);
+    } finally {
+      done();
+    }
+  });
+
+  it("binds a pseudonym to the first page it writes to, and lets the page's deletion free it", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      const p = "aa".repeat(32);
+      const other = "22".repeat(16);
+      expect(await s.voici.bindPseudonymPage(p, PAGE, 1)).toBe(PAGE);
+      expect(await s.voici.bindPseudonymPage(p, other, 2)).toBe(PAGE);
+      expect(await s.voici.bindPseudonymPage(p, PAGE, 3)).toBe(PAGE);
+      expect(await s.voici.bindPseudonymPage("bb".repeat(32), other, 4)).toBe(other);
+      await s.voici.publishPage(page(1), 0);
+      await s.voici.deleteAccount("alice");
+      expect(await s.voici.bindPseudonymPage(p, other, 5)).toBe(other);
+    } finally {
+      done();
+    }
+  });
+
   it("keeps draft ops once, consumes and expires them", async () => {
     const { s, done } = fresh(adapter);
     try {

@@ -3449,4 +3449,5 @@
     <string name="install_disk_stop_ambiguous">このインストーラーの対象ディスク(%1$s)は、このコンピューターの複数のディスクに一致します。何も消去されていません。</string>
     <string name="install_disk_stop_advice">同じレシピでインストーラーを作り直し、「インストール先のディスク」にコンピューターが画面に表示したディスクのいずれかを入力してから、そのインストーラーでコンピューターを起動してください。</string>
     <string name="setup_stopped_cancel_or_contact">この注文をキャンセルすると名前が解放され、サーバーを作り直せます。または、お問い合わせいただければ確認します。</string>
+    <string name="voici_err_sign_out">そのウェブサイトからサインアウトできませんでした。もう一度お試しください。</string>
 </resources>

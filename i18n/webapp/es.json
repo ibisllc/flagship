@@ -3235,5 +3235,6 @@
   "The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.": "El disco para el que se creó este instalador ({0}) no está en este ordenador. No se ha borrado nada.",
   "The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.": "El disco para el que se creó este instalador ({0}) coincide con más de un disco de este ordenador. No se ha borrado nada.",
   "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Vuelve a crear el instalador con la misma receta, indica en «Disco donde instalar» uno de los discos que el ordenador mostró en su pantalla y arranca el ordenador desde él.",
-  "This server didn't finish installing.": "Este servidor no terminó de instalarse."
+  "This server didn't finish installing.": "Este servidor no terminó de instalarse.",
+  "Couldn't sign out of that website. Try again.": "No se pudo cerrar la sesión en ese sitio web. Inténtalo de nuevo."
 }

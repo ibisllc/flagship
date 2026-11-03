@@ -158,6 +158,19 @@ describe("admin", () => {
     expect(w.integrity.devices.get("mallory-phone")?.banned).toBe(false);
   });
 
+  it("keeps a ban when the account is deleted, so the name claimed again (or one with its safety key) stays banned", async () => {
+    const w = await world();
+    const id = (await w.call("POST", "/api/voici/reports", messageReport())).body!.reportId as string;
+    expect((await w.admin("POST", "ban", { username: "mal-lory", reportId: id, reason: "spam" })).status).toBe(200);
+    await deleteVoiciAbuseAccount(w.db, "mal-lory");
+    expect(await isAccountBanned(w.db, "mal-lory")).toBe(true);
+    expect(await isAccountBanned(w.db, "mallory")).toBe(true);
+    expect(await isAccountBanned(w.db, "ma11ory")).toBe(true);
+    expect(await isAccountBanned(w.db, "malory")).toBe(false);
+    expect((await w.admin("POST", "unban", { username: "mallory" })).status).toBe(200);
+    expect(await isAccountBanned(w.db, "mal-lory")).toBe(false);
+  });
+
   it("dismisses a report", async () => {
     const w = await world();
     const id = (await w.call("POST", "/api/voici/reports", pageReport())).body!.reportId as string;

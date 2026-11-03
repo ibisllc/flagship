@@ -37,6 +37,9 @@ class MockVoiciClient(
     val inbox = HashMap<String, MutableList<VoiciInboxItem>>()
     val blocks = HashMap<String, MutableSet<String>>()
     val revoked = HashSet<String>()
+    /** A refusal the next revoke answers with (status, code). */
+    var revokeRefusal: Pair<Int, String>? = null
+    val revokeBodies = ArrayList<JsonObject>()
     /** Conversations an `unblock` order accepted (B1: lifts the awaiting-reply cap). */
     val accepted = HashSet<String>()
     val reports = ArrayList<JsonObject>()
@@ -140,6 +143,8 @@ class MockVoiciClient(
     }
 
     override suspend fun revoke(body: JsonObject) {
+        revokeRefusal?.let { (status, code) -> revokeRefusal = null; refuse(status, code) }
+        synchronized(this) { revokeBodies += body }
         val r = WebDelegations.parseWebDelegationRevoke(body["revoke"]) ?: refuse(400, "malformed")
         val p = VoiciJs.str(body["principalPub"]) ?: refuse(400, "malformed")
         if (!WebDelegations.verifyWebDelegationRevoke(r, VoiciJs.str(body["signature"]) ?: "", p)) refuse(403, "bad-signature")

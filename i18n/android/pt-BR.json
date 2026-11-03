@@ -3446,5 +3446,6 @@
   "install_disk_stop_missing": "O disco para o qual este instalador foi criado (%1$s) não está neste computador. Nada foi apagado.",
   "install_disk_stop_ambiguous": "O disco para o qual este instalador foi criado (%1$s) corresponde a mais de um disco neste computador. Nada foi apagado.",
   "install_disk_stop_advice": "Crie o instalador de novo com a mesma receita, preencha \"Disco onde instalar\" com um dos discos que o computador listou na tela e inicie o computador por ele.",
-  "setup_stopped_cancel_or_contact": "Cancele este pedido para liberar o nome e criar o servidor de novo, ou fale conosco e vamos verificar."
+  "setup_stopped_cancel_or_contact": "Cancele este pedido para liberar o nome e criar o servidor de novo, ou fale conosco e vamos verificar.",
+  "voici_err_sign_out": "Não foi possível sair desse site. Tente novamente."
 }

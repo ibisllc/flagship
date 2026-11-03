@@ -14240,5 +14240,9 @@
   "setup_stopped_cancel_or_contact": {
     "en": "Cancel this order to free the name and create the server again, or contact us and we'll look at it.",
     "ctx": "ui/screens/InstallProgressScreen.kt SetupStoppedCard (prose)"
+  },
+  "voici_err_sign_out": {
+    "en": "Couldn't sign out of that website. Try again.",
+    "ctx": "voi.ci / Messages: error"
   }
 }

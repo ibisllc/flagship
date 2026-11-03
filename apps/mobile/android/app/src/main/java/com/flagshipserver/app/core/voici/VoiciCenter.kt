@@ -670,7 +670,7 @@ class VoiciCenter(
         val umk = keyring.umk() ?: return "not-found"
         val visitor = VoiciVisitorKeys.derive(umk, site.pageId)
         return try {
-            client.revoke(VoiciOwner.revokeBody(visitor, site.delegatePub, now()))
+            client.revoke(VoiciOwner.revokeBody(visitor, site.pageId, site.delegatePub, now()))
             changeState { s -> s.copy(signedInSites = s.signedInSites.filter { it.delegatePub != site.delegatePub }) }
             // The last browser of that page signed out: no more reply notices for it.
             if (_messages.value.state.signedInSites.none { it.pageId == site.pageId }) {
@@ -679,7 +679,7 @@ class VoiciCenter(
             }
             null
         } catch (e: VoiciHttpError) {
-            e.code ?: "network"
+            if (e.code == "rate-limited") "rate-limited" else "sign-out-failed"
         } catch (e: Exception) {
             "network"
         }

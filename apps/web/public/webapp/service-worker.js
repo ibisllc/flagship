@@ -466,7 +466,9 @@
 //  v197: an install the USB installer stopped because it couldn't tell which disk to erase (several disks, none, or
 //       the named one missing) reads as that, in the app's language, with the advice to make the installer again
 //       naming the disk (lib/provisionProgress.js parseDiskStop; test-vectors/install-disk-stop.json).
-const SHELL_VERSION = "v197";
+//  v198: "Sign out" of a voi.ci website sends the page with the revoke and reads any answer but 2xx as a failure, in
+//       the app's language (lib/voiciSignIn.js revokeSignedInSite; .com stores a P-signed revoke for any browser key).
+const SHELL_VERSION = "v198";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

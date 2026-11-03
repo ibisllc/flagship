@@ -1483,6 +1483,9 @@ export async function tryControlPlane(
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
           serverOrders: storage.serverOrders,
+          // The name is claimable again later: the account's voi.ci links, page, mailbox and state go first.
+          voici: { voiciLinks: storage.voiciLinks, voiciNames: storage.voiciNames },
+          voiciPages: { deleteAccount: (u: string) => deleteVoiciAccount(env, storage, u) },
           ...(reclaimDns ? { dns: reclaimDns } : {}),
         },
         decodeURIComponent(m[1]!),
@@ -3845,6 +3848,7 @@ export async function tryControlPlane(
         provisioning: storage.demoAccountProvisioning,
         demos: storage.demoUsers,
         destroyServer: (serverId) => demoServers.destroyServer(serverId),
+        voiciPages: { deleteAccount: (u: string) => deleteVoiciAccount(env, storage, u) },
         ...(demoDns ? {
           cleanupDns: async (username: string) => {
             const domain = `home.${username}.${servicesApex}`;

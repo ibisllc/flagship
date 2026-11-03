@@ -295,7 +295,16 @@ class VoiciAppTest {
 
         val site = vc.messages.value.state.signedInSites.single()
         assertEquals(req.delegatePub, site.delegatePub)
+        // Any refusal is a failed sign-out (the site stays listed), told in its own sentence; 404 included.
+        for (status in listOf(404, 403, 500)) {
+            mock.revokeRefusal = status to "unknown-delegate"
+            assertEquals("sign-out-failed", vc.signOutSite(site))
+            assertEquals(1, vc.messages.value.state.signedInSites.size)
+        }
+        mock.revokeRefusal = 429 to "rate-limited"
+        assertEquals("rate-limited", vc.signOutSite(site))
         assertNull(vc.signOutSite(site))
+        assertEquals(pageId, VoiciJs.str(mock.revokeBodies.last()["pageId"]))
         assertTrue(req.delegatePub in mock.revoked)
         assertTrue(vc.messages.value.state.signedInSites.isEmpty())
 

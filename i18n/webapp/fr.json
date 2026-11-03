@@ -3235,5 +3235,6 @@
   "The disk this installer was made for ({0}) isn't in this computer. Nothing was erased.": "Le disque pour lequel cet installateur a été créé ({0}) n'est pas dans cet ordinateur. Rien n'a été effacé.",
   "The disk this installer was made for ({0}) matches more than one disk in this computer. Nothing was erased.": "Le disque pour lequel cet installateur a été créé ({0}) correspond à plusieurs disques de cet ordinateur. Rien n'a été effacé.",
   "Make the installer again with the same recipe and fill in Disk to install on with one of the disks the computer listed on its screen, then start the computer from it.": "Recréez l'installateur avec la même recette, indiquez dans « Disque où installer » l'un des disques que l'ordinateur a affichés à l'écran, puis démarrez l'ordinateur dessus.",
-  "This server didn't finish installing.": "Ce serveur n'a pas terminé son installation."
+  "This server didn't finish installing.": "Ce serveur n'a pas terminé son installation.",
+  "Couldn't sign out of that website. Try again.": "Impossible de se déconnecter de ce site web. Réessayez."
 }
