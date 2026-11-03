@@ -53,7 +53,7 @@ import { TunnelRegistry } from "../src/tunnel/registry.js";
 import { MailboxRegistry } from "../src/tunnel/mailboxRelay.js";
 import { MeshNode } from "../src/tunnel/mesh/node.js";
 import { RelayBlessingProvider } from "../src/tunnel/hubBlessingProvider.js";
-import { wireMeshRelay } from "../src/server.js";
+import { outboundRelayFromEnv, wireMeshRelay } from "../src/server.js";
 import { APEX, hex, keypair, MeshFixture, type FixtureRelay } from "./support/meshFixture.js";
 import { lease, policy, type Ed } from "./support/serving.js";
 import { connect as tlsConnect } from "node:tls";
@@ -127,7 +127,7 @@ async function startRelay(f: FixtureRelay, http: Server): Promise<Relay> {
     minMoveMs: 0,
   });
   const mailboxes = new MailboxRegistry();
-  const wired = await wireMeshRelay({ httpServer: http, registry, node, blessing, servicesApex: APEX, mailboxes, tunnelTcpPort: 0, host: "127.0.0.1", holdTimeoutMs: HOLD_MS, checkMs: 100 });
+  const wired = await wireMeshRelay({ httpServer: http, registry, node, blessing, servicesApex: APEX, mailboxes, tunnelTcpPort: 0, host: "127.0.0.1", holdTimeoutMs: HOLD_MS, checkMs: 100, outboundRelay: outboundRelayFromEnv("http://127.0.0.1:1", {}) });
   wired.start();
   const r: Relay = { fx: f, id: f.relayId, http, httpPort, sniPort: wired.router!.port, node, blessing, wired, mailboxes };
   relays.set(f.relayId, r);
@@ -402,6 +402,8 @@ describe("relay mesh: three relays in one process", () => {
     const ack = await b1.connect(R("rb"));
     expect(ack.ok).toBe(true);
     expect(ack.capabilities).toContain("mesh-v1");
+    // Gym run 28: a mesh relay must still carry the boxes' AI calls (`outbound-v1`), as the relay with the mesh off does.
+    expect(ack.capabilities).toContain("outbound-v1");
     expect(ack.relayId).toBe("rb");
     expect(await b1.attach()).toEqual({ ok: true });
     R("rb").node.flushAnnouncements();

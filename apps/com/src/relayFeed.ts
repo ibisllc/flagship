@@ -340,6 +340,8 @@ export const RELAY_FEED_HEAD_MS = FEED_HEAD_MINT_MS;
 
 const NOW_SQL = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
 const GUARD_KEY = (c: string) => `length(${c}) = 64 AND lower(${c}) NOT GLOB '*[^0-9a-f]*'`;
+/** A device grant id the log can carry (`RELAY_LOG_GRANT_ID`): the apps choose UUIDs, so hex digits and dashes. */
+const GUARD_GRANT = (c: string) => `length(${c}) BETWEEN 1 AND 64 AND lower(${c}) NOT GLOB '*[^0-9a-f-]*' AND ${c} NOT GLOB '-*'`;
 const GUARD_USER = (c: string) =>
   `length(${c}) BETWEEN 1 AND 63 AND lower(${c}) NOT GLOB '*[^a-z0-9-]*' AND ${c} NOT GLOB '-*' AND ${c} NOT GLOB '*-'`;
 const GUARD_NAME = (c: string) => `length(${c}) BETWEEN 3 AND 253 AND lower(${c}) NOT GLOB '*[^a-z0-9.-]*'`;
@@ -388,7 +390,7 @@ export function backfillStatements(db: D1Database): D1PreparedStatement[] {
       `AND NOT EXISTS (SELECT 1 FROM relay_log r WHERE r.kind = 'renewal-key-revoke' AND r.f1 = l.subject) GROUP BY l.subject ORDER BY MIN(l.sequence)`,
     // device-grant-revoke: revoked grants.
     `${INSERT} SELECT 'device-grant-revoke', COALESCE(CAST(g.revoked_at AS INTEGER), ${NOW_SQL}), lower(g.username), NULL, lower(g.grant_id), lower(g.device_pub_hex), '', '', ${NOW_SQL} ` +
-      `FROM device_capability_grants g WHERE g.revoked_at IS NOT NULL AND ${GUARD_KEY("g.grant_id")} AND ${GUARD_KEY("g.device_pub_hex")} ` +
+      `FROM device_capability_grants g WHERE g.revoked_at IS NOT NULL AND ${GUARD_GRANT("g.grant_id")} AND ${GUARD_KEY("g.device_pub_hex")} ` +
       `AND NOT EXISTS (SELECT 1 FROM relay_log r WHERE r.kind = 'device-grant-revoke' AND r.f1 = lower(g.grant_id)) ORDER BY g.revoked_at, g.grant_id`,
     // cert-revoke: every cert id on an account's revocation list.
     `${INSERT} SELECT 'cert-revoke', ${NOW_SQL}, lower(e.username), NULL, NULL, lower(j.value), '', '', ${NOW_SQL} ` +

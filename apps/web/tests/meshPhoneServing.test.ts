@@ -67,6 +67,25 @@ describe("phone ledger relay", () => {
     expect(phoneRouteEligibility(hex(device.publicKey), "carol", after.adminRootPub, after.grants, Date.now()).ok).toBe(false);
   });
 
+  it("a grant the apps made (an upper-case UUID id) is revoked by the log's lowercased entry (gym run 28)", async () => {
+    const fx = new MeshFixture();
+    const admin = keypair();
+    fx.authority("carol", hex(admin.publicKey), hex(keypair().publicKey));
+    const feed = new MeshFeed({ servicesApex: APEX, logKey: fx.logPub, source: fx.source() });
+    await feed.poll();
+    const device = keypair();
+    const grantId = "0F8FAD5B-D9CB-469F-A165-70867728950E";
+    const g = { grantId, username: "carol", deviceId: "cd".repeat(16), devicePubKey: device.publicKey, scopes: ["admin"] as never, issuedAt: Date.now() - 1_000, expiresAt: Date.now() + 86_400_000 };
+    const presented = [{ grant: { grantId, username: "carol", deviceId: "cd".repeat(16), devicePubHex: hex(device.publicKey), scopes: ["admin"], issuedAt: g.issuedAt, expiresAt: g.expiresAt }, signatureHex: hex(signDeviceCapabilityGrant(g, admin)), signerRoot: "admin-root" }];
+    const elig = meshPhoneEligibility(() => feed.state);
+    const before = (await elig("carol", presented))!;
+    expect(phoneRouteEligibility(hex(device.publicKey), "carol", before.adminRootPub, before.grants, Date.now()).ok).toBe(true);
+    fx.append({ kind: "device-grant-revoke", grantId: grantId.toLowerCase(), devicePub: hex(device.publicKey) });
+    await feed.poll();
+    const after = (await elig("carol", presented))!;
+    expect(phoneRouteEligibility(hex(device.publicKey), "carol", after.adminRootPub, after.grants, Date.now()).ok).toBe(false);
+  });
+
   it("the phones' begin as the shared vector writes it (what iOS and Android send) is eligible on a mesh relay", async () => {
     const V = JSON.parse(readFileSync(new URL("../../../packages/protocol/test-vectors/phone-route/vectors.json", import.meta.url), "utf8")).begin;
     const fx = new MeshFixture();

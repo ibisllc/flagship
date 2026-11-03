@@ -442,7 +442,13 @@ export const relayMesh: Group = {
           if (!hint) {
             stop = true;
             await Promise.all(pumps);
-            throw new Error(`no locality hint within 4 min after ${visits} visits through ${RC!.relayId} (a legacy box in account ${user} blocks rebalancing, §10.2)`);
+            // The home's own count of its decisions (§10.2 refusal reasons) says why; no guessing. In a full run account A
+            // carries an hour of real traffic through gym-a, so "share"/"lead" (the 60-min byte window) is as likely as
+            // "legacy-box".
+            const st = await relayStats(RA);
+            const reb = (st?.mesh as { rebalance?: unknown } | undefined)?.rebalance;
+            const why = reb ? `${RA.relayId} rebalance ${JSON.stringify(reb)}` : `set GYM_RELAY_STATS_SECRET to see ${RA.relayId}'s decision counts`;
+            throw new Error(`no locality hint within 4 min after ${visits} visits through ${RC!.relayId} (§10.2; ${why})`);
           }
           assert((hint.hint as { toRelayId?: string }).toRelayId === RC!.relayId, `the locality hint names ${String((hint.hint as { toRelayId?: string }).toRelayId)}, not ${RC!.relayId}`);
           b = await follow(b, s, hint, []);

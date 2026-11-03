@@ -15,6 +15,7 @@ import {
   liveEntry,
   PHONE_ROUTE_GRANT_TTL_MS,
   phoneHostname,
+  relayLogGrantId,
   signRelayMeshRecord,
   type LedgerResult,
   type PhoneItem,
@@ -274,7 +275,7 @@ export function meshPhoneEligibility(log: () => RelayLogState, now: () => number
     const wire = raw.map((p) => {
       const o = (p ?? {}) as Record<string, unknown>;
       const g = (o.grant ?? {}) as Record<string, unknown>;
-      return { ...g, signatureHex: o.signatureHex, signerRoot: o.signerRoot, revokedAt: typeof g.grantId === "string" && state.revokedGrants.has(g.grantId) ? now() : null };
+      return { ...g, signatureHex: o.signatureHex, signerRoot: o.signerRoot, revokedAt: typeof g.grantId === "string" && state.revokedGrants.has(relayLogGrantId(g.grantId)) ? now() : null };
     });
     return parsePhoneEligibility({ adminRootPub, grants: wire });
   };

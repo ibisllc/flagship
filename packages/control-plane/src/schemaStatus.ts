@@ -113,6 +113,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0124",
   // voi.ci reply alerts: a visitor's opt-in Web Push subscription, bound to one conversation.
   "0125",
+  // Relay log: device-grant-revoke for the apps' grant ids (UUIDs), not only 64-hex ones.
+  "0126",
 ];
 
 export interface SchemaStatusDeps {

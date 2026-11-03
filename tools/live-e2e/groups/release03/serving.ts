@@ -86,11 +86,21 @@ export const serving: Group = {
       assert(x.status === 200 && x.json?.policyAdopted === true, `box policy ${x.status}: ${short(x.text)}`);
     };
     let lastNotAfter = 0;
-    const postLease = async (lease: ServingLease, signature: string, delegationPub?: string) => {
+    // Like the apps (webapp lib/servingAuthority.js), a lease goes to `.com` AND to the box: a mesh relay takes leases
+    // only from the box's HELLO (relay-mesh.md §9.5), and the box otherwise hears of a `.com` lease at its next
+    // heartbeat (up to 5 min), after a short lease may have ended.
+    const postLease = async (lease: ServingLease, signature: string, delegation?: { record: RenewalKeyDelegation; signature: string }) => {
+      const delegationPub = delegation?.record.renewalPub;
       const r = await postJson(`https://${CONTROL}/api/accounts/${acct.username}/serving-leases`, {
         leases: [{ lease, signature, ...(delegationPub ? { delegationPub } : {}) }],
       });
       assert(r.status === 200 && r.json?.accepted >= 1, `.com lease ${r.status}: ${short(r.text)}`);
+      const x = await postJson(
+        `https://${b.fqdn}/api/screens/serving`,
+        { leases: [{ record: lease, signature, ...(delegation ? { delegation } : {}) }] },
+        session,
+      );
+      assert(x.status === 200 && x.json?.leasesAccepted >= 1, `box lease ${x.status}: ${short(x.text)}`);
       lastNotAfter = Math.max(lastNotAfter, lease.notAfter);
     };
     const lease = (p: ServingPolicy, seconds: number): ServingLease => {
@@ -139,7 +149,7 @@ export const serving: Group = {
         });
         assert(dr.status === 200, `delegation ${dr.status}: ${short(dr.text)}`);
         const l = lease(p, 150);
-        await postLease(l, signServingLeaseP256(l, sk), renewalPub);
+        await postLease(l, signServingLeaseP256(l, sk), { record: d, signature: bytesToHex(signServingRecord("renewal-key-delegation", d, adminSign)) });
         assert(await appUp(), "the app is not served under the delegated lease");
         return `delegated key ${renewalPub.slice(0, 10)}… accepted`;
       });

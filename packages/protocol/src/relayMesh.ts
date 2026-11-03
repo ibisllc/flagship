@@ -185,6 +185,17 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
 const P256_PUB = /^0[23][0-9a-f]{64}$/;
+/**
+ * A device grant's id as the log carries it: the client chooses grant ids (the apps use UUIDs, some tools 32 or 64 hex),
+ * so `.com` appends them lowercased and the relays compare lowercased (`relayLogGrantId`). Any id outside this shape
+ * would never reach the relays, so it stays as wide as the ids `.com` stores in practice.
+ */
+export const RELAY_LOG_GRANT_ID = /^[0-9a-f][0-9a-f-]{0,63}$/;
+
+/** The form a grant id takes in the relay log (and in every relay's revoked-grant set). */
+export function relayLogGrantId(grantId: string): string {
+  return grantId.toLowerCase();
+}
 const RELAY_ID = /^[a-z][a-z0-9-]{1,30}$/;
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const ACCOUNT = LABEL;
@@ -703,7 +714,7 @@ export function parseRelayLogEntry(e: RelayLogEntry): RelayLogBody {
       empty("f4", e.f4);
       return { kind: e.kind, renewalPub: e.f1 };
     case "device-grant-revoke":
-      hexField("f1 grantId", e.f1);
+      hexField("f1 grantId", e.f1, RELAY_LOG_GRANT_ID);
       hexField("f2 devicePub", e.f2);
       empty("f3", e.f3);
       empty("f4", e.f4);

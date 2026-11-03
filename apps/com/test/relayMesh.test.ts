@@ -18,6 +18,7 @@ import {
   nameHash,
   relayLogAdminKey,
   relayLogBox,
+  relayLogGrantId,
   relayLogHeadStatus,
   relayLogPolicyHead,
   servingDecision,
@@ -271,6 +272,34 @@ describe("relay log writers (migration 0122 triggers)", () => {
       expect(s.revokedGrants.get("a".repeat(64))).toBe(dev);
       expect(s.revokedRenewalKeys.has(renewal)).toBe(true);
       expect(s.revokedCerts.has(`${accountHash("alice")}|${"f".repeat(64)}`)).toBe(true);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("a grant the apps made (a UUID id, any case) is revoked in the log under its lowercased id (gym run 28)", async () => {
+    const w = await setup();
+    try {
+      await claimAlice(w);
+      const uuid = "0F8FAD5B-D9CB-469F-A165-70867728950E";
+      const short32 = "ab".repeat(16);
+      const devs = [pub(21), pub(22), pub(23)];
+      for (const [i, id] of [uuid, short32, "not|an id"].entries()) {
+        const deviceId = String(i).repeat(32);
+        await w.storage.deviceIdentities.put({ accountId: "alice", deviceId, devicePubHex: devs[i]!, platformClass: null, createdAt: 1, lastSeenAt: 1, revokedAt: null });
+        await w.db
+          .prepare("INSERT INTO device_capability_grants (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root) VALUES (?, 'alice', ?, ?, '[]', 1, 9999999999999, ?, NULL, 'admin-root')")
+          .bind(id, deviceId, devs[i]!, "00".repeat(64))
+          .run();
+      }
+      await w.db.prepare("UPDATE device_capability_grants SET revoked_at = 60 WHERE grant_id = ?").bind(uuid).run();
+      await w.db.prepare("DELETE FROM device_capability_grants WHERE grant_id = ?").bind(short32).run();
+      await w.db.prepare("UPDATE device_capability_grants SET revoked_at = 61 WHERE grant_id = ?").bind("not|an id").run();
+      const r = (await rows(w.db)).filter((x) => x.kind === "device-grant-revoke");
+      expect(r.map((x) => x.f1)).toEqual([uuid.toLowerCase(), short32]);
+      const s = await relayState(w.db);
+      expect(s.revokedGrants.get(relayLogGrantId(uuid))).toBe(devs[0]);
+      expect(s.revokedGrants.get(short32)).toBe(devs[1]);
     } finally {
       w.close();
     }

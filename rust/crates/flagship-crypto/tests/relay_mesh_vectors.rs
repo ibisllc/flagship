@@ -1082,3 +1082,45 @@ fn shape_helpers() {
         "iad1.tunnel.flagship.services"
     );
 }
+
+/// The apps choose device grant ids (UUIDs), so a `device-grant-revoke` carries any lowercased id of hex digits and
+/// dashes up to 64 characters (migration 0126; gym run 28: no UUID grant's revocation reached a mesh relay).
+#[test]
+fn device_grant_revoke_takes_the_apps_grant_ids() {
+    use flagship_crypto::relay_mesh::{
+        RelayLogBody, RelayLogEntry, parse_relay_log_entry, relay_log_grant_id,
+    };
+    let dev = "43".repeat(32);
+    let entry = |f1: &str| RelayLogEntry {
+        sequence: 1,
+        kind: "device-grant-revoke".into(),
+        at: 1,
+        f1: f1.into(),
+        f2: dev.clone(),
+        f3: String::new(),
+        f4: String::new(),
+    };
+    let uuid = relay_log_grant_id("0F8FAD5B-D9CB-469F-A165-70867728950E");
+    assert_eq!(uuid, "0f8fad5b-d9cb-469f-a165-70867728950e");
+    for ok in [uuid.as_str(), &"ab".repeat(16), &"cd".repeat(32)] {
+        assert_eq!(
+            parse_relay_log_entry(&entry(ok)).unwrap(),
+            RelayLogBody::DeviceGrantRevoke {
+                grant_id: ok.to_string(),
+                device_pub: dev.clone()
+            }
+        );
+    }
+    for bad in [
+        "",
+        "-abc",
+        "0F8FAD5B-D9CB-469F-A165-70867728950E",
+        "not|an id",
+        &"a".repeat(65),
+    ] {
+        assert!(
+            parse_relay_log_entry(&entry(bad)).is_err(),
+            "{bad} accepted"
+        );
+    }
+}

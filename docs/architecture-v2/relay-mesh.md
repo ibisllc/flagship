@@ -233,7 +233,7 @@ flagship/relay-log/v1|<servicesApex>|<sequence>|<kind>|<at>|<f1>|<f2>|<f3>|<f4>
 | `account-authority` | accountHash | adminRootPub or empty | irkPub | authorityGen | account created, admin root or IRK rotated |
 | `policy-head` | boxPub | regGen | policyGen | sha256hex(canonicalServingPolicy) | a serving policy is stored |
 | `renewal-key-revoke` | renewalPub | | | | a device holding a renewal key is removed |
-| `device-grant-revoke` | grantId | devicePub | | | a device is removed or its grant revoked |
+| `device-grant-revoke` | grantId (lowercased; hex digits and dashes, ≤ 64: the apps use UUIDs; migration 0126) | devicePub | | | a device is removed or its grant revoked |
 | `cert-revoke` | accountHash | certId | | | an entitlement or ServiceGrant cert is revoked |
 | `relay-revoke` | relayId | relayKey | | | a relay is retired |
 

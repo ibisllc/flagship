@@ -175,6 +175,23 @@ fn hex64(name: &str, s: &str) -> Result<(), MeshError> {
     }
 }
 
+/// A device grant's id as the log carries it (TS `RELAY_LOG_GRANT_ID`): clients choose grant ids (the apps use UUIDs),
+/// so `.com` appends them lowercased: `[0-9a-f][0-9a-f-]{0,63}`.
+#[must_use]
+pub fn relay_log_grant_id_ok(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() <= 64
+        && b.first().is_some_and(|c| *c != b'-')
+        && b.iter()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(c) || *c == b'-')
+}
+
+/// The form a grant id takes in the relay log and in `revoked_grants` (TS `relayLogGrantId`).
+#[must_use]
+pub fn relay_log_grant_id(grant_id: &str) -> String {
+    grant_id.to_ascii_lowercase()
+}
+
 fn p256_pub(s: &str) -> bool {
     lower_hex(s, 66) && (s.starts_with("02") || s.starts_with("03"))
 }
@@ -836,7 +853,9 @@ pub fn parse_relay_log_entry(e: &RelayLogEntry) -> Result<RelayLogBody, MeshErro
             })
         }
         "device-grant-revoke" => {
-            hex64("f1 grantId", &e.f1)?;
+            if !relay_log_grant_id_ok(&e.f1) {
+                return bad("f1 grantId", "must be lowercase hex of the right length");
+            }
             hex64("f2 devicePub", &e.f2)?;
             empty("f3", &e.f3)?;
             empty("f4", &e.f4)?;

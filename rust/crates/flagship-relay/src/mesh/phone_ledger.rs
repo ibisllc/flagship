@@ -421,7 +421,8 @@ impl Mesh {
                 let revoked_now = o
                     .get("grantId")
                     .and_then(Value::as_str)
-                    .is_some_and(|id| revoked.iter().any(|r| r == id));
+                    .map(flagship_crypto::relay_mesh::relay_log_grant_id)
+                    .is_some_and(|id| revoked.contains(&id));
                 if revoked_now {
                     o.insert("revokedAt".into(), json!(1));
                 } else {

@@ -78,6 +78,21 @@ export const relayAuthority: Group = {
       });
       return;
     }
+    // This group drives the `.com`-fed relay (relay-mesh off, production's 0.3 launch setting): the relay looks every
+    // HELLO up at `.com` and reads policies and leases from `.com`. A mesh relay instead learns registrations,
+    // revocations and policy heads from the signed feed (seconds behind) and takes policies and leases ONLY from the
+    // box's HELLO (relay-mesh.md §4.1, §4.4, §9.5), so every scenario here would measure the wrong model (gym run 28:
+    // "serverId not registered with .com" on a just-registered box, then cascades). The mesh's own versions of these
+    // scenarios are the relay-mesh group's (revocation and dead-man across relays) and tools/relay-conformance MESH*.
+    const hubHealth = await tryHttp(tunnelUrl.replace(/^wss:/, "https:").replace(/\/tunnel$/, "/api/health"), {}, 15_000);
+    if (hubHealth.json && typeof hubHealth.json === "object" && "mesh" in hubHealth.json) {
+      await rec.check("the gym relay is the `.com`-fed relay (relay mesh off)", async () => {
+        throw new SkipError(
+          "the gym relay runs the relay mesh (GYM_MESH=on): this group tests the .com-fed relay that production launches with; run it on a gym refreshed without GYM_MESH, and the relay-mesh group for the mesh",
+        );
+      });
+      return;
+    }
     const relayIp = (await lookup(a1.fqdn, { family: 4 })).address;
     const adminPub = bytesToHex(acct.keys.adminRoot.publicKey);
     const adminSign = (m: Uint8Array) => ed.sign(m, acct.keys.adminRoot.privateKey);

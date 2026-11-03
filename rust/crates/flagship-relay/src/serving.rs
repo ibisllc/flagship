@@ -877,7 +877,8 @@ impl ServingGate {
         } else {
             None
         };
-        let (Some(com_key), Some(box_key)) = (&rec.admin_key, h.admin_key.as_ref().or(waived)) else {
+        let (Some(com_key), Some(box_key)) = (&rec.admin_key, h.admin_key.as_ref().or(waived))
+        else {
             if box_revoked(revs, &h.username, &h.box_pub, rec.reg_gen) {
                 return deny(false, "revoked");
             }

@@ -550,13 +550,7 @@ export async function start(opts: {
   // stops advertising it; boxes then refuse relay-on AI calls.
   // Which hosts it may reach comes from `.com`'s list (docs/outbound-hosts.md); without the
   // shared secret only the known AI providers are allowed.
-  const outboundSecret = process.env.USAGE_REPORT_SECRET;
-  const outboundRelay =
-    process.env.FLAGSHIP_OUTBOUND_RELAY === "off"
-      ? undefined
-      : new OutboundRelay({
-          hostPolicy: outboundSecret ? new ComHostPolicy({ baseUrl: comBaseUrl, secret: outboundSecret }) : new KnownHostsPolicy(),
-        });
+  const outboundRelay = outboundRelayFromEnv(comBaseUrl);
   const stopHub = startTunnelHub(app.server, registry, {
     surface,
     apex: servicesApex,
@@ -727,6 +721,7 @@ async function startMeshRelay(o: {
     ...(o.opts.tunnelTcpPort !== undefined ? { tunnelTcpPort: o.opts.tunnelTcpPort } : {}),
     host: o.host,
     meter: usageMeterFromEnv(o.comBaseUrl),
+    outboundRelay: outboundRelayFromEnv(o.comBaseUrl),
   });
   o.health.check = () => {
     const rd = node.readiness();
@@ -773,6 +768,17 @@ function refuseUnclaimedUpgrades(server: import("node:http").Server): void {
   });
 }
 
+/**
+ * The AI provider relay (docs/ai-privacy-and-staging.md §4), the same with the mesh on or off: without it a hub never
+ * advertises `outbound-v1` and every box on it refuses relay-on AI calls (gym run 28: the TS mesh relay had none).
+ * FLAGSHIP_OUTBOUND_RELAY=off turns it off; the host list is `.com`'s with USAGE_REPORT_SECRET, else the known AI hosts.
+ */
+export function outboundRelayFromEnv(comBaseUrl: string, env: NodeJS.ProcessEnv = process.env): OutboundRelay | undefined {
+  if (env.FLAGSHIP_OUTBOUND_RELAY === "off") return undefined;
+  const secret = env.USAGE_REPORT_SECRET;
+  return new OutboundRelay({ hostPolicy: secret ? new ComHostPolicy({ baseUrl: comBaseUrl, secret }) : new KnownHostsPolicy() });
+}
+
 function usageMeterFromEnv(comBaseUrl: string): UsageMeter | undefined {
   const usageSecret = process.env.USAGE_REPORT_SECRET;
   if (!usageSecret) return undefined;
@@ -800,6 +806,8 @@ export async function wireMeshRelay(o: {
   tunnelTcpPort?: number;
   host?: string;
   meter?: UsageMeter | undefined;
+  /** The AI provider relay (`outbound-v1`); undefined leaves it unadvertised. */
+  outboundRelay?: OutboundRelay | undefined;
   /** Test overrides for the hub and router. */
   hubOverrides?: Partial<import("./tunnel/tunnelHub.js").TunnelHubOptions>;
   holdTimeoutMs?: number;
@@ -839,6 +847,7 @@ export async function wireMeshRelay(o: {
   const hub = startTunnelHub(o.httpServer, registry, {
     surface: "services",
     apex: o.servicesApex,
+    ...(o.outboundRelay ? { outboundRelay: o.outboundRelay } : {}),
     ...(o.mailboxes ? { mailboxes: o.mailboxes } : {}),
     authLookup: lookups.authLookup,
     irkLookup: lookups.irkLookup,
