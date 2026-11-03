@@ -221,20 +221,27 @@
             <option value="medium">Mittel: Informationsoffenlegung, teilweise Umgehung</option>
             <option value="low">Niedrig: gering, erfordert ungewöhnliche Bedingungen</option>
           </select><label for="component">Komponente</label><select id="component" name="component">
-            <option>Protokoll / Kryptografie</option>
-            <option>Server-Daemon</option>
-            <option>Datenschicht (Postgres / Dateibereitstellung)</option>
-            <option>Boot-Image / Image-Builder</option>
-            <option>iOS-App</option>
-            <option>Android-App</option>
-            <option>Web-App</option>
-            <option>Deck (Cast-Oberfläche)</option>
-            <option>Steuerungsebene (flagshipserver.com)</option>
-            <option>Tunnel / öffentlicher Eingang</option>
-            <option>Sonstiges</option>
+            <option value="Protocol / crypto">Protokoll / Kryptografie</option>
+            <option value="Server daemon">Server-Daemon</option>
+            <option value="Data layer (Postgres / files provisioning)">Datenschicht (Postgres / Dateibereitstellung)</option>
+            <option value="Boot image / image-builder">Boot-Image / Image-Builder</option>
+            <option value="iOS app">iOS-App</option>
+            <option value="Android app">Android-App</option>
+            <option value="Webapp">Web-App</option>
+            <option value="Deck (cast surface)">Deck (Cast-Oberfläche)</option>
+            <option value="Control plane (flagshipserver.com)">Steuerungsebene (flagshipserver.com)</option>
+            <option value="Tunnel / public ingress">Tunnel / öffentlicher Eingang</option>
+            <option value="Other">Sonstiges</option>
           </select><label for="summary">Zusammenfassung <span class="req">*</span></label> <input id="summary" name="summary" type="text" required="" maxlength="200" placeholder="Beschreibung in einer Zeile"> <label for="details">Details, Reproduktionsschritte, Auswirkung <span class="req">*</span></label><textarea id="details" name="details" required="" maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea><button class="cta" type="submit" style="margin-top: 1.5rem;">Meldung absenden</button></form>
 
         <div id="out" class="out" role="status" aria-live="polite"></div>
+        <!-- The form's own lines, here so scripts/i18n-web.mjs translates them; the script picks one. -->
+        <div id="report-messages" hidden="">
+          <p data-msg="sending">Wird gesendet…</p>
+          <p data-msg="ok">Danke. Referenz: <span data-arg=""></span>. Wir melden uns bei dir.</p>
+          <p data-msg="failed">Senden fehlgeschlagen (HTTP <span data-arg=""></span>).</p>
+          <p data-msg="network">Netzwerkfehler. Bitte schreib direkt an security@flagshipserver.com.</p>
+        </div>
       </section>
     </main>
 
@@ -266,7 +273,7 @@
       <ul>
         <li><a href="/de/open-source">Open Source</a></li>
         <li><a href="/de/adapters">Repo-Adapter</a></li>
-        <li><a href="/status/">Status</a></li>
+        <li><a href="/de/status">Status</a></li>
         <li><a href="/de/docs">Doku</a></li>
         <li><a href="/de/blog">Blog</a></li>
         <li><a href="/de/help">Hilfe</a></li>
@@ -279,10 +286,16 @@
     <script type="module">
       const form = document.getElementById("report-form");
       const out = document.getElementById("out");
+      const msg = (key, arg) => {
+        const c = document.querySelector(`#report-messages [data-msg="${key}"]`).cloneNode(true);
+        const slot = c.querySelector("[data-arg]");
+        if (slot) slot.textContent = String(arg ?? "");
+        return c.textContent.replace(/\s+/g, " ").trim();
+      };
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         out.className = "out";
-        out.textContent = "Submitting…";
+        out.textContent = msg("sending");
         const data = Object.fromEntries(new FormData(form).entries());
         try {
           const r = await fetch("/api/security/report", {
@@ -293,15 +306,15 @@
           const body = await r.json();
           if (r.ok) {
             out.className = "out ok";
-            out.textContent = `Thank you. Reference: ${body.reportId}. We'll be in touch.`;
+            out.textContent = msg("ok", body.reportId);
             form.reset();
           } else {
             out.className = "out err";
-            out.textContent = body.error ?? `Submission failed (HTTP ${r.status}).`;
+            out.textContent = body.error ?? msg("failed", r.status);
           }
         } catch (err) {
           out.className = "out err";
-          out.textContent = "Network error. Please email security@flagshipserver.com directly.";
+          out.textContent = msg("network");
         }
       });
 

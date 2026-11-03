@@ -51,8 +51,8 @@ describe("parity-check parsers", () => {
     expect(parseManifestAppLinkPaths(xml, "flagshipserver.com")).toEqual(["/join"]);
   });
 
-  it("reads the open page's LINKS and their web flag", () => {
-    const html = `const LINKS = {\n        "/join": {\n          hl: "x",\n          web: true,\n        },\n        "/qr": {\n          web: false,\n        },\n      };`;
+  it("reads the open page's link copy and its web flag", () => {
+    const html = `<div id="link-texts" hidden>\n  <div data-link="/join" data-web="1">\n    <p data-part="hl">x</p>\n  </div>\n  <div data-link="/qr">\n  </div>\n</div>`;
     expect(parseOpenPageLinks(html)).toEqual({ "/join": true, "/qr": false });
   });
 

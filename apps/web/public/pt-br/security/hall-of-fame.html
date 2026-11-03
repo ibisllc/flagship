@@ -56,146 +56,29 @@
       <h1>Hall da fama</h1>
       <p class="muted">Pesquisadores que nos relataram uma vulnerabilidade, com os commits que a corrigiram. Cada um recebe o crédito da forma que pedir: nome, apelido ou anônimo, com um link se quiser. Aparecem sem atribuição até nos dizerem sua preferência; nunca publicamos um nome que não recebemos.</p>
   
-      <div lang="en">
-      <h2>Unauthenticated identity-key swap on an account with no second factor</h2>
-      <p class="hof-meta">
-        Critical · reported and fixed October 2026 · fix
-        <a href="https://github.com/ibisllc/flagship/commit/7d49a444">7d49a444</a>
-        · credit pending the reporter’s preference
-      </p>
-      <p>
-        Account recovery schedules a replacement of the account’s root
-        identity key. The endpoint that starts it verified the request against
-        the <em>incoming</em> key, a self-assertion, and its only other
-        input, the account’s current identity key, is served to anyone by
-        the public username lookup. On an account with no second factor
-        enrolled, that left nothing a stranger could not supply: knowing a
-        public handle was enough to schedule a hostile key swap, which
-        completed once the grace window elapsed.
-      </p>
-      <p>
-        There was also no owner veto, contrary to what our own documentation
-        claimed. The objection endpoint is signed by the incoming key, so it
-        is the recoverer’s own undo rather than something the displaced
-        owner can exercise. The grace window was a notification window, not a
-        brake.
-      </p>
-      <p>
-        Starting a recovery now requires an enrolled credential: a TOTP or
-        recovery code, the short-lived proof minted by the passphrase-gated
-        wrapped-key fetch, or a signature from the account’s currently
-        registered key. An account with no credential cannot be recovered by
-        anyone, which is what our naming and recovery policy always said.
-        Finalising a recovery now requires a signature from the key being
-        installed, where it had been an unauthenticated POST. The same pass
-        closed a related fault we had not been told about: with its key
-        unavailable the server fell back to a structural check on TOTP codes,
-        so the second factor was a formality on exactly the accounts that had
-        enrolled one.
-      </p>
+      <div>
+      <h2>Troca da chave de identidade sem autenticação em uma conta sem segundo fator</h2>
+      <p class="hof-meta">Crítica · relatada e corrigida em outubro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/7d49a444">7d49a444</a> · crédito aguardando a preferência de quem relatou</p>
+      <p>A recuperação de conta agenda a substituição da chave de identidade raiz da conta. O endpoint que a inicia verificava a solicitação com a chave <em>nova</em>, uma autoafirmação, e sua única outra entrada, a chave de identidade atual da conta, é entregue a qualquer pessoa pela consulta pública de nomes de usuário. Em uma conta sem segundo fator cadastrado, não sobrava nada que um estranho não pudesse fornecer: conhecer um nome público bastava para agendar uma troca de chave hostil, que se concluía ao fim do período de carência.</p>
+      <p>Também não havia veto do dono, ao contrário do que nossa própria documentação dizia. O endpoint de objeção é assinado pela chave nova, então é o desfazer de quem recupera, e não algo que o dono deslocado possa usar. O período de carência era um período de aviso, não um freio.</p>
+      <p>Iniciar uma recuperação agora exige uma credencial cadastrada: um código TOTP ou de recuperação, a prova de curta duração emitida pela busca da chave encapsulada protegida por frase secreta, ou uma assinatura da chave registrada atualmente na conta. Ninguém consegue recuperar uma conta sem credencial, que é o que nossa política de nomes e recuperação sempre disse. Concluir uma recuperação agora exige uma assinatura da chave que está sendo instalada, onde antes havia um POST sem autenticação. A mesma revisão fechou uma falha relacionada que não nos tinha sido relatada: sem sua chave disponível, o servidor recorria a uma verificação estrutural dos códigos TOTP, então o segundo fator era uma formalidade justamente nas contas que o tinham cadastrado.</p>
   
-      <h2>Unauthenticated CA-signing oracle mints a relay-hub blessing for any key or host</h2>
-      <p class="hof-meta">
-        Critical · reported and fixed October 2026 · fix
-        <a href="https://github.com/ibisllc/flagship/commit/54889a4c">54889a4c</a>,
-        hardening
-        <a href="https://github.com/ibisllc/flagship/commit/484ef162">484ef162</a>
-        and
-        <a href="https://github.com/ibisllc/flagship/commit/771db538">771db538</a>
-        · credit pending the reporter’s preference
-      </p>
-      <p>
-        The endpoint that issues relay-hub blessings did not authenticate its
-        caller, so anyone could obtain a validly signed blessing for a key and
-        host of their choosing: a signing oracle against the trust chain a
-        box uses to decide whether the hub in front of it is the real one.
-      </p>
-      <p>
-        The issuer is now authenticated and blessings are bound to the
-        expected apex. Two follow-ups harden the box side rather than the
-        hole itself: a box fails closed when the hub presents no blessing and
-        requires the expected apex, and trust lockdown now closes connections
-        that are already open instead of only refusing new ones.
-      </p>
+      <h2>Um oráculo de assinatura da CA sem autenticação emite uma bênção de hub de relay para qualquer chave ou host</h2>
+      <p class="hof-meta">Crítica · relatada e corrigida em outubro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/54889a4c">54889a4c</a>, reforço <a href="https://github.com/ibisllc/flagship/commit/484ef162">484ef162</a> e <a href="https://github.com/ibisllc/flagship/commit/771db538">771db538</a> · crédito aguardando a preferência de quem relatou</p>
+      <p>O endpoint que emite as bênçãos do hub de relay não autenticava quem o chamava, então qualquer pessoa podia obter uma bênção com assinatura válida para uma chave e um host de sua escolha: um oráculo de assinatura contra a cadeia de confiança que uma caixa usa para decidir se o hub à sua frente é o verdadeiro.</p>
+      <p>O emissor agora é autenticado e as bênçãos ficam vinculadas ao apex esperado. Dois reforços posteriores protegem o lado da caixa, e não o buraco em si: uma caixa falha de forma fechada quando o hub não apresenta bênção e exige o apex esperado, e o bloqueio de confiança agora fecha conexões que já estão abertas em vez de só recusar as novas.</p>
   
-      <h2>Free username rename bypassed the paid name change and the reserved-name list</h2>
-      <p class="hof-meta">
-        Medium · reported and fixed October 2026 · fix
-        <a href="https://github.com/ibisllc/flagship/commit/b3d6852b">b3d6852b</a>,
-        hardening
-        <a href="https://github.com/ibisllc/flagship/commit/c4132973">c4132973</a>
-        · credit pending the reporter’s preference
-      </p>
-      <p>
-        New accounts can only take a handle the server suggested, and choosing
-        your own name is meant to be the paid name change; the fee is what
-        keeps desirable names from being squatted. An old rename endpoint
-        from early development was still live and enforced none of that. It
-        checked only the account’s own signature, so any account holder
-        could move to a handle of their choosing, for free, as often as they
-        liked, including names we reserve for our own infrastructure. Because
-        names are never taken back, every such allocation would have been
-        permanent.
-      </p>
-      <p>
-        No other account’s data or keys were exposed, and a squatted
-        reserved name could not be put to use: registering a server
-        re-validates the name, so none could obtain DNS records or a
-        certificate. No app ever called the endpoint, so we removed it rather
-        than patching it. The paid name change will be a separate, new
-        endpoint built with these checks from the start. Besides the
-        reporter’s own test, we found one earlier rename in production,
-        onto a reserved test-environment name; both allocations have been
-        reverted.
-      </p>
-      <p>
-        A second review of the fix found two places where it relied on
-        something else being true, and both are now closed. Our edge server
-        forwards any API request it does not recognise to the backend, so the
-        removed endpoint answered “not found” only because the
-        backend lacked it too; the edge now refuses it directly, whatever its
-        spelling, and a test proves such a request never reaches the backend
-        or the database. And our compiler never deletes the output of a
-        removed source file, so the old handler’s compiled code was
-        still sitting in the local build directory. It was never part of the
-        deployed service, since nothing loaded it, but every deploy now
-        rebuilds from an empty directory and refuses to ship compiled code
-        that has no source.
-      </p>
+      <h2>Uma troca gratuita de nome de usuário contornava a troca de nome paga e a lista de nomes reservados</h2>
+      <p class="hof-meta">Média · relatada e corrigida em outubro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/b3d6852b">b3d6852b</a>, reforço <a href="https://github.com/ibisllc/flagship/commit/c4132973">c4132973</a> · crédito aguardando a preferência de quem relatou</p>
+      <p>Contas novas só podem usar um nome sugerido pelo servidor, e escolher seu próprio nome deveria ser a troca de nome paga; a taxa é o que impede que nomes desejados sejam ocupados por especuladores. Um antigo endpoint de troca de nome, do início do desenvolvimento, ainda estava ativo e não aplicava nada disso. Ele só verificava a assinatura da própria conta, então qualquer titular de conta podia passar para um nome de sua escolha, de graça, quantas vezes quisesse, inclusive nomes que reservamos para nossa própria infraestrutura. Como nomes nunca são retomados, cada uma dessas atribuições teria sido permanente.</p>
+      <p>Nenhum dado ou chave de outra conta foi exposto, e um nome reservado ocupado não podia ser usado: registrar um servidor valida o nome de novo, então nenhum deles podia obter registros DNS ou um certificado. Nenhum app chegou a chamar o endpoint, então nós o removemos em vez de corrigi-lo. A troca de nome paga será um endpoint novo e separado, construído com essas verificações desde o início. Além do teste de quem relatou, encontramos uma troca de nome anterior em produção, para um nome reservado do ambiente de testes; as duas atribuições foram revertidas.</p>
+      <p>Uma segunda revisão da correção encontrou dois pontos em que ela dependia de outra coisa ser verdade, e os dois estão fechados agora. Nosso servidor de borda encaminha ao backend qualquer solicitação de API que não reconhece, então o endpoint removido respondia «não encontrado» só porque o backend também não o tinha; agora a borda o recusa diretamente, seja qual for a grafia, e um teste prova que essa solicitação nunca chega ao backend nem ao banco de dados. Além disso, nosso compilador nunca apaga a saída de um arquivo-fonte removido, então o código compilado do antigo handler ainda estava no diretório de build local. Ele nunca fez parte do serviço implantado, já que nada o carregava, mas agora cada deploy recompila a partir de um diretório vazio e se recusa a publicar código compilado que não tem fonte.</p>
   
-      <h2>The webapp and the browser remote could be framed by another site</h2>
-      <p class="hof-meta">
-        Low · reported and fixed October 2026 · fix
-        <a href="https://github.com/ibisllc/flagship/commit/d0658fb6">d0658fb6</a>
-        · credit pending the reporter’s preference
-      </p>
-      <p>
-        The webapp, the browser remote and this site sent nothing telling a
-        browser not to show them inside another site’s frame. A hostile
-        page could load them invisibly and lay its own buttons on top, so a
-        click meant for the hostile page landed on ours (clickjacking).
-      </p>
-      <p>
-        The reach was limited. A framed copy starts signed out: browsers give
-        a frame inside another site its own storage, so it never sees the keys
-        of the user’s real session, and passkey and Face ID prompts
-        appear above any page, where an overlay cannot reach them. The case
-        that mattered was the browser remote. Someone who scanned its code and
-        approved it with their phone while it sat inside a hostile page would
-        leave an approved session in that frame, where buttons laid over it
-        could steer their clicks.
-      </p>
-      <p>
-        Every response from <code>flagshipserver.com</code> and its
-        subdomains now refuses framing (<code>frame-ancestors 'none'</code>
-        and <code>X-Frame-Options: DENY</code>), and the webapp also refuses
-        to start inside a frame if it is ever served without those headers.
-        The same pass gave the webapp and the remote a strict Content Security
-        Policy: scripts only from the app itself, no inline script, and
-        connections only to Flagship and the account’s own servers. The
-        pages a Flagship server serves itself (invites, sign-in, request
-        access) refuse framing too, from each server’s next update.
-      </p>
+      <h2>Outro site podia exibir o app web e o controle remoto do navegador dentro de um frame</h2>
+      <p class="hof-meta">Baixa · relatada e corrigida em outubro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/d0658fb6">d0658fb6</a> · crédito aguardando a preferência de quem relatou</p>
+      <p>O app web, o controle remoto do navegador e este site não enviavam nada dizendo ao navegador para não exibi-los dentro do frame de outro site. Uma página hostil podia carregá-los de forma invisível e colocar seus próprios botões por cima, de modo que um clique destinado à página hostil caía na nossa (clickjacking).</p>
+      <p>O alcance era limitado. Uma cópia em um frame começa sem sessão: os navegadores dão a um frame dentro de outro site seu próprio armazenamento, então ele nunca vê as chaves da sessão real do usuário, e os pedidos de chave de acesso e de Face ID aparecem acima de qualquer página, onde uma sobreposição não consegue alcançá-los. O caso que importava era o controle remoto do navegador. Alguém que escaneasse o código dele e o aprovasse com o celular enquanto ele estava dentro de uma página hostil deixaria uma sessão aprovada nesse frame, onde botões sobrepostos poderiam direcionar seus cliques.</p>
+      <p>Todas as respostas de <code>flagshipserver.com</code> e seus subdomínios agora recusam frames (<code>frame-ancestors 'none'</code> e <code>X-Frame-Options: DENY</code>), e o app web também se recusa a iniciar dentro de um frame se algum dia for servido sem esses cabeçalhos. A mesma revisão deu ao app web e ao controle remoto uma Content Security Policy rígida: scripts só do próprio app, nenhum script inline e conexões só com o Flagship e com os servidores da própria conta. As páginas que um servidor Flagship serve por conta própria (convites, login, pedido de acesso) também recusam frames, a partir da próxima atualização de cada servidor.</p>
       </div>
       <p class="fineprint">Encontrou algo? <a href="/pt-br/security#report">Relate</a>; a <a href="/pt-br/security#disclosure">política de divulgação</a> diz o que esperar.</p>
     </main>
@@ -228,7 +111,7 @@
       <ul>
         <li><a href="/pt-br/open-source">Código aberto</a></li>
         <li><a href="/pt-br/adapters">Adaptadores do repositório</a></li>
-        <li><a href="/status/">Status</a></li>
+        <li><a href="/pt-br/status">Status</a></li>
         <li><a href="/pt-br/docs">Documentação</a></li>
         <li><a href="/pt-br/blog">Blog</a></li>
         <li><a href="/pt-br/help">Ajuda</a></li>

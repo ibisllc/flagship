@@ -24,7 +24,7 @@
  */
 
 import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
-import { pickWebLocale } from "./localeRedirect.js";
+import { localisedAssetPath, pickWebLocale } from "./localeRedirect.js";
 import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
@@ -875,11 +875,9 @@ async function routeImpl(
   // a redirect into the webapp origin: on Android an installed webapp claims
   // every navigation into its origin, so the redirect opened it unasked.
   // Before the coming-soon gate, so a real recipient always gets the page.
+  // In the visitor's language (serveLocalisedPage).
   if (APP_LINK_PATHS.has(url.pathname) || url.pathname.startsWith("/app/")) {
-    return env.ASSETS.fetch(new Request(new URL("/open/index.html", url), {
-      method: request.method,
-      headers: request.headers,
-    }));
+    return serveLocalisedPage(request, env, url, "/open/index.html");
   }
 
   // The standalone "how to assemble your server" explainer was folded into
@@ -903,11 +901,7 @@ async function routeImpl(
     return new Response(null, { status: 308, headers: { location: "/studio" } });
   }
   if (url.pathname === "/studio") {
-    const studioUrl = new URL("/studio/index.html", url);
-    return env.ASSETS.fetch(new Request(studioUrl, {
-      method: request.method,
-      headers: request.headers,
-    }));
+    return serveLocalisedPage(request, env, url, "/studio/index.html");
   }
 
   // Pre-launch stealth gate: the public marketing surface is replaced by
@@ -1056,6 +1050,22 @@ async function routeImpl(
 
   // Static asset path — let the assets binding handle it.
   return notFoundForMissingAsset(url.pathname, await env.ASSETS.fetch(request));
+}
+
+/**
+ * A page the Worker serves at a fixed URL (the open-in-app page, /studio), in the visitor's
+ * language: the copy scripts/i18n-web.mjs built under /<lang>/ when the browser or the fs-lang
+ * cookie picks a live language (localeRedirect.ts), the English file otherwise. Same URL either way.
+ */
+async function serveLocalisedPage(request: Request, env: RouteEnv, url: URL, path: string): Promise<Response> {
+  const file = localisedAssetPath(path, request.headers.get("accept-language"), request.headers.get("cookie"));
+  const res = await env.ASSETS.fetch(new Request(new URL(file, url), {
+    method: request.method,
+    headers: request.headers,
+  }));
+  const out = new Response(res.body, res);
+  out.headers.append("vary", "Accept-Language, Cookie");
+  return out;
 }
 
 /**

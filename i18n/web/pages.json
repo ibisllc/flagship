@@ -1,5 +1,5 @@
 {
-  "_about": "The English pages that are localised. Everything else stays as it is: the legal pages (privacy, terms, abuse) are English-only on purpose - a machine translation of a legal text is worse than the original - and pages that are redirects, the Worker's own fallbacks, the live status board and the webapp are not marketing copy. Links from a localised page to an unlisted page go to the English one. `node scripts/i18n-web.mjs check` fails on any English .html page under apps/web/public that is in neither `pages` nor `englishOnly` (each with its reason), outside the generated language folders and the `ownI18n` trees, so a new page cannot ship English-only by accident.",
+  "_about": "The English pages that are localised. Everything else stays as it is: the legal pages (privacy, terms, abuse) are English-only on purpose - a machine translation of a legal text is worse than the original - and pages that are redirects, the Worker's unused fallbacks and the webapp are not localised here. Links from a localised page to an unlisted page go to the English one. `node scripts/i18n-web.mjs check` fails on any English .html page under apps/web/public that is in neither `pages` nor `englishOnly` (each with its reason), outside the generated language folders and the `ownI18n` trees, so a new page cannot ship English-only by accident. The open-in-app page (open/index.html) and the Studio download page are served by the Worker at fixed URLs (/join ..., /studio); it picks the built copy for the visitor's language (apps/com/src/route.ts localisedPage, same rule as the first-visit redirect).",
   "pages": [
     { "src": "index.html" },
     { "src": "faq.html" },
@@ -13,7 +13,11 @@
     { "src": "dibs.html" },
     { "src": "security/runtime.html" },
     { "src": "security/iso-seed.html" },
-    { "src": "security/hall-of-fame.html" }
+    { "src": "security/hall-of-fame.html" },
+    { "src": "open/index.html" },
+    { "src": "disambiguate.html" },
+    { "src": "studio/index.html" },
+    { "src": "status/index.html" }
   ],
   "englishOnly": [
     { "src": "privacy.html", "why": "legal text: a machine translation of a legal text is worse than the original" },
@@ -23,12 +27,8 @@
     { "src": "build/index.html", "why": "redirect to /studio" },
     { "src": "security/disclosure.html", "why": "redirect to /security#disclosure" },
     { "src": "security/report.html", "why": "redirect to /security#report" },
-    { "src": "404.html", "why": "the Worker's own fallback, served at whatever path was missed (no /<lang>/ route)" },
-    { "src": "coming-soon.html", "why": "the Worker's own pre-launch gate page, served in place of any path" },
-    { "src": "open/index.html", "why": "the Worker's own fallback for app links (/join, /share, /voici-sign-in ...), served at the link's own path, never under /<lang>/; its sentences are set by its inline script" },
-    { "src": "disambiguate.html", "why": "short-link chooser (a code that names more than one app), a utility page filled by its script, noindex; not localised yet" },
-    { "src": "status/index.html", "why": "the live status board, operational data rather than marketing copy" },
-    { "src": "studio/index.html", "why": "Studio download page the Worker serves at /studio; not localised yet (it would need a /<lang>/studio route)" }
+    { "src": "404.html", "why": "not shown to anyone: the assets layer answers a missing page with the homepage (not_found_handling = single-page-application in apps/com/wrangler.toml), so this file is reached only by typing /404.html" },
+    { "src": "coming-soon.html", "why": "the pre-launch gate page; the gate has been off since the public launch (SITE_PUBLIC = \"1\" in apps/com/wrangler.toml), so no visitor sees it. Translate it before re-arming the gate" }
   ],
   "ownI18n": [
     { "dir": "webapp", "why": "the webapp, localised at runtime from i18n/webapp (scripts/i18n-pwa.mjs)" },

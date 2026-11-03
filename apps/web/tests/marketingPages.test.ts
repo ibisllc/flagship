@@ -156,9 +156,9 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     const list = /APP_LINK_PATHS[^=]*=\s*new Set\(\s*\[([^\]]*)\]/.exec(route)?.[1] ?? "";
     const paths = [...list.matchAll(/"(\/[a-z-]+)"/g)].map((m) => m[1]!);
     expect(paths).toContain("/join");
-    for (const path of paths) expect(r.body).toContain(`"${path}": {`);
+    for (const path of paths) expect(r.body).toContain(`data-link="${path}"`);
     // The old desktop QR login's /qr is no longer an app link.
-    expect(r.body).not.toContain('"/qr": {');
+    expect(r.body).not.toContain('data-link="/qr"');
   });
 
   it("never promotes one available desktop build without the other", async () => {

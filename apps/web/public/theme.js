@@ -26,9 +26,11 @@
   function apply(t) {
     root.setAttribute("data-theme", t);
     syncMeta(t);
+    // The button keeps its page's own label ("Switch theme", translated by scripts/i18n-web.mjs);
+    // the state is aria-pressed, so no English is written into a translated page.
     var btns = document.querySelectorAll("[data-theme-toggle]");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].setAttribute("aria-label", t === "dark" ? "Switch to light theme" : "Switch to dark theme");
+      btns[i].setAttribute("aria-pressed", t === "dark" ? "true" : "false");
     }
   }
 
@@ -45,7 +47,7 @@
   });
 
   function injectFloating() {
-    if (document.querySelector("[data-theme-toggle]")) return;
+    if (document.querySelector("[data-theme-toggle]")) { apply(root.getAttribute("data-theme") === "dark" ? "dark" : "light"); return; }
     var b = document.createElement("button");
     b.type = "button";
     b.className = "theme-btn theme-btn--floating";

@@ -159,12 +159,11 @@ export function parseManifestSchemeHosts(xml) {
 
 /** The open-in-app page's `const LINKS = { "/path": { ..., web: bool } }`. */
 export function parseOpenPageLinks(html) {
-  const start = (html ?? "").indexOf("const LINKS = {");
-  if (start < 0) return {};
-  const body = html.slice(start, html.indexOf("\n      };", start));
+  // Each link's copy is a hidden <div data-link="/path" [data-web="1"]> in the page (translated by
+  // scripts/i18n-web.mjs); data-web offers the webapp as an opt-in link.
   const out = {};
-  for (const m of body.matchAll(/"(\/[a-z0-9-]+)":\s*\{([\s\S]*?)\n\s*\}/g)) {
-    out[m[1]] = /web:\s*true/.test(m[2]);
+  for (const m of (html ?? "").matchAll(/<div\s+data-link="(\/[a-z0-9-]+)"([^>]*)>/g)) {
+    out[m[1]] = /\bdata-web\b/.test(m[2]);
   }
   return out;
 }
@@ -528,7 +527,7 @@ function checkAppLinks(repo) {
     if (!aasa.includes(`${p}/`)) findings.push({ key: `aasa:${p}/`, message: `${P.aasa} does not claim the trailing-slash ${p}/` });
     if (!android.includes(p)) findings.push({ key: `android-manifest:${p}`, message: `AndroidManifest.xml has no https App Link for ${p}` });
     if (!android.includes(`${p}/`)) findings.push({ key: `android-manifest:${p}/`, message: `AndroidManifest.xml has no https App Link for the trailing-slash ${p}/` });
-    if (!(p in open)) findings.push({ key: `open-page:${p}`, message: `${P.openPage} LINKS has no entry for ${p} (no get-the-app copy)` });
+    if (!(p in open)) findings.push({ key: `open-page:${p}`, message: `${P.openPage} has no data-link entry for ${p} (no get-the-app copy)` });
     if (!ios.paths.includes(p)) findings.push({ key: `ios-parser:${p}`, message: `iOS DeepLink.parse does not route https ${p}` });
     if (!and.paths.includes(p)) findings.push({ key: `android-parser:${p}`, message: `Android DeepLink/AppLink does not route https ${p}` });
     if (open[p] === true && !web.includes(p)) findings.push({ key: `webapp:${p}`, message: `the open page offers the webapp for ${p} but no webapp module reads that landing path` });

@@ -221,20 +221,27 @@
             <option value="medium">中：情報漏えい、部分的な回避</option>
             <option value="low">低：軽微、特殊な条件が必要</option>
           </select><label for="component">コンポーネント</label><select id="component" name="component">
-            <option>プロトコル／暗号</option>
-            <option>サーバーデーモン</option>
-            <option>データ層（Postgres／ファイルのプロビジョニング）</option>
-            <option>ブートイメージ／イメージビルダー</option>
-            <option>iOS アプリ</option>
-            <option>Android アプリ</option>
-            <option>Web アプリ</option>
-            <option>Deck（キャスト画面）</option>
-            <option>コントロールプレーン（flagshipserver.com）</option>
-            <option>トンネル／公開エントリ</option>
-            <option>その他</option>
+            <option value="Protocol / crypto">プロトコル／暗号</option>
+            <option value="Server daemon">サーバーデーモン</option>
+            <option value="Data layer (Postgres / files provisioning)">データ層（Postgres／ファイルのプロビジョニング）</option>
+            <option value="Boot image / image-builder">ブートイメージ／イメージビルダー</option>
+            <option value="iOS app">iOS アプリ</option>
+            <option value="Android app">Android アプリ</option>
+            <option value="Webapp">Web アプリ</option>
+            <option value="Deck (cast surface)">Deck（キャスト画面）</option>
+            <option value="Control plane (flagshipserver.com)">コントロールプレーン（flagshipserver.com）</option>
+            <option value="Tunnel / public ingress">トンネル／公開エントリ</option>
+            <option value="Other">その他</option>
           </select><label for="summary">概要 <span class="req">*</span></label> <input id="summary" name="summary" type="text" required="" maxlength="200" placeholder="1 行の説明"> <label for="details">詳細、再現手順、影響 <span class="req">*</span></label><textarea id="details" name="details" required="" maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea><button class="cta" type="submit" style="margin-top: 1.5rem;">報告を送信</button></form>
 
         <div id="out" class="out" role="status" aria-live="polite"></div>
+        <!-- The form's own lines, here so scripts/i18n-web.mjs translates them; the script picks one. -->
+        <div id="report-messages" hidden="">
+          <p data-msg="sending">送信しています…</p>
+          <p data-msg="ok">ありがとうございます。受付番号: <span data-arg=""></span>。追ってご連絡します。</p>
+          <p data-msg="failed">送信に失敗しました（HTTP <span data-arg=""></span>）。</p>
+          <p data-msg="network">ネットワークエラーです。security@flagshipserver.com に直接メールでお知らせください。</p>
+        </div>
       </section>
     </main>
 
@@ -266,7 +273,7 @@
       <ul>
         <li><a href="/ja/open-source">オープンソース</a></li>
         <li><a href="/ja/adapters">リポジトリアダプター</a></li>
-        <li><a href="/status/">ステータス</a></li>
+        <li><a href="/ja/status">ステータス</a></li>
         <li><a href="/ja/docs">ドキュメント</a></li>
         <li><a href="/ja/blog">ブログ</a></li>
         <li><a href="/ja/help">ヘルプ</a></li>
@@ -279,10 +286,16 @@
     <script type="module">
       const form = document.getElementById("report-form");
       const out = document.getElementById("out");
+      const msg = (key, arg) => {
+        const c = document.querySelector(`#report-messages [data-msg="${key}"]`).cloneNode(true);
+        const slot = c.querySelector("[data-arg]");
+        if (slot) slot.textContent = String(arg ?? "");
+        return c.textContent.replace(/\s+/g, " ").trim();
+      };
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         out.className = "out";
-        out.textContent = "Submitting…";
+        out.textContent = msg("sending");
         const data = Object.fromEntries(new FormData(form).entries());
         try {
           const r = await fetch("/api/security/report", {
@@ -293,15 +306,15 @@
           const body = await r.json();
           if (r.ok) {
             out.className = "out ok";
-            out.textContent = `Thank you. Reference: ${body.reportId}. We'll be in touch.`;
+            out.textContent = msg("ok", body.reportId);
             form.reset();
           } else {
             out.className = "out err";
-            out.textContent = body.error ?? `Submission failed (HTTP ${r.status}).`;
+            out.textContent = body.error ?? msg("failed", r.status);
           }
         } catch (err) {
           out.className = "out err";
-          out.textContent = "Network error. Please email security@flagshipserver.com directly.";
+          out.textContent = msg("network");
         }
       });
 

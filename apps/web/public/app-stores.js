@@ -18,7 +18,10 @@
     PENDING_CLASSES.forEach((c) => a.classList.remove(c));
     a.href = store.url;
     a.rel = "noopener";
-    a.setAttribute("aria-label", store.aria);
+    // A page's own title is in its language (scripts/i18n-web.mjs); store.aria is the English fallback.
+    const title = el.getAttribute("title");
+    if (title) a.title = title;
+    a.setAttribute("aria-label", title || store.aria);
     a.setAttribute("data-app-store", el.getAttribute("data-app-store"));
     while (el.firstChild) a.appendChild(el.firstChild);
     const label = a.querySelector("[data-app-store-label]");

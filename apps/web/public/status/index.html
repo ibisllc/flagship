@@ -236,8 +236,20 @@
       </section>
 
       <p style="color: var(--ink-faint); font-size:0.8rem;">
-        This page calls <code>/api/_status/probe</code> on flagshipserver.com. The Worker performs a server-side fetch of <code>flagship.services/api/health</code> and returns timing and reachability — so what you see is what the edge sees, not what your local network sees.
+        This page calls <code>/api/_status/probe</code> on flagshipserver.com. The Worker performs a server-side fetch of <code>flagship.services/api/health</code> and returns timing and reachability, so what you see is what the edge sees, not what your local network sees.
       </p>
+      <!-- Every word the script shows is here, so scripts/i18n-web.mjs translates it; the script only picks one. -->
+      <div id="status-messages" hidden>
+        <p data-msg="up">operational</p>
+        <p data-msg="slow">degraded</p>
+        <p data-msg="down">down</p>
+        <p data-msg="auto-on">Auto-refresh: on</p>
+        <p data-msg="auto-off">Auto-refresh: off</p>
+        <p data-msg="probe-ok">HTTP <span data-arg="0"></span> in <span data-arg="1"></span> ms</p>
+        <p data-msg="probe-down">Down: <span data-arg="0"></span></p>
+        <p data-msg="unreachable">unreachable</p>
+        <p data-msg="local-error">(error in this browser)</p>
+      </div>
     </main>
 
     <footer class="footer">
@@ -291,6 +303,14 @@
         let timer = null;
 
         const $ = (id) => document.getElementById(id);
+        const lang = document.documentElement.getAttribute("lang") || undefined;
+        function msg(key, ...args) {
+          const tpl = document.querySelector('#status-messages [data-msg="' + key + '"]');
+          if (!tpl) return key;
+          const c = tpl.cloneNode(true);
+          c.querySelectorAll("[data-arg]").forEach((el) => { el.textContent = String(args[Number(el.getAttribute("data-arg"))] ?? ""); });
+          return c.textContent.replace(/\s+/g, " ").trim();
+        }
 
         function fmtBytes(n) {
           if (typeof n !== "number") return "—";
@@ -326,8 +346,8 @@
               const heightPct = Math.min(100, Math.max(8, (p.latencyMs / 1000) * 100));
               bar.style.height = heightPct + "%";
               bar.title =
-                p.checkedAt + " — " +
-                (p.reachable ? p.statusCode + " in " + p.latencyMs + " ms" : "DOWN: " + (p.error || "unreachable"));
+                new Date(p.checkedAt).toLocaleString(lang) + " · " +
+                (p.reachable ? msg("probe-ok", p.statusCode, p.latencyMs) : msg("probe-down", p.error || msg("unreachable")));
             } else {
               bar.style.height = "8%";
               bar.style.opacity = "0.3";
@@ -339,11 +359,11 @@
           const cls = classify(probe);
           const pill = $("pill");
           pill.className = "status-pill " + cls;
-          pill.textContent = cls === "up" ? "operational" : cls === "slow" ? "degraded" : "down";
+          pill.textContent = msg(cls);
 
           $("latency").textContent = probe.latencyMs + " ms";
           $("http").textContent = probe.statusCode != null ? String(probe.statusCode) : "—";
-          $("checkedAt").textContent = new Date(probe.checkedAt).toLocaleString();
+          $("checkedAt").textContent = new Date(probe.checkedAt).toLocaleString(lang);
           $("upstream").textContent = probe.upstream;
           $("raw").textContent = JSON.stringify(probe, null, 2);
 
@@ -367,7 +387,7 @@
               reachable: false,
               statusCode: null,
               latencyMs: 0,
-              upstream: "(local error)",
+              upstream: msg("local-error"),
               checkedAt: new Date().toISOString(),
               error: String(e && e.message || e),
             });
@@ -386,7 +406,7 @@
         $("autoToggle").addEventListener("click", (e) => {
           autoRefresh = !autoRefresh;
           e.currentTarget.classList.toggle("on", autoRefresh);
-          e.currentTarget.textContent = "Auto-refresh: " + (autoRefresh ? "on" : "off");
+          e.currentTarget.textContent = msg(autoRefresh ? "auto-on" : "auto-off");
           schedule();
         });
 
@@ -409,6 +429,7 @@
         tick();
       })();
     </script>
+  <script src="/i18n.js" defer></script>
   <script src="/motion.js" defer></script>
 </body>
 </html>

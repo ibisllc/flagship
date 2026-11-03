@@ -50,7 +50,8 @@
       "security.html",
       "open-source.html",
       "adapters.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "studio/index.html"
     ]
   },
   "se164d2e5bf": {
@@ -70,7 +71,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sd8e067f833": {
@@ -132,7 +134,11 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "open/index.html",
+      "disambiguate.html",
+      "studio/index.html",
+      "status/index.html"
     ]
   },
   "s3980fa6732": {
@@ -191,7 +197,9 @@
     "kind": "attr",
     "ctx": "span[title]",
     "pages": [
-      "index.html"
+      "index.html",
+      "open/index.html",
+      "studio/index.html"
     ]
   },
   "s49e0122870": {
@@ -199,7 +207,9 @@
     "kind": "attr",
     "ctx": "span[title]",
     "pages": [
-      "index.html"
+      "index.html",
+      "open/index.html",
+      "studio/index.html"
     ]
   },
   "sb44cfe3eb1": {
@@ -215,7 +225,8 @@
     "kind": "attr",
     "ctx": "div[aria-label]",
     "pages": [
-      "index.html"
+      "index.html",
+      "studio/index.html"
     ]
   },
   "sbcf5e0ec0c": {
@@ -259,7 +270,9 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "disambiguate.html",
+      "status/index.html"
     ]
   },
   "se24f793bf9": {
@@ -633,7 +646,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sb893166c94": {
@@ -653,7 +667,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s311aed55dd": {
@@ -673,7 +688,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "se31f2cd95d": {
@@ -701,7 +717,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s0ea994bede": {
@@ -721,7 +738,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sa3c3c380ee": {
@@ -741,7 +759,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s8104119722": {
@@ -761,7 +780,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s5452a6ca48": {
@@ -779,7 +799,8 @@
       "blog/index.html",
       "blog/flagship-0-3.html",
       "dibs.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s26e5d747c2": {
@@ -799,7 +820,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s4725b42d57": {
@@ -819,7 +841,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s326d2af3a8": {
@@ -839,7 +862,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s2a8b102c74": {
@@ -856,7 +880,8 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sc7470806c3": {
@@ -876,7 +901,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s661cf4f411": {
@@ -896,7 +922,9 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "disambiguate.html",
+      "status/index.html"
     ]
   },
   "s82cd1953ed": {
@@ -916,7 +944,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "s52d369c9d8": {
@@ -936,7 +965,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sfbb821f74f": {
@@ -954,7 +984,8 @@
       "blog/index.html",
       "blog/flagship-0-3.html",
       "dibs.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sef298c20e8": {
@@ -989,7 +1020,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "sd034a70edb": {
@@ -1003,7 +1035,8 @@
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
-      "security/hall-of-fame.html"
+      "security/hall-of-fame.html",
+      "status/index.html"
     ]
   },
   "se6e98cec67": {
@@ -3357,6 +3390,38 @@
       "security.html"
     ]
   },
+  "s59cbf0de23": {
+    "en": "Submitting…",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "se515aaa500": {
+    "en": "Thank you. Reference: <1/>. We'll be in touch.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s3981ab4e89": {
+    "en": "Submission failed (HTTP <1/>).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s815751ccfa": {
+    "en": "Network error. Please email security@flagshipserver.com directly.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
   "sfa29e26c6f": {
     "en": "Docs · Flagship",
     "kind": "text",
@@ -3383,7 +3448,9 @@
       "blog/flagship-0-3.html",
       "dibs.html",
       "security/runtime.html",
-      "security/iso-seed.html"
+      "security/iso-seed.html",
+      "open/index.html",
+      "status/index.html"
     ]
   },
   "s1d34362df3": {
@@ -3407,7 +3474,8 @@
     "kind": "text",
     "ctx": "div",
     "pages": [
-      "docs/index.html"
+      "docs/index.html",
+      "disambiguate.html"
     ]
   },
   "sdd041c6e2d": {
@@ -5918,12 +5986,849 @@
       "security/hall-of-fame.html"
     ]
   },
+  "sceed40c99c": {
+    "en": "Unauthenticated identity-key swap on an account with no second factor",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s91ce25ca8e": {
+    "en": "Critical · reported and fixed October 2026 · fix <1>7d49a444</1> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1aaade5028": {
+    "en": "Account recovery schedules a replacement of the account’s root identity key. The endpoint that starts it verified the request against the <1>incoming</1> key, a self-assertion, and its only other input, the account’s current identity key, is served to anyone by the public username lookup. On an account with no second factor enrolled, that left nothing a stranger could not supply: knowing a public handle was enough to schedule a hostile key swap, which completed once the grace window elapsed.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1ef7bc1bca": {
+    "en": "There was also no owner veto, contrary to what our own documentation claimed. The objection endpoint is signed by the incoming key, so it is the recoverer’s own undo rather than something the displaced owner can exercise. The grace window was a notification window, not a brake.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sf258d22f5d": {
+    "en": "Starting a recovery now requires an enrolled credential: a TOTP or recovery code, the short-lived proof minted by the passphrase-gated wrapped-key fetch, or a signature from the account’s currently registered key. An account with no credential cannot be recovered by anyone, which is what our naming and recovery policy always said. Finalising a recovery now requires a signature from the key being installed, where it had been an unauthenticated POST. The same pass closed a related fault we had not been told about: with its key unavailable the server fell back to a structural check on TOTP codes, so the second factor was a formality on exactly the accounts that had enrolled one.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1c691d0a20": {
+    "en": "Unauthenticated CA-signing oracle mints a relay-hub blessing for any key or host",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s4aa13abf4e": {
+    "en": "Critical · reported and fixed October 2026 · fix <1>54889a4c</1>, hardening <2>484ef162</2> and <3>771db538</3> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s38472151e1": {
+    "en": "The endpoint that issues relay-hub blessings did not authenticate its caller, so anyone could obtain a validly signed blessing for a key and host of their choosing: a signing oracle against the trust chain a box uses to decide whether the hub in front of it is the real one.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s27285a456e": {
+    "en": "The issuer is now authenticated and blessings are bound to the expected apex. Two follow-ups harden the box side rather than the hole itself: a box fails closed when the hub presents no blessing and requires the expected apex, and trust lockdown now closes connections that are already open instead of only refusing new ones.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "saaaa8a6b30": {
+    "en": "Free username rename bypassed the paid name change and the reserved-name list",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "se070ed6525": {
+    "en": "Medium · reported and fixed October 2026 · fix <1>b3d6852b</1>, hardening <2>c4132973</2> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s550e17ab1a": {
+    "en": "New accounts can only take a handle the server suggested, and choosing your own name is meant to be the paid name change; the fee is what keeps desirable names from being squatted. An old rename endpoint from early development was still live and enforced none of that. It checked only the account’s own signature, so any account holder could move to a handle of their choosing, for free, as often as they liked, including names we reserve for our own infrastructure. Because names are never taken back, every such allocation would have been permanent.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "se5e10629b6": {
+    "en": "No other account’s data or keys were exposed, and a squatted reserved name could not be put to use: registering a server re-validates the name, so none could obtain DNS records or a certificate. No app ever called the endpoint, so we removed it rather than patching it. The paid name change will be a separate, new endpoint built with these checks from the start. Besides the reporter’s own test, we found one earlier rename in production, onto a reserved test-environment name; both allocations have been reverted.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s54aa6aeae4": {
+    "en": "A second review of the fix found two places where it relied on something else being true, and both are now closed. Our edge server forwards any API request it does not recognise to the backend, so the removed endpoint answered “not found” only because the backend lacked it too; the edge now refuses it directly, whatever its spelling, and a test proves such a request never reaches the backend or the database. And our compiler never deletes the output of a removed source file, so the old handler’s compiled code was still sitting in the local build directory. It was never part of the deployed service, since nothing loaded it, but every deploy now rebuilds from an empty directory and refuses to ship compiled code that has no source.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s0d33401aaf": {
+    "en": "The webapp and the browser remote could be framed by another site",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s974bf846ac": {
+    "en": "Low · reported and fixed October 2026 · fix <1>d0658fb6</1> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s0cdb00e8a2": {
+    "en": "The webapp, the browser remote and this site sent nothing telling a browser not to show them inside another site’s frame. A hostile page could load them invisibly and lay its own buttons on top, so a click meant for the hostile page landed on ours (clickjacking).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sdb512c81c5": {
+    "en": "The reach was limited. A framed copy starts signed out: browsers give a frame inside another site its own storage, so it never sees the keys of the user’s real session, and passkey and Face ID prompts appear above any page, where an overlay cannot reach them. The case that mattered was the browser remote. Someone who scanned its code and approved it with their phone while it sat inside a hostile page would leave an approved session in that frame, where buttons laid over it could steer their clicks.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sa7275db6e5": {
+    "en": "Every response from <1>flagshipserver.com</1> and its subdomains now refuses framing (<2>frame-ancestors 'none'</2> and <3>X-Frame-Options: DENY</3>), and the webapp also refuses to start inside a frame if it is ever served without those headers. The same pass gave the webapp and the remote a strict Content Security Policy: scripts only from the app itself, no inline script, and connections only to Flagship and the account’s own servers. The pages a Flagship server serves itself (invites, sign-in, request access) refuse framing too, from each server’s next update.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com",
+      "frame-ancestors 'none'",
+      "X-Frame-Options: DENY"
+    ],
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "s3d124389fc": {
     "en": "Found something? <1>Report it</1>; the <2>disclosure policy</2> says what to expect.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "security/hall-of-fame.html"
+    ]
+  },
+  "s27c405cdd0": {
+    "en": "Flagship — get the app",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s86c0600773": {
+    "en": "Open this link in the Flagship app.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sf550fab782": {
+    "en": "Open this in the Flagship app",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s0501a35bd8": {
+    "en": "This link is meant for the Flagship app. Get the app, then open the link again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sfee2161d8a": {
+    "en": "Get the Flagship app",
+    "kind": "attr",
+    "ctx": "div[aria-label]",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s0e7c8a116f": {
+    "en": "Add this device in the Flagship app",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s2335f7c3aa": {
+    "en": "This code pairs a device with a Flagship account. Get the app, then scan the code again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s5fb22dbaf2": {
+    "en": "A server was shared with you",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sf5585919c0": {
+    "en": "Accept it in the Flagship app. Get the app, then open this link again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s115f387ad1": {
+    "en": "A server is being handed to you",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sdd4331597e": {
+    "en": "Take it over in the Flagship app. Get the app, then open this link again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s9c998de9d0": {
+    "en": "Let a browser in with the Flagship app",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s59ebfc4c26": {
+    "en": "A browser is asking to use your Flagship account. Approve it in the Flagship app. Get the app, then scan the code again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sa805fa7665": {
+    "en": "Sign in to voi.ci with Flagship",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sbb3903a5a7": {
+    "en": "A voi.ci page wants you to sign in so you can message it. Approve it in the Flagship app. Get the app, then come back to the voi.ci page after installing.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s244d292769": {
+    "en": "Pair Flagship Studio with the app",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s15db5ff7e9": {
+    "en": "Flagship Studio is waiting for your phone. Get the app, then scan the code in Studio again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s208a4a3fd1": {
+    "en": "Sign in to this app with Flagship",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s9c6eb94c6d": {
+    "en": "A private app is asking who you are. Confirm it in the Flagship app. Get the app, then open this link again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s6f10a753ef": {
+    "en": "You're invited to an app",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s5d2418425c": {
+    "en": "Someone invited you to an app on their Flagship server. Accept it in the Flagship app. Get the app, then open the invite link again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s5e3791de5b": {
+    "en": "Someone accepted your invite",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "se3dfb44115": {
+    "en": "Let them in from the Flagship app. Get the app, then open this link again. In the web app, paste this link into the app's Access control page.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s5f00b0a5d4": {
+    "en": "or <1>continue with the web app</1>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s43406f2aef": {
+    "en": "Patent Pending",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s869735fb2a": {
+    "en": "Pick a destination · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "s5514dcecab": {
+    "en": "This short URL points to more than one app. Pick which one you mean.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "s0941159c4c": {
+    "en": "No service here yet.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "se15680afc8": {
+    "en": "The short URL <1>…</1> isn't pointing at a service right now. The owner of this username can decide which install, if any, claims it. <2>More on multiplexing →</2>",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "…"
+    ],
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "s936c7250f6": {
+    "en": "No service is currently claiming this URL.",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "s9555d7fe69": {
+    "en": "<1>Why does this happen?</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "s5385231090": {
+    "en": "Each service instance decides whether to claim a short URL. Until somebody claims it, this fallback shows. The long form (<1>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</1>) is always reachable.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "<app>.<server>.<user>.flagship.services"
+    ],
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "scc443a7ac5": {
+    "en": "Flagship · Patent Pending",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "disambiguate.html"
+    ]
+  },
+  "scc56773e22": {
+    "en": "Download Flagship Studio for macOS or Windows and pair it with the Flagship app.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "se57f141552": {
+    "en": "Get Flagship Studio",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "sea729a1beb": {
+    "en": "<1>docs</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s16cac25d72": {
+    "en": "<1>status</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s83c52f31d1": {
+    "en": "Flagship Studio · Patent Pending",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s79dc56f5b8": {
+    "en": "Build your server from your computer.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s57da43aef4": {
+    "en": "Studio pairs with the Flagship app, receives the server recipe your phone authorized, and writes the boot USB.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s25a88ae782": {
+    "en": "Open <1>flagshipserver.com/studio</1> on the Mac or Windows computer you will use to create the server.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s60eea284d6": {
+    "en": "<1> <2>Recommended for this computer</2> <3>Download for macOS</3> <4>Apple Silicon and Intel · DMG</4> </1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "sf3a3815c27": {
+    "en": "<1> <2>Recommended for this computer</2> <3>Download for Windows <4>Experimental</4></3> <5>Windows 11 · ZIP · not yet proven on every PC</5> </1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s74cd12cd37": {
+    "en": "<1>Install and open Studio.</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s0b23b9824d": {
+    "en": "Studio shows a QR code and a short pairing code.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "sed83b2cf17": {
+    "en": "<1>Pair from your phone.</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "sb7063506d0": {
+    "en": "In the Flagship app (<1><2>App Store</2></1> · <3><4>Google Play</4></3>), choose Add server → Pair with Studio, then scan the QR or enter the short code.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "sa621182e6b": {
+    "en": "<1>Write and boot the USB.</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s375fe638ac": {
+    "en": "Choose the target drive in Studio. Your phone approves the recipe; Studio handles the operating-system image and USB.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s0cadccf248": {
+    "en": "Already downloaded a recipe from the webapp? Open or paste it in Studio. On Linux? <1>Get the AppImage</1> <2>Experimental</2> (x86-64; needs Node.js 22 or later).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s1a16d476e1": {
+    "en": "<1>© 2026 Flagship · Patent Pending</1><2><3>Privacy</3> · <4>Terms</4></2>",
+    "kind": "text",
+    "ctx": "footer",
+    "pages": [
+      "studio/index.html"
+    ]
+  },
+  "s91f0879227": {
+    "en": "Live status of flagship.services — latency, reachability, load.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s3ba9b4e91a": {
+    "en": "Flagship — status",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s30f1af8553": {
+    "en": "Status",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s601e9fd043": {
+    "en": "Live health of <1>flagship.services</1>, probed every few seconds from the Cloudflare edge.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.services"
+    ],
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s2464017dcb": {
+    "en": "<1>checking…</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s636124811d": {
+    "en": "Latency",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s82742fa490": {
+    "en": "HTTP status",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s5bce1a9672": {
+    "en": "Process uptime",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s57b03ebd74": {
+    "en": "RSS memory",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s1003960e21": {
+    "en": "Heap used",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s2dbeeb230b": {
+    "en": "Node",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s8f808f1f1d": {
+    "en": "Recent probes (newest on right)",
+    "kind": "attr",
+    "ctx": "div[aria-label]",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s1876c34c27": {
+    "en": "<1>Last checked: <2>—</2></1> <3>Upstream: <4>—</4></3>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "sf2d4bba720": {
+    "en": "<1>Probe now</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s86d4e8ec35": {
+    "en": "<1>Auto-refresh: on</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s66857d185e": {
+    "en": "Raw response",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s022bab7504": {
+    "en": "Configured infrastructure",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "sb82ceb79a5": {
+    "en": "What flagshipserver.com tells daemons + browsers about where the data plane lives. Sourced from <1>/api/services/endpoints</1>; updated by deploying the Worker. If these change unexpectedly, something's drifted.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "/api/services/endpoints"
+    ],
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s1c1f55e00a": {
+    "en": "Tunnel hub",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s09d34f5f30": {
+    "en": "Passthrough IPv4",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s85c5abdae1": {
+    "en": "Passthrough IPv6",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s57e2fb61e7": {
+    "en": "Endpoints version",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s5a4ad08ca9": {
+    "en": "This page calls <1>/api/_status/probe</1> on flagshipserver.com. The Worker performs a server-side fetch of <2>flagship.services/api/health</2> and returns timing and reachability, so what you see is what the edge sees, not what your local network sees.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "/api/_status/probe",
+      "flagship.services/api/health"
+    ],
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "sb2451033b7": {
+    "en": "operational",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s1bdea22b76": {
+    "en": "degraded",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s0119c003f0": {
+    "en": "down",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s48c4885315": {
+    "en": "Auto-refresh: on",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "saffde5a1ad": {
+    "en": "Auto-refresh: off",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "scb4b920494": {
+    "en": "HTTP <1/> in <2/> ms",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "sacfe4d0f0d": {
+    "en": "Down: <1/>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s5bd38c4859": {
+    "en": "unreachable",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
+    ]
+  },
+  "s9e7aa5e543": {
+    "en": "(error in this browser)",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "status/index.html"
     ]
   }
 }

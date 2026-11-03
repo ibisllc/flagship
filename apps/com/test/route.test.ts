@@ -1224,6 +1224,20 @@ describe("app links — open-in-app page on the control apex", () => {
     }
   });
 
+  it("serves the page in the visitor's language at the link's own URL", async () => {
+    const fr = await route(new Request("https://flagshipserver.com/share#k=x", { headers: { "accept-language": "fr-CA,fr;q=0.9" } }), makeEnv());
+    expect(fr.status).toBe(200);
+    expect(fr.headers.get("location")).toBeNull();
+    expect(await fr.text()).toBe("asset:/fr/open/index.html");
+    expect(fr.headers.get("vary")).toContain("Accept-Language");
+    const ja = await route(new Request("https://flagshipserver.com/app/settings", { headers: { "accept-language": "ja" } }), makeEnv());
+    expect(await ja.text()).toBe("asset:/ja/open/index.html");
+    const en = await route(new Request("https://flagshipserver.com/join", { headers: { "accept-language": "en-GB,de;q=0.5" } }), makeEnv());
+    expect(await en.text()).toBe("asset:/open/index.html");
+    const chosen = await route(new Request("https://flagshipserver.com/invite", { headers: { "accept-language": "de", cookie: "fs-lang=en" } }), makeEnv());
+    expect(await chosen.text()).toBe("asset:/open/index.html");
+  });
+
   it("/joined (a lookalike) is not an app link", async () => {
     const r = await route(new Request("https://flagshipserver.com/joined"), makeEnv());
     expect(await r.text()).toBe("asset:/coming-soon.html");
@@ -2165,6 +2179,13 @@ describe("/studio — canonical desktop-builder page", () => {
     );
     expect(r.status).toBe(200);
     expect(await r.text()).toBe("asset:/studio/index.html");
+  });
+
+  it("serves the page in the visitor's language at /studio", async () => {
+    const r = await route(new Request("https://flagshipserver.com/studio", { headers: { "accept-language": "pt-BR" } }), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/pt-br/studio/index.html");
+    expect(r.headers.get("vary")).toContain("Cookie");
   });
 
   it("canonicalizes the trailing slash and retires /ready + /build", async () => {

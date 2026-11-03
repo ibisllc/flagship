@@ -316,17 +316,17 @@
 
           <label for="component">Component</label>
           <select id="component" name="component">
-            <option>Protocol / crypto</option>
-            <option>Server daemon</option>
-            <option>Data layer (Postgres / files provisioning)</option>
-            <option>Boot image / image-builder</option>
-            <option>iOS app</option>
-            <option>Android app</option>
-            <option>Webapp</option>
-            <option>Deck (cast surface)</option>
-            <option>Control plane (flagshipserver.com)</option>
-            <option>Tunnel / public ingress</option>
-            <option>Other</option>
+            <option value="Protocol / crypto">Protocol / crypto</option>
+            <option value="Server daemon">Server daemon</option>
+            <option value="Data layer (Postgres / files provisioning)">Data layer (Postgres / files provisioning)</option>
+            <option value="Boot image / image-builder">Boot image / image-builder</option>
+            <option value="iOS app">iOS app</option>
+            <option value="Android app">Android app</option>
+            <option value="Webapp">Webapp</option>
+            <option value="Deck (cast surface)">Deck (cast surface)</option>
+            <option value="Control plane (flagshipserver.com)">Control plane (flagshipserver.com)</option>
+            <option value="Tunnel / public ingress">Tunnel / public ingress</option>
+            <option value="Other">Other</option>
           </select>
 
           <label for="summary">Summary <span class="req">*</span></label>
@@ -339,6 +339,13 @@
         </form>
 
         <div id="out" class="out" role="status" aria-live="polite"></div>
+        <!-- The form's own lines, here so scripts/i18n-web.mjs translates them; the script picks one. -->
+        <div id="report-messages" hidden>
+          <p data-msg="sending">Submitting…</p>
+          <p data-msg="ok">Thank you. Reference: <span data-arg></span>. We'll be in touch.</p>
+          <p data-msg="failed">Submission failed (HTTP <span data-arg></span>).</p>
+          <p data-msg="network">Network error. Please email security@flagshipserver.com directly.</p>
+        </div>
       </section>
     </main>
 
@@ -386,10 +393,16 @@
     <script type="module">
       const form = document.getElementById("report-form");
       const out = document.getElementById("out");
+      const msg = (key, arg) => {
+        const c = document.querySelector(`#report-messages [data-msg="${key}"]`).cloneNode(true);
+        const slot = c.querySelector("[data-arg]");
+        if (slot) slot.textContent = String(arg ?? "");
+        return c.textContent.replace(/\s+/g, " ").trim();
+      };
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         out.className = "out";
-        out.textContent = "Submitting…";
+        out.textContent = msg("sending");
         const data = Object.fromEntries(new FormData(form).entries());
         try {
           const r = await fetch("/api/security/report", {
@@ -400,15 +413,15 @@
           const body = await r.json();
           if (r.ok) {
             out.className = "out ok";
-            out.textContent = `Thank you. Reference: ${body.reportId}. We'll be in touch.`;
+            out.textContent = msg("ok", body.reportId);
             form.reset();
           } else {
             out.className = "out err";
-            out.textContent = body.error ?? `Submission failed (HTTP ${r.status}).`;
+            out.textContent = body.error ?? msg("failed", r.status);
           }
         } catch (err) {
           out.className = "out err";
-          out.textContent = "Network error. Please email security@flagshipserver.com directly.";
+          out.textContent = msg("network");
         }
       });
 

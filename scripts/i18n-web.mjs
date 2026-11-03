@@ -336,6 +336,17 @@ const L10N_NOTE = {
   "zh-Hans": "此为机器翻译，以英文原文为准。",
 };
 
+// The switcher's accessible name, in the page's language (machine draft; i18n/REVIEW.md).
+const LANGUAGE_LABEL = {
+  en: "Language",
+  es: "Idioma",
+  fr: "Langue",
+  de: "Sprache",
+  "pt-BR": "Idioma",
+  ja: "言語",
+  "zh-Hans": "语言",
+};
+
 function switcherScript() {
   const table = locales.locales.map((l) => ({ code: l.code, native: l.native, path: l.webPath ?? "", ga: l.status === "ga" }));
   const urls = [...translatedUrls];
@@ -347,6 +358,7 @@ function switcherScript() {
   var LOCALES = ${JSON.stringify(table)};
   var PAGES = ${JSON.stringify(urls)};
   var NOTE = ${JSON.stringify(L10N_NOTE)};
+  var LABEL = ${JSON.stringify(LANGUAGE_LABEL)};
   var here = document.documentElement.getAttribute("lang") || "en";
   var preview = /[?&]i18n-preview\b/.test(location.search) || (function () { try { return localStorage.getItem("fs-i18n-preview") === "1"; } catch (e) { return false; } })();
   if (/[?&]i18n-preview\b/.test(location.search)) { try { localStorage.setItem("fs-i18n-preview", "1"); } catch (e) {} }
@@ -360,7 +372,7 @@ function switcherScript() {
     wrap.className = "lang-switch";
     wrap.style.cssText = "display:inline-flex;align-items:center;gap:8px;font:inherit;color:var(--muted,#667);margin-left:auto";
     var sel = document.createElement("select");
-    sel.setAttribute("aria-label", "Language");
+    sel.setAttribute("aria-label", LABEL[here] || LABEL.en);
     sel.style.cssText = "font:inherit;color:inherit;background:transparent;border:1px solid var(--rule-strong,#8884);border-radius:4px;padding:4px 8px";
     LOCALES.forEach(function (l) {
       if (!l.ga && !preview && l.code !== here) return;

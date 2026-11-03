@@ -55,3 +55,20 @@ function matches(code: string, tag: string): boolean {
   }
   return true; // pt-PT is read fine by a pt-BR page, fr-CA by fr, es-MX by es
 }
+
+/**
+ * The built copy of a localised page for this request, for pages the Worker serves at a fixed URL
+ * (the open-in-app page at /join, /share …, and /studio): `/open/index.html` becomes
+ * `/fr/open/index.html` for a visitor whose browser (or `fs-lang` choice) picks French. Same rule as
+ * the first-visit redirect; English stays the root file. The response must carry
+ * `Vary: Accept-Language, Cookie`.
+ */
+export function localisedAssetPath(
+  path: string,
+  acceptLanguage: string | null,
+  cookieHeader: string | null,
+  live: readonly WebLocale[] = GA_WEB_LOCALES,
+): string {
+  const pick = pickWebLocale(acceptLanguage, cookieHeader, live);
+  return pick ? `/${pick.webPath}${path}` : path;
+}

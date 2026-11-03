@@ -94,7 +94,7 @@
       <h2>快速开始</h2>
       <p>三个步骤，大约十分钟。</p>
       <p><strong>1.</strong>安装手机应用，选一个用户名，批准生物识别。你的主密钥绝不会离开手机。</p>
-      <p><strong>2.</strong>在电脑上安装 <a href="/studio">Flagship Studio</a>。在手机应用中依次选择“添加服务器 → 与 Studio 配对”，并扫描 Studio 显示的二维码。Studio 收到已签名的配方，并为你写入启动 U 盘。插上并启动。服务器请求批准时，请确认其屏幕上的 6 位代码与应用中的一致。</p>
+      <p><strong>2.</strong>在电脑上安装 <a href="/zh-hans/studio">Flagship Studio</a>。在手机应用中依次选择“添加服务器 → 与 Studio 配对”，并扫描 Studio 显示的二维码。Studio 收到已签名的配方，并为你写入启动 U 盘。插上并启动。服务器请求批准时，请确认其屏幕上的 6 位代码与应用中的一致。</p>
       <p><strong>3.</strong>在手机上用 vibe coding 做出你的第一个应用。完成。</p><a class="next" href="#how-it-works">查看完整流程 →</a></section>
 
     <section class="doc-section" id="architecture">
@@ -106,7 +106,7 @@
       <h2>Flagship 的工作原理</h2>
       <p>从头到尾共五个阶段。每一步都由你的手机签名，即使是你第一次注册，我们也看不到你的内容。</p>
       <p><strong>1 · 配对你的手机。</strong>你安装 Flagship 应用，它会生成一个主密钥，并用存放在手机安全硬件中的密钥将其包裹（iPhone 上是 Secure Enclave，Android 上是硬件支持的 Keystore），通过 Face ID、Touch ID 或指纹解锁。主密钥绝不会离开手机。我们从中再派生出三个密钥：一个用于身份（你的用户名），一个用于备份授权（LUKS 解锁），一个用于工作密钥（每台服务器的秘密）。你选一个用户名，手机对注册请求签名，<code>flagshipserver.com</code> 记录用户名和公钥那一半。没有邮箱、没有密码、没有短信。</p>
-      <p><strong>2 · 生成并交付配方。</strong>你的手机通过 Studio 显示的二维码或短码，直接与 <a href="/studio">Flagship Studio</a> 配对。确认安全码一致后，手机会生成并发送一份小型已签名配方，其中写明你的服务器名称，并带有短暂、单次有效的过期时间。Studio 获取合适的基础操作系统并写入启动 U 盘：你无需自己挑选或下载系统镜像。</p>
+      <p><strong>2 · 生成并交付配方。</strong>你的手机通过 Studio 显示的二维码或短码，直接与 <a href="/zh-hans/studio">Flagship Studio</a> 配对。确认安全码一致后，手机会生成并发送一份小型已签名配方，其中写明你的服务器名称，并带有短暂、单次有效的过期时间。Studio 获取合适的基础操作系统并写入启动 U 盘：你无需自己挑选或下载系统镜像。</p>
       <p><strong>3 · 启动与安装。</strong>U 盘在你的硬件上启动一个经过加固的 Linux 基础系统。首次启动脚本在本地验证配方签名，然后在核实维护者的签名后，安装一个指定确切版本的 Flagship 发布包；不运行 git 检出或包管理器。它用 LUKS 格式化磁盘，生成每台主机独有的身份，申请真实的 Let's Encrypt 证书（DNS-01 通配符），向 <code>flagshipserver.com</code> 注册，然后进入稳态运行。它第一次请求批准时，你的手机会固定该服务器自己的密钥：服务器证明它是由你的配方构建的；如果有屏幕，它会显示一个 6 位代码，你的手机上也会显示同一个代码。随后你的手机会亮起：<em>“你的 Flagship 已上线。”</em></p>
       <p><strong>4 · 每次启动都需解锁。</strong>主机重启时，LUKS 加密的根分区不会自动打开。启动阶段会向 <code>flagshipserver.com</code> 轮询是否有已解封的解锁密钥。你的手机被推送唤醒后，要求生物识别，在本地解密密封数据块，并存入有效期 10 分钟的已解封密钥。主机取用后，该行在读取时即被删除，磁盘随之打开。没有你手机的被盗主机只是一块砖，连我们也帮不上忙，因为我们从未拥有过已解封的密钥。</p>
       <p><strong>5 · 上线。Vibe coding。分享。</strong>你在手机上用日常语言描述一个服务，由 LLM 来写（使用你自己的提供商密钥、Flagship Inference 的免费额度，或你下载到自己服务器上的模型，它不会向外发送任何内容）。守护进程构建容器，配置限定于该服务的 Postgres 数据库和文件夹，完成部署并注册子域名，一分钟内就能在 <code>app.you.flagship.services</code> 上线。分享只需轻点一下：签名邀请或用户搜索。服务永远看不到 Cookie；守护进程在检查成员资格之后注入身份请求头。</p>
@@ -124,7 +124,7 @@
       <div class="doc-sub" id="certificate">
         <h3>证书</h3>
         <p>证书是由你的<strong>手机</strong>签名的一个小型 JSON 文件。它写明你要创建的服务器，并证明请求来自你：只有手机能授权新的 Flagship 服务器，而手机从不离开你的口袋。</p>
-        <p>要获得证书，请在电脑上安装 <a href="/studio">Flagship Studio</a>。Studio 会显示一个二维码和一个短码；在手机应用的“添加服务器”中扫描或输入。确认安全码一致后，应用会为服务器配方签名并直接发送给 Studio。网页应用用户也可以改为下载已签名的 JSON 配方，并在 Studio 中打开。</p>
+        <p>要获得证书，请在电脑上安装 <a href="/zh-hans/studio">Flagship Studio</a>。Studio 会显示一个二维码和一个短码；在手机应用的“添加服务器”中扫描或输入。确认安全码一致后，应用会为服务器配方签名并直接发送给 Studio。网页应用用户也可以改为下载已签名的 JSON 配方，并在 Studio 中打开。</p>
         <div class="callout">
           <p style="margin:0;"><strong>它是一次性的，且时效很短。</strong>证书只在几个小时内有效，并且只授权一台服务器，因此遗留在磁盘上的文件无法被重放。需要时重新生成一个即可。</p>
         </div>
@@ -281,7 +281,7 @@
       <ul>
         <li><a href="/zh-hans/open-source">开源</a></li>
         <li><a href="/zh-hans/adapters">仓库适配器</a></li>
-        <li><a href="/status/">状态</a></li>
+        <li><a href="/zh-hans/status">状态</a></li>
         <li><a href="/zh-hans/docs">文档</a></li>
         <li><a href="/zh-hans/blog">博客</a></li>
         <li><a href="/zh-hans/help">帮助</a></li>

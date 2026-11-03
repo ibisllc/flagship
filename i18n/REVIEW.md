@@ -49,7 +49,7 @@ report and block, the Apple/Google device check). The legal pages (terms, privac
 **New 0.3 website pages (`i18n/web`, 2026-11-02, drafted by an agent, needs native review).** 80 segments of four pages
 added in 0.3 that had shipped English-only: `dibs.html` (the .com name-dibs window, 21), `security/runtime.html` and
 `security/iso-seed.html` (verify the Node runtime and the boot seed, 55 between them, their shared footer included) and
-the framing prose of `security/hall-of-fame.html` (4; the write-ups stay English, `lang="en"`). The dibs status
+the framing prose of `security/hall-of-fame.html` (4; the write-ups were translated afterwards, see "Every customer-facing page" below). The dibs status
 sentences now live in the page (`#dibs-messages`) and the script only fills in the date (`<1/>`, formatted in the page's
 language). Review first: the four dibs status lines (the date lands where `<1/>` is; check each reads with a long date),
 "There is no appeal process.", the "$20, once." line (currency format), the dibs-window word, which must match the apps'
@@ -70,3 +70,21 @@ could not be handed to the helper.", "The helper would not accept that disk.", "
 "aushängen"; check it reads as unmount, not eject). The Studios' version label "Beta" (`studio-mac`, `studio-linux`,
 `studio-windows`) reuses the iPhone app's translation. Android (`i18n/android`, keys `access_list_*`): the ten access-list
 line errors ("one host per line" …), copied from the iPhone app's reviewed wording.
+
+**Every customer-facing page (`i18n/web`, 2026-11-02, drafted by agents, needs native review).** Owner rule: everything a
+customer sees is translated, except server error sentences. 106 new segments in all six languages: the open-in-app page
+(`open/index.html`: the headline and line for each app link, `/join` … `/voici-sign-in`, the store buttons, "or continue
+with the web app"), the short-URL fallback (`disambiguate.html`), the Studio download page (`studio/index.html`), the
+status board (`status/index.html`, including the words its script shows: "operational", "degraded", "down",
+"Auto-refresh: on/off", the probe tooltip), the security report form's replies ("Submitting…", "Thank you. Reference:
+<1/>. We'll be in touch." …) and the four hall-of-fame write-ups (`security/hall-of-fame.html`). The Worker serves the
+open-in-app page and `/studio` at their own URL in the visitor's language. The switcher's accessible name ("Language")
+is in `scripts/i18n-web.mjs` `LANGUAGE_LABEL`. Review first: the hall-of-fame write-ups (security meaning must be
+exact): "blessing" (relay-hub blessing; drafted es "bendición", pt-BR "bênção", fr "bénédiction", de "Segen", ja "承認",
+zh-Hans "认可": keeping the English word may read better), "fails closed" (each language drafted a literal form), "trust
+lockdown" (de "Vertrauenssperre"), "squatted" names, "passphrase-gated wrapped-key fetch", and the "credit pending the
+reporter's preference" line (fr is long). On the open-in-app page, "Let a browser in with the Flagship app" (zh-Hans
+"让浏览器进入" may read awkwardly) and the quoted page name "Access control" (matches the webapp's own label in each
+language). On the Studio page, the menu path "Add server → Pair with Studio" is translated literally: it should match
+the app's real labels (the English itself predates the current "Add a server" wording). On the status board, "Upstream",
+"Heap used", "Passthrough" and the pill words; pt-BR and de keep "Status" as is.

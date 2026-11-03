@@ -133,6 +133,7 @@
   <script src="/theme.js"></script>
 </head>
 <body>
+  <button type="button" class="theme-btn theme-btn--floating" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
   <main class="open-card" role="main">
     <a href="/" class="open-wordmark" aria-label="Flagship — home">
       <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true">
@@ -157,6 +158,47 @@
       </span>
     </div>
 
+    <!-- Every sentence the page can show is here, so scripts/i18n-web.mjs translates it; the Worker
+         serves the copy in the visitor's language (route.ts) and the script below only picks one. -->
+    <div id="link-texts" hidden>
+      <div data-link="/join" data-web="1">
+        <p data-part="hl">Add this device in the Flagship app</p>
+        <p data-part="sub">This code pairs a device with a Flagship account. Get the app, then scan the code again.</p>
+      </div>
+      <div data-link="/share" data-web="1">
+        <p data-part="hl">A server was shared with you</p>
+        <p data-part="sub">Accept it in the Flagship app. Get the app, then open this link again.</p>
+      </div>
+      <div data-link="/transfer" data-web="1">
+        <p data-part="hl">A server is being handed to you</p>
+        <p data-part="sub">Take it over in the Flagship app. Get the app, then open this link again.</p>
+      </div>
+      <div data-link="/remote">
+        <p data-part="hl">Let a browser in with the Flagship app</p>
+        <p data-part="sub">A browser is asking to use your Flagship account. Approve it in the Flagship app. Get the app, then scan the code again.</p>
+      </div>
+      <div data-link="/voici-sign-in" data-web="1">
+        <p data-part="hl">Sign in to voi.ci with Flagship</p>
+        <p data-part="sub">A voi.ci page wants you to sign in so you can message it. Approve it in the Flagship app. Get the app, then come back to the voi.ci page after installing.</p>
+      </div>
+      <div data-link="/builder">
+        <p data-part="hl">Pair Flagship Studio with the app</p>
+        <p data-part="sub">Flagship Studio is waiting for your phone. Get the app, then scan the code in Studio again.</p>
+      </div>
+      <div data-link="/access" data-web="1">
+        <p data-part="hl">Sign in to this app with Flagship</p>
+        <p data-part="sub">A private app is asking who you are. Confirm it in the Flagship app. Get the app, then open this link again.</p>
+      </div>
+      <div data-link="/invite" data-web="1">
+        <p data-part="hl">You're invited to an app</p>
+        <p data-part="sub">Someone invited you to an app on their Flagship server. Accept it in the Flagship app. Get the app, then open the invite link again.</p>
+      </div>
+      <div data-link="/invite-accept">
+        <p data-part="hl">Someone accepted your invite</p>
+        <p data-part="sub">Let them in from the Flagship app. Get the app, then open this link again. In the web app, paste this link into the app's Access control page.</p>
+      </div>
+    </div>
+
     <p class="web-alt" id="web-alt" hidden>
       or <a id="web-link" href="https://webapp.flagshipserver.com/">continue with the web app</a>
     </p>
@@ -176,62 +218,18 @@
       else if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) platform = "ios";
       document.body.dataset.platform = platform;
 
-      // `web`: the webapp opens this same path itself (lib/deepLink.js), so
-      // the fallback link carries the whole link over, fragment included
+      // A link with data-web: the webapp opens this same path itself (lib/deepLink.js),
+      // so the fallback link carries the whole link over, fragment included
       // (a share link's secret rides there and never reaches a server).
-      const LINKS = {
-        "/join": {
-          hl: "Add this device in the Flagship app",
-          sub: "This code pairs a device with a Flagship account. Get the app, then scan the code again.",
-          web: true,
-        },
-        "/share": {
-          hl: "A server was shared with you",
-          sub: "Accept it in the Flagship app. Get the app, then open this link again.",
-          web: true,
-        },
-        "/transfer": {
-          hl: "A server is being handed to you",
-          sub: "Take it over in the Flagship app. Get the app, then open this link again.",
-          web: true,
-        },
-        "/remote": {
-          hl: "Let a browser in with the Flagship app",
-          sub: "A browser is asking to use your Flagship account. Approve it in the Flagship app. Get the app, then scan the code again.",
-          web: false,
-        },
-        "/voici-sign-in": {
-          hl: "Sign in to voi.ci with Flagship",
-          sub: "A voi.ci page wants you to sign in so you can message it. Approve it in the Flagship app. Get the app, then come back to the voi.ci page after installing.",
-          web: true,
-        },
-        "/builder": {
-          hl: "Pair Flagship Studio with the app",
-          sub: "Flagship Studio is waiting for your phone. Get the app, then scan the code in Studio again.",
-          web: false,
-        },
-        "/access": {
-          hl: "Sign in to this app with Flagship",
-          sub: "A private app is asking who you are. Confirm it in the Flagship app. Get the app, then open this link again.",
-          web: true,
-        },
-        "/invite": {
-          hl: "You're invited to an app",
-          sub: "Someone invited you to an app on their Flagship server. Accept it in the Flagship app. Get the app, then open the invite link again.",
-          web: true,
-        },
-        "/invite-accept": {
-          hl: "Someone accepted your invite",
-          sub: "Let them in from the Flagship app. Get the app, then open this link again. In the web app, paste this link into the app's Access control page.",
-          web: false,
-        },
-      };
       const path = location.pathname.replace(/\/+$/, "");
-      const link = Object.prototype.hasOwnProperty.call(LINKS, path) ? LINKS[path] : null;
+      let link = null;
+      document.querySelectorAll("#link-texts [data-link]").forEach((el) => {
+        if (el.getAttribute("data-link") === path) link = el;
+      });
       if (!link) return;
-      document.getElementById("hl").textContent = link.hl;
-      document.getElementById("sub").textContent = link.sub;
-      if (!link.web) return;
+      document.getElementById("hl").textContent = link.querySelector('[data-part="hl"]').textContent;
+      document.getElementById("sub").textContent = link.querySelector('[data-part="sub"]').textContent;
+      if (!link.hasAttribute("data-web")) return;
       const webappHost = "webapp." + location.host.replace(/^www\./, "");
       document.getElementById("web-link").href =
         "https://" + webappHost + path + location.search + location.hash;
