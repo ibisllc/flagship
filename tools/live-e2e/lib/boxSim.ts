@@ -569,14 +569,14 @@ export class RawVisitor {
 }
 
 /** One short visit: which simulated box answered (null when none did). */
-export async function visitSim(ip: string, sni: string, ms = 8_000): Promise<{ label: string | null; tls: boolean }> {
+export async function visitSim(ip: string, sni: string, ms = 8_000): Promise<{ label: string | null; tls: boolean; error?: string }> {
   let v: RawVisitor | null = null;
   try {
     v = await RawVisitor.open(ip, sni);
     const a = await v.firstAnswer(ms);
-    return { label: a?.label ?? null, tls: v.sawTls };
-  } catch {
-    return { label: null, tls: false };
+    return { label: a?.label ?? null, tls: v.sawTls, ...(a ? {} : { error: "no answer" }) };
+  } catch (e) {
+    return { label: null, tls: false, error: v ? `after connect: ${(e as Error).message}` : `connect: ${(e as Error).message}` };
   } finally {
     v?.end();
   }

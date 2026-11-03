@@ -441,11 +441,20 @@ export const relayMesh: Group = {
           let failed = 0;
           let visits = 0;
           let stop = false;
+          // Each failure's start relative to the hint and the move, and why: a gap in make-before-break clusters at the move.
+          const misses: Array<{ at: number; why: string }> = [];
+          let hintAt = 0;
+          let movedAt = 0;
+          const phase = (t: number) => (!hintAt || t < hintAt ? "before-hint" : !movedAt || t < movedAt ? "moving" : `+${Math.round((t - movedAt) / 100) / 10}s after the move`);
           const pump = async () => {
             while (!stop) {
+              const t = Date.now();
               const v = await visitSim(RC!.ip, s.fqdn, 6_000);
               visits++;
-              if (v.label !== "K") failed++;
+              if (v.label !== "K") {
+                failed++;
+                misses.push({ at: t, why: v.label ? `answered by ${v.label}` : (v.error ?? "no answer") });
+              }
             }
           };
           const pumps = Array.from({ length: 12 }, () => pump());
@@ -468,13 +477,15 @@ export const relayMesh: Group = {
             const why = reb ? `${RA.relayId} rebalance ${JSON.stringify(reb)}` : `set GYM_RELAY_STATS_SECRET to see ${RA.relayId}'s decision counts`;
             throw new Error(`no locality hint within 4 min after ${visits} visits (${failed} failed) through ${RC!.relayId} to ${s.fqdn}, the only box of the fresh account ${solo.username} (§10.2; ${why})`);
           }
+          hintAt = Date.now();
           assert((hint.hint as { toRelayId?: string }).toRelayId === RC!.relayId, `the locality hint names ${String((hint.hint as { toRelayId?: string }).toRelayId)}, not ${RC!.relayId}`);
           b = await follow(b, s, hint, []);
+          movedAt = Date.now();
           await sleep(MOVE_GRACE_MS + 5_000);
           stop = true;
           await Promise.all(pumps);
           assert(b.relayId === RC!.relayId, `K is on ${b.relayId}`);
-          assert(failed === 0, `${failed} of ${visits} visits through ${RC!.relayId} failed during the move`);
+          assert(failed === 0, `${failed} of ${visits} visits through ${RC!.relayId} failed: ${short(misses.map((m) => `${phase(m.at)} ${m.why}`), 900)}`);
           return `${visits} visits, none failed; K (fresh account ${solo.username}) moved ${RA.relayId}→${RC!.relayId}`;
         });
       }
