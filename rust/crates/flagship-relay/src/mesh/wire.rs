@@ -335,6 +335,8 @@ pub enum WireItem {
         epoch: u64,
         sig_hex: String,
         relay_id: String,
+        /// The box's v2 signature binding the announcement to `relay_id` (§7.6), when it sent one.
+        relay_signature: Option<String>,
     },
 }
 
@@ -367,6 +369,7 @@ pub fn item_from_json(v: &Value) -> Option<WireItem> {
                 epoch: n(a, "epoch")?,
                 sig_hex: s(v, "signature")?,
                 relay_id: s(v, "relayId")?,
+                relay_signature: s(v, "relaySignature"),
             })
         }
         _ => None,
@@ -390,8 +393,15 @@ pub fn item_to_json(item: &WireItem) -> Value {
             epoch,
             sig_hex,
             relay_id,
-        } => json!({"kind": "mailbox", "announce": {"pikPubHex": pik_pub_hex, "epoch": epoch},
-            "signature": sig_hex, "relayId": relay_id}),
+            relay_signature,
+        } => {
+            let mut v = json!({"kind": "mailbox", "announce": {"pikPubHex": pik_pub_hex, "epoch": epoch},
+                "signature": sig_hex, "relayId": relay_id});
+            if let (Some(rs), Some(o)) = (relay_signature, v.as_object_mut()) {
+                o.insert("relaySignature".into(), Value::String(rs.clone()));
+            }
+            v
+        }
     }
 }
 
@@ -454,6 +464,7 @@ pub fn mesh_auth_from_json(v: &Value) -> Option<MeshAuth> {
         peer: s(v, "peer")?,
         nonce: s(v, "nonce")?,
         at: n(v, "at")?,
+        kx: s(v, "kx").unwrap_or_default(),
         blessing,
         sig: s(v, "sig")?,
     })

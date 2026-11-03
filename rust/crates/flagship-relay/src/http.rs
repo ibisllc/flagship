@@ -44,6 +44,10 @@ pub struct HttpApp {
     phone_slots: Arc<Mutex<Slots>>,
     /// `/mesh` handshakes not yet authenticated, in all and per client address (§6.1).
     mesh_pending: Arc<Mutex<Slots>>,
+    /// The 16 more only a known peer address may hold when `mesh_pending` is full (§6.1).
+    mesh_reserved: Arc<Mutex<Slots>>,
+    /// Use `Fly-Client-IP` as the client address (only on Fly).
+    trust_fly_client_ip: bool,
 }
 
 /// Counts of something held per client address, released when its [`Slot`] drops.
@@ -90,11 +94,13 @@ pub fn take_slot(slots: &Arc<Mutex<Slots>>, key: &str, per_key: u64, total: u64)
     })
 }
 
-/// The client's address: `Fly-Client-IP` when Fly's proxy set it (TLS ends at Fly's edge), else the socket peer.
+/// The client's address: `Fly-Client-IP` when `trust_fly` (running on Fly, whose proxy sets it; TLS ends at Fly's
+/// edge), else the socket peer. Off Fly the header is anyone's to forge (relay-mesh.md §6.1).
 #[must_use]
-pub fn client_address(req: &Request<Incoming>, peer: Option<SocketAddr>) -> String {
+pub fn client_address<B>(req: &Request<B>, peer: Option<SocketAddr>, trust_fly: bool) -> String {
     req.headers()
         .get("fly-client-ip")
+        .filter(|_| trust_fly)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.trim().parse::<IpAddr>().ok())
         .or_else(|| peer.map(|p| p.ip()))
@@ -124,6 +130,7 @@ impl HttpApp {
         mailboxes: Option<Arc<MailboxRegistry>>,
         stats_secret: Option<String>,
         header_timeout: Duration,
+        trust_fly_client_ip: bool,
     ) -> Arc<Self> {
         Arc::new(Self {
             hub,
@@ -136,6 +143,8 @@ impl HttpApp {
             mail_in_flight: AtomicUsize::new(0),
             phone_slots: Arc::new(Mutex::new(Slots::default())),
             mesh_pending: Arc::new(Mutex::new(Slots::default())),
+            mesh_reserved: Arc::new(Mutex::new(Slots::default())),
+            trust_fly_client_ip,
         })
     }
 }
@@ -374,6 +383,29 @@ fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>, client: &str) ->
     r
 }
 
+/// A pending-handshake slot for `/mesh` (§6.1): the general pool, else the reserved one for a known peer address.
+fn mesh_slot(app: &HttpApp, mesh: &crate::mesh::Mesh, client: &str) -> Option<Slot> {
+    use flagship_crypto::relay_mesh as rm;
+    take_slot(
+        &app.mesh_pending,
+        client,
+        rm::MESH_HANDSHAKE_MAX_PENDING_PER_IP,
+        rm::MESH_HANDSHAKE_MAX_PENDING,
+    )
+    .or_else(|| {
+        mesh.known_peer_address(client)
+            .then(|| {
+                take_slot(
+                    &app.mesh_reserved,
+                    client,
+                    rm::MESH_HANDSHAKE_MAX_PENDING_PER_IP,
+                    rm::MESH_HANDSHAKE_RESERVED,
+                )
+            })
+            .flatten()
+    })
+}
+
 /// `/mesh`: a peer relay's bridge (relay-mesh.md §6); 404 with the mesh off.
 fn mesh_bridge(app: &Arc<HttpApp>, mut req: Request<Incoming>, client: &str) -> Resp {
     let Some(mesh) = app.hub.mesh.clone() else {
@@ -382,23 +414,19 @@ fn mesh_bridge(app: &Arc<HttpApp>, mut req: Request<Incoming>, client: &str) -> 
     let Some(accept) = upgrade_ok(&req) else {
         return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
     };
-    let Some(pending) = take_slot(
-        &app.mesh_pending,
-        client,
-        flagship_crypto::relay_mesh::MESH_HANDSHAKE_MAX_PENDING_PER_IP,
-        flagship_crypto::relay_mesh::MESH_HANDSHAKE_MAX_PENDING,
-    ) else {
+    let Some(pending) = mesh_slot(app, &mesh, client) else {
         return busy();
     };
     let ws_cfg = WebSocketConfig::default()
         .max_message_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64))
         .max_frame_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64));
     let on_upgrade = hyper::upgrade::on(&mut req);
+    let client = client.to_owned();
     tokio::spawn(async move {
         if let Ok(up) = on_upgrade.await {
             let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
                 .await;
-            mesh.accept_bridge(ws, pending).await;
+            mesh.accept_bridge(ws, pending, &client).await;
         }
     });
     let mut r = Response::new(Full::new(Bytes::new()));
@@ -493,11 +521,11 @@ async fn handle(
     Ok(match (method, path.as_str()) {
         (_, TUNNEL_PATH) => tunnel(&app, req),
         (_, crate::phone::PHONE_TUNNEL_PATH) => {
-            let client = client_address(&req, peer);
+            let client = client_address(&req, peer, app.trust_fly_client_ip);
             phone_tunnel(&app, req, &client)
         }
         (_, crate::mesh::bridge::MESH_PATH) => {
-            let client = client_address(&req, peer);
+            let client = client_address(&req, peer, app.trust_fly_client_ip);
             mesh_bridge(&app, req, &client)
         }
         (Method::GET, "/api/health") => health(&app),

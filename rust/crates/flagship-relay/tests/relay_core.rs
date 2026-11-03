@@ -967,6 +967,7 @@ mod mailboxes_through_the_hub {
                 pik_pub_hex: pik,
                 epoch: epoch as f64,
                 sig_hex: sig,
+                ..Default::default()
             },
             id,
         )
@@ -1218,6 +1219,7 @@ mod http_surface {
                 pik_pub_hex: pik,
                 epoch: epoch as f64,
                 sig_hex: sig,
+                ..Default::default()
             }])
             .unwrap(),
         );

@@ -294,7 +294,12 @@ const legacyAtt: BoxAttachment = { serverFqdn: name("cabin"), boxPub: boxCabin.p
 const withdrawBox: RelayWithdraw = { subjectKind: "box", subject: name("home"), relayId: "iad1", withdrawnIssuedAt: T0 - MIN, at: T0 };
 const NS = "aa".repeat(32);
 const NC = "bb".repeat(32);
-const bridge = { role: "client" as const, signerRelayId: "ams1", peerRelayId: "iad1", serverNonce: NS, clientNonce: NC, at: T0 };
+// Ephemeral X25519 secrets of the two bridge ends (test-only): the dialer ams1 and the acceptor iad1.
+const KX_CLIENT_SECRET = new Uint8Array(32).fill(0x51);
+const KX_SERVER_SECRET = new Uint8Array(32).fill(0x52);
+const KX_CLIENT = P.bridgeKx(KX_CLIENT_SECRET);
+const KX_SERVER = P.bridgeKx(KX_SERVER_SECRET);
+const bridge = { role: "client" as const, signerRelayId: "ams1", peerRelayId: "iad1", serverNonce: NS, clientNonce: NC, at: T0, kx: KX_CLIENT };
 const hint: MoveHint = { serverFqdn: name("home"), boxPub: boxHome.pub, fromRelayId: "iad1", toRelayId: "ams1", reason: "co-locate", issuedAt: T0 - MIN, notAfter: T0 + 9 * MIN };
 const move: AccountMove = { accountHash: P.accountHash("alice"), fromRelayId: "iad1", toRelayId: "ams1", issuedAt: T0 - MIN, notAfter: T0 + 9 * MIN };
 const grant: PhoneRouteGrant = { hostname: `alice.${APEX}`, phoneRoutePub: phone.pub, generation: 4, holderRelayId: "ams1", ledgerRelayId: "iad1", issuedAt: T0 - 10_000, notAfter: T0 + 50_000 };
@@ -560,6 +565,9 @@ const compare = [
   ["higher regGen wins", item("legacy", { ...homeAtt, regGen: 2, issuedAt: T0 - 2 * MIN }), item("box", homeAtt), 1],
   ["box beats legacy", item("box", homeAtt), item("legacy", { ...homeAtt, issuedAt: T0 }), 1],
   ["later issuedAt wins", item("box", { ...homeAtt, relayId: "ams1", issuedAt: T0 - MIN + 1 }), item("box", homeAtt), 1],
+  // A retiring tunnel's renewal (later issuedAt, older tunnel) never outranks the newer tunnel's first signature.
+  ["later attachedAt beats later issuedAt", item("box", { ...homeAtt, relayId: "ams1", attachedAt: T0 - 2 * MIN, issuedAt: T0 - 2 * MIN }), item("box", homeAtt), 1],
+  ["older tunnel loses despite a newer renewal", item("box", { ...homeAtt, issuedAt: T0 }), item("box", { ...homeAtt, relayId: "ams1", attachedAt: T0 - MIN, issuedAt: T0 - MIN }), -1],
   ["smaller relay id wins", item("box", { ...homeAtt, relayId: "ams1" }), item("box", homeAtt), 1],
   ["loses to larger regGen", item("box", homeAtt), item("box", { ...homeAtt, regGen: 2 }), -1],
   ["same", item("box", homeAtt), item("box", homeAtt), 0],
@@ -642,14 +650,15 @@ const authOf = (o: Partial<MeshAuth> & { signer?: Key; role?: "client" | "server
   const relayId = o.relayId ?? "ams1";
   const peer = o.peer ?? "iad1";
   const at0 = o.at ?? T0;
-  const signed = { role, signerRelayId: relayId, peerRelayId: peer, serverNonce: NS, clientNonce: NC, at: at0, ...o.signed };
+  const kx = o.kx ?? (role === "client" ? KX_CLIENT : KX_SERVER);
+  const signed = { role, signerRelayId: relayId, peerRelayId: peer, serverNonce: NS, clientNonce: NC, at: at0, kx, ...o.signed };
   let sig = "00".repeat(64);
   try {
     sig = sigBy(o.signer ?? relayKeys[relayId] ?? ams1, "relay-bridge-auth", signed);
   } catch {
     /* malformed on purpose */
   }
-  return { type: "mesh-auth", v: 1, relayId, peer, nonce: role === "client" ? NC : NS, at: at0, blessing: o.blessing === undefined ? (B[relayId] ?? null) : o.blessing, sig };
+  return { type: "mesh-auth", v: 1, relayId, peer, nonce: role === "client" ? NC : NS, at: at0, kx, blessing: o.blessing === undefined ? (B[relayId] ?? null) : o.blessing, sig };
 };
 const bridgeCases = [
   ["ok", authOf({}), "client", "iad1", NS, null, "ok"],
@@ -669,6 +678,9 @@ const bridgeCases = [
   ["replayed against another session", authOf({}), "client", "iad1", "cc".repeat(32), null, "bad-signature"],
   ["role swapped", authOf({ signed: { role: "server", serverNonce: NS, clientNonce: NC } }), "client", "iad1", NS, null, "bad-signature"],
   ["proof made for another peer", authOf({ signed: { peerRelayId: "ent1" } }), "client", "iad1", NS, null, "bad-signature"],
+  // The ephemeral key is signed: a man in the middle swapping it breaks the signature.
+  ["kx swapped after signing", { ...authOf({}), kx: KX_SERVER }, "client", "iad1", NS, null, "bad-signature"],
+  ["kx malformed", authOf({ kx: "zz".repeat(32) }), "client", "iad1", NS, null, "bad-signature"],
 ].map(([n, a, role, self, selfNonce, held, w]) => ({
   name: n,
   auth: a,
@@ -682,6 +694,45 @@ const bridgeCases = [
     return r.ok ? { ok: true, blessingRelayId: r.blessing.relayId } : r;
   })(),
 }));
+
+// bridge MAC keys and sealed control messages (§6.2, §6.3): each side derives the same keys from its secret and the
+// peer's signed kx.
+const macKeysClient = P.bridgeMacKeys({ secret: KX_CLIENT_SECRET, peerKx: KX_SERVER, serverNonce: NS, clientNonce: NC, clientRelayId: "ams1", serverRelayId: "iad1" })!;
+const macKeysServer = P.bridgeMacKeys({ secret: KX_SERVER_SECRET, peerKx: KX_CLIENT, serverNonce: NS, clientNonce: NC, clientRelayId: "ams1", serverRelayId: "iad1" })!;
+if (hexOf(macKeysClient.c2s) !== hexOf(macKeysServer.c2s) || hexOf(macKeysClient.s2c) !== hexOf(macKeysServer.s2c)) throw new Error("bridge MAC keys differ");
+const syncJson = JSON.stringify({ type: "sync-done" });
+const bridgeMac = {
+  clientSecret: hexOf(KX_CLIENT_SECRET),
+  serverSecret: hexOf(KX_SERVER_SECRET),
+  clientKx: KX_CLIENT,
+  serverKx: KX_SERVER,
+  serverNonce: NS,
+  clientNonce: NC,
+  clientRelayId: "ams1",
+  serverRelayId: "iad1",
+  c2s: hexOf(macKeysClient.c2s),
+  s2c: hexOf(macKeysClient.s2c),
+  sealed: [
+    { dir: "c2s", seq: 0, json: syncJson, text: P.sealBridgeText(macKeysClient.c2s, 0, syncJson) },
+    { dir: "c2s", seq: 1, json: syncJson, text: P.sealBridgeText(macKeysClient.c2s, 1, syncJson) },
+    { dir: "s2c", seq: 0, json: syncJson, text: P.sealBridgeText(macKeysClient.s2c, 0, syncJson) },
+  ],
+  // Low-order point: the shared secret is all zeros, so no keys.
+  zeroPeerKx: "00".repeat(32),
+  zeroPeerKeys: P.bridgeMacKeys({ secret: KX_CLIENT_SECRET, peerKx: "00".repeat(32), serverNonce: NS, clientNonce: NC, clientRelayId: "ams1", serverRelayId: "iad1" }),
+};
+if (P.openBridgeText(macKeysServer.c2s, 0, bridgeMac.sealed[0]!.text) !== syncJson || P.openBridgeText(macKeysServer.c2s, 1, bridgeMac.sealed[0]!.text) !== null) throw new Error("bridge MAC does not open");
+
+// relay-bound mailbox announcements (§7.6): the box's PIK signs pik|epoch|relayId.
+const mailboxEpoch = P.pbMailboxEpoch(T0);
+const mailboxForRelay = {
+  pikPubHex: boxHome.pub,
+  epoch: mailboxEpoch,
+  relayId: "iad1",
+  canonical: td.decode(P.canonicalPbMailboxAnnounceForRelay(boxHome.pub, mailboxEpoch, "iad1")),
+  relaySigHex: hexOf(boxHome.sign(P.canonicalPbMailboxAnnounceForRelay(boxHome.pub, mailboxEpoch, "iad1"))),
+  mailboxId: P.pbMailboxId(boxHome.pub, mailboxEpoch),
+};
 
 // move hints (box side)
 const rate0: MoveHintRateState = P.emptyMoveHintRateState();
@@ -926,6 +977,8 @@ const doc = {
     withdraw: withdrawCases,
     withdrawCovers: covers,
     bridgeAuth: bridgeCases,
+    bridgeMac,
+    mailboxForRelay,
     moveHint: moveHintCases,
     recordMoveHint: recordHint,
     recordMoveTargetFailed: recordFailed,

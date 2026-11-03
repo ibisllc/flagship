@@ -258,7 +258,7 @@ impl Tunnel {
         sni: &str,
         initial: Vec<u8>,
     ) -> Result<StreamHandle, OpenError> {
-        self.open_stream_kind(sni, "tls", None, initial)
+        self.open_stream_kind(sni, "tls", None, None, initial)
     }
 
     /// [`Self::open_stream`]; on a bridge the OPEN is `{sni, kind, hop:1}` and ids keep this side's parity.
@@ -267,6 +267,7 @@ impl Tunnel {
         sni: &str,
         kind: &str,
         length: Option<u64>,
+        client: Option<&str>,
         initial: Vec<u8>,
     ) -> Result<StreamHandle, OpenError> {
         if self.is_closed() {
@@ -325,7 +326,7 @@ impl Tunnel {
             );
             s.data.open(id, credit.then(SendWindow::default));
             let open = if s.bridge.is_some() {
-                payload::bridge_open_frame(id, sni, kind, length)
+                payload::bridge_open_frame(id, sni, kind, length, client)
             } else {
                 payload::open_frame(id, sni)
             };

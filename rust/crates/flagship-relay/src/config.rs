@@ -47,6 +47,9 @@ pub struct Settings {
     pub phone_route: bool,
     /// `FLAGSHIP_MESH=on` (relay-mesh.md §15.7): the relay mesh. Off (the default) is exactly today's relay.
     pub mesh: Option<MeshSettings>,
+    /// `Fly-Client-IP` is the client address only on Fly (relay-mesh.md §6.1): `FLAGSHIP_TRUST_FLY_CLIENT_IP` `1`/`0`
+    /// when set, else whether `FLY_APP_NAME` or `FLY_ALLOC_ID` is set.
+    pub trust_fly_client_ip: bool,
 }
 
 /// The mesh's environment (relay-mesh.md §15.7). `Debug` leaves the key seed out.
@@ -68,6 +71,8 @@ pub struct MeshSettings {
     pub maintainer_pin: String,
     /// `FLAGSHIP_MESH_PEER_URLS`: `relayId=url,…`, dial a peer there instead of its direct name.
     pub peer_urls: HashMap<String, String>,
+    /// `FLAGSHIP_MESH_PEER_ADDRS`: comma-separated peer addresses always admitted to the reserved handshake pool.
+    pub peer_addrs: Vec<String>,
     /// Test-only shortenings: `FLAGSHIP_MESH_FEED_POLL_MS`, `_REBALANCE_MS`, `_MIN_MOVE_MS`, `_ATTACH_TTL_MS`.
     pub feed_poll: Option<Duration>,
     /// `FLAGSHIP_MESH_CAPACITY`: this relay's `load.capacity` (default 10,000).
@@ -75,6 +80,8 @@ pub struct MeshSettings {
     pub rebalance: Option<Duration>,
     pub min_move: Option<Duration>,
     pub attach_ttl: Option<Duration>,
+    /// `FLAGSHIP_MESH_CLIENT_KEY_BY_PORT=1` (test-only, conformance on loopback): key a visitor by `ip:port`, not ip.
+    pub client_key_by_port: bool,
 }
 
 impl std::fmt::Debug for MeshSettings {
@@ -166,11 +173,30 @@ fn mesh_settings(
         maintainer_pin: nonempty(vars, "FLAGSHIP_RELAY_MAINTAINER_PIN")
             .unwrap_or_else(|| crate::mesh::ca::MAINTAINER_PINNED_MANDATE_HASH.to_owned()),
         peer_urls,
+        peer_addrs: {
+            let mut out = Vec::new();
+            for a in nonempty(vars, "FLAGSHIP_MESH_PEER_ADDRS")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|a| !a.is_empty())
+            {
+                let ip: std::net::IpAddr = a.parse().map_err(|_| {
+                    format!("FLAGSHIP_MESH_PEER_ADDRS entry {a:?} is not an IP address")
+                })?;
+                out.push(ip.to_string());
+            }
+            out
+        },
         feed_poll: millis(vars, "FLAGSHIP_MESH_FEED_POLL_MS").filter(|d| !d.is_zero()),
         capacity: nonempty(vars, "FLAGSHIP_MESH_CAPACITY").and_then(|c| c.parse().ok()),
         rebalance: millis(vars, "FLAGSHIP_MESH_REBALANCE_MS").filter(|d| !d.is_zero()),
         min_move: millis(vars, "FLAGSHIP_MESH_MIN_MOVE_MS"),
         attach_ttl: millis(vars, "FLAGSHIP_MESH_ATTACH_TTL_MS").filter(|d| !d.is_zero()),
+        client_key_by_port: vars
+            .get("FLAGSHIP_MESH_CLIENT_KEY_BY_PORT")
+            .map(|v| v.trim())
+            == Some("1"),
     }))
 }
 
@@ -249,6 +275,14 @@ impl Settings {
                 .filter(|d| !d.is_zero())
                 .unwrap_or(Duration::from_secs(5)),
             phone_route: vars.get("FLAGSHIP_PHONE_ROUTE").map(String::as_str) != Some("off"),
+            trust_fly_client_ip: match vars.get("FLAGSHIP_TRUST_FLY_CLIENT_IP").map(|v| v.trim()) {
+                Some("1") => true,
+                Some("0") => false,
+                _ => {
+                    nonempty(vars, "FLY_APP_NAME").is_some()
+                        || nonempty(vars, "FLY_ALLOC_ID").is_some()
+                }
+            },
             mesh: mesh_settings(
                 vars,
                 &nonempty(vars, "FLAGSHIP_COM_BASE_URL")

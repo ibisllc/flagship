@@ -116,20 +116,28 @@
     "LEGACY_ATTACH_WAIT_MS": 10000,
     "LEGACY_RENEW_MS": 60000,
     "LEGACY_TTL_MS": 180000,
+    "MESH_ACCOUNT_MOVES_MAX": 200000,
     "MESH_ANNOUNCE_BATCH_MAX": 500,
     "MESH_ANNOUNCE_DELAY_MS": 1000,
     "MESH_BACKOFF_MAX_MS": 60000,
     "MESH_BACKOFF_MIN_MS": 1000,
+    "MESH_BRIDGE_STABLE_MS": 30000,
     "MESH_CLOCK_SKEW_MS": 60000,
     "MESH_CONTROL_MAX_BYTES": 1048576,
     "MESH_DIAL_TIMEOUT_MS": 5000,
+    "MESH_FIRST_DATA_WAIT_MS": 10000,
+    "MESH_HANDSHAKE_FIRST_MS": 2000,
     "MESH_HANDSHAKE_MAX_PENDING": 64,
     "MESH_HANDSHAKE_MAX_PENDING_PER_IP": 4,
+    "MESH_HANDSHAKE_RESERVED": 16,
     "MESH_HANDSHAKE_STEP_MS": 5000,
+    "MESH_KNOWN_ADDRESSES_MAX": 256,
+    "MESH_KNOWN_ADDRESS_TTL_MS": 86400000,
     "MESH_LOAD_FRESH_MS": 60000,
     "MESH_LOAD_INTERVAL_MS": 30000,
     "MESH_LOG_PUSH_MAX": 256,
     "MESH_LOG_SINCE_MAX": 1024,
+    "MESH_NEG_CACHE_EXCLUDE_MS": 2000,
     "MESH_NEG_CACHE_MAX": 50000,
     "MESH_NEG_CACHE_MS": 10000,
     "MESH_PEER_CUT_MS": 600000,
@@ -147,6 +155,8 @@
     "MESH_STORE_MAX_PER_RELAY": 100000,
     "MESH_STORE_MAX_PHONE_ITEMS": 20000,
     "MESH_STREAM_INITIAL_WINDOW": 262144,
+    "MESH_TOMBSTONES_PER_RELAY_MAX": 100000,
+    "MESH_TOMBSTONE_KEEP_MS": 3600000,
     "MOVE_COLOCATE_MAX_PER_DAY": 6,
     "MOVE_COLOCATE_MIN_MS": 600000,
     "MOVE_DIAL_TIMEOUT_MS": 10000,
@@ -160,6 +170,8 @@
     "PHONE_LEDGER_TOP_K": 3,
     "PHONE_ROUTE_GRANT_TTL_MS": 60000,
     "REBALANCE_BUCKET_MS": 60000,
+    "REBALANCE_CLIENTS_PER_BUCKET_MAX": 1024,
+    "REBALANCE_CLIENT_BYTES_CAP": 8388608,
     "REBALANCE_INTERVAL_MS": 3600000,
     "REBALANCE_JITTER_MS": 600000,
     "REBALANCE_MAX_LOAD_TENTHS": 8,
@@ -332,11 +344,12 @@
         "peerRelayId": "iad1",
         "serverNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "clientNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "at": 1800000000000
+        "at": 1800000000000,
+        "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34"
       },
-      "canonical": "flagship/relay-bridge-auth/v1|client|ams1|iad1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|1800000000000",
+      "canonical": "flagship/relay-bridge-auth/v2|client|ams1|iad1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|1800000000000|ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
       "signer": "ams1",
-      "signature": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+      "signature": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
     },
     {
       "kind": "relay-bridge-auth",
@@ -346,11 +359,12 @@
         "peerRelayId": "ams1",
         "serverNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "clientNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "at": 1800000000000
+        "at": 1800000000000,
+        "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34"
       },
-      "canonical": "flagship/relay-bridge-auth/v1|server|iad1|ams1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|1800000000000",
+      "canonical": "flagship/relay-bridge-auth/v2|server|iad1|ams1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|1800000000000|ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
       "signer": "iad1",
-      "signature": "0c49d433b80b5bc9c995a65ab459fe2e5a969d1ac4685f7ed373b5153f62fef2d8436004278c03dd5ba1722318f6604fd9b33f7a8a50291b20b303c50ab1f20c"
+      "signature": "665a8104eeaa5479b922989e337f48c71f59936ad477025cb940a1effce03d95d4308e18f00f477d7cfce9d8e4e48b44e908ebc3bb83247438d542098d6fa302"
     },
     {
       "kind": "relay-move-hint",
@@ -1221,7 +1235,8 @@
         "peerRelayId": "iad1",
         "serverNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "clientNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "at": 1800000000000
+        "at": 1800000000000,
+        "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34"
       }
     },
     {
@@ -1233,7 +1248,8 @@
         "peerRelayId": "ams1",
         "serverNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "clientNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "at": 1800000000000
+        "at": 1800000000000,
+        "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34"
       }
     },
     {
@@ -1245,7 +1261,8 @@
         "peerRelayId": "iad1",
         "serverNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "clientNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "at": 1800000000000
+        "at": 1800000000000,
+        "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34"
       }
     },
     {
@@ -6034,6 +6051,66 @@
         "expected": 1
       },
       {
+        "name": "later attachedAt beats later issuedAt",
+        "a": {
+          "kind": "box",
+          "attachment": {
+            "serverFqdn": "home.alice.flagship.services",
+            "boxPub": "d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da",
+            "regGen": 1,
+            "relayId": "ams1",
+            "attachedAt": 1799999880000,
+            "issuedAt": 1799999880000,
+            "notAfter": 1800001740000
+          },
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "b": {
+          "kind": "box",
+          "attachment": {
+            "serverFqdn": "home.alice.flagship.services",
+            "boxPub": "d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da",
+            "regGen": 1,
+            "relayId": "iad1",
+            "attachedAt": 1799999700000,
+            "issuedAt": 1799999940000,
+            "notAfter": 1800001740000
+          },
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected": 1
+      },
+      {
+        "name": "older tunnel loses despite a newer renewal",
+        "a": {
+          "kind": "box",
+          "attachment": {
+            "serverFqdn": "home.alice.flagship.services",
+            "boxPub": "d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da",
+            "regGen": 1,
+            "relayId": "iad1",
+            "attachedAt": 1799999700000,
+            "issuedAt": 1800000000000,
+            "notAfter": 1800001740000
+          },
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "b": {
+          "kind": "box",
+          "attachment": {
+            "serverFqdn": "home.alice.flagship.services",
+            "boxPub": "d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da",
+            "regGen": 1,
+            "relayId": "ams1",
+            "attachedAt": 1799999940000,
+            "issuedAt": 1799999940000,
+            "notAfter": 1800001740000
+          },
+          "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected": -1
+      },
+      {
         "name": "smaller relay id wins",
         "a": {
           "kind": "box",
@@ -6558,6 +6635,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6577,7 +6655,7 @@
               }
             ]
           },
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6598,6 +6676,7 @@
           "peer": "ams1",
           "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "at": 1800000000000,
+          "kx": "f68b05ba03f7185e1ba88878682f8dd0b15158f6050889c9481d79c2d7d2fa07",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6617,7 +6696,7 @@
               }
             ]
           },
-          "sig": "0c49d433b80b5bc9c995a65ab459fe2e5a969d1ac4685f7ed373b5153f62fef2d8436004278c03dd5ba1722318f6604fd9b33f7a8a50291b20b303c50ab1f20c"
+          "sig": "edf24a6005712eddf40d03ac0a1a3e47539bc42a74e7e8c3b8f93ac37bbec6215a4065b7fb327d716100cbc2b8531c5c725519c997d08023fd8c3c407fa19507"
         },
         "role": "server",
         "selfRelayId": "ams1",
@@ -6638,8 +6717,9 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": null,
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6678,8 +6758,9 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": null,
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6700,8 +6781,9 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": null,
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6740,6 +6822,7 @@
           "peer": "ent1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6759,7 +6842,7 @@
               }
             ]
           },
-          "sig": "ae036c41961b7b0f4e8ce6bbb32d95b8dc11cd8b013ba9c4cecc47fb5c77a092ce968d3beef01e322f067270a0b2e9eb4e0c07508759430124cc8a4416d4330a"
+          "sig": "150b7b0dd9dd0955f4a0e1dcc327f56d01660f016fdc713890532187482d7453fad4b7c6dd125c5c3defcb7bbce373dbbd2b18fa37304273df19890f7c73de09"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6780,6 +6863,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6820,6 +6904,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1799999939000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6839,7 +6924,7 @@
               }
             ]
           },
-          "sig": "21546b8574f5ff78c1bec2463cc042723952c8b462e902b8b49ce07f7e23389748044f2247875155372ac3c250b5f500fb0f9625c9c5fc2fb138d9e678d3f409"
+          "sig": "048222352ab2840da4a27efe4fd92938be5e28d529448ad7190bd5fef516914d717674c583d664613b1d94a284d6fbbed1717eda0ac8489f235f08594edcde06"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6860,6 +6945,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6879,7 +6965,7 @@
               }
             ]
           },
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6900,6 +6986,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6919,7 +7006,7 @@
               }
             ]
           },
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6940,6 +7027,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6959,7 +7047,7 @@
               }
             ]
           },
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -6980,6 +7068,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -6999,7 +7088,7 @@
               }
             ]
           },
-          "sig": "380d9d4f0ec92b61d43f2fab910bdfb5c8799f4140b55d8d16aa1386ca8421fd94311f007775e1f9992ae60fb764d131c5344893de2d21fce03d34b6f7f97208"
+          "sig": "9cf471a7d8969b09d27cd7bd46a699f5e8874508c81f7878326bebc2654d7e68ae89ecf79e0e1457ffcb5ecdc415ba35e1c064eb0f89e88c96ab3c30aefaa000"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -7020,6 +7109,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -7039,7 +7129,7 @@
               }
             ]
           },
-          "sig": "3bb0f4e8e88060a9ec372e14f8e8a1865b6fd035607ed451d107ac0dfa36b28935a2b18662f16a0341538d394ccff1f9c1154b6b1c7e5f878d997169c8c32405"
+          "sig": "f5ff2be684bfaf7ab0d2251a0fd6d61ba7b6c89df44fcdf3cc0e459ba9e14a81d3435fb6fe5b90b49be3772ba9608e84a99fcdb09703136947a71955fa0e200e"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -7060,6 +7150,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -7079,7 +7170,7 @@
               }
             ]
           },
-          "sig": "9e748e74b57f1166d44d9a05fb83a54f9d63c701d576ad39688129e912384da98844285dd73d3fa404f5b0297a161d9afda356819e74ad5421d29f3d31de0806"
+          "sig": "dc41832d520f36b79128feb5a1511927b3d3d5e09e7ef5c3a129f3fad680d562d09c6fd2a7cf53b59a4fffe2f864ac948832cf3005db8e130e3322aec89f5102"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -7100,6 +7191,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -7119,7 +7211,7 @@
               }
             ]
           },
-          "sig": "e7d2c1759c9910eb4d0629f9591b86bdd3f4c921c1961e6bcc84ab6ffe0fe4c2c3cc4545e7c5b4a9f4da8d210db1db172c87bdf7b4bd75d98ca734f462074b03"
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -7140,6 +7232,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -7159,7 +7252,7 @@
               }
             ]
           },
-          "sig": "b8946f6b48e6c1082b9ccefef69431ab2f5bda5d4503dc8b0167d14ecc215544cbdf0e8f942badba26841454e653f4715629868295824cadea04c83e9ac08f0b"
+          "sig": "f55b4147b8998580d210af755896e25059c79c62ccc01049f4045cba613debd2d4be84a2f47c056f3f0d528a842566ee727a0a500b3fcd79e71b7346058eb109"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -7180,6 +7273,7 @@
           "peer": "iad1",
           "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "at": 1800000000000,
+          "kx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
           "blessing": {
             "kind": "RelayBlessing",
             "version": 1,
@@ -7199,7 +7293,89 @@
               }
             ]
           },
-          "sig": "ae036c41961b7b0f4e8ce6bbb32d95b8dc11cd8b013ba9c4cecc47fb5c77a092ce968d3beef01e322f067270a0b2e9eb4e0c07508759430124cc8a4416d4330a"
+          "sig": "150b7b0dd9dd0955f4a0e1dcc327f56d01660f016fdc713890532187482d7453fad4b7c6dd125c5c3defcb7bbce373dbbd2b18fa37304273df19890f7c73de09"
+        },
+        "role": "client",
+        "selfRelayId": "iad1",
+        "selfNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "heldBlessing": null,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "bad-signature"
+        }
+      },
+      {
+        "name": "kx swapped after signing",
+        "auth": {
+          "type": "mesh-auth",
+          "v": 1,
+          "relayId": "ams1",
+          "peer": "iad1",
+          "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "at": 1800000000000,
+          "kx": "f68b05ba03f7185e1ba88878682f8dd0b15158f6050889c9481d79c2d7d2fa07",
+          "blessing": {
+            "kind": "RelayBlessing",
+            "version": 1,
+            "relayId": "ams1",
+            "relayKey": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+            "servicesApex": "flagship.services",
+            "tunnelHost": "ams1.tunnel.flagship.services",
+            "relayKind": "full",
+            "nonce": "db5fd79b8452baad2e9612066cebf03a",
+            "issuedAt": 1799996400000,
+            "expiresAt": 1800090000000,
+            "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+            "signatures": [
+              {
+                "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+                "sig": "b4d477bb56aa9765e100a49186ebe6eba2cf159bad57a806061b04a726cc3448e83f0c60ed24d3581295f4d6773470907a8be065c031d40b85147e5f309e2707"
+              }
+            ]
+          },
+          "sig": "0784a1bd7b373ed0a46385d0f0a5d1f9a4b2ba0e6a9d9ad93b8360669c247eccbf71283a5b8296288ac8ea5747452f1b1d7ae075e5cd3cb14e256fc1d5b16107"
+        },
+        "role": "client",
+        "selfRelayId": "iad1",
+        "selfNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "heldBlessing": null,
+        "now": 1800000000000,
+        "expected": {
+          "ok": false,
+          "reason": "bad-signature"
+        }
+      },
+      {
+        "name": "kx malformed",
+        "auth": {
+          "type": "mesh-auth",
+          "v": 1,
+          "relayId": "ams1",
+          "peer": "iad1",
+          "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "at": 1800000000000,
+          "kx": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+          "blessing": {
+            "kind": "RelayBlessing",
+            "version": 1,
+            "relayId": "ams1",
+            "relayKey": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+            "servicesApex": "flagship.services",
+            "tunnelHost": "ams1.tunnel.flagship.services",
+            "relayKind": "full",
+            "nonce": "db5fd79b8452baad2e9612066cebf03a",
+            "issuedAt": 1799996400000,
+            "expiresAt": 1800090000000,
+            "signedBy": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+            "signatures": [
+              {
+                "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+                "sig": "b4d477bb56aa9765e100a49186ebe6eba2cf159bad57a806061b04a726cc3448e83f0c60ed24d3581295f4d6773470907a8be065c031d40b85147e5f309e2707"
+              }
+            ]
+          },
+          "sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         },
         "role": "client",
         "selfRelayId": "iad1",
@@ -7212,6 +7388,48 @@
         }
       }
     ],
+    "bridgeMac": {
+      "clientSecret": "5151515151515151515151515151515151515151515151515151515151515151",
+      "serverSecret": "5252525252525252525252525252525252525252525252525252525252525252",
+      "clientKx": "ad908a8a708aca07588cda7c4ed3e44d4966a80a9abb2f1e4bbac53c67414e34",
+      "serverKx": "f68b05ba03f7185e1ba88878682f8dd0b15158f6050889c9481d79c2d7d2fa07",
+      "serverNonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "clientNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "clientRelayId": "ams1",
+      "serverRelayId": "iad1",
+      "c2s": "54a8121d6f38802a94198fd67b51a3fb33f2b508a8f5430e1863cf04298903f8",
+      "s2c": "418a432b74e6323935c13863016ea1e8ce60d87fe6d7afa959e32b7af50befff",
+      "sealed": [
+        {
+          "dir": "c2s",
+          "seq": 0,
+          "json": "{\"type\":\"sync-done\"}",
+          "text": "3cc87c2909a795765189f72139fe8414d9fb7c51bbc629b1f12042135836e565{\"type\":\"sync-done\"}"
+        },
+        {
+          "dir": "c2s",
+          "seq": 1,
+          "json": "{\"type\":\"sync-done\"}",
+          "text": "fa14e36311215d3b0ee61aa7c0f68daeb1590f9425e5754b372df3e2b40bd186{\"type\":\"sync-done\"}"
+        },
+        {
+          "dir": "s2c",
+          "seq": 0,
+          "json": "{\"type\":\"sync-done\"}",
+          "text": "22218c1a619e63d4320e5460f20f4ca4baf676af68d2fb92b98f0632d4e3b6c5{\"type\":\"sync-done\"}"
+        }
+      ],
+      "zeroPeerKx": "0000000000000000000000000000000000000000000000000000000000000000",
+      "zeroPeerKeys": null
+    },
+    "mailboxForRelay": {
+      "pikPubHex": "d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da",
+      "epoch": 2976,
+      "relayId": "iad1",
+      "canonical": "flagship/pb-mailbox-announce/v2|d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da|2976|iad1",
+      "relaySigHex": "1d2ad2a29d77bf63a4552506ba69c2dfd8227fb53c6731a972846d42b7fc13a0d2bd1ade00584fc60830b88b6e917abac4cce054fc4140f35e6e3504de129105",
+      "mailboxId": "ef633b9262c7a259a17a00e115013c02"
+    },
     "moveHint": [
       {
         "name": "co-locate ok",

@@ -448,8 +448,11 @@ that `boxPub` and `serverFqdn` are this tunnel's and `relayId` is itself.
 ### 5.2 Precedence (per serverFqdn)
 
 Among valid attachments for one name, the winner is decided in this order: higher `regGen`; box-signed beats legacy;
-later `issuedAt`; smaller `relayId`. Newest wins, so a box that moved supersedes its old relay at its first signature on
-the new one. A relay routes a box from its own registry only while its own attachment for that box is the winner; once
+later `attachedAt`; later `issuedAt`; smaller `relayId`. The newest **tunnel** wins, so a box that moved supersedes its
+old relay at its first signature on the new one, and a renewal the old tunnel signs during its retire grace (later
+`issuedAt`, older `attachedAt`) can never take the name back (review 2026-11-03: the gym's intermittent rebalancing
+drops). A box whose clock stepped back between two tunnels can make the older one win until it is withdrawn or
+expires; the old relay withdraws on close, so this lasts at most the 30 s grace in practice. A relay routes a box from its own registry only while its own attachment for that box is the winner; once
 superseded it forwards like any entry relay, even while the old tunnel finishes its streams.
 
 ### 5.3 Legacy attachment (old boxes)
@@ -473,6 +476,13 @@ flagship/relay-withdraw/v1|<subjectKind>|<subject>|<relayId>|<withdrawnIssuedAt>
 attachment it withdraws; it removes that attachment and any older one from that relay. Sent when a tunnel closes or is
 superseded. A withdrawal by any other relay is ignored. Attachments without a withdrawal simply expire at `notAfter`.
 
+A receiver keeps a **tombstone** per `(subjectKind, subject, relayId)`: the highest `withdrawnIssuedAt`, kept 60 min
+(`MESH_TOMBSTONE_KEEP_MS`, longer than any TTL). An item of that relay for that subject issued at or before it is
+refused, so a third peer's sync dump cannot re-install a withdrawn attachment. A tombstone is kept only when the
+subject is registered in the applied log (a `box-register` for the pod name; an authority for the bare name's
+account) and at most 100,000 per withdrawing relay (`MESH_TOMBSTONES_PER_RELAY_MAX`, its oldest out); the item
+removal happens either way. Both relays (review 2026-11-03; the Rust relay had none).
+
 ### 5.5 Announcement and caches
 
 - The holder pushes every new or renewed attachment and every withdrawal to every peer within 1 s (batched, ≤ 500 per
@@ -491,26 +501,52 @@ the smaller id stays). Dial timeout 5 s; reconnect with full-jitter backoff 1 s 
 (≤ 1 MiB); binary messages are v1 frames, exactly one per message, as on `/phone-tunnel`.
 
 An acceptor keeps at most 64 handshakes that have not yet authenticated (`MESH_HANDSHAKE_MAX_PENDING`) and at most 4
-from one client address (`MESH_HANDSHAKE_MAX_PENDING_PER_IP`; the address is `Fly-Client-IP` when Fly's proxy set it,
-else the socket peer). Over either cap the upgrade is answered 503 before any WebSocket work (security review
-2026-11-02, Low).
+from one client address (`MESH_HANDSHAKE_MAX_PENDING_PER_IP`). Over either cap the upgrade is answered 503 before any
+WebSocket work (security review 2026-11-02, Low). Review 2026-11-03 (slot starvation):
+
+- **Client address.** `Fly-Client-IP` is trusted only on Fly: when `FLY_APP_NAME` or `FLY_ALLOC_ID` is set, or
+  `FLAGSHIP_TRUST_FLY_CLIENT_IP=1` (`=0` turns it off on Fly). Anywhere else the socket peer is the address, so a
+  spoofed header cannot spread one sender over many per-address budgets (phone tunnels use the same rule).
+- **Reserved for peers.** 16 more pending handshakes (`MESH_HANDSHAKE_RESERVED`, 4 per address) are open only to a
+  **known peer address**: one a relay authenticated from in the last 24 h (`MESH_KNOWN_ADDRESS_TTL_MS`, at most 256,
+  oldest out) or one listed in `FLAGSHIP_MESH_PEER_ADDRS` (comma-separated IPs; for hosts whose egress address is
+  stable). A known address takes the general pool first, then the reserved one.
+- **First message.** The acceptor waits 2 s (`MESH_HANDSHAKE_FIRST_MS`) for the dialer's `mesh-auth`, not a whole step.
+
+The dialer's backoff resets only after a bridge that lived 30 s (`MESH_BRIDGE_STABLE_MS`); a bridge closed sooner
+counts as a failed dial, so a peer that authenticates and then drops the bridge is not redialled in a hot loop.
 
 ### 6.2 Handshake
 
 ```text
 acceptor → {type:"mesh-hello", v:1, relayId:S, nonce:Ns, at}
-dialer   → {type:"mesh-auth", v:1, relayId:C, peer:S, nonce:Nc, at, blessing:<RelayBlessing C>, sig}
-acceptor → {type:"mesh-auth", v:1, relayId:S, peer:C, nonce:Ns, at, blessing:<RelayBlessing S>, sig}
+dialer   → {type:"mesh-auth", v:1, relayId:C, peer:S, nonce:Nc, at, kx:Kc, blessing:<RelayBlessing C>, sig}
+acceptor → {type:"mesh-auth", v:1, relayId:S, peer:C, nonce:Ns, at, kx:Ks, blessing:<RelayBlessing S>, sig}
 ```
 
 `sig` is the signer's relay key over
-`flagship/relay-bridge-auth/v1|<role>|<signerRelayId>|<peerRelayId>|<serverNonce>|<clientNonce>|<at>` with role
-`client` or `server`. Each side checks: nonces are 32-byte hex; `|at − now| ≤ 60 s`; the blessing verifies (§3.2),
-names the claimed relayId and a key equal to the directory's entry for it; the relay is not revoked in the log; `peer`
-is its own relayId. Naming both ids stops a relay from replaying one peer's proof to another. Each step has 5 s; a
-failure closes 4401 with a reason code (`bad-blessing`, `not-in-directory`, `revoked`, `bad-signature`, `stale`,
-`wrong-peer`). TLS terminates at Fly's edge, so this is the mutual authentication; the WebPKI hostname check is the
+`flagship/relay-bridge-auth/v2|<role>|<signerRelayId>|<peerRelayId>|<serverNonce>|<clientNonce>|<at>|<kx>` with role
+`client` or `server`; `kx` is the signer's ephemeral X25519 public key for this bridge (64 hex, fresh per handshake).
+Each side checks: nonces are 32-byte hex; `|at − now| ≤ 60 s` (the dialer checks the `mesh-hello`'s `at` too, else
+`stale`); the blessing verifies (§3.2), names the claimed relayId and a key equal to the directory's entry for it; the
+relay is not revoked in the log (nor cut by this relay for abuse: answered `revoked` **before** this side sends its own
+`mesh-auth`); `peer` is its own relayId. Naming both ids stops a relay from replaying one peer's proof to another. Each
+step has 5 s (the acceptor's first wait 2 s, §6.1); a failure closes 4401 with a reason code (`bad-blessing`,
+`not-in-directory`, `revoked`, `bad-signature`, `stale`, `wrong-peer`, `bad-mac`). TLS terminates at Fly's edge (and
+neither relay terminates TLS on `/mesh` itself), so this is the mutual authentication; the WebPKI hostname check is the
 outer layer.
+
+**Channel binding (review 2026-11-03).** Without it every unsigned control message after the handshake was trusted on
+the connection alone, which is only as good as the path between Fly's edge and the relay (and any proxy in front of a
+non-Fly relay). Both relays derive two MAC keys: shared = X25519(own secret, peer `kx`) (all-zero refused); PRK =
+HKDF-SHA256(salt `<serverNonce>|<clientNonce>`, shared); `c2s` / `s2c` = expand(`flagship/relay-bridge-mac/v1|<c2s|s2c>|
+<clientRelayId>|<serverRelayId>`, 32). Every **text** message after a side's own `mesh-auth` is
+`hex(HMAC-SHA256(key, u64be(seq) ‖ utf8(json)))` (64 chars) followed by the JSON, with `seq` counting that
+direction's text messages from 0 (the dialer sends with `c2s`, the acceptor with `s2c`). A missing or wrong MAC closes
+the bridge 4401 `bad-mac`. Binary frames are not MACed: stream bytes are the visitor's end-to-end TLS, and a forged
+`OPEN` is no more than a visitor could send; every routing and trust decision (refusals, items, moves, phone ledger
+traffic) travels as text. Vectors: `checks.bridgeMac`. TLS exporters (RFC 5705/8446) were not usable because the TLS
+session ends at Fly's edge, not in either relay.
 
 A relay that restarted without a blessing (`.com` down) sends `blessing: null`. The other side accepts it only if it
 still holds a valid blessing for that relayId with the same key (kept from earlier handshakes and `directory.json`),
@@ -538,18 +574,24 @@ what is checked; the blessing only has to exist and be valid.
 {type:"refuse", stream, code}                                    then CLOSE; codes below
 ```
 
-Every item, entry, head and directory is verified by the receiver before use; nothing is trusted because a peer sent
-it. Bad items are dropped and counted per peer (`/api/stats` `mesh.peers[].rejected`).
+Every message above is sealed with the bridge MAC (§6.2). Every item, entry, head and directory is verified by the
+receiver before use; nothing is trusted because a peer sent it. A sync dump carries this relay's own items only (its
+box and legacy attachments, its phone items, its local mailboxes) plus the store's other box items; other relays' phone
+and mailbox items are never re-announced (their receiver would refuse them: a phone item is checked against its
+announcer, a mailbox item must come from its relay). Bad items are dropped and counted per peer (`/api/stats` `mesh.peers[].rejected`).
 
 ### 6.4 Streams
 
 - Ids: dialer-opened odd, acceptor-opened even, `1..0x7fffffff`, never reused while open.
-- `OPEN` payload on a bridge is JSON `{sni, kind:"tls"|"pb-mail", hop:1}`; then `DATA`, `CLOSE`, and `STREAM_CREDIT`
+- `OPEN` payload on a bridge is JSON `{sni, kind:"tls"|"pb-mail", hop:1, client?}`; `client` (16 hex) is the entry
+  relay's opaque key for the visitor's address (HMAC-SHA256 under a per-process random key, first 8 bytes), used only
+  for rebalancing (§10.1); the holder never learns the address. Then `DATA`, `CLOSE`, and `STREAM_CREDIT`
   (0x06) with the `stream-credit-v1` rules from `relay-transport.md` §1, mandatory on bridges (both ends are new code):
   256 KiB initial window per direction, credit returned at ≥ a quarter window.
 - The entry relay sends the peeked ClientHello bytes as the first `DATA`, then pipes. For `kind:"tls"` the holder
   parses the SNI from that first `DATA` and refuses the stream `not-holder` unless it is exactly `OPEN.sni`
   (lowercased): routing follows the bytes the visitor sent, never the peer's label alone (security review 2026-11-02).
+  A stream whose first `DATA` has not arrived within 10 s (`MESH_FIRST_DATA_WAIT_MS`) is closed (both relays).
 - `refuse` codes: `not-holder` (no winning attachment here), `apps-off` (serving gate), `revoked`, `busy` (a cap),
   `stale` (the holder is not fresh), `hop` (an OPEN without `hop:1`).
 - Caps per peer: 2,000 OPENs per second (token bucket, burst 4,000), 20,000 open streams, 64 MiB queued; past a queue
@@ -575,9 +617,12 @@ On a parsed ClientHello (unchanged peek bounds):
 2. **Account-level**: compute the home (§7.3). Home is self: local, as today (registry, allocator, park-and-nudge).
    Home is a peer: forward to it. No home (no live attachment for the account): delayed drop.
 3. **Bare**: the winning phone item (§8.4); forward to its holder or route locally. None: delayed drop.
-4. **Query**: single-flight per name. Send `query` to every peer with a live bridge, 1.5 s timeout
+4. **Query**: single-flight per (name, excluded relays). Send `query` to every peer with a live bridge, 1.5 s timeout
    (`MESH_QUERY_TIMEOUT_MS`), take the first answer item that is valid and beats what the store holds, add it to the
-   store. Nothing: remember the miss for 10 s (negative cache, ≤ 50,000 names, LRU) and delayed drop.
+   store. Nothing: remember the miss for 10 s (negative cache, ≤ 50,000 names, LRU) and delayed drop. A re-query that
+   excluded a refusing relay and found nothing is remembered for 2 s per (name, excluded) (`MESH_NEG_CACHE_EXCLUDE_MS`),
+   so a burst of visitors to a name whose holder keeps refusing costs one query, not one per visitor; an announcement
+   for the name clears both.
 5. **Forward**: before forwarding, the entry checks the target is not revoked (box key / regGen in the log, relay in the
    directory) and that it is fresh itself (§4.6); then `OPEN` on the holder's bridge. On `refuse not-holder` it drops
    that attachment, re-queries once excluding that relay, and forwards again or delayed-drops. Other refusals: close the
@@ -620,14 +665,23 @@ per-source limits it already has (pending hellos, delayed drops). The entry rela
 ### 7.6 Peer-backup mailboxes and ACME
 
 - `/pb/m/<id>` lands on any relay (LB). The holder announces each PIK-signed mailbox announcement it accepted, in its
-  `announce` stream (`{kind:"mailbox", announce, signature, relayId}`; self-authenticating, TTL as today). The
-  announcement does not name the relay, so a receiver keeps the **first** holder of a mailbox id (security review
-  2026-11-02): it remembers the relays that announced an id in order (at most 4); the first is the holder, and a later
-  one takes over only when that holder sends `{type:"mailbox-withdraw", ids:[...]}` (≤ 500 ids; it sends one whenever
-  a local tunnel stops holding mailboxes), its bridge goes down, it is retired, or the epoch moves on. A withdrawal
-  only removes the sending peer from those ids; a held second announcement is not a rejection. A relay without the
-  mailbox forwards the HTTP request over the bridge as an `OPEN kind:"pb-mail"` stream (request bytes, then response
-  bytes, the same 1 MiB cap). Same one-hop rule.
+  `announce` stream (`{kind:"mailbox", announce, signature, relayId, relaySignature?}`; self-authenticating, TTL as
+  today). The v1 announcement (`flagship/pb-mailbox-announce/v1|<pik>|<epoch>`) does not name the relay, so a receiver
+  keeps the **first** holder of a mailbox id (security review 2026-11-02): it remembers the relays that announced an id
+  in order (at most 4); the first is the holder, and a later one takes over only when that holder sends
+  `{type:"mailbox-withdraw", ids:[...]}` (≤ 500 ids; it sends one whenever a local tunnel stops holding mailboxes), its
+  bridge goes down, it is retired, or the epoch moves on. A withdrawal only removes the sending peer from those ids; a
+  held second announcement is not a rejection. A relay without the mailbox forwards the HTTP request over the bridge as
+  an `OPEN kind:"pb-mail"` stream (request bytes, then response bytes, the same 1 MiB cap). Same one-hop rule. When
+  the first relay refuses (`not-holder`) or cannot be reached, the next one in the list is tried, up to the 4.
+- **Relay-bound announcements (review 2026-11-03).** A 0.3 box on a verified mesh tunnel also signs
+  `flagship/pb-mailbox-announce/v2|<pik>|<epoch>|<relayId>` with its PIK and sends it as `relayId` + `relaySigHex` next
+  to each v1 announcement (it re-announces once the relay accepted its attachment). The holder keeps it only when it
+  names itself and verifies; peers get it as `relaySignature`. A bound announcement verified for the relay that sent it
+  goes before every unbound one for that id (a replayed v1 copy cannot hold it), and bound ones keep first-claim
+  order among themselves; a bound announcement naming another relay is refused. Upgrade: relays first (they ignore
+  nothing new: old relays drop the extra fields), then boxes. 0.2 boxes keep sending v1 only and keep the first-claim
+  rule for this one release; once no 0.2 box is left, relays may require v2.
 - Let's Encrypt's TLS-ALPN-01 validators hit `<server>.<user>.<apex>:443` from several vantage points, which the LB may
   send to different relays; every one forwards to the holder. The mesh path is therefore on the critical path of box
   certificate issuance and must be in place before a second relay joins the LB.
@@ -769,8 +823,11 @@ relay's key; `notAfter = issuedAt + 10 min`. The box acts only if all hold:
 
 Then make-before-break, reusing the `onDrain` path in `superviseTunnelClient`: dial
 `wss://<target tunnelHost>:8443/tunnel`, HELLO, require an accepting HELLO_ACK within 10 s whose `hubSig` verifies under
-the target blessing's key, sign and send the attachment for the target, then keep the old tunnel 30 s for its open
-streams and close it. Any failure: stay, record it. The box never moves to a relay that is not blessed, never chains
+the target blessing's key, sign and send the attachment for the target, and wait (inside the same 10 s) for the target's
+`ATTACHMENT` answer: only an `ok` commits the move (review 2026-11-03; it used to commit on send). A refusal or no
+answer: close the new tunnel, stay on the old relay and record the target as failed. On commit the old tunnel is
+retired: it stops renewing its attachment at once (a renewal there used to outrank the new one, §5.2), keeps 30 s for
+its open streams and closes; its relay withdraws on close. Any failure: stay, record it. The box never moves to a relay that is not blessed, never chains
 hints (a hint arriving on a tunnel less than 10 min old is a new decision, subject to the same limits).
 
 ### 9.4 Relay checks over time
@@ -798,12 +855,22 @@ holder relay can then black-hole the box but cannot keep its apps serving past t
 The home relay counts, per account, visitor bytes (both directions) by entry relay (self for local visitors) in
 one-minute buckets over the last 60 min. Phone traffic is not counted.
 
+Visitor steering (review 2026-11-03, the cheap parts): a session is counted only when it **completes** — it ended
+after the box sent bytes and the visitor sent bytes after its ClientHello (a handshake that finished), so opening and
+dropping connections through a far relay counts for nothing — and is keyed by the visitor's **client address key**
+(§6.4 `client`; this relay's own key for local visitors; `?` for a bridged stream without one). The window the decision
+sees is, per entry relay: `streams` = distinct client keys, `bytes` = Σ over keys of min(key's bytes, 8 MiB)
+(`REBALANCE_CLIENT_BYTES_CAP`). At most 1,024 keys per (account, minute, entry) (`REBALANCE_CLIENTS_PER_BUCKET_MAX`);
+later ones share one overflow key. Tests where every visitor is 127.0.0.1 set `FLAGSHIP_MESH_CLIENT_KEY_BY_PORT=1` (both
+relays) to key by address and port. The `load` message is still self-reported (open point, §16); requiring the pattern
+across several windows is not done.
+
 ### 10.2 Decision (`rebalanceDecision` in chunk A, pure)
 
 Every 60 min (± 10 min jitter) per account, with `T` the top entry relay other than home and `share(x)` its fraction of
 the window's bytes, move to `T` when all hold:
 
-- window total ≥ 64 MiB or ≥ 500 streams;
+- window total ≥ 64 MiB (capped per client key) or ≥ 500 distinct client keys;
 - `share(T) ≥ 0.6` and `share(T) − share(home) ≥ 0.3`;
 - `T` is `full`, fresh-looking (its last `load` message < 60 s old), not draining, `tunnels / capacity < 0.8`;
 - no account move for this account in the last 6 h; no old (legacy) box in the account.
@@ -816,7 +883,11 @@ flagship/relay-account-move/v1|<accountHash>|<fromRelayId>|<toRelayId>|<issuedAt
 
 Signed by the home (`from`); `notAfter = issuedAt + 10 min`. Announced to every peer, then a `locality` hint goes to each
 box of the account, 2 s apart. Peers accept a move only from the relay they compute as the account's home, at most one
-per account per 6 h. Once `to` holds a box of the account, it is the home (§7.3 rule 1), so the old home's remaining
+per account per 6 h. A relay that holds no attachment and no local box of the account refuses the move
+(`unknown-account`; it would have nothing to compute a home from), and a known account whose home is null refuses it
+`not-home` (both relays; review 2026-11-03). A live move reaches it later in a sync dump. Accepted moves and their 6 h
+spacing are kept for the spacing, then dropped, at most 200,000 (`MESH_ACCOUNT_MOVES_MAX`; past it new accounts'
+moves are refused `busy`). Once `to` holds a box of the account, it is the home (§7.3 rule 1), so the old home's remaining
 boxes get `co-locate` hints from the old home, not the other way round (no ping-pong).
 
 ### 10.4 Retiring a relay
@@ -1312,11 +1383,16 @@ Env (both relays): `FLAGSHIP_MESH=on|off` (default off), `FLAGSHIP_RELAY_ID`, `F
 | directory | TTL 7 d, re-minted daily; box re-check 1 h |
 | blessing | TTL 30 d (minted by `.com`), renewed every 24 h; A's constants still say 26 h / 12 h (§3.2) |
 | mesh key | 32 bytes per epoch; AES-256-GCM, 12-byte nonce; head and pages sealed, directory and key files clear |
-| rebalance | every 60 min ± 10; ≥ 64 MiB or 500 streams; share ≥ 0.6 and ≥ home + 0.3; target load < 0.8 |
+| rebalance | every 60 min ± 10; ≥ 64 MiB or 500 distinct client keys (completed sessions); share ≥ 0.6 and ≥ home + 0.3; target load < 0.8 |
 | moves | account move TTL 10 min, ≥ 6 h apart; box `locality` ≥ 6 h; `co-locate` ≥ 10 min, ≤ 6 / 24 h; dial 10 s; old tunnel grace 30 s; failed target ignored 1 h |
 | phone | grant 60 s, renew 15 s (existing constants); ledger top-k 3; generation jump ≤ 8, ≤ 2^40, remembered 1 h after the last item lapsed |
 | phone tunnel (every relay) | 8 per client address; `begin` 20 a minute per address (burst 10); ledger read cached 2 s per hostname; `.com` eligibility cached 5 s per account |
-| `/mesh` handshakes | 64 pending in all, 4 per client address |
+| `/mesh` handshakes | 64 pending in all, 4 per client address; 16 more for known peer addresses (24 h, ≤ 256); first message 2 s; `Fly-Client-IP` trusted only on Fly |
+| bridge (review 2026-11-03) | backoff resets after a bridge lived 30 s; first DATA 10 s; MAC keys from X25519 `kx` (§6.2) |
+| tombstones | 60 min, ≤ 100,000 per withdrawing relay, subject registered |
+| query, excluded | 2 s per (name, excluded) |
+| account moves kept | ≤ 200,000 |
+| rebalance per client key | 8 MiB cap; ≤ 1,024 keys per account, minute and entry |
 
 ## 16. Risks and open points
 

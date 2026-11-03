@@ -12,7 +12,7 @@
 //! flagship/relay-attachment/v1|<serverFqdn>|<boxPub>|<regGen>|<relayId>|<attachedAt>|<issuedAt>|<notAfter>
 //! flagship/relay-legacy-attachment/v1|<serverFqdn>|<boxPub>|<regGen>|<relayId>|<attachedAt>|<issuedAt>|<notAfter>
 //! flagship/relay-withdraw/v1|<subjectKind>|<subject>|<relayId>|<withdrawnIssuedAt>|<at>
-//! flagship/relay-bridge-auth/v1|<role>|<signerRelayId>|<peerRelayId>|<serverNonce>|<clientNonce>|<at>
+//! flagship/relay-bridge-auth/v2|<role>|<signerRelayId>|<peerRelayId>|<serverNonce>|<clientNonce>|<at>|<kx>
 //! flagship/relay-move-hint/v1|<serverFqdn>|<boxPub>|<fromRelayId>|<toRelayId>|<reason>|<issuedAt>|<notAfter>
 //! flagship/relay-account-move/v1|<accountHash>|<fromRelayId>|<toRelayId>|<issuedAt>|<notAfter>
 //! flagship/phone-route-grant/v1|<hostname>|<phoneRoutePub>|<generation>|<holderRelayId>|<ledgerRelayId>|<issuedAt>|<notAfter>
@@ -54,7 +54,11 @@ pub const TAG_RELAY_LOG_HEAD: &str = "flagship/relay-log-head/v1";
 pub const TAG_RELAY_ATTACHMENT: &str = "flagship/relay-attachment/v1";
 pub const TAG_RELAY_LEGACY_ATTACHMENT: &str = "flagship/relay-legacy-attachment/v1";
 pub const TAG_RELAY_WITHDRAW: &str = "flagship/relay-withdraw/v1";
-pub const TAG_RELAY_BRIDGE_AUTH: &str = "flagship/relay-bridge-auth/v1";
+pub const TAG_RELAY_BRIDGE_AUTH: &str = "flagship/relay-bridge-auth/v2";
+/// HKDF info prefix of the per-direction bridge MAC keys (§6.2).
+pub const TAG_RELAY_BRIDGE_MAC: &str = "flagship/relay-bridge-mac/v1";
+/// The relay-bound peer-backup mailbox announcement (§7.6).
+pub const TAG_PB_MAILBOX_ANNOUNCE_RELAY: &str = "flagship/pb-mailbox-announce/v2";
 pub const TAG_RELAY_MOVE_HINT: &str = "flagship/relay-move-hint/v1";
 pub const TAG_RELAY_ACCOUNT_MOVE: &str = "flagship/relay-account-move/v1";
 pub const TAG_PHONE_ROUTE_GRANT: &str = "flagship/phone-route-grant/v1";
@@ -74,6 +78,13 @@ pub const MESH_CLOCK_SKEW_MS: u64 = 60_000;
 pub const MESH_QUERY_TIMEOUT_MS: u64 = 1_500;
 pub const MESH_NEG_CACHE_MS: u64 = 10_000;
 pub const MESH_NEG_CACHE_MAX: usize = 50_000;
+/// A query that skipped a refusing relay and found nothing is remembered this long per (name, excluded).
+pub const MESH_NEG_CACHE_EXCLUDE_MS: u64 = 2_000;
+/// Withdrawal tombstones kept per withdrawing relay (§5.4).
+pub const MESH_TOMBSTONES_PER_RELAY_MAX: usize = 100_000;
+pub const MESH_TOMBSTONE_KEEP_MS: u64 = 60 * MIN;
+/// Accepted account moves remembered at most (§10.3).
+pub const MESH_ACCOUNT_MOVES_MAX: usize = 200_000;
 pub const MESH_STORE_MAX_BOX_ITEMS: usize = 200_000;
 pub const MESH_STORE_MAX_PER_RELAY: usize = 100_000;
 pub const MESH_STORE_MAX_PHONE_ITEMS: usize = 20_000;
@@ -90,6 +101,16 @@ pub const MESH_HANDSHAKE_STEP_MS: u64 = 5_000;
 /// `/mesh` handshakes not yet authenticated, across the relay and from one client address (§6.1).
 pub const MESH_HANDSHAKE_MAX_PENDING: u64 = 64;
 pub const MESH_HANDSHAKE_MAX_PENDING_PER_IP: u64 = 4;
+/// Extra pending handshakes only a known peer address may use (§6.1).
+pub const MESH_HANDSHAKE_RESERVED: u64 = 16;
+/// The acceptor's wait for the dialer's `mesh-auth`.
+pub const MESH_HANDSHAKE_FIRST_MS: u64 = 2_000;
+pub const MESH_KNOWN_ADDRESS_TTL_MS: u64 = 24 * HOUR;
+pub const MESH_KNOWN_ADDRESSES_MAX: usize = 256;
+/// A bridge that lived less than this does not reset the dialer's backoff.
+pub const MESH_BRIDGE_STABLE_MS: u64 = 30_000;
+/// The holder's wait for a bridged stream's first DATA.
+pub const MESH_FIRST_DATA_WAIT_MS: u64 = 10_000;
 pub const MESH_PING_MS: u64 = 10_000;
 pub const MESH_PEER_DOWN_MS: u64 = 30_000;
 pub const MESH_BACKOFF_MIN_MS: u64 = 1_000;
@@ -121,6 +142,10 @@ pub const REBALANCE_WINDOW_MS: u64 = HOUR;
 pub const REBALANCE_BUCKET_MS: u64 = MIN;
 pub const REBALANCE_MIN_BYTES: u64 = 64 * 1024 * 1024;
 pub const REBALANCE_MIN_STREAMS: u64 = 500;
+/// One client key's bytes count toward the window at most this much (§10.1).
+pub const REBALANCE_CLIENT_BYTES_CAP: u64 = 8 * 1024 * 1024;
+/// Distinct client keys kept per (account, minute, entry relay).
+pub const REBALANCE_CLIENTS_PER_BUCKET_MAX: usize = 1_024;
 pub const REBALANCE_MIN_SHARE_TENTHS: u64 = 6;
 pub const REBALANCE_MIN_LEAD_TENTHS: u64 = 3;
 pub const REBALANCE_MAX_LOAD_TENTHS: u64 = 8;
@@ -1576,7 +1601,8 @@ pub fn attachment_refusal_code(reason: &str) -> &'static str {
     }
 }
 
-/// §5.2: `Greater` when `a` wins. Higher regGen; box beats legacy; later `issuedAt`; smaller relayId.
+/// §5.2: `Greater` when `a` wins. Higher regGen; box beats legacy; later `attachedAt` (the newer tunnel); later
+/// `issuedAt`; smaller relayId.
 #[must_use]
 pub fn compare_attachments(a: &AttachmentItem, b: &AttachmentItem) -> Ordering {
     let (x, y) = (&a.attachment, &b.attachment);
@@ -1584,6 +1610,7 @@ pub fn compare_attachments(a: &AttachmentItem, b: &AttachmentItem) -> Ordering {
     x.reg_gen
         .cmp(&y.reg_gen)
         .then(rank(a.kind).cmp(&rank(b.kind)))
+        .then(x.attached_at.cmp(&y.attached_at))
         .then(x.issued_at.cmp(&y.issued_at))
         .then(y.relay_id.cmp(&x.relay_id))
 }
@@ -1686,6 +1713,8 @@ pub struct BridgeAuth {
     pub server_nonce: String,
     pub client_nonce: String,
     pub at: u64,
+    /// The signer's ephemeral X25519 public key for this bridge (64 hex).
+    pub kx: String,
 }
 
 /// # Errors
@@ -1701,6 +1730,7 @@ pub fn bridge_auth_canonical(b: &BridgeAuth) -> Result<String, MeshError> {
     }
     hex64("serverNonce", &b.server_nonce)?;
     hex64("clientNonce", &b.client_nonce)?;
+    hex64("kx", &b.kx)?;
     Ok(CanonicalV1::new(TAG_RELAY_BRIDGE_AUTH)?
         .text(&b.role)?
         .text(&b.signer_relay_id)?
@@ -1708,6 +1738,7 @@ pub fn bridge_auth_canonical(b: &BridgeAuth) -> Result<String, MeshError> {
         .text(&b.server_nonce)?
         .text(&b.client_nonce)?
         .uint(b.at)?
+        .text(&b.kx)?
         .finish_string())
 }
 
@@ -1718,6 +1749,8 @@ pub struct MeshAuth {
     pub peer: String,
     pub nonce: String,
     pub at: u64,
+    /// Ephemeral X25519 public key (64 hex), signed in `sig`.
+    pub kx: String,
     pub blessing: Option<RelayBlessing>,
     pub sig: String,
 }
@@ -1774,11 +1807,152 @@ pub fn check_bridge_auth<'a>(c: &BridgeAuthCheck<'a>) -> Result<&'a RelayBlessin
         server_nonce: server_nonce.to_owned(),
         client_nonce: client_nonce.to_owned(),
         at: a.at,
+        kx: a.kx.clone(),
     };
     match bridge_auth_canonical(&msg) {
         Ok(canonical) if verify(&canonical, &a.sig, &blessing.body.relay_key) => Ok(blessing),
         _ => Err("bad-signature"),
     }
+}
+
+// ── bridge channel binding (§6.2) ─────────────────────────────────────────
+
+/// The two MAC keys of one bridge: `c2s` for what the dialer sends, `s2c` for what the acceptor sends.
+#[derive(Clone, PartialEq, Eq)]
+pub struct BridgeMacKeys {
+    pub c2s: [u8; 32],
+    pub s2c: [u8; 32],
+}
+
+impl std::fmt::Debug for BridgeMacKeys {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BridgeMacKeys(..)")
+    }
+}
+
+fn unhex32(s: &str) -> Option<[u8; 32]> {
+    if s.len() != 64 || !s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, o) in out.iter_mut().enumerate() {
+        let at = i.checked_mul(2)?;
+        *o = u8::from_str_radix(s.get(at..at.checked_add(2)?)?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// A fresh ephemeral X25519 pair for one handshake: (secret, `kx` hex).
+///
+/// # Errors
+/// [`MeshError`] when the system RNG fails.
+pub fn bridge_ephemeral() -> Result<([u8; 32], String), MeshError> {
+    let mut secret = [0u8; 32];
+    getrandom::fill(&mut secret).map_err(|_| MeshError("kx: no randomness".into()))?;
+    let kx = bridge_kx(&secret);
+    Ok((secret, kx))
+}
+
+/// The public half of an X25519 secret, as hex.
+#[must_use]
+pub fn bridge_kx(secret: &[u8; 32]) -> String {
+    let s = x25519_dalek::StaticSecret::from(*secret);
+    encode_lower_hex(x25519_dalek::PublicKey::from(&s).as_bytes())
+}
+
+/// §6.2: shared = X25519(secret, peer kx) (all-zero refused); PRK = HKDF-SHA256(salt `<sn>|<cn>`, shared); each key =
+/// expand(`flagship/relay-bridge-mac/v1|<c2s|s2c>|<clientRelayId>|<serverRelayId>`, 32). `None` for a bad key.
+#[must_use]
+pub fn bridge_mac_keys(
+    secret: &[u8; 32],
+    peer_kx: &str,
+    server_nonce: &str,
+    client_nonce: &str,
+    client_relay_id: &str,
+    server_relay_id: &str,
+) -> Option<BridgeMacKeys> {
+    let peer = unhex32(peer_kx)?;
+    let s = x25519_dalek::StaticSecret::from(*secret);
+    let shared = s.diffie_hellman(&x25519_dalek::PublicKey::from(peer));
+    if shared.as_bytes().iter().all(|b| *b == 0) {
+        return None;
+    }
+    let salt = format!("{server_nonce}|{client_nonce}");
+    let hk = hkdf::Hkdf::<Sha256>::new(Some(salt.as_bytes()), shared.as_bytes());
+    let mut c2s = [0u8; 32];
+    let mut s2c = [0u8; 32];
+    hk.expand(
+        format!("{TAG_RELAY_BRIDGE_MAC}|c2s|{client_relay_id}|{server_relay_id}").as_bytes(),
+        &mut c2s,
+    )
+    .ok()?;
+    hk.expand(
+        format!("{TAG_RELAY_BRIDGE_MAC}|s2c|{client_relay_id}|{server_relay_id}").as_bytes(),
+        &mut s2c,
+    )
+    .ok()?;
+    Some(BridgeMacKeys { c2s, s2c })
+}
+
+/// HMAC-SHA256(key, u64be(seq) ‖ json), 64 lowercase hex.
+#[must_use]
+pub fn bridge_mac(key: &[u8; 32], seq: u64, json: &str) -> String {
+    use hmac::Mac;
+    let Ok(mut mac) = <hmac::Hmac<Sha256> as hmac::KeyInit>::new_from_slice(key) else {
+        return String::new();
+    };
+    mac.update(&seq.to_be_bytes());
+    mac.update(json.as_bytes());
+    encode_lower_hex(&mac.finalize().into_bytes())
+}
+
+/// A sealed control message: the MAC then the JSON (§6.3).
+#[must_use]
+pub fn seal_bridge_text(key: &[u8; 32], seq: u64, json: &str) -> String {
+    let mut out = bridge_mac(key, seq, json);
+    out.push_str(json);
+    out
+}
+
+/// The JSON of a sealed control message when its MAC is right for `seq`.
+#[must_use]
+pub fn open_bridge_text<'a>(key: &[u8; 32], seq: u64, text: &'a str) -> Option<&'a str> {
+    let mac = text.get(..64)?;
+    let json = text.get(64..)?;
+    let want = bridge_mac(key, seq, json);
+    let d = mac
+        .bytes()
+        .zip(want.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y));
+    (d == 0 && want.len() == 64).then_some(json)
+}
+
+/// `flagship/pb-mailbox-announce/v2|<pik>|<epoch>|<relayId>` (§7.6).
+///
+/// # Errors
+/// [`MeshError`] for a malformed pik or relay id.
+pub fn pb_mailbox_announce_relay_canonical(
+    pik_pub_hex: &str,
+    epoch: u64,
+    relay: &str,
+) -> Result<String, MeshError> {
+    hex64("pikPubHex", pik_pub_hex)?;
+    relay_id("relayId", relay)?;
+    Ok(format!(
+        "{TAG_PB_MAILBOX_ANNOUNCE_RELAY}|{pik_pub_hex}|{epoch}|{relay}"
+    ))
+}
+
+/// Does `sig_hex` verify the relay-bound announcement under the PIK?
+#[must_use]
+pub fn verify_pb_mailbox_announce_relay(
+    pik_pub_hex: &str,
+    epoch: u64,
+    relay: &str,
+    sig_hex: &str,
+) -> bool {
+    pb_mailbox_announce_relay_canonical(pik_pub_hex, epoch, relay)
+        .is_ok_and(|c| verify(&c, sig_hex, pik_pub_hex))
 }
 
 // ── move hints (§9.3) ─────────────────────────────────────────────────────

@@ -31,13 +31,27 @@ const QUEUE_HIGH_BYTES = MAX_FRAME_PAYLOAD;
 const QUEUE_LOW_BYTES = 256 * 1024;
 
 /**
- * The client address of an upgrade: `Fly-Client-IP` when Fly's proxy set it (the hub port sits behind Fly's TLS
- * handler, so the socket peer is the proxy), else the socket peer.
+ * Whether `Fly-Client-IP` may be believed (relay-mesh.md §6.1, review 2026-11-03): only on Fly, where Fly's proxy sets
+ * it (`FLY_APP_NAME` / `FLY_ALLOC_ID`), unless `FLAGSHIP_TRUST_FLY_CLIENT_IP` says otherwise (`1` / `0`). Off Fly anyone
+ * can send the header, so it would let one sender spread over many per-address budgets.
  */
-export function clientAddress(req: IncomingMessage): string {
-  const fly = req.headers["fly-client-ip"];
-  const v = typeof fly === "string" ? fly.trim().toLowerCase() : "";
-  if (v.length > 0 && v.length <= 64 && isIP(v) !== 0) return v;
+export function flyClientIpTrusted(env: NodeJS.ProcessEnv = process.env): boolean {
+  const explicit = env.FLAGSHIP_TRUST_FLY_CLIENT_IP?.trim();
+  if (explicit === "1") return true;
+  if (explicit === "0") return false;
+  return !!(env.FLY_APP_NAME?.trim() || env.FLY_ALLOC_ID?.trim());
+}
+
+/**
+ * The client address of an upgrade: `Fly-Client-IP` when on Fly (the hub port sits behind Fly's TLS handler, so the
+ * socket peer is the proxy), else the socket peer.
+ */
+export function clientAddress(req: IncomingMessage, trustFly: boolean = flyClientIpTrusted()): string {
+  if (trustFly) {
+    const fly = req.headers["fly-client-ip"];
+    const v = typeof fly === "string" ? fly.trim().toLowerCase() : "";
+    if (v.length > 0 && v.length <= 64 && isIP(v) !== 0) return v;
+  }
   return req.socket.remoteAddress ?? "?";
 }
 

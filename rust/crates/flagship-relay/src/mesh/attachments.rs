@@ -5,13 +5,13 @@
 //! the caps (an item from another relay with the oldest `issuedAt` goes first; a relay never evicts its own).
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use flagship_crypto::relay_mesh::{
     AttachmentItem, AttachmentKind, HomeAttachment, MESH_STORE_MAX_BOX_ITEMS,
-    MESH_STORE_MAX_PER_RELAY, MESH_STORE_MAX_PHONE_ITEMS, MeshItem, PHONE_GENERATION_MEMORY_MS,
-    PhoneItem, RelayWithdraw, account_of_pod_name, compare_attachments, compare_phone_items,
-    name_hash, withdraw_covers,
+    MESH_STORE_MAX_PER_RELAY, MESH_STORE_MAX_PHONE_ITEMS, MESH_TOMBSTONE_KEEP_MS,
+    MESH_TOMBSTONES_PER_RELAY_MAX, MeshItem, PHONE_GENERATION_MEMORY_MS, PhoneItem, RelayWithdraw,
+    account_of_pod_name, compare_attachments, compare_phone_items, name_hash, withdraw_covers,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +59,15 @@ pub struct Store {
     per_relay: HashMap<String, usize>,
     box_count: usize,
     phone_count: usize,
+    /// §5.4: `<kind>|<subject>|<relayId>` → (the highest withdrawn `issuedAt`, when it was kept). An item of that relay
+    /// for that subject issued no later is refused, so a third peer's dump cannot re-install it.
+    tombstones: HashMap<String, (u64, u64)>,
+    /// Withdrawing relay → its tombstone keys, oldest first (the per-relay cap evicts from the front).
+    tombstones_by_relay: HashMap<String, VecDeque<String>>,
+}
+
+fn tomb_key(kind: &str, subject: &str, relay: &str) -> String {
+    format!("{kind}|{subject}|{relay}")
 }
 
 impl Store {
@@ -76,6 +85,8 @@ impl Store {
             per_relay: HashMap::new(),
             box_count: 0,
             phone_count: 0,
+            tombstones: HashMap::new(),
+            tombstones_by_relay: HashMap::new(),
         }
     }
 
@@ -106,10 +117,52 @@ impl Store {
         }
     }
 
+    /// Is an item of `relay` for `subject` issued at `issued` covered by a kept withdrawal (§5.4)?
+    #[must_use]
+    pub fn withdrawn(&self, kind: &str, subject: &str, relay: &str, issued: u64) -> bool {
+        self.tombstones
+            .get(&tomb_key(kind, subject, relay))
+            .is_some_and(|(up_to, _)| issued <= *up_to)
+    }
+
+    /// The number of kept tombstones.
+    #[must_use]
+    pub fn tombstone_count(&self) -> usize {
+        self.tombstones.len()
+    }
+
+    /// Keep a tombstone for a checked withdrawal whose subject the log registers (the caller checks that).
+    pub fn keep_tombstone(&mut self, w: &RelayWithdraw, now: u64) {
+        let k = tomb_key(&w.subject_kind, &w.subject, &w.relay_id);
+        if let Some(t) = self.tombstones.get_mut(&k) {
+            if t.0 < w.withdrawn_issued_at {
+                *t = (w.withdrawn_issued_at, now);
+            }
+            return;
+        }
+        let order = self
+            .tombstones_by_relay
+            .entry(w.relay_id.clone())
+            .or_default();
+        while order.len() >= MESH_TOMBSTONES_PER_RELAY_MAX {
+            match order.pop_front() {
+                Some(old) => {
+                    self.tombstones.remove(&old);
+                }
+                None => break,
+            }
+        }
+        order.push_back(k.clone());
+        self.tombstones.insert(k, (w.withdrawn_issued_at, now));
+    }
+
     /// Insert a checked attachment item.
     pub fn insert_box(&mut self, item: AttachmentItem) -> Inserted {
         let name = item.attachment.server_fqdn.clone();
         let relay = item.attachment.relay_id.clone();
+        if self.withdrawn("box", &name, &relay, item.attachment.issued_at) {
+            return Inserted::Stale;
+        }
         if let Some(list) = self.boxes.get_mut(&name)
             && let Some(had) = list.iter_mut().find(|x| x.attachment.relay_id == relay)
         {
@@ -246,6 +299,9 @@ impl Store {
         self.remember_generation(&item);
         let host = item.grant.hostname.clone();
         let holder = item.grant.holder_relay_id.clone();
+        if self.withdrawn("phone", &host, &holder, item.grant.issued_at) {
+            return Inserted::Stale;
+        }
         if let Some(list) = self.phones.get_mut(&host)
             && let Some(had) = list.iter_mut().find(|x| x.grant.holder_relay_id == holder)
         {
@@ -359,6 +415,13 @@ impl Store {
             self.remove_box_where(&n, |i| i.attachment.not_after <= now);
         }
         self.retain_phones(|p| p.grant.not_after > now);
+        self.tombstones
+            .retain(|_, (_, at)| now.saturating_sub(*at) < MESH_TOMBSTONE_KEEP_MS);
+        let kept = &self.tombstones;
+        self.tombstones_by_relay.retain(|_, order| {
+            order.retain(|k| kept.contains_key(k));
+            !order.is_empty()
+        });
         self.generations.retain(|_, m| {
             m.retain(|_, (_, until)| until.saturating_add(PHONE_GENERATION_MEMORY_MS) > now);
             !m.is_empty()
@@ -664,27 +727,43 @@ impl Mesh {
                 epoch,
                 sig_hex,
                 relay_id,
+                relay_signature,
             } => {
                 if relay_id != from {
                     return false;
                 }
+                // §7.6: a relay-bound announcement must verify for the relay that sent it; else it is refused.
+                let bound = match &relay_signature {
+                    None => false,
+                    Some(rs) => {
+                        if !flagship_crypto::relay_mesh::verify_pb_mailbox_announce_relay(
+                            &pik_pub_hex,
+                            epoch,
+                            from,
+                            rs,
+                        ) {
+                            return false;
+                        }
+                        true
+                    }
+                };
                 let list = [crate::payload::MailboxAnnouncement {
                     pik_pub_hex,
                     epoch: epoch as f64,
                     sig_hex,
+                    ..Default::default()
                 }];
                 let Some(ids) = crate::mailbox::verify_announcements(&list, now()) else {
                     return false;
                 };
-                // The announcement does not name the relay: the first holder keeps the id until it withdraws it (§7.6).
                 self.with_state(|s| {
                     for id in ids {
-                        let l = s.remote_mailboxes.entry(id).or_default();
-                        if let Some(e) = l.iter_mut().find(|(r, _)| r == from) {
-                            e.1 = epoch;
-                        } else if l.len() < MAILBOX_CANDIDATES_MAX {
-                            l.push((from.to_owned(), epoch));
-                        }
+                        place_mailbox(
+                            s.remote_mailboxes.entry(id).or_default(),
+                            from,
+                            epoch,
+                            bound,
+                        );
                     }
                 });
                 true
@@ -721,6 +800,19 @@ impl Mesh {
             if check_withdraw(w, sig, ctx).is_err() {
                 return false;
             }
+            // §5.4: a tombstone only for a subject the applied log registers (any withdrawal still removes items).
+            let registered = if w.subject_kind == "box" {
+                flagship_crypto::relay_mesh::relay_log_box(ctx.log, &w.subject).is_some()
+            } else {
+                w.subject
+                    .split('.')
+                    .next()
+                    .and_then(|a| flagship_crypto::relay_mesh::account_hash(a).ok())
+                    .is_some_and(|h| ctx.log.authorities.contains_key(&h))
+            };
+            if registered {
+                store.keep_tombstone(w, ctx.now);
+            }
             store.withdraw(w);
             true
         })
@@ -729,17 +821,35 @@ impl Mesh {
 
     // ── peer-backup mailboxes (§7.6) ─────────────────────────────────────
 
-    /// A box here announced mailboxes (already verified by the hub): announce them to every peer.
+    /// A box here announced mailboxes (already verified by the hub): announce them to every peer. A relay-bound one
+    /// (§7.6) keeps its binding only when it names this relay and the v2 signature verifies.
     pub fn on_mailbox_announce(&self, list: &[crate::payload::MailboxAnnouncement]) {
+        let me = self.relay_id().to_owned();
         for a in list {
             if !a.epoch.is_finite() || a.epoch < 0.0 {
                 continue;
             }
+            let epoch = a.epoch as u64;
+            let relay_signature = match (&a.relay_id, &a.relay_sig_hex) {
+                (Some(r), Some(rs))
+                    if *r == me
+                        && flagship_crypto::relay_mesh::verify_pb_mailbox_announce_relay(
+                            &a.pik_pub_hex,
+                            epoch,
+                            &me,
+                            rs,
+                        ) =>
+                {
+                    Some(rs.clone())
+                }
+                _ => None,
+            };
             let item = wire::WireItem::Mailbox {
                 pik_pub_hex: a.pik_pub_hex.clone(),
-                epoch: a.epoch as u64,
+                epoch,
                 sig_hex: a.sig_hex.clone(),
-                relay_id: self.relay_id().to_owned(),
+                relay_id: me.clone(),
+                relay_signature,
             };
             self.with_state(|s| {
                 s.local_mail.insert(
@@ -777,7 +887,7 @@ impl Mesh {
         self.with_state(|s| {
             for id in ids.iter().filter_map(Value::as_str) {
                 if let Some(l) = s.remote_mailboxes.get_mut(id) {
-                    l.retain(|(r, _)| r != from);
+                    l.retain(|c| c.relay != from);
                     if l.is_empty() {
                         s.remote_mailboxes.remove(id);
                     }
@@ -791,7 +901,7 @@ impl Mesh {
     pub(crate) fn forget_mailboxes_of(&self, relay: &str) {
         self.with_state(|s| {
             s.remote_mailboxes.retain(|_, l| {
-                l.retain(|(r, _)| r != relay);
+                l.retain(|c| c.relay != relay);
                 !l.is_empty()
             });
         });
@@ -809,7 +919,7 @@ impl Mesh {
             s.remote_mailboxes
                 .get(id)
                 .and_then(|l| l.first())
-                .map(|(r, _)| r.clone())
+                .map(|c| c.relay.clone())
         })
         .flatten()
     }
@@ -825,17 +935,42 @@ impl Mesh {
         if envelope.len() > BRIDGED_MAIL_MAX {
             return None;
         }
-        let holder = self.mailbox_holder(id)?;
-        let peer = self.peer(&holder)?;
+        // §7.6: the first candidate, then the next ones when one refuses or cannot be reached.
+        let candidates: Vec<String> = self
+            .with_state(|s| {
+                s.remote_mailboxes
+                    .get(id)
+                    .map(|l| l.iter().map(|c| c.relay.clone()).collect())
+            })
+            .flatten()
+            .unwrap_or_default();
+        for relay in candidates {
+            if let Ok(answer) = self.forward_mail_to(&relay, id, envelope).await {
+                return answer;
+            }
+        }
+        None
+    }
+
+    /// One attempt: `Err` when the relay refused the stream or could not be reached (the next one may be tried);
+    /// `Ok(None)` when it took the envelope but gave no answer (never re-sent elsewhere).
+    async fn forward_mail_to(
+        &self,
+        holder: &str,
+        id: &str,
+        envelope: &[u8],
+    ) -> Result<Option<crate::mailbox::MailAnswer>, ()> {
+        let peer = self.peer(holder).ok_or(())?;
         let h = peer
             .tunnel
             .open_stream_kind(
                 id,
                 "pb-mail",
                 Some(envelope.len() as u64),
+                None,
                 envelope.to_vec(),
             )
-            .ok()?;
+            .map_err(|_| ())?;
         let refusal = peer.expect_refusal(h.id);
         let read = async {
             let mut buf = Vec::new();
@@ -843,19 +978,19 @@ impl Mesh {
                 h.tunnel.consumed(h.id, chunk.len());
                 buf.extend_from_slice(&chunk);
                 if buf.len() > BRIDGED_MAIL_MAX.saturating_add(4) {
-                    return None;
+                    return Ok(None);
                 }
             }
-            let (status, body) = buf.split_at_checked(4)?;
-            let status = u32::from_be_bytes(status.try_into().ok()?);
-            Some(crate::mailbox::MailAnswer {
-                status: u16::try_from(status).ok()?,
-                body: body.to_vec(),
-            })
+            // Closed before a single byte: refused or gone, so the next relay may be tried.
+            if buf.is_empty() {
+                return Err(());
+            }
+            Ok(parse_mail_answer(&buf))
         };
         let answer = tokio::select! {
-            a = tokio::time::timeout(std::time::Duration::from_secs(130), read) => a.ok().flatten(),
-            _ = refusal => None,
+            a = tokio::time::timeout(std::time::Duration::from_secs(130), read) => a.unwrap_or(Ok(None)),
+            // A refusal, or the bridge went down (the waiter is dropped) before an answer.
+            _ = refusal => Err(()),
         };
         h.tunnel.close_stream(h.id);
         answer
@@ -922,6 +1057,60 @@ impl Mesh {
 pub const MAILBOX_WITHDRAW_MAX: usize = 500;
 /// Relays remembered as waiting to hold one mailbox id after its first holder.
 const MAILBOX_CANDIDATES_MAX: usize = 4;
+
+/// A bridged mail answer: a `u32` BE status, then the reply.
+fn parse_mail_answer(buf: &[u8]) -> Option<crate::mailbox::MailAnswer> {
+    let (status, body) = buf.split_at_checked(4)?;
+    let status = u32::from_be_bytes(status.try_into().ok()?);
+    Some(crate::mailbox::MailAnswer {
+        status: u16::try_from(status).ok()?,
+        body: body.to_vec(),
+    })
+}
+
+/// A relay that announced a mailbox id (§7.6): `bound` when the box signed the announcement for that relay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MailboxCandidate {
+    pub relay: String,
+    pub epoch: u64,
+    pub bound: bool,
+}
+
+/// Place `relay`'s announcement in an id's candidate list: bound ones before every unbound one, first-claim order
+/// within each group, at most `MAILBOX_CANDIDATES_MAX` (a bound one displaces the last unbound one when full).
+pub(crate) fn place_mailbox(l: &mut Vec<MailboxCandidate>, relay: &str, epoch: u64, bound: bool) {
+    if let Some(at) = l.iter().position(|c| c.relay == relay) {
+        let was_bound = l.get(at).is_some_and(|c| c.bound);
+        if bound && !was_bound {
+            l.remove(at);
+        } else {
+            if let Some(c) = l.get_mut(at) {
+                c.epoch = epoch;
+            }
+            return;
+        }
+    }
+    let c = MailboxCandidate {
+        relay: relay.to_owned(),
+        epoch,
+        bound,
+    };
+    if !bound {
+        if l.len() < MAILBOX_CANDIDATES_MAX {
+            l.push(c);
+        }
+        return;
+    }
+    let at = l.iter().take_while(|x| x.bound).count();
+    if l.len() >= MAILBOX_CANDIDATES_MAX {
+        if l.last().is_some_and(|x| !x.bound) {
+            l.pop();
+        } else {
+            return;
+        }
+    }
+    l.insert(at.min(l.len()), c);
+}
 
 /// A bridged mailbox envelope's limit (§7.6: "the same 1 MiB cap").
 const BRIDGED_MAIL_MAX: usize = 1024 * 1024;
@@ -1074,6 +1263,83 @@ mod tests {
                 .grant
                 .holder_relay_id,
             "fra1"
+        );
+    }
+
+    #[test]
+    fn a_withdrawn_attachment_is_not_reinstalled_by_a_third_peers_dump() {
+        let mut s = Store::new("iad1", APEX, Caps::default());
+        let name = format!("home.alice.{APEX}");
+        assert_eq!(
+            s.insert_box(item("ams1", AttachmentKind::Box, 1, 100)),
+            Inserted::Stored
+        );
+        let w = RelayWithdraw {
+            subject_kind: "box".into(),
+            subject: name.clone(),
+            relay_id: "ams1".into(),
+            withdrawn_issued_at: 100,
+            at: 150,
+        };
+        s.keep_tombstone(&w, 150);
+        assert!(s.withdraw(&w));
+        // fra1's dump still carries ams1's old item: refused; a newer one from ams1 is taken.
+        assert_eq!(
+            s.insert_box(item("ams1", AttachmentKind::Box, 1, 100)),
+            Inserted::Stale
+        );
+        assert!(s.winner(&name, 120).is_none());
+        assert_eq!(
+            s.insert_box(item("ams1", AttachmentKind::Box, 1, 101)),
+            Inserted::Stored
+        );
+        // Kept 60 min, then forgotten.
+        s.sweep(150 + MESH_TOMBSTONE_KEEP_MS);
+        assert_eq!(s.tombstone_count(), 0);
+    }
+
+    #[test]
+    fn tombstones_are_capped_per_withdrawing_relay() {
+        let mut s = Store::new("iad1", APEX, Caps::default());
+        for i in 0..=MESH_TOMBSTONES_PER_RELAY_MAX {
+            s.keep_tombstone(
+                &RelayWithdraw {
+                    subject_kind: "box".into(),
+                    subject: format!("b{i}.alice.{APEX}"),
+                    relay_id: "ams1".into(),
+                    withdrawn_issued_at: 1,
+                    at: 1,
+                },
+                1,
+            );
+        }
+        assert_eq!(s.tombstone_count(), MESH_TOMBSTONES_PER_RELAY_MAX);
+        assert!(
+            !s.withdrawn("box", &format!("b0.alice.{APEX}"), "ams1", 1),
+            "the oldest went"
+        );
+        assert!(s.withdrawn("box", &format!("b1.alice.{APEX}"), "ams1", 1));
+    }
+
+    #[test]
+    fn bound_mailbox_announcements_go_first_and_keep_first_claim_among_themselves() {
+        let mut l = Vec::new();
+        place_mailbox(&mut l, "rog1", 1, false);
+        place_mailbox(&mut l, "ams1", 1, true);
+        place_mailbox(&mut l, "fra1", 1, true);
+        place_mailbox(&mut l, "rog2", 1, false);
+        let order: Vec<_> = l.iter().map(|c| c.relay.as_str()).collect();
+        assert_eq!(order, ["ams1", "fra1", "rog1", "rog2"]);
+        // Full: a bound one displaces the last unbound one; an unbound one is not kept.
+        place_mailbox(&mut l, "sin1", 1, true);
+        place_mailbox(&mut l, "rog3", 1, false);
+        let order: Vec<_> = l.iter().map(|c| c.relay.as_str()).collect();
+        assert_eq!(order, ["ams1", "fra1", "sin1", "rog1"]);
+        // An unbound holder that later sends a bound one moves up among the bound.
+        place_mailbox(&mut l, "rog1", 2, true);
+        assert_eq!(
+            l.get(3).map(|c| (c.relay.as_str(), c.bound)),
+            Some(("rog1", true))
         );
     }
 }

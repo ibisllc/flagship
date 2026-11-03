@@ -6,7 +6,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 
-use flagship_crypto::relay_mesh::{MESH_NEG_CACHE_MAX, MESH_NEG_CACHE_MS};
+use flagship_crypto::relay_mesh::{
+    MESH_NEG_CACHE_EXCLUDE_MS, MESH_NEG_CACHE_MAX, MESH_NEG_CACHE_MS,
+};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -18,6 +20,8 @@ struct QState {
     flights: HashMap<String, watch::Receiver<Option<bool>>>,
     negative: HashMap<String, u64>,
     order: VecDeque<String>,
+    /// name → excluded relay → until: a re-query that skipped a refusing relay and found nothing (§7.2 step 4).
+    negative_ex: HashMap<String, HashMap<String, u64>>,
     waiting: HashMap<u64, mpsc::UnboundedSender<(String, Value)>>,
 }
 
@@ -26,25 +30,42 @@ pub struct Queries {
     st: Mutex<QState>,
 }
 
+fn flight_key(name: &str, exclude: Option<&str>) -> String {
+    match exclude {
+        None => name.to_owned(),
+        Some(ex) => format!("{name}|{ex}"),
+    }
+}
+
 impl Mesh {
     /// Ask the peers about `name` (a pod name), skipping `exclude` (the relay that just refused it). True when the
     /// store now holds a winner other than `exclude`.
     pub async fn query(&self, name: &str, exclude: Option<&str>) -> bool {
         let name = name.to_ascii_lowercase();
+        let key = flight_key(&name, exclude);
         let t = now();
         let (rx, mine) = {
             let Ok(mut q) = self.0.queries.st.lock() else {
                 return false;
             };
-            if exclude.is_none() && q.negative.get(&name).is_some_and(|until| *until > t) {
+            let negative = match exclude {
+                None => q.negative.get(&name).is_some_and(|until| *until > t),
+                Some(ex) => q
+                    .negative_ex
+                    .get(&name)
+                    .and_then(|m| m.get(ex))
+                    .is_some_and(|until| *until > t),
+            };
+            if negative {
                 self.0.stats.negative_hits.fetch_add(1, Ordering::Relaxed);
                 return false;
             }
-            match q.flights.get(&name) {
-                Some(rx) if exclude.is_none() => (rx.clone(), None),
-                _ => {
+            // Single-flight per (name, excluded): an excluding re-query never replaces the name's own flight.
+            match q.flights.get(&key) {
+                Some(rx) => (rx.clone(), None),
+                None => {
                     let (tx, rx) = watch::channel(None);
-                    q.flights.insert(name.clone(), rx.clone());
+                    q.flights.insert(key.clone(), rx.clone());
                     q.next = q.next.wrapping_add(1);
                     let qid = q.next;
                     let (wtx, wrx) = mpsc::unbounded_channel();
@@ -97,10 +118,21 @@ impl Mesh {
         }
         if let Ok(mut q) = self.0.queries.st.lock() {
             q.waiting.remove(&qid);
-            q.flights.remove(&name);
+            q.flights.remove(&key);
             if found {
                 self.0.stats.query_hits.fetch_add(1, Ordering::Relaxed);
-            } else if exclude.is_none() {
+            } else if let Some(ex) = exclude {
+                if q.negative_ex.len() < MESH_NEG_CACHE_MAX || q.negative_ex.contains_key(&name) {
+                    let m = q.negative_ex.entry(name.clone()).or_default();
+                    m.retain(|_, until| *until > t);
+                    m.insert(ex.to_owned(), t.saturating_add(MESH_NEG_CACHE_EXCLUDE_MS));
+                } else {
+                    q.negative_ex.retain(|_, m| {
+                        m.retain(|_, until| *until > t);
+                        !m.is_empty()
+                    });
+                }
+            } else {
                 q.negative
                     .insert(name.clone(), t.saturating_add(MESH_NEG_CACHE_MS));
                 q.order.push_back(name.clone());
@@ -133,6 +165,7 @@ impl Mesh {
     pub(crate) fn clear_negative(&self, name: &str) {
         if let Ok(mut q) = self.0.queries.st.lock() {
             q.negative.remove(name);
+            q.negative_ex.remove(name);
         }
     }
 }

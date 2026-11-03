@@ -45,6 +45,7 @@ fn every_announcement_list_gets_the_typescript_verdict() {
                 pik_pub_hex: a["pikPubHex"].as_str().unwrap().to_owned(),
                 epoch: a["epoch"].as_f64().unwrap(),
                 sig_hex: a["sigHex"].as_str().unwrap().to_owned(),
+                ..Default::default()
             })
             .collect();
         let want: Option<Vec<String>> = l["ids"]
@@ -61,6 +62,7 @@ fn a_non_integral_or_negative_epoch_never_verifies() {
             pik_pub_hex: "00".repeat(32),
             epoch,
             sig_hex: "00".repeat(64),
+            ..Default::default()
         };
         assert_eq!(verify_announcements(&[a], 1_760_000_000_000), None);
     }

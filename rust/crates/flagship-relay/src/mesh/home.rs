@@ -6,9 +6,10 @@
 use std::time::Duration;
 
 use flagship_crypto::relay_mesh::{
-    ACCOUNT_MOVE_HINT_SPACING_MS, ACCOUNT_MOVE_TTL_MS, AccountMove, MOVE_HINT_TTL_MS, MoveHint,
-    RelayKind, account_hash, account_home, account_move_canonical, account_of_pod_name,
-    check_account_move, move_hint_canonical, sign_canonical, verify_relay_blessing,
+    ACCOUNT_MOVE_HINT_SPACING_MS, ACCOUNT_MOVE_TTL_MS, AccountMove, MESH_ACCOUNT_MOVES_MAX,
+    MOVE_HINT_TTL_MS, MoveHint, RelayKind, account_hash, account_home, account_move_canonical,
+    account_of_pod_name, check_account_move, move_hint_canonical, sign_canonical,
+    verify_relay_blessing,
 };
 use serde_json::Value;
 
@@ -180,12 +181,25 @@ impl Mesh {
         let account = accounts
             .into_iter()
             .find(|a| account_hash(a).is_ok_and(|h| h == mv.account_hash));
-        // A relay that holds nothing of the account takes the move's own `fromRelayId` as the expected home (§15.4.1):
-        // it routes nothing for the account either way.
-        let expected = match &account {
-            Some(a) => self.account_home(a),
-            None => Some(mv.from_relay_id.clone()),
+        // §10.3 (review 2026-11-03): a relay that holds no attachment and no box of the account has nothing to compute
+        // a home from, so it refuses the move (a live move reaches it again in a sync dump); a known account whose home
+        // is null refuses it too (`not-home`, as the TS relay).
+        let Some(account) = account else {
+            self.log(&format!(
+                "account move for {}… refused: unknown account",
+                mv.account_hash.get(..8).unwrap_or_default()
+            ));
+            return false;
         };
+        let expected = self.account_home(&account);
+        let full = self
+            .with_state(|s| {
+                s.moves.len() >= MESH_ACCOUNT_MOVES_MAX && !s.moves.contains_key(&mv.account_hash)
+            })
+            .unwrap_or(true);
+        if full {
+            return false;
+        }
         let min_move = ms(self.0.cfg.min_move);
         let last = self
             .with_state(|s| s.moves.get(&mv.account_hash).map(|m| m.accepted_at))

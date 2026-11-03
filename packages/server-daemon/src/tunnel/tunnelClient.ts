@@ -216,7 +216,8 @@ export interface TunnelClientOptions {
    * `pb-mail-v1`, the client announces these after every HELLO_ACK and each
    * hour, and hands each sealed request to `onMail`.
    */
-  mailboxAnnouncements?: () => Promise<MailboxAnnouncement[]>;
+  /** `relayId`: this tunnel's verified mesh relay, for relay-bound announcements (relay-mesh.md §7.6). */
+  mailboxAnnouncements?: (relayId?: string) => Promise<MailboxAnnouncement[]>;
   onMail?: (mailboxId: string, envelope: Uint8Array) => Promise<Uint8Array>;
   /**
    * The serving authority (docs/architecture-v2/serving-wiring.md §2-3): every HELLO carries the box's pinned
@@ -273,10 +274,18 @@ export interface TunnelClient {
   /** The verified mesh relay this tunnel is attached to, or null (non-mesh relay, unverified blessing). */
   meshRelay?(): MeshRelay | null;
   /**
-   * Settles once the first accepting HELLO_ACK has been handled: the verified relay once its attachment is sent, else
-   * null (not a mesh relay, a blessing that didn't verify, a refused HELLO, or a closed socket).
+   * Settles once the first accepting HELLO_ACK has been handled: the verified relay once it ANSWERED the first
+   * attachment `ok` (relay-mesh.md §9.3: a move commits only then), else null (not a mesh relay, a blessing that didn't
+   * verify, a refused attachment, a refused HELLO, or a closed socket).
    */
   attached?(): Promise<MeshRelay | null>;
+  /** The relay's refusal code for this tunnel's first attachment, or null (none sent, accepted, or not answered yet). */
+  attachmentRefusal?(): string | null;
+  /**
+   * The tunnel is being retired (a move or a drain replaced it): stop renewing its attachment, so a late renewal never
+   * outranks the replacement's (§5.2, §9.3). Its open streams keep flowing until it closes.
+   */
+  retire?(): void;
   close(): Promise<void>;
 }
 
@@ -319,6 +328,11 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   let meshRelay: MeshRelay | null = null;
   let meshHandled = false;
   let renewTimer: ReturnType<typeof setInterval> | null = null;
+  let retired = false;
+  let firstAttachmentSent = false;
+  let firstAttachmentAnswered = false;
+  let attachRefusal: string | null = null;
+  let attachedOk = false;
   let resolveAttached!: (r: MeshRelay | null) => void;
   const attachedP = new Promise<MeshRelay | null>((r) => (resolveAttached = r));
   const meshLog = opts.mesh?.log ?? ((m: string) => console.log(m));
@@ -336,8 +350,10 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
 
   function announceMailboxes(): void {
     if (!opts.mailboxAnnouncements || !hubCapabilities.includes(CAPABILITY_PB_MAIL_V1)) return;
+    // §7.6: once the mesh relay accepted the attachment, bind the announcements to it.
+    const bound = attachedOk ? meshRelay?.relayId : undefined;
     void opts
-      .mailboxAnnouncements()
+      .mailboxAnnouncements(bound)
       .then((a) => {
         if (a.length > 0) send(mailboxAnnounceFrame(a));
       })
@@ -614,6 +630,18 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     if (f.type === FRAME_ATTACHMENT) {
       const r = parseAttachmentResult(f.payload);
       if (!r || !meshRelay) return;
+      if (firstAttachmentSent && !firstAttachmentAnswered) {
+        firstAttachmentAnswered = true;
+        if (r.ok) {
+          attachedOk = true;
+          resolveAttached(meshRelay);
+          // Re-announce the mailboxes bound to this relay (relay-mesh.md §7.6).
+          announceMailboxes();
+        } else {
+          attachRefusal = r.code;
+          resolveAttached(null);
+        }
+      }
       if (!r.ok) meshLog(`[relay-mesh] relay ${meshRelay.relayId} refused the attachment: ${r.code}${r.code === "clock" ? " (this server's clock is off by more than a minute)" : ""}`);
       try {
         opts.mesh?.onAttachmentResult?.(r, meshRelay);
@@ -709,20 +737,26 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
         return;
       }
       meshRelay = v.relay;
-      send(attachmentFrame(await mesh.signAttachment(v.relay, attachedAt)));
+      const first = await mesh.signAttachment(v.relay, attachedAt);
+      if (onCloseFired) {
+        resolveAttached(null);
+        return;
+      }
+      firstAttachmentSent = true;
+      send(attachmentFrame(first));
       const renew = () => {
         const relay = meshRelay;
-        if (!relay || onCloseFired) return;
+        if (!relay || onCloseFired || retired) return;
         void mesh.signAttachment(relay, attachedAt).then(
           (p) => send(attachmentFrame(p)),
           (e: unknown) => meshLog(`[relay-mesh] couldn't sign the attachment renewal: ${(e as Error).message}`),
         );
       };
-      if (renewTimer === null && !onCloseFired) {
+      if (renewTimer === null && !onCloseFired && !retired) {
         renewTimer = setIntervalFn(renew, mesh.renewMs ?? 10 * 60_000);
         (renewTimer as { unref?: () => void }).unref?.();
       }
-      resolveAttached(v.relay);
+      // `attached` settles on the relay's answer (FRAME_ATTACHMENT result) or the close.
     } catch (e) {
       meshLog(`[relay-mesh] attachment failed: ${(e as Error).message}`);
       meshRelay = null;
@@ -797,6 +831,14 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     openOutbound,
     meshRelay: () => meshRelay,
     attached: () => attachedP,
+    attachmentRefusal: () => attachRefusal,
+    retire: () => {
+      retired = true;
+      if (renewTimer !== null) {
+        clearIntervalFn(renewTimer);
+        renewTimer = null;
+      }
+    },
     requestTransfer: (fqdn: string) => {
       send(requestTransferFrame({ fqdn: fqdn.toLowerCase() }));
     },
@@ -1071,6 +1113,9 @@ export function superviseTunnelClient(
 
   function retireAfter(old: TunnelClient, graceMs: number): void {
     retiring.add(old);
+    // §9.3: a retiring tunnel never renews its attachment again (a renewal would outrank nothing now, since the
+    // newer tunnel's attachedAt wins, but it would keep a stale attachment alive past the grace).
+    old.retire?.();
     const t = setTimeoutFn(() => {
       if (retiring.delete(old)) void old.close();
     }, graceMs);
@@ -1191,8 +1236,12 @@ export function superviseTunnelClient(
         timer = setTimeoutFn(() => r("timeout"), meshSup?.dialTimeoutMs ?? MOVE_DIAL_TIMEOUT_MS_DEFAULT);
         (timer as { unref?: () => void }).unref?.();
       });
+      // §9.3: the move commits only once the new relay answered the attachment `ok` (within the dial timeout).
       const acked = c.ready().then(
-        async () => ({ relay: c.attached ? await c.attached() : null }),
+        async () => {
+          const relay = c.attached ? await c.attached() : null;
+          return c.attachmentRefusal?.() ? ("refused" as const) : { relay };
+        },
         () => "refused" as const,
       );
       const outcome = await Promise.race([acked, closed, timeout]);

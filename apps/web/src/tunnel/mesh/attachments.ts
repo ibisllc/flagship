@@ -5,7 +5,13 @@
  * query only repairs gaps. Every item is checked by `@flagship/protocol` before it is kept.
  */
 import {
+  accountHash,
   accountOfPodName,
+  canonicalPbMailboxAnnounceForRelay,
+  ed,
+  MESH_TOMBSTONE_KEEP_MS,
+  MESH_TOMBSTONES_PER_RELAY_MAX,
+  relayLogBox,
   checkAttachmentItem,
   checkPhoneItem,
   checkWithdraw,
@@ -39,12 +45,26 @@ export interface StoredPhone {
   announcer: string;
 }
 
-/** `{kind:"mailbox", announce, signature}` (§7.6): a PIK-signed mailbox announcement and the relay holding it. */
+/**
+ * `{kind:"mailbox", announce, signature, relayId, relaySignature?}` (§7.6): a PIK-signed mailbox announcement and the
+ * relay holding it; `relaySignature` is the box's v2 signature naming that relay (a relay-bound announcement).
+ */
 export interface MailboxItem {
   kind: "mailbox";
   announce: { pikPubHex: string; epoch: number };
   signature: string;
   relayId: string;
+  relaySignature?: string;
+}
+
+/** Whether `sigHex` is the PIK's v2 announcement of this mailbox for `relayId` (§7.6). */
+export function verifyMailboxForRelay(pikPubHex: string, epoch: number, relayId: string, sigHex: unknown): boolean {
+  if (typeof sigHex !== "string" || !/^[0-9a-f]{128}$/.test(sigHex)) return false;
+  try {
+    return ed.verify(Buffer.from(sigHex, "hex"), canonicalPbMailboxAnnounceForRelay(pikPubHex, epoch, relayId), Buffer.from(pikPubHex, "hex"));
+  } catch {
+    return false;
+  }
 }
 
 export type WithdrawItem = { withdraw: RelayWithdraw; signature: string };
@@ -56,6 +76,8 @@ export interface AttachmentStoreOptions {
   maxBoxItems?: number;
   maxPerRelay?: number;
   maxPhoneItems?: number;
+  /** Test shortening of `MESH_TOMBSTONES_PER_RELAY_MAX`. */
+  maxTombstonesPerRelay?: number;
   /** An item for this name changed (added, withdrawn, purged). */
   onChange?: (kind: "box" | "phone", name: string) => void;
 }
@@ -89,7 +111,9 @@ export class AttachmentStore {
    */
   private readonly phoneGenerations = new Map<string, Map<string, { generation: number; until: number }>>();
   /** `<kind>|<subject>|<relayId>` → the latest withdrawn issuedAt: an older item from that relay arriving late is ignored. */
-  private readonly tombstones = new Map<string, { upTo: number; at: number }>();
+  private readonly tombstones = new Map<string, { upTo: number; at: number; relayId: string }>();
+  /** withdrawing relay → its tombstone keys, oldest first (the per-relay cap, §5.4). */
+  private readonly tombstonesByRelay = new Map<string, Set<string>>();
   /**
    * mailboxId → the relays that announced it, in order, at most `MAILBOX_HOLDERS_MAX` (§7.6: the announcement does not
    * name the relay). The first is the holder; the next takes over only when it withdraws, its bridge goes or it is
@@ -227,9 +251,8 @@ export class AttachmentStore {
       return false;
     }
     const wd = w.withdraw;
-    const tk = `${wd.subjectKind}|${wd.subject}|${wd.relayId}`;
-    const t = this.tombstones.get(tk);
-    if (!t || t.upTo < wd.withdrawnIssuedAt) this.tombstones.set(tk, { upTo: wd.withdrawnIssuedAt, at: this.opts.ctx().now });
+    if (this.subjectRegistered(wd.subjectKind, wd.subject)) this.tombstone(wd);
+    else this.count(from, "withdraw-unregistered");
     if (wd.subjectKind === "box") {
       const per = this.boxes.get(wd.subject);
       if (per) {
@@ -250,6 +273,43 @@ export class AttachmentStore {
       this.opts.onChange?.("phone", wd.subject);
     }
     return true;
+  }
+
+  /** §5.4: a tombstone only for a subject the applied log registers (a box name, or a bare name's account). */
+  private subjectRegistered(kind: string, subject: string): boolean {
+    const log = this.opts.ctx().log;
+    if (kind === "box") return relayLogBox(log, subject) !== null;
+    const account = subject.slice(0, -(this.opts.servicesApex.length + 1));
+    try {
+      return log.authorities.has(accountHash(account));
+    } catch {
+      return false;
+    }
+  }
+
+  private tombstone(wd: RelayWithdraw): void {
+    const tk = `${wd.subjectKind}|${wd.subject}|${wd.relayId}`;
+    const t = this.tombstones.get(tk);
+    if (t && t.upTo >= wd.withdrawnIssuedAt) return;
+    let keys = this.tombstonesByRelay.get(wd.relayId);
+    if (!keys) this.tombstonesByRelay.set(wd.relayId, (keys = new Set()));
+    keys.delete(tk);
+    keys.add(tk);
+    this.tombstones.set(tk, { upTo: wd.withdrawnIssuedAt, at: this.opts.ctx().now, relayId: wd.relayId });
+    while (keys.size > (this.opts.maxTombstonesPerRelay ?? MESH_TOMBSTONES_PER_RELAY_MAX)) {
+      const oldest = keys.values().next().value as string;
+      keys.delete(oldest);
+      this.tombstones.delete(oldest);
+    }
+  }
+
+  private dropTombstone(tk: string): void {
+    const t = this.tombstones.get(tk);
+    if (!t) return;
+    this.tombstones.delete(tk);
+    const keys = this.tombstonesByRelay.get(t.relayId);
+    keys?.delete(tk);
+    if (keys && keys.size === 0) this.tombstonesByRelay.delete(t.relayId);
   }
 
   // ── phone items (§8.3, §8.4) ────────────────────────────────────────────
@@ -336,10 +396,28 @@ export class AttachmentStore {
       return false;
     }
     const id = ids[0]!;
-    const it = { kind: "mailbox" as const, announce: item.announce, signature: item.signature, relayId: item.relayId, epoch: a.epoch };
+    // §7.6: a relay-bound announcement must name the relay that holds it; it goes before every unbound one.
+    const bound = item.relaySignature !== undefined;
+    if (bound && !verifyMailboxForRelay(a.pikPubHex, a.epoch, item.relayId, item.relaySignature)) {
+      this.count(from, "mailbox-relay");
+      return false;
+    }
+    const it: MailboxItem & { epoch: number } = { kind: "mailbox", announce: item.announce, signature: item.signature, relayId: item.relayId, epoch: a.epoch, ...(bound ? { relaySignature: item.relaySignature! } : {}) };
     const list = this.mailboxes.get(id) ?? [];
+    const insertBound = () => {
+      const firstUnbound = list.findIndex((m) => m.relaySignature === undefined);
+      list.splice(firstUnbound < 0 ? list.length : firstUnbound, 0, it);
+      if (list.length > MAILBOX_HOLDERS_MAX) list.length = MAILBOX_HOLDERS_MAX;
+    };
     const at = list.findIndex((m) => m.relayId === it.relayId);
-    if (at >= 0) list[at] = it;
+    if (at >= 0) {
+      const prev = list[at]!;
+      if (!bound && prev.relaySignature !== undefined) list[at] = { ...it, relaySignature: prev.relaySignature };
+      else if (bound && prev.relaySignature === undefined) {
+        list.splice(at, 1);
+        insertBound();
+      } else list[at] = it;
+    } else if (bound) insertBound();
     else if (list.length < MAILBOX_HOLDERS_MAX) list.push(it);
     this.mailboxes.set(id, list);
     return true;
@@ -361,6 +439,11 @@ export class AttachmentStore {
   /** The relay holding a mailbox, or null. */
   mailboxRelay(id: string): string | null {
     return this.mailboxes.get(id)?.[0]?.relayId ?? null;
+  }
+
+  /** Every relay that announced a mailbox, holder first (delivery tries them in order, §7.6). */
+  mailboxRelays(id: string): string[] {
+    return (this.mailboxes.get(id) ?? []).map((m) => m.relayId);
   }
 
   dropMailboxesOf(relayId: string): void {
@@ -430,7 +513,7 @@ export class AttachmentStore {
       if (per.size === 0) this.phoneGenerations.delete(host);
     }
     // A tombstone outlives every item it can cover (the longest TTL is 30 min).
-    for (const [k, t] of this.tombstones) if (now - t.at > 60 * 60_000) this.tombstones.delete(k);
+    for (const [k, t] of [...this.tombstones]) if (now - t.at > MESH_TOMBSTONE_KEEP_MS) this.dropTombstone(k);
     const epoch = Math.floor(now / (7 * 24 * 60 * 60_000));
     for (const [id, list] of this.mailboxes) if (list[0]!.epoch < epoch - 1) this.mailboxes.delete(id);
     if (this.seen.size > 4 * (this.opts.maxBoxItems ?? MESH_STORE_MAX_BOX_ITEMS)) this.seen.clear();
@@ -441,8 +524,14 @@ export class AttachmentStore {
     const now = this.opts.ctx().now;
     const out: Array<AttachmentItem | PhoneItem | MailboxItem> = [];
     for (const per of this.boxes.values()) for (const s of per.values()) if (s.item.attachment.notAfter > now) out.push(s.item);
-    for (const per of this.phones.values()) for (const s of per.values()) if (s.item.grant.notAfter > now) out.push(s.item);
-    for (const list of this.mailboxes.values()) for (const m of list) out.push({ kind: "mailbox", announce: m.announce, signature: m.signature, relayId: m.relayId });
+    // §6.3: another relay's phone and mailbox items are its to announce (a receiver checks them against the sender).
+    const self = this.opts.selfRelayId;
+    for (const per of this.phones.values()) for (const s of per.values()) if (s.item.grant.notAfter > now && s.item.grant.holderRelayId === self) out.push(s.item);
+    for (const list of this.mailboxes.values()) {
+      for (const m of list) {
+        if (m.relayId === self) out.push({ kind: "mailbox", announce: m.announce, signature: m.signature, relayId: m.relayId, ...(m.relaySignature ? { relaySignature: m.relaySignature } : {}) });
+      }
+    }
     return out;
   }
 

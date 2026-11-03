@@ -2105,7 +2105,7 @@ async function main(): Promise<void> {
       dataDir,
       entitlements: () => entitlementBundle,
       ...(peerEngine
-        ? { peerMail: { announcements: () => peerEngine.mailboxAnnouncements(), onMail: (id: string, e: Uint8Array) => peerEngine.handleMail(id, e) } }
+        ? { peerMail: { announcements: (relayId?: string) => peerEngine.mailboxAnnouncements(relayId), onMail: (id: string, e: Uint8Array) => peerEngine.handleMail(id, e) } }
         : {}),
       // LAN-direct (docs/lan-direct.md): on by default at :443 on the box's
       // private LAN addresses only; FLAGSHIP_LAN_DIRECT=0 keeps the box

@@ -202,6 +202,7 @@ fn bridge_auth(v: &Value) -> BridgeAuth {
         server_nonce: s(v, "serverNonce"),
         client_nonce: s(v, "clientNonce"),
         at: n(v, "at"),
+        kx: s(v, "kx"),
     }
 }
 fn move_hint(v: &Value) -> MoveHint {
@@ -434,6 +435,27 @@ fn constants_match() {
         ("MESH_CONTROL_MAX_BYTES", m::MESH_CONTROL_MAX_BYTES as u64),
         ("MESH_DIAL_TIMEOUT_MS", m::MESH_DIAL_TIMEOUT_MS),
         ("MESH_HANDSHAKE_STEP_MS", m::MESH_HANDSHAKE_STEP_MS),
+        ("MESH_HANDSHAKE_RESERVED", m::MESH_HANDSHAKE_RESERVED),
+        ("MESH_HANDSHAKE_FIRST_MS", m::MESH_HANDSHAKE_FIRST_MS),
+        ("MESH_KNOWN_ADDRESS_TTL_MS", m::MESH_KNOWN_ADDRESS_TTL_MS),
+        (
+            "MESH_KNOWN_ADDRESSES_MAX",
+            m::MESH_KNOWN_ADDRESSES_MAX as u64,
+        ),
+        ("MESH_BRIDGE_STABLE_MS", m::MESH_BRIDGE_STABLE_MS),
+        ("MESH_FIRST_DATA_WAIT_MS", m::MESH_FIRST_DATA_WAIT_MS),
+        ("MESH_NEG_CACHE_EXCLUDE_MS", m::MESH_NEG_CACHE_EXCLUDE_MS),
+        (
+            "MESH_TOMBSTONES_PER_RELAY_MAX",
+            m::MESH_TOMBSTONES_PER_RELAY_MAX as u64,
+        ),
+        ("MESH_TOMBSTONE_KEEP_MS", m::MESH_TOMBSTONE_KEEP_MS),
+        ("MESH_ACCOUNT_MOVES_MAX", m::MESH_ACCOUNT_MOVES_MAX as u64),
+        ("REBALANCE_CLIENT_BYTES_CAP", m::REBALANCE_CLIENT_BYTES_CAP),
+        (
+            "REBALANCE_CLIENTS_PER_BUCKET_MAX",
+            m::REBALANCE_CLIENTS_PER_BUCKET_MAX as u64,
+        ),
         ("MESH_HANDSHAKE_MAX_PENDING", m::MESH_HANDSHAKE_MAX_PENDING),
         (
             "MESH_HANDSHAKE_MAX_PENDING_PER_IP",
@@ -904,6 +926,7 @@ fn auth(v: &Value) -> MeshAuth {
         peer: s(v, "peer"),
         nonce: s(v, "nonce"),
         at: n(v, "at"),
+        kx: s(v, "kx"),
         blessing: (!v["blessing"].is_null()).then(|| blessing(&v["blessing"])),
         sig: s(v, "sig"),
     }
@@ -1223,4 +1246,62 @@ fn device_grant_revoke_takes_the_apps_grant_ids() {
             "{bad} accepted"
         );
     }
+}
+
+#[test]
+fn bridge_mac_and_relay_bound_mailboxes() {
+    let w = World::new();
+    let mv = &w.v["checks"]["bridgeMac"];
+    let un = |h: &str| -> [u8; 32] {
+        let mut o = [0u8; 32];
+        for (i, b) in o.iter_mut().enumerate() {
+            *b = u8::from_str_radix(&h[i * 2..i * 2 + 2], 16).unwrap();
+        }
+        o
+    };
+    let cs = un(&s(mv, "clientSecret"));
+    let ss = un(&s(mv, "serverSecret"));
+    assert_eq!(m::bridge_kx(&cs), s(mv, "clientKx"));
+    assert_eq!(m::bridge_kx(&ss), s(mv, "serverKx"));
+    let (sn, cn, ci, si) = (
+        s(mv, "serverNonce"),
+        s(mv, "clientNonce"),
+        s(mv, "clientRelayId"),
+        s(mv, "serverRelayId"),
+    );
+    for (sec, peer) in [(&cs, s(mv, "serverKx")), (&ss, s(mv, "clientKx"))] {
+        let k = m::bridge_mac_keys(sec, &peer, &sn, &cn, &ci, &si).unwrap();
+        assert_eq!(k.c2s, un(&s(mv, "c2s")));
+        assert_eq!(k.s2c, un(&s(mv, "s2c")));
+    }
+    for c in mv["sealed"].as_array().unwrap() {
+        let key = un(&s(mv, if s(c, "dir") == "c2s" { "c2s" } else { "s2c" }));
+        let seq = n(c, "seq");
+        let text = s(c, "text");
+        assert_eq!(m::seal_bridge_text(&key, seq, &s(c, "json")), text);
+        assert_eq!(
+            m::open_bridge_text(&key, seq, &text),
+            Some(s(c, "json").as_str())
+        );
+        assert_eq!(m::open_bridge_text(&key, seq + 1, &text), None);
+    }
+    assert!(m::bridge_mac_keys(&cs, &s(mv, "zeroPeerKx"), &sn, &cn, &ci, &si).is_none());
+    let mb = &w.v["checks"]["mailboxForRelay"];
+    let (pik, epoch, relay) = (s(mb, "pikPubHex"), n(mb, "epoch"), s(mb, "relayId"));
+    assert_eq!(
+        m::pb_mailbox_announce_relay_canonical(&pik, epoch, &relay).unwrap(),
+        s(mb, "canonical")
+    );
+    assert!(m::verify_pb_mailbox_announce_relay(
+        &pik,
+        epoch,
+        &relay,
+        &s(mb, "relaySigHex")
+    ));
+    assert!(!m::verify_pb_mailbox_announce_relay(
+        &pik,
+        epoch,
+        "ams1",
+        &s(mb, "relaySigHex")
+    ));
 }

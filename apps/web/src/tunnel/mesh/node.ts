@@ -7,6 +7,7 @@
  *
  * Everything here is behind `FLAGSHIP_MESH=on`; with it off none of this is constructed.
  */
+import { createHmac, randomBytes } from "node:crypto";
 import type { Server as HttpServer } from "node:http";
 import type { Duplex } from "node:stream";
 import {
@@ -15,6 +16,8 @@ import {
   attachmentRefusalCode,
   isBarePhoneName,
   isPodName,
+  MESH_FIRST_DATA_WAIT_MS,
+  pbMailboxId,
   nameHash as relayLogNameHash,
   MESH_ANNOUNCE_BATCH_MAX,
   MESH_ANNOUNCE_DELAY_MS,
@@ -45,10 +48,11 @@ import {
 } from "@flagship/protocol";
 import { attachmentResultFrame, moveHintFrame, parseAttachmentFrame, type Frame, type MailboxAnnouncement } from "@flagship/tunnel-protocol";
 import type { TunnelRegistry } from "../registry.js";
+import type { SessionCounter } from "../sniRouter.js";
 import type { ServingGate } from "../servingGate.js";
 import type { PhoneRoutes } from "../phoneRoute.js";
 import type { MailboxRegistry } from "../mailboxRelay.js";
-import { AttachmentStore, type MailboxItem, type WithdrawItem } from "./attachments.js";
+import { AttachmentStore, verifyMailboxForRelay, type MailboxItem, type WithdrawItem } from "./attachments.js";
 import { BridgeManager, bridgedSniMatches, type BridgePeer, type BridgeStream } from "./bridge.js";
 import { MeshDirectory } from "./directory.js";
 import { MeshFeed, type FeedSource } from "./feed.js";
@@ -96,6 +100,10 @@ export interface MeshNodeOptions {
   capacity?: number;
   /** How often the directory is re-read from the feed. Default 60 s. */
   directoryPollMs?: number;
+  /** `FLAGSHIP_MESH_CLIENT_KEY_BY_PORT=1` (tests, where every visitor is 127.0.0.1): key clients by address and port. */
+  clientKeyByPort?: boolean;
+  /** Test shortening: how long a bridged stream may wait for its first DATA (10 s). */
+  firstDataWaitMs?: number;
   log?: (m: string) => void;
 }
 
@@ -137,7 +145,7 @@ interface LocalBox {
   lastCoLocateAt: number;
 }
 
-type RouterEntry = (stream: Duplex, sni: string, initialBytes: Uint8Array, ctx: { entry: string; refuse: (code: string) => void }) => void;
+type RouterEntry = (stream: Duplex, sni: string, initialBytes: Uint8Array, ctx: { entry: string; refuse: (code: string) => void; client?: string }) => void;
 
 export class MeshNode {
   readonly feed: MeshFeed;
@@ -155,6 +163,9 @@ export class MeshNode {
   private routerEntry: RouterEntry | null = null;
   private mailboxes: MailboxRegistry | null;
   private readonly local = new Map<string, LocalBox>();
+  private readonly clientSecret = randomBytes(32);
+  /** This relay's own mailbox items (its tunnels proved them), re-sent in every sync dump (§6.3, §7.6). */
+  private readonly localMail = new Map<string, { kind: string; announce: { pikPubHex: string; epoch: number }; signature: string; relayId: string; relaySignature?: string }>();
   private announceQueue: unknown[] = [];
   private withdrawQueue: WithdrawItem[] = [];
   private announceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -165,7 +176,7 @@ export class MeshNode {
   private readonly reconsider = new Set<string>();
   private reconsiderScheduled = false;
   private certIndex: { sequence: number; byAccount: Map<string, Set<string>> } | null = null;
-  readonly counters = { forwarded: 0, bridgedIn: 0, refusedIn: {} as Record<string, number>, hintsSent: {} as Record<string, number>, legacyAnnounced: 0, attachmentsRefused: {} as Record<string, number> };
+  readonly counters = { firstDataTimeouts: 0, forwarded: 0, bridgedIn: 0, refusedIn: {} as Record<string, number>, hintsSent: {} as Record<string, number>, legacyAnnounced: 0, attachmentsRefused: {} as Record<string, number> };
 
   constructor(readonly opts: MeshNodeOptions) {
     this.now = opts.now ?? (() => Date.now());
@@ -624,10 +635,10 @@ export class MeshNode {
     return r && r !== this.opts.relayId && this.bridges.peer(r) ? r : null;
   }
 
-  /** Open a bridged stream for a visitor (entry duties). */
-  openTo(relayId: string, sni: string): BridgeStream | null {
+  /** Open a bridged stream for a visitor (entry duties); `client` is this relay's key for its address (§6.4). */
+  openTo(relayId: string, sni: string, client?: string): BridgeStream | null {
     const p = this.bridges.peer(relayId);
-    const s = p?.open(sni, "tls") ?? null;
+    const s = p?.open(sni, "tls", client && /^[0-9a-f]{16}$/.test(client) ? { client } : {}) ?? null;
     if (s) this.counters.forwarded++;
     return s;
   }
@@ -640,14 +651,34 @@ export class MeshNode {
     if (ph && ph.grant.holderRelayId === relayId) this.store.dropPhone(ph);
   }
 
-  /** Count a visitor stream's bytes toward rebalancing (the home counts by entry relay; phones are not counted). */
-  traffic(podCanonical: string, sni: string, entry: string): ((bytes: number) => void) | null {
+  /**
+   * A visitor session toward rebalancing (the home counts by entry relay; phones are not counted): counted when it
+   * ends, and only if the box answered and the visitor spoke after its ClientHello (§10.1).
+   */
+  traffic(podCanonical: string, sni: string, entry: string, client: string): SessionCounter | null {
     const apex = this.opts.servicesApex;
     if (isBarePhoneName(sni.toLowerCase(), apex)) return null;
     const account = accountOfPodName(podCanonical.toLowerCase(), apex);
     if (!account) return null;
-    this.rebalancer.countStream(account, entry);
-    return (n) => this.rebalancer.countBytes(account, entry, n);
+    let up = 0;
+    let down = 0;
+    let ended = false;
+    return {
+      up: (n) => void (up += n),
+      down: (n) => void (down += n),
+      end: () => {
+        if (ended) return;
+        ended = true;
+        if (up > 0 && down > 0) this.rebalancer.countSession(account, entry, client, up + down);
+      },
+    };
+  }
+
+  /** This relay's opaque key for a visitor's address (§6.4 `client`): HMAC under a per-process key, 8 bytes. */
+  clientKey(address: string | undefined, port?: number): string {
+    if (!address) return "?";
+    const who = this.opts.clientKeyByPort && port !== undefined ? `${address.toLowerCase()}:${port}` : address.toLowerCase();
+    return createHmac("sha256", this.clientSecret).update(who).digest("hex").slice(0, 16);
   }
 
   // ── bridges ────────────────────────────────────────────────────────────
@@ -657,7 +688,7 @@ export class MeshNode {
     this.directory.offerBlessing(p.blessing);
     const head = this.feed.head;
     p.send({ type: "sync", directoryVersion: this.directory.version(), head, features: [], load: this.loadBody() });
-    const items = this.store.dump();
+    const items = [...this.store.dump(), ...this.localMail.values()];
     for (let i = 0; i < items.length; i += MESH_ANNOUNCE_BATCH_MAX) p.send({ type: "announce", items: items.slice(i, i + MESH_ANNOUNCE_BATCH_MAX) });
     for (const m of this.homes.liveMoves()) p.send({ type: "account-move", ...m });
     p.send({ type: "sync-done" });
@@ -721,8 +752,9 @@ export class MeshNode {
         const mv = m.move as { accountHash?: string } | undefined;
         const account = typeof mv?.accountHash === "string" ? this.accountByHash(mv.accountHash) : null;
         const r = this.homes.offer({ move: m.move, signature: m.signature }, account, p.relayId);
-        if (!r.ok) p.rejected++;
-        else if (account) this.scheduleReconsider(account);
+        // An unknown account is not the peer's fault: the move is for relays that hold its boxes (§10.3).
+        if (!r.ok && r.reason !== "unknown-account") p.rejected++;
+        else if (r.ok && account) this.scheduleReconsider(account);
         return;
       }
       case "phone-begin":
@@ -817,31 +849,67 @@ export class MeshNode {
     if (!this.routerEntry) return refuse("not-holder");
     // The entry sends the peeked ClientHello as the first DATA; route once it is here, by the SNI the visitor sent
     // (§6.4: a peer's OPEN label alone never picks the tunnel).
+    // §6.4: a stream whose first DATA never comes is closed (the Rust relay's FIRST_DATA_WAIT).
+    const wait = setTimeout(() => {
+      this.counters.firstDataTimeouts++;
+      s.destroy();
+    }, this.opts.firstDataWaitMs ?? MESH_FIRST_DATA_WAIT_MS);
+    wait.unref?.();
+    s.once("close", () => clearTimeout(wait));
     s.once("data", (first: Buffer) => {
+      clearTimeout(wait);
       s.pause();
       if (s.kind === "tls" && !bridgedSniMatches(s.sni, first)) return refuse("not-holder");
-      this.routerEntry!(s, s.sni, new Uint8Array(first.buffer, first.byteOffset, first.byteLength), { entry: p.relayId, refuse });
+      const c = (s as BridgeStream & { openExtra?: { client?: unknown } }).openExtra?.client;
+      const client = typeof c === "string" && /^[0-9a-f]{16}$/.test(c) ? c : undefined;
+      this.routerEntry!(s, s.sni, new Uint8Array(first.buffer, first.byteOffset, first.byteLength), { entry: p.relayId, refuse, ...(client ? { client } : {}) });
     });
   }
 
   // ── peer-backup mailboxes over a bridge (§7.6) ──────────────────────────
 
-  /** Announce mailboxes a local tunnel proved (called by the mailbox registry). */
+  /**
+   * Announce mailboxes a local tunnel proved (called by the mailbox registry). A relay-bound announcement (§7.6) is
+   * kept only when it names this relay and verifies; it is re-sent in every sync dump.
+   */
   announceMailboxes(list: MailboxAnnouncement[]): void {
-    for (const a of list) this.queueAnnounce({ kind: "mailbox", announce: { pikPubHex: a.pikPubHex, epoch: a.epoch }, signature: a.sigHex, relayId: this.opts.relayId });
+    for (const a of list) {
+      const bound = a.relayId === this.opts.relayId && verifyMailboxForRelay(a.pikPubHex, a.epoch, this.opts.relayId, a.relaySigHex);
+      const item = { kind: "mailbox", announce: { pikPubHex: a.pikPubHex, epoch: a.epoch }, signature: a.sigHex, relayId: this.opts.relayId, ...(bound ? { relaySignature: a.relaySigHex } : {}) };
+      let id: string;
+      try {
+        id = pbMailboxId(a.pikPubHex, a.epoch);
+      } catch {
+        continue;
+      }
+      const had = this.localMail.get(id);
+      // An unbound re-announcement never drops a binding this relay already proved.
+      if (had?.relaySignature !== undefined && !bound) continue;
+      this.localMail.set(id, item);
+      this.queueAnnounce(item);
+    }
   }
 
   /** Local tunnels stopped holding these mailboxes: tell every peer, so another relay's holder can take them (§7.6). */
   withdrawMailboxes(ids: string[]): void {
+    for (const id of ids) this.localMail.delete(id);
     for (let i = 0; i < ids.length; i += MESH_ANNOUNCE_BATCH_MAX) this.bridges.broadcast({ type: "mailbox-withdraw", ids: ids.slice(i, i + MESH_ANNOUNCE_BATCH_MAX) });
   }
 
   /** Deliver to a mailbox held by a peer: `OPEN kind:"pb-mail"`, the envelope, then the reply (status u32 BE + body). */
   async deliverRemote(id: string, envelope: Uint8Array): Promise<{ status: number; body: Uint8Array } | null> {
-    const relayId = this.store.mailboxRelay(id);
-    const peer = relayId && relayId !== this.opts.relayId ? this.bridges.peer(relayId) : null;
-    const s = peer?.open(id, "pb-mail", { length: envelope.byteLength }) ?? null;
-    if (!s) return null;
+    // §7.6: the holder first; when it refuses or cannot be reached, the next relay that announced the mailbox.
+    for (const relayId of this.store.mailboxRelays(id)) {
+      if (relayId === this.opts.relayId) continue;
+      const r = await this.deliverVia(relayId, id, envelope);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  private deliverVia(relayId: string, id: string, envelope: Uint8Array): Promise<{ status: number; body: Uint8Array } | null> {
+    const s = this.bridges.peer(relayId)?.open(id, "pb-mail", { length: envelope.byteLength }) ?? null;
+    if (!s) return Promise.resolve(null);
     return new Promise((resolve) => {
       const chunks: Buffer[] = [];
       let total = 0;

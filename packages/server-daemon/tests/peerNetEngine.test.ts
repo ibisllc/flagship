@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PB_NETWORK_DEFAULT, canonicalPbMailboxAnnounce, ed, pbMailboxEpoch } from "@flagship/protocol";
+import { PB_NETWORK_DEFAULT, canonicalPbMailboxAnnounce, canonicalPbMailboxAnnounceForRelay, ed, pbMailboxEpoch } from "@flagship/protocol";
 import { PeerBackupEngine, type PeerPolicy } from "../src/peerNet/engine.js";
 import type { PbComClient } from "../src/peerNet/types.js";
 
@@ -94,6 +94,17 @@ describe("peer backup engine", () => {
     expect(a.map((x) => x.epoch)).toEqual([ep, ep + 1]);
     for (const x of a) {
       expect(ed.verify(Buffer.from(x.sigHex, "hex"), canonicalPbMailboxAnnounce(x.pikPubHex, x.epoch), Buffer.from(x.pikPubHex, "hex"))).toBe(true);
+    }
+  });
+
+  it("binds each announcement to the mesh relay it is sent to (relay-mesh.md §7.6)", async () => {
+    const { e } = engine({ p: "peer" }, []);
+    expect((await e.mailboxAnnouncements())[0]!.relayId).toBeUndefined();
+    for (const x of await e.mailboxAnnouncements("iad1")) {
+      expect(x.relayId).toBe("iad1");
+      const pub = Buffer.from(x.pikPubHex, "hex");
+      expect(ed.verify(Buffer.from(x.relaySigHex!, "hex"), canonicalPbMailboxAnnounceForRelay(x.pikPubHex, x.epoch, "iad1"), pub)).toBe(true);
+      expect(ed.verify(Buffer.from(x.relaySigHex!, "hex"), canonicalPbMailboxAnnounceForRelay(x.pikPubHex, x.epoch, "ams1"), pub)).toBe(false);
     }
   });
 });

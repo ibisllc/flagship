@@ -109,6 +109,7 @@ fn build(builder: &str, a: &Value) -> Frame {
                     pik_pub_hex: s(x, "pikPubHex").to_owned(),
                     epoch: x["epoch"].as_f64().unwrap(),
                     sig_hex: s(x, "sigHex").to_owned(),
+                    ..Default::default()
                 })
                 .collect();
             payload::mailbox_announce_frame(&list).unwrap()

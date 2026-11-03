@@ -14,7 +14,8 @@ use flagship_crypto::relay_mesh::{
     MESH_CONTROL_MAX_BYTES, MESH_LOAD_INTERVAL_MS, MESH_PEER_CUT_MS, MESH_PEER_MAX_QUEUED_BYTES,
     MESH_PEER_MAX_STREAMS, MESH_PEER_OPEN_BURST, MESH_PEER_OPEN_RATE, MESH_PEER_OVER_LIMIT_MS,
     MESH_PEER_QUERY_BURST, MESH_PEER_QUERY_RATE, MeshCheckContext, bridge_auth_canonical,
-    check_bridge_auth, sign_canonical,
+    bridge_ephemeral, bridge_mac_keys, check_bridge_auth, open_bridge_text, seal_bridge_text,
+    sign_canonical,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -41,8 +42,28 @@ const FEATURES: [&str; 2] = ["stream-credit-v1", "pb-mail"];
 const FLUSH_EVERY: Duration = Duration::from_millis(200);
 /// A head goes to one peer at most this often (§6.3).
 const HEAD_EVERY: Duration = Duration::from_secs(5);
-/// How long the holder waits for a bridged stream's first bytes.
-const FIRST_DATA_WAIT: Duration = Duration::from_secs(10);
+/// How long the holder waits for a bridged stream's first bytes (§6.4).
+const FIRST_DATA_WAIT: Duration = Duration::from_millis(rm::MESH_FIRST_DATA_WAIT_MS);
+
+/// One authenticated bridge's MAC keys, as this side uses them (§6.2): `send` seals what it sends, `recv` opens.
+#[derive(Clone, Copy)]
+struct LinkKeys {
+    send: [u8; 32],
+    recv: [u8; 32],
+}
+
+/// This side's half of a handshake's channel binding: the ephemeral secret and its `kx`.
+struct Ephemeral {
+    secret: [u8; 32],
+    kx: String,
+}
+
+impl Ephemeral {
+    fn new() -> Option<Self> {
+        let (secret, kx) = bridge_ephemeral().ok()?;
+        Some(Self { secret, kx })
+    }
+}
 
 /// Items and withdrawals waiting for the next flush to every peer.
 #[derive(Debug, Default)]
@@ -362,6 +383,11 @@ impl Peer {
     }
 }
 
+/// §6.1: only a bridge that authenticated and lived at least `stable` resets the dialer's backoff.
+fn backoff_resets(authenticated: bool, lived: Duration, stable: Duration) -> bool {
+    authenticated && lived >= stable
+}
+
 fn random_hex(n: usize) -> String {
     let mut b = vec![0u8; n];
     let _ = getrandom::fill(&mut b);
@@ -418,6 +444,7 @@ impl Mesh {
         peer: &str,
         server_nonce: &str,
         client_nonce: &str,
+        kx: &str,
     ) -> Value {
         let at = now();
         let b = BridgeAuth {
@@ -427,6 +454,7 @@ impl Mesh {
             server_nonce: server_nonce.to_owned(),
             client_nonce: client_nonce.to_owned(),
             at,
+            kx: kx.to_owned(),
         };
         let sig = bridge_auth_canonical(&b)
             .map(|c| sign_canonical(&self.0.key, &c))
@@ -441,7 +469,7 @@ impl Mesh {
             server_nonce
         };
         json!({"type": "mesh-auth", "v": 1, "relayId": self.relay_id(), "peer": peer, "nonce": nonce, "at": at,
-            "blessing": blessing, "sig": sig})
+            "kx": kx, "blessing": blessing, "sig": sig})
     }
 
     /// Check a peer's `mesh-auth` (`peer_role` is the peer's). On success: the peer id and whether its blessing came
@@ -451,7 +479,7 @@ impl Mesh {
         v: &Value,
         peer_role: &str,
         self_nonce: &str,
-    ) -> Result<(String, Option<Value>), &'static str> {
+    ) -> Result<(String, Option<Value>, String), &'static str> {
         let Some(auth) = wire::mesh_auth_from_json(v) else {
             return Err("bad-signature");
         };
@@ -487,9 +515,9 @@ impl Mesh {
         match raw {
             Some(r) => {
                 self.adopt_blessing(&blessing, &r);
-                Ok((auth.relay_id, None))
+                Ok((auth.relay_id, None, auth.kx))
             }
-            None => Ok((auth.relay_id, held.map(|(_, r)| r))),
+            None => Ok((auth.relay_id, held.map(|(_, r)| r), auth.kx)),
         }
     }
 
@@ -503,12 +531,15 @@ impl Mesh {
 
     /// Accept a `/mesh` WebSocket (the acceptor side of §6.2), then run the bridge until it closes. `pending` is held
     /// until the handshake ends (it counts against the pending-handshake caps, §6.1).
-    pub async fn accept_bridge<S, G>(&self, mut ws: WebSocketStream<S>, pending: G)
+    pub async fn accept_bridge<S, G>(&self, mut ws: WebSocketStream<S>, pending: G, client: &str)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         G: Send,
     {
-        let step = self.0.cfg.bridge.step;
+        let first = self.0.cfg.bridge.first;
+        let Some(eph) = Ephemeral::new() else {
+            return close_ws(ws, 1011, "no randomness").await;
+        };
         let ns = random_hex(32);
         let hello = json!({"type": "mesh-hello", "v": 1, "relayId": self.relay_id(), "nonce": ns, "at": now()});
         if ws
@@ -518,10 +549,10 @@ impl Mesh {
         {
             return;
         }
-        let Some(v) = next_text(&mut ws, step).await else {
+        let Some(v) = next_text(&mut ws, first).await else {
             return close_ws(ws, 4401, "stale").await;
         };
-        let (peer, held) = match self.check_auth(&v, "client", &ns) {
+        let (peer, held, peer_kx) = match self.check_auth(&v, "client", &ns) {
             Ok(x) => x,
             Err(r) => {
                 self.log(&format!("bridge refused: {r}"));
@@ -533,7 +564,11 @@ impl Mesh {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_owned();
-        let reply = self.auth_message("server", &peer, &ns, &nc);
+        let Some(keys) = bridge_mac_keys(&eph.secret, &peer_kx, &ns, &nc, &peer, self.relay_id())
+        else {
+            return close_ws(ws, 4401, "bad-signature").await;
+        };
+        let reply = self.auth_message("server", &peer, &ns, &nc, &eph.kx);
         if ws
             .send(Message::Text(reply.to_string().into()))
             .await
@@ -541,17 +576,13 @@ impl Mesh {
         {
             return;
         }
-        if let Some(b) = held {
-            let _ = ws
-                .send(Message::Text(
-                    json!({"type": "blessing", "blessing": b})
-                        .to_string()
-                        .into(),
-                ))
-                .await;
-        }
+        self.learn_peer_address(client);
         drop(pending);
-        self.run_link(ws, &peer, false).await;
+        let link = LinkKeys {
+            send: keys.s2c,
+            recv: keys.c2s,
+        };
+        self.run_link(ws, &peer, false, link, held).await;
     }
 
     /// Dial a peer (the dialer side of §6.2) and run the bridge until it closes. Returns whether it authenticated.
@@ -571,6 +602,10 @@ impl Mesh {
             return false;
         };
         let step = self.0.cfg.bridge.step;
+        let Some(eph) = Ephemeral::new() else {
+            close_ws(ws, 1011, "no randomness").await;
+            return false;
+        };
         let Some(hello) = next_text(&mut ws, step).await else {
             close_ws(ws, 4401, "stale").await;
             return false;
@@ -586,8 +621,17 @@ impl Mesh {
             close_ws(ws, 4401, "wrong-peer").await;
             return false;
         }
+        // The acceptor's clock too (§6.2): a `mesh-hello` more than 60 s off is refused `stale`.
+        let fresh = hello
+            .get("at")
+            .and_then(Value::as_u64)
+            .is_some_and(|at| at.abs_diff(now()) <= rm::MESH_CLOCK_SKEW_MS);
+        if !fresh {
+            close_ws(ws, 4401, "stale").await;
+            return false;
+        }
         let nc = random_hex(32);
-        let auth = self.auth_message("client", peer, &ns, &nc);
+        let auth = self.auth_message("client", peer, &ns, &nc, &eph.kx);
         if ws
             .send(Message::Text(auth.to_string().into()))
             .await
@@ -599,17 +643,19 @@ impl Mesh {
             close_ws(ws, 4401, "stale").await;
             return false;
         };
-        match self.check_auth(&v, "server", &nc) {
-            Ok((id, held)) if id == peer => {
-                if let Some(b) = held {
-                    let _ = ws
-                        .send(Message::Text(
-                            json!({"type": "blessing", "blessing": b})
-                                .to_string()
-                                .into(),
-                        ))
-                        .await;
+        let (held, keys) = match self.check_auth(&v, "server", &nc) {
+            Ok((id, held, peer_kx)) if id == peer => {
+                if v.get("nonce").and_then(Value::as_str) != Some(ns.as_str()) {
+                    close_ws(ws, 4401, "bad-signature").await;
+                    return false;
                 }
+                let Some(keys) =
+                    bridge_mac_keys(&eph.secret, &peer_kx, &ns, &nc, self.relay_id(), peer)
+                else {
+                    close_ws(ws, 4401, "bad-signature").await;
+                    return false;
+                };
+                (held, keys)
             }
             Ok(_) => {
                 close_ws(ws, 4401, "wrong-peer").await;
@@ -620,8 +666,12 @@ impl Mesh {
                 close_ws(ws, 4401, r).await;
                 return false;
             }
-        }
-        self.run_link(ws, peer, true).await;
+        };
+        let link = LinkKeys {
+            send: keys.c2s,
+            recv: keys.s2c,
+        };
+        self.run_link(ws, peer, true, link, held).await;
         true
     }
 
@@ -644,22 +694,34 @@ impl Mesh {
         true
     }
 
-    async fn run_link<S>(&self, ws: WebSocketStream<S>, peer_id: &str, dialed: bool)
-    where
+    async fn run_link<S>(
+        &self,
+        ws: WebSocketStream<S>,
+        peer_id: &str,
+        dialed: bool,
+        keys: LinkKeys,
+        held: Option<Value>,
+    ) where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (peer, mut rx) = Peer::new(peer_id, dialed, bridge_hub_config());
         if !self.register_peer(&peer) {
             return close_ws(ws, 4409, "duplicate").await;
         }
+        // A relay that restarted without a blessing gets back the copy this side admitted it on (§6.2).
+        if let Some(b) = held {
+            peer.send_json(&json!({"type": "blessing", "blessing": b}));
+        }
         self.log(&format!("bridge up: {peer_id}"));
         let (mut sink, mut stream) = ws.split();
         let ping_every = self.0.cfg.bridge.ping;
         let writer = {
             let tunnel = Arc::clone(&peer.tunnel);
+            let send_key = keys.send;
             tokio::spawn(async move {
                 let mut ping = tokio::time::interval(ping_every);
                 ping.tick().await;
+                let mut seq: u64 = 0;
                 loop {
                     let woke = tunnel.wake.notified();
                     while let Some(f) = tunnel.next_frame() {
@@ -670,7 +732,11 @@ impl Mesh {
                     tokio::select! {
                         _ = woke => {}
                         o = rx.recv() => match o {
-                            Some(Out::Text(t)) => if sink.send(Message::Text(t.into())).await.is_err() { return },
+                            Some(Out::Text(t)) => {
+                                let sealed = seal_bridge_text(&send_key, seq, &t);
+                                seq = seq.saturating_add(1);
+                                if sink.send(Message::Text(sealed.into())).await.is_err() { return }
+                            }
                             Some(Out::Binary(b)) => if sink.send(Message::Binary(b.into())).await.is_err() { return },
                             Some(Out::Close(code, reason)) => {
                                 let _ = sink.send(Message::Close(Some(CloseFrame { code: CloseCode::from(code), reason: reason.into() }))).await;
@@ -696,6 +762,7 @@ impl Mesh {
             stream_credit: true,
             ..TypeSet::V1
         };
+        let mut recv_seq: u64 = 0;
         loop {
             let msg = tokio::select! {
                 m = stream.next() => m,
@@ -726,11 +793,18 @@ impl Mesh {
                     }
                 },
                 Some(Ok(Message::Text(t))) => {
-                    if t.len() > MESH_CONTROL_MAX_BYTES {
+                    if t.len() > MESH_CONTROL_MAX_BYTES.saturating_add(64) {
                         peer.close(1009, "control message too large");
                         break;
                     }
-                    if let Ok(v) = serde_json::from_str::<Value>(t.as_str())
+                    // §6.2: every text message carries the bridge MAC for its place in this direction.
+                    let Some(json) = open_bridge_text(&keys.recv, recv_seq, t.as_str()) else {
+                        self.log(&format!("bridge {peer_id}: bad MAC"));
+                        peer.close(4401, "bad-mac");
+                        break;
+                    };
+                    recv_seq = recv_seq.saturating_add(1);
+                    if let Ok(v) = serde_json::from_str::<Value>(json)
                         && v.is_object()
                     {
                         self.on_control(&peer, &v);
@@ -879,7 +953,7 @@ impl Mesh {
                         });
                         let current = crate::mailbox::mailbox_epoch(t);
                         s.remote_mailboxes.retain(|_, l| {
-                            l.retain(|(_, epoch)| epoch.saturating_add(1) >= current);
+                            l.retain(|c| c.epoch.saturating_add(1) >= current);
                             !l.is_empty()
                         });
                     });
@@ -954,7 +1028,9 @@ impl Mesh {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 continue;
             }
-            if self.dial_bridge(peer).await {
+            // A bridge that authenticated and then lived < `stable` is a failed dial (§6.1): no hot redial loop.
+            let started = Instant::now();
+            if backoff_resets(self.dial_bridge(peer).await, started.elapsed(), b.stable) {
                 backoff = b.backoff_min;
             }
             let cap = u64::try_from(backoff.as_millis()).unwrap_or(1).max(1);
@@ -989,6 +1065,7 @@ impl Mesh {
             kind,
             hop,
             length,
+            client,
         }) = payload::parse_bridge_open(payload)
         else {
             return peer.refuse(id, "hop");
@@ -1028,7 +1105,16 @@ impl Mesh {
                     let (local, remote) = tokio::io::duplex(64 * 1024);
                     tokio::spawn(async move {
                         router
-                            .route_local(local, sni, first, Instant::now(), Some(entry))
+                            .route_local(
+                                local,
+                                sni,
+                                first,
+                                Instant::now(),
+                                Some(entry),
+                                client.unwrap_or_else(|| {
+                                    crate::mesh::rebalance::CLIENT_UNKNOWN.to_owned()
+                                }),
+                            )
                             .await;
                     });
                     pump(remote, h, None).await;
@@ -1051,6 +1137,7 @@ impl Mesh {
         key: Option<&str>,
         sni: &str,
         initial: Vec<u8>,
+        client: Option<&str>,
     ) -> Result<(), (String, S)>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -1063,7 +1150,10 @@ impl Mesh {
         if !self.fresh() && !key.is_some_and(|pod| self.log_knows(pod)) {
             return Err(("stale".into(), sock));
         }
-        let Ok(h) = peer.tunnel.open_stream_kind(sni, "tls", None, initial) else {
+        let Ok(h) = peer
+            .tunnel
+            .open_stream_kind(sni, "tls", None, client, initial)
+        else {
             return Err(("busy".into(), sock));
         };
         let refusal = peer.expect_refusal(h.id);
@@ -1397,5 +1487,18 @@ pub fn hello_sni(first: &[u8]) -> Option<String> {
     match r.push(first) {
         crate::sni::SniStatus::Done(info) => info.sni.clone(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_short_lived_bridge_does_not_reset_the_backoff() {
+        let stable = Duration::from_millis(rm::MESH_BRIDGE_STABLE_MS);
+        assert!(!backoff_resets(true, Duration::from_millis(50), stable));
+        assert!(!backoff_resets(false, stable, stable));
+        assert!(backoff_resets(true, stable, stable));
     }
 }

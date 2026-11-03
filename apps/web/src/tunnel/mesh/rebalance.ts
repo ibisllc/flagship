@@ -1,9 +1,13 @@
 /**
- * Rebalancing (relay-mesh.md §10): the home relay counts, per account, visitor bytes and streams by entry relay in
- * one-minute buckets over the last hour (phone traffic is not counted), and every hour (± 10 min) asks
- * `rebalanceDecision` whether the account should move to the relay most of its visitors arrive through.
+ * Rebalancing (relay-mesh.md §10): the home relay counts, per account, visitor sessions by entry relay in one-minute
+ * buckets over the last hour (phone traffic is not counted), and every hour (± 10 min) asks `rebalanceDecision`
+ * whether the account should move to the relay most of its visitors arrive through. Only completed sessions count,
+ * keyed by the visitor's client-address key: an entry's `streams` are its distinct keys and its `bytes` the sum over
+ * keys of each key's bytes capped at 8 MiB (§10.1, review 2026-11-03), so one address cannot steer an account.
  */
 import {
+  REBALANCE_CLIENT_BYTES_CAP,
+  REBALANCE_CLIENTS_PER_BUCKET_MAX,
   REBALANCE_BUCKET_MS,
   REBALANCE_INTERVAL_MS,
   REBALANCE_JITTER_MS,
@@ -29,8 +33,11 @@ export interface RebalancerOptions {
   minMoveMs?: number;
 }
 
-/** account → bucket start → entry relay → {bytes, streams}. */
-type Buckets = Map<number, Map<string, { bytes: number; streams: number }>>;
+/** account → bucket start → entry relay → client key → bytes. */
+type Buckets = Map<number, Map<string, Map<string, number>>>;
+
+/** The key later clients of a full (account, minute, entry) bucket share. */
+export const REBALANCE_OVERFLOW_CLIENT = "~";
 
 export class Rebalancer {
   private readonly accounts = new Map<string, Buckets>();
@@ -51,13 +58,34 @@ export class Rebalancer {
     return Math.max(1, Math.min(REBALANCE_BUCKET_MS, Math.floor(this.windowMs / 60)));
   }
 
-  /** A visitor stream to a box of `account` arrived through `entry` (self for local visitors). */
-  countStream(account: string, entry: string): void {
-    this.slot(account, entry).streams += 1;
+  /**
+   * A completed visitor session to a box of `account` that arrived through `entry` (self for local visitors), from the
+   * visitor whose client-address key is `client`, carrying `bytes` both ways. Call it once, when the session ends.
+   */
+  countSession(account: string, entry: string, client: string, bytes: number): void {
+    const per = this.slot(account, entry);
+    const key = per.has(client) || per.size < REBALANCE_CLIENTS_PER_BUCKET_MAX ? client : REBALANCE_OVERFLOW_CLIENT;
+    per.set(key, (per.get(key) ?? 0) + Math.max(0, bytes));
   }
 
-  countBytes(account: string, entry: string, bytes: number): void {
-    this.slot(account, entry).bytes += bytes;
+  /** The window the decision sees for an account: per entry, distinct client keys and their capped bytes. */
+  window(account: string): Array<{ relayId: string; bytes: number; streams: number }> {
+    const buckets = this.accounts.get(account);
+    if (!buckets) return [];
+    this.prune(buckets, this.now());
+    const byEntry = new Map<string, Map<string, number>>();
+    for (const per of buckets.values()) {
+      for (const [relayId, clients] of per) {
+        const m = byEntry.get(relayId) ?? new Map<string, number>();
+        for (const [c, b] of clients) m.set(c, (m.get(c) ?? 0) + b);
+        byEntry.set(relayId, m);
+      }
+    }
+    return [...byEntry].map(([relayId, clients]) => {
+      let bytes = 0;
+      for (const b of clients.values()) bytes += Math.min(b, REBALANCE_CLIENT_BYTES_CAP);
+      return { relayId, bytes, streams: clients.size };
+    });
   }
 
   start(): void {
@@ -88,20 +116,12 @@ export class Rebalancer {
         continue;
       }
       if (this.opts.homeOf(account) !== this.opts.selfRelayId) continue;
-      const window = new Map<string, { bytes: number; streams: number }>();
-      for (const per of buckets.values()) {
-        for (const [relayId, v] of per) {
-          const w = window.get(relayId) ?? { bytes: 0, streams: 0 };
-          w.bytes += v.bytes;
-          w.streams += v.streams;
-          window.set(relayId, w);
-        }
-      }
+      const window = this.window(account);
       const last = this.opts.lastMove(account);
       const minMove = this.opts.minMoveMs;
       const d = rebalanceDecision({
         home: this.opts.selfRelayId,
-        window: [...window].map(([relayId, v]) => ({ relayId, ...v })),
+        window,
         relays: this.opts.relays(),
         lastMoveAt: last !== null && minMove !== undefined && now - last >= minMove ? null : last,
         hasLegacyBox: this.opts.hasLegacyBox(account),
@@ -117,7 +137,7 @@ export class Rebalancer {
     }
   }
 
-  private slot(account: string, entry: string): { bytes: number; streams: number } {
+  private slot(account: string, entry: string): Map<string, number> {
     const now = this.now();
     const start = now - (now % this.bucketMs);
     let buckets = this.accounts.get(account);
@@ -128,7 +148,7 @@ export class Rebalancer {
       this.prune(buckets, now);
     }
     let s = per.get(entry);
-    if (!s) per.set(entry, (s = { bytes: 0, streams: 0 }));
+    if (!s) per.set(entry, (s = new Map()));
     return s;
   }
 

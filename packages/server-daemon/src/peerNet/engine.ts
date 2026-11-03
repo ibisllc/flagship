@@ -6,7 +6,7 @@
  * bricks and leaves gracefully as a holder.
  */
 import { join } from "node:path";
-import { canonicalPbMailboxAnnounce, ed, pbMailboxEpoch } from "@flagship/protocol";
+import { canonicalPbMailboxAnnounce, canonicalPbMailboxAnnounceForRelay, ed, pbMailboxEpoch } from "@flagship/protocol";
 import { buildHttpPbCom, buildHttpPbTransport } from "./comClient.js";
 import { HolderEngine, type HolderState, type HolderStatus } from "./holder.js";
 import { fromHex, hex } from "./mailOps.js";
@@ -212,12 +212,21 @@ export class PeerBackupEngine {
     return this.holder.handleMail(mailboxId, envelope);
   }
 
-  /** The mailbox announcements the tunnel sends the hub (current and next epoch). */
-  async mailboxAnnouncements(): Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string }>> {
+  /**
+   * The mailbox announcements the tunnel sends the hub (current and next epoch). On a verified mesh tunnel `relayId`
+   * names its relay and each announcement also carries the v2 signature binding it there (relay-mesh.md §7.6).
+   */
+  async mailboxAnnouncements(relayId?: string): Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string; relayId?: string; relaySigHex?: string }>> {
     const st = await this.holder.state();
     const pik = await this.holder.pikPubHex();
+    const seed = fromHex(st.pikSeedHex);
     const e = pbMailboxEpoch((this.o.now ?? Date.now)());
-    return [e, e + 1].map((epoch) => ({ pikPubHex: pik, epoch, sigHex: hex(ed.sign(canonicalPbMailboxAnnounce(pik, epoch), fromHex(st.pikSeedHex))) }));
+    return [e, e + 1].map((epoch) => ({
+      pikPubHex: pik,
+      epoch,
+      sigHex: hex(ed.sign(canonicalPbMailboxAnnounce(pik, epoch), seed)),
+      ...(relayId ? { relayId, relaySigHex: hex(ed.sign(canonicalPbMailboxAnnounceForRelay(pik, epoch, relayId), seed)) } : {}),
+    }));
   }
 
   async restore(a: { serverId: string; pbk: Uint8Array; outPath: string; onProgress?: (done: number, total: number) => void }): Promise<PeerRestoreResult> {

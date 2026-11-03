@@ -5,9 +5,10 @@
  * bytewise-smaller relayId dials; the other only accepts. One hop only: a bridged OPEN carries `hop:1` and the holder
  * never forwards it on.
  *
- * Wire: text messages are JSON control (≤ 1 MiB); binary messages are exactly one frame each: OPEN (payload JSON
- * `{sni, kind, hop:1}`), DATA, CLOSE, and STREAM_CREDIT 0x06 (`u32 BE` bytes > 0, `stream-credit-v1`). Dialer-opened
- * streams are odd, acceptor-opened even.
+ * Wire: text messages are JSON control (≤ 1 MiB), each sealed with the bridge MAC after the handshake (§6.2: 64 hex
+ * HMAC over the direction's sequence number and the JSON, keys from the X25519 `kx` both sides signed); binary
+ * messages are exactly one frame each: OPEN (payload JSON `{sni, kind, hop:1, client?}`), DATA, CLOSE, and
+ * STREAM_CREDIT 0x06 (`u32 BE` bytes > 0, `stream-credit-v1`). Dialer-opened streams are odd, acceptor-opened even.
  */
 import type { IncomingMessage, Server as HttpServer } from "node:http";
 import { randomBytes } from "node:crypto";
@@ -15,8 +16,19 @@ import { Duplex } from "node:stream";
 import type { Duplex as NetDuplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import {
+  bridgeEphemeral,
+  bridgeMacKeys,
   checkBridgeAuth,
+  isRelayId,
   MESH_BACKOFF_MAX_MS,
+  MESH_BRIDGE_STABLE_MS,
+  MESH_HANDSHAKE_FIRST_MS,
+  MESH_HANDSHAKE_RESERVED,
+  MESH_KNOWN_ADDRESS_TTL_MS,
+  MESH_KNOWN_ADDRESSES_MAX,
+  openBridgeText,
+  sealBridgeText,
+  type BridgeMacKeys,
   MESH_BACKOFF_MIN_MS,
   MESH_CONTROL_MAX_BYTES,
   MESH_DIAL_TIMEOUT_MS,
@@ -41,12 +53,62 @@ import {
   type RelayBlessing,
 } from "@flagship/protocol";
 import { decodeFrame, encodeFrame, FRAME_CLOSE, FRAME_CLOSE_REMOTE, FRAME_DATA, FRAME_OPEN, parseClientHelloSni, type Frame } from "@flagship/tunnel-protocol";
-import { AddressLimiter, clientAddress } from "../phoneTunnel.js";
+import { AddressLimiter, clientAddress, flyClientIpTrusted } from "../phoneTunnel.js";
 
-/** `/mesh` handshakes not yet authenticated: 4 per client address, 64 in all (§6.1; security review 2026-11-02). */
-export class PendingHandshakes extends AddressLimiter {
-  constructor() {
-    super(MESH_HANDSHAKE_MAX_PENDING_PER_IP, MESH_HANDSHAKE_MAX_PENDING);
+/**
+ * `/mesh` handshakes not yet authenticated: 4 per client address, 64 in all (§6.1; security review 2026-11-02), plus
+ * 16 (4 per address) only a known peer address may take once the 64 are held (review 2026-11-03).
+ */
+export class PendingHandshakes {
+  private readonly general = new AddressLimiter(MESH_HANDSHAKE_MAX_PENDING_PER_IP, MESH_HANDSHAKE_MAX_PENDING);
+  private readonly reserved = new AddressLimiter(MESH_HANDSHAKE_MAX_PENDING_PER_IP, MESH_HANDSHAKE_RESERVED);
+
+  /** The pool the handshake holds (give it back to `done`), or null: answer 503. */
+  tryAdd(address: string, knownPeer = false): "general" | "reserved" | null {
+    if (this.general.tryAdd(address)) return "general";
+    if (knownPeer && this.reserved.tryAdd(address)) return "reserved";
+    return null;
+  }
+
+  done(address: string, pool: "general" | "reserved" = "general"): void {
+    (pool === "general" ? this.general : this.reserved).done(address);
+  }
+
+  count(address: string): number {
+    return this.general.count(address) + this.reserved.count(address);
+  }
+}
+
+/** Addresses peers authenticated from (24 h, ≤ 256, oldest out) plus `FLAGSHIP_MESH_PEER_ADDRS` (§6.1). */
+export class KnownPeerAddresses {
+  private readonly learned = new Map<string, number>();
+  private readonly fixed: ReadonlySet<string>;
+
+  constructor(
+    fixed: readonly string[] = [],
+    private readonly now: () => number = () => Date.now(),
+  ) {
+    this.fixed = new Set(fixed.map((a) => a.trim().toLowerCase()).filter((a) => a.length > 0));
+  }
+
+  static fromEnv(env: NodeJS.ProcessEnv = process.env, now?: () => number): KnownPeerAddresses {
+    return new KnownPeerAddresses((env.FLAGSHIP_MESH_PEER_ADDRS ?? "").split(","), now);
+  }
+
+  has(address: string): boolean {
+    if (this.fixed.has(address)) return true;
+    const until = this.learned.get(address);
+    if (until === undefined) return false;
+    if (until > this.now()) return true;
+    this.learned.delete(address);
+    return false;
+  }
+
+  learn(address: string): void {
+    if (address === "?") return;
+    this.learned.delete(address);
+    this.learned.set(address, this.now() + MESH_KNOWN_ADDRESS_TTL_MS);
+    while (this.learned.size > MESH_KNOWN_ADDRESSES_MAX) this.learned.delete(this.learned.keys().next().value as string);
   }
 }
 
@@ -280,6 +342,11 @@ export class BridgePeer {
   /** The peer's last `load` (rebalancing, §10.2). */
   load: { tunnels: number; capacity: number; draining: boolean; at: number } | null = null;
   closed = false;
+  /** §6.2 channel binding: this side seals with `sendKey`, checks the peer's text with `recvKey`. */
+  private readonly sendKey: Uint8Array;
+  private readonly recvKey: Uint8Array;
+  private sendSeq = 0;
+  private recvSeq = 0;
 
   constructor(
     readonly relayId: string,
@@ -290,7 +357,10 @@ export class BridgePeer {
     private readonly now: () => number,
     private readonly onCut: (relayId: string) => void,
     timings: { pingMs?: number; downMs?: number } = {},
+    keys: BridgeMacKeys,
   ) {
+    this.sendKey = role === "client" ? keys.c2s : keys.s2c;
+    this.recvKey = role === "client" ? keys.s2c : keys.c2s;
     this.nextId = role === "client" ? 1 : 2;
     this.opens = new TokenBucket(MESH_PEER_OPEN_RATE, MESH_PEER_OPEN_BURST, now);
     this.lastHeard = now();
@@ -317,7 +387,7 @@ export class BridgePeer {
 
   send(msg: Record<string, unknown>): void {
     if (!this.live) return;
-    this.ws.send(JSON.stringify(msg));
+    this.ws.send(sealBridgeText(this.sendKey, this.sendSeq++, JSON.stringify(msg)));
   }
 
   sendBinary(bytes: Uint8Array): void {
@@ -422,10 +492,17 @@ export class BridgePeer {
   private onMessage(raw: Buffer, isBinary: boolean): void {
     this.lastHeard = this.now();
     if (!isBinary) {
-      if (raw.byteLength > MESH_CONTROL_MAX_BYTES) return this.close(1009, "control message too large");
+      if (raw.byteLength > MESH_CONTROL_MAX_BYTES + 64) return this.close(1009, "control message too large");
+      // §6.2: every text after the handshake carries the bridge MAC for its place in the sequence.
+      const json = openBridgeText(this.recvKey, this.recvSeq, raw.toString("utf8"));
+      if (json === null) {
+        this.rejected++;
+        return this.close(4401, "bad-mac");
+      }
+      this.recvSeq++;
       let msg: unknown;
       try {
-        msg = JSON.parse(raw.toString("utf8"));
+        msg = JSON.parse(json);
       } catch {
         this.rejected++;
         return;
@@ -523,14 +600,16 @@ export interface HandshakeContext {
   caKeys(): readonly string[];
   checkContext(): MeshCheckContext;
   now(): number;
+  /** A peer this relay refuses for now (cut for abuse, §11): the acceptor answers `revoked` before its own proof. */
+  refused?(relayId: string): boolean;
 }
 
 const nonce = (): string => randomBytes(32).toString("hex");
 
-function myAuth(ctx: HandshakeContext, role: BridgeRole, peer: string, serverNonce: string, clientNonce: string): MeshAuth {
+function myAuth(ctx: HandshakeContext, role: BridgeRole, peer: string, serverNonce: string, clientNonce: string, kx: string): MeshAuth {
   const at = ctx.now();
-  const sig = signRelayMeshRecord("relay-bridge-auth", { role, signerRelayId: ctx.selfRelayId, peerRelayId: peer, serverNonce, clientNonce, at }, ctx.sign);
-  return { type: "mesh-auth", v: 1, relayId: ctx.selfRelayId, peer, nonce: role === "server" ? serverNonce : clientNonce, at, blessing: ctx.blessing(), sig };
+  const sig = signRelayMeshRecord("relay-bridge-auth", { role, signerRelayId: ctx.selfRelayId, peerRelayId: peer, serverNonce, clientNonce, at, kx }, ctx.sign);
+  return { type: "mesh-auth", v: 1, relayId: ctx.selfRelayId, peer, nonce: role === "server" ? serverNonce : clientNonce, at, kx, blessing: ctx.blessing(), sig };
 }
 
 /**
@@ -595,20 +674,29 @@ export class HandshakeQueue {
   }
 }
 
-export type HandshakeResult = { ok: true; relayId: string; blessing: RelayBlessing; returnBlessing: boolean } | { ok: false; reason: BridgeRefusal | "timeout" };
+export type HandshakeResult =
+  | { ok: true; relayId: string; blessing: RelayBlessing; returnBlessing: boolean; keys: BridgeMacKeys }
+  | { ok: false; reason: BridgeRefusal | "timeout" | "bad-mac" };
 
-/** The acceptor's side: `mesh-hello`, check the dialer's `mesh-auth`, answer with its own. */
-export async function acceptorHandshake(ws: WebSocket, ctx: HandshakeContext, stepMs = MESH_HANDSHAKE_STEP_MS, q = new HandshakeQueue(ws)): Promise<HandshakeResult> {
+/**
+ * The acceptor's side: `mesh-hello`, check the dialer's `mesh-auth` (within `firstMs`, §6.1), refuse a cut peer before
+ * answering, then answer with its own. Both sides' signed `kx` give the bridge MAC keys (§6.2).
+ */
+export async function acceptorHandshake(ws: WebSocket, ctx: HandshakeContext, stepMs = MESH_HANDSHAKE_STEP_MS, q = new HandshakeQueue(ws), firstMs = Math.min(stepMs, MESH_HANDSHAKE_FIRST_MS)): Promise<HandshakeResult> {
   const ns = nonce();
   const hello: MeshHello = { type: "mesh-hello", v: 1, relayId: ctx.selfRelayId, nonce: ns, at: ctx.now() };
   ws.send(JSON.stringify(hello));
-  const auth = (await q.next(stepMs)) as MeshAuth | null;
+  const auth = (await q.next(firstMs)) as MeshAuth | null;
   if (!auth) return fail(ws, "timeout");
   const c = checkBridgeAuth({ auth, role: "client", selfRelayId: ctx.selfRelayId, selfNonce: ns, heldBlessing: auth.blessing === null ? ctx.heldBlessing(String(auth.relayId)) : null, caKeys: ctx.caKeys(), ctx: ctx.checkContext() });
   if (!c.ok) return fail(ws, c.reason);
   if (typeof auth.nonce !== "string" || !/^[0-9a-f]{64}$/.test(auth.nonce)) return fail(ws, "bad-signature");
-  ws.send(JSON.stringify(myAuth(ctx, "server", auth.relayId, ns, auth.nonce)));
-  return { ok: true, relayId: auth.relayId, blessing: c.blessing, returnBlessing: auth.blessing === null };
+  if (ctx.refused?.(auth.relayId)) return fail(ws, "revoked");
+  const eph = bridgeEphemeral();
+  const keys = bridgeMacKeys({ secret: eph.secret, peerKx: auth.kx, serverNonce: ns, clientNonce: auth.nonce, clientRelayId: auth.relayId, serverRelayId: ctx.selfRelayId });
+  if (!keys) return fail(ws, "bad-signature");
+  ws.send(JSON.stringify(myAuth(ctx, "server", auth.relayId, ns, auth.nonce, eph.kx)));
+  return { ok: true, relayId: auth.relayId, blessing: c.blessing, returnBlessing: auth.blessing === null, keys };
 }
 
 /** The dialer's side: wait for `mesh-hello` from the expected peer, send `mesh-auth`, check the acceptor's. */
@@ -619,17 +707,20 @@ export async function dialerHandshake(ws: WebSocket, expectPeer: string, ctx: Ha
   if (typeof hello.nonce !== "string" || !/^[0-9a-f]{64}$/.test(hello.nonce)) return fail(ws, "wrong-peer");
   if (typeof hello.at !== "number" || Math.abs(hello.at - ctx.now()) > 60_000) return fail(ws, "stale");
   const nc = nonce();
-  ws.send(JSON.stringify(myAuth(ctx, "client", expectPeer, hello.nonce, nc)));
+  const eph = bridgeEphemeral();
+  ws.send(JSON.stringify(myAuth(ctx, "client", expectPeer, hello.nonce, nc, eph.kx)));
   const auth = (await q.next(stepMs)) as MeshAuth | null;
   if (!auth) return fail(ws, "timeout");
   if (auth.nonce !== hello.nonce) return fail(ws, "bad-signature");
   const c = checkBridgeAuth({ auth, role: "server", selfRelayId: ctx.selfRelayId, selfNonce: nc, heldBlessing: auth.blessing === null ? ctx.heldBlessing(expectPeer) : null, caKeys: ctx.caKeys(), ctx: ctx.checkContext() });
   if (!c.ok) return fail(ws, c.reason);
   if (auth.relayId !== expectPeer) return fail(ws, "wrong-peer");
-  return { ok: true, relayId: auth.relayId, blessing: c.blessing, returnBlessing: auth.blessing === null };
+  const keys = bridgeMacKeys({ secret: eph.secret, peerKx: auth.kx, serverNonce: hello.nonce, clientNonce: nc, clientRelayId: ctx.selfRelayId, serverRelayId: expectPeer });
+  if (!keys) return fail(ws, "bad-signature");
+  return { ok: true, relayId: auth.relayId, blessing: c.blessing, returnBlessing: auth.blessing === null, keys };
 }
 
-function fail(ws: WebSocket, reason: BridgeRefusal | "timeout"): HandshakeResult {
+function fail(ws: WebSocket, reason: BridgeRefusal | "timeout" | "bad-mac"): HandshakeResult {
   if (ws.readyState === WebSocket.OPEN) ws.close(4401, reason);
   else ws.terminate();
   return { ok: false, reason };
@@ -645,27 +736,48 @@ export interface BridgeManagerOptions extends HandshakeContext {
   peerUrl?(peer: { relayId: string; tunnelHost: string }): string;
   pingMs?: number;
   downMs?: number;
+  /** Test shortenings: the acceptor's first wait (2 s) and how long a bridge must live to reset the backoff (30 s). */
+  firstMs?: number;
+  stableMs?: number;
+  /** Known peer addresses (default: `FLAGSHIP_MESH_PEER_ADDRS` plus learned ones). */
+  knownPeers?: KnownPeerAddresses;
+  /** Believe `Fly-Client-IP` (default: on Fly only, §6.1). */
+  trustFlyClientIp?: boolean;
   log?: (m: string) => void;
+}
+
+interface DialState {
+  timer: ReturnType<typeof setTimeout> | null;
+  attempt: number;
+  busy: boolean;
+  /** When this dialer's current bridge came up (its backoff resets only once it lived `MESH_BRIDGE_STABLE_MS`). */
+  upAt: number | null;
 }
 
 export class BridgeManager {
   private readonly bridges = new Map<string, BridgePeer>();
-  private readonly dialing = new Map<string, { timer: ReturnType<typeof setTimeout> | null; attempt: number; busy: boolean }>();
+  private readonly dialing = new Map<string, DialState>();
   private readonly cutUntil = new Map<string, number>();
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: 2 * MESH_CONTROL_MAX_BYTES });
   private readonly pending = new PendingHandshakes();
+  private readonly known: KnownPeerAddresses;
+  private readonly trustFly: boolean;
   private tick: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
   readonly handshakeFailures: Record<string, number> = {};
 
-  constructor(private readonly opts: BridgeManagerOptions) {}
+  constructor(private readonly opts: BridgeManagerOptions) {
+    this.known = opts.knownPeers ?? KnownPeerAddresses.fromEnv(process.env, () => opts.now());
+    this.trustFly = opts.trustFlyClientIp ?? flyClientIpTrusted();
+  }
 
   /** Mount `/mesh` on the HTTP server; returns the detach function. */
   attach(httpServer: HttpServer): () => void {
     const onUpgrade = (req: IncomingMessage, socket: NetDuplex, head: Buffer): void => {
       if (req.url !== MESH_PATH) return;
-      const address = clientAddress(req);
-      if (!this.pending.tryAdd(address)) {
+      const address = clientAddress(req, this.trustFly);
+      const pool = this.pending.tryAdd(address, this.known.has(address));
+      if (!pool) {
         this.handshakeFailures.busy = (this.handshakeFailures.busy ?? 0) + 1;
         socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
         return;
@@ -674,10 +786,10 @@ export class BridgeManager {
       const release = () => {
         if (released) return;
         released = true;
-        this.pending.done(address);
+        this.pending.done(address, pool);
       };
       socket.once("close", release);
-      this.wss.handleUpgrade(req, socket, head, (ws) => void this.accept(ws).finally(release));
+      this.wss.handleUpgrade(req, socket, head, (ws) => void this.accept(ws, address, release).finally(release));
     };
     httpServer.on("upgrade", onUpgrade);
     return () => httpServer.off("upgrade", onUpgrade);
@@ -725,14 +837,14 @@ export class BridgeManager {
       if (this.opts.selfRelayId >= p.relayId) continue; // the smaller id dials
       if (this.peer(p.relayId)) continue;
       if ((this.cutUntil.get(p.relayId) ?? 0) > this.opts.now()) continue;
-      const d = this.dialing.get(p.relayId) ?? { timer: null, attempt: 0, busy: false };
+      const d = this.dialing.get(p.relayId) ?? { timer: null, attempt: 0, busy: false, upAt: null };
       this.dialing.set(p.relayId, d);
       if (d.busy || d.timer) continue;
       void this.dial(p, d);
     }
   }
 
-  private async dial(p: { relayId: string; tunnelHost: string }, d: { timer: ReturnType<typeof setTimeout> | null; attempt: number; busy: boolean }): Promise<void> {
+  private async dial(p: { relayId: string; tunnelHost: string }, d: DialState): Promise<void> {
     d.busy = true;
     const url = this.opts.peerUrl ? this.opts.peerUrl(p) : `wss://${p.tunnelHost}:8443${MESH_PATH}`;
     let ws: WebSocket;
@@ -763,7 +875,7 @@ export class BridgeManager {
       const r = await dialerHandshake(ws, p.relayId, this.opts, MESH_HANDSHAKE_STEP_MS, q);
       if (r.ok) {
         ok = true;
-        this.up(ws, r.relayId, "client", r.blessing, r.returnBlessing, q.detach());
+        this.up(ws, r.relayId, "client", r.blessing, r.returnBlessing, q.detach(), r.keys);
       } else {
         this.handshakeFailures[r.reason] = (this.handshakeFailures[r.reason] ?? 0) + 1;
         this.opts.log?.(`[mesh-bridge] dial ${p.relayId} refused: ${r.reason}`);
@@ -773,13 +885,19 @@ export class BridgeManager {
     }
     d.busy = false;
     if (ok) {
-      d.attempt = 0;
+      // The backoff resets only once the bridge has lived a while (§6.1): see `bridgeDown`.
+      d.upAt = this.opts.now();
       return;
     }
     if (this.stopped) return;
-    // Full-jitter backoff 1 s → 60 s.
+    this.backoff(d);
+  }
+
+  /** Full-jitter backoff 1 s → 60 s. */
+  private backoff(d: DialState): void {
     d.attempt++;
     const cap = Math.min(MESH_BACKOFF_MAX_MS, MESH_BACKOFF_MIN_MS * 2 ** Math.min(d.attempt, 10));
+    if (d.timer) clearTimeout(d.timer);
     d.timer = setTimeout(() => {
       d.timer = null;
       this.reconcile();
@@ -787,23 +905,39 @@ export class BridgeManager {
     d.timer.unref?.();
   }
 
-  private async accept(ws: WebSocket): Promise<void> {
+  /** A dialled bridge went down: a long-lived one resets the backoff, a short-lived one counts as a failed dial. */
+  private bridgeDown(relayId: string): void {
+    const d = this.dialing.get(relayId);
+    if (!d || d.upAt === null) return;
+    const lived = this.opts.now() - d.upAt;
+    d.upAt = null;
+    if (lived >= (this.opts.stableMs ?? MESH_BRIDGE_STABLE_MS)) d.attempt = 0;
+    else if (!this.stopped) this.backoff(d);
+  }
+
+  /** How many times the dialer has failed in a row toward a peer (tests, stats). */
+  dialAttempts(relayId: string): number {
+    return this.dialing.get(relayId)?.attempt ?? 0;
+  }
+
+  private async accept(ws: WebSocket, address = "?", release: () => void = () => undefined): Promise<void> {
     ws.on("error", () => undefined);
     const q = new HandshakeQueue(ws);
-    const r = await acceptorHandshake(ws, this.opts, MESH_HANDSHAKE_STEP_MS, q);
+    // A cut peer is answered `revoked` before this relay proves itself (review 2026-11-03: it used to authenticate and
+    // then close at once, which the dialer took as a success and redialled in a loop).
+    const ctx: HandshakeContext = { ...this.opts, refused: (id) => (this.cutUntil.get(id) ?? 0) > this.opts.now() || (this.opts.refused?.(id) ?? false) };
+    const r = await acceptorHandshake(ws, ctx, MESH_HANDSHAKE_STEP_MS, q, this.opts.firstMs ?? MESH_HANDSHAKE_FIRST_MS);
     if (!r.ok) {
       this.handshakeFailures[r.reason] = (this.handshakeFailures[r.reason] ?? 0) + 1;
       this.opts.log?.(`[mesh-bridge] refused an incoming bridge: ${r.reason}`);
       return;
     }
-    if ((this.cutUntil.get(r.relayId) ?? 0) > this.opts.now()) {
-      ws.close(4429, "cut");
-      return;
-    }
-    this.up(ws, r.relayId, "server", r.blessing, r.returnBlessing, q.detach());
+    if (isRelayId(r.relayId)) this.known.learn(address);
+    release();
+    this.up(ws, r.relayId, "server", r.blessing, r.returnBlessing, q.detach(), r.keys);
   }
 
-  private up(ws: WebSocket, relayId: string, role: BridgeRole, blessing: RelayBlessing, returnBlessing: boolean, queued: Array<{ raw: Buffer; isBinary: boolean }>): void {
+  private up(ws: WebSocket, relayId: string, role: BridgeRole, blessing: RelayBlessing, returnBlessing: boolean, queued: Array<{ raw: Buffer; isBinary: boolean }>, keys: BridgeMacKeys): void {
     const old = this.bridges.get(relayId);
     const peer = new BridgePeer(relayId, role, blessing, ws, {
       onControl: (p, m) => this.opts.handler.onControl(p, m),
@@ -811,10 +945,11 @@ export class BridgeManager {
       onUp: (p) => this.opts.handler.onUp(p),
       onDown: (p, why) => {
         if (this.bridges.get(p.relayId) === p) this.bridges.delete(p.relayId);
+        if (p.role === "client") this.bridgeDown(p.relayId);
         this.opts.handler.onDown(p, why);
         if (!this.stopped) setTimeout(() => this.reconcile(), 50).unref?.();
       },
-    }, () => this.opts.now(), (id) => this.cutUntil.set(id, this.opts.now() + MESH_PEER_CUT_MS), { pingMs: this.opts.pingMs, downMs: this.opts.downMs });
+    }, () => this.opts.now(), (id) => this.cutUntil.set(id, this.opts.now() + MESH_PEER_CUT_MS), { pingMs: this.opts.pingMs, downMs: this.opts.downMs }, keys);
     this.bridges.set(relayId, peer);
     // A newer connection to the same peer replaces the older one (both were dialled by the smaller id).
     if (old && old !== peer) old.close(1000, "replaced");

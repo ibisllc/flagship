@@ -193,17 +193,27 @@ pub fn open_frame(stream_id: u32, sni: &str) -> Frame {
     Frame::new(stream_id, FRAME_OPEN, sni.as_bytes().to_vec())
 }
 
-/// A mesh bridge's OPEN (relay-mesh.md §6.4): `{sni, kind:"tls"|"pb-mail", hop:1}`, and for `pb-mail` the envelope's
-/// `length` (§15.4.1).
-pub fn bridge_open_frame(stream_id: u32, sni: &str, kind: &str, length: Option<u64>) -> Frame {
+/// A mesh bridge's OPEN (relay-mesh.md §6.4): `{sni, kind:"tls"|"pb-mail", hop:1}`, for `pb-mail` the envelope's
+/// `length` (§15.4.1), and the entry's opaque `client` key of the visitor (16 hex, §10.1).
+pub fn bridge_open_frame(
+    stream_id: u32,
+    sni: &str,
+    kind: &str,
+    length: Option<u64>,
+    client: Option<&str>,
+) -> Frame {
     let length = length
         .map(|n| format!(",\"length\":{n}"))
+        .unwrap_or_default();
+    let client = client
+        .filter(|c| is_lower_hex(c, 16))
+        .map(|c| format!(",\"client\":{}", str_lit(c)))
         .unwrap_or_default();
     Frame::new(
         stream_id,
         FRAME_OPEN,
         format!(
-            "{{\"sni\":{},\"kind\":{},\"hop\":1{length}}}",
+            "{{\"sni\":{},\"kind\":{},\"hop\":1{length}{client}}}",
             str_lit(sni),
             str_lit(kind)
         )
@@ -218,6 +228,8 @@ pub struct BridgeOpen {
     pub kind: String,
     pub hop: u64,
     pub length: Option<u64>,
+    /// The entry's client key (16 lowercase hex); anything else reads as none.
+    pub client: Option<String>,
 }
 
 /// `None` unless `sni` and `kind` are strings; a missing or non-integer `hop` reads as 0.
@@ -234,6 +246,11 @@ pub fn parse_bridge_open(payload: &[u8]) -> Option<BridgeOpen> {
         kind: kind.to_owned(),
         hop: o.get("hop").and_then(Value::as_u64).unwrap_or(0),
         length: o.get("length").and_then(Value::as_u64),
+        client: o
+            .get("client")
+            .and_then(Value::as_str)
+            .filter(|c| is_lower_hex(c, 16))
+            .map(str::to_owned),
     })
 }
 
@@ -350,12 +367,16 @@ pub fn parse_credit(payload: &[u8]) -> Option<u32> {
 
 // ---------------------------------------------------------------- mailbox announce
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct MailboxAnnouncement {
     pub pik_pub_hex: String,
     /// A JS number: any non-negative integral double, as `Number.isInteger` allows.
     pub epoch: f64,
     pub sig_hex: String,
+    /// relay-mesh.md §7.6 (0.3 boxes): the mesh relay the box bound this announcement to, and the PIK's signature over
+    /// `flagship/pb-mailbox-announce/v2|<pik>|<epoch>|<relayId>`. Both or neither; a malformed pair is dropped.
+    pub relay_id: Option<String>,
+    pub relay_sig_hex: Option<String>,
 }
 
 pub fn mailbox_announce_frame(list: &[MailboxAnnouncement]) -> Result<Frame, PayloadError> {
@@ -372,6 +393,12 @@ pub fn mailbox_announce_frame(list: &[MailboxAnnouncement]) -> Result<Frame, Pay
         s.push_str(&format!(",\"epoch\":{}", a.epoch as u64));
         s.push_str(",\"sigHex\":");
         json::write_str(&mut s, &a.sig_hex);
+        if let (Some(r), Some(rs)) = (&a.relay_id, &a.relay_sig_hex) {
+            s.push_str(",\"relayId\":");
+            json::write_str(&mut s, r);
+            s.push_str(",\"relaySigHex\":");
+            json::write_str(&mut s, rs);
+        }
         s.push('}');
     }
     s.push_str("]}");
@@ -392,10 +419,24 @@ pub fn decode_mailbox_announce(payload: &[u8]) -> Option<Vec<MailboxAnnouncement
         if !is_lower_hex(pik, 64) || !is_lower_hex(sig, 128) || !is_integer(epoch) || epoch < 0.0 {
             return None;
         }
+        let relay_id = a
+            .get("relayId")
+            .and_then(Value::as_str)
+            .filter(|r| flagship_crypto::relay_mesh::is_relay_id(r));
+        let relay_sig = a
+            .get("relaySigHex")
+            .and_then(Value::as_str)
+            .filter(|r| is_lower_hex(r, 128));
+        let (relay_id, relay_sig_hex) = match (relay_id, relay_sig) {
+            (Some(r), Some(rs)) => (Some(r.to_owned()), Some(rs.to_owned())),
+            _ => (None, None),
+        };
         out.push(MailboxAnnouncement {
             pik_pub_hex: pik.to_owned(),
             epoch,
             sig_hex: sig.to_owned(),
+            relay_id,
+            relay_sig_hex,
         });
     }
     Some(out)

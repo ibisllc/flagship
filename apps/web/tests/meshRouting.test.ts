@@ -10,6 +10,8 @@ import {
   ATTACH_TTL_MS,
   ed,
   LEGACY_TTL_MS,
+  REBALANCE_CLIENT_BYTES_CAP,
+  REBALANCE_CLIENTS_PER_BUCKET_MAX,
   REBALANCE_MIN_BYTES,
   signRelayMeshRecord,
   type AttachmentItem,
@@ -116,6 +118,30 @@ describe("account homes", () => {
 });
 
 describe("rebalancing", () => {
+  it("one client address cannot steer an account: its bytes are capped and it counts as one stream (§10.1)", () => {
+    const t = 100_000_000;
+    const moved: Array<[string, string]> = [];
+    const r = new Rebalancer({
+      selfRelayId: "ra",
+      now: () => t,
+      intervalMs: 60_000,
+      relays: () => [{ relayId: "rc", relayKind: "full", lastLoadAt: t, draining: false, tunnels: 1, capacity: 100 }],
+      homeOf: () => "ra",
+      lastMove: () => null,
+      hasLegacyBox: () => false,
+      move: (a, to) => moved.push([a, to]),
+    });
+    // 1,000 sessions and 10 × the byte threshold, all from one address through rc: below the threshold.
+    for (let i = 0; i < 1_000; i++) r.countSession("bob", "rc", "same", (10 * REBALANCE_MIN_BYTES) / 1_000);
+    expect(r.window("bob")).toEqual([{ relayId: "rc", bytes: REBALANCE_CLIENT_BYTES_CAP, streams: 1 }]);
+    r.runOnce();
+    expect(moved).toEqual([]);
+    expect(r.decisions["below-threshold"]).toBe(1);
+    // Past the per-bucket key cap, later keys share one overflow key.
+    for (let i = 0; i < REBALANCE_CLIENTS_PER_BUCKET_MAX + 50; i++) r.countSession("cat", "rc", `k${i}`, 1);
+    expect(r.window("cat")[0]!.streams).toBe(REBALANCE_CLIENTS_PER_BUCKET_MAX + 1);
+  });
+
   it("moves an account whose visitors mostly arrive through another fresh, light relay, and never one with an old box", () => {
     let t = 100_000_000;
     const moved: Array<[string, string]> = [];
@@ -133,8 +159,8 @@ describe("rebalancing", () => {
       hasLegacyBox: () => legacy,
       move: (a, to) => moved.push([a, to]),
     });
-    r.countBytes("bob", "rc", REBALANCE_MIN_BYTES);
-    r.countBytes("bob", "ra", 1_000);
+    for (let i = 0; i * REBALANCE_CLIENT_BYTES_CAP < REBALANCE_MIN_BYTES; i++) r.countSession("bob", "rc", `c${i}`, REBALANCE_CLIENT_BYTES_CAP);
+    r.countSession("bob", "ra", "h0", 1_000);
     legacy = true;
     r.runOnce();
     expect(moved).toEqual([]);
@@ -143,7 +169,7 @@ describe("rebalancing", () => {
     r.runOnce();
     expect(moved).toEqual([["bob", "rc"]]);
     // A quiet account (below 64 MiB and 500 streams) stays.
-    r.countBytes("amy", "rc", 1_000);
+    r.countSession("amy", "rc", "a0", 1_000);
     r.runOnce();
     expect(r.decisions["below-threshold"]).toBe(1);
     t += 61_000;

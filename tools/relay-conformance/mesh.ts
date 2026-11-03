@@ -15,7 +15,12 @@ import { createHash } from "node:crypto";
 import { WebSocket } from "ws";
 import {
   accountHash,
+  bridgeEphemeral,
+  bridgeMacKeys,
   canonicalServingPolicy,
+  openBridgeText,
+  sealBridgeText,
+  type BridgeMacKeys,
   checkRelayBlessingRequest,
   DIRECTORY_TTL_MS,
   ed,
@@ -327,6 +332,8 @@ export function meshRelayEnv(com: MeshCom, s: MeshRelaySpec, peers: Map<string, 
     FLAGSHIP_MESH_PEER_URLS: [...peers].filter(([id]) => id !== s.relayId).map(([id, port]) => `${id}=ws://127.0.0.1:${port}/mesh`).join(","),
     FLAGSHIP_MESH_FEED_POLL_MS: String(t.feedPollMs ?? 200),
     FLAGSHIP_MESH_MIN_MOVE_MS: "0",
+    // Every visitor here is 127.0.0.1: key rebalancing clients by address and port (test only, §10.1).
+    FLAGSHIP_MESH_CLIENT_KEY_BY_PORT: "1",
   };
   if (t.refuseNewMs !== undefined) env.FLAGSHIP_SERVING_REFUSE_NEW_MS = String(t.refuseNewMs);
   if (t.closeAllMs !== undefined) env.FLAGSHIP_SERVING_CLOSE_ALL_MS = String(t.closeAllMs);
@@ -535,9 +542,14 @@ export class MeshBox {
 // ── visitors ─────────────────────────────────────────────────────────────
 
 /** Visit `sni` on a relay's SNI port: what came back and when the relay hung up (-1: still open at `waitMs`). */
-export async function visit(r: MeshRelay, sni: string, waitMs = 2_500): Promise<{ text: string; bytes: Buffer; closedAfterMs: number }> {
+/**
+ * One visit through `r`. `talk`: answer the box's first bytes once more, as a TLS client finishing its handshake would
+ * (only such a completed session counts toward rebalancing, relay-mesh.md §10.1).
+ */
+export async function visit(r: MeshRelay, sni: string, waitMs = 2_500, o: { talk?: boolean } = {}): Promise<{ text: string; bytes: Buffer; closedAfterMs: number }> {
   const started = Date.now();
   const v = await Visitor.open(r.ports.sni, clientHello(sni));
+  if (o.talk) v.sock.once("data", () => v.write("fin"));
   const t = await Promise.race([v.done.then(() => Date.now() - started), sleep(waitMs).then(() => -1)]);
   if (t === -1) v.sock.destroy();
   return { text: v.received.toString("latin1"), bytes: v.received, closedAfterMs: t };
@@ -569,6 +581,11 @@ export class PeerSim {
   answerQueries = true;
   queryAnswer: (name: string) => unknown[] = () => [];
   private nextStream = 1;
+  /** §6.2: the bridge MAC keys, set when the relay's `mesh-auth` arrives; this sim is the dialer (sends `c2s`). */
+  keys: BridgeMacKeys | null = null;
+  private eph: { secret: Uint8Array; kx: string; serverNonce: string; clientNonce: string } | null = null;
+  private sendSeq = 0;
+  private recvSeq = 0;
 
   private constructor(readonly ws: WebSocket, readonly relayId: string) {
     this.closed = new Promise((r) =>
@@ -584,11 +601,24 @@ export class PeerSim {
         if (d.kind === "ok") this.frames.push(d.frame);
         return;
       }
+      let text = raw.toString("utf8");
+      if (this.keys) {
+        const opened = openBridgeText(this.keys.s2c, this.recvSeq, text);
+        if (opened === null) {
+          this.msgs.push({ type: "__bad-mac" });
+          return;
+        }
+        this.recvSeq++;
+        text = opened;
+      }
       let m: Record<string, unknown>;
       try {
-        m = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+        m = JSON.parse(text) as Record<string, unknown>;
       } catch {
         return;
+      }
+      if (!this.keys && m.type === "mesh-auth" && this.eph) {
+        this.keys = bridgeMacKeys({ secret: this.eph.secret, peerKx: String(m.kx), serverNonce: this.eph.serverNonce, clientNonce: this.eph.clientNonce, clientRelayId: this.relayId, serverRelayId: String(m.relayId) });
       }
       this.msgs.push(m);
       if (m.type === "query" && this.answerQueries) this.send({ type: "answer", qid: m.qid, items: this.queryAnswer(String(m.name)) });
@@ -618,12 +648,14 @@ export class PeerSim {
     const nc = hex(rand32());
     const at = o.at ?? Date.now();
     const peer = o.peer ?? String(hello.relayId);
+    const eph = bridgeEphemeral();
+    sim.eph = { secret: eph.secret, kx: eph.kx, serverNonce: String(hello.nonce), clientNonce: nc };
     const sig = signRelayMeshRecord(
       "relay-bridge-auth",
-      { role: "client", signerRelayId: o.relayId, peerRelayId: peer, serverNonce: String(hello.nonce), clientNonce: nc, at },
+      { role: "client", signerRelayId: o.relayId, peerRelayId: peer, serverNonce: String(hello.nonce), clientNonce: nc, at, kx: eph.kx },
       (m) => ed.sign(m, (o.signWith ?? o.key).privateKey),
     );
-    sim.send({ type: "mesh-auth", v: 1, relayId: o.relayId, peer, nonce: nc, at, blessing: o.blessing, sig });
+    sim.send({ type: "mesh-auth", v: 1, relayId: o.relayId, peer, nonce: nc, at, kx: eph.kx, blessing: o.blessing, sig });
     await Promise.race([sim.next((m) => m.type === "mesh-auth", 6_000).then((m) => (sim.serverAuth = m)).catch(() => null), sim.closed]);
     return sim;
   }
@@ -632,8 +664,16 @@ export class PeerSim {
     return this.serverAuth !== null && this.closeInfo === null;
   }
 
+  /** A control message, sealed with the bridge MAC once authenticated (§6.2). */
   send(m: Record<string, unknown>): void {
-    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
+    if (this.ws.readyState !== WebSocket.OPEN) return;
+    const json = JSON.stringify(m);
+    this.ws.send(this.keys ? sealBridgeText(this.keys.c2s, this.sendSeq++, json) : json);
+  }
+
+  /** Text as given, no MAC (the bad-mac case). */
+  sendRaw(text: string): void {
+    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(text);
   }
 
   sendFrame(f: Frame): void {

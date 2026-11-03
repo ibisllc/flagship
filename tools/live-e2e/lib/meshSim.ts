@@ -14,8 +14,13 @@ import { connect as netConnect } from "node:net";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { WebSocket } from "ws";
 import {
+  bridgeEphemeral,
+  bridgeMacKeys,
   canonicalRelayBlessingRequest,
   ed,
+  openBridgeText,
+  sealBridgeText,
+  type BridgeMacKeys,
   isRelayId,
   signRelayMeshRecord,
   verifyRelayBlessing,
@@ -197,6 +202,11 @@ export class MeshSimRelay {
   closedWith: { code: number; reason: string } | null = null;
   readonly closed: Promise<void>;
   private waiters: Array<() => void> = [];
+  /** §6.2 bridge MAC: this harness dials, so it sends with `c2s` and reads with `s2c`. */
+  private keys: BridgeMacKeys | null = null;
+  private eph: { secret: Uint8Array; serverNonce: string; clientNonce: string } | null = null;
+  private sendSeq = 0;
+  private recvSeq = 0;
 
   private constructor(
     readonly ws: WebSocket,
@@ -215,13 +225,23 @@ export class MeshSimRelay {
     ws.on("error", () => undefined);
     ws.on("message", (raw: Buffer, isBinary: boolean) => {
       if (isBinary) return;
+      let text = raw.toString();
+      if (this.keys) {
+        const opened = openBridgeText(this.keys.s2c, this.recvSeq, text);
+        if (opened === null) return void ws.close(4401, "bad-mac");
+        this.recvSeq++;
+        text = opened;
+      }
       let m: MeshMsg;
       try {
-        m = JSON.parse(raw.toString()) as MeshMsg;
+        m = JSON.parse(text) as MeshMsg;
       } catch {
         return;
       }
       if (typeof m?.type !== "string") return;
+      if (!this.keys && m.type === "mesh-auth" && this.eph) {
+        this.keys = bridgeMacKeys({ secret: this.eph.secret, peerKx: String(m.kx), serverNonce: this.eph.serverNonce, clientNonce: this.eph.clientNonce, clientRelayId: this.relayId, serverRelayId: String(m.relayId) });
+      }
       this.messages.push(m);
       this.note(m);
       this.wake();
@@ -261,7 +281,8 @@ export class MeshSimRelay {
 
   send(m: MeshMsg): boolean {
     if (this.ws.readyState !== this.ws.OPEN) return false;
-    this.ws.send(JSON.stringify(m));
+    const json = JSON.stringify(m);
+    this.ws.send(this.keys ? sealBridgeText(this.keys.c2s, this.sendSeq++, json) : json);
     return true;
   }
 
@@ -279,12 +300,14 @@ export class MeshSimRelay {
     if (hello.relayId !== o.peer.relayId) throw new Error(`mesh-hello names ${String(hello.relayId)}, not ${o.peer.relayId}`);
     const nc = randomBytes(32).toString("hex");
     const at = Date.now();
+    const eph = bridgeEphemeral();
+    sim.eph = { secret: eph.secret, serverNonce: String(hello.nonce), clientNonce: nc };
     const sig = signRelayMeshRecord(
       "relay-bridge-auth",
-      { role: "client", signerRelayId: o.relayId, peerRelayId: o.peer.relayId, serverNonce: String(hello.nonce), clientNonce: nc, at },
+      { role: "client", signerRelayId: o.relayId, peerRelayId: o.peer.relayId, serverNonce: String(hello.nonce), clientNonce: nc, at, kx: eph.kx },
       (msg) => ed.sign(msg, o.seed),
     );
-    sim.send({ type: "mesh-auth", v: 1, relayId: o.relayId, peer: o.peer.relayId, nonce: nc, at, blessing: o.blessing, sig });
+    sim.send({ type: "mesh-auth", v: 1, relayId: o.relayId, peer: o.peer.relayId, nonce: nc, at, kx: eph.kx, blessing: o.blessing, sig });
     const auth = await sim.next((m) => m.type === "mesh-auth", 5_000);
     if (!auth) throw new Error(`the handshake with ${o.peer.relayId} failed: ${JSON.stringify(sim.closedWith)}`);
     const sync = await sim.next((m) => m.type === "sync", 5_000);

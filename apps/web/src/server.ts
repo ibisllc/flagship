@@ -709,6 +709,7 @@ async function startMeshRelay(o: {
     ...(n("FLAGSHIP_MESH_REBALANCE_MS") !== undefined ? { rebalanceMs: n("FLAGSHIP_MESH_REBALANCE_MS") } : {}),
     ...(n("FLAGSHIP_MESH_MIN_MOVE_MS") !== undefined ? { minMoveMs: n("FLAGSHIP_MESH_MIN_MOVE_MS") } : {}),
     ...(n("FLAGSHIP_MESH_CAPACITY") !== undefined ? { capacity: n("FLAGSHIP_MESH_CAPACITY") } : {}),
+    ...(process.env.FLAGSHIP_MESH_CLIENT_KEY_BY_PORT === "1" ? { clientKeyByPort: true } : {}),
     log: (m) => console.log(m),
   });
   const r = await wireMeshRelay({

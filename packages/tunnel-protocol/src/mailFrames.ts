@@ -30,6 +30,12 @@ export interface MailboxAnnouncement {
   pikPubHex: string;
   epoch: number;
   sigHex: string;
+  /**
+   * relay-mesh.md §7.6 (0.3 boxes on a verified mesh tunnel): the relay the box names, and its PIK signature over
+   * `flagship/pb-mailbox-announce/v2|<pik>|<epoch>|<relayId>`. Hubs that don't know them ignore them.
+   */
+  relayId?: string;
+  relaySigHex?: string;
 }
 
 export function mailboxAnnounceFrame(announcements: MailboxAnnouncement[]): Frame {
@@ -53,7 +59,9 @@ export function decodeMailboxAnnounce(payload: Uint8Array): MailboxAnnouncement[
       ) {
         return null;
       }
-      out.push({ pikPubHex: a.pikPubHex, epoch: a.epoch, sigHex: a.sigHex });
+      const bound =
+        typeof a.relayId === "string" && /^[a-z][a-z0-9-]{1,30}$/.test(a.relayId) && typeof a.relaySigHex === "string" && /^[0-9a-f]{128}$/.test(a.relaySigHex);
+      out.push({ pikPubHex: a.pikPubHex, epoch: a.epoch, sigHex: a.sigHex, ...(bound ? { relayId: a.relayId as string, relaySigHex: a.relaySigHex as string } : {}) });
     }
     return out;
   } catch {

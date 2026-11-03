@@ -164,6 +164,16 @@ for (const cfg of CONFIGS) {
           await Promise.race([s.closed, sleep(3_000)]);
           expect(s.closeInfo, `${label(id)}: ${what}`).toEqual({ code: 4401, reason });
         }
+        // §6.2 channel binding: after the handshake every control message carries the bridge MAC.
+        const sealed = await PeerSim.dial(r, { relayId: "aa-obs", key: obs.key, blessing: com.relayBlessings.get("aa-obs")! });
+        expect(sealed.authed && sealed.keys !== null, `${label(id)} derives the bridge keys`).toBe(true);
+        expect((sealed.serverAuth as { kx?: unknown }).kx, `${label(id)} signs a kx`).toMatch(/^[0-9a-f]{64}$/);
+        sealed.sync(com);
+        await sealed.next((m) => m.type === "sync-done", 5_000);
+        expect(sealed.msgs.some((m) => m.type === "__bad-mac"), `${label(id)} seals what it sends`).toBe(false);
+        sealed.sendRaw(JSON.stringify({ type: "load", tunnels: 0, capacity: 10_000, draining: false }));
+        await Promise.race([sealed.closed, sleep(3_000)]);
+        expect(sealed.closeInfo, `${label(id)}: an unsealed control message`).toEqual({ code: 4401, reason: "bad-mac" });
       }
     });
 
@@ -629,7 +639,7 @@ for (const cfg of CONFIGS) {
       await waitReaches(R("rc"), b.pod, "RBL");
       let failed = 0;
       const batch = async () => {
-        const rs = await Promise.all(Array.from({ length: 100 }, () => visit(R("rc"), b.pod, 1_500)));
+        const rs = await Promise.all(Array.from({ length: 100 }, () => visit(R("rc"), b.pod, 1_500, { talk: true })));
         failed += rs.filter((r) => !r.text.startsWith("RBL:")).length;
       };
       for (let i = 0; i < 6; i++) await batch();

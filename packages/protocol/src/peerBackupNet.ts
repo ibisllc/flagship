@@ -210,6 +210,19 @@ export function canonicalPbMailboxAnnounce(pikPubHex: string, epoch: number): By
   return te.encode(`${TAG_MAILBOX_ANNOUNCE}|${pikPubHex}|${epoch}`);
 }
 
+const TAG_MAILBOX_ANNOUNCE_RELAY = "flagship/pb-mailbox-announce/v2";
+
+/**
+ * The relay-bound announcement (relay-mesh.md §7.6): the box names the mesh relay its tunnel proved, so no other relay
+ * can claim the mailbox with a replayed copy. `relayId` must be a mesh relay id.
+ */
+export function canonicalPbMailboxAnnounceForRelay(pikPubHex: string, epoch: number, relayId: string): Bytes {
+  assertHex(pikPubHex, 64, "pikPubHex");
+  if (!Number.isInteger(epoch) || epoch < 0) throw new Error("epoch must be a non-negative integer");
+  if (typeof relayId !== "string" || !/^[a-z][a-z0-9-]{1,30}$/.test(relayId)) throw new Error("relayId must be a relay id");
+  return te.encode(`${TAG_MAILBOX_ANNOUNCE_RELAY}|${pikPubHex}|${epoch}|${relayId}`);
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Filler (§5.5)
 // ──────────────────────────────────────────────────────────────────────

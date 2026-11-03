@@ -23,15 +23,29 @@ export interface MeshRouting {
   readonly selfRelayId: string;
   decide(sni: string, bridged: boolean): MeshDecision;
   ask(name: string, exclude: string[]): Promise<string | null>;
-  openTo(relayId: string, sni: string): (Duplex & { refused: string | null }) | null;
+  /** `client`: this relay's key for the visitor's address, sent in the OPEN for the holder's rebalancing (§6.4). */
+  openTo(relayId: string, sni: string, client?: string): (Duplex & { refused: string | null }) | null;
   notHolder(name: string, relayId: string): void;
-  traffic(podCanonical: string, sni: string, entry: string): ((bytes: number) => void) | null;
+  /** This relay's opaque key for a visitor address (§6.4 `client`). */
+  clientKey(address: string | undefined, port?: number): string;
+  /** A visitor session to count for rebalancing once it completes (§10.1), or null (not counted). */
+  traffic(podCanonical: string, sni: string, entry: string, client: string): SessionCounter | null;
+}
+
+/** One visitor session's traffic, counted for rebalancing only if both sides spoke after the ClientHello (§10.1). */
+export interface SessionCounter {
+  /** Visitor → box bytes after the ClientHello. */
+  up(bytes: number): void;
+  /** Box → visitor bytes. */
+  down(bytes: number): void;
+  /** The session ended (idempotent). */
+  end(): void;
 }
 
 /** Where a stream came from: a visitor's own TCP connection (with its arrival time) or a peer relay's bridge. */
 interface RouteCtx {
   arrivedAt?: number;
-  bridged?: { entry: string; refuse: (code: string) => void };
+  bridged?: { entry: string; refuse: (code: string) => void; client?: string };
 }
 
 /**
@@ -129,7 +143,7 @@ export interface RunningSniRouter {
    * Mesh holder duties (§7.4): route a stream a peer relay opened over a bridge, from local tunnels only. `refuse`
    * answers the entry relay (`not-holder`, `apps-off`, …) instead of the delayed drop the entry does itself.
    */
-  routeBridged(stream: Duplex, sni: string, initialBytes: Uint8Array, ctx: { entry: string; refuse: (code: string) => void }): void;
+  routeBridged(stream: Duplex, sni: string, initialBytes: Uint8Array, ctx: { entry: string; refuse: (code: string) => void; client?: string }): void;
 }
 
 const DEFAULT_MAX_PEEK_BYTES = DEFAULT_SNI_LIMITS.maxRawBytes;
@@ -313,7 +327,8 @@ function routeToTunnel(
   const tunnel = hold.registry.findBySni(sni);
   if (tunnel) {
     routerStats.routed += 1;
-    const count = mesh?.traffic(tunnel.podCanonical, sni, ctx.bridged?.entry ?? mesh.selfRelayId) ?? undefined;
+    const visitorKey = mesh ? (ctx.bridged ? (ctx.bridged.client ?? "?") : mesh.clientKey((client as { remoteAddress?: string }).remoteAddress, (client as { remotePort?: number }).remotePort)) : "?";
+    const count = mesh?.traffic(tunnel.podCanonical, sni, ctx.bridged?.entry ?? mesh.selfRelayId, visitorKey) ?? undefined;
     pipeToTunnel(client, tunnel, sni, initialBytes, hold.meter, hold.slowVisitorGraceMs, count);
     return;
   }
@@ -363,7 +378,7 @@ function forwardOverMesh(
   retried: boolean,
 ): void {
   if (client.destroyed) return;
-  const s = mesh.openTo(relayId, sni);
+  const s = mesh.openTo(relayId, sni, mesh.clientKey((client as { remoteAddress?: string }).remoteAddress, (client as { remotePort?: number }).remotePort));
   if (!s) {
     if (!retried) queryThenForward(mesh, client, sni, name, [relayId], initialBytes, hold, ctx, true);
     else delayedDrop(client, sni, hold, ctx.arrivedAt);
@@ -605,8 +620,8 @@ function pipeToTunnel(
   initialBytes: Uint8Array,
   meter: UsageMeter | undefined,
   slowVisitorGraceMs: number = SLOW_VISITOR_GRACE_MS,
-  /** Mesh rebalancing: visitor bytes by entry relay (§10.1). */
-  count?: (bytes: number) => void,
+  /** Mesh rebalancing: this visitor session's traffic (§10.1). */
+  count?: SessionCounter,
 ): void {
   // Per-account metering: attribute this stream to the box's owner. Custom
   // domains resolve to a tunnel whose podCanonical carries the username too.
@@ -640,6 +655,7 @@ function pipeToTunnel(
     tunnel.resumeInbound?.(slowKey);
   };
   const closeStream = () => {
+    count?.end();
     if (closed) return;
     closed = true;
     visitorSide.dispose();
@@ -682,13 +698,14 @@ function pipeToTunnel(
       // box → visitor (the dominant egress leg).
       if (closed) return;
       meter?.add(account, data.byteLength);
-      count?.(data.byteLength);
+      count?.down(data.byteLength);
       client.write(Buffer.from(data));
       if (client.writableLength >= VISITOR_QUEUE_BYTES) watchSlowVisitor();
       const wait = meter?.throttleDelayMs(account, data.byteLength) ?? 0;
       if (wait > 0) tunnel.holdInbound?.(wait);
     },
     onRemoteClose() {
+      count?.end();
       closed = true;
       visitorSide.dispose();
       stopSlowWatch();
@@ -716,7 +733,7 @@ function pipeToTunnel(
     // visitor → box (request leg; small, but still relay egress).
     if (closed) return;
     meter?.add(account, chunk.byteLength);
-    count?.(chunk.byteLength);
+    count?.up(chunk.byteLength);
     sendToBox(bufferToBytes(chunk));
     visitorSide.hold(meter?.throttleDelayMs(account, chunk.byteLength) ?? 0);
   });

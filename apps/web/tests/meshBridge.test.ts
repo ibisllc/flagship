@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
-import { ed, type RelayBlessing } from "@flagship/protocol";
+import { ed, openBridgeText, type RelayBlessing } from "@flagship/protocol";
 import { encodeFrame, FRAME_OPEN } from "@flagship/tunnel-protocol";
 import { acceptorHandshake, BridgeManager, type BridgePeer, type BridgeStream, type HandshakeContext } from "../src/tunnel/mesh/bridge.js";
 import { MeshDirectory } from "../src/tunnel/mesh/directory.js";
@@ -166,11 +166,13 @@ describe("bridges", () => {
     const q = new HandshakeQueue(ws);
     ws.on("error", () => undefined);
     await new Promise<void>((r) => ws.on("open", () => r()));
-    expect((await dialerHandshake(ws, "rb", await ctxFor(fx, ra), 5_000, q)).ok).toBe(true);
+    const hs = await dialerHandshake(ws, "rb", await ctxFor(fx, ra), 5_000, q);
+    if (!hs.ok) throw new Error(hs.reason);
     q.detach();
     const msgs: Record<string, unknown>[] = [];
+    let seq = 0;
     ws.on("message", (raw: Buffer, bin: boolean) => {
-      if (!bin) msgs.push(JSON.parse(raw.toString()) as Record<string, unknown>);
+      if (!bin) msgs.push(JSON.parse(openBridgeText(hs.keys.s2c, seq++, raw.toString())!) as Record<string, unknown>);
     });
     ws.send(encodeFrame({ streamId: 1, type: FRAME_OPEN, payload: new TextEncoder().encode(JSON.stringify({ sni: `x.${APEX}`, kind: "tls", hop: 2 })) }));
     await expect.poll(() => msgs.find((m) => m.type === "refuse"), { timeout: 2_000 }).toMatchObject({ type: "refuse", stream: 1, code: "hop" });

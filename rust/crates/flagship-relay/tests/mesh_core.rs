@@ -435,6 +435,7 @@ impl World {
 struct Tune {
     refuse_new: Duration,
     close_all: Duration,
+    trust_fly: bool,
 }
 
 impl Default for Tune {
@@ -442,6 +443,7 @@ impl Default for Tune {
         Self {
             refuse_new: Duration::from_secs(60),
             close_all: Duration::from_secs(600),
+            trust_fly: false,
         }
     }
 }
@@ -518,6 +520,7 @@ async fn world(tune: Tune) -> World {
         );
         let mut rc = RelayConfig::default();
         rc.hub.apex = APEX.into();
+        rc.trust_fly_client_ip = tune.trust_fly;
         rc.router.hold_timeout = HOLD;
         rc.router.hold_poll_interval = Duration::from_millis(20);
         rc.router.sni.deadline = Duration::from_millis(800);
@@ -592,6 +595,8 @@ fn alice() -> Acct {
 #[derive(Default, Clone)]
 struct BoxOpts {
     mesh: bool,
+    /// Answer a visitor and keep the stream open until the visitor closes it.
+    linger: bool,
     canonicals: Vec<String>,
     policy: Option<(Value, Value)>,
 }
@@ -690,6 +695,7 @@ impl SimBox {
             ..TypeSet::V1
         };
         let (cl, pod_s, out) = (Arc::clone(&closed), pod.to_owned(), tx.clone());
+        let linger = o.linger;
         let reader = tokio::spawn(async move {
             let mut d = FrameDecoder::new(types, 8 << 20);
             let mut open: HashMap<u32, String> = HashMap::new();
@@ -712,8 +718,11 @@ impl SimBox {
                                                 Frame::new(f.stream_id, FRAME_DATA, c.to_vec());
                                             let _ = out.send(frame::encode_frame(&fr).unwrap());
                                         }
-                                        let fr = Frame::new(f.stream_id, FRAME_CLOSE, Vec::new());
-                                        let _ = out.send(frame::encode_frame(&fr).unwrap());
+                                        if !linger {
+                                            let fr =
+                                                Frame::new(f.stream_id, FRAME_CLOSE, Vec::new());
+                                            let _ = out.send(frame::encode_frame(&fr).unwrap());
+                                        }
                                     }
                                 }
                                 frame::FRAME_PB_MAIL_REQ => {
@@ -1137,6 +1146,8 @@ async fn a_revoked_box_is_dropped_by_every_relay_within_the_deadline() {
     let (bytes, d) = visit(w.node("cc1").r(), &pod).await;
     assert!(bytes.is_empty());
     assert_held(d, "a revoked box");
+    // A bridged OPEN for it is refused `revoked` by the holder, explicitly.
+    assert_eq!(w.node("aa1").mesh.holder_admits(&pod), Err("revoked"));
     for id in IDS {
         let (b2, ack) = SimBox::connect(w.node(id).r().hub_addr, &a, &pod, &stk, &opts).await;
         assert!(!ack.ok, "a revoked box is refused on {id}");
@@ -1200,7 +1211,10 @@ async fn an_unrevoked_box_serves_again_at_its_new_reg_gen_until_revoked_again() 
     }
     for id in IDS {
         let (b2, ack) = SimBox::connect(w.node(id).r().hub_addr, &a, &pod, &stk, &opts).await;
-        assert!(!ack.ok, "revoked at regGen 2, a re-sent register notwithstanding: refused on {id}");
+        assert!(
+            !ack.ok,
+            "revoked at regGen 2, a re-sent register notwithstanding: refused on {id}"
+        );
         drop(b2);
     }
 }
@@ -1597,6 +1611,7 @@ async fn without_com_new_tunnels_stop_then_only_boxes_without_a_dead_man_keep_se
     let w = world(Tune {
         refuse_new: Duration::from_millis(700),
         close_all: Duration::from_millis(1600),
+        trust_fly: false,
     })
     .await;
     let a = alice();
@@ -1723,6 +1738,7 @@ async fn a_mailbox_on_another_relay_is_reached_over_the_bridge() {
             &pik,
             &flagship_relay::mailbox::canonical_announce(&pubhex(&pik), epoch),
         ),
+        ..Default::default()
     };
     b.send(&payload::mailbox_announce_frame(&[ann]).unwrap());
     let id = flagship_relay::mailbox::mailbox_id(&pubhex(&pik), epoch);
@@ -1760,6 +1776,7 @@ async fn a_mailbox_on_another_relay_is_reached_over_the_bridge() {
             &pik,
             &flagship_relay::mailbox::canonical_announce(&pubhex(&pik), epoch),
         ),
+        ..Default::default()
     };
     b2.send(&payload::mailbox_announce_frame(&[ann2]).unwrap());
     tokio::time::sleep(Duration::from_millis(600)).await;
@@ -1818,32 +1835,60 @@ async fn phone_tunnels_and_begins_are_capped_per_address() {
     assert!(ok, "a closed tunnel frees its place");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn unauthenticated_mesh_handshakes_are_capped_per_address() {
-    let w = world(Tune::default()).await;
-    let hub = w.node("bb1").r().hub_addr;
-    let mut pending = Vec::new();
-    for _ in 0..rm::MESH_HANDSHAKE_MAX_PENDING_PER_IP {
-        let (ws, _) = tokio_tungstenite::connect_async(format!("ws://{hub}/mesh"))
-            .await
-            .unwrap();
-        pending.push(ws);
-    }
-    let over = tokio_tungstenite::connect_async(format!("ws://{hub}/mesh")).await;
-    let Err(tokio_tungstenite::tungstenite::Error::Http(r)) = over else {
-        panic!("the handshake past the cap was not refused");
-    };
-    assert_eq!(r.status().as_u16(), 503);
-    // Another client address (Fly-Client-IP) has its own allowance.
+async fn mesh_ws(hub: SocketAddr, fly: Option<&str>) -> Result<(), u16> {
     let mut req = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(
         format!("ws://{hub}/mesh"),
     )
     .unwrap();
-    req.headers_mut()
-        .insert("fly-client-ip", "203.0.113.9".parse().unwrap());
-    assert!(tokio_tungstenite::connect_async(req).await.is_ok());
+    if let Some(ip) = fly {
+        req.headers_mut()
+            .insert("fly-client-ip", ip.parse().unwrap());
+    }
+    match tokio_tungstenite::connect_async(req).await {
+        Ok((ws, _)) => {
+            // Held open (unauthenticated) until the test ends.
+            std::mem::forget(ws);
+            Ok(())
+        }
+        Err(tokio_tungstenite::tungstenite::Error::Http(r)) => Err(r.status().as_u16()),
+        Err(e) => panic!("{e}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unauthenticated_mesh_handshakes_are_capped_per_address() {
+    let w = world(Tune::default()).await;
+    let hub = w.node("bb1").r().hub_addr;
+    // 127.0.0.1 is where the peers authenticated from: a known peer address, so it also gets the reserved pool.
+    for _ in 0..2 * rm::MESH_HANDSHAKE_MAX_PENDING_PER_IP {
+        assert_eq!(mesh_ws(hub, None).await, Ok(()));
+    }
+    assert_eq!(mesh_ws(hub, None).await, Err(503));
+    // Off Fly a forged Fly-Client-IP buys no new allowance (§6.1).
+    assert_eq!(mesh_ws(hub, Some("203.0.113.9")).await, Err(503));
     // The real bridges were never in the way: they authenticated long ago.
     assert_eq!(w.node("bb1").mesh.peer_ids().len(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn on_fly_unknown_addresses_cannot_take_the_slots_kept_for_peers() {
+    let w = world(Tune {
+        trust_fly: true,
+        ..Tune::default()
+    })
+    .await;
+    let hub = w.node("bb1").r().hub_addr;
+    // 16 addresses × 4 fill the 64 general slots.
+    let per = rm::MESH_HANDSHAKE_MAX_PENDING_PER_IP;
+    for i in 0..rm::MESH_HANDSHAKE_MAX_PENDING / per {
+        let ip = format!("198.51.100.{i}");
+        for _ in 0..per {
+            assert_eq!(mesh_ws(hub, Some(&ip)).await, Ok(()));
+        }
+    }
+    // A new unknown address: refused; the known peer address (the socket peer, no header): still admitted.
+    assert_eq!(mesh_ws(hub, Some("203.0.113.9")).await, Err(503));
+    assert_eq!(mesh_ws(hub, None).await, Ok(()));
 }
 
 #[test]
@@ -1883,8 +1928,21 @@ async fn the_home_moves_an_account_toward_the_relay_its_visitors_use() {
     // A bridged visit is counted by entry relay on the home.
     reaches(w.node("cc1").r(), &pod, &pod).await;
     let home = &w.node("aa1").mesh;
-    home.count_traffic("alice", Some("cc1"), 80 << 20, 600);
-    home.count_traffic("alice", None, 1 << 20, 10);
+    // One address, however much it sends, is one client capped at 8 MiB: no move (§10.1).
+    for _ in 0..600 {
+        home.count_session("alice", Some("cc1"), "00000000000000aa", 1 << 20);
+    }
+    assert!(
+        home.rebalance_now().is_empty(),
+        "one busy client steers nothing"
+    );
+    // 600 distinct visitors through cc1, a few here.
+    for i in 0..600u32 {
+        home.count_session("alice", Some("cc1"), &format!("{i:016x}"), 140 << 10);
+    }
+    for i in 0..10u32 {
+        home.count_session("alice", None, &format!("{:016x}", 10_000 + i), 100 << 10);
+    }
     assert_eq!(
         home.rebalance_now(),
         vec![("alice".to_owned(), "cc1".to_owned())]
@@ -1921,4 +1979,482 @@ async fn the_home_moves_an_account_toward_the_relay_its_visitors_use() {
         .await;
     }
     reaches(w.node("aa1").r(), &pod, &pod).await;
+}
+
+// ── channel binding (§6.2, review 2026-11-03) ───────────────────────────────
+
+type Ws = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>;
+
+async fn next_json(ws: &mut Ws) -> Option<String> {
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .ok()??
+        {
+            Ok(Message::Text(t)) => return Some(t.to_string()),
+            Ok(Message::Close(c)) => {
+                return c.map(|c| format!("close:{}:{}", u16::from(c.code), c.reason));
+            }
+            Ok(_) => {}
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Dial `hub` as relay `id` (its key), finish the handshake, and return the socket with this side's MAC keys.
+async fn fake_dial(w: &World, hub: SocketAddr, id: &str, peer: &str) -> (Ws, rm::BridgeMacKeys) {
+    let k = w.node(id).key.clone();
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{hub}/mesh"))
+        .await
+        .unwrap();
+    let hello: Value = serde_json::from_str(&next_json(&mut ws).await.unwrap()).unwrap();
+    let ns = hello["nonce"].as_str().unwrap().to_owned();
+    let nc = rand_hex(32);
+    let (secret, kx) = rm::bridge_ephemeral().unwrap();
+    let at = now();
+    let b = rm::BridgeAuth {
+        role: "client".into(),
+        signer_relay_id: id.into(),
+        peer_relay_id: peer.into(),
+        server_nonce: ns.clone(),
+        client_nonce: nc.clone(),
+        at,
+        kx: kx.clone(),
+    };
+    let s = sig(&k, &rm::bridge_auth_canonical(&b).unwrap());
+    let auth = json!({"type": "mesh-auth", "v": 1, "relayId": id, "peer": peer, "nonce": nc, "at": at, "kx": kx,
+        "blessing": w.com.bless(id, &pubhex(&k)), "sig": s});
+    ws.send(Message::Text(auth.to_string().into()))
+        .await
+        .unwrap();
+    let reply: Value = serde_json::from_str(&next_json(&mut ws).await.unwrap()).unwrap();
+    assert_eq!(reply["type"], "mesh-auth");
+    let peer_kx = reply["kx"]
+        .as_str()
+        .expect("the acceptor's mesh-auth carries kx");
+    let keys = rm::bridge_mac_keys(&secret, peer_kx, &ns, &nc, id, peer).unwrap();
+    (ws, keys)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bridge_control_messages_are_sealed_and_an_unsealed_one_closes_the_bridge() {
+    let w = world(Tune::default()).await;
+    let hub = w.node("bb1").r().hub_addr;
+    let (mut ws, keys) = fake_dial(&w, hub, "aa1", "bb1").await;
+    // The acceptor's first control message (its `sync`) is sealed under s2c at seq 0.
+    let first = next_json(&mut ws).await.unwrap();
+    let json = rm::open_bridge_text(&keys.s2c, 0, &first).expect("sealed with s2c, seq 0");
+    assert_eq!(serde_json::from_str::<Value>(json).unwrap()["type"], "sync");
+    // A sealed message is taken; an unsealed one (what a man in the middle would inject) closes 4401 bad-mac.
+    ws.send(Message::Text(
+        rm::seal_bridge_text(&keys.c2s, 0, r#"{"type":"sync-done"}"#).into(),
+    ))
+    .await
+    .unwrap();
+    ws.send(Message::Text(r#"{"type":"sync-done"}"#.into()))
+        .await
+        .unwrap();
+    let mut closed = None;
+    while let Some(m) = next_json(&mut ws).await {
+        if m.starts_with("close:") {
+            closed = Some(m);
+            break;
+        }
+    }
+    assert_eq!(closed.as_deref(), Some("close:4401:bad-mac"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_acceptor_waits_only_two_seconds_for_the_first_mesh_auth() {
+    let w = world(Tune::default()).await;
+    let hub = w.node("bb1").r().hub_addr;
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{hub}/mesh"))
+        .await
+        .unwrap();
+    let t0 = Instant::now();
+    let _hello = next_json(&mut ws).await.unwrap();
+    let end = next_json(&mut ws).await;
+    let took = t0.elapsed();
+    assert!(
+        end.as_ref().is_none_or(|m| m.starts_with("close:")),
+        "{end:?}"
+    );
+    assert!(
+        took < Duration::from_millis(rm::MESH_HANDSHAKE_STEP_MS - 1000),
+        "closed after {took:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dialer_refuses_a_stale_mesh_hello() {
+    let w = world(Tune::default()).await;
+    // A fake acceptor for "zz9" whose mesh-hello is 10 minutes old.
+    let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    tokio::spawn(async move {
+        let (s, _) = l.accept().await.unwrap();
+        let mut ws = tokio_tungstenite::accept_async(s).await.unwrap();
+        let hello = json!({"type": "mesh-hello", "v": 1, "relayId": "zz9", "nonce": rand_hex(32), "at": now() - 600_000});
+        ws.send(Message::Text(hello.to_string().into()))
+            .await
+            .unwrap();
+        while let Some(Ok(m)) = ws.next().await {
+            match m {
+                Message::Text(t) => tx.send(format!("text:{t}")).unwrap(),
+                Message::Close(c) => {
+                    tx.send(format!(
+                        "close:{}",
+                        c.map(|c| c.reason.to_string()).unwrap_or_default()
+                    ))
+                    .unwrap();
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+    let n = &w.nodes[0];
+    let mut cfg = MeshConfig::new("aa2", APEX, RelayKind::Full, &pubhex(&w.com.log));
+    cfg.peer_urls
+        .insert("zz9".into(), format!("ws://{addr}/mesh"));
+    let parts = MeshParts {
+        feed: Arc::new(Feed(Arc::clone(&w.com))),
+        decrypt: SealedFeed::new(APEX, "aa2", n.key.to_bytes()),
+        ca: Arc::new(StaticCaKeys(vec![pubhex(&w.com.ca)])),
+        issuer: Arc::new(Issuer(Arc::clone(&w.com))),
+    };
+    let m = Mesh::new(cfg, n.key.clone(), parts, Box::new(|_: &str| {})).unwrap();
+    assert!(!m.dial_bridge("zz9").await);
+    let got = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap();
+    assert_eq!(
+        got.as_deref(),
+        Some("close:stale"),
+        "no mesh-auth to a stale hello"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_requery_that_skipped_a_relay_is_single_flight_and_remembered_briefly() {
+    let w = world(Tune::default()).await;
+    let m = &w.node("aa1").mesh;
+    let name = format!("ghost.alice.{APEX}");
+    let hits = || m.counters().negative_hits.load(Ordering::Relaxed);
+    let sent = || m.counters().queries_sent.load(Ordering::Relaxed);
+    // Concurrent: the plain query and the excluding one are separate flights; two of the same excluding one are one.
+    let (a, b, c) = tokio::join!(
+        m.query(&name, None),
+        m.query(&name, Some("bb1")),
+        m.query(&name, Some("bb1"))
+    );
+    assert!(!a && !b && !c);
+    assert_eq!(sent(), 2, "one flight per (name, excluded)");
+    // The miss with bb1 excluded is remembered: no new query for 2 s.
+    let h0 = hits();
+    assert!(!m.query(&name, Some("bb1")).await);
+    assert_eq!(hits(), h0 + 1);
+    assert_eq!(sent(), 2);
+    tokio::time::sleep(Duration::from_millis(rm::MESH_NEG_CACHE_EXCLUDE_MS + 100)).await;
+    assert!(!m.query(&name, Some("bb1")).await);
+    assert_eq!(sent(), 3, "asked again once the 2 s are over");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_move_for_an_account_the_relay_holds_nothing_of_is_refused() {
+    let w = world(Tune::default()).await;
+    let hub = w.node("bb1").r().hub_addr;
+    let (mut ws, keys) = fake_dial(&w, hub, "aa1", "bb1").await;
+    let t = now();
+    let mv = rm::AccountMove {
+        account_hash: rm::account_hash("nobody").unwrap(),
+        from_relay_id: "aa1".into(),
+        to_relay_id: "cc1".into(),
+        issued_at: t,
+        not_after: t + rm::ACCOUNT_MOVE_TTL_MS,
+    };
+    let s = sig(
+        &w.node("aa1").key,
+        &rm::account_move_canonical(&mv).unwrap(),
+    );
+    let msg = wire::account_move_to_json(&mv, &s).to_string();
+    ws.send(Message::Text(
+        rm::seal_bridge_text(&keys.c2s, 0, &msg).into(),
+    ))
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(w.node("bb1").mesh.accepted_moves().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_relay_bound_mailbox_announcement_beats_a_replayed_unbound_copy() {
+    let w = world(Tune::default()).await;
+    let a = alice();
+    w.com.account(&a);
+    let pods = [
+        ("aa1", format!("home.alice.{APEX}"), key(0x31)),
+        ("cc1", format!("cabin.alice.{APEX}"), key(0x32)),
+    ];
+    for (_, pod, stk) in &pods {
+        w.com.register(pod, stk);
+    }
+    synced(&w).await;
+    let mut boxes = Vec::new();
+    for (relay, pod, stk) in &pods {
+        let opts = BoxOpts {
+            mesh: true,
+            ..BoxOpts::default()
+        };
+        let (mut b, _) = SimBox::connect(w.node(relay).r().hub_addr, &a, pod, stk, &opts).await;
+        b.attach(relay).await;
+        boxes.push(b);
+    }
+    let pik = key(0x51);
+    let epoch = flagship_relay::mailbox::mailbox_epoch(now());
+    let v1 = sig(
+        &pik,
+        &flagship_relay::mailbox::canonical_announce(&pubhex(&pik), epoch),
+    );
+    let bound = |relay: &str| {
+        sig(
+            &pik,
+            &rm::pb_mailbox_announce_relay_canonical(&pubhex(&pik), epoch, relay).unwrap(),
+        )
+    };
+    let id = flagship_relay::mailbox::mailbox_id(&pubhex(&pik), epoch);
+    // The unbound copy (an old box, or a replay) through aa1 arrives first.
+    boxes[0].send(
+        &payload::mailbox_announce_frame(&[payload::MailboxAnnouncement {
+            pik_pub_hex: pubhex(&pik),
+            epoch: epoch as f64,
+            sig_hex: v1.clone(),
+            ..Default::default()
+        }])
+        .unwrap(),
+    );
+    eventually("bb1 learns aa1", || {
+        w.node("bb1").mesh.mailbox_holder(&id).as_deref() == Some("aa1")
+    })
+    .await;
+    // A binding to another relay is not kept by cc1's hub: still unbound, aa1 keeps it.
+    boxes[1].send(
+        &payload::mailbox_announce_frame(&[payload::MailboxAnnouncement {
+            pik_pub_hex: pubhex(&pik),
+            epoch: epoch as f64,
+            sig_hex: v1.clone(),
+            relay_id: Some("aa1".into()),
+            relay_sig_hex: Some(bound("aa1")),
+        }])
+        .unwrap(),
+    );
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assert_eq!(
+        w.node("bb1").mesh.mailbox_holder(&id).as_deref(),
+        Some("aa1")
+    );
+    // The box's own announcement, bound to cc1: cc1 holds it everywhere, though aa1's tunnel is still up.
+    boxes[1].send(
+        &payload::mailbox_announce_frame(&[payload::MailboxAnnouncement {
+            pik_pub_hex: pubhex(&pik),
+            epoch: epoch as f64,
+            sig_hex: v1,
+            relay_id: Some("cc1".into()),
+            relay_sig_hex: Some(bound("cc1")),
+        }])
+        .unwrap(),
+    );
+    eventually("the bound announcement wins", || {
+        w.node("bb1").mesh.mailbox_holder(&id).as_deref() == Some("cc1")
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn mail_goes_to_the_next_relay_when_the_first_refuses() {
+    let w = world(Tune::default()).await;
+    let a = alice();
+    let stk = key(0x32);
+    let pod = format!("cabin.alice.{APEX}");
+    w.com.account(&a);
+    w.com.register(&pod, &stk);
+    synced(&w).await;
+    let pik = key(0x51);
+    let epoch = flagship_relay::mailbox::mailbox_epoch(now());
+    let v1 = sig(
+        &pik,
+        &flagship_relay::mailbox::canonical_announce(&pubhex(&pik), epoch),
+    );
+    let id = flagship_relay::mailbox::mailbox_id(&pubhex(&pik), epoch);
+    // A bridge claiming to be aa1 announces the mailbox first, then refuses every stream `not-holder`.
+    let hub = w.node("bb1").r().hub_addr;
+    let (ws, keys) = fake_dial(&w, hub, "aa1", "bb1").await;
+    let (mut sink, mut stream) = ws.split();
+    let item = json!({"kind": "mailbox", "announce": {"pikPubHex": pubhex(&pik), "epoch": epoch}, "signature": v1,
+        "relayId": "aa1"});
+    let ann = json!({"type": "announce", "items": [item]}).to_string();
+    sink.send(Message::Text(
+        rm::seal_bridge_text(&keys.c2s, 0, &ann).into(),
+    ))
+    .await
+    .unwrap();
+    let refuser = tokio::spawn(async move {
+        let mut seq = 1u64;
+        let mut d = FrameDecoder::new(
+            TypeSet {
+                stream_credit: true,
+                ..TypeSet::V1
+            },
+            8 << 20,
+        );
+        while let Some(Ok(m)) = stream.next().await {
+            if let Message::Binary(b) = m {
+                d.push(&b).unwrap();
+                while let Some(f) = d.next_frame().unwrap() {
+                    if f.frame_type == FRAME_OPEN {
+                        let r =
+                            json!({"type": "refuse", "stream": f.stream_id, "code": "not-holder"})
+                                .to_string();
+                        sink.send(Message::Text(
+                            rm::seal_bridge_text(&keys.c2s, seq, &r).into(),
+                        ))
+                        .await
+                        .unwrap();
+                        seq += 1;
+                    }
+                }
+            }
+        }
+    });
+    eventually("bb1 learns aa1", || {
+        w.node("bb1").mesh.mailbox_holder(&id).as_deref() == Some("aa1")
+    })
+    .await;
+    // The real holder, second in line, through cc1.
+    let opts = BoxOpts {
+        mesh: true,
+        ..BoxOpts::default()
+    };
+    let (mut b, _) = SimBox::connect(w.node("cc1").r().hub_addr, &a, &pod, &stk, &opts).await;
+    b.attach("cc1").await;
+    b.send(
+        &payload::mailbox_announce_frame(&[payload::MailboxAnnouncement {
+            pik_pub_hex: pubhex(&pik),
+            epoch: epoch as f64,
+            sig_hex: v1.clone(),
+            ..Default::default()
+        }])
+        .unwrap(),
+    );
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let (status, body) = post_mail(hub, &id, b"sealed").await;
+    assert_eq!((status, body.as_slice()), (200, b"reply:sealed".as_slice()));
+    refuser.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn only_completed_sessions_count_toward_rebalancing() {
+    let w = world(Tune::default()).await;
+    let a = alice();
+    let stk = key(0x31);
+    let pod = format!("home.alice.{APEX}");
+    w.com.account(&a);
+    w.com.register(&pod, &stk);
+    synced(&w).await;
+    let opts = BoxOpts {
+        mesh: true,
+        linger: true,
+        ..BoxOpts::default()
+    };
+    let (mut b, _) = SimBox::connect(w.node("aa1").r().hub_addr, &a, &pod, &stk, &opts).await;
+    b.attach("aa1").await;
+    eventually("cc1 knows", || w.node("cc1").mesh.winner_of(&pod).is_some()).await;
+    let home = &w.node("aa1").mesh;
+    // A ClientHello and nothing after it (the box answered, the visitor never went on): not a completed session.
+    let mut s = TcpStream::connect(w.node("cc1").r().sni_addr)
+        .await
+        .unwrap();
+    s.write_all(&client_hello(&pod)).await.unwrap();
+    let mut buf = vec![0u8; 64];
+    assert!(s.read(&mut buf).await.unwrap() > 0);
+    drop(s);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        home.traffic_window("alice").is_empty(),
+        "{:?}",
+        home.traffic_window("alice")
+    );
+    // A visitor that keeps talking after the box answered: one session, keyed by cc1's client key.
+    let mut s = TcpStream::connect(w.node("cc1").r().sni_addr)
+        .await
+        .unwrap();
+    s.write_all(&client_hello(&pod)).await.unwrap();
+    let mut buf = vec![0u8; 64];
+    let n = s.read(&mut buf).await.unwrap();
+    assert!(n > 0);
+    s.write_all(b"finished").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    drop(s);
+    eventually("counted", || {
+        home.traffic_window("alice")
+            .iter()
+            .any(|x| x.relay_id == "cc1" && x.streams == 1)
+    })
+    .await;
+}
+
+#[test]
+fn the_test_knob_keys_loopback_visitors_by_port() {
+    let com = Com::new();
+    let k = key(0x0b);
+    let lone = |by_port: bool| {
+        let mut cfg = MeshConfig::new("aa1", APEX, RelayKind::Full, &pubhex(&com.log));
+        cfg.client_key_by_port = by_port;
+        let parts = MeshParts {
+            feed: Arc::new(Feed(Arc::clone(&com))),
+            decrypt: SealedFeed::new(APEX, "aa1", k.to_bytes()),
+            ca: Arc::new(StaticCaKeys(vec![pubhex(&com.ca)])),
+            issuer: Arc::new(Issuer(Arc::clone(&com))),
+        };
+        Mesh::new(cfg, k.clone(), parts, Box::new(|_: &str| {})).unwrap()
+    };
+    let (a, b): (SocketAddr, SocketAddr) = (
+        "127.0.0.1:40001".parse().unwrap(),
+        "127.0.0.1:40002".parse().unwrap(),
+    );
+    let off = lone(false);
+    assert_eq!(
+        off.visitor_key(a),
+        off.visitor_key(b),
+        "one IP is one client by default"
+    );
+    let on = lone(true);
+    assert_ne!(
+        on.visitor_key(a),
+        on.visitor_key(b),
+        "two ports are two clients with the knob"
+    );
+    let vars = |kv: &[(&str, &str)]| -> HashMap<String, String> {
+        kv.iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    };
+    let base = [
+        ("FLAGSHIP_MESH", "on"),
+        ("PORT", "3000"),
+        ("TUNNEL_TCP_PORT", "8443"),
+        ("FLAGSHIP_RELAY_ID", "aa1"),
+        (
+            "FLAGSHIP_RELAY_KEY_SEED",
+            "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+        ),
+        ("FLAGSHIP_RELAY_LOG_PUB", "aa".repeat(32).leak()),
+    ];
+    let s = flagship_relay::config::Settings::from_vars(&vars(&base)).unwrap();
+    assert!(!s.mesh.unwrap().client_key_by_port);
+    let mut on_vars = base.to_vec();
+    on_vars.push(("FLAGSHIP_MESH_CLIENT_KEY_BY_PORT", "1"));
+    let s = flagship_relay::config::Settings::from_vars(&vars(&on_vars)).unwrap();
+    assert!(s.mesh.unwrap().client_key_by_port);
 }

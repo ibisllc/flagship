@@ -77,12 +77,20 @@ pub struct MeshConfig {
     pub capacity: u64,
     /// The least time between two `co-locate` hints to one box from this relay.
     pub colocate_every: Duration,
+    /// `FLAGSHIP_MESH_PEER_ADDRS`: addresses always known as peers (the reserved handshake pool, §6.1).
+    pub peer_addrs: Vec<String>,
+    /// Test-only (`FLAGSHIP_MESH_CLIENT_KEY_BY_PORT`): visitors keyed by `ip:port` (§10.1), so loopback tests see many.
+    pub client_key_by_port: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct BridgeTimings {
     pub dial: Duration,
     pub step: Duration,
+    /// The acceptor's wait for the dialer's `mesh-auth` (`MESH_HANDSHAKE_FIRST_MS`).
+    pub first: Duration,
+    /// A bridge must live this long to reset the dialer's backoff (`MESH_BRIDGE_STABLE_MS`).
+    pub stable: Duration,
     pub ping: Duration,
     pub down: Duration,
     pub backoff_min: Duration,
@@ -94,6 +102,8 @@ impl Default for BridgeTimings {
         Self {
             dial: Duration::from_millis(rm::MESH_DIAL_TIMEOUT_MS),
             step: Duration::from_millis(rm::MESH_HANDSHAKE_STEP_MS),
+            first: Duration::from_millis(rm::MESH_HANDSHAKE_FIRST_MS),
+            stable: Duration::from_millis(rm::MESH_BRIDGE_STABLE_MS),
             ping: Duration::from_millis(rm::MESH_PING_MS),
             down: Duration::from_millis(rm::MESH_PEER_DOWN_MS),
             backoff_min: Duration::from_millis(rm::MESH_BACKOFF_MIN_MS),
@@ -123,6 +133,8 @@ impl MeshConfig {
             peer_urls: HashMap::new(),
             capacity: 10_000,
             colocate_every: Duration::from_millis(rm::MOVE_COLOCATE_MIN_MS),
+            peer_addrs: Vec::new(),
+            client_key_by_port: false,
         }
     }
 }
@@ -194,7 +206,7 @@ pub(crate) struct State {
     /// Mailbox ids announced by peers' boxes: id → the announcing relays in the order they first announced it (relayId,
     /// epoch). The first is the holder (the announcement names no relay, §7.6); the others take over, in order, once it
     /// withdraws the id or its bridge goes down.
-    pub remote_mailboxes: HashMap<String, Vec<(String, u64)>>,
+    pub remote_mailboxes: HashMap<String, Vec<attachments::MailboxCandidate>>,
     /// Mailbox announcements of this relay's boxes, by mailbox id (part of the dump to a new peer).
     pub local_mail: HashMap<String, wire::WireItem>,
     pub draining: bool,
@@ -247,6 +259,10 @@ pub(crate) struct Inner {
     pub tasks: Mutex<Vec<tokio::task::AbortHandle>>,
     pub dialers: Mutex<HashMap<String, tokio::task::AbortHandle>>,
     pub banned: Mutex<HashMap<String, u64>>,
+    /// Client addresses a peer authenticated from → when (§6.1 known peer addresses).
+    pub known_addrs: Mutex<HashMap<String, u64>>,
+    /// Per-process key for visitor client keys (§10.1).
+    pub client_secret: [u8; 32],
     pub outbox: Mutex<bridge::Outbox>,
     pub log: Box<dyn Fn(&str) + Send + Sync>,
 }
@@ -343,6 +359,12 @@ impl Mesh {
             tasks: Mutex::new(Vec::new()),
             dialers: Mutex::new(HashMap::new()),
             banned: Mutex::new(HashMap::new()),
+            known_addrs: Mutex::new(HashMap::new()),
+            client_secret: {
+                let mut k = [0u8; 32];
+                getrandom::fill(&mut k).map_err(|e| format!("no randomness: {e}"))?;
+                k
+            },
             outbox: Mutex::new(bridge::Outbox::default()),
             relay_pub,
             key,
@@ -355,6 +377,40 @@ impl Mesh {
     #[must_use]
     pub fn relay_id(&self) -> &str {
         &self.0.cfg.relay_id
+    }
+
+    /// Is `addr` a known peer address (configured, or a peer authenticated from it in the last 24 h)? §6.1.
+    #[must_use]
+    pub fn known_peer_address(&self, addr: &str) -> bool {
+        if self.0.cfg.peer_addrs.iter().any(|a| a == addr) {
+            return true;
+        }
+        let t = now();
+        self.0.known_addrs.lock().is_ok_and(|k| {
+            k.get(addr)
+                .is_some_and(|at| t.saturating_sub(*at) < rm::MESH_KNOWN_ADDRESS_TTL_MS)
+        })
+    }
+
+    /// A peer authenticated from `addr`: remember it (at most `MESH_KNOWN_ADDRESSES_MAX`, oldest out).
+    pub(crate) fn learn_peer_address(&self, addr: &str) {
+        if addr.is_empty() || addr == "?" {
+            return;
+        }
+        let t = now();
+        if let Ok(mut k) = self.0.known_addrs.lock() {
+            k.retain(|_, at| t.saturating_sub(*at) < rm::MESH_KNOWN_ADDRESS_TTL_MS);
+            k.insert(addr.to_owned(), t);
+            while k.len() > rm::MESH_KNOWN_ADDRESSES_MAX {
+                let oldest = k.iter().min_by_key(|(_, at)| **at).map(|(a, _)| a.clone());
+                match oldest {
+                    Some(o) => {
+                        k.remove(&o);
+                    }
+                    None => break,
+                }
+            }
+        }
     }
 
     #[must_use]
@@ -587,7 +643,7 @@ impl Mesh {
     /// The holder's admission of a bridged OPEN (§6.4, §7.4): `Ok` to route it locally, else the refusal code.
     ///
     /// # Errors
-    /// `stale`, `not-holder` or `apps-off`.
+    /// `revoked`, `stale`, `not-holder` or `apps-off`.
     pub fn holder_admits(&self, sni: &str) -> Result<(), &'static str> {
         let me = self.relay_id().to_owned();
         let t = now();
@@ -595,6 +651,19 @@ impl Mesh {
             return Err("not-holder");
         };
         let class = self.classify(sni);
+        // A box the applied log revokes at its regGen is refused `revoked`, not `not-holder` (as the TS holder).
+        if let NameClass::Box(pod) = &class {
+            let revoked = self
+                .with_state(|s| {
+                    rm::relay_log_box(&s.log, pod).is_some_and(|b| {
+                        s.log.revoked_boxes.get(&b.box_pub).copied().unwrap_or(0) >= b.reg_gen
+                    })
+                })
+                .unwrap_or(false);
+            if revoked {
+                return Err("revoked");
+            }
+        }
         if !self.fresh() {
             // Stale: only a box here that is exempt (a decision with no end, §4.6 as amended).
             let exempt = match &class {

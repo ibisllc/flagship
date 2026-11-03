@@ -243,13 +243,13 @@ describe("Low: a bridged stream routes by its ClientHello", () => {
 describe("Low: /mesh handshakes are capped", () => {
   it("per client address and in all", () => {
     const p = new PendingHandshakes();
-    for (let i = 0; i < MESH_HANDSHAKE_MAX_PENDING_PER_IP; i++) expect(p.tryAdd("1.1.1.1")).toBe(true);
-    expect(p.tryAdd("1.1.1.1")).toBe(false);
+    for (let i = 0; i < MESH_HANDSHAKE_MAX_PENDING_PER_IP; i++) expect(p.tryAdd("1.1.1.1")).toBe("general");
+    expect(p.tryAdd("1.1.1.1")).toBeNull();
     p.done("1.1.1.1");
-    expect(p.tryAdd("1.1.1.1")).toBe(true);
+    expect(p.tryAdd("1.1.1.1")).toBe("general");
     let n = MESH_HANDSHAKE_MAX_PENDING_PER_IP;
     for (let i = 0; n < MESH_HANDSHAKE_MAX_PENDING; i++) if (p.tryAdd(`10.0.${i >> 2}.${i & 3}`)) n++;
-    expect(p.tryAdd("9.9.9.9")).toBe(false);
+    expect(p.tryAdd("9.9.9.9")).toBeNull();
   });
 });
 

@@ -4,6 +4,7 @@
  * a move only from the relay it computes as the account's home, at most one per account per 6 h (`checkAccountMove`).
  */
 import {
+  MESH_ACCOUNT_MOVES_MAX,
   ACCOUNT_MOVE_MIN_INTERVAL_MS,
   ACCOUNT_MOVE_TTL_MS,
   accountHash,
@@ -67,19 +68,26 @@ export class AccountHomes {
     }
   }
 
-  /** A peer's `account-move`: accepted only from the account's current home (as this relay computes it). */
-  offer(raw: unknown, account: string | null, from: string): { ok: true } | { ok: false; reason: AccountMoveRefusal | "unknown-account" } {
+  /**
+   * A peer's `account-move`: accepted only from the account's current home (as this relay computes it). `account` is
+   * the name when this relay holds an attachment or a local box of it, else null: such a move is refused
+   * `unknown-account` (nothing to compute a home from; a live move comes back in a sync dump), and a known account whose
+   * home is null is refused `not-home` (§10.3, review 2026-11-03; the Rust relay does the same).
+   */
+  offer(raw: unknown, account: string | null, from: string): { ok: true } | { ok: false; reason: AccountMoveRefusal | "unknown-account" | "busy" } {
     const o = raw as { move?: AccountMove; signature?: string } | null;
     if (!o?.move || typeof o.signature !== "string") return this.refuse(from, "malformed");
+    if (!account) return this.refuse(from, "unknown-account");
     const m = o.move;
     const ctx = this.opts.ctx();
     const last = this.lastMoveAt.get(m.accountHash) ?? null;
-    // The expected home needs the account name; a relay that holds no box of the account computes it from nothing
-    // and falls back to the move's own `from` only when it holds no attachment of the account at all.
-    const expected = account ? this.homeOf(account) ?? m.fromRelayId : m.fromRelayId;
     const minMove = this.opts.minMoveMs ?? ACCOUNT_MOVE_MIN_INTERVAL_MS;
-    const c = checkAccountMove({ move: m, signature: o.signature, expectedHome: expected, lastAcceptedAt: last !== null && ctx.now - last >= minMove ? null : last, ctx });
+    const c = checkAccountMove({ move: m, signature: o.signature, expectedHome: this.homeOf(account), lastAcceptedAt: last !== null && ctx.now - last >= minMove ? null : last, ctx });
     if (!c.ok) return this.refuse(from, c.reason);
+    if (!this.lastMoveAt.has(m.accountHash) && this.lastMoveAt.size >= MESH_ACCOUNT_MOVES_MAX) {
+      this.sweep();
+      if (this.lastMoveAt.size >= MESH_ACCOUNT_MOVES_MAX) return this.refuse(from, "busy");
+    }
     this.moves.set(m.accountHash, { move: { move: m, signature: o.signature }, acceptedAt: ctx.now });
     this.lastMoveAt.set(m.accountHash, ctx.now);
     return { ok: true };
@@ -101,16 +109,24 @@ export class AccountHomes {
     return [...this.moves.values()].filter((m) => m.move.move.notAfter > now).map((m) => m.move);
   }
 
+  /** Drop expired moves, and spacings older than the 6 h they enforce. */
   sweep(): void {
     const now = this.opts.ctx().now;
     for (const [k, m] of this.moves) if (m.move.move.notAfter <= now) this.moves.delete(k);
+    const minMove = this.opts.minMoveMs ?? ACCOUNT_MOVE_MIN_INTERVAL_MS;
+    for (const [k, at] of this.lastMoveAt) if (now - at >= minMove) this.lastMoveAt.delete(k);
+  }
+
+  /** How many accounts' move spacings are kept (tests, stats). */
+  spacingCount(): number {
+    return this.lastMoveAt.size;
   }
 
   stats(): { moves: number; refused: Record<string, number> } {
     return { moves: this.moves.size, refused: { ...this.refused } };
   }
 
-  private refuse(from: string, reason: AccountMoveRefusal | "unknown-account"): { ok: false; reason: AccountMoveRefusal | "unknown-account" } {
+  private refuse<R extends AccountMoveRefusal | "unknown-account" | "busy">(from: string, reason: R): { ok: false; reason: R } {
     const k = `${from}:${reason}`;
     this.refused[k] = (this.refused[k] ?? 0) + 1;
     return { ok: false, reason };

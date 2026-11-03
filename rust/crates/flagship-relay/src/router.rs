@@ -108,8 +108,8 @@ fn bump(c: &AtomicU64) {
 pub trait VisitorIo: AsyncRead + AsyncWrite + Unpin + Send + 'static {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> VisitorIo for T {}
 
-/// Counts a stream's bytes for the home's rebalancing (relay-mesh.md §10.1).
-type Counter = Arc<dyn Fn(usize) + Send + Sync>;
+/// Counts a session's bytes for the home's rebalancing (relay-mesh.md §10.1); recorded when the last handle drops.
+type Counter = Arc<crate::mesh::rebalance::SessionCount>;
 
 /// Domain → the claim its single park group is waiting for.
 type ParkLot = HashMap<String, watch::Receiver<Option<Arc<Tunnel>>>>;
@@ -227,7 +227,8 @@ impl Router {
         if let Some(mesh) = self.mesh.get().cloned() {
             return self.mesh_route(&mesh, sock, sni, initial, arrived).await;
         }
-        self.route_local(sock, sni, initial, arrived, None).await;
+        self.route_local(sock, sni, initial, arrived, None, String::new())
+            .await;
     }
 
     fn deadline(&self, arrived: Instant) -> Instant {
@@ -237,7 +238,8 @@ impl Router {
     }
 
     /// The holder's routing, exactly today's: the registry, park-and-nudge, or a delayed drop. `entry` is the relay a
-    /// bridged visitor reached (relay-mesh.md §7.4); `None` for a visitor on this relay.
+    /// bridged visitor reached (relay-mesh.md §7.4); `None` for a visitor on this relay. `client` is the visitor's client
+    /// key for rebalancing (§10.1).
     pub async fn route_local<S: VisitorIo>(
         &self,
         sock: S,
@@ -245,6 +247,7 @@ impl Router {
         initial: Vec<u8>,
         arrived: Instant,
         entry: Option<String>,
+        client: String,
     ) {
         let (found, nudgeable, user) = match self.registry.lock() {
             Ok(r) => (
@@ -254,7 +257,7 @@ impl Router {
             ),
             Err(_) => return,
         };
-        let counter = self.counter(&sni, entry);
+        let counter = self.counter(&sni, entry, client);
         if let Some(t) = found {
             bump(&self.stats.routed);
             self.pipe_counted(sock, t, &sni, initial, counter).await;
@@ -274,17 +277,14 @@ impl Router {
     }
 
     /// The home counts an account's visitor bytes by entry relay; the phone's bare name is not counted.
-    fn counter(&self, sni: &str, entry: Option<String>) -> Option<Counter> {
+    fn counter(&self, sni: &str, entry: Option<String>, client: String) -> Option<Counter> {
         let mesh = self.mesh.get()?.clone();
         match mesh.classify(sni) {
             crate::mesh::NameClass::Box(_) | crate::mesh::NameClass::Account(_) => {}
             _ => return None,
         }
         let account = crate::registry::user_of(sni, &self.cfg.apex)?;
-        mesh.count_traffic(&account, entry.as_deref(), 0, 1);
-        Some(Arc::new(move |n: usize| {
-            mesh.count_traffic(&account, entry.as_deref(), n as u64, 0);
-        }))
+        Some(Arc::new(mesh.session_count(&account, entry, client)))
     }
 
     /// The entry relay's side of §7.2: route locally, forward to the holder over its bridge, or query the peers first.
@@ -308,13 +308,28 @@ impl Router {
         }
         let mut sock = sock;
         let mut requeried = false;
+        let client = sock.peer_addr().map_or_else(
+            |_| crate::mesh::rebalance::CLIENT_UNKNOWN.to_owned(),
+            |a| mesh.visitor_key(a),
+        );
         loop {
             match route {
-                Route::Local => return self.route_local(sock, sni, initial, arrived, None).await,
+                Route::Local => {
+                    return self
+                        .route_local(sock, sni, initial, arrived, None, client)
+                        .await;
+                }
                 Route::Query(_) | Route::Drop => break,
                 Route::Forward { holder, key } => {
                     match mesh
-                        .forward(sock, &holder, key.as_deref(), &sni, initial.clone())
+                        .forward(
+                            sock,
+                            &holder,
+                            key.as_deref(),
+                            &sni,
+                            initial.clone(),
+                            Some(&client),
+                        )
                         .await
                     {
                         Ok(()) => return,
@@ -495,7 +510,7 @@ impl Router {
             m.add(account.as_deref(), initial.len());
         }
         if let Some(c) = &counter {
-            c(initial.len());
+            c.initial(initial.len());
         }
         let first_wait = self
             .meter
@@ -553,7 +568,7 @@ impl Router {
                 return;
             }
             if let Some(c) = &counter {
-                c(n);
+                c.up(n);
             }
             if let Some(m) = &self.meter {
                 m.add(account, n);
@@ -580,7 +595,7 @@ async fn downlink<S: VisitorIo>(
             return;
         }
         if let Some(c) = &counter {
-            c(chunk.len());
+            c.down(chunk.len());
         }
         h.tunnel.consumed(h.id, chunk.len());
     }

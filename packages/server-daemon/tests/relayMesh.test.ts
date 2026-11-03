@@ -31,6 +31,8 @@ import { checkSign } from "@flagship/keyd";
 import {
   CAPABILITY_DRAIN_V1,
   CAPABILITY_MESH_V1,
+  CAPABILITY_PB_MAIL_V1,
+  FRAME_PB_MAILBOX_ANNOUNCE,
   FRAME_ATTACHMENT,
   FRAME_CLOSE_REMOTE,
   FRAME_HELLO,
@@ -287,7 +289,7 @@ async function waitFor<T>(fn: () => T | undefined | null | false, ms = 2_000): P
 }
 
 /** Answer the socket's HELLO as relay `relayId` (a mesh relay unless `mesh: false`). */
-async function acceptAs(ws: FakeWS, relayId: string | null, o: { blessing?: RelayBlessing; keyOf?: string } = {}): Promise<void> {
+async function acceptAs(ws: FakeWS, relayId: string | null, o: { blessing?: RelayBlessing; keyOf?: string; extraCaps?: string[] } = {}): Promise<void> {
   const hello = await waitFor(() => ws.frames(FRAME_HELLO)[0]);
   const nonce = Uint8Array.from(Buffer.from(ws.json(hello).nonce, "hex"));
   if (relayId === null) {
@@ -295,7 +297,7 @@ async function acceptAs(ws: FakeWS, relayId: string | null, o: { blessing?: Rela
     return;
   }
   const hubSig = hexOf(ed.sign(nonce, seedOf(o.keyOf ?? relayId)));
-  ws.deliver(helloAckFrame(true, undefined, { hubSig, relayId, relayBlessing: o.blessing ?? blessingOf(relayId) }, [CAPABILITY_DRAIN_V1, CAPABILITY_MESH_V1]));
+  ws.deliver(helloAckFrame(true, undefined, { hubSig, relayId, relayBlessing: o.blessing ?? blessingOf(relayId) }, [CAPABILITY_DRAIN_V1, CAPABILITY_MESH_V1, ...(o.extraCaps ?? [])]));
 }
 
 const entitlements = async () => ({
@@ -311,7 +313,7 @@ interface Harness {
   opened: string[];
 }
 
-async function harness(o: { now?: () => number; renewMs?: number; graceMs?: number; dialTimeoutMs?: number; checkIntervalMs?: number; fetchDirectory?: () => Promise<unknown> } = {}): Promise<Harness> {
+async function harness(o: { now?: () => number; renewMs?: number; graceMs?: number; dialTimeoutMs?: number; checkIntervalMs?: number; fetchDirectory?: () => Promise<unknown>; mail?: (relayId?: string) => Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string; relayId?: string; relaySigHex?: string }>> } = {}): Promise<Harness> {
   const notes: Harness["notes"] = [];
   const wiring = await buildRelayMeshBox({
     dataDir: dir,
@@ -337,6 +339,7 @@ async function harness(o: { now?: () => number; renewMs?: number; graceMs?: numb
       return null;
     },
     onDrain: () => {},
+    ...(o.mail ? { mailboxAnnouncements: o.mail, onMail: async () => new Uint8Array(0) } : {}),
     mesh: { ...wiring.client, ...(o.renewMs ? { renewMs: o.renewMs } : {}) },
     meshSupervisor: { ...wiring.supervisor, graceMs: o.graceMs ?? 80, dialTimeoutMs: o.dialTimeoutMs ?? 150, ...(o.checkIntervalMs ? { checkIntervalMs: o.checkIntervalMs } : {}) },
     wsFactory: factory,
@@ -372,6 +375,26 @@ describe("tunnel client: mesh-v1", () => {
     const n = ws.frames(FRAME_ATTACHMENT).length;
     await new Promise((r) => setTimeout(r, 60));
     expect(ws.frames(FRAME_ATTACHMENT).length).toBe(n);
+  });
+
+  it("re-announces its mailboxes bound to the relay once the relay accepted the attachment (§7.6)", async () => {
+    const asked: Array<string | undefined> = [];
+    const h = await harness({
+      mail: async (relayId) => {
+        asked.push(relayId);
+        return [{ pikPubHex: "ab".repeat(32), epoch: 1, sigHex: "cd".repeat(64), ...(relayId ? { relayId, relaySigHex: "ef".repeat(64) } : {}) }];
+      },
+    });
+    const ws = await waitFor(() => h.sockets[0]);
+    await acceptAs(ws, "iad1", { extraCaps: [CAPABILITY_PB_MAIL_V1] });
+    await waitFor(() => ws.frames(FRAME_ATTACHMENT).length === 1);
+    await waitFor(() => ws.frames(FRAME_PB_MAILBOX_ANNOUNCE).length === 1);
+    expect(asked).toEqual([undefined]);
+    ws.deliver(attachmentResultFrame({ ok: true }));
+    await waitFor(() => ws.frames(FRAME_PB_MAILBOX_ANNOUNCE).length === 2);
+    expect(asked).toEqual([undefined, "iad1"]);
+    expect(ws.json(ws.frames(FRAME_PB_MAILBOX_ANNOUNCE)[1]!).announcements[0]).toMatchObject({ relayId: "iad1", relaySigHex: "ef".repeat(64) });
+    await h.sup.close();
   });
 
   it("an old relay (no mesh-v1, no relayId) is served as before: no attachment, hints ignored", async () => {
@@ -421,6 +444,10 @@ describe("supervisor: move hints, make-before-break", () => {
     await acceptAs(target, "ams1");
     const att = await waitFor(() => target.frames(FRAME_ATTACHMENT)[0]);
     expect(target.json(att).attachment.relayId).toBe("ams1");
+    // Not live until the new relay accepts the attachment (§9.3).
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.sup.meshRelay()?.relayId).toBe("iad1");
+    target.deliver(attachmentResultFrame({ ok: true }));
     await waitFor(() => h.sup.meshRelay()?.relayId === "ams1");
     // The old tunnel keeps serving for the grace.
     expect(old.closed).toBe(false);
@@ -491,6 +518,62 @@ describe("supervisor: move hints, make-before-break", () => {
     await h.sup.close();
   });
 
+  it("stays when the target refuses the attachment, and ignores that target for an hour", async () => {
+    const c = hintCase("co-locate ok");
+    const h = await harness({ now: () => c.now });
+    const old = await waitFor(() => h.sockets[0]);
+    await acceptAs(old, "iad1");
+    await waitFor(() => old.frames(FRAME_ATTACHMENT).length === 1);
+    old.deliver(moveHintFrame({ hint: c.hint, signature: c.signature, target: c.target }));
+    const target = await waitFor(() => h.sockets[1]);
+    await acceptAs(target, "ams1");
+    await waitFor(() => target.frames(FRAME_ATTACHMENT)[0]);
+    target.deliver(attachmentResultFrame({ ok: false, code: "not-registered" }));
+    await waitFor(() => h.notes.length === 1);
+    expect(h.notes[0]!.kind).toBe(RELAY_MOVE_REFUSED_KIND);
+    expect(target.closed).toBe(true);
+    expect(old.closed).toBe(false);
+    expect(h.sup.meshRelay()?.relayId).toBe("iad1");
+    expect(JSON.parse(await readFile(statePath(), "utf8")).rate.failedTargets).toEqual({ ams1: c.now });
+    await h.sup.close();
+  });
+
+  it("stays when the target never answers the attachment", async () => {
+    const c = hintCase("co-locate ok");
+    const h = await harness({ now: () => c.now, dialTimeoutMs: 60 });
+    const old = await waitFor(() => h.sockets[0]);
+    await acceptAs(old, "iad1");
+    await waitFor(() => old.frames(FRAME_ATTACHMENT).length === 1);
+    old.deliver(moveHintFrame({ hint: c.hint, signature: c.signature, target: c.target }));
+    const target = await waitFor(() => h.sockets[1]);
+    await acceptAs(target, "ams1");
+    await waitFor(() => h.notes.length === 1);
+    expect(h.notes[0]!.kind).toBe(RELAY_MOVE_REFUSED_KIND);
+    expect(target.frames(FRAME_ATTACHMENT).length).toBe(1);
+    expect(h.sup.meshRelay()?.relayId).toBe("iad1");
+    await h.sup.close();
+  });
+
+  it("a retiring tunnel stops renewing its attachment once the move commits", async () => {
+    const c = hintCase("co-locate ok");
+    const h = await harness({ now: () => c.now, renewMs: 10, graceMs: 200 });
+    const old = await waitFor(() => h.sockets[0]);
+    await acceptAs(old, "iad1");
+    await waitFor(() => old.frames(FRAME_ATTACHMENT).length >= 2);
+    old.deliver(moveHintFrame({ hint: c.hint, signature: c.signature, target: c.target }));
+    const target = await waitFor(() => h.sockets[1]);
+    await acceptAs(target, "ams1");
+    await waitFor(() => target.frames(FRAME_ATTACHMENT)[0]);
+    target.deliver(attachmentResultFrame({ ok: true }));
+    await waitFor(() => h.sup.meshRelay()?.relayId === "ams1");
+    const n = old.frames(FRAME_ATTACHMENT).length;
+    await new Promise((r) => setTimeout(r, 80));
+    expect(old.closed).toBe(false);
+    expect(old.frames(FRAME_ATTACHMENT).length).toBe(n);
+    expect(target.frames(FRAME_ATTACHMENT).length).toBeGreaterThan(1);
+    await h.sup.close();
+  });
+
   it("stays when the target proves another relay's key", async () => {
     const c = hintCase("co-locate ok");
     const h = await harness({ now: () => c.now });
@@ -522,6 +605,8 @@ describe("supervisor: move hints, make-before-break", () => {
     const next = await waitFor(() => h.sockets[1]);
     expect(next.url).toBe(`wss://tunnel.${APEX}:8443/tunnel`);
     await acceptAs(next, "ams1");
+    await waitFor(() => next.frames(FRAME_ATTACHMENT)[0]);
+    next.deliver(attachmentResultFrame({ ok: true }));
     await check;
     expect(h.sup.meshRelay()?.relayId).toBe("ams1");
     expect(h.notes).toEqual([{ kind: RELAY_MOVED_KIND, detail: "This server reconnected to another Flagship relay because relay iad1 is no longer on Flagship's list of relays.", ok: true }]);

@@ -180,6 +180,34 @@ describe("relay mesh vectors", () => {
     for (const c of k.comparePhoneItems) expect(Math.sign(P.comparePhoneItems(c.a, c.b)), c.name).toBe(c.expected);
   });
 
+  it("bridge MAC keys and sealed control messages; relay-bound mailbox announcements", () => {
+    const m = v.checks.bridgeMac;
+    const un = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
+    expect(P.bridgeKx(un(m.clientSecret))).toBe(m.clientKx);
+    expect(P.bridgeKx(un(m.serverSecret))).toBe(m.serverKx);
+    const base = { serverNonce: m.serverNonce, clientNonce: m.clientNonce, clientRelayId: m.clientRelayId, serverRelayId: m.serverRelayId };
+    for (const [secret, peerKx] of [[m.clientSecret, m.serverKx], [m.serverSecret, m.clientKx]]) {
+      const keys = P.bridgeMacKeys({ ...base, secret: un(secret), peerKx })!;
+      expect(Buffer.from(keys.c2s).toString("hex")).toBe(m.c2s);
+      expect(Buffer.from(keys.s2c).toString("hex")).toBe(m.s2c);
+    }
+    for (const s of m.sealed) {
+      const key = un(s.dir === "c2s" ? m.c2s : m.s2c);
+      expect(P.sealBridgeText(key, s.seq, s.json)).toBe(s.text);
+      expect(P.openBridgeText(key, s.seq, s.text)).toBe(s.json);
+      expect(P.openBridgeText(key, s.seq + 1, s.text)).toBeNull();
+      expect(P.openBridgeText(key, s.seq, s.text.slice(0, -1) + " ")).toBeNull();
+    }
+    expect(P.bridgeMacKeys({ ...base, secret: un(m.clientSecret), peerKx: m.zeroPeerKx })).toBeNull();
+    expect(m.zeroPeerKeys).toBeNull();
+    const mb = v.checks.mailboxForRelay;
+    const bytes = P.canonicalPbMailboxAnnounceForRelay(mb.pikPubHex, mb.epoch, mb.relayId);
+    expect(new TextDecoder().decode(bytes)).toBe(mb.canonical);
+    expect(P.ed.verify(un(mb.relaySigHex), bytes, un(mb.pikPubHex))).toBe(true);
+    expect(P.ed.verify(un(mb.relaySigHex), P.canonicalPbMailboxAnnounceForRelay(mb.pikPubHex, mb.epoch, "ams1"), un(mb.pikPubHex))).toBe(false);
+    expect(P.pbMailboxId(mb.pikPubHex, mb.epoch)).toBe(mb.mailboxId);
+  });
+
   it("routing: home, ledger ranking, rebalancing, serving at a policy head", () => {
     const k = v.checks;
     for (const c of k.accountHome) expect(P.accountHome({ attachments: c.attachments, directory: D, move: c.move, now: c.now }), c.name).toBe(c.expected);

@@ -17,7 +17,7 @@
  *   flagship/relay-attachment/v1|<serverFqdn>|<boxPub>|<regGen>|<relayId>|<attachedAt>|<issuedAt>|<notAfter>
  *   flagship/relay-legacy-attachment/v1|<serverFqdn>|<boxPub>|<regGen>|<relayId>|<attachedAt>|<issuedAt>|<notAfter>
  *   flagship/relay-withdraw/v1|<subjectKind>|<subject>|<relayId>|<withdrawnIssuedAt>|<at>
- *   flagship/relay-bridge-auth/v1|<role>|<signerRelayId>|<peerRelayId>|<serverNonce>|<clientNonce>|<at>
+ *   flagship/relay-bridge-auth/v2|<role>|<signerRelayId>|<peerRelayId>|<serverNonce>|<clientNonce>|<at>|<kx>
  *   flagship/relay-move-hint/v1|<serverFqdn>|<boxPub>|<fromRelayId>|<toRelayId>|<reason>|<issuedAt>|<notAfter>
  *   flagship/relay-account-move/v1|<accountHash>|<fromRelayId>|<toRelayId>|<issuedAt>|<notAfter>
  *   flagship/phone-route-grant/v1|<hostname>|<phoneRoutePub>|<generation>|<holderRelayId>|<ledgerRelayId>|<issuedAt>|<notAfter>
@@ -51,6 +51,9 @@
  * either. The records below are the plaintext a relay verifies; an encryption layer, if chosen, wraps the published
  * files (chunk B) and never these canonical forms.
  */
+import { x25519 } from "@noble/curves/ed25519.js";
+import { hkdf } from "@noble/hashes/hkdf";
+import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 import { hex } from "./canonicalBase.js";
 import { ed } from "./edSync.js";
@@ -70,7 +73,9 @@ export const TAG_RELAY_LOG_HEAD = "flagship/relay-log-head/v1";
 export const TAG_RELAY_ATTACHMENT = "flagship/relay-attachment/v1";
 export const TAG_RELAY_LEGACY_ATTACHMENT = "flagship/relay-legacy-attachment/v1";
 export const TAG_RELAY_WITHDRAW = "flagship/relay-withdraw/v1";
-export const TAG_RELAY_BRIDGE_AUTH = "flagship/relay-bridge-auth/v1";
+export const TAG_RELAY_BRIDGE_AUTH = "flagship/relay-bridge-auth/v2";
+/** HKDF info prefix for the per-direction bridge MAC keys (§6.2). */
+export const TAG_RELAY_BRIDGE_MAC = "flagship/relay-bridge-mac/v1";
 export const TAG_RELAY_MOVE_HINT = "flagship/relay-move-hint/v1";
 export const TAG_RELAY_ACCOUNT_MOVE = "flagship/relay-account-move/v1";
 export const TAG_PHONE_ROUTE_GRANT = "flagship/phone-route-grant/v1";
@@ -98,6 +103,14 @@ export const MESH_CLOCK_SKEW_MS = 60_000;
 export const MESH_QUERY_TIMEOUT_MS = 1_500;
 export const MESH_NEG_CACHE_MS = 10_000;
 export const MESH_NEG_CACHE_MAX = 50_000;
+/** A query that skipped a refusing relay and found nothing is remembered this long per (name, excluded relays). */
+export const MESH_NEG_CACHE_EXCLUDE_MS = 2_000;
+/** Withdrawal tombstones kept per withdrawing relay (§5.4); over it, that relay's oldest goes. */
+export const MESH_TOMBSTONES_PER_RELAY_MAX = 100_000;
+/** A tombstone outlives every item it can cover (the longest TTL is 30 min). */
+export const MESH_TOMBSTONE_KEEP_MS = 60 * MIN;
+/** Accepted account moves (and their 6 h spacing) remembered at most (§10.3). */
+export const MESH_ACCOUNT_MOVES_MAX = 200_000;
 export const MESH_STORE_MAX_BOX_ITEMS = 200_000;
 export const MESH_STORE_MAX_PER_RELAY = 100_000;
 export const MESH_STORE_MAX_PHONE_ITEMS = 20_000;
@@ -117,6 +130,17 @@ export const MESH_HANDSHAKE_STEP_MS = 5_000;
 /** `/mesh` handshakes not yet authenticated, across the relay and from one client address (§6.1). */
 export const MESH_HANDSHAKE_MAX_PENDING = 64;
 export const MESH_HANDSHAKE_MAX_PENDING_PER_IP = 4;
+/** Extra pending handshakes only a known peer address may use when the 64 are taken (§6.1). */
+export const MESH_HANDSHAKE_RESERVED = 16;
+/** The acceptor waits this long for the dialer's `mesh-auth` (the first message), not a whole step (§6.1). */
+export const MESH_HANDSHAKE_FIRST_MS = 2_000;
+/** An address a peer authenticated from is "known" this long; at most this many are kept (oldest out). */
+export const MESH_KNOWN_ADDRESS_TTL_MS = 24 * 60 * MIN;
+export const MESH_KNOWN_ADDRESSES_MAX = 256;
+/** A bridge that lived less than this does not reset the dialer's backoff (§6.1). */
+export const MESH_BRIDGE_STABLE_MS = 30_000;
+/** The holder waits this long for a bridged stream's first DATA (the visitor's ClientHello), then closes it (§6.4). */
+export const MESH_FIRST_DATA_WAIT_MS = 10_000;
 export const MESH_PING_MS = 10_000;
 export const MESH_PEER_DOWN_MS = 30_000;
 export const MESH_BACKOFF_MIN_MS = 1_000;
@@ -160,6 +184,10 @@ export const REBALANCE_WINDOW_MS = HOUR;
 export const REBALANCE_BUCKET_MS = MIN;
 export const REBALANCE_MIN_BYTES = 64 * 1024 * 1024;
 export const REBALANCE_MIN_STREAMS = 500;
+/** One client key's bytes count toward the rebalancing window at most this much (§10.1). */
+export const REBALANCE_CLIENT_BYTES_CAP = 8 * 1024 * 1024;
+/** Distinct client keys kept per (account, minute, entry relay); later ones share one overflow key. */
+export const REBALANCE_CLIENTS_PER_BUCKET_MAX = 1_024;
 /** share(T) ≥ 6/10, share(T) − share(home) ≥ 3/10, target tunnels/capacity < 8/10 (integer arithmetic, §10.2). */
 export const REBALANCE_MIN_SHARE_TENTHS = 6;
 export const REBALANCE_MIN_LEAD_TENTHS = 3;
@@ -866,6 +894,8 @@ export interface BridgeAuth {
   serverNonce: string;
   clientNonce: string;
   at: number;
+  /** The signer's ephemeral X25519 public key for this bridge, 64 lowercase hex (§6.2 channel binding). */
+  kx: string;
 }
 
 export function canonicalBridgeAuth(b: BridgeAuth): Bytes {
@@ -876,7 +906,8 @@ export function canonicalBridgeAuth(b: BridgeAuth): Bytes {
   hexField("serverNonce", b.serverNonce);
   hexField("clientNonce", b.clientNonce);
   intField("at", b.at);
-  return enc([TAG_RELAY_BRIDGE_AUTH, b.role, b.signerRelayId, b.peerRelayId, b.serverNonce, b.clientNonce, b.at]);
+  hexField("kx", b.kx);
+  return enc([TAG_RELAY_BRIDGE_AUTH, b.role, b.signerRelayId, b.peerRelayId, b.serverNonce, b.clientNonce, b.at, b.kx]);
 }
 
 export type MoveHintReason = "locality" | "co-locate" | "retire";
@@ -1366,13 +1397,15 @@ export function attachmentRefusalCode(r: AttachmentRefusal): "clock" | "mismatch
 
 /**
  * §5.2 precedence between two VALID attachments for the same name: positive when `a` wins, negative when `b` wins, 0
- * for the same attachment. Higher regGen; box-signed beats legacy; later `issuedAt`; the bytewise-smaller relayId.
+ * for the same attachment. Higher regGen; box-signed beats legacy; later `attachedAt` (the newer tunnel, so a retiring
+ * tunnel's late renewal never outranks the one that replaced it); later `issuedAt`; the bytewise-smaller relayId.
  */
 export function compareAttachments(a: AttachmentItem, b: AttachmentItem): number {
   const x = a.attachment;
   const y = b.attachment;
   if (x.regGen !== y.regGen) return x.regGen > y.regGen ? 1 : -1;
   if (a.kind !== b.kind) return a.kind === "box" ? 1 : -1;
+  if (x.attachedAt !== y.attachedAt) return x.attachedAt > y.attachedAt ? 1 : -1;
   if (x.issuedAt !== y.issuedAt) return x.issuedAt > y.issuedAt ? 1 : -1;
   if (x.relayId !== y.relayId) return x.relayId < y.relayId ? 1 : -1;
   return 0;
@@ -1426,6 +1459,8 @@ export interface MeshAuth {
   peer: string;
   nonce: string;
   at: number;
+  /** Ephemeral X25519 public key (64 hex), signed in `sig`: the bridge MAC keys come from it (§6.2). */
+  kx: string;
   blessing: RelayBlessing | null;
   sig: string;
 }
@@ -1457,8 +1492,72 @@ export function checkBridgeAuth(o: {
   const entry = directoryRelay(o.ctx.directory, a.relayId);
   if (!entry || entry.relayKey !== blessing.relayKey) return { ok: false, reason: "not-in-directory" };
   const [serverNonce, clientNonce] = o.role === "client" ? [o.selfNonce, a.nonce] : [a.nonce, o.selfNonce];
-  const ok = verifyRelayMeshRecord("relay-bridge-auth", { role: o.role, signerRelayId: a.relayId, peerRelayId: o.selfRelayId, serverNonce, clientNonce, at: a.at }, a.sig, blessing.relayKey);
+  const ok = verifyRelayMeshRecord("relay-bridge-auth", { role: o.role, signerRelayId: a.relayId, peerRelayId: o.selfRelayId, serverNonce, clientNonce, at: a.at, kx: a.kx }, a.sig, blessing.relayKey);
   return ok ? { ok: true, blessing } : { ok: false, reason: "bad-signature" };
+}
+
+// ── bridge channel binding (§6.2) ─────────────────────────────────────────
+
+/** The two MAC keys of one bridge: `c2s` authenticates what the dialer sends, `s2c` what the acceptor sends. */
+export interface BridgeMacKeys {
+  c2s: Bytes;
+  s2c: Bytes;
+}
+
+/**
+ * Derive a bridge's MAC keys from this side's ephemeral X25519 secret and the peer's signed `kx` (§6.2): shared =
+ * X25519; PRK = HKDF-SHA256(salt `<serverNonce>|<clientNonce>`, shared); each key = expand(`flagship/relay-bridge-mac/v1|
+ * <c2s|s2c>|<clientRelayId>|<serverRelayId>`, 32). Null for a malformed key or an all-zero shared secret.
+ */
+export function bridgeMacKeys(o: { secret: Bytes; peerKx: string; serverNonce: string; clientNonce: string; clientRelayId: string; serverRelayId: string }): BridgeMacKeys | null {
+  if (typeof o.peerKx !== "string" || !HEX64.test(o.peerKx) || o.secret.length !== 32) return null;
+  let shared: Bytes;
+  try {
+    shared = x25519.getSharedSecret(o.secret, fromHex(o.peerKx));
+  } catch {
+    return null;
+  }
+  if (shared.every((b) => b === 0)) return null;
+  const salt = new TextEncoder().encode(`${o.serverNonce}|${o.clientNonce}`);
+  const info = (dir: string) => new TextEncoder().encode(`${TAG_RELAY_BRIDGE_MAC}|${dir}|${o.clientRelayId}|${o.serverRelayId}`);
+  return { c2s: hkdf(sha256, shared, salt, info("c2s"), 32), s2c: hkdf(sha256, shared, salt, info("s2c"), 32) };
+}
+
+/** A fresh ephemeral X25519 key pair for one handshake: `kx` is the public half as hex. */
+export function bridgeEphemeral(): { secret: Bytes; kx: string } {
+  const secret = x25519.utils.randomSecretKey();
+  return { secret, kx: hex(x25519.getPublicKey(secret)) };
+}
+
+/** The public half of an X25519 secret, as hex (tests and vectors). */
+export function bridgeKx(secret: Bytes): string {
+  return hex(x25519.getPublicKey(secret));
+}
+
+/** HMAC-SHA256(key, u64be(seq) ‖ utf8(json)), 64 lowercase hex. */
+export function bridgeMac(key: Bytes, seq: number, json: string): string {
+  if (!Number.isSafeInteger(seq) || seq < 0) throw new Error("seq must be a safe integer ≥ 0");
+  const body = new TextEncoder().encode(json);
+  const m = new Uint8Array(8 + body.length);
+  new DataView(m.buffer).setBigUint64(0, BigInt(seq));
+  m.set(body, 8);
+  return hex(hmac(sha256, key, m));
+}
+
+/** A control message on an authenticated bridge: the MAC (64 hex) then the JSON (§6.3). */
+export function sealBridgeText(key: Bytes, seq: number, json: string): string {
+  return bridgeMac(key, seq, json) + json;
+}
+
+/** The JSON of a sealed control message when its MAC is right for `seq`, else null. */
+export function openBridgeText(key: Bytes, seq: number, text: string): string | null {
+  if (text.length < 64) return null;
+  const mac = text.slice(0, 64);
+  const json = text.slice(64);
+  const want = bridgeMac(key, seq, json);
+  let d = 0;
+  for (let i = 0; i < 64; i++) d |= mac.charCodeAt(i) ^ want.charCodeAt(i);
+  return d === 0 ? json : null;
 }
 
 // ── move hints, box side (§9.3) ───────────────────────────────────────────

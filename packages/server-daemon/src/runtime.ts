@@ -243,7 +243,8 @@ export interface DaemonRuntimeOptions {
    * announces to a hub offering pb-mail-v1, and who answers the mail.
    */
   peerMail?: {
-    announcements: () => Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string }>>;
+    /** `relayId`: the verified mesh relay of the tunnel asking (relay-bound announcements, relay-mesh.md §7.6). */
+    announcements: (relayId?: string) => Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string; relayId?: string; relaySigHex?: string }>>;
     onMail: (mailboxId: string, envelope: Uint8Array) => Promise<Uint8Array>;
   };
   /**

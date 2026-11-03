@@ -29,6 +29,8 @@ pub struct RelayConfig {
     pub max_tunnels: usize,
     pub max_echo_conns: usize,
     pub ws_handshake_timeout: Duration,
+    /// Trust `Fly-Client-IP` as the client address (only on Fly; relay-mesh.md §6.1).
+    pub trust_fly_client_ip: bool,
 }
 
 impl Default for RelayConfig {
@@ -40,6 +42,7 @@ impl Default for RelayConfig {
             max_tunnels: 20_000,
             max_echo_conns: 1024,
             ws_handshake_timeout: Duration::from_secs(10),
+            trust_fly_client_ip: false,
         }
     }
 }
@@ -184,6 +187,7 @@ pub fn start_with_mesh(
         c.mailboxes,
         c.stats_secret,
         cfg.ws_handshake_timeout,
+        cfg.trust_fly_client_ip,
     );
     let (stop_accept, stop_rx) = watch::channel(false);
     let mut tasks = Vec::new();

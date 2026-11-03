@@ -216,6 +216,8 @@ fn build_mesh(
     cfg.refuse_new_after = s.serving_refuse_new;
     cfg.close_all_after = s.serving_close_all;
     cfg.peer_urls.clone_from(&m.peer_urls);
+    cfg.peer_addrs.clone_from(&m.peer_addrs);
+    cfg.client_key_by_port = m.client_key_by_port;
     if let Some(d) = m.feed_poll {
         cfg.feed_poll = d;
     }
@@ -438,6 +440,7 @@ async fn run(s: Settings) -> Result<(), String> {
     let cfg = {
         let mut c = RelayConfig::default();
         c.hub.apex.clone_from(&s.apex);
+        c.trust_fly_client_ip = s.trust_fly_client_ip;
         c
     };
     let authority: Arc<dyn flagship_relay::hello::HelloAuthority> = match &wiring {
