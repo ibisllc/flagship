@@ -82,14 +82,14 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(38);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 38 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(47);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 47 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(38);
-    expect(phases.slice(0, 23).every((p) => p === "A")).toBe(true);
-    expect(phases.slice(23).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(38);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(38);
+    expect(phases).toHaveLength(47);
+    expect(phases.slice(0, 32).every((p) => p === "A")).toBe(true);
+    expect(phases.slice(32).every((p) => p === "B")).toBe(true);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(47);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(47);
     expect(calls(env)).toBe("");
   });
 
@@ -99,10 +99,13 @@ describe("release.sh", () => {
     const sections = [...r.out.matchAll(/runbook: (\S+?)\. /g)].map((m) => m[1]);
     // 0 ready | 1 plan | 2 lease | 3 endorse | 9 appliance builds start after the endorsement
     // | 5 secrets | 6 gym | 1b backup prerequisites | 4 migrations (after the gym gate and a fresh backup)
+    // | 1c-1e the mesh's .com prerequisites (R2 buckets, feed domain, mesh key: before .com binds them)
     // | 8 .services FIRST | 6a DNS wildcard (before .com: the new .com writes no per-box records)
-    // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
+    // | 7 .com (+ zone-health post-check) | 8a-8f the relay mesh (key, admission, certs, feed on, Rust iad1, watch)
+    // | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
-      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "3d", "9", "5", "6", "1b", "4", "8", "7a", "6a", "7", "14", "9", "9", "9",
+      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "3d", "9", "5", "6", "1b", "1c", "1d", "1e", "4", "8", "7a", "6a", "7",
+      "8a", "8b", "8c", "8d", "8e", "8f", "14", "9", "9", "9",
       "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11d", "11b", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
@@ -132,9 +135,23 @@ describe("release.sh", () => {
     expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("iOS: Release-clean"));
     expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("Android: release-clean"));
     expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
-    expect(idx("Write DEPLOYED-FINAL")).toBe(23);
+    expect(idx("Write DEPLOYED-FINAL")).toBe(32);
     // the canary opens phase B: after the release is published, before the scrub and the stores
-    expect(idx("Canary cohorts")).toBe(24);
+    expect(idx("Canary cohorts")).toBe(33);
+    // the relay mesh (journal I3/I4): .com's prerequisites before the first .com deploy binds them; the mesh relay
+    // only after .com has admitted it, its certificates exist and the feed publishes a directory naming it
+    expect(idx("R2 buckets the new .com binds")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("Relay feed: custom domain")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("RELAY_MESH_KEY_SEED")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("R2 buckets the new .com binds")).toBeGreaterThan(idx("Gym gate"));
+    expect(idx("Deploy .com")).toBeLessThan(idx("the iad1 relay key"));
+    expect(idx("Pending D1 migrations")).toBeLessThan(idx("admit iad1"));
+    expect(idx("the iad1 relay key")).toBeLessThan(idx("admit iad1"));
+    expect(idx("admit iad1")).toBeLessThan(idx("switch the relay feed on"));
+    expect(idx("Fly certificates and DNS")).toBeLessThan(idx("switch the relay feed on"));
+    expect(idx("switch the relay feed on")).toBeLessThan(idx("deploy the Rust relay as iad1"));
+    expect(idx("deploy the Rust relay as iad1")).toBeLessThan(idx("the 30-minute watch"));
+    expect(idx("the 30-minute watch")).toBeLessThan(idx("Publish the VM appliances"));
     // G2: the signed runtime manifest is committed with the other signatures, before the gym and the .com deploy that serves it
     expect(idx("Sign and commit the runtime manifest")).toBeGreaterThan(idx("Sign and publish the release catalog"));
     expect(idx("Sign and commit the runtime manifest")).toBeLessThan(idx("Gym gate"));
@@ -173,7 +190,7 @@ describe("release.sh", () => {
   it("--list --phase B lists only phase B", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
-    expect(steps[0]!.n).toBe(24);
+    expect(steps[0]!.n).toBe(33);
     expect(steps).toHaveLength(15);
   });
 
@@ -183,7 +200,7 @@ describe("release.sh", () => {
     expect(r.code, r.err).toBe(0);
     expect(r.out).toContain("[dry-run]");
     const steps = planSteps(r.out);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 23 }, (_, i) => i + 1));
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 32 }, (_, i) => i + 1));
     expect(r.out).toContain("npm run deploy");
     expect(r.out).toContain("bash scripts/gym-release-run.sh");
     expect(r.out).toContain("node scripts/check-versions.mjs --write");
@@ -201,6 +218,29 @@ describe("release.sh", () => {
     expect(r.out.indexOf("flyctl deploy --remote-only")).toBeLessThan(r.out.indexOf("dig +short A anything-at-all"));
     expect(r.out.indexOf("dig +short A anything-at-all")).toBeLessThan(r.out.indexOf("(cd apps/com && npm run deploy)"));
     expect(r.out).toContain("gh secret list");
+    // the relay mesh steps, in order: buckets, mesh key, transition relay, .com, key, admission, certs, feed on, Rust iad1
+    for (const c of [
+      "wrangler r2 bucket create <name>",
+      "openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED",
+      "node scripts/relay-key.mjs new ~/.config/flagship/iad1.seed",
+      "flyctl secrets import --stage -a flagship-services",
+      "npm run relays -- add iad1 <relay key> full iad --ipv4 149.248.216.86 --ipv6 2a09:8280:1::110:d2b6:0",
+      "npm run relays -- backfill",
+      "flyctl certs add tunnel.flagship.services -a flagship-services",
+      "npx tsx scripts/prod-mesh-dns.ts --apply",
+      'TUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"',
+      "npm run relays -- mint-directory",
+      "flyctl scale count 1 -a flagship-services --yes",
+      "flyctl deploy -c fly.relay.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes",
+      "live-check.ts --relay iad1.tunnel.flagship.services --expect rust",
+      "npm run ops -- mesh",
+      "flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes",
+    ]) expect(r.out, c).toContain(c);
+    const at = (c: string) => r.out.indexOf(c);
+    expect(at("wrangler r2 bucket create <name>")).toBeLessThan(at("(cd apps/com && npm run deploy)"));
+    expect(at("(cd apps/com && npm run deploy)")).toBeLessThan(at("npm run relays -- add iad1"));
+    expect(at("npm run relays -- mint-directory")).toBeLessThan(at("flyctl deploy -c fly.relay.mesh.toml"));
+    expect(r.out).not.toMatch(/--strategy=immediate/);
     expect(calls(env)).toBe(""); // no gh, wrangler, flyctl, curl, npm, npx, dig, openssl, and no git fetch/push
     expect(existsSync(join(env.home, ".flagship-release"))).toBe(false); // nothing written, no worktree
   });
@@ -242,7 +282,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
       encoding: "utf8",
       env: { PATH: process.env.PATH ?? "", HOME: env.home, FLAGSHIP_RELEASE_HOME: home },
     });
-    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=22"]);
+    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=31"]);
     expect(JSON.parse(readFileSync(join(home, "state.json"), "utf8")).done).toEqual(["2"]);
   });
 
@@ -533,6 +573,57 @@ describe("release.sh parsers against captured tool output", () => {
     expect(sh(`ips_agree ${v4} ${v6}`, ips).code).toBe(0);
     expect(sh(`ips_agree 1.2.3.4 ${v6}`, ips).code).toBe(1);
     expect(sh(`ips_agree ${v4} 2001:db8::1`, ips).code).toBe(1);
+  });
+
+  it("relay mesh: the buckets wrangler.toml binds, the ones R2 lacks", () => {
+    const want = sh("wrangler_buckets", readFileSync(join(ROOT, "apps/com/wrangler.toml"), "utf8")).out.split("\n");
+    expect(want).toEqual(expect.arrayContaining(["flagship-relay-feed", "flagship-voici", "flagship-iso", "flagship-adapters"]));
+    const have = sh("r2_bucket_names", fx("wrangler-r2-bucket-list.synthetic.txt")).out;
+    expect(have.split("\n")).toEqual(["flagship-adapters", "flagship-d1-backups", "flagship-iso", "flagship-iso-temp"]);
+    expect(sh("r2_bucket_names", JSON.stringify([{ name: "flagship-iso" }, { name: "flagship-voici" }])).out).toBe("flagship-iso\nflagship-voici");
+    const missing = sh(`names_missing "$(printf '%s\n' ${have.split("\n").join(" ")})"`, want.join("\n") + "\n").out.split("\n");
+    expect(missing).toEqual(["flagship-relay-feed", "flagship-voici"]);
+  });
+
+  it("relay mesh: admission state, the directory, a relay's health, the tunnel-count rule", () => {
+    const k = "a".repeat(64);
+    const list = JSON.stringify({ relays: [{ relayId: "iad1", relayKey: k, retiredAt: null }, { relayId: "old1", relayKey: "b".repeat(64), retiredAt: 5 }] });
+    expect(sh("relay_admitted iad1", list).out).toBe(`active ${k}`);
+    expect(sh("relay_admitted old1", list).out).toBe(`retired ${"b".repeat(64)}`);
+    expect(sh("relay_admitted ams1", list).out).toBe("");
+    expect(sh("relay_admitted iad1", "Refused").out).toBe("");
+    const dir = JSON.stringify({ directory: { directoryVersion: 2, relays: [{ relayId: "iad1", relayKey: k }] }, signature: "x" });
+    expect(sh(`directory_lists iad1 ${k}`, dir).code).toBe(0);
+    expect(sh("directory_lists iad1", dir).code).toBe(0);
+    expect(sh(`directory_lists iad1 ${"c".repeat(64)}`, dir).code).toBe(1);
+    expect(sh("directory_lists ams1", dir).code).toBe(1);
+    expect(sh("directory_lists iad1", "<html>").code).toBe(1);
+    // the Rust relay's body (http.rs health) and the TS hub's (server.ts), mesh on and off
+    const rust = { ok: true, runtime: "rust", tunnelsOnline: 41, mesh: { relayId: "iad1", ready: true, readiness: [] } };
+    expect(sh("health_line", JSON.stringify(rust)).out).toBe("rust ready 41");
+    expect(sh("health_line", JSON.stringify({ ...rust, mesh: { relayId: "iad1", ready: false, readiness: ["stale head"] } })).out).toBe("rust not-ready 41 stale_head");
+    expect(sh("health_line", JSON.stringify({ ok: true, nodeVersion: "v24.1.0", mesh: { ready: true, reasons: [] } })).out).toBe("ts ready -");
+    expect(sh("health_line", JSON.stringify({ ok: true, nodeVersion: "v24.1.0" })).out).toBe("ts no-mesh -");
+    expect(sh("health_line", "").out).toBe("unknown no-mesh -");
+    expect(sh("tunnels_ok 80 100 90", "").code).toBe(0);
+    expect(sh("tunnels_ok 79 100 90", "").code).toBe(1);
+    expect(sh("tunnels_ok 40 '' 50", "").code).toBe(0);
+    expect(sh("tunnels_ok 39 '' 50", "").code).toBe(1);
+  });
+
+  it("relay mesh: the wrangler.toml edit rewrites exactly one line, and refuses an ambiguous file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "toml-"));
+    const f = join(dir, "wrangler.toml");
+    writeFileSync(f, 'A = "1"\nRELAY_MESH = "off"\nTUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"\n# RELAY_MESH = "x"\n');
+    const r = sh(`set_toml_var ${f} RELAY_MESH on && set_toml_var ${f} TUNNEL_HUB_URL wss://tunnel.flagship.services:8443/tunnel && toml_var ${f} RELAY_MESH`, "");
+    expect(r.out).toBe("on");
+    expect(readFileSync(f, "utf8")).toBe('A = "1"\nRELAY_MESH = "on"\nTUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"\n# RELAY_MESH = "x"\n');
+    writeFileSync(f, 'RELAY_MESH = "off"\nRELAY_MESH = "off"\n');
+    expect(sh(`set_toml_var ${f} RELAY_MESH on`, "").code).not.toBe(0);
+    // the production file has each exactly once, and ships with the mesh off until the release step turns it on
+    const prod = join(ROOT, "apps/com/wrangler.toml");
+    expect(sh(`toml_var ${prod} RELAY_MESH`, "").out).toBe("off");
+    expect(sh(`toml_var ${prod} TUNNEL_HUB_URL`, "").out).toBe("wss://flagship-services.fly.dev:8443/tunnel");
   });
 
   it("backup-recipient.pub: the placeholder is refused, a real age key is accepted", () => {

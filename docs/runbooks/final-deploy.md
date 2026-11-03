@@ -24,9 +24,9 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 38 steps, with phase, commands, gate, rollback
-bash scripts/release.sh --phase A             # deploy the real state (steps 1-23), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 24-38; 24 is the canary, re-run with --only 24)
+bash scripts/release.sh --list                # the 47 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --phase A             # deploy the real state (steps 1-32), before the Windows test
+bash scripts/release.sh --phase B             # after the Windows results (steps 33-47; 33 is the canary, re-run with --only 33)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
@@ -49,8 +49,12 @@ exist yet would get names that do not resolve (and resolvers negative-cache that
 wildcard starts answering them. Adding the wildcard first is safe for existing
 accounts, whose own records keep answering. `zone-health` ships with the `.com`
 deploy, so the DNS step is checked with `dig` and `zone-health` runs as a post-check
-of the `.com` deploy. The canary (9b) opens phase B: it is deferred, not done, until the
-release reaches 100%, so run it again with `--only 24` after each observation window; it never
+of the `.com` deploy. The relay mesh (owner, 2026-11-03: mesh on, one Rust relay `iad1` on one machine) splits
+around the `.com` deploy: what the new `.com` binds or reads comes before it (1c R2 buckets, 1d the feed's custom
+domain and cache rule, 1e `RELAY_MESH_KEY_SEED`), the mesh itself after it (8a-8f: the relay key, admission and
+backfill, the tunnel certificates and DNS, the feed switched on with `TUNNEL_HUB_URL`, the Rust relay as `iad1`,
+a 30-minute watch), because a mesh relay is blessed only once `.com` publishes a directory naming it. The canary (9b) opens phase B: it is deferred, not done, until the
+release reaches 100%, so run it again with `--only 33` after each observation window; it never
 holds the other phase B steps. The maintenance notice (12.1) is its own step after it. What it cannot do for you: the DNS canary after the gym run (the gym itself runs from the
 script: `scripts/gym-release-run.sh`, gated on its exit code), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
@@ -65,20 +69,21 @@ be told to update, clearly. What in this run reaches them early, in order:
 1. **Landing `release/0.3` on `main`** (before step 1): every 0.2 app writes `installerGitRef:
    "main"` into its recipes, and a USB/ISO install (and a 0.2 Studio's installer fallback) clones
    `main` at install time. From this push on, a server created from a 0.2 app installs the 0.3 tree
-   with the 0.2 bootstrap, against the 0.2 `.com` until step 19. Keep the time from this push to
+   with the 0.2 bootstrap, against the 0.2 `.com` until step 22. Keep the time from this push to
    the `.com` deploy as short as you can (one sitting), and don't push 0.3 to `main` days ahead.
 2. **The endorsement (step 7)**: a 0.2 box lists releases from `origin/main` itself. From this
    push on, every 0.2 box offers "Update to latest" (0.3) while `.com` is still 0.2, and a NEW 0.2
-   box (no update history, no apps) moves to it on its first boot. Run steps 7 to 19 in one
+   box (no update history, no apps) moves to it on its first boot. Run steps 7 to 22 in one
    sitting; publish the maintenance notice (12.1) before it, from a 0.2 commit (below).
-3. **Migrations (step 15)** are additive (new tables, nullable columns, AFTER triggers): the 0.2
+3. **Migrations (step 18)** are additive (new tables, nullable columns, AFTER triggers): the 0.2
    `.com` keeps working on them. One gap: 0127 copies usernames, codes and link names into `names`
-   once; anything the 0.2 `.com` creates between step 15 and step 19 is missing there. Keep 15-19
-   together, or re-run its steps 4a-4c (`INSERT OR IGNORE`, idempotent) after step 19.
-4. **`.services` (step 16)** is deployed before `.com`. Without `FLAGSHIP_SERVING_REVOCATION_PUB`
+   once; anything the 0.2 `.com` creates between step 18 and step 22 is missing there. Keep 18-22
+   together, or re-run its steps 4a-4c (`INSERT OR IGNORE`, idempotent) after step 22.
+4. **`.services` (step 19)** is deployed before `.com` (the 0.3 TS hub, mesh off; the Rust mesh relay
+   replaces it in step 27, 8e). Without `FLAGSHIP_SERVING_REVOCATION_PUB`
    the 0.3 relay routes every name a box proves, as the 0.2 one did; the key is given only after the
    `.com` deploy (`serving_relay_key`). (Section 8's "right after `.com`" predates this order.)
-5. **`.com` (step 19) is the release moment for the apps.** After it, a real (non-demo) account's
+5. **`.com` (step 22) is the release moment for the apps.** After it, a real (non-demo) account's
    0.2 app: Home, sign-in, pairing and orders keep working; start-up approval, accepting a shared
    server, saving cloud recovery and a passkey recovery answer with "…needs the newest version of
    Flagship. Update the app…" (`packages/control-plane/src/clientUpdate.ts`). A 0.2 box keeps its
@@ -89,17 +94,17 @@ be told to update, clearly. What in this run reaches them early, in order:
    Home shows "Needs an update" and its page "This server needs an update to keep working with
    Flagship 0.3" above the Update card. The 0.2 apps show nothing new. Demo accounts are left out
    (we update their boxes). The investor demo is waived (`demo02Compat.test.ts`).
-6. **Appliance manifests (steps 21-22, 31)** overwrite `/downloads/FlagshipVMAppliance-*.json`. A
+6. **Appliance manifests (steps 30-31, 40)** overwrite `/downloads/FlagshipVMAppliance-*.json`. A
    0.2 Studio accepts any `version: 1` qcow2 manifest whose `installerGitRef` matches its recipe
-   ("main"), so after step 22 a 0.2 Studio hosts the 0.3 appliance with its 0.2 seed. Not run on the
-   gym; until the 0.3 Studios are out (steps 29-30) that is what 0.2 Studio hosting does.
-7. **Studio downloads (steps 29-30, 32)**: the 0.2 downloads stay until the redeploy; the same
+   ("main"), so after step 31 a 0.2 Studio hosts the 0.3 appliance with its 0.2 seed. Not run on the
+   gym; until the 0.3 Studios are out (steps 38-39) that is what 0.2 Studio hosting does.
+7. **Studio downloads (steps 38-39, 41)**: the 0.2 downloads stay until the redeploy; the same
    redeploy turns on `STUDIO_PIPE_MIN` (asked), after which a 0.2 Studio is refused at pairing with
    "This version of Flagship Studio is out of date. Download the new one…" (the relay's error line,
    the only server text 0.2 Studios show).
-8. **The stores**: the 0.3 builds are submitted in steps 34-35, after the `.com` deploy, and
+8. **The stores**: the 0.3 builds are submitted in steps 43-44, after the `.com` deploy, and
    review takes days. Until both are approved, a 0.2 phone user who is told to update has nothing
-   to update to; submit as soon as phase A is green (`--only 34`, `--only 35`), then step 36 signs
+   to update to; submit as soon as phase A is green (`--only 43`, `--only 44`), then step 45 signs
    the update notice once both stores carry 0.3.
 
 **Before landing 0.3 on `main` (owner, optional but recommended):** sign a maintenance notice on
@@ -127,6 +132,9 @@ The script stops and asks at each of these; nothing else needs you.
 | once | a public test repo with tags `v1` and `v2`, named in `GYM_SYNC_REPO` (the gym's upstream-sync group skips without it) | 6 |
 | every release | accept or refuse gym skips (exit 3); the DNS canary | 6 |
 | once | the adapter attestation key, complaint salt and review key on `.com`; the key's public half in `release/adapter-vetting-keys.json` | 5 |
+| once | the relay feed: R2 custom domain `feed.flagshipserver.com` and its cache rule (ignore query string) in the dashboard | 1d |
+| once | the iad1 relay key seed `~/.config/flagship/iad1.seed` (made by the script): back it up offline; a Cloudflare token with Zone.DNS:Edit on `flagship.services` only in `~/.config/flagship/prod-dns-token` | 8a, 8c |
+| every relay deploy | quiet hours: one machine, every tunnel drops ~20-60 s; deploy with `-c fly.relay.mesh.toml` | 8e |
 | once | the Public Suffix List request for `flagship.services` (`docs/psl-submission-flagship-services.md`) | (outside the script) |
 | once | the issuance service's ACME account key `ISSUANCE_ACME_ACCOUNT_KEY` on prod and (a separate one) on the gym Worker | 5 |
 | once, after boxes renew through the service | the account-pinned apex CAA (`accounturi=…; validationmethods=dns-01`), then the CT inventory and revocation | 6b |
@@ -289,6 +297,54 @@ a secret in the repo; you add two values in GitHub.
 Check: the R2 object exists and `latest.json` is fresh; both workflows green.
 
 Rollback: none needed; the workflows only read D1 and write the new bucket.
+
+## 1c. R2 buckets the new .com binds (relay feed, voi.ci)
+
+The 0.3 `apps/com/wrangler.toml` binds two buckets production may not have: `RELAY_FEED` =
+`flagship-relay-feed` (the relay mesh's encrypted feed) and `VOICI` = `flagship-voici` (voi.ci
+files). **A `.com` deploy fails while any bound bucket is missing, mesh on or off**, so this comes
+before the first `.com` deploy. `release.sh` reads every `bucket_name` of the pinned file, lists the
+account's buckets and creates each missing one on your yes:
+
+```sh
+grep '^bucket_name' apps/com/wrangler.toml
+cd apps/com && npx wrangler r2 bucket list
+npx wrangler r2 bucket create flagship-relay-feed      # if missing; private, no public access, no r2.dev URL
+npx wrangler r2 bucket create flagship-voici           # if missing; its custom domain files.voi.ci is a dashboard step
+```
+
+Rollback: an empty bucket is harmless; delete one only before a `.com` deploy binds it.
+
+## 1d. The relay feed's custom domain and cache rule
+
+Relays read the feed from `https://feed.flagshipserver.com/v1` (`FLAGSHIP_RELAY_FEED_URL` in
+`fly.relay.mesh.toml`), served by Cloudflare's cache in front of the bucket. Two dashboard steps
+(no API in the script):
+
+1. R2 > `flagship-relay-feed` > Settings > Custom Domains > Connect domain `feed.flagshipserver.com`
+   (Cloudflare writes the DNS record).
+2. `flagshipserver.com` zone > Caching > Cache Rules > Create: hostname equals `feed.flagshipserver.com`;
+   "Eligible for cache"; Cache key: **Ignore query string** on (so `?x=random` cannot bust the cache,
+   relay-mesh.md §4.5); Edge and Browser TTL "Respect origin" (the feed sets `max-age=2` on `head.json`).
+
+Check (the script runs it after your typed `done`): `dig +short feed.flagshipserver.com @1.1.1.1` answers and
+`curl -sI https://feed.flagshipserver.com/v1/head.json` answers over valid TLS (404 until the feed is on, 8d).
+The query-string check runs in 8d, once there is something to cache.
+
+Rollback: remove the custom domain and the rule; nothing reads the feed until a mesh relay runs.
+
+## 1e. The relay mesh key (RELAY_MESH_KEY_SEED)
+
+`.com` seals the feed to a mesh key derived from `RELAY_MESH_KEY_SEED` (relay-mesh.md §4.5.1);
+`SERVING_REVOCATION_SEED` (already set for the serving authority) signs the relay log. Once, never
+replaced in place (replacing it means a `.com` deploy and `npm run relays -- republish`):
+
+```sh
+cd apps/com && npx wrangler secret list                      # RELAY_MESH_KEY_SEED, SERVING_REVOCATION_SEED
+openssl rand -hex 32 | npx wrangler secret put RELAY_MESH_KEY_SEED    # piped: never printed, never in argv
+```
+
+The gym Worker has its own, different value (`--config wrangler.gym.toml`).
 
 ## 2. Renew the CA lease (due 2026-11-05, and do it before anything that needs the CA)
 
@@ -959,6 +1015,178 @@ this order:
    its own records (a warning in zone-health) until its store review ends; trim
    it by hand then.
 
+## 8a. Relay mesh: the iad1 relay key and its Fly secrets
+
+**The relay mesh at launch (owner, 2026-11-03).** Mesh on, ONE relay `iad1` (kind `full`, region `iad`)
+on ONE machine of the existing Fly app `flagship-services`, running the Rust relay (`fly.relay.mesh.toml`,
+`Dockerfile.relay`). Same app, so `149.248.216.86`, `2a09:8280:1::110:d2b6:0` and `flagship-services.fly.dev`
+stay: 0.2 boxes and phones keep reaching it by those. More relays later: their own Fly app (or a non-Fly host)
+each, admitted, and added to `tunnel.flagship.services` as more A/AAAA records (DNS round-robin; journal I6).
+
+Order and why (steps 22-28 of `release.sh`): the 0.3 TS hub, mesh off, goes out first (step 19, section 8:
+production runs the 0.2 relay, which has no serving authority); `.com` deploys with migrations 0120-0130
+(0122 the mesh tables and log triggers, 0126 grant ids); only then can `.com` admit a relay and publish a
+directory naming it, and **a mesh relay that starts before its directory exists is never blessed** (health 503).
+So the mesh relay is the last relay change of phase A. The endorsed box release is independent: a 0.3 box
+with `mesh-v1` on a mesh-off relay works as today, a 0.2 box on the mesh relay is a legacy attachment, never
+moved (relay-mesh.md §13.1). The 0.2 review/demo box (`playstore-test-0725`) is updated to 0.3 before 8e.
+
+```sh
+node scripts/relay-key.mjs new ~/.config/flagship/iad1.seed     # once (mode 600, refuses to overwrite); prints the relay key
+node scripts/relay-key.mjs pub ~/.config/flagship/iad1.seed     # the key again
+curl -s https://flagshipserver.com/api/serving/revocation-key | jq -r .publicKey      # FLAGSHIP_RELAY_LOG_PUB (public)
+flyctl secrets list -a flagship-services                         # SERVICES_CONTROL_SECRET, USAGE_REPORT_SECRET already there
+printf 'FLAGSHIP_RELAY_KEY_SEED=%s\nFLAGSHIP_RELAY_LOG_PUB=%s\n' "$(cat ~/.config/flagship/iad1.seed)" "<key>" \
+  | flyctl secrets import --stage -a flagship-services          # staged: applied by the 8e deploy, no restart now
+```
+
+Back the seed file up offline: an admitted relay that comes back with the same seed needs no new admission; a
+lost seed means a new relay id. `FLAGSHIP_MESH_CA_KEYS` is not needed for the Rust relay (it checks blessings
+and the directory under the maintainer chain in its image, `/app/.maintainers`, with the production pin compiled
+in); the TS rollback profile `fly.mesh.toml` carries it (the newest prod lease's `caPubkey`).
+
+Rollback: `flyctl secrets unset --stage FLAGSHIP_RELAY_KEY_SEED FLAGSHIP_RELAY_LOG_PUB -a flagship-services`.
+
+## 8b. Relay mesh: admit iad1 and backfill the log
+
+Admin secret; `release.sh` pins `FLAGSHIP_BASE_URL` to production for these calls.
+
+```sh
+npm run relays -- list --json
+npm run relays -- add iad1 "$(node scripts/relay-key.mjs pub ~/.config/flagship/iad1.seed)" full iad \
+  --ipv4 149.248.216.86 --ipv6 2a09:8280:1::110:d2b6:0      # the addresses phones test with the echo
+npm run relays -- backfill                                    # idempotent
+```
+
+The script refuses when `iad1` is admitted under another key (keys are never replaced in place: `stage-key`) or
+was retired (an id is never reused). Rollback: `npm run relays -- retire iad1` (then a new id).
+
+## 8c. Relay mesh: certificates and DNS for the tunnel names
+
+`iad1.tunnel.flagship.services` is the relay's direct name (peers, hints, the canary); `tunnel.flagship.services`
+is the name boxes dial (`TUNNEL_HUB_URL`, 8d). Both are Fly certificates on `flagship-services`, validated by
+DNS-01 (`:443` is raw passthrough, so HTTP-01 and TLS-ALPN cannot work). With one relay there is no load
+balancer: both names are plain A/AAAA at the relay's two addresses, DNS only. They must be explicit records
+although `*.flagship.services` already answers the relay: a challenge CNAME under `tunnel.` makes `tunnel.` and
+`iad1.tunnel.` empty non-terminals, which the root wildcard no longer covers. `zone-health` accepts every
+record under `tunnel.`.
+
+```sh
+flyctl certs add iad1.tunnel.flagship.services -a flagship-services
+flyctl certs add tunnel.flagship.services -a flagship-services
+npx tsx scripts/prod-mesh-dns.ts            # dry run: A/AAAA for both names + the two _acme-challenge CNAMEs
+npx tsx scripts/prod-mesh-dns.ts --apply    # token: ~/.config/flagship/prod-dns-token (Zone.DNS:Edit on flagship.services only)
+flyctl certs check tunnel.flagship.services -a flagship-services
+curl -s -o /dev/null -w "%{http_code}\n" https://iad1.tunnel.flagship.services:8443/api/health    # 200, valid TLS
+curl -s -o /dev/null -w "%{http_code}\n" https://tunnel.flagship.services:8443/api/health
+```
+
+The script refuses when Fly's dedicated addresses differ from `SERVICES_PASSTHROUGH_IPV4/6` in
+`apps/com/wrangler.toml`, and touches only names under `tunnel.flagship.services`. A second Fly relay later
+cannot hold a Fly certificate for `tunnel.flagship.services` too (one DNS-01 CNAME, one app): decide that
+before I6 (relay-mesh runbook §4).
+
+Rollback: delete the records under `tunnel.flagship.services` and `flyctl certs remove <name>`; nothing dials
+these names until 8d moves `TUNNEL_HUB_URL`.
+
+## 8d. Relay mesh: switch the feed on and mint the directory
+
+The script edits the pinned `apps/com/wrangler.toml`, commits, pushes to `main`, re-pins and deploys `.com`:
+
+```toml
+RELAY_MESH = "on"
+TUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"
+```
+
+then `npm run relays -- mint-directory` (no `directory.json` is written while the mesh is off, so the admission
+in 8b left none; the first alarm writes every page, the head and `log-key.json`).
+
+**Why `TUNNEL_HUB_URL` moves now, and why 0.2 keeps working.** A 0.2 box takes the hub from
+`/api/services/endpoints` at every daemon start (cache, then its compiled-in `flagship-services.fly.dev`
+only when `.com` cannot be reached), checks the certificate with the system CAs, and pins nothing to the host
+name. `tunnel.flagship.services` is the same Fly app and machine with a Fly certificate, so a 0.2 box that
+restarts lands on the same relay; one that never restarts keeps its fly.dev tunnel. Later relays join by DNS on
+this name without touching any box. The script refuses to move it until `tunnel.flagship.services:8443`
+answers over valid TLS (or you type `keep-fly-dev`: the feed goes on, the hub stays). `SERVICES_BASE_URL`
+(status probe, peer-backup mailbox base, the `/api/*` fall-through) stays `flagship-services.fly.dev:8443`.
+
+Check:
+
+```sh
+curl -s https://feed.flagshipserver.com/v1/directory.json | jq '.directory.directoryVersion, [.directory.relays[].relayId]'   # ["iad1"]
+curl -sI https://feed.flagshipserver.com/v1/head.json            # cache-control: public, max-age=2 (body: RelayFeedSealed ciphertext)
+curl -sI "https://feed.flagshipserver.com/v1/head.json?x=1"; curl -sI "https://feed.flagshipserver.com/v1/head.json?x=2"   # 2nd: cf-cache-status HIT
+curl -s https://flagshipserver.com/api/services/endpoints | jq '.tunnelHub, [.relays[].relayId]'
+```
+
+The relay is unchanged (a mesh-off relay ignores the feed). Rollback: revert the `wrangler.toml` commit on
+`main` and `npm run deploy`, or `wrangler rollback <version-id>`; the log keeps being appended and signed.
+
+## 8e. Relay mesh: deploy the Rust relay as iad1
+
+Preconditions the script checks live: `directory.json` names `iad1` under its key, the staged secrets, both
+tunnel names on valid TLS; you confirm the demo box runs 0.3. Then:
+
+```sh
+npm run ops -- services                      # baseline: box tunnels online (USAGE_REPORT_SECRET in your shell)
+flyctl machines list -a flagship-services
+flyctl scale count 1 -a flagship-services --yes        # one relay id = one machine (fly.toml ran two)
+flyctl deploy -c fly.relay.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
+```
+
+**Every tunnel drops for about 20-60 s**: with one machine, rolling stops it (DrainNotice, then 1012) and
+starts the new image; boxes redial. Quiet hours. Never `--strategy=immediate` (no drain) and never bluegreen or
+`flyctl scale count 2` on this app while it is a mesh relay: two machines with one relay key replace each
+other's bridges and split the boxes. From now on the production relay deploy is
+`flyctl deploy -c fly.relay.mesh.toml ...`; a bare `flyctl deploy` (fly.toml) is the mesh-off rollback.
+
+Check:
+
+```sh
+curl -s https://iad1.tunnel.flagship.services:8443/api/health | jq '.runtime, .mesh, .tunnelsOnline'   # "rust", ready true
+npx tsx tools/relay-conformance/live-check.ts --relay iad1.tunnel.flagship.services --expect rust
+npx tsx tools/relay-conformance/live-check.ts --relay flagship-services.fly.dev --expect rust
+npm run ops -- mesh                          # iad1 ready, head age, bridges (none: one relay)
+printf 'GET /echo HTTP/1.1\r\nHost: flagship-services.fly.dev\r\nConnection: close\r\n\r\n' \
+  | openssl s_client -quiet -connect 149.248.216.86:8444 -servername flagship-services.fly.dev   # names 149.248.216.86
+```
+
+`https://flagshipserver.com/status/` reads the same health through `.com`'s probe; it now shows the Rust
+relay's uptime and version (it used Node-only fields before), and "down" while the relay is not mesh-ready
+(the 503 is the mesh's own signal, `ops -- mesh` says why).
+
+## 8f. Relay mesh: the 30-minute watch, and rollback
+
+`release.sh` polls `iad1`'s health once a minute for 30 minutes (status, runtime, readiness, `tunnelsOnline`) and
+fails on three non-200 answers in a row, a relay that is not Rust, or a tunnel count under 80% of the baseline
+(or its own peak) for five minutes after minute 10. Also watch `npm run ops -- health` (box heartbeats) and
+`npm run ops -- mesh`.
+
+**Rollback, in order (boxes need nothing: they redial the same addresses):**
+
+1. **Rust -> TS hub, mesh kept** (same relay id, key and secrets; `fly.mesh.toml`):
+
+   ```sh
+   curl -s https://feed.flagshipserver.com/v1/directory.json | jq -r .directory.signedBy   # must equal FLAGSHIP_MESH_CA_KEYS in fly.mesh.toml
+   flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
+   npx tsx tools/relay-conformance/live-check.ts --relay iad1.tunnel.flagship.services --expect ts
+   ```
+
+2. **TS mesh -> mesh off** (today's relay; `.com`'s internal routes and feed WebSocket still exist this release):
+
+   ```sh
+   flyctl deploy -a flagship-services --remote-only --strategy=rolling --yes     # fly.toml: TS hub, mesh off
+   flyctl scale count 2 -a flagship-services --yes                               # fly.toml's two-machine HA again
+   ```
+
+   `TUNNEL_HUB_URL` may stay at `tunnel.flagship.services` (same app); move it back to
+   `wss://flagship-services.fly.dev:8443/tunnel` only if that name or its certificate is the problem. To stop
+   publishing too: `RELAY_MESH = "off"` and deploy `.com` (the log is still appended and signed).
+3. **Forward again**: `flyctl scale count 1 -a flagship-services --yes`, then 8e.
+
+A misbehaving relay among several is retired instead (relay-mesh runbook §5); with one relay, retiring it leaves
+no mesh relay at all, so use the ladder above.
+
 ## 9. Publish the VM appliances
 
 Studio's "Host on this PC / Mac" boots a prebuilt appliance that bakes the
@@ -1175,7 +1403,7 @@ ship a higher version. The notice mechanism (step 12) can ask people to update.
 
 ## 11d. Tell the 0.2 apps to update
 
-Run once both stores carry the 0.3 builds (`bash scripts/release.sh --only 36`). The script
+Run once both stores carry the 0.3 builds (`bash scripts/release.sh --only 45`). The script
 previews an `update-required` notice naming this release's store builds and webapp shell; you
 sign it in another terminal (ca-track YubiKey, plus the PQ half from the release key), and it
 commits `.maintainers/notices`, pushes and redeploys `.com`.
@@ -1247,7 +1475,7 @@ with the go/no-go points:
 4. Verify with the runbook's step 4 (the four orphan counts are 0; the review
    login signs in).
 5. **Reap** DNS and demo servers of removed accounts (needs the `.com` deploy of
-   step 7, which contains the reap rules). `release.sh` step 27 runs all of this:
+   step 7, which contains the reap rules). `release.sh` step 36 runs all of this:
    the gym sweep is part of it by default (`npx tsx tools/live-e2e/sweep-cli.ts`,
    then `--destroy`; the step asks you to type `sweep`, or `skip-gym` to skip it,
    and refuses the sweep while `/private/tmp/claude-501/flagship-locks/gym.lock`

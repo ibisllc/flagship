@@ -61,6 +61,10 @@ case "$what" in
     ;;
   prod)
     cat <<EOF
+At launch (owner, 2026-11-03) prod runs the Rust relay WITH the mesh as iad1 on one machine: that rollout is
+bash scripts/release.sh steps 23-28 (fly.relay.mesh.toml; rollback fly.mesh.toml, then fly.toml + scale count 2,
+docs/runbooks/final-deploy.md 8f). The mesh-off canary below is the older plan, kept for a relay without the mesh.
+
 Prod canary (owner, from a clean main checkout, after the gym canary passed; never --strategy=immediate):
 
   export PATH="\$HOME/.fly/bin:\$PATH"

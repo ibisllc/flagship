@@ -1,0 +1,120 @@
+# flagship.services in production AS `iad1`, the one relay of the relay mesh at launch (owner, 2026-11-03;
+# docs/architecture-v2/relay-mesh.md §13.2 step 4, docs/runbooks/relay-mesh.md, docs/runbooks/final-deploy.md 8a-8f).
+# The Rust relay (Dockerfile.relay) on the SAME Fly app as fly.toml, so the dedicated IPv4 149.248.216.86, the IPv6
+# 2a09:8280:1::110:d2b6:0 and flagship-services.fly.dev stay: 0.2 boxes and phones keep reaching it by those.
+#
+# Deploy (release.sh step "Deploy the Rust relay as iad1"; never --strategy=immediate):
+#   flyctl scale count 1 -a flagship-services --yes      # first: fly.toml runs two machines; one relay id = one machine
+#   flyctl deploy -c fly.relay.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
+#
+# ONE machine, on purpose. A relay id runs on exactly one machine: two machines holding the same relay key replace
+# each other's bridges every second and split the boxes between two registries (relay-mesh runbook §2). So every
+# deploy of this file stops the only machine and starts the new one: every tunnel drops for about 20-60 s and the
+# boxes redial (owner: acceptable; deploy rarely, in quiet hours). More capacity is ANOTHER relay with its own id and
+# key (later: Cloudflare DNS A/AAAA round-robin on tunnel.flagship.services), never `flyctl scale count 2` here.
+#
+# Before the first deploy (release.sh steps 8a-8d; nothing here holds a secret):
+#   secrets, staged:  FLAGSHIP_RELAY_KEY_SEED  (~/.config/flagship/iad1.seed, `node scripts/relay-key.mjs new`)
+#                     FLAGSHIP_RELAY_LOG_PUB   (curl -s https://flagshipserver.com/api/serving/revocation-key | jq -r .publicKey,
+#                                               public: the key .com signs the relay log with, SERVING_REVOCATION_SEED)
+#   already there:    SERVICES_CONTROL_SECRET, USAGE_REPORT_SECRET (and FLAGSHIP_SERVING_REVOCATION_PUB, unused in mesh mode)
+#   admitted:         npm run relays -- add iad1 <relay key> full iad --ipv4 149.248.216.86 --ipv6 2a09:8280:1::110:d2b6:0
+#   .com:             RELAY_MESH = "on" deployed and `npm run relays -- mint-directory` run: a mesh relay with no directory
+#                     naming its key is not blessed and answers /api/health 503
+#   certificates:     flyctl certs add iad1.tunnel.flagship.services / tunnel.flagship.services (DNS-01 CNAMEs:
+#                     npx tsx scripts/prod-mesh-dns.ts --apply)
+#
+# The CA keys: the Rust relay checks blessings and the directory under the maintainer chain baked into the image
+# (Dockerfile.relay copies the build tree's .maintainers/ to /app/.maintainers) with the production pin compiled in,
+# so FLAGSHIP_RELAY_MAINTAINER_PIN stays unset here. Like a box, the relay needs a new image before the newest CA
+# lease in .maintainers/ca-endorsements ends.
+#
+# Rollback (docs/runbooks/final-deploy.md 8f): the TS hub with the same relay id and key, mesh kept:
+#   flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
+# then, to leave the mesh, fly.toml (mesh off) and `flyctl scale count 2`.
+
+app = "flagship-services"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+# Rolling over ONE machine: the machine is stopped (the relay drains: DRAIN_NOTICE to the boxes, then 1012 after
+# FLAGSHIP_DRAIN_GRACE_MS, inside kill_timeout) and started on the new image. Not bluegreen: that would run a second
+# machine under the same relay id while the first still holds every tunnel.
+[deploy]
+  strategy = "rolling"
+  wait_timeout = "120s"
+
+[build]
+  dockerfile = "Dockerfile.relay"
+
+[env]
+  PORT = "3000"
+  TUNNEL_TCP_PORT = "8443"
+  RELAY_ECHO_PORT = "3001"
+  # The mesh (relay-mesh.md §15.7). FLAGSHIP_SERVICES_APEX and FLAGSHIP_COM_BASE_URL stay unset: the production
+  # defaults (flagship.services, https://flagshipserver.com).
+  FLAGSHIP_MESH = "on"
+  FLAGSHIP_RELAY_ID = "iad1"
+  FLAGSHIP_RELAY_KIND = "full"
+  FLAGSHIP_RELAY_FEED_URL = "https://feed.flagshipserver.com/v1"
+  FLAGSHIP_RELAY_MAINTAINERS_DIR = "/app/.maintainers"
+
+# External :443 → internal :8443 (raw TCP, SNI passthrough). TLS ends on the user's box; the relay never sees
+# plaintext. Same as fly.toml, one machine, never stopped by Fly's idle stop (it is the only relay).
+[[services]]
+  protocol = "tcp"
+  internal_port = 8443
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+    handlers = []
+
+# External :8443 → internal :3000, TLS ended by Fly with the app's certificates: flagship-services.fly.dev (0.2
+# boxes, SERVICES_BASE_URL), iad1.tunnel.flagship.services (the relay's direct name: peers, hints, the canary) and
+# tunnel.flagship.services (TUNNEL_HUB_URL). The tunnel WebSocket at /tunnel, the phone route, the mesh bridge,
+# /api/health (503 with the reasons while not mesh-ready), /api/stats and the peer-backup mailbox POST /pb/m/<id>.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  # :80 → 301 to https at the Fly edge (as fly.toml): a box serves only HTTPS through the :443 passthrough.
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  # TCP, not HTTP: /api/health answers 503 while the relay is not mesh-ready, and Fly must not kill the only relay
+  # for that (the boxes it holds keep working; `npm run ops -- mesh` shows why).
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# External :8444 → internal :3001, TLS ended by Fly with a PROXY-protocol header in front: the relay-address echo
+# (docs/relay-addresses.md). Phones (0.2 and 0.3) ask it under SNI flagship-services.fly.dev.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8444
+    handlers = ["tls", "proxy_proto"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

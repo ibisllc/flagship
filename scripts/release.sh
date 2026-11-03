@@ -47,6 +47,16 @@ WEBAPP_URL="https://webapp.flagshipserver.com"
 REMOTE_URL="https://remote.flagshipserver.com"
 BOOT_URL="https://boot.flagshipserver.com"
 SHIM_URL="https://inference.flagshipserver.com"
+# The relay mesh at launch (owner, 2026-11-03): ONE relay, iad1, kind full, on ONE machine of the existing Fly app.
+RELAY_APP="flagship-services"
+MESH_RELAY_ID="iad1"
+MESH_RELAY_REGION="iad"
+MESH_TUNNEL_HOST="tunnel.flagship.services"
+MESH_RELAY_HOST="$MESH_RELAY_ID.$MESH_TUNNEL_HOST"
+MESH_HUB_URL="wss://$MESH_TUNNEL_HOST:8443/tunnel"
+LEGACY_HUB_URL="wss://flagship-services.fly.dev:8443/tunnel"
+FEED_URL="https://feed.flagshipserver.com/v1"
+MESH_SEED_FILE="${FLAGSHIP_RELAY_SEED_FILE:-$HOME/.config/flagship/$MESH_RELAY_ID.seed}"
 export PATH="$HOME/.fly/bin:$PATH"
 
 DRY=0
@@ -94,9 +104,10 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
+STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime kickoff secrets gym backup r2buckets feeddomain meshseed migrations services dnsbroker dns com
+          relaykey relayadmit meshcerts meshon meshrelay meshwatch cpu publish redeployA status
           canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android upgradenotice hof final)
-LAST_A=23   # the last step of phase A (status)
+LAST_A=32   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
 step_count() { echo "${#STEP_IDS[@]}"; }
@@ -372,7 +383,7 @@ EOF
 meta_migrations() {
   TITLE="Pending D1 migrations (check, apply, stamp the ledger)"
   RUNBOOK="4. Pending D1 migrations"
-  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm."
+  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.3 that includes 0120 (serving authority), 0122 (relay mesh: relay_log, relays, directories, mesh-key epochs and the triggers that append to the log) and 0126 (relay log grant ids): all before the .com deploy and before any relay is admitted."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version")
 for each pending file, in order:
@@ -381,6 +392,138 @@ for each pending file, in order:
 EOF
   GATE="A second read of the ledger lists every repo migration."
   ROLLBACK="There are no down-migrations: roll the code back, leave additive tables, forward-fix. Data damage: docs/runbooks/d1-restore.md."
+}
+meta_r2buckets() {
+  TITLE="R2 buckets the new .com binds: flagship-relay-feed and flagship-voici (BEFORE .com)"
+  RUNBOOK="1c. R2 buckets the new .com binds (relay feed, voi.ci)"
+  REQUIRED=1
+  WHAT="Reads every bucket_name the pinned apps/com/wrangler.toml binds and lists the account's R2 buckets; creates each missing one on your yes (private, no public access). Needed even with the mesh off: the .com deploy fails while a bound bucket (RELAY_FEED = flagship-relay-feed, VOICI = flagship-voici) does not exist."
+  read -r -d '' CMDS <<'EOF' || true
+grep '^bucket_name' apps/com/wrangler.toml          (flagship-iso, flagship-iso-temp, flagship-adapters, flagship-relay-feed, flagship-voici)
+(cd apps/com && wrangler r2 bucket list)
+(for each missing one, on your yes:) (cd apps/com && wrangler r2 bucket create <name>)
+EOF
+  GATE="wrangler r2 bucket list names every bucket the pinned wrangler.toml binds."
+  ROLLBACK="An empty bucket is harmless; remove one only before a .com deploy binds it (wrangler r2 bucket delete <name>)."
+}
+meta_feeddomain() {
+  TITLE="Relay feed: custom domain feed.flagshipserver.com and its cache rule (Cloudflare dashboard, by hand)"
+  RUNBOOK="1d. The relay feed's custom domain and cache rule"
+  WHAT="Prints the two dashboard steps (R2 custom domain on flagship-relay-feed; a Cache Rule on that host that ignores the query string, so ?x=random cannot bust the cache), waits for a typed done, then checks with dig and curl that feed.flagshipserver.com resolves and answers over valid TLS from R2 (404 until the mesh publishes is expected). The query-string check runs after the feed is on (step 'Switch the relay feed on')."
+  read -r -d '' CMDS <<'EOF' || true
+(dashboard) R2 > flagship-relay-feed > Settings > Custom Domains > Connect domain: feed.flagshipserver.com
+(dashboard) flagshipserver.com zone > Caching > Cache Rules > Create: hostname equals feed.flagshipserver.com,
+            "Eligible for cache", Cache key: Ignore query string ON, Browser/Edge TTL: respect the origin's Cache-Control
+dig +short feed.flagshipserver.com @1.1.1.1
+curl -sI https://feed.flagshipserver.com/v1/head.json        (valid TLS; 404 before the feed is on, 200 after)
+EOF
+  GATE="feed.flagshipserver.com resolves and answers over valid TLS (any HTTP status from R2), and you typed done for the cache rule."
+  ROLLBACK="Remove the custom domain and the cache rule in the dashboard; nothing reads the feed until a mesh relay runs."
+}
+meta_meshseed() {
+  TITLE="Relay mesh key seed RELAY_MESH_KEY_SEED on .com (generated, never printed; once)"
+  RUNBOOK="1e. The relay mesh key (RELAY_MESH_KEY_SEED)"
+  WHAT="Skipped when prod already has RELAY_MESH_KEY_SEED (never replaced in place: replacing it needs npm run relays -- republish). Otherwise generates 32 random bytes and pipes them straight into wrangler secret put (nothing is echoed, stored or put in argv). Also checks SERVING_REVOCATION_SEED, which signs the relay log."
+  read -r -d '' CMDS <<'EOF' || true
+(cd apps/com && wrangler secret list)                         (RELAY_MESH_KEY_SEED, SERVING_REVOCATION_SEED)
+(if absent, on your yes:) (cd apps/com && openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED)
+EOF
+  GATE="wrangler secret list names RELAY_MESH_KEY_SEED and SERVING_REVOCATION_SEED."
+  ROLLBACK="Before RELAY_MESH is on nothing uses it. After: a new seed means wrangler secret put, a .com deploy and npm run relays -- republish."
+}
+meta_relaykey() {
+  TITLE="Relay mesh: the iad1 relay key and its Fly secrets (staged, no restart)"
+  RUNBOOK="8a. Relay mesh: the iad1 relay key and its Fly secrets"
+  WHAT="Makes the iad1 relay key seed once (node scripts/relay-key.mjs new; the file is mode 600, the seed is never printed, an existing file is reused), prints its public relay key, reads .com's relay-log key (GET /api/serving/revocation-key, public) and, on your yes, stages FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB on flagship-services through flyctl secrets import --stage (stdin, not argv). Nothing restarts: the mesh relay deploy applies them. Checks that SERVICES_CONTROL_SECRET and USAGE_REPORT_SECRET are already on the app."
+  read -r -d '' CMDS <<'EOF' || true
+node scripts/relay-key.mjs new ~/.config/flagship/iad1.seed        (once; else: node scripts/relay-key.mjs pub ~/.config/flagship/iad1.seed)
+curl -s https://flagshipserver.com/api/serving/revocation-key | jq -r .publicKey
+flyctl secrets list -a flagship-services                            (SERVICES_CONTROL_SECRET, USAGE_REPORT_SECRET)
+(FLAGSHIP_RELAY_KEY_SEED=<seed file>, FLAGSHIP_RELAY_LOG_PUB=<key> on stdin) | flyctl secrets import --stage -a flagship-services
+EOF
+  GATE="flyctl secrets list shows FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB (staged); the seed file exists, mode 600; keep it (an admitted relay that comes back with the same seed needs no new admission)."
+  ROLLBACK="flyctl secrets unset --stage FLAGSHIP_RELAY_KEY_SEED FLAGSHIP_RELAY_LOG_PUB -a flagship-services (a mesh-off relay ignores both)."
+}
+meta_relayadmit() {
+  TITLE="Relay mesh: admit iad1 (full, iad, the relay's two addresses) and backfill the relay log"
+  RUNBOOK="8b. Relay mesh: admit iad1 and backfill the log"
+  WHAT="Needs migrations 0122+ and the new .com live. Lists the admitted relays; admits iad1 under the seed's relay key with the dedicated IPv4/IPv6 from apps/com/wrangler.toml (refuses if iad1 is admitted under another key: a relay key is never replaced in place, use stage-key), then runs the idempotent backfill (one box-register, account-authority and policy-head per existing server and account, then the revocations). Admin secret."
+  read -r -d '' CMDS <<'EOF' || true
+npm run relays -- list --json
+npm run relays -- add iad1 <relay key> full iad --ipv4 149.248.216.86 --ipv6 2a09:8280:1::110:d2b6:0
+npm run relays -- backfill
+EOF
+  GATE="relays -- list shows iad1, full, active, under the seed's key; the backfill reports its counts with no error."
+  ROLLBACK="npm run relays -- retire iad1 (the id is then never reused: admit a new id). The backfill only appends to the log."
+}
+meta_meshcerts() {
+  TITLE="Relay mesh: Fly certificates and DNS for iad1.tunnel.flagship.services and tunnel.flagship.services"
+  RUNBOOK="8c. Relay mesh: certificates and DNS for the tunnel names"
+  WHAT="Adds both names as Fly certificates on flagship-services (DNS-01: :443 is raw passthrough, so HTTP-01 and TLS-ALPN cannot work), shows the DNS plan of scripts/prod-mesh-dns.ts (A/AAAA at the relay's two addresses for both names, DNS only, and the _acme-challenge CNAMEs Fly asks for; only names under tunnel.flagship.services are touched), writes it on your yes, waits for Fly to issue, then checks both names over real TLS on :8443 (the current relay answers there already). Needs ~/.config/flagship/prod-dns-token (Zone.DNS:Edit on flagship.services)."
+  read -r -d '' CMDS <<'EOF' || true
+flyctl certs add iad1.tunnel.flagship.services -a flagship-services
+flyctl certs add tunnel.flagship.services -a flagship-services
+npx tsx scripts/prod-mesh-dns.ts                  (dry run: the plan)
+npx tsx scripts/prod-mesh-dns.ts --apply
+flyctl certs check iad1.tunnel.flagship.services -a flagship-services ; flyctl certs check tunnel.flagship.services -a flagship-services
+dig +short A iad1.tunnel.flagship.services @1.1.1.1 ; dig +short A tunnel.flagship.services @1.1.1.1
+curl -s -o /dev/null -w "%{http_code}" https://iad1.tunnel.flagship.services:8443/api/health     (valid TLS)
+curl -s -o /dev/null -w "%{http_code}" https://tunnel.flagship.services:8443/api/health
+EOF
+  GATE="Both names resolve to the relay's addresses (DNS only) and answer /api/health on :8443 with a certificate curl accepts."
+  ROLLBACK="npx tsx scripts/prod-mesh-dns.ts reads what is there; delete the records under tunnel.flagship.services in the dashboard and flyctl certs remove <name> -a flagship-services. Nothing dials these names until TUNNEL_HUB_URL moves."
+}
+meta_meshon() {
+  TITLE="Relay mesh: switch the relay feed on (RELAY_MESH on, TUNNEL_HUB_URL tunnel.flagship.services), deploy .com, mint the directory"
+  RUNBOOK="8d. Relay mesh: switch the feed on and mint the directory"
+  WHAT="Refuses until both tunnel names answer over valid TLS. Sets RELAY_MESH = \"on\" and TUNNEL_HUB_URL = wss://tunnel.flagship.services:8443/tunnel in apps/com/wrangler.toml (same Fly app: 0.2 and 0.3 boxes read it from /api/services/endpoints at their next start and reach the same relay; their compiled-in fallback stays flagship-services.fly.dev; SERVICES_BASE_URL stays fly.dev), commits, pushes to main, re-pins, deploys .com with its checks, then mints the directory (nothing writes directory.json while the mesh was off). Then checks the feed: directory.json lists iad1, head.json is public max-age=2, two query strings hit one cache entry, and /api/services/endpoints names the new hub and iad1. The relay is unchanged (a mesh-off relay ignores the feed)."
+  read -r -d '' CMDS <<'EOF' || true
+(apps/com/wrangler.toml)  RELAY_MESH = "on" ; TUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"
+git add -- apps/com/wrangler.toml && git commit -m "Relay mesh on: publish the feed; boxes dial tunnel.flagship.services"
+git push origin HEAD:main            (then the pin moves to this commit)
+(cd apps/com && npm run deploy)      (and the .com post-checks)
+npm run relays -- mint-directory
+curl -s https://feed.flagshipserver.com/v1/directory.json | jq '.directory.directoryVersion, [.directory.relays[].relayId]'
+curl -sI https://feed.flagshipserver.com/v1/head.json            (cache-control: public, max-age=2)
+curl -sI "https://feed.flagshipserver.com/v1/head.json?x=<a>" ; curl -sI "https://feed.flagshipserver.com/v1/head.json?x=<b>"   (second: cf-cache-status HIT)
+curl -s https://flagshipserver.com/api/services/endpoints | jq '.tunnelHub, [.relays[].relayId]'
+EOF
+  GATE="directory.json lists iad1; endpoints answer tunnelHub wss://tunnel.flagship.services:8443/tunnel; the .com checks pass."
+  ROLLBACK="Revert the wrangler.toml commit on main (RELAY_MESH off, TUNNEL_HUB_URL fly.dev) and npm run deploy, or wrangler rollback <version-id> in apps/com. The log keeps being appended and signed either way."
+}
+meta_meshrelay() {
+  TITLE="Relay mesh: deploy the Rust relay as iad1 (fly.relay.mesh.toml, ONE machine; every tunnel drops ~20-60 s)"
+  RUNBOOK="8e. Relay mesh: deploy the Rust relay as iad1"
+  REQUIRED=1
+  WHAT="Checks the preconditions live (directory.json names iad1, the two Fly secrets staged, both tunnel names on valid TLS), asks you to confirm the demo box (playstore-test-0725) runs 0.3, takes a tunnel-count baseline, scales flagship-services to ONE machine (one relay id = one machine), then deploys fly.relay.mesh.toml (Dockerfile.relay, FLAGSHIP_MESH=on, iad1, full, feed.flagshipserver.com) rolling: the only machine stops and starts, every box redials. Then: health 200 and mesh-ready on both names, live-check --expect rust (health + the :8444 echo), npm run ops -- mesh, the relay echo on the dedicated address, one machine. Prints the rollback commands."
+  read -r -d '' CMDS <<'EOF' || true
+curl -s https://feed.flagshipserver.com/v1/directory.json | jq '[.directory.relays[].relayId]'     (iad1)
+flyctl secrets list -a flagship-services          (FLAGSHIP_RELAY_KEY_SEED, FLAGSHIP_RELAY_LOG_PUB)
+npm run ops -- services                           (baseline: box tunnels online; needs USAGE_REPORT_SECRET in your shell)
+flyctl machines list -a flagship-services
+flyctl scale count 1 -a flagship-services --yes
+flyctl deploy -c fly.relay.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
+curl -s https://iad1.tunnel.flagship.services:8443/api/health | jq '.runtime, .mesh, .tunnelsOnline'
+npx tsx tools/relay-conformance/live-check.ts --relay iad1.tunnel.flagship.services --expect rust
+npx tsx tools/relay-conformance/live-check.ts --relay flagship-services.fly.dev --expect rust
+npm run ops -- mesh                               (iad1 ready)
+openssl s_client -connect 149.248.216.86:8444 -servername flagship-services.fly.dev   (GET /echo names 149.248.216.86)
+EOF
+  GATE="iad1 answers /api/health 200 with runtime rust and mesh.ready true; both live-checks exit 0; ops -- mesh shows iad1 ready; the echo names the dedicated address; one machine."
+  ROLLBACK="Rust -> TS hub, mesh kept: flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes (then live-check --expect ts). TS mesh -> mesh off: flyctl deploy -a flagship-services --remote-only --strategy=rolling --yes (fly.toml) and flyctl scale count 2 -a flagship-services --yes. Boxes need nothing."
+}
+meta_meshwatch() {
+  TITLE="Relay mesh: the 30-minute watch (tunnel count, mesh readiness), then rollback or go"
+  RUNBOOK="8f. Relay mesh: the 30-minute watch, and rollback"
+  OUTWARD=0
+  WHAT="Read-only. Polls https://iad1.tunnel.flagship.services:8443/api/health once a minute for 30 minutes and prints status, runtime, mesh readiness and tunnelsOnline. Fails (with the rollback commands) on three non-200 answers in a row, on a relay that is not Rust, or when the tunnel count stays below 80% of the baseline (or of its own peak) after minute 10. Ends with npm run ops -- mesh."
+  read -r -d '' CMDS <<'EOF' || true
+curl -s https://iad1.tunnel.flagship.services:8443/api/health        (every 60 s, 30 times)
+npm run ops -- mesh
+npm run ops -- health                                                  (box heartbeats)
+EOF
+  GATE="30 minutes without three failures in a row; tunnelsOnline back to at least 80% of the baseline by minute 10 and held; mesh.ready true at the end."
+  ROLLBACK="As the previous step: fly.mesh.toml (TS hub, mesh kept), then fly.toml + flyctl scale count 2 (mesh off). docs/runbooks/final-deploy.md 8f."
 }
 meta_com() {
   TITLE="Deploy .com (Cloudflare Worker) and check it"
@@ -418,13 +561,14 @@ EOF
   ROLLBACK="If it fires: upgrade to Workers Paid (USD 5 a month, dashboard) or roll .com back."
 }
 meta_services() {
-  TITLE="Deploy .services (Fly relay)"
+  TITLE="Deploy .services (Fly relay): the 0.3 TS hub, mesh off, as the transition relay"
   RUNBOOK="8. Deploy \`.services\` (Fly): needed, one image"
-  WHAT="Deploys the relay image (the uniform drop timing for unregistered names) FIRST, before the DNS wildcard and before .com, so the relay already drops unknown names uniformly when the wildcard starts answering them. Every box's tunnel drops for about 20 seconds."
+  WHAT="Deploys the 0.3 relay image from fly.toml (the TS hub, mesh off, two machines rolling with DrainNotice: no gap) BEFORE .com: production still runs the 0.2 relay, which has no serving authority, and a mesh relay cannot start before .com publishes the feed and admits it. The Rust mesh relay replaces this one after .com (step 'Deploy the Rust relay as iad1'). A re-run after that step is a mesh-off rollback and asks first."
   read -r -d '' CMDS <<'EOF' || true
 flyctl releases -a flagship-services | head -5
-flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
+flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services          (fly.toml: the 0.3 TS hub, mesh off, two machines)
 curl -s -o /dev/null -w "%{http_code}" https://flagship.services/api/health
+openssl s_client -connect 149.248.216.86:8444 -servername flagship-services.fly.dev   (GET /echo names 149.248.216.86)
 EOF
   GATE="https://flagship.services/api/health answers 200 and https://flagshipserver.com/status/ shows boxes back online within a minute."
   ROLLBACK="flyctl releases rollback -a flagship-services (stateless; clean)."
@@ -846,6 +990,44 @@ test_filters_from_names() {
     sed -n 's#^\(packages/[^/]*\)/.*#\1#p;s#^\(apps/[^/]*\)/.*#\1#p;s#^\(billing\)/.*#\1#p;s#^\(infra\)/.*#\1#p;s#^\(tools\)/.*#\1#p'
   } | sort -u | tr '\n' ' '
 }
+
+# apps/com/wrangler.toml on stdin -> every R2 bucket_name it binds, one per line
+wrangler_buckets() { sed -n 's/^[[:space:]]*bucket_name[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | sort -u; }
+
+# wrangler r2 bucket list (text "name: X" lines, or JSON with "name") -> bucket names, one per line
+r2_bucket_names() { tr ',{}[]' '\n\n\n\n\n' | sed -n 's/^[[:space:]]*name:[[:space:]]*\([A-Za-z0-9._-]*\)[[:space:]]*$/\1/p; s/.*"name"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9._-]*\)".*/\1/p' | sort -u; }
+
+# names on stdin, $1 = a newline list of present names -> the ones missing from it
+names_missing() { local have=$1 n; while IFS= read -r n; do [ -z "$n" ] && continue; printf '%s\n' "$have" | grep -qx "$n" || echo "$n"; done; }
+
+# npm run relays -- list --json on stdin, $1 = relay id -> "<active|retired> <relayKey>", or nothing when not admitted
+relay_admitted() {
+  node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let j;try{j=JSON.parse(s)}catch{process.exit(0)}
+const r=(j.relays||[]).find(x=>x.relayId===process.argv[1]);if(r)console.log((r.retiredAt?"retired":"active")+" "+r.relayKey)})' "$1"
+}
+
+# the feed directory.json on stdin, $1 = relay id, $2 = relay key (may be empty) -> exit 0 when the directory lists it
+directory_lists() {
+  node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let j;try{j=JSON.parse(s)}catch{process.exit(1)}
+const d=j.directory||j;const r=(d.relays||[]).find(x=>x.relayId===process.argv[1]);
+process.exit(r&&(!process.argv[2]||r.relayKey===process.argv[2])?0:1)})' "$1" "${2:-}"
+}
+
+# a relay's /api/health body on stdin -> "<runtime> <ready|not-ready|no-mesh> <tunnelsOnline|-> <reasons>"
+health_line() {
+  node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let h={};try{h=JSON.parse(s)}catch{}
+const rt=h.runtime==="rust"?"rust":(h.nodeVersion?"ts":"unknown");
+const m=h.mesh;const ready=m?(m.ready?"ready":"not-ready"):"no-mesh";
+const why=m?[].concat(m.readiness||m.reasons||[]).map(String).join(",").replace(/\s+/g,"_"):"";
+const t=typeof h.tunnelsOnline==="number"?h.tunnelsOnline:"-";
+console.log([rt,ready,t,why].filter((x,i)=>i<3||x).join(" "))})'
+}
+
+# $1 = tunnels now, $2 = baseline (may be empty), $3 = peak seen -> exit 0 when now >= 80% of max(baseline, peak)
+tunnels_ok() { node -e 'const [n,b,p]=process.argv.slice(1).map(x=>Number(x)||0);process.exit(n>=0.8*Math.max(b,p)?0:1)' "$1" "${2:-0}" "${3:-0}"; }
 
 # ---------------------------------------------------------------- pin and worktree
 
@@ -1758,6 +1940,10 @@ run_services() {
   require_gym_gate || return $?
   require_done migrations || return 10
   ensure_wt
+  if [ -n "$(st_get meshRelayDeployedAt)" ]; then
+    warn "the Rust mesh relay (iad1) was deployed at $(st_get meshRelayDeployedAt): this step now REPLACES it with the mesh-off TS hub (fly.toml), i.e. the full mesh-off rollback."
+    [ "$(ask_word "Type  mesh-off-rollback  to go on, or Enter to stop")" = mesh-off-rollback ] || return 10
+  fi
   say "  recent Fly releases:"; flyctl releases -a flagship-services 2>&1 | head -5 | sed 's/^/    /' || true
   say "  last relay-path commit on the pin:"; wt_git log -1 --format='    %h %cI %s' -- apps/web/src packages Dockerfile fly.toml billing
   say "  --strategy=rolling (fly.toml): one machine at a time, the old hub sends DrainNotice so tunnels move over; with two machines running there is no gap."
@@ -1768,15 +1954,7 @@ run_services() {
   info_code "status page" "$COM_URL/status/"
   say "  watch $COM_URL/status/ until every box is back online (about a minute)."
   probe_end
-  # The relay echo (docs/relay-addresses.md): the phones drop any address whose echo is not itself.
-  local v4 v6; read -r v4 v6 < <(relay_ips)
-  hdr "Relay echo (:8444) on the dedicated address"
-  if command -v openssl >/dev/null 2>&1 && [ -n "$v4" ]; then
-    local e; e=$(printf 'GET /echo HTTP/1.1\r\nHost: flagship-services.fly.dev\r\nConnection: close\r\n\r\n' | openssl s_client -quiet -connect "$v4:8444" -servername flagship-services.fly.dev 2>/dev/null | tr -d '\r' | tail -3)
-    say "  echo answered: ${e:-nothing}"
-    if echo "$e" | grep -q "$v4"; then ok "the echo names the dedicated address $v4"
-    else warn "the echo did not name $v4. If it names something else (or an IPv4-mapped IPv6 form), .com's addresses will fail the phones' echo check and they fall back to the built-in pair (safe); fix before relying on .com's list. Record the result: npm run release-manifest -- receipt relay-echo-live <note>"; fi
-  else warn "openssl or the relay address is missing; run the echo check by hand (docs/relay-addresses.md)"; fi
+  relay_echo_check
   say "  /api/stats needs USAGE_REPORT_SECRET on Fly (503 = not set): check by hand: curl -H 'x-usage-secret: <secret>' $SERVICES_URL/api/stats"
 }
 
@@ -1827,6 +2005,340 @@ EOF
   say "  (zone-health is not deployed yet: it runs as a post-check of the .com deploy.)"
   st_w set dnsWildcardAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   probe_end
+}
+
+# ---------------------------------------------------------------- the relay mesh (docs/runbooks/final-deploy.md 1c-1e, 8a-8f)
+
+run_r2buckets() {
+  ensure_wt
+  local want have missing b
+  want=$(wrangler_buckets < "$WT/apps/com/wrangler.toml")
+  [ -n "$want" ] || fail "no bucket_name found in apps/com/wrangler.toml"
+  have=$(WRQ r2 bucket list 2>/dev/null | r2_bucket_names || true)
+  [ -n "$have" ] || fail "could not list the R2 buckets (wrangler login?)"
+  missing=$(printf '%s\n' "$want" | names_missing "$have")
+  for b in $want; do printf '%s\n' "$missing" | grep -qx "$b" || ok "R2 bucket $b exists"; done
+  [ -z "$missing" ] && return 0
+  for b in $missing; do
+    warn "R2 bucket $b is bound in apps/com/wrangler.toml but does not exist: the .com deploy fails without it"
+    confirm "Create R2 bucket $b now (private, no public access)?" || return 10
+    WRX r2 bucket create "$b"
+  done
+  have=$(WRQ r2 bucket list 2>/dev/null | r2_bucket_names || true)
+  missing=$(printf '%s\n' "$want" | names_missing "$have")
+  [ -z "$missing" ] || fail "still missing after the create: $missing"
+  ok "every bound bucket exists"
+  say "  flagship-voici: its public custom domain files.voi.ci is a dashboard step of its own (wrangler.toml comment at the VOICI binding)."
+}
+
+run_feeddomain() {
+  cat <<'EOF'
+
+  Cloudflare dashboard (the account of flagship-com):
+    1. R2 > flagship-relay-feed > Settings > Custom Domains > Connect domain: feed.flagshipserver.com
+       (Cloudflare adds the DNS record itself; leave it as it makes it).
+    2. flagshipserver.com zone > Caching > Cache Rules > Create rule:
+         When: Hostname equals feed.flagshipserver.com
+         Then: Eligible for cache; Cache key: "Ignore query string" ON (so ?x=random cannot bust the cache);
+               Edge TTL and Browser TTL: "Respect origin" (the feed sets max-age=2 on head.json).
+EOF
+  [ "$(ask_word "Type  done  when both exist")" = done ] || return 10
+  PROBE_FAILS=0
+  local i a=""
+  for i in 1 2 3 4 5 6; do a=$(dig +short feed.flagshipserver.com @1.1.1.1 2>/dev/null | head -1 || true); [ -n "$a" ] && break; sleep 5; done
+  if [ -n "$a" ]; then ok "feed.flagshipserver.com resolves ($a)"; else err "feed.flagshipserver.com does not resolve yet"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  local code; code=$(http_code "$FEED_URL/head.json")
+  case "$code" in
+    200|404) ok "the feed host answers over valid TLS ($code: 404 is expected until the mesh publishes)" ;;
+    *) err "the feed host answered $code (000 = no TLS or no answer)"; PROBE_FAILS=$((PROBE_FAILS + 1)) ;;
+  esac
+  probe_end
+}
+
+run_meshseed() {
+  ensure_wt
+  local names; names=$(WRQ secret list 2>/dev/null | json_names || true)
+  [ -n "$names" ] || fail "could not list the prod secrets (wrangler login?)"
+  if echo "$names" | grep -qx SERVING_REVOCATION_SEED; then ok "SERVING_REVOCATION_SEED is set (it signs the relay log)"
+  else warn "SERVING_REVOCATION_SEED is NOT set: .com cannot sign the relay log. Create it: cd apps/com && openssl rand -hex 32 | wrangler secret put SERVING_REVOCATION_SEED"; confirm "Continue anyway?" || return 10; fi
+  if echo "$names" | grep -qx RELAY_MESH_KEY_SEED; then ok "RELAY_MESH_KEY_SEED is already set: kept (never replaced in place)"; return 0; fi
+  say "  32 random bytes go from openssl straight into wrangler secret put: nothing is shown, stored or put in argv."
+  confirm "Create the prod secret RELAY_MESH_KEY_SEED now?" || return 10
+  printf '%s+ (cd apps/com && openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED)%s\n' "$C_D" "$C_0"
+  ( cd "$WT/apps/com" && openssl rand -hex 32 | WR secret put RELAY_MESH_KEY_SEED ) || fail "wrangler secret put RELAY_MESH_KEY_SEED failed"
+  names=$(WRQ secret list 2>/dev/null | json_names || true)
+  echo "$names" | grep -qx RELAY_MESH_KEY_SEED || fail "RELAY_MESH_KEY_SEED is not listed after the put"
+  ok "RELAY_MESH_KEY_SEED set"
+}
+
+relay_log_pub() { # .com's relay-log key (public), or nothing
+  curl -fsS -m 15 "$COM_URL/api/serving/revocation-key" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const k=JSON.parse(s).publicKey;if(/^[0-9a-f]{64}$/.test(k))process.stdout.write(k)}catch{}})' || true
+}
+fly_secret_names() { flyctl secrets list -a "$RELAY_APP" 2>/dev/null | awk 'NR>1 && $1 ~ /^[A-Z_]+$/ {print $1}' | sort -u; }
+mesh_relay_key() { ( cd "$WT" && node scripts/relay-key.mjs pub "$MESH_SEED_FILE" ) 2>/dev/null | tail -1; }
+
+run_relaykey() {
+  ensure_wt
+  if [ -f "$MESH_SEED_FILE" ]; then ok "the $MESH_RELAY_ID seed exists: $MESH_SEED_FILE (reused)"
+  else
+    say "  A new relay key for $MESH_RELAY_ID: $MESH_SEED_FILE (mode 600; back it up offline, never commit it)."
+    confirm "Make the $MESH_RELAY_ID relay key seed now?" || return 10
+    mkdir -p "$(dirname "$MESH_SEED_FILE")"
+    WX node scripts/relay-key.mjs new "$MESH_SEED_FILE"
+  fi
+  local key; key=$(mesh_relay_key)
+  [[ "$key" =~ ^[0-9a-f]{64}$ ]] || fail "could not read the relay key of $MESH_SEED_FILE"
+  say "  relay key ($MESH_RELAY_ID): $key"
+  st_w set meshRelayKey "$key"
+  local logpub; logpub=$(relay_log_pub)
+  [ -n "$logpub" ] || fail ".com serves no relay-log key at $COM_URL/api/serving/revocation-key (SERVING_REVOCATION_SEED and the .com deploy first)"
+  say "  relay-log key (.com, public): $logpub"
+  local names n; names=$(fly_secret_names)
+  for n in SERVICES_CONTROL_SECRET USAGE_REPORT_SECRET; do
+    if echo "$names" | grep -qx "$n"; then ok "$n is on $RELAY_APP"; else warn "$n is NOT on $RELAY_APP (the same value .com holds: flyctl secrets set $n=... -a $RELAY_APP --stage)"; fi
+  done
+  confirm "Stage FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB on $RELAY_APP (flyctl secrets import --stage: no restart)?" || return 10
+  printf '%s+ (FLAGSHIP_RELAY_KEY_SEED, FLAGSHIP_RELAY_LOG_PUB on stdin) | flyctl secrets import --stage -a %s%s\n' "$C_D" "$RELAY_APP" "$C_0"
+  { printf 'FLAGSHIP_RELAY_KEY_SEED=%s\n' "$(tr -d '[:space:]' < "$MESH_SEED_FILE")"; printf 'FLAGSHIP_RELAY_LOG_PUB=%s\n' "$logpub"; } \
+    | flyctl secrets import --stage -a "$RELAY_APP" >/dev/null || fail "flyctl secrets import failed"
+  names=$(fly_secret_names)
+  for n in FLAGSHIP_RELAY_KEY_SEED FLAGSHIP_RELAY_LOG_PUB; do echo "$names" | grep -qx "$n" || fail "$n is not listed on $RELAY_APP after the import"; done
+  ok "both staged; the mesh relay deploy applies them"
+}
+
+relays_cmd() { # relays_cmd args... : npm run relays against prod .com with the admin secret (never the gym's base URL)
+  local a q=""; for a in "$@"; do q="$q '$a'"; done
+  printf '%s+ npm run relays --%s%s\n' "$C_D" "$q" "$C_0"
+  with_secret bash -c "cd '$WT' && FLAGSHIP_BASE_URL='$COM_URL' npm run -s relays --$q"
+}
+
+run_relayadmit() {
+  require_done migrations com || return 10
+  ensure_wt
+  need_admin_secret || fail "the admin secret is needed to admit a relay"
+  local key; key=$(st_get meshRelayKey); [ -n "$key" ] || key=$(mesh_relay_key)
+  [[ "$key" =~ ^[0-9a-f]{64}$ ]] || fail "no relay key for $MESH_RELAY_ID: run step $(step_index relaykey) first"
+  local list; list=$(with_secret bash -c "cd '$WT' && FLAGSHIP_BASE_URL='$COM_URL' npm run -s relays -- list --json" 2>/dev/null) || fail "npm run relays -- list failed (is the 0.3 .com deployed with migration 0122?)"
+  local state; state=$(printf '%s' "$list" | relay_admitted "$MESH_RELAY_ID")
+  case "$state" in
+    "active $key") ok "$MESH_RELAY_ID is already admitted under this key" ;;
+    active\ *) fail "$MESH_RELAY_ID is admitted under ANOTHER key (${state#active }): a relay key is never replaced in place. Use the seed that made it, or npm run relays -- stage-key (docs/runbooks/relay-mesh.md 6)." ;;
+    retired\ *) fail "$MESH_RELAY_ID was retired: an id is never reused. Pick a new id (and change fly.relay.mesh.toml, fly.mesh.toml and MESH_RELAY_ID)." ;;
+    *)
+      local v4 v6; read -r v4 v6 < <(relay_ips)
+      [ -n "$v4" ] || fail "SERVICES_PASSTHROUGH_IPV4 not found in apps/com/wrangler.toml"
+      local ips; ips=$(flyctl ips list -a "$RELAY_APP" 2>&1 || true)
+      echo "$ips" | ips_agree "$v4" "$v6" || fail "flyctl ips list and apps/com/wrangler.toml disagree: fix the repo first"
+      confirm "Admit $MESH_RELAY_ID ($key, full, $MESH_RELAY_REGION, $v4 $v6) on prod .com?" || return 10
+      relays_cmd add "$MESH_RELAY_ID" "$key" full "$MESH_RELAY_REGION" --ipv4 "$v4" --ipv6 "$v6" || fail "admission refused"
+      ;;
+  esac
+  confirm "Run the relay-log backfill now (idempotent: existing servers, accounts, policies, revocations)?" || return 10
+  relays_cmd backfill || fail "the backfill failed"
+}
+
+run_meshcerts() {
+  ensure_wt
+  local have h
+  have=$(flyctl certs list -a "$RELAY_APP" 2>/dev/null || true)
+  for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do
+    if echo "$have" | grep -qw "$h"; then ok "Fly certificate for $h exists"
+    else
+      confirm "Add the Fly certificate for $h on $RELAY_APP (DNS-01 validation)?" || return 10
+      WX flyctl certs add "$h" -a "$RELAY_APP"
+    fi
+  done
+  [ -n "${PROD_DNS_TOKEN:-}" ] || [ -f "$HOME/.config/flagship/prod-dns-token" ] \
+    || fail "no Cloudflare DNS token: write ~/.config/flagship/prod-dns-token (Zone.DNS:Edit on flagship.services only)"
+  say "  the DNS plan (dry run, nothing written):"
+  ( cd "$WT" && npx tsx scripts/prod-mesh-dns.ts ) || warn "the dry run exited non-zero (a challenge target may not be known yet)"
+  confirm "Write this plan to the flagship.services zone?" || return 10
+  WX npx tsx scripts/prod-mesh-dns.ts --apply
+  PROBE_FAILS=0
+  local i out
+  for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do
+    for i in $(seq 1 20); do
+      out=$(flyctl certs check "$h" -a "$RELAY_APP" 2>&1 || true)
+      echo "$out" | grep -qiE 'issued|ready|valid' && break
+      [ "$i" = 1 ] && say "  waiting for Fly to issue $h (up to 10 minutes) ..."
+      sleep 30
+    done
+    echo "$out" | tail -4 | sed 's/^/    /'
+    probe_code "$h :8443 over valid TLS" "https://$h:8443/api/health" 200 6
+    local a; a=$(dig +short A "$h" @1.1.1.1 2>/dev/null | head -1 || true)
+    local v4 v6; read -r v4 v6 < <(relay_ips)
+    if [ "$a" = "$v4" ]; then ok "$h resolves to $v4"; else err "$h resolves to '$a', want $v4"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  done
+  probe_end
+}
+
+set_toml_var() { # set_toml_var file NAME value : exactly one top-level line NAME = "..." is rewritten
+  local f=$1 k=$2 v=$3 n
+  n=$(grep -c "^$k = \"" "$f" || true)
+  [ "$n" = 1 ] || fail "$f has $n lines '$k = \"...\"' (want exactly one)"
+  sed -i.bak "s|^$k = \".*\"|$k = \"$v\"|" "$f" && rm -f "$f.bak"
+}
+toml_var() { sed -n "s/^$2 = \"\(.*\)\".*/\1/p" "$1" | head -1; }
+
+run_meshon() {
+  require_done relayadmit meshcerts || return 10
+  ensure_wt
+  need_admin_secret || fail "the admin secret is needed to mint the directory"
+  PROBE_FAILS=0
+  local hub="$MESH_HUB_URL"
+  probe_code "$MESH_TUNNEL_HOST :8443 over valid TLS" "https://$MESH_TUNNEL_HOST:8443/api/health" 200 3
+  if [ "$PROBE_FAILS" -gt 0 ]; then
+    PROBE_FAILS=0
+    warn "tunnel.flagship.services does not answer over valid TLS: moving TUNNEL_HUB_URL there now would strand every box that restarts."
+    [ "$(ask_word "Type  keep-fly-dev  to switch the feed on but leave TUNNEL_HUB_URL at flagship-services.fly.dev, or Enter to stop")" = keep-fly-dev ] || return 10
+    hub="$LEGACY_HUB_URL"
+  fi
+  local toml="$WT/apps/com/wrangler.toml"
+  if [ "$(toml_var "$toml" RELAY_MESH)" = on ] && [ "$(toml_var "$toml" TUNNEL_HUB_URL)" = "$hub" ]; then
+    ok "the pinned wrangler.toml already has RELAY_MESH on and TUNNEL_HUB_URL $hub"
+  else
+    set_toml_var "$toml" RELAY_MESH on
+    set_toml_var "$toml" TUNNEL_HUB_URL "$hub"
+    wt_git diff -- apps/com/wrangler.toml | sed 's/^/    /'
+    commit_paths "Relay mesh on: publish the feed; boxes dial $(echo "$hub" | sed 's#wss://##;s#:.*##')" apps/com/wrangler.toml
+    land_commits || return $?
+  fi
+  if [ "$(st_get comDeployedSha)" != "$PIN" ]; then com_deploy || return $?; com_checks; fi
+  confirm "Mint the relay directory now (npm run relays -- mint-directory)?" || return 10
+  relays_cmd mint-directory || fail "mint-directory failed"
+  PROBE_FAILS=0
+  local i dir="" key; key=$(st_get meshRelayKey)
+  for i in 1 2 3 4 5 6; do
+    dir=$(curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null || true)
+    printf '%s' "$dir" | directory_lists "$MESH_RELAY_ID" "$key" && break
+    sleep 10
+  done
+  if printf '%s' "$dir" | directory_lists "$MESH_RELAY_ID" "$key"; then ok "directory.json lists $MESH_RELAY_ID under its key"
+  else err "directory.json does not list $MESH_RELAY_ID (yet): $FEED_URL/directory.json"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  local hdrs; hdrs=$(curl -sI -m 20 "$FEED_URL/head.json" | tr -d '\r' || true)
+  if echo "$hdrs" | grep -qi '^cache-control:.*max-age=2'; then ok "head.json: public, max-age=2"; else err "head.json headers: $(echo "$hdrs" | head -3 | tr '\n' ' ')"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  local r1 c2; r1=$RANDOM$RANDOM
+  curl -s -o /dev/null -m 20 "$FEED_URL/head.json?x=$r1" || true
+  c2=$(curl -sI -m 20 "$FEED_URL/head.json?x=$r1-other" | tr -d '\r' | sed -n 's/^cf-cache-status: *//Ip' | head -1)
+  if [ "$c2" = HIT ]; then ok "a different query string hit the same cache entry (the cache rule ignores it)"
+  else warn "the second query string answered cf-cache-status '${c2:-none}' (want HIT): check the cache rule (Ignore query string) before relays depend on it"; fi
+  local ep; ep=$(curl -fsS -m 20 "$COM_URL/api/services/endpoints" 2>/dev/null || true)
+  if [ "$(printf '%s' "${ep:-null}" | json_field tunnelHub 2>/dev/null || true)" = "$hub" ]; then ok "/api/services/endpoints: tunnelHub $hub"; else err "/api/services/endpoints tunnelHub is not $hub"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  st_w set meshOnAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  probe_end
+}
+
+relay_echo_check() { # the relay echo (docs/relay-addresses.md): the phones drop any address whose echo is not itself
+  local v4 v6; read -r v4 v6 < <(relay_ips)
+  hdr "Relay echo (:8444) on the dedicated address"
+  if command -v openssl >/dev/null 2>&1 && [ -n "$v4" ]; then
+    local e; e=$(printf 'GET /echo HTTP/1.1\r\nHost: flagship-services.fly.dev\r\nConnection: close\r\n\r\n' | openssl s_client -quiet -connect "$v4:8444" -servername flagship-services.fly.dev 2>/dev/null | tr -d '\r' | tail -3)
+    say "  echo answered: ${e:-nothing}"
+    if echo "$e" | grep -q "$v4"; then ok "the echo names the dedicated address $v4"
+    else warn "the echo did not name $v4. If it names something else (or an IPv4-mapped IPv6 form), .com's addresses will fail the phones' echo check and they fall back to the built-in pair (safe); fix before relying on .com's list. Record the result: npm run release-manifest -- receipt relay-echo-live <note>"; fi
+  else warn "openssl or the relay address is missing; run the echo check by hand (docs/relay-addresses.md)"; fi
+}
+
+mesh_rollback_text() {
+  cat <<EOF
+
+  Rollback (docs/runbooks/final-deploy.md 8f; boxes need nothing, they redial the same addresses):
+    1. Rust -> TS hub, mesh kept (same relay id, key, secrets):
+         flyctl deploy -c fly.mesh.toml -a $RELAY_APP --remote-only --strategy=rolling --yes
+         npx tsx tools/relay-conformance/live-check.ts --relay $MESH_RELAY_HOST --expect ts
+    2. TS mesh -> mesh off (today's relay: .com's internal routes and feed WebSocket still exist this release):
+         flyctl deploy -a $RELAY_APP --remote-only --strategy=rolling --yes            (fly.toml)
+         flyctl scale count 2 -a $RELAY_APP --yes
+       TUNNEL_HUB_URL can stay at tunnel.flagship.services (same app); RELAY_MESH may stay on (the log keeps publishing).
+    Back again: flyctl scale count 1 -a $RELAY_APP --yes, then fly.relay.mesh.toml as in step $(step_index meshrelay).
+EOF
+}
+
+health_of() { curl -s -m 20 "https://$1:8443/api/health" 2>/dev/null || true; }
+health_code() { curl -s -o /dev/null -m 20 -w '%{http_code}' "https://$1:8443/api/health" 2>/dev/null || echo 000; }
+
+run_meshrelay() {
+  require_done meshon || return 10
+  ensure_wt
+  [ -f "$WT/fly.relay.mesh.toml" ] || fail "fly.relay.mesh.toml is not on the pinned commit"
+  local key; key=$(st_get meshRelayKey)
+  curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null | directory_lists "$MESH_RELAY_ID" "$key" \
+    || fail "the feed's directory.json does not list $MESH_RELAY_ID under its key: a mesh relay would not be blessed (step $(step_index meshon))"
+  ok "directory.json lists $MESH_RELAY_ID"
+  local names n; names=$(fly_secret_names)
+  for n in FLAGSHIP_RELAY_KEY_SEED SERVICES_CONTROL_SECRET; do echo "$names" | grep -qx "$n" || fail "$n is not on $RELAY_APP (step $(step_index relaykey))"; done
+  echo "$names" | grep -qxE 'FLAGSHIP_RELAY_LOG_PUB|FLAGSHIP_SERVING_REVOCATION_PUB' || fail "neither FLAGSHIP_RELAY_LOG_PUB nor FLAGSHIP_SERVING_REVOCATION_PUB is on $RELAY_APP"
+  ok "the relay's secrets are there"
+  local h; for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do [ "$(health_code "$h")" = 200 ] || fail "$h does not answer over valid TLS (step $(step_index meshcerts))"; done
+  ok "both tunnel names answer over valid TLS"
+  say "  The 0.2 review/demo box (playstore-test-0725) must already run 0.3 (RELEASE-0.3-JOURNAL I2); 0.2 store apps keep working against it."
+  confirm "Is the demo box on 0.3 (or do you accept it reconnecting as a 0.2 box)?" || return 10
+  if [ -n "${USAGE_REPORT_SECRET:-}" ]; then ( cd "$WT" && npm run -s ops -- services ) 2>&1 | head -12 | sed 's/^/    /' || true
+  else say "  (USAGE_REPORT_SECRET is not in this shell: run 'npm run ops -- services' in another terminal for the box tunnel count.)"; fi
+  local base; base=$(ask_word "Box tunnels online right now (a number, or Enter for none)")
+  [[ "$base" =~ ^[0-9]+$ ]] && st_w set meshBaseline "$base" || st_w set meshBaseline ""
+  local count; count=$(flyctl machines list -a "$RELAY_APP" --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).length)}catch{console.log("?")}})')
+  say "  machines now: $count"
+  if [ "$count" != 1 ]; then
+    say "  One relay id runs on exactly one machine. Scaling down destroys the extra machine; its boxes get DrainNotice and redial the one left."
+    confirm "Scale $RELAY_APP to ONE machine now (flyctl scale count 1)?" || return 10
+    WX flyctl scale count 1 -a "$RELAY_APP" --yes
+  fi
+  cat <<'EOF'
+
+  The deploy stops the ONLY machine and starts the Rust relay: every box tunnel drops for about 20-60 s and
+  redials (DrainNotice first, then 1012). Quiet hours. Never --strategy=immediate, never bluegreen here.
+EOF
+  confirm "Deploy the Rust relay as $MESH_RELAY_ID now (fly.relay.mesh.toml, rolling)?" || return 10
+  WX flyctl deploy -c fly.relay.mesh.toml -a "$RELAY_APP" --remote-only --strategy=rolling --yes
+  st_w set meshRelayDeployedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  st_w set meshRelayImpl rust
+  PROBE_FAILS=0
+  local i line
+  for i in $(seq 1 18); do
+    line=$(health_of "$MESH_RELAY_HOST" | health_line)
+    [ "$(health_code "$MESH_RELAY_HOST")" = 200 ] && case "$line" in "rust ready"*) break ;; esac
+    sleep 10
+  done
+  say "  $MESH_RELAY_HOST: $line"
+  case "$line" in "rust ready"*) ok "iad1 is the Rust relay and mesh-ready" ;; *) err "iad1 is not a mesh-ready Rust relay after 3 minutes: $line"; PROBE_FAILS=$((PROBE_FAILS + 1)) ;; esac
+  for h in "$MESH_RELAY_HOST" flagship-services.fly.dev; do
+    printf '%s+ npx tsx tools/relay-conformance/live-check.ts --relay %s --expect rust%s\n' "$C_D" "$h" "$C_0"
+    ( cd "$WT" && npx tsx tools/relay-conformance/live-check.ts --relay "$h" --expect rust ) || { err "live-check on $h failed"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
+  done
+  printf '%s+ npm run ops -- mesh%s\n' "$C_D" "$C_0"
+  ( cd "$WT" && npm run -s ops -- mesh ) || { err "ops -- mesh reported a problem"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
+  relay_echo_check
+  count=$(flyctl machines list -a "$RELAY_APP" --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).length)}catch{console.log("?")}})')
+  if [ "$count" = 1 ]; then ok "one machine"; else err "$count machines (want 1): flyctl scale count 1 -a $RELAY_APP --yes"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  mesh_rollback_text
+  probe_end
+}
+
+run_meshwatch() {
+  require_done meshrelay || return 10
+  local base; base=$(st_get meshBaseline)
+  local mins=${MESH_WATCH_MINUTES:-30} i code line n peak=0 fails=0 low=0 bad=0
+  say "  watching $MESH_RELAY_HOST for $mins minutes (baseline: ${base:-none}); Ctrl-C stops, resume with --only $CURRENT_STEP"
+  for ((i = 1; i <= mins; i++)); do
+    code=$(health_code "$MESH_RELAY_HOST")
+    line=$(health_of "$MESH_RELAY_HOST" | health_line)
+    n=$(echo "$line" | awk '{print $3}')
+    printf '  %s  min %2d  http %s  %s\n' "$(date -u +%H:%M:%S)" "$i" "$code" "$line"
+    if [ "$code" = 200 ]; then fails=0; else fails=$((fails + 1)); fi
+    [ "$fails" -ge 3 ] && { err "three non-200 answers in a row"; bad=1; break; }
+    if [ "$code" = 200 ]; then case "$line" in rust*) ;; *) err "the relay answering is not the Rust relay: $line"; bad=1; break ;; esac; fi
+    if [[ "$n" =~ ^[0-9]+$ ]]; then
+      [ "$n" -gt "$peak" ] && peak=$n
+      if [ "$i" -ge 10 ] && ! tunnels_ok "$n" "$base" "$peak"; then low=$((low + 1)); else low=0; fi
+      [ "$low" -ge 5 ] && { err "tunnels online ($n) below 80% of max(baseline ${base:-0}, peak $peak) for 5 minutes"; bad=1; break; }
+    fi
+    [ "$i" -lt "$mins" ] && sleep 60
+  done
+  printf '%s+ npm run ops -- mesh%s\n' "$C_D" "$C_0"
+  ( cd "$REPO" && npm run -s ops -- mesh ) || warn "ops -- mesh reported a problem"
+  if [ "$bad" = 1 ]; then mesh_rollback_text; return 11; fi
+  case "$line" in "rust ready"*) ok "30 minutes clean: iad1 is the Rust relay, mesh-ready, $n tunnels (peak $peak)" ;; *) warn "the watch ended with: $line"; mesh_rollback_text; confirm "Treat the watch as passed anyway?" || return 11 ;; esac
 }
 
 # publish_arch ARCH -> 0 published, 20 not ready/deferred

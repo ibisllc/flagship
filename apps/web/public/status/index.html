@@ -368,10 +368,14 @@
           $("raw").textContent = JSON.stringify(probe, null, 2);
 
           const h = probe.health || {};
-          $("uptime").textContent = fmtUptime(h.processUptimeSec);
+          // Both relays answer here: the TS hub (processUptimeSec, heapUsed, nodeVersion) and the Rust relay
+          // (uptimeMs, runtime + version, no heap).
+          const upSec = typeof h.processUptimeSec === "number" ? h.processUptimeSec
+            : typeof h.uptimeMs === "number" ? Math.floor(h.uptimeMs / 1000) : undefined;
+          $("uptime").textContent = fmtUptime(upSec);
           $("rss").textContent = fmtBytes(h.memory && h.memory.rss);
           $("heap").textContent = fmtBytes(h.memory && h.memory.heapUsed);
-          $("node").textContent = h.nodeVersion || "—";
+          $("node").textContent = h.nodeVersion || (h.runtime && h.version ? h.runtime + " " + h.version : "—");
 
           history.push(probe);
           while (history.length > HISTORY_LEN) history.shift();

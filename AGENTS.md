@@ -66,7 +66,7 @@ npx tsc -b                                      # typecheck the whole tree
 # Deploy
 npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUILT dist/ of the packages in scripts/com-bundled-packages.sh. Use `npm run deploy` (NOT `wrangler deploy` directly): its `predeploy` rebuilds those packages from an empty dist/ (scripts/clean-build-com.sh — `tsc -b` alone never deletes a removed module's output) and then runs the guard (scripts/predeploy-com.sh — route-safety + dist-freshness + orphaned-output + static-asset list + migration drift), and deploys the webapp Worker first (scripts/deploy-webapp-static.sh), then flagship-com
 export PATH="$HOME/.fly/bin:$PATH"
-flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
+flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services -c fly.relay.mesh.toml   # 0.3: Rust relay iad1, mesh on, ONE machine (all tunnels drop ~20-60 s: deploy at quiet hours). Plain fly.toml = the mesh-off TS rollback; fly.mesh.toml = TS with the mesh
 
 # What is slow or failing (docs/ops-command.md): health, relay counters incl. missed
 # redirections, Worker timings and errors, a live per-route CPU tail

@@ -1,0 +1,100 @@
+# flagship.services in production AS `iad1` on the TypeScript hub: the ROLLBACK for fly.relay.mesh.toml (the Rust
+# relay), keeping the mesh (docs/runbooks/final-deploy.md 8f). Same app, ports, one machine, relay id, relay key and
+# secrets; only the image (Dockerfile, the Node hub) and the CA keys' source differ.
+#
+#   flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
+#   npx tsx tools/relay-conformance/live-check.ts --relay iad1.tunnel.flagship.services --expect ts
+#
+# Every tunnel drops for about 20-60 s (one machine, as the Rust profile). Back to Rust: deploy fly.relay.mesh.toml.
+# Out of the mesh entirely: deploy fly.toml (mesh off, the Node hub), then `flyctl scale count 2`, and point .com's
+# TUNNEL_HUB_URL back at wss://flagship-services.fly.dev:8443/tunnel (or leave tunnel.flagship.services: same app).
+#
+# The TS hub reads the CA keys from FLAGSHIP_MESH_CA_KEYS (relay-mesh.md §15.3.1): `.com`'s hot CA public key, the
+# `caPubkey` of the newest production lease in .maintainers/ca-endorsements/ (the same key every lease since
+# 2026-05-19 names). Check it before a rollback; it must equal what the directory is signed by:
+#   curl -s https://feed.flagshipserver.com/v1/directory.json | jq -r .directory.signedBy
+# If a CA lease renewal moved the key, change it here first (a wrong key: no blessing or directory verifies, the
+# relay answers /api/health 503 and refuses mesh traffic while still serving the boxes it holds).
+
+app = "flagship-services"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[deploy]
+  strategy = "rolling"
+  wait_timeout = "120s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  TUNNEL_TCP_PORT = "8443"
+  RELAY_ECHO_PORT = "3001"
+  FLAGSHIP_SURFACE = "services"
+  FLAGSHIP_MESH = "on"
+  FLAGSHIP_RELAY_ID = "iad1"
+  FLAGSHIP_RELAY_KIND = "full"
+  FLAGSHIP_RELAY_FEED_URL = "https://feed.flagshipserver.com/v1"
+  FLAGSHIP_MESH_CA_KEYS = "230ad9ed20e56d79e836690e351cb5538fb4aca9e509d9adc9755da81cd235cc"
+
+# External :443 → internal :8443 (raw TCP, SNI passthrough). TLS ends on the user's box; the relay never sees
+# plaintext. Same as fly.toml, one machine, never stopped by Fly's idle stop (it is the only relay).
+[[services]]
+  protocol = "tcp"
+  internal_port = 8443
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+    handlers = []
+
+# External :8443 → internal :3000, TLS ended by Fly with the app's certificates: flagship-services.fly.dev (0.2
+# boxes, SERVICES_BASE_URL), iad1.tunnel.flagship.services (the relay's direct name: peers, hints, the canary) and
+# tunnel.flagship.services (TUNNEL_HUB_URL). The tunnel WebSocket at /tunnel, the phone route, the mesh bridge,
+# /api/health (503 with the reasons while not mesh-ready), /api/stats and the peer-backup mailbox POST /pb/m/<id>.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  # :80 → 301 to https at the Fly edge (as fly.toml): a box serves only HTTPS through the :443 passthrough.
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  # TCP, not HTTP: /api/health answers 503 while the relay is not mesh-ready, and Fly must not kill the only relay
+  # for that (the boxes it holds keep working; `npm run ops -- mesh` shows why).
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# External :8444 → internal :3001, TLS ended by Fly with a PROXY-protocol header in front: the relay-address echo
+# (docs/relay-addresses.md). Phones (0.2 and 0.3) ask it under SNI flagship-services.fly.dev.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8444
+    handlers = ["tls", "proxy_proto"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

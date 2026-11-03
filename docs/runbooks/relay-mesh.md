@@ -109,6 +109,10 @@ in the same change. Also cost out pools, origins and health-check regions (§16 
 
 ## 7. Rollback (§13.3)
 
+Production at launch (one relay `iad1`, Rust, one machine of `flagship-services`): the ladder is in
+`docs/runbooks/final-deploy.md` 8f (`fly.mesh.toml` = the TS hub with the mesh kept, then `fly.toml` + `flyctl scale count 2`
+= mesh off); `bash scripts/release.sh --list` steps 23-28 are the bring-up.
+
 - One relay misbehaving: retire it (section 5). Its boxes drain to the rest.
 - Leave mesh mode: retire down to one relay; on it set `FLAGSHIP_MESH=off` (Fly: remove the env line, or deploy the
   non-mesh toml; the gym: `bash scripts/gym-refresh.sh` without `GYM_MESH`); point `.com`'s `TUNNEL_HUB_URL` back at its
