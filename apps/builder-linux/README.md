@@ -140,7 +140,7 @@ The pure layer is fully unit-tested; the following need a live Linux desktop:
     `sudo dnf install python3-gobject gtk4 libadwaita`
   - Arch:
     `sudo pacman -S python-gobject gtk4 libadwaita`
-- **Node.js 20+** somewhere on `PATH` — the Node CLI remasters the
+- **Node.js 22+** somewhere on `PATH` — the Node CLI remasters the
   user-supplied ISO.
 - **`lsblk`** — ships on every Linux distro.
 - **`pkexec`** (PolicyKit) — ships on every modern desktop distro (NOT in

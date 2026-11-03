@@ -21,7 +21,7 @@
 #   - the Flagship icon
 #
 # The user must still have:
-#   - node (>=20) installed system-wide (`apt install nodejs` or via nvm)
+#   - node (>=22) installed system-wide (`apt install nodejs` or via nvm)
 #   - pkexec (ships on every modern desktop distro)
 #
 # Both are runtime prereqs — bundling Node ~80MB into the AppImage would
@@ -93,7 +93,7 @@ install -Dm755 "${LINUX_DIR}/disk_write.py"        "${APPDIR}/usr/share/flagship
 ( cd "${REPO_ROOT}" && npx tsc -b packages/flagship-builder )
 mkdir -p "${APPDIR}/usr/share/flagship-builder/cli-dist"
 "${REPO_ROOT}/node_modules/.bin/esbuild" "${REPO_ROOT}/packages/flagship-builder/dist/cli.js" \
-  --bundle --platform=node --target=node20 --format=esm --log-level=warning \
+  --bundle --platform=node --target=node22 --format=esm --log-level=warning \
   --banner:js="import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" \
   --outfile="${APPDIR}/usr/share/flagship-builder/cli-dist/cli.mjs"
 
