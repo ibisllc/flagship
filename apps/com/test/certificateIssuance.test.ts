@@ -7,7 +7,9 @@ import { describe, expect, it, vi } from "vitest";
 import { webcrypto } from "node:crypto";
 import { D1Storage, type D1Database } from "@flagship/storage";
 import {
+  boxNameList,
   ed,
+  nameListSha256,
   signDeviceCapabilityGrant,
   SERVER_WILDCARD_GRANT_MAX_AGE_MS,
   signServerWildcardGrant,
@@ -760,6 +762,101 @@ describe("the server wildcard grant has an age limit and is bound to the registr
       expect(regGen).toBe(2);
       expect((await ask(w, { cls: "apps", names: both, regGen, grant: before })).json.code).toBe("issuance-wildcard-grant");
       expect((await ask(w, { cls: "apps", names: both, regGen, grant: grantAt(w.clock.t - 1000) })).res.status).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+// ── 2026-11-03 review: renewal-window and abandoned-order caps, policy scope ──
+
+describe("the renewal window holds across a name-set change the grant did not make", () => {
+  const grantAt = (issuedAt: number) => ({
+    issuedAt,
+    signature: hex(signServerWildcardGrant({ username: "alice", serverDomain: SERVER, stkPubHex: BOX, issuedAt }, (m) => ed.sign(m, ADMIN))),
+  });
+  const both = [`*.${SERVER}`, `*.alice.${APEX}`];
+
+  it("refuses dropping a still-valid grant early, and lets a newly granted account wildcard through", async () => {
+    const w = await setup();
+    try {
+      const first = await issue(w, { cls: "apps", names: both, grant: grantAt(w.clock.t - 1000) });
+      expect(first.done.status).toBe("issued");
+      const dropped = await ask(w, { cls: "apps", names: [`*.${SERVER}`], csr: await makeCsr([`*.${SERVER}`], { keys: first.csr.keys }) });
+      expect(dropped.json.code).toBe("issuance-not-due");
+    } finally {
+      w.close();
+    }
+  });
+
+  it("lets a box that gets the grant after its certificate add the account wildcard at once", async () => {
+    const w = await setup();
+    try {
+      const first = await issue(w, { cls: "apps", names: [`*.${SERVER}`] });
+      expect(first.done.status).toBe("issued");
+      const granted = await ask(w, { cls: "apps", names: both, grant: grantAt(w.clock.t - 1000), csr: await makeCsr(both, { keys: first.csr.keys }) });
+      expect(granted.res.status, JSON.stringify(granted.json)).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+describe("an issued certificate forgives only the order right before it", () => {
+  it("still counts a device's earlier failed orders against the account", async () => {
+    const w = await setup();
+    try {
+      const device = hex(ed.getPublicKey(seed(150)));
+      const row = (id: number, status: string, at: number) =>
+        w.db
+          .prepare(
+            "INSERT INTO certificate_orders (order_id, request_id, device_pub, username, server_domain, class, reg_gen, names, zone, csr_b64, csr_spki_sha256, order_json, signature, status, step, acme_ordered_at, error_code, created_at, updated_at) VALUES (?, ?, ?, 'alice', ?, 'control', 1, ?, ?, 'x', 'x', '{}', 'x', ?, 'done', ?, ?, ?, ?)",
+          )
+          .bind(String(id).padStart(32, "0"), `r${id}`, device, `x.alice.${APEX}`, `x.alice.${APEX}`, `alice.${APEX}`, status, at, status === "failed" ? "issuance-superseded" : null, at, at)
+          .run();
+      const n = ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay + 1;
+      for (let i = 0; i < n; i++) await row(i + 1, "failed", w.clock.t - 60_000 + i);
+      await row(n + 1, "issued", w.clock.t - 30_000);
+      const r = await ask(w, { cls: "phone", names: [`alice.${APEX}`] });
+      expect(r.res.status).toBe(429);
+      expect(r.json.code).toBe("issuance-rate-limited");
+    } finally {
+      w.close();
+    }
+  });
+});
+
+describe("the serving policy's signed scope bounds the apps certificate", () => {
+  async function putPolicy(w: World, scopeSha256: string) {
+    const p: ServingPolicy = { account: "alice", box: BOX, regGen: 1, policyGen: 1, grace: "indefinite", onLapse: "stop-apps", scopeSha256, issuedAt: w.clock.t };
+    await w.db
+      .prepare("INSERT INTO serving_policies (username, box_pub, reg_gen, policy_gen, record_json, signature, updated_at) VALUES ('alice', ?, 1, 1, ?, ?, ?)")
+      .bind(BOX, JSON.stringify(p), hex(signServingRecord("serving-policy", p, (m) => ed.sign(m, ADMIN))), w.clock.t)
+      .run();
+  }
+
+  it("refuses app names a policy for another name list does not cover", async () => {
+    const w = await setup();
+    try {
+      await putPolicy(w, "ab".repeat(32));
+      const r = await ask(w, { cls: "apps", names: [`*.${SERVER}`] });
+      expect(r.res.status).toBe(403);
+      expect(r.json).toMatchObject({ code: "issuance-no-serving", reason: "scope" });
+    } finally {
+      w.close();
+    }
+  });
+
+  it("a scope without the account wildcard covers only the server's own wildcard; the full list covers both", async () => {
+    const w = await setup();
+    try {
+      await putPolicy(w, nameListSha256([{ class: "control", name: SERVER }, { class: "apps", name: `*.${SERVER}` }]));
+      expect((await ask(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`], grant: true })).json).toMatchObject({ reason: "scope" });
+      expect((await ask(w, { cls: "apps", names: [`*.${SERVER}`] })).res.status).toBe(202);
+      await w.db.prepare("DELETE FROM serving_policies").run();
+      await w.db.prepare("DELETE FROM certificate_orders").run();
+      await putPolicy(w, nameListSha256(boxNameList("home", "alice", APEX)));
+      expect((await ask(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`], grant: true })).res.status).toBe(202);
     } finally {
       w.close();
     }

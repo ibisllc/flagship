@@ -51,11 +51,18 @@ public struct ServingRenewer {
         self.now = now
     }
 
-    /// Delegate this device's renewal key with the admin root (already opened by the caller), once.
+    /// The stored delegation of `key` while it is current (not within two weeks of its end).
+    func currentDelegation(_ key: RenewalKey.Signer) -> SignedServingRecord<RenewalKeyDelegation>? {
+        guard let d = delegation(username), d.record.renewalPub == key.publicKeyHex, d.record.isCurrent(now: now()) else { return nil }
+        return d
+    }
+
+    /// Delegate this device's renewal key with the admin root (already opened by the caller), when no current delegation is held.
     @discardableResult
     public func delegate(with adminRoot: Curve25519.Signing.PrivateKey) async -> SignedServingRecord<RenewalKeyDelegation>? {
-        if let d = delegation(username) { return d }
-        guard let key = renewalKey(), let device = deviceKeyPub() else { return nil }
+        guard let key = renewalKey() else { return nil }
+        if let d = currentDelegation(key) { return d }
+        guard let device = deviceKeyPub() else { return nil }
         let record = RenewalKeyDelegation(account: username, renewalPub: key.publicKeyHex, deviceId: device, issuedAt: now())
         guard let bytes = try? record.canonicalBytes(),
               let sig = try? ServingAuthority.signEd25519(bytes, key: adminRoot) else { return nil }
@@ -73,7 +80,7 @@ public struct ServingRenewer {
     /// Nil under an indefinite policy or with no key to sign with.
     public func signLease(_ policy: ServingPolicy, adminRoot: Curve25519.Signing.PrivateKey?) -> SignedServingLease? {
         guard let lease = ServingAuthority.leaseFor(policy, now: now(), leaseId: ServingAuthority.randomLeaseId()) else { return nil }
-        if let d = delegation(username), let key = renewalKey(), key.publicKeyHex == d.record.renewalPub,
+        if let key = renewalKey(), let d = delegation(username), key.publicKeyHex == d.record.renewalPub, d.record.expiresAt > now(),
            let sig = try? ServingAuthority.signLeaseP256(lease, sign: key.sign) {
             return SignedServingLease(record: lease, signature: sig, delegation: d)
         }
@@ -120,7 +127,7 @@ public struct ServingRenewer {
         }
         guard !finite.isEmpty else { return 0 }
         let root = silentAdminRoot()
-        if delegation(username) == nil, let root { await delegate(with: root) }
+        if let root { await delegate(with: root) }
         let signed = finite.compactMap { domain, policy in signLease(policy, adminRoot: root).map { (serverDomain: domain, lease: $0) } }
         guard !signed.isEmpty else { return 0 }
         if await post(signed) {
@@ -155,7 +162,7 @@ public enum ServingRenewal {
         Keystore.onAdminRootOpened = { key in
             prior?(key)
             Task { @MainActor in
-                guard let r = renewer(), RenewalKey.delegation(account: r.username) == nil else { return }
+                guard let r = renewer(), let signer = r.renewalKey(), r.currentDelegation(signer) == nil else { return }
                 if await r.delegate(with: key) != nil { await r.renew() }
             }
         }

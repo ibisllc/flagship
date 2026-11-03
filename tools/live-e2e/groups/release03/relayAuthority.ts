@@ -328,7 +328,7 @@ export const relayAuthority: Group = {
         const sl = lease(p, 300);
         const undelegated = await postLeases({ lease: sl, signature: signServingLeaseP256(sl, stranger), delegationPub: bytesToHex(p256.getPublicKey(stranger, true)) });
         assert(undelegated.accepted === 0, "an undelegated key's lease was accepted");
-        const d: RenewalKeyDelegation = { account: user, alg: "p256", renewalPub, deviceId: devicePub, issuedAt: Date.now() };
+        const d: RenewalKeyDelegation = { account: user, alg: "p256", renewalPub, deviceId: devicePub, issuedAt: Date.now(), expiresAt: Date.now() + 30 * 86_400_000 };
         const dr = await postJson(`https://${CONTROL}/api/accounts/${user}/renewal-delegations`, { delegation: d, signature: bytesToHex(signServingRecord("renewal-key-delegation", d, adminSign)) });
         assert(dr.status === 200, `delegation ${dr.status}: ${short(dr.text)}`);
         const r = await postLeases(delegated(lease(p, 240)));

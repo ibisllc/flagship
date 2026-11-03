@@ -411,7 +411,7 @@ function pickPolicy(r: ServingPolicy): ServingPolicy {
 }
 
 function pickDelegation(r: RenewalKeyDelegation): RenewalKeyDelegation {
-  return { account: r.account, alg: r.alg, renewalPub: r.renewalPub, deviceId: r.deviceId, issuedAt: r.issuedAt };
+  return { account: r.account, alg: r.alg, renewalPub: r.renewalPub, deviceId: r.deviceId, issuedAt: r.issuedAt, expiresAt: r.expiresAt };
 }
 
 function pickLease(r: ServingLease): ServingLease {

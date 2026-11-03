@@ -192,10 +192,22 @@ describe("the renewal key", () => {
     const w = world();
     const rec = await ensureDelegation(w.deps);
     const post = w.posts.find((p) => p.url === "https://flagshipserver.com/api/accounts/alice/renewal-delegations")!;
-    expect(post.body.delegation).toEqual({ account: "alice", alg: "p256", renewalPub: rec.pubHex, deviceId: DEVICE, issuedAt: 1_800_000_000_000 });
+    expect(post.body.delegation).toEqual({ account: "alice", alg: "p256", renewalPub: rec.pubHex, deviceId: DEVICE, issuedAt: 1_800_000_000_000, expiresAt: 1_800_000_000_000 + 90 * 86_400_000 });
     expect(verifyServingRecord("renewal-key-delegation", post.body.delegation, post.body.signature, ADMIN_PUB)).toBe(true);
     await ensureDelegation(w.deps);
     expect(w.posts.filter((p) => p.url.endsWith("/renewal-delegations"))).toHaveLength(1);
+  });
+
+  it("signs a new delegation once the old one is within two weeks of its end", async () => {
+    let now = 1_800_000_000_000;
+    const w = world({ now: () => now });
+    const first = await ensureDelegation(w.deps);
+    now += 75 * 86_400_000;
+    expect((await ensureDelegation(w.deps)).delegation.signature).toBe(first.delegation.signature);
+    now += 2 * 86_400_000;
+    const next = await ensureDelegation(w.deps);
+    expect(next.delegation.record).toMatchObject({ issuedAt: now, expiresAt: now + 90 * 86_400_000, renewalPub: first.pubHex });
+    expect(w.posts.filter((p) => p.url.endsWith("/renewal-delegations"))).toHaveLength(2);
   });
 
   it("keeps a delegation .com didn't take and posts the same one next time", async () => {

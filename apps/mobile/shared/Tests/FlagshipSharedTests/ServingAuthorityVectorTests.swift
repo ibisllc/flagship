@@ -97,6 +97,9 @@ final class ServingAuthorityVectorTests: XCTestCase {
         XCTAssertThrowsError(try ServingLease(account: "alice", box: box, regGen: 1, policyGen: 1, leaseId: "ab", issuedAt: 5, notAfter: 6).canonicalBytes())
         XCTAssertThrowsError(try ServingLease(account: "alice", box: box, regGen: 1, policyGen: 1, leaseId: String(repeating: "ab", count: 16), issuedAt: 6, notAfter: 6).canonicalBytes())
         XCTAssertThrowsError(try RenewalKeyDelegation(account: "alice", renewalPub: "04" + String(repeating: "aa", count: 32), deviceId: box, issuedAt: 1).canonicalBytes())
+        let p256 = "02" + String(repeating: "aa", count: 32)
+        XCTAssertThrowsError(try RenewalKeyDelegation(account: "alice", renewalPub: p256, deviceId: box, issuedAt: 5, expiresAt: 5).canonicalBytes())
+        XCTAssertThrowsError(try RenewalKeyDelegation(account: "alice", renewalPub: p256, deviceId: box, issuedAt: 5, expiresAt: 5 + RenewalKeyDelegation.maxLifetimeMs + 1).canonicalBytes())
     }
 
     /// A key CryptoKit makes signs a lease the reference rule accepts, whatever S CryptoKit chose.

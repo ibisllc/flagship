@@ -8,7 +8,7 @@ import FlagshipAPI
 /// `packages/protocol/test-vectors/serving-authority/vectors.json`:
 ///
 ///   flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
-///   flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>
+///   flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>
 ///   flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
 ///
 /// The admin root signs the policy and each device's renewal-key delegation (Ed25519). An admin
@@ -36,7 +36,10 @@ extension RenewalKeyDelegation {
         try ServingAuthority.hex("renewalPub", renewalPub, ServingAuthority.isP256Pub)
         try ServingAuthority.hex("deviceId", deviceId, ServingAuthority.isHex64)
         try ServingAuthority.int("issuedAt", issuedAt, min: 0)
-        return ServingAuthority.join([Self.tag, account, alg, renewalPub, deviceId, String(issuedAt)])
+        try ServingAuthority.int("expiresAt", expiresAt, min: 0)
+        guard expiresAt > issuedAt else { throw ServingRecordError.invalid("expiresAt must be after issuedAt") }
+        guard expiresAt - issuedAt <= Self.maxLifetimeMs else { throw ServingRecordError.invalid("a delegation lasts at most 90 days") }
+        return ServingAuthority.join([Self.tag, account, alg, renewalPub, deviceId, String(issuedAt), String(expiresAt)])
     }
 }
 

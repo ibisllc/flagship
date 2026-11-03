@@ -1,6 +1,6 @@
 // This admin device's serving renewal key (docs/architecture-v2/serving-wiring.md section 4): an
 // ECDSA P-256 key in the Android Keystore that signs the serving lease each time the app opens,
-// with no prompt. The admin root delegates it once (`renewal-key-delegation/v1`); removing the
+// with no prompt. The admin root delegates it for up to 90 days at a time (`renewal-key-delegation/v2`); removing the
 // device revokes it.
 //
 // - StrongBox when the phone has one, else the TEE; never exportable.

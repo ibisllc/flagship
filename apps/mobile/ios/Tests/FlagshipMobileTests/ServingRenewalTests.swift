@@ -49,6 +49,24 @@ final class ServingRenewalTests: XCTestCase {
             now: { [now] in now })
     }
 
+    func testAnExpiringDelegationIsSignedAgainAndAnExpiredOneSignsNothing() async throws {
+        let old = RenewalKeyDelegation(account: user, renewalPub: renewalSigner.publicKeyHex, deviceId: device,
+                                       issuedAt: now - 89 * 86_400_000, expiresAt: now - 1)
+        delegations[user] = SignedServingRecord(record: old, signature: try ServingAuthority.signEd25519(old.canonicalBytes(), key: admin))
+        let mailbox = MockSecretMailboxClient()
+        mailbox.serving = [AccountServingEntry(serverDomain: "home.alice.flagship.services", boxPub: boxA, regGen: 1, policy: policy(boxA, .sevenDays))]
+
+        let none = await renewer(mailbox: mailbox, box: nil, silentRoot: false).renew()
+        XCTAssertEqual(none, 0, "an expired delegation signs no lease")
+
+        let one = await renewer(mailbox: mailbox, box: nil, silentRoot: true).renew()
+        XCTAssertEqual(one, 1)
+        let d = try XCTUnwrap(mailbox.renewalDelegations.first?.body.delegation)
+        XCTAssertEqual(d.issuedAt, now)
+        XCTAssertEqual(d.expiresAt, now + RenewalKeyDelegation.maxLifetimeMs)
+        XCTAssertEqual(mailbox.servingLeasePosts.first?.body.leases.first?.delegationPub, renewalSigner.publicKeyHex)
+    }
+
     func testOpeningSignsOneLeasePerFiniteServerWithTheDelegatedKey() async throws {
         let mailbox = MockSecretMailboxClient()
         mailbox.serving = [

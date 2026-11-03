@@ -40,7 +40,9 @@ import {
   type IssuanceRefusal,
 } from "@flagship/control-plane";
 import {
+  boxNameList,
   canonicalCertificateOrder,
+  nameListSha256,
   emptyRevocationState,
   serverWildcardGrantInDate,
   servingDecision,
@@ -98,9 +100,11 @@ const DEFAULT_PROPAGATION_MS = 10_000;
 const CHALLENGE_QUIET_MS = 90_000;
 /** A pending order no poll has touched for this long is not in flight (its device polls every few seconds). */
 const ABANDONED_ORDER_MS = 120_000;
-/** The order `f` was followed by a certificate for the same device and class. */
+/** The order right after `f` from the same device and class was issued (only that one order is forgiven). */
 const LATER_ISSUED =
-  "EXISTS (SELECT 1 FROM certificate_orders i WHERE i.device_pub = f.device_pub AND i.class = f.class AND i.status = 'issued' AND i.created_at > f.created_at)";
+  "EXISTS (SELECT 1 FROM certificate_orders i WHERE i.device_pub = f.device_pub AND i.class = f.class AND i.status = 'issued' AND i.created_at > f.created_at " +
+  "AND NOT EXISTS (SELECT 1 FROM certificate_orders m WHERE m.device_pub = f.device_pub AND m.class = f.class AND m.order_id <> f.order_id AND m.order_id <> i.order_id " +
+  "AND m.created_at >= f.created_at AND m.created_at <= i.created_at))";
 const LOCK_MS = 30_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
@@ -263,7 +267,21 @@ async function authorize(
     now,
   });
   if (!d.apps) return { ok: false, code: "issuance-no-serving", extra: { reason: d.reason } };
+  if (bundle.policy && !policyScopeCovers(bundle.policy.record.scopeSha256, label, r.account, apex, accountWildcard)) {
+    return { ok: false, code: "issuance-no-serving", extra: { reason: "scope" } };
+  }
   return { ok: true, value: { names: issuanceNames({ class: "apps", account: r.account, apex, server: label, accountWildcard }) } };
+}
+
+/**
+ * The policy's signed scope is the box's canonical name list (boxNameList: its control name and the app wildcards
+ * under it and under the account). A policy whose scope leaves out the account wildcard (control name and the
+ * server wildcard only) covers a certificate without it; any other scope covers nothing.
+ */
+function policyScopeCovers(scopeSha256: string, label: string, account: string, apex: string, accountWildcard: boolean): boolean {
+  const full = boxNameList(label, account, apex);
+  if (scopeSha256 === nameListSha256(full)) return true;
+  return !accountWildcard && scopeSha256 === nameListSha256(full.filter((n) => n.name !== `*.${account}.${apex}`));
 }
 
 async function authorizePhone(
@@ -460,7 +478,7 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
 
   const key = namesKey(names);
   const zone = `${account}.${s.apex}`;
-  const limited = await limits(s, { device: order.device, cls: order.class, key, zone, account, spki: csr.spkiSha256 });
+  const limited = await limits(s, { device: order.device, cls: order.class, key, zone, account, spki: csr.spkiSha256, server, grant });
   if (limited instanceof Response) return limited;
 
   await supersedePending(s, order.device, order.class);
@@ -496,20 +514,20 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
 /** H7: refuse what is not due, and stay under the CA's limits. A refusal, or whether the order is a due renewal. */
 async function limits(
   s: Service,
-  o: { device: string; cls: string; key: string; zone: string; account: string; spki: string },
+  o: { device: string; cls: string; key: string; zone: string; account: string; spki: string; server: string | null; grant: AcmeState["grant"] },
 ): Promise<Response | { renewal: boolean }> {
   const backoff = await s.db.prepare("SELECT until FROM issuance_backoff WHERE scope = 'ca' AND until > ?").bind(s.now).first<{ until: number }>();
   if (backoff) return refuse("issuance-rate-limited", { retryAfterMs: backoff.until - s.now });
 
   const prev = await s.db
     .prepare(
-      "SELECT names, csr_spki_sha256, not_before, not_after FROM certificate_orders o WHERE device_pub = ? AND class = ? AND status = 'issued' AND not_after > ? " +
+      "SELECT names, server_domain, acme_json, csr_spki_sha256, not_before, not_after FROM certificate_orders o WHERE device_pub = ? AND class = ? AND status = 'issued' AND not_after > ? " +
         "AND NOT EXISTS (SELECT 1 FROM certificate_revocations r WHERE r.order_id = o.order_id) ORDER BY not_after DESC LIMIT 1",
     )
     .bind(o.device, o.cls, s.now)
-    .first<{ names: string; csr_spki_sha256: string; not_before: number; not_after: number }>();
+    .first<{ names: string; server_domain: string | null; acme_json: string | null; csr_spki_sha256: string; not_before: number; not_after: number }>();
   const renewal = !!prev && s.now >= renewalDueAt({ notBefore: prev.not_before, notAfter: prev.not_after });
-  if (prev && prev.names === o.key) {
+  if (prev && !nameSetMayChange(prev, o, s.now)) {
     const dueAt = renewalDueAt({ notBefore: prev.not_before, notAfter: prev.not_after });
     if (s.now < dueAt) {
       const rekeyed = await s.db
@@ -549,6 +567,28 @@ async function limits(
     return refuse("issuance-rate-limited", { retryAfterMs: over });
   }
   return { renewal };
+}
+
+/**
+ * A device's names change only when what grants them did: the server's name, or its account wildcard grant (a newer
+ * one, or the old one aged out). Leaving a still-valid grant off, or sending an older one, does not start a new
+ * renewal window.
+ */
+function nameSetMayChange(
+  prev: { names: string; server_domain: string | null; acme_json: string | null },
+  o: { key: string; server: string | null; grant: AcmeState["grant"] },
+  now: number,
+): boolean {
+  if (prev.names === o.key) return false;
+  if ((prev.server_domain ?? null) !== o.server) return true;
+  let prevGrant: AcmeState["grant"] = null;
+  try {
+    prevGrant = prev.acme_json ? ((JSON.parse(prev.acme_json) as Partial<AcmeState>).grant ?? null) : null;
+  } catch {
+    prevGrant = null;
+  }
+  if (o.grant) return !prevGrant || o.grant.issuedAt > prevGrant.issuedAt;
+  return !!prevGrant && !serverWildcardGrantInDate(prevGrant.issuedAt, now);
 }
 
 /** ACME orders the CA saw in the last 3 hours: all of them, and those that were not a due renewal. */
@@ -892,7 +932,7 @@ const SWEEP_REVOCATIONS_PER_RUN = 3;
 /** An apps certificate outlives a lapsed serving lease this long before it is revoked (the owner may come back). */
 export const LAPSED_LEASE_REVOKE_MS = 30 * 86_400_000;
 const SWEEP_CURSOR = "sweep-cursor";
-const LEASE_LAPSE: ReadonlySet<string> = new Set(["no-lease", "lease-expired", "policy-stale", "policy-signature"]);
+const LEASE_LAPSE: ReadonlySet<string> = new Set(["no-lease", "lease-expired", "policy-stale", "policy-signature", "scope"]);
 
 /**
  * Why an issued certificate's holder lost the authority it was issued under, or null while it still has it. A box that

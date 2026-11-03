@@ -443,7 +443,7 @@ fn a_lease_without_a_hint_is_offered_under_each_key() {
         "leases": [{"record": {"account": "alice", "box": "bb".repeat(32), "regGen": 2, "policyGen": 1,
             "leaseId": "0".repeat(32), "issuedAt": 1, "notAfter": 2}, "signature": "cc".repeat(64)}],
         "delegations": [{"delegation": {"account": "alice", "alg": "p256", "renewalPub": "04", "deviceId": "dd".repeat(32),
-            "issuedAt": 1}, "signature": "ee"}],
+            "issuedAt": 1, "expiresAt": 2}, "signature": "ee"}],
     });
     let r = parse_com_serving_record(&body).unwrap();
     assert_eq!(r.leases.len(), 2);

@@ -48,7 +48,11 @@ public struct ServingPolicy: Codable, Equatable, Sendable {
 }
 
 public struct RenewalKeyDelegation: Codable, Equatable, Sendable {
-    public static let tag = "flagship/renewal-key-delegation/v1"
+    public static let tag = "flagship/renewal-key-delegation/v2"
+    /// The longest a delegation lasts.
+    public static let maxLifetimeMs: Int64 = 90 * 86_400_000
+    /// A delegation this close to its end is signed again at the next admin-root signature.
+    public static let renewBeforeMs: Int64 = 14 * 86_400_000
     public var account: String
     public var alg: String
     /// SEC1 compressed P-256 point, 66 lowercase hex.
@@ -56,10 +60,16 @@ public struct RenewalKeyDelegation: Codable, Equatable, Sendable {
     /// The device's account device key (64 hex).
     public var deviceId: String
     public var issuedAt: Int64
+    /// Leases the key signed stop counting here.
+    public var expiresAt: Int64
 
-    public init(account: String, renewalPub: String, deviceId: String, issuedAt: Int64) {
+    public init(account: String, renewalPub: String, deviceId: String, issuedAt: Int64, expiresAt: Int64? = nil) {
         self.account = account; self.alg = "p256"; self.renewalPub = renewalPub; self.deviceId = deviceId; self.issuedAt = issuedAt
+        self.expiresAt = expiresAt ?? issuedAt + Self.maxLifetimeMs
     }
+
+    /// Still usable at `now`, and not yet due to be signed again.
+    public func isCurrent(now: Int64) -> Bool { expiresAt - now > Self.renewBeforeMs }
 }
 
 public struct ServingLease: Codable, Equatable, Sendable {

@@ -7,7 +7,8 @@
 // Under a finite policy every admin device signs a `serving-lease/v1` each time
 // the app is opened, with a renewal key: a non-extractable WebCrypto ECDSA P-256
 // key kept in IndexedDB, delegated once by the admin root
-// (`renewal-key-delegation/v1`). No prompt, nothing under an indefinite policy.
+// (`renewal-key-delegation/v2`, for at most 90 days, signed again before it
+// ends). No prompt, nothing under an indefinite policy.
 //
 // Canonical bytes mirror @flagship/protocol servingAuthority.ts byte for byte
 // (shared vectors: packages/protocol/test-vectors/serving-authority/vectors.json).
@@ -34,12 +35,15 @@ import { rememberServingState } from "./bootSuspension.js";
 
 import { tr } from "./i18n.js";
 export const TAG_SERVING_POLICY = "flagship/serving-policy/v1";
-export const TAG_RENEWAL_KEY_DELEGATION = "flagship/renewal-key-delegation/v1";
+export const TAG_RENEWAL_KEY_DELEGATION = "flagship/renewal-key-delegation/v2";
 export const TAG_SERVING_LEASE = "flagship/serving-lease/v1";
 
 export const GRACES = ["7d", "30d", "indefinite"];
 export const GRACE_MS = { "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
 export const ON_LAPSE = ["stop-apps", "lock-server"];
+export const RENEWAL_DELEGATION_MAX_MS = 90 * 86_400_000;
+/** A delegation this close to its end is signed again at the next admin-root signature. */
+export const RENEWAL_DELEGATION_RENEW_MS = 14 * 86_400_000;
 
 /** Foreground renewals run at most this often (a new lease a few times a day is plenty). */
 export const RENEW_MIN_INTERVAL_MS = 30 * 60_000;
@@ -80,14 +84,17 @@ export function canonicalServingPolicy(p) {
   return te([TAG_SERVING_POLICY, p.account, p.box, p.regGen, p.policyGen, p.grace, p.onLapse, p.scopeSha256, p.issuedAt]);
 }
 
-/** `flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>` */
+/** `flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>` */
 export function canonicalRenewalKeyDelegation(d) {
   accountField(d.account);
   if (d.alg !== "p256") throw new Error("alg must be p256");
   hexField("renewalPub", d.renewalPub, P256_PUB);
   hexField("deviceId", d.deviceId);
   intField("issuedAt", d.issuedAt);
-  return te([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt]);
+  intField("expiresAt", d.expiresAt);
+  if (d.expiresAt <= d.issuedAt) throw new Error("expiresAt must be after issuedAt");
+  if (d.expiresAt - d.issuedAt > RENEWAL_DELEGATION_MAX_MS) throw new Error("a delegation lasts at most 90 days");
+  return te([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt, d.expiresAt]);
 }
 
 /** `flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>` */
@@ -267,9 +274,10 @@ export async function ensureDelegation(deps = {}) {
   if (!signer || signer.kind !== "admin") throw new Error("only an admin device delegates a renewal key");
   const account = accountOf(session);
   let rec = await ensureRenewalKey(deps);
-  if (!(rec.delegation && rec.delegation.record?.account === account && rec.delegation.record?.renewalPub === rec.pubHex)) {
+  const now = (deps.now ?? Date.now)();
+  if (!delegationCurrent(rec, account, now)) {
     const deviceId = deps.deviceId ?? (await accountDeviceKeyHex(session, profile));
-    const record = { account, alg: "p256", renewalPub: rec.pubHex, deviceId, issuedAt: (deps.now ?? Date.now)() };
+    const record = { account, alg: "p256", renewalPub: rec.pubHex, deviceId, issuedAt: now, expiresAt: now + RENEWAL_DELEGATION_MAX_MS };
     const signature = bytesToHex(await signer.sign(canonicalRenewalKeyDelegation(record)));
     rec = { ...rec, delegation: { record, signature, posted: false } };
     await kvOf(deps).put(recordKeyOf(deps), rec);
@@ -294,6 +302,11 @@ export async function ensureDelegation(deps = {}) {
     }
   }
   return rec;
+}
+
+function delegationCurrent(rec, account, now) {
+  const d = rec?.delegation?.record;
+  return !!d && d.account === account && d.renewalPub === rec.pubHex && Number.isSafeInteger(d.expiresAt) && d.expiresAt - now > RENEWAL_DELEGATION_RENEW_MS;
 }
 
 /** This device's account device key (the delegation's `deviceId`), hex. */

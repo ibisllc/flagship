@@ -60,12 +60,13 @@
         "alg": "p256",
         "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
         "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-        "issuedAt": 1800000000000
+        "issuedAt": 1800000000000,
+        "expiresAt": 1807776000000
       },
-      "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07",
+      "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08",
       "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "alg": "ed25519",
-      "canonical": "flagship/renewal-key-delegation/v1|alice|p256|02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|1800000000000"
+      "canonical": "flagship/renewal-key-delegation/v2|alice|p256|02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|1800000000000|1807776000000"
     },
     {
       "kind": "serving-lease",
@@ -244,9 +245,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -453,9 +455,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -544,9 +547,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -601,9 +605,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -658,9 +663,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -715,9 +721,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -819,9 +826,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "a6f5170ec421b70bbf0cdc0a9f111ae90c077505965723d9ffd601ad225c77ad5b6492f6d3a35ba804d388a84246f2c8ccb0481de1497fb8c4176cfc7eedbc0f"
+              "signature": "f174ed48bf206ab5b3cb77e41eddf410a5ee18f5848fe08ccee801e016c63567c85b8747a4d927cdc6c1606d493f5b08a8044a10e47b38e4a8e567fadd55cf08"
             }
           }
         ],
@@ -876,9 +884,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -934,9 +943,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -991,9 +1001,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -1060,9 +1071,10 @@
                 "alg": "p256",
                 "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
                 "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
-                "issuedAt": 1800000000000
+                "issuedAt": 1800000000000,
+                "expiresAt": 1807776000000
               },
-              "signature": "891396d46f0dceceb578600dbca1593052e0f2b4618941867bc5a961abe3fd88f7b8789df114d12b644d2c015268fc8162156e1e5151ffb868442cebc48b2d07"
+              "signature": "2604d38992cdaf658a63ff5dba6d2f9ee2ab65fbafbbd0bb3fbf2b6ff6119c55eeb1bec444ca06beecaeb156ed91f17500e7c9d29a01a6e8aecf6c5db9891a08"
             }
           }
         ],
@@ -1080,6 +1092,123 @@
           }
         ],
         "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease",
+        "lock": false
+      }
+    },
+    {
+      "name": "delegation ends before the lease: the lease ends with it",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policies": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "grace": "7d",
+              "onLapse": "stop-apps",
+              "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+              "issuedAt": 1800000000000
+            },
+            "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
+          }
+        ],
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "d2af7ff7ffa3ba077b117b7cc724f72e992695aa52403270893f958a3c8305f73100282ccaac78304a6a4768f78fe9ad3718425e897b6cbf56291730a6dbd49b",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "alg": "p256",
+                "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000,
+                "expiresAt": 1800259200000
+              },
+              "signature": "915b9d9b7c971a1d713964bc9d8b525551d64035b33d5f01e7b63337e8957de37f86584defbe3c3220336493e1d461aa0580175af84ca980d2cb8778addca304"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": true,
+        "until": 1800259200000,
+        "policyGen": 1,
+        "onLapse": "stop-apps"
+      }
+    },
+    {
+      "name": "delegation expired",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policies": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "grace": "7d",
+              "onLapse": "stop-apps",
+              "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+              "issuedAt": 1800000000000
+            },
+            "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
+          }
+        ],
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "d2af7ff7ffa3ba077b117b7cc724f72e992695aa52403270893f958a3c8305f73100282ccaac78304a6a4768f78fe9ad3718425e897b6cbf56291730a6dbd49b",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "alg": "p256",
+                "renewalPub": "02591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000,
+                "expiresAt": 1800259200000
+              },
+              "signature": "915b9d9b7c971a1d713964bc9d8b525551d64035b33d5f01e7b63337e8957de37f86584defbe3c3220336493e1d461aa0580175af84ca980d2cb8778addca304"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800259200000
       },
       "expected": {
         "control": true,

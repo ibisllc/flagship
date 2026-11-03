@@ -20,7 +20,7 @@ import {
   type RelayBlessingRequest,
 } from "@flagship/protocol";
 import { mintRelayDirectory, publishDirectory, relayRow, type RelayDirectoryEnv } from "./relayDirectory.js";
-import { meshKeysFor, currentMeshEpoch, FEED_CACHE, FEED_OBJECTS, feedPut, servicesApexOf } from "./relayFeed.js";
+import { meshKeysFor, currentMeshEpoch, FEED_CACHE, FEED_OBJECTS, feedPut, resealMeshKeys, rotateMeshEpoch, servicesApexOf } from "./relayFeed.js";
 import { pokeServingFeed } from "./servingAuthority.js";
 
 export const RELAY_BLESSING_PATH = "/api/services/relay-blessing";
@@ -85,17 +85,20 @@ export async function handleRelayBlessing(
   let promoted = false;
   if (req.relayKey === row.next_relay_key) {
     // The staged key proved itself: it replaces the old one (new directory version; the old key's blessing is no
-    // longer the directory's key, so peers refuse it at once).
-    const meshKeys = env.RELAY_MESH_KEY_SEED ? meshKeysFor(env.RELAY_MESH_KEY_SEED, apex, row.relay_id, req.relayKey, await currentMeshEpoch(db)) : null;
+    // longer the directory's key, so peers refuse it at once). A new mesh-key epoch, sealed only to current keys,
+    // keeps whoever holds the old key from reading anything written from now on (as retiring a relay does).
     const r = await db
       .prepare(
-        "UPDATE relays SET relay_key = next_relay_key, next_relay_key = NULL, key_deadline = NULL, blessing_json = NULL, mesh_keys_json = ? " +
+        "UPDATE relays SET relay_key = next_relay_key, next_relay_key = NULL, key_deadline = NULL, blessing_json = NULL, mesh_keys_json = NULL " +
           "WHERE relay_id = ? AND next_relay_key = ? AND retired_at IS NULL",
       )
-      .bind(meshKeys ? JSON.stringify(meshKeys) : null, row.relay_id, req.relayKey)
+      .bind(row.relay_id, req.relayKey)
       .run();
     if (!r.meta?.changes) return refuse(409, "relay-key-unknown");
-    if (meshKeys && env.RELAY_FEED) await feedPut(env.RELAY_FEED, FEED_OBJECTS.keys(row.relay_id), meshKeys, FEED_CACHE.keys);
+    if (env.RELAY_MESH_KEY_SEED) {
+      await rotateMeshEpoch(db, `promote key ${row.relay_id}`, now);
+      await resealMeshKeys(env, db, now);
+    }
     row = (await relayRow(db, req.relayId))!;
     promoted = true;
   } else if (req.relayKey !== row.relay_key) {
@@ -141,7 +144,7 @@ export async function handleRelayBlessing(
   if (promoted) await mintRelayDirectory(env, db, ca, now);
   const publish = (async () => {
     await publishDirectory(env, db);
-    if (promoted) await pokeServingFeed(env, { type: "relay-feed" });
+    if (promoted) await pokeServingFeed(env, { type: "relay-feed", ...(env.RELAY_MESH_KEY_SEED ? { force: "tail" as const } : {}) });
   })().catch((e) => console.error(JSON.stringify({ event: "relay-directory-publish-failed", error: String(e) })));
   if (deps.waitUntil) deps.waitUntil(publish);
   else await publish;

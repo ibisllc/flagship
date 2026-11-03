@@ -142,7 +142,7 @@ export const serving: Group = {
           leases: [{ lease: stranger, signature: signServingLeaseP256(stranger, sk), delegationPub: renewalPub }],
         });
         assert(refused.status === 200 && (refused.json?.accepted ?? 0) === 0, `undelegated: ${short(refused.text)}`);
-        const d: RenewalKeyDelegation = { account: acct.username, alg: "p256", renewalPub, deviceId: bytesToHex(acct.keys.primaryDevice.publicKey), issuedAt: Date.now() };
+        const d: RenewalKeyDelegation = { account: acct.username, alg: "p256", renewalPub, deviceId: bytesToHex(acct.keys.primaryDevice.publicKey), issuedAt: Date.now(), expiresAt: Date.now() + 30 * 86_400_000 };
         const dr = await postJson(`https://${CONTROL}/api/accounts/${acct.username}/renewal-delegations`, {
           delegation: d,
           signature: bytesToHex(signServingRecord("renewal-key-delegation", d, adminSign)),

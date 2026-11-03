@@ -215,7 +215,7 @@ function parseLease(v: unknown): ServingLease | null {
 function parseDelegation(v: unknown): RenewalKeyDelegation | null {
   const o = asObject(v);
   if (!o) return null;
-  const d = { account: o.account, alg: o.alg, renewalPub: o.renewalPub, deviceId: o.deviceId, issuedAt: o.issuedAt } as RenewalKeyDelegation;
+  const d = { account: o.account, alg: o.alg, renewalPub: o.renewalPub, deviceId: o.deviceId, issuedAt: o.issuedAt, expiresAt: o.expiresAt } as RenewalKeyDelegation;
   try {
     canonicalRenewalKeyDelegation(d);
     return d;
@@ -269,17 +269,41 @@ interface LogRow {
   signature: string | null;
 }
 
+/**
+ * A live admin-root-signed grant with the `admin` scope: what a device needs for its renewal key to count on an account
+ * that pins an admin root. Binds one parameter, the current time. A device holds one active grant at a time, so a
+ * demotion revokes its admin grant first (0120's trigger revokes the renewal key then); a grant that merely expired is
+ * dropped here, at every read.
+ */
+const ADMIN_GRANT_LIVE =
+  "g.revoked_at IS NULL AND g.signer_root = 'admin-root' AND g.expires_at > ? AND EXISTS (SELECT 1 FROM json_each(g.scopes_json) WHERE value = 'admin') " +
+  "AND NOT EXISTS (SELECT 1 FROM device_identities i WHERE i.account_id = g.username AND i.device_id = g.device_id AND i.revoked_at IS NOT NULL)";
+
 const SQL = {
   servers: "SELECT server_domain, lower(identity_pubkey_hex) AS box_pub, reg_gen, revoked_at FROM servers WHERE username = ?",
   policies: "SELECT box_pub, reg_gen, policy_gen, record_json, signature FROM serving_policies WHERE username = ?",
   leases: "SELECT box_pub, signer_pub, reg_gen, policy_gen, record_json, signature, delegation_pub, not_after FROM serving_leases WHERE username = ?",
   delegations: "SELECT renewal_pub, username, device_id, record_json, signature, revoked_at FROM renewal_delegations WHERE username = ?",
+  adminRoot: "SELECT admin_root_pub_hex AS root FROM usernames WHERE username = ?",
+  adminDevices: `SELECT DISTINCT lower(g.device_pub_hex) AS d FROM device_capability_grants g WHERE lower(g.username) = ? AND ${ADMIN_GRANT_LIVE}`,
 };
 
 /** Reads started together: through `.com`'s RequestD1 they leave as one D1 batch with any other reads of the tick. */
 async function readAll<T>(db: D1Database, stmts: Array<[string, unknown[]]>): Promise<T[][]> {
   const results = await Promise.all(stmts.map(([sql, args]) => db.prepare(sql).bind(...args).all<T>()));
   return results.map((r) => r.results ?? []);
+}
+
+/**
+ * The renewal keys that count: not revoked and, on an account that pins an admin root, held by a device that is still
+ * an admin. An account without one (legacy) keeps the device check made when the key was delegated.
+ */
+function liveDelegations(rows: readonly DelegationRow[], adminRoot: unknown, adminDevices: readonly unknown[]): Map<string, DelegationRow> {
+  const admins = new Set((adminDevices as Array<{ d: string }>).map((r) => r.d));
+  const pinned = (adminRoot as Array<{ root: string | null }>)[0]?.root != null;
+  const live = new Map<string, DelegationRow>();
+  for (const d of rows) if (d.revoked_at == null && (!pinned || admins.has(d.device_id.toLowerCase()))) live.set(d.renewal_pub, d);
+  return live;
 }
 
 /** The account's live row for a box key (the highest generation if a key was registered twice). */
@@ -346,19 +370,20 @@ export interface ServingBundle {
 }
 
 /** Everything stored for one box, unverified (the box and the relay verify it themselves). Null: no such box. */
-export async function servingBundle(db: D1Database, username: string, box: string): Promise<ServingBundle | null> {
+export async function servingBundle(db: D1Database, username: string, box: string, now = Date.now()): Promise<ServingBundle | null> {
   const u = username.toLowerCase();
   const b = box.toLowerCase();
-  const [servers, policies, leases, delegations] = await readAll<unknown>(db, [
+  const [servers, policies, leases, delegations, adminRoot, adminDevices] = await readAll<unknown>(db, [
     [SQL.servers, [u]],
     ["SELECT box_pub, reg_gen, policy_gen, record_json, signature FROM serving_policies WHERE username = ? AND box_pub = ?", [u, b]],
     ["SELECT box_pub, signer_pub, reg_gen, policy_gen, record_json, signature, delegation_pub, not_after FROM serving_leases WHERE username = ? AND box_pub = ?", [u, b]],
     [SQL.delegations, [u]],
+    [SQL.adminRoot, [u]],
+    [SQL.adminDevices, [u, now]],
   ]);
   const server = currentServer(servers as ServerRow[], b);
   if (!server) return null;
-  const live = new Map<string, DelegationRow>();
-  for (const d of delegations as DelegationRow[]) if (d.revoked_at == null) live.set(d.renewal_pub, d);
+  const live = liveDelegations(delegations as DelegationRow[], adminRoot, adminDevices);
   const policyRow = (policies as PolicyRow[]).find((p) => p.reg_gen === server.reg_gen);
   return {
     regGen: server.reg_gen,
@@ -533,7 +558,7 @@ export async function tryServingRoute(request: Request, env: ServingEnv, deps: S
     const u = safeDecode(m[1]!);
     if (!u) return refuse(400, "serving-malformed");
     const user = await deps.usernames.get(u);
-    const bundle = user ? await servingBundle(db, u, m[2]!.toLowerCase()) : null;
+    const bundle = user ? await servingBundle(db, u, m[2]!.toLowerCase(), now) : null;
     if (!user || !bundle) return refuse(404, "serving-unknown-box");
     // A demo account's keys are derived by this Worker (DEMO_IRK_KEK), so a box's own pin of its admin key guards
     // nothing `.com` couldn't sign anyway: the relay may judge a demo box that pins no key (a 0.2 box) under this one.
@@ -624,20 +649,31 @@ async function postDelegation(
   if (!delegation || !isSig(signature)) return refuse(400, "serving-malformed");
   if (delegation.account !== u) return refuse(403, "serving-account");
   if (delegation.issuedAt > now + SERVING_CLOCK_SKEW_MS) return refuse(400, "serving-clock");
+  if (delegation.expiresAt <= now) return refuse(400, "serving-malformed");
   if (!verifyServingRecord("renewal-key-delegation", delegation, signature, adminKeyOf(user))) {
     return refuse(403, "renewal-delegation-signature");
   }
-  // The device check and the insert are one statement, so a device removed meanwhile can't leave a
-  // delegation its removal never saw.
+  // The device check and the insert are one statement, so a device removed or demoted meanwhile can't leave a
+  // delegation its removal never saw. On an admin-root account only a device that is still an admin delegates.
+  // A later delegation of the same key (signed again before the old one ends) replaces it; a revoked key stays revoked.
+  const deviceOk = user.adminRootPubHex
+    ? { sql: `SELECT 1 FROM device_capability_grants g WHERE lower(g.username) = ? AND lower(g.device_pub_hex) = ? AND ${ADMIN_GRANT_LIVE}`, args: [u, delegation.deviceId, now] }
+    : {
+        sql:
+          "SELECT 1 FROM device_identities WHERE account_id = ? AND device_pub_hex = ? AND revoked_at IS NULL " +
+          "UNION ALL SELECT 1 FROM device_capability_grants WHERE username = ? AND device_pub_hex = ? AND revoked_at IS NULL",
+        args: [u, delegation.deviceId, u, delegation.deviceId],
+      };
   const put = await db
     .prepare(
       "INSERT INTO renewal_delegations (renewal_pub, username, device_id, record_json, signature, created_at, revoked_at) " +
-        "SELECT ?, ?, ?, ?, ?, ?, NULL WHERE EXISTS (" +
-        "SELECT 1 FROM device_identities WHERE account_id = ? AND device_pub_hex = ? AND revoked_at IS NULL " +
-        "UNION ALL SELECT 1 FROM device_capability_grants WHERE username = ? AND device_pub_hex = ? AND revoked_at IS NULL) " +
-        "ON CONFLICT(renewal_pub) DO NOTHING",
+        `SELECT ?, ?, ?, ?, ?, ?, NULL WHERE EXISTS (${deviceOk.sql}) ` +
+        "ON CONFLICT(renewal_pub) DO UPDATE SET record_json = excluded.record_json, signature = excluded.signature " +
+        "WHERE renewal_delegations.username = excluded.username AND renewal_delegations.device_id = excluded.device_id " +
+        "AND renewal_delegations.revoked_at IS NULL " +
+        "AND COALESCE(json_extract(renewal_delegations.record_json, '$.expiresAt'), 0) < json_extract(excluded.record_json, '$.expiresAt')",
     )
-    .bind(delegation.renewalPub, u, delegation.deviceId, JSON.stringify(delegation), signature, now, u, delegation.deviceId, u, delegation.deviceId)
+    .bind(delegation.renewalPub, u, delegation.deviceId, JSON.stringify(delegation), signature, now, ...deviceOk.args)
     .run();
   if (!put.meta?.changes) {
     const existing = await db
@@ -667,12 +703,15 @@ async function postLeases(
   const list = body?.leases;
   if (!Array.isArray(list) || list.length === 0 || list.length > MAX_LEASES_PER_CALL) return refuse(400, "serving-malformed");
   const admin = adminKeyOf(user);
-  const [servers, policies, delegations] = await readAll<unknown>(db, [
+  const [servers, policies, delegations, adminRoot, adminDevices] = await readAll<unknown>(db, [
     [SQL.servers, [u]],
     [SQL.policies, [u]],
     [SQL.delegations, [u]],
+    [SQL.adminRoot, [u]],
+    [SQL.adminDevices, [u, now]],
   ]);
   const delegationsByPub = new Map((delegations as DelegationRow[]).map((d) => [d.renewal_pub, d]));
+  const liveKeys = liveDelegations(delegations as DelegationRow[], adminRoot, adminDevices);
   const refused: Array<{ leaseId: string | null; code: LeaseRefusal }> = [];
   const writes = [];
   const changedBoxes = new Set<string>();
@@ -719,7 +758,7 @@ async function postLeases(
         no("serving-lease-delegation");
         continue;
       }
-      if (row.revoked_at != null) {
+      if (!liveKeys.has(row.renewal_pub)) {
         no("serving-lease-key-revoked");
         continue;
       }
@@ -784,16 +823,17 @@ export interface AccountServingEntry {
 
 async function accountServing(db: D1Database, u: string, now: number, deps: ServingRouteDeps): Promise<{ servers: AccountServingEntry[] }> {
   const user = await deps.usernames.get(u);
-  const [servers, policies, leases, delegations] = await readAll<unknown>(db, [
+  const [servers, policies, leases, delegations, adminRoot, adminDevices] = await readAll<unknown>(db, [
     [SQL.servers, [u]],
     [SQL.policies, [u]],
     [SQL.leases, [u]],
     [SQL.delegations, [u]],
+    [SQL.adminRoot, [u]],
+    [SQL.adminDevices, [u, now]],
   ]);
   if (!user) return { servers: [] };
   const admin = adminKeyOf(user);
-  const live = new Map<string, DelegationRow>();
-  for (const d of delegations as DelegationRow[]) if (d.revoked_at == null) live.set(d.renewal_pub, d);
+  const live = liveDelegations(delegations as DelegationRow[], adminRoot, adminDevices);
   const confirmedByRelays = null;
   const out: AccountServingEntry[] = [];
   for (const s of servers as ServerRow[]) {

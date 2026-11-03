@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
-//! flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>
+//! flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>
 //! flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
 //! flagship/revocation-entry/v1|<sequence>|<kind>|<account>|<subject>|<generation>|<revokedAt>
 //! flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|<issuedAt>
@@ -26,7 +26,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const TAG_SERVING_POLICY: &str = "flagship/serving-policy/v1";
-pub const TAG_RENEWAL_KEY_DELEGATION: &str = "flagship/renewal-key-delegation/v1";
+pub const TAG_RENEWAL_KEY_DELEGATION: &str = "flagship/renewal-key-delegation/v2";
 pub const TAG_SERVING_LEASE: &str = "flagship/serving-lease/v1";
 pub const TAG_REVOCATION_ENTRY: &str = "flagship/revocation-entry/v1";
 pub const TAG_CERTIFICATE_ORDER: &str = "flagship/certificate-order/v1";
@@ -35,6 +35,8 @@ pub const TAG_ROUTE_CLAIM: &str = "flagship/route-claim/v1";
 const DAY_MS: u64 = 86_400_000;
 /// How far a signer's clock may run ahead of the verifier's.
 pub const SERVING_CLOCK_SKEW_MS: u64 = 5 * 60_000;
+/// The longest a renewal-key delegation lasts.
+pub const RENEWAL_DELEGATION_MAX_MS: u64 = 90 * DAY_MS;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServingError {
@@ -252,6 +254,8 @@ pub struct RenewalKeyDelegation {
     pub renewal_pub: String,
     pub device_id: String,
     pub issued_at: u64,
+    /// Leases it signed stop counting here; at most [`RENEWAL_DELEGATION_MAX_MS`] after `issued_at`.
+    pub expires_at: u64,
 }
 
 /// # Errors
@@ -263,12 +267,16 @@ pub fn delegation_canonical(d: &RenewalKeyDelegation) -> Result<String, ServingE
     }
     p256_pub("renewalPub", &d.renewal_pub)?;
     hex64("deviceId", &d.device_id)?;
+    if d.expires_at <= d.issued_at || d.expires_at - d.issued_at > RENEWAL_DELEGATION_MAX_MS {
+        return Err(ServingError::BadNumber("expiresAt"));
+    }
     Ok(CanonicalV1::new(TAG_RENEWAL_KEY_DELEGATION)?
         .text(&d.account)?
         .text(&d.alg)?
         .text(&d.renewal_pub)?
         .text(&d.device_id)?
         .uint(d.issued_at)?
+        .uint(d.expires_at)?
         .finish_string())
 }
 
@@ -780,10 +788,10 @@ pub fn serving_decision_at_head(
         {
             continue;
         }
-        if !lease_signed_by_admin(l, admin, &p.account, i.revocations) {
+        let Some(end) = lease_end(l, admin, &p.account, i.revocations, i.now) else {
             continue;
-        }
-        best = Some(best.map_or(r.not_after, |b| b.max(r.not_after)));
+        };
+        best = Some(best.map_or(end, |b| b.max(end)));
     }
     let lapsed = |reason| ServingDecision::Refuse {
         control: true,
@@ -801,22 +809,34 @@ pub fn serving_decision_at_head(
     }
 }
 
-fn lease_signed_by_admin(
+/// When a lease stops counting, or `None` when neither the admin key nor a live delegation of it signed it. A lease
+/// a renewal key signed ends no later than its delegation, and not at all under one that has expired.
+fn lease_end(
     l: &SignedLease,
     admin: &str,
     account: &str,
     revocations: &RevocationState,
-) -> bool {
+    now: u64,
+) -> Option<u64> {
     let canonical = lease_canonical(&l.lease);
     if verify_canonical(&canonical, &l.signature, admin) {
-        return true;
+        return Some(l.lease.not_after);
     }
-    let Some((d, dsig)) = &l.delegation else {
-        return false;
-    };
+    let (d, dsig) = l.delegation.as_ref()?;
     if d.account != account || revocations.renewal_keys.contains(&d.renewal_pub) {
-        return false;
+        return None;
     }
-    verify_canonical(&delegation_canonical(d), dsig, admin)
+    if d.issued_at > now.saturating_add(SERVING_CLOCK_SKEW_MS)
+        || d.expires_at <= now
+        || l.lease.issued_at >= d.expires_at
+    {
+        return None;
+    }
+    if verify_canonical(&delegation_canonical(d), dsig, admin)
         && verify_lease_p256(&l.lease, &l.signature, &d.renewal_pub)
+    {
+        Some(l.lease.not_after.min(d.expires_at))
+    } else {
+        None
+    }
 }

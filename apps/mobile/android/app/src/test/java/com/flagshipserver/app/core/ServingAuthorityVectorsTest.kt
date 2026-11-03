@@ -106,7 +106,10 @@ class ServingAuthorityVectorsTest {
         refuses { ServingAuthority.canonical(ServingPolicy("alice", box, 0, 1, "7d", "stop-apps", scope, 1)) }
         refuses { ServingAuthority.canonical(ServingLease("alice", box, 1, 1, "ab", 5, 6)) }
         refuses { ServingAuthority.canonical(ServingLease("alice", box, 1, 1, "ab".repeat(16), 6, 6)) }
-        refuses { ServingAuthority.canonical(RenewalKeyDelegation("alice", renewalPub = "04" + "aa".repeat(32), deviceId = box, issuedAt = 1)) }
+        refuses { ServingAuthority.canonical(RenewalKeyDelegation("alice", renewalPub = "04" + "aa".repeat(32), deviceId = box, issuedAt = 1, expiresAt = 2)) }
+        val p256 = "02" + "aa".repeat(32)
+        refuses { ServingAuthority.canonical(RenewalKeyDelegation("alice", renewalPub = p256, deviceId = box, issuedAt = 5, expiresAt = 5)) }
+        refuses { ServingAuthority.canonical(RenewalKeyDelegation("alice", renewalPub = p256, deviceId = box, issuedAt = 5, expiresAt = 5 + RenewalKeyDelegation.MAX_LIFETIME_MS + 1)) }
     }
 
     /** What Android Keystore does (DER out of SHA256withECDSA), done with a software key. */

@@ -74,7 +74,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/runtime-manifest/v2": "vectors runtimeManifest.test.ts (the PQ companion over the v1 bytes; same cases)",
   // ---- serving authority (plan H; servingAuthority.test.ts + test-vectors/serving-authority, not wired to a verifier yet)
   "flagship/serving-policy/v1": "vectors servingAuthority.test.ts (other signer, other box, tampered grace)",
-  "flagship/renewal-key-delegation/v1": "vectors servingAuthority.test.ts (forged delegation, revoked renewal key)",
+  "flagship/renewal-key-delegation/v2": "vectors servingAuthority.test.ts (forged delegation, revoked renewal key)",
   "flagship/serving-lease/v1": "vectors servingAuthority.test.ts (undelegated key, longer than the grace, older policy generation, other box/account/generation, future-dated)",
   "flagship/revocation-entry/v1": "vectors servingAuthority.test.ts (gap, duplicate, forged signature)",
   "flagship/certificate-order/v1": "vectors servingAuthority.test.ts (shape; the issuance service verifier is H1)",

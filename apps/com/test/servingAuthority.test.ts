@@ -3,7 +3,7 @@
  * binding with every migration applied: the four account routes, the internal relay routes, the
  * trigger-written revocation log and the heartbeat's `serving` block.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { p256 } from "@noble/curves/nist.js";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { D1Storage, type D1Database } from "@flagship/storage";
@@ -44,6 +44,15 @@ const irk = deriveIRK({ seed: seed(5) });
 
 const sign = (msg: Uint8Array, key = ADMIN) => ed.sign(msg, key);
 
+/** A device grant row as `.com` keeps it (its signature is checked when it is written, not here). */
+function grant(sqlite: ReturnType<typeof createSqliteD1>, id: string, scopes: string[], root: "admin-root" | "membership", expiresAt = Date.now() + 86_400_000) {
+  sqlite.raw
+    .prepare(
+      "INSERT INTO device_capability_grants (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root) VALUES (?, 'alice', ?, ?, ?, 1, ?, ?, NULL, ?)",
+    )
+    .run(id, DEVICE_ID, DEVICE_PUB, JSON.stringify(scopes), expiresAt, "00".repeat(64), root);
+}
+
 async function setup() {
   const sqlite = createSqliteD1();
   const storage = new D1Storage(sqlite as unknown as D1Database);
@@ -54,6 +63,7 @@ async function setup() {
   await storage.deviceIdentities.put({
     accountId: "alice", deviceId: DEVICE_ID, devicePubHex: DEVICE_PUB, platformClass: null, createdAt: 1, lastSeenAt: 1, revokedAt: null,
   });
+  grant(sqlite, "g-admin", ["admin"], "admin-root");
   const env: ControlPlaneEnv = {
     DB: sqlite as unknown as D1Database,
     ACCOUNT_READ_TOKEN_SECRET: "route-secret",
@@ -80,7 +90,8 @@ function signedPolicy(p: ServingPolicy, key = ADMIN) {
   return { policy: p, signature: hex(signServingRecord("serving-policy", p, (m) => sign(m, key))) };
 }
 function delegation(o: Partial<RenewalKeyDelegation> = {}): RenewalKeyDelegation {
-  return { account: "alice", alg: "p256", renewalPub: RENEWAL_PUB, deviceId: DEVICE_PUB, issuedAt: Date.now(), ...o };
+  const now = Date.now();
+  return { account: "alice", alg: "p256", renewalPub: RENEWAL_PUB, deviceId: DEVICE_PUB, issuedAt: now, expiresAt: now + 90 * 86_400_000, ...o };
 }
 const leaseId = (n: number) => n.toString(16).padStart(32, "0");
 
@@ -255,6 +266,65 @@ describe("renewal-delegations and serving-leases", () => {
       });
       expect(again.status).toBe(409);
       expect(await again.json()).toMatchObject({ code: "renewal-key-revoked" });
+    } finally {
+      close();
+    }
+  });
+});
+
+describe("a renewal key counts only while it is delegated and its device is an admin", () => {
+  const post = (env: ControlPlaneEnv, d: RenewalKeyDelegation) =>
+    call(env, "/api/accounts/alice/renewal-delegations", { json: { delegation: d, signature: hex(signServingRecord("renewal-key-delegation", d, (m) => sign(m))) } });
+  const postKeyLease = async (env: ControlPlaneEnv, p: ServingPolicy) => {
+    const l = leaseFor(p, Date.now(), leaseId(1))!;
+    const r = await call(env, "/api/accounts/alice/serving-leases", { json: { leases: [{ lease: l, signature: signServingLeaseP256(l, RENEWAL), delegationPub: RENEWAL_PUB }] } });
+    return (await r.json()) as { accepted: number; refused: Array<{ code: string }> };
+  };
+
+  it("refuses a delegation from a device without a live admin grant", async () => {
+    const { env, sqlite, close } = await setup();
+    try {
+      sqlite.raw.prepare("UPDATE device_capability_grants SET revoked_at = 5 WHERE grant_id = 'g-admin'").run();
+      grant(sqlite, "g-member", ["serving"], "membership");
+      const r = await post(env, delegation());
+      expect(r.status).toBe(403);
+      expect(await r.json()).toMatchObject({ code: "renewal-delegation-device" });
+    } finally {
+      close();
+    }
+  });
+
+  it("drops the key once the device's admin grant has run out: leases refused, absent from the relay's record", async () => {
+    const { env, sqlite, close } = await setup();
+    try {
+      const p = await withPolicy(env);
+      expect((await post(env, delegation())).status).toBe(200);
+      expect((await postKeyLease(env, p)).accepted).toBe(1);
+      sqlite.raw.prepare("UPDATE device_capability_grants SET expires_at = ? WHERE grant_id = 'g-admin'").run(Date.now() - 1);
+      expect((await postKeyLease(env, p)).refused.map((x) => x.code)).toEqual(["serving-lease-key-revoked"]);
+      const view = (await (await internal(env, `/api/internal/serving/alice/${BOX}`)).json()) as { leases: Array<{ delegationPub?: string }>; delegations: unknown[] };
+      expect(view.delegations).toHaveLength(0);
+      expect(view.leases.filter((l) => l.delegationPub)).toHaveLength(0);
+    } finally {
+      close();
+    }
+  });
+
+  it("refuses an expired delegation, and takes a later one of the same key", async () => {
+    const { env, close } = await setup();
+    try {
+      const p = await withPolicy(env);
+      const now = Date.now();
+      expect((await post(env, delegation({ issuedAt: now - 90 * 86_400_000, expiresAt: now - 1 }))).status).toBe(400);
+      expect((await post(env, delegation({ issuedAt: now - 60_000, expiresAt: now + 1_000 }))).status).toBe(200);
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now + 2_000);
+      try {
+        expect((await postKeyLease(env, p)).refused.map((x) => x.code)).toEqual(["serving-lease-invalid"]);
+        expect((await post(env, delegation())).status).toBe(200);
+        expect((await postKeyLease(env, p)).accepted).toBe(1);
+      } finally {
+        clock.mockRestore();
+      }
     } finally {
       close();
     }

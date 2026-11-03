@@ -51,7 +51,8 @@ const scope = nameListSha256(boxNameList("home", "alice", "flagship.services"));
 const policy7 = { account: "alice", box, regGen: 1, policyGen: 1, grace: "7d", onLapse: "stop-apps", scopeSha256: scope, issuedAt: T0 };
 const policyInf = { ...policy7, grace: "indefinite" };
 const policyLock = { ...policy7, grace: "30d", onLapse: "lock-server" };
-const delegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: device, issuedAt: T0 };
+const delegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: device, issuedAt: T0, expiresAt: T0 + 90 * DAY };
+const shortDelegation = { ...delegation, expiresAt: T0 + 3 * DAY };
 const lease = leaseFor(policy7 as never, T0, "ab".repeat(16))!;
 const revBox: RevocationEntry = { sequence: 1, kind: "box", account: "alice", subject: box, generation: 1, revokedAt: T0 + DAY };
 const revKey: RevocationEntry = { sequence: 1, kind: "renewal-key", account: "alice", subject: renewal.pub, generation: 0, revokedAt: T0 + DAY };
@@ -113,6 +114,8 @@ const cases: Case[] = [
   { name: "lock-server, lease ended: lock", input: { ...base, policies: [sp(policyLock)] as never, now: T0 + 7 * DAY } },
   { name: "box revoked", input: { ...base, revocationEntries: [se(revBox)] } },
   { name: "renewal key revoked", input: { ...base, revocationEntries: [se(revKey)] } },
+  { name: "delegation ends before the lease: the lease ends with it", input: { ...base, leases: [{ ...sl(lease), delegation: sd(shortDelegation) }] as never } },
+  { name: "delegation expired", input: { ...base, leases: [{ ...sl(lease), delegation: sd(shortDelegation) }] as never, now: T0 + 3 * DAY } },
 ];
 
 const decisions = cases.map((c) => {

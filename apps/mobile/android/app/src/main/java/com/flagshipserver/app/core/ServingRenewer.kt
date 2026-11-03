@@ -39,14 +39,17 @@ class ServingRenewer(
 ) {
     val username: String = username.lowercase()
 
-    private fun currentDelegation(): SignedRenewalDelegation? = delegation(username, renewalKey()?.publicKeyHex)
+    /** The stored delegation of this device's renewal key while it is current (not within two weeks of its end). */
+    fun currentDelegation(): SignedRenewalDelegation? =
+        delegation(username, renewalKey()?.publicKeyHex)?.takeIf { it.record.isCurrent(now()) }
 
-    /** Delegate this device's renewal key with the admin root (already opened by the caller), once. */
+    /** Delegate this device's renewal key with the admin root (already opened by the caller), when no current delegation is held. */
     suspend fun delegate(adminRoot: Ed25519Sign): SignedRenewalDelegation? {
         currentDelegation()?.let { return it }
         val key = renewalKey() ?: return null
         val device = deviceKeyPub() ?: return null
-        val record = RenewalKeyDelegation(account = username, renewalPub = key.publicKeyHex, deviceId = device, issuedAt = now())
+        val at = now()
+        val record = RenewalKeyDelegation(account = username, renewalPub = key.publicKeyHex, deviceId = device, issuedAt = at, expiresAt = at + RenewalKeyDelegation.MAX_LIFETIME_MS)
         val sig = runCatching { ServingAuthority.signEd25519(ServingAuthority.canonical(record), adminRoot) }.getOrNull() ?: return null
         val ok = runCatching { mailbox.postRenewalDelegation(username, RenewalDelegationPost(record, sig)) }.isSuccess
         if (!ok) return null
@@ -57,7 +60,7 @@ class ServingRenewer(
     fun signLease(policy: ServingPolicy, adminRoot: Ed25519Sign?): SignedServingLease? {
         val lease = ServingAuthority.leaseFor(policy, now(), ServingAuthority.randomLeaseId()) ?: return null
         val key = renewalKey()
-        val d = delegation(username, key?.publicKeyHex)
+        val d = delegation(username, key?.publicKeyHex)?.takeIf { it.record.expiresAt > now() }
         if (key != null && d != null) {
             runCatching { ServingAuthority.signLeaseP256Der(lease, key.signDer) }.getOrNull()?.let {
                 return SignedServingLease(lease, it, d)
@@ -104,7 +107,7 @@ class ServingRenewer(
         }
         if (finite.isEmpty()) return 0
         val root = silentAdminRoot()
-        if (currentDelegation() == null && root != null) delegate(root)
+        if (root != null) delegate(root)
         val signed = finite.mapNotNull { (domain, p) -> signLease(p, root)?.let { domain to it } }
         if (signed.isEmpty()) return 0
         if (post(signed)) {

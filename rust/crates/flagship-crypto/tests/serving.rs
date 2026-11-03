@@ -45,6 +45,7 @@ fn delegation(v: &Value) -> RenewalKeyDelegation {
         renewal_pub: s(v, "renewalPub"),
         device_id: s(v, "deviceId"),
         issued_at: n(v, "issuedAt"),
+        expires_at: n(v, "expiresAt"),
     }
 }
 fn lease(v: &Value) -> ServingLease {
@@ -171,7 +172,7 @@ fn relay_decisions_agree_with_typescript() {
     let v: Value = serde_json::from_str(VECTORS).unwrap();
     let revocation_key = s(&v, "revocationKeyPub");
     let decisions = v["decisions"].as_array().unwrap();
-    assert_eq!(decisions.len(), 17);
+    assert_eq!(decisions.len(), 19);
     for d in decisions {
         let i = &d["input"];
         let entries: Vec<(RevocationEntry, String)> = i["revocationEntries"]

@@ -6,7 +6,7 @@ import FlagshipAPI
 
 /// This admin device's serving renewal key (docs/architecture-v2/serving-wiring.md section 4): an
 /// ECDSA P-256 key in the Secure Enclave that signs the serving lease each time the app opens, with
-/// no prompt. The admin root delegates it once (`renewal-key-delegation/v1`); a lease it signs is
+/// no prompt. The admin root delegates it for up to 90 days at a time (`renewal-key-delegation/v2`); a lease it signs is
 /// worth no more than a lease the admin root signs, and removing the device revokes it.
 ///
 /// - Secure Enclave key (CryptoKit `SecureEnclave.P256.Signing`), access control

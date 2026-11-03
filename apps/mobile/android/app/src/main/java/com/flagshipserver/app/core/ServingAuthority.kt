@@ -4,7 +4,7 @@
 // packages/protocol/test-vectors/serving-authority/ lock the bytes:
 //
 //   flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
-//   flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>
+//   flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>
 //   flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
 //
 // The admin root signs the policy and each device's renewal-key delegation (Ed25519). An admin
@@ -63,7 +63,19 @@ data class RenewalKeyDelegation(
     /** The device's account device key (64 hex). */
     val deviceId: String,
     val issuedAt: Long,
-)
+    /** Leases the key signed stop counting here. */
+    val expiresAt: Long,
+) {
+    /** Still usable at [now], and not yet due to be signed again. */
+    fun isCurrent(now: Long): Boolean = expiresAt - now > RENEW_BEFORE_MS
+
+    companion object {
+        /** The longest a delegation lasts. */
+        const val MAX_LIFETIME_MS: Long = 90L * 86_400_000
+        /** A delegation this close to its end is signed again at the next admin-root signature. */
+        const val RENEW_BEFORE_MS: Long = 14L * 86_400_000
+    }
+}
 
 @Serializable
 data class ServingLease(
@@ -88,7 +100,7 @@ data class SignedServingLease(val record: ServingLease, val signature: String, v
 
 object ServingAuthority {
     const val TAG_POLICY = "flagship/serving-policy/v1"
-    const val TAG_DELEGATION = "flagship/renewal-key-delegation/v1"
+    const val TAG_DELEGATION = "flagship/renewal-key-delegation/v2"
     const val TAG_LEASE = "flagship/serving-lease/v1"
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
@@ -124,7 +136,10 @@ object ServingAuthority {
         hex("renewalPub", d.renewalPub, P256_PUB)
         hex("deviceId", d.deviceId, HEX64)
         int("issuedAt", d.issuedAt, 0)
-        return join(TAG_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt)
+        int("expiresAt", d.expiresAt, 0)
+        require(d.expiresAt > d.issuedAt) { "expiresAt must be after issuedAt" }
+        require(d.expiresAt - d.issuedAt <= RenewalKeyDelegation.MAX_LIFETIME_MS) { "a delegation lasts at most 90 days" }
+        return join(TAG_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt, d.expiresAt)
     }
 
     fun canonical(l: ServingLease): ByteArray {

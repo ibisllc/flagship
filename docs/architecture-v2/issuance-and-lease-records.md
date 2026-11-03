@@ -10,7 +10,7 @@ bytes the owner's decisions of 2026-10-30 (journal, Appendices H and I); each li
 | Record | Signed by | Checked by | Carries decision |
 |---|---|---|---|
 | `serving-policy/v1` | the admin root (sensitive-order key) | `.com`, issuance service, relay | grace is 7 days, 30 days or indefinite; reducing it advances the policy generation |
-| `renewal-key-delegation/v1` | the admin root | issuance service, relay | a narrowly delegated renewal key (cannot add boxes, widen scope, extend past the grace, change policy or undo revocation) |
+| `renewal-key-delegation/v2` | the admin root | issuance service, relay | a narrowly delegated renewal key (cannot add boxes, widen scope, extend past the grace, change policy or undo revocation) |
 | `serving-lease/v1` | the admin root or the delegated renewal key, about daily while a phone is online | relay (route admission), issuance service (certificate permission) | the dead-man is its nullable `notAfter` |
 | `revocation-entry/v1` | `.com`'s existing revocation-list key | relay | revocation is pushed, not polled: an append-only log with a monotonic sequence (owner, 2026-10-31) |
 | `route-claim/v1` | a phone's route key | relay | the phone keeps its claim by liveness; a higher generation from the same phone supersedes |
@@ -33,7 +33,10 @@ flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse
     <grace>   = 7d | 30d | indefinite      (never a large number standing in for "forever")
     <onLapse> = stop-apps | lock-server    (lock-server needs a finite grace)
 
-flagship/renewal-key-delegation/v1|<account>|<renewalPub>|<policyGen>|<expiresAt>
+flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>
+    <expiresAt> at most 90 days after <issuedAt>; a lease the key signed ends no later than it. The key counts only
+    while <deviceId> holds a live admin-root-signed `admin` grant (losing it, or the device, revokes the key). No
+    <policyGen>: one delegation serves every box of the account, each with its own policy generation; the lease binds it.
 
 flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
     an indefinite policy has no leases at all: the policy alone authorizes serving and nothing is signed daily

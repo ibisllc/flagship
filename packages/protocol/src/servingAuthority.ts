@@ -3,7 +3,7 @@
  * decisions of 2026-10-31). The relay enforces it; the issuance service reads the same records.
  *
  *   flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
- *   flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>
+ *   flagship/renewal-key-delegation/v2|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>|<expiresAt>
  *   flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
  *   flagship/revocation-entry/v1|<sequence>|<kind>|<account>|<subject>|<generation>|<revokedAt>
  *   flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|<issuedAt>
@@ -32,7 +32,7 @@ import { hex, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes } from "./types.js";
 
 export const TAG_SERVING_POLICY = "flagship/serving-policy/v1";
-export const TAG_RENEWAL_KEY_DELEGATION = "flagship/renewal-key-delegation/v1";
+export const TAG_RENEWAL_KEY_DELEGATION = "flagship/renewal-key-delegation/v2";
 export const TAG_SERVING_LEASE = "flagship/serving-lease/v1";
 export const TAG_REVOCATION_ENTRY = "flagship/revocation-entry/v1";
 export const TAG_CERTIFICATE_ORDER = "flagship/certificate-order/v1";
@@ -44,6 +44,11 @@ export type ServingOnLapse = "stop-apps" | "lock-server";
 export const GRACE_MS: Readonly<Record<Exclude<ServingGrace, "indefinite">, number>> = { "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
 /** The grace a new server starts with. */
 export const DEFAULT_SERVING_GRACE: ServingGrace = "indefinite";
+/**
+ * The longest a renewal-key delegation lasts. A device re-delegates at an admin-root unlock it does anyway; a key
+ * left on a demoted or lost device stops counting at its end even if no revocation reached the verifier.
+ */
+export const RENEWAL_DELEGATION_MAX_MS = 90 * 86_400_000;
 /** How far a signer's clock may run ahead of the verifier's. */
 export const SERVING_CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -106,9 +111,14 @@ export interface RenewalKeyDelegation {
    */
   alg: "p256";
   renewalPub: string;
-  /** The device it lives on (its account device key); removing the device revokes the renewal key too. */
+  /**
+   * The device it lives on (its account device key); removing the device, or its last admin grant, revokes the
+   * renewal key too.
+   */
   deviceId: string;
   issuedAt: number;
+  /** Leases it signed stop counting here; at most RENEWAL_DELEGATION_MAX_MS after issuedAt. */
+  expiresAt: number;
 }
 
 export function canonicalRenewalKeyDelegation(d: RenewalKeyDelegation): Bytes {
@@ -117,7 +127,10 @@ export function canonicalRenewalKeyDelegation(d: RenewalKeyDelegation): Bytes {
   hexField("renewalPub", d.renewalPub, P256_PUB);
   hexField("deviceId", d.deviceId);
   intField("issuedAt", d.issuedAt);
-  return enc([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt]);
+  intField("expiresAt", d.expiresAt);
+  if (d.expiresAt <= d.issuedAt) throw new Error("expiresAt must be after issuedAt");
+  if (d.expiresAt - d.issuedAt > RENEWAL_DELEGATION_MAX_MS) throw new Error("a delegation lasts at most 90 days");
+  return enc([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt, d.expiresAt]);
 }
 
 // ── serving-lease ─────────────────────────────────────────────────────────
@@ -491,9 +504,10 @@ export function servingDecision(i: ServingInput): ServingDecision {
     const r = l.record;
     if (r.account !== p.account || r.box !== p.box || r.regGen !== p.regGen || r.policyGen !== p.policyGen) continue;
     if (r.issuedAt > i.now + SERVING_CLOCK_SKEW_MS || r.notAfter - r.issuedAt > graceMs) continue;
-    if (!leaseSignedByAdmin(l, admin, p.account, i.revocations)) continue;
+    const end = leaseEnd(l, admin, p.account, i.revocations, i.now);
+    if (end === null) continue;
     sawLease = true;
-    best = Math.max(best, r.notAfter);
+    best = Math.max(best, end);
   }
   const lock = p.onLapse === "lock-server";
   if (!sawLease) return { control: true, apps: false, reason: "no-lease", lock };
@@ -501,15 +515,22 @@ export function servingDecision(i: ServingInput): ServingDecision {
   return { control: true, apps: true, until: best, policyGen: p.policyGen, onLapse: p.onLapse };
 }
 
-function leaseSignedByAdmin(
+/**
+ * When a lease stops counting, or null when it was not signed by the admin key or a live delegation of it. A lease a
+ * renewal key signed ends no later than its delegation, and not at all under one that has expired.
+ */
+function leaseEnd(
   l: SignedServingRecord<ServingLease> & { delegation?: SignedServingRecord<RenewalKeyDelegation> },
   admin: string,
   account: string,
   revocations: ServingRevocations,
-): boolean {
-  if (verifyServingRecord("serving-lease", l.record, l.signature, admin)) return true;
+  now: number,
+): number | null {
+  if (verifyServingRecord("serving-lease", l.record, l.signature, admin)) return l.record.notAfter;
   const d = l.delegation;
-  if (!d || d.record.account !== account || revocations.renewalKeys.has(d.record.renewalPub)) return false;
-  if (!verifyServingRecord("renewal-key-delegation", d.record, d.signature, admin)) return false;
-  return verifyServingLeaseP256(l.record, l.signature, d.record.renewalPub);
+  if (!d || d.record.account !== account || revocations.renewalKeys.has(d.record.renewalPub)) return null;
+  if (d.record.issuedAt > now + SERVING_CLOCK_SKEW_MS || d.record.expiresAt <= now || l.record.issuedAt >= d.record.expiresAt) return null;
+  if (!verifyServingRecord("renewal-key-delegation", d.record, d.signature, admin)) return null;
+  if (!verifyServingLeaseP256(l.record, l.signature, d.record.renewalPub)) return null;
+  return Math.min(l.record.notAfter, d.record.expiresAt);
 }

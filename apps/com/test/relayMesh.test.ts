@@ -686,6 +686,23 @@ describe("POST /api/services/relay-blessing (proof of key)", () => {
       w.close();
     }
   });
+
+  it("promoting a staged key starts a new mesh-key epoch the old key is not sealed to", async () => {
+    const w = await setup();
+    try {
+      await admit(w, "iad1", RELAY_A);
+      const before = (await bless(w, blessingRequest(RELAY_A, "iad1", w.now()))).body.meshKeys!.current;
+      await admin(w, { op: "stage-key", relayId: "iad1", nextKey: hex(ed.getPublicKey(RELAY_B)) });
+      const promoted = await bless(w, blessingRequest(RELAY_B, "iad1", w.now()));
+      expect(promoted.status).toBe(200);
+      expect(promoted.body.meshKeys!.current).toBe(before + 1);
+      expect(openRelayMeshKeys(promoted.body.meshKeys, RELAY_B, { servicesApex: APEX, relayId: "iad1" }).ok).toBe(true);
+      expect(openRelayMeshKeys(promoted.body.meshKeys, RELAY_A, { servicesApex: APEX, relayId: "iad1" }).ok).toBe(false);
+      expect(w.bucket.json<RelayMeshKeys>("v1/keys/iad1.json").current).toBe(before + 1);
+    } finally {
+      w.close();
+    }
+  });
 });
 
 // ── backfill ──────────────────────────────────────────────────────────────

@@ -99,6 +99,7 @@ fn delegation_of(v: &Value) -> Option<RenewalKeyDelegation> {
         renewal_pub: s(v, "renewalPub")?,
         device_id: s(v, "deviceId")?,
         issued_at: n(v, "issuedAt")?,
+        expires_at: n(v, "expiresAt")?,
     })
 }
 
