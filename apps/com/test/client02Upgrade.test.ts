@@ -55,7 +55,8 @@ const DEMO_HOST = "home.demo02.flagship.services";
 async function setup() {
   const sqlite = createSqliteD1();
   const storage = new D1Storage(sqlite as unknown as D1Database);
-  for (const u of ["alice", "demo02"]) await storage.usernames.put({ username: u, irkPubHex: hex(irk.publicKey), claimedAt: 1 });
+  // Demo provisioning marks the account row demo (`is_demo = 1`) in the batch that writes its demo row.
+  for (const u of ["alice", "demo02"]) await storage.usernames.put({ username: u, irkPubHex: hex(irk.publicKey), claimedAt: 1, isDemo: u === "demo02" });
   const demo: DemoUserRecord = {
     username: "demo02", idempotencyKey: "k", snapshotId: null, isoR2Key: null, ttlIdleMinutes: 60, region: "r", size: "s",
     activeServerId: null, activeServerIp: null, image: null, activeServerFqdn: DEMO_HOST, lastActivityAt: 1, state: "ready",

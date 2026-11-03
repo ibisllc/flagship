@@ -111,15 +111,20 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
       await s.voici.insertMessage(msg(b, "01".repeat(16), { storedAt: 3000 }));
       await s.voici.insertMessage(msg(a, "02".repeat(16), { kind: "voici-reply", storedAt: 4000 }));
       await s.voici.insertMessage(msg(a, "03".repeat(16), { storedAt: 5000 }));
-      expect(await s.voici.convStats(a, 4500, 40)).toEqual({ messages: 2, replies: 1, messagesLastHour: 1, messagesLastDay: 2, lastPushedAt: 50 });
-      expect(await s.voici.convStats("c".repeat(64), 0, 0)).toEqual({ messages: 0, replies: 0, messagesLastHour: 0, messagesLastDay: 0, lastPushedAt: null });
+      expect(await s.voici.convStats(PAGE, a, 4500, 40)).toEqual({ messages: 2, replies: 1, messagesLastHour: 1, messagesLastDay: 2, lastPushedAt: 50 });
+      expect(await s.voici.convStats(PAGE, "c".repeat(64), 0, 0)).toEqual({ messages: 0, replies: 0, messagesLastHour: 0, messagesLastDay: 0, lastPushedAt: null });
       const inbox = await s.voici.listInbox(PAGE, 0, 3);
       expect(inbox.map((m) => m.msgId)).toEqual(["01".repeat(16), "01".repeat(16), "02".repeat(16)]);
       expect(await s.voici.markFetched(PAGE, 0, inbox[2]!.id, 9)).toBe(2);
       expect(await s.voici.deliveredThrough(a)).toBe(inbox[0]!.id);
-      const thread = await s.voici.listThread(a, inbox[0]!.id, 10);
+      const thread = await s.voici.listThread(PAGE, a, inbox[0]!.id, 10);
       expect(thread.map((m) => [m.kind, m.fetchedAt])).toEqual([["voici-reply", null], ["voici-message", null]]);
-      expect((await s.voici.getMessage(a, "03".repeat(16)))?.storedAt).toBe(5000);
+      expect((await s.voici.getMessage(PAGE, a, "03".repeat(16)))?.storedAt).toBe(5000);
+      // Every conversation read is scoped to its page (security review M2): another page's view of `a` is empty.
+      const OTHER = "a0".repeat(16);
+      expect(await s.voici.getMessage(OTHER, a, "03".repeat(16))).toBeNull();
+      expect(await s.voici.convStats(OTHER, a, 0, 0)).toEqual({ messages: 0, replies: 0, messagesLastHour: 0, messagesLastDay: 0, lastPushedAt: null });
+      expect(await s.voici.listThread(OTHER, a, 0, 10)).toEqual([]);
       expect(await s.voici.delegatePage("bb".repeat(32), "04" + "cd".repeat(64))).toBe(PAGE);
       expect(await s.voici.delegatePage("aa".repeat(32), "04" + "cd".repeat(64))).toBeNull();
       expect(await s.voici.deleteMessagesBefore(4000, 10)).toBe(2);
@@ -152,11 +157,31 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
       const d = "04" + "ab".repeat(64);
       await s.voici.revokeDelegate({ delegatePub: d, pageId: PAGE, principalPub: "aa".repeat(32), expiresAt: 100, revokedAt: 1 });
       await s.voici.revokeDelegate({ delegatePub: d, pageId: PAGE, principalPub: "aa".repeat(32), expiresAt: 999, revokedAt: 2 });
-      expect(await s.voici.isRevoked(d, 50)).toBe(true);
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 50)).toBe(true);
       expect(await s.voici.listRevoked(PAGE, 50)).toEqual([d]);
-      expect(await s.voici.isRevoked(d, 100)).toBe(false);
-      expect(await s.voici.deleteExpiredRevoked(100, 10)).toBe(1);
+      // The later revocation's expiry holds (it is not ignored as a duplicate).
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 100)).toBe(true);
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 999)).toBe(false);
+      expect(await s.voici.deleteExpiredRevoked(100, 10)).toBe(0);
+      expect(await s.voici.deleteExpiredRevoked(999, 10)).toBe(1);
       expect(await s.voici.listRevoked(PAGE, 0)).toEqual([]);
+    } finally {
+      done();
+    }
+  });
+
+  it("keys a revocation by browser key AND pseudonym: one pseudonym's never ends another's (Low a)", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      const d = "04" + "ab".repeat(64);
+      // A stranger's row for the same browser key, stored first, neither applies to nor blocks the real pseudonym's.
+      await s.voici.revokeDelegate({ delegatePub: d, pageId: PAGE, principalPub: "ee".repeat(32), expiresAt: 999, revokedAt: 1 });
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 50)).toBe(false);
+      await s.voici.revokeDelegate({ delegatePub: d, pageId: PAGE, principalPub: "aa".repeat(32), expiresAt: 999, revokedAt: 2 });
+      expect(await s.voici.isRevoked(d, "aa".repeat(32), 50)).toBe(true);
+      expect(await s.voici.isRevoked(d, "ee".repeat(32), 50)).toBe(true);
+      expect(await s.voici.listRevoked(PAGE, 50)).toEqual([d]);
+      expect(await s.voici.deleteExpiredRevoked(1000, 10)).toBe(2);
     } finally {
       done();
     }
@@ -245,7 +270,9 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
 
       expect(await s.voici.deleteAlert(A, H(3))).toBe(true);
       expect(await s.voici.deleteAlert(A, H(3))).toBe(false);
-      expect(await s.voici.deleteAlertsForDelegate("04" + "ef".repeat(64))).toBe(1);
+      // A browser key's alerts go only in the one conversation its revocation names.
+      expect(await s.voici.deleteAlertsForDelegate("04" + "ef".repeat(64), A)).toBe(0);
+      expect(await s.voici.deleteAlertsForDelegate("04" + "ef".repeat(64), B)).toBe(1);
       expect(await s.voici.listAlerts(B)).toEqual([]);
 
       // collected: past the delegation's expiry, or the conversation has no mail left

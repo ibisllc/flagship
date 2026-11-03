@@ -49,8 +49,19 @@ describe("the voi.ci host (one namespace)", () => {
   it("T1 + D13: capitals and a trailing slash 301 to the canonical path, the query kept", async () => {
     const w = await world();
     try {
-      expect(location(await w.call("/Alice/"))).toEqual([301, "/alice"]);
-      expect(location(await w.call("/alice/?ref=card"))).toEqual([301, "/alice?ref=card"]);
+      expect(location(await w.call("/Alice/"))).toEqual([301, "https://voi.ci/alice"]);
+      expect(location(await w.call("/alice/?ref=card"))).toEqual([301, "https://voi.ci/alice?ref=card"]);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("M1: never redirects off voi.ci: //host, /\\host and their encodings are a 404 with no Location", async () => {
+    const w = await world();
+    try {
+      for (const p of ["//Evil.com", "//evil.com/", "/%2F%2Fevil.com", "/%5C%5Cevil.com", "/%5cevil.com", "/evil.com"]) {
+        expect(location(await w.call(p)), p).toEqual([404, null]);
+      }
     } finally {
       w.close();
     }
@@ -59,7 +70,7 @@ describe("the voi.ci host (one namespace)", () => {
   it("T7: /@alice 301s to /alice, which is the page shell once the page is published", async () => {
     const w = await world();
     try {
-      expect(location(await w.call("/@alice"))).toEqual([301, "/alice"]);
+      expect(location(await w.call("/@alice"))).toEqual([301, "https://voi.ci/alice"]);
       const before = await w.call("/alice");
       expect([before.status, await before.text()]).toEqual([404, VOICI_SITE_SHELL_404]);
       await publish(w);

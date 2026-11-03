@@ -62,6 +62,10 @@ export type RateLimitEndpoint =
   | "name-dibs"
   // Custom voi.ci name check: up to two DNS lookups per call, and the field asks as people type.
   | "voici-name-check"
+  // Setting or clearing an app's voi.ci name (POST /api/users/<u>/apps/<id>/voici-name): signed, verified with the
+  // account's keys and written to the names registry. An owner sets a name now and then; per source and per account
+  // (the path names it), so a flood is bounded in signature work and registry writes.
+  | "voici-name-set"
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
@@ -75,6 +79,10 @@ export type RateLimitEndpoint =
   // off the owner's push channel. The per-username budget is the
   // tight one: a legitimate recovery initiates ONCE.
   | "re-pair-initiate"
+  // The owner's veto of a recovery re-pair (POST /api/users/<u>/re-pair/veto): signed, verified, and on success pushed
+  // to the account's devices. Per source and per (source, account), never per account alone: a budget anyone could
+  // spend for an account would let them keep its owner from vetoing a hostile recovery.
+  | "re-pair-veto"
   | "qr-pipe-upgrade"
   | "builder-pipe-upgrade"
   // TOTP verify (the recovery proof carrier). Keyed per target username:
@@ -259,6 +267,11 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 60, windowSec: 60 },
     { axis: "ip", limit: 600, windowSec: 3600 },
   ],
+  "voici-name-set": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+    { axis: "usernameHash", limit: 60, windowSec: 3600 },
+  ],
   "auth-code-issue": [
     { axis: "ip", limit: 20, windowSec: 3600 },
     { axis: "irk", limit: 10, windowSec: 3600 },
@@ -278,6 +291,11 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "re-pair-initiate": [
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
+  ],
+  "re-pair-veto": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+    { axis: "ipSubject", limit: 20, windowSec: 3600 },
   ],
   // Each /qr-pipe or /builder-pipe upgrade materialises a relay Durable
   // Object; see checkPipeUpgrade.
@@ -661,8 +679,17 @@ export function retryAfterPhrase(sec: number): string {
  * Returns `null` for anything that isn't one of the four protected
  * routes — the caller passes those straight through.
  */
-/** The server or account a PQ binding or policy write is about (its rate-limit subject). */
+/** The server or account a PQ binding or policy write (or a re-pair veto) is about (its rate-limit subject). */
 export function bindingSubject(endpoint: RateLimitEndpoint, pathname: string): string | undefined {
+  if (endpoint === "re-pair-veto") {
+    const v = /^\/api\/users\/([^/]+)\/re-pair\/veto$/.exec(pathname);
+    if (!v) return undefined;
+    try {
+      return `users:${decodeURIComponent(v[1]!).trim().toLowerCase()}`;
+    } catch {
+      return `users:${v[1]!.toLowerCase()}`;
+    }
+  }
   if (endpoint !== "pq-binding-put" && endpoint !== "assurance-policy-post" && endpoint !== "serving-lease" && endpoint !== "serving-signed") return undefined;
   const m = /^\/api\/(server|accounts)\/([^/]+)\//.exec(pathname);
   return m ? `${m[1]}:${decodeURIComponent(m[2]!).toLowerCase()}` : undefined;
@@ -684,6 +711,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && (pathname === "/api/name-dibs/initiate" || pathname === "/api/name-dibs/verify")) return "name-dibs";
   if (m === "GET" && /^\/api\/users\/[^/]+\/voici-name-check$/.test(pathname)) return "voici-name-check";
+  if (m === "POST" && /^\/api\/users\/[^/]+\/apps\/[^/]+\/voici-name$/.test(pathname)) return "voici-name-set";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/messages-attestation$/.test(pathname)) return "messages-attest";
   if (m === "POST" && pathname === "/api/voici/reports") return "voici-report";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
@@ -694,6 +722,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair$/.test(pathname)) {
     return "re-pair-initiate";
   }
+  if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair\/veto$/.test(pathname)) return "re-pair-veto";
   if (m === "POST" && pathname === "/api/boot/suspension/box") return "boot-suspension-box";
   if (m === "POST" && /^\/api\/users\/[^/]+\/totp\/verify$/.test(pathname)) {
     return "totp-verify";
@@ -931,6 +960,7 @@ export function extractUsernameHash(pathname: string): string | undefined {
     pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/) ??
     pathname.match(/^\/api\/accounts\/([^/]+)\/read-token$/) ??
     pathname.match(/^\/api\/users\/([^/]+)\/share-key-attestation$/) ??
+    pathname.match(/^\/api\/users\/([^/]+)\/apps\/[^/]+\/voici-name$/) ??
     pathname.match(/^\/api\/accounts\/([^/]+)\/messages-attestation$/);
   if (!m) return undefined;
   // One budget per account however the path spells it (case, escapes).

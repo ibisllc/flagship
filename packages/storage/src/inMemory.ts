@@ -139,8 +139,12 @@ import type {
 
 export class InMemoryUsernameStorage implements UsernameStorage {
   private byName = new Map<string, UsernameRecord>();
-  /** The names registry this store claims in (shared with the link and code stores by InMemoryStorage). */
-  constructor(readonly names: InMemoryNameRegistryStorage = new InMemoryNameRegistryStorage()) {}
+  /** The names registry this store claims in (shared with the link and code stores by InMemoryStorage), and the demo
+   *  rows a deleted account's row takes with it (D1: the same batch). */
+  constructor(
+    readonly names: InMemoryNameRegistryStorage = new InMemoryNameRegistryStorage(),
+    private readonly demos?: Pick<DemoUsersStorage, "delete">,
+  ) {}
   async put(rec: UsernameRecord) {
     const norm = rec.username.toLowerCase();
     const existing = this.byName.get(norm);
@@ -295,6 +299,7 @@ export class InMemoryUsernameStorage implements UsernameStorage {
   async delete(username: string, at = Date.now()) {
     const u = username.toLowerCase();
     this.names.accountGone(u, at);
+    await this.demos?.delete(u);
     return this.byName.delete(u);
   }
   /** Demo teardown (an operator's, not a person's): the name is released at once. */
@@ -2436,7 +2441,8 @@ export class InMemoryDeviceCapabilityGrantStorage
 
 export class InMemoryStorage implements Storage {
   names = new InMemoryNameRegistryStorage();
-  usernames = new InMemoryUsernameStorage(this.names);
+  demoUsers = new InMemoryDemoUsersStorage();
+  usernames = new InMemoryUsernameStorage(this.names, this.demoUsers);
   schemaVersion = new InMemorySchemaVersionStorage();
   suggestionQueue = new InMemorySuggestionQueueStorage();
   suggestThrottle = new InMemorySuggestThrottleStorage();
@@ -2479,7 +2485,6 @@ export class InMemoryStorage implements Storage {
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
-  demoUsers = new InMemoryDemoUsersStorage();
   deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
   accountProvisioning = new InMemoryAccountProvisioningStorage(
     this.usernames,

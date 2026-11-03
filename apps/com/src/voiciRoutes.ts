@@ -493,6 +493,7 @@ export async function serveVoiciHost(request: Request, url: URL, env: VoiciEnv):
       names: on ? storage.names : linksOnly,
       pages: on ? storage.voici : { getPage: async () => null },
       ...linkTargets(env, storage),
+      origin: voiciWebOrigin(env),
     },
     url.pathname,
     url.search,

@@ -30,7 +30,7 @@ async function setup() {
   const storage = new D1Storage(sqlite as unknown as D1Database);
   await storage.usernames.put({ username: "alice", irkPubHex: hex(irk.publicKey), claimedAt: 1 });
   for (const u of ["demo-ok", "demo-gone"]) {
-    await storage.usernames.put({ username: u, irkPubHex: hex(irk.publicKey), claimedAt: 1 });
+    await storage.usernames.put({ username: u, irkPubHex: hex(irk.publicKey), claimedAt: 1, isDemo: true });
   }
   await storage.demoUsers.insert(demoRow("demo-ok", "ready"));
   await storage.demoUsers.insert(demoRow("demo-gone", "cleanup-only"));
@@ -166,6 +166,20 @@ describe("account-not-found", () => {
       const gone = await call(env, "GET", "/api/users/demo-gone/pods");
       expect(gone!.status).toBe(404);
       expect(((await gone!.json()) as { code: string }).code).toBe("account-not-found");
+    } finally {
+      close();
+    }
+  });
+
+  it("M5: a demo row left from an earlier holder of the name never makes the real owner public", async () => {
+    const { env, sqlite, close } = await setup();
+    try {
+      const storage = new D1Storage(sqlite as unknown as D1Database);
+      await storage.usernames.put({ username: "dana", irkPubHex: hex(irk.publicKey), claimedAt: 2 });
+      await storage.demoUsers.insert(demoRow("dana", "ready"));
+      expect((await call(env, "GET", "/api/users/dana/pods"))!.status).toBe(401);
+      const resolve = await call(env, "GET", "/api/account/resolve/dana");
+      expect(((await resolve!.json()) as { kind: string }).kind).not.toBe("demo");
     } finally {
       close();
     }

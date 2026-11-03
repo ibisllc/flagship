@@ -10,7 +10,7 @@
 // reveals, so the answer tells a caller nothing new. A demo account counts as
 // existing, except one that is being cleaned up (resolve calls that unknown).
 
-import type { DemoUsersStorage, UsernameStorage } from "@flagship/storage";
+import type { DemoUserRecord, DemoUsersStorage, UsernameRecord, UsernameStorage } from "@flagship/storage";
 import type { HandlerResponseWithHeaders } from "./types.js";
 
 export const ACCOUNT_NOT_FOUND_CODE = "account-not-found";
@@ -20,11 +20,24 @@ export interface AccountGoneDeps {
   demoUsers: DemoUsersStorage;
 }
 
+/**
+ * The demo row that speaks for the account holding the name now, if any (security review M5). Demo provisioning writes
+ * the account row (`isDemo: true`, account type "demo", claimed at the demo row's `createdAt`) and the demo row in one
+ * batch. A row whose account row is gone never applies; neither does one older than the account row now holding the
+ * name, unless that row is itself marked demo: a later, real owner of the name claims after the demo row was made.
+ */
+export function currentDemoRow(demo: DemoUserRecord | undefined, user: UsernameRecord | undefined): DemoUserRecord | undefined {
+  if (!demo || !user) return undefined;
+  if (user.isDemo === true || user.accountType === "demo") return demo;
+  return user.claimedAt <= demo.createdAt ? demo : undefined;
+}
+
 export async function accountExists(deps: AccountGoneDeps, username: string): Promise<boolean> {
   const u = username.toLowerCase();
   // Both lookups always run, so an existing, a demo and a missing name cost
   // the same work before the answer.
-  const [demo, user] = await Promise.all([deps.demoUsers.get(u), deps.usernames.get(u)]);
+  const [demoRow, user] = await Promise.all([deps.demoUsers.get(u), deps.usernames.get(u)]);
+  const demo = currentDemoRow(demoRow, user);
   if (demo) return demo.state !== "cleanup-only";
   return !!user;
 }

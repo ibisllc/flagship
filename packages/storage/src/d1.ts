@@ -468,6 +468,9 @@ export class D1UsernameStorage implements UsernameStorage {
     const u = username.toLowerCase();
     const results = await this.db.batch([
       ...accountGoneStatements(this.db, u, at),
+      // The account's demo row goes in the same transaction (also the FK's ON DELETE CASCADE, named here so it never
+      // depends on it): a leftover row would make the name's next owner a demo account (security review M5).
+      this.db.prepare("DELETE FROM demo_users WHERE username = ?").bind(u),
       this.db.prepare("DELETE FROM usernames WHERE username = ?").bind(u),
     ]);
     const meta = results[results.length - 1]?.meta;

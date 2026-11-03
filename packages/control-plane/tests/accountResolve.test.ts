@@ -102,7 +102,7 @@ describe("handleAccountResolve", () => {
       provisionPhaseAt: null,
       provisionLastError: null,
     });
-    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const r = await handleAccountResolve(deps({ demoUsers, usernames: usernames({ demoalice: { isDemo: true } }) }), "demoalice");
     expect(r.status).toBe(200);
     const b = body(r);
     expect(b.kind).toBe("demo");
@@ -187,7 +187,7 @@ describe("handleAccountResolve", () => {
       provisionLastError: null,
     });
     await demoUsers.setProvisionPhase("demoalice", "cert-issued", null, 555);
-    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const r = await handleAccountResolve(deps({ demoUsers, usernames: usernames({ demoalice: { isDemo: true } }) }), "demoalice");
     const b = body(r);
     expect(b.demoServer!.phase).toBe("cert-issued");
     expect(b.demoServer!.phaseAt).toBe(555);
@@ -215,7 +215,7 @@ describe("handleAccountResolve", () => {
       provisionLastError: null,
     });
     await demoUsers.setProvisionPhase("demoalice", "failed", "acme dns-01 timeout", 777);
-    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const r = await handleAccountResolve(deps({ demoUsers, usernames: usernames({ demoalice: { isDemo: true } }) }), "demoalice");
     const b = body(r);
     expect(b.demoServer!.phase).toBe("failed");
     expect(b.demoServer!.lastError).toBe("acme dns-01 timeout");
@@ -241,7 +241,7 @@ describe("handleAccountResolve", () => {
       provisionPhaseAt: null,
       provisionLastError: null,
     });
-    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const r = await handleAccountResolve(deps({ demoUsers, usernames: usernames({ demoalice: { isDemo: true } }) }), "demoalice");
     const b = body(r);
     expect(b.demoServer!.phase).toBeNull();
     expect(b.demoServer!.phaseAt).toBeNull();

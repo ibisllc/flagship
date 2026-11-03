@@ -14,6 +14,7 @@ import type {
   WebauthnRecoveryStorage,
   DemoUsersStorage,
 } from "@flagship/storage";
+import { currentDemoRow } from "./accountGone.js";
 import { validateUserLabel } from "./labels.js";
 import { ok, type HandlerResponseWithHeaders } from "./types.js";
 import { demoServerBlockFromRow, type DemoServerBlock } from "./demoUsers.js";
@@ -65,7 +66,9 @@ export async function handleAccountResolve(
   // share one username grammar. Demo crypto is a
   // no-op — knowing the name is the capability — so the client skips
   // every credential gate and just attaches a device.
-  const demoRow = await deps.demoUsers.get(norm);
+  // A demo row counts only for the account row it was created with (security review M5).
+  const [demoRowAny, userAny] = await Promise.all([deps.demoUsers.get(norm), deps.usernames.get(norm)]);
+  const demoRow = currentDemoRow(demoRowAny, userAny);
   if (demoRow && (demoRow.state === "initializing" || demoRow.state === "cleanup-only")) {
     return ok<AccountResolution>(unknown(norm));
   }
@@ -88,7 +91,7 @@ export async function handleAccountResolve(
     return ok<AccountResolution>(unknown(norm));
   }
 
-  const user = await deps.usernames.get(norm);
+  const user = userAny;
   if (!user) {
     return ok<AccountResolution>(unknown(norm));
   }

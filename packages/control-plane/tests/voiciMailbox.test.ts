@@ -3,9 +3,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { InMemoryStorage } from "@flagship/storage";
+import { p256 } from "@noble/curves/nist.js";
 import {
+  b64Encode,
+  canonicalWebDelegationRevoke,
   checkVoiciMessage,
+  sealVoiciBody,
   signAccountDirectoryRequest,
+  signWebDelegation,
+  signWebEnvelopeEd25519,
   signVoiciBlock,
   signVoiciThreadFetchP256,
   signWebDelegationRevoke,
@@ -28,7 +34,7 @@ import {
   type VoiciMailboxDeps,
   type VoiciOwnerDeps,
 } from "../src/index.js";
-import { adminPub, buildPage, caPub, fakeBucket, hex, irkPub, ORIGIN, ownerSign, PAGE_ID, uploadHeaders, USER, visitor } from "./support/voiciFixture.js";
+import { adminPub, buildPage, caPub, fakeBucket, hex, inbox, irkPub, ORIGIN, ownerSign, PAGE_ID, uploadHeaders, USER, visitor } from "./support/voiciFixture.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const vectors = JSON.parse(readFileSync(join(here, "../../protocol/test-vectors/messages/vectors.json"), "utf8"));
@@ -72,11 +78,12 @@ async function mailbox(opts: { accepts?: 0 | 1 } = {}) {
   expect((await handleVoiciPublish(pagesDeps, USER, JSON.stringify(page.index))).status).toBe(200);
   const pushes: string[] = [];
   const limits = { ip: null as number | null, page: null as number | null };
+  const calls = { caKeys: 0, limitSend: 0 };
   const deps: VoiciMailboxDeps = {
     voici: storage.voici,
     origin: ORIGIN,
-    caKeys: () => [caPub],
-    limitSend: async () => limits.ip,
+    caKeys: () => (calls.caKeys++, [caPub]),
+    limitSend: async () => (calls.limitSend++, limits.ip),
     limitNewConversation: async () => limits.page,
     push: { message: async (_u, kind) => (pushes.push(kind), 1), pageDrafts: async () => 0 },
     now: () => now,
@@ -90,7 +97,8 @@ async function mailbox(opts: { accepts?: 0 | 1 } = {}) {
     voici: storage.voici,
     readTokens: {
       secret: undefined,
-      usernames: storage.usernames,
+      // A demo account: its demo row and an account row marked demo (security review M5).
+      usernames: { get: async (u: string) => ({ ...(await storage.usernames.get(u))!, isDemo: true }) } as never,
       identities: storage.deviceIdentities,
       servers: storage.servers,
       demoUsers: { get: async () => ({ username: USER }) } as never,
@@ -107,7 +115,7 @@ async function mailbox(opts: { accepts?: 0 | 1 } = {}) {
     const r = await handleVoiciSend(deps, JSON.stringify(direct ? { envelope: env, direct } : env));
     return { status: r.status, body: r.body as Record<string, unknown> };
   };
-  return { storage, bucket, deps, owner, send, pushes, limits, deviceAuth, setNow: (t: number) => (now = t) };
+  return { storage, bucket, deps, owner, send, pushes, limits, calls, deviceAuth, setNow: (t: number) => (now = t) };
 }
 
 describe("voi.ci send", () => {
@@ -192,7 +200,8 @@ describe("voi.ci thread, inbox, revoke, state", () => {
     const revoke = { delegatePub: v.browserPub, issuedAt: T0 };
     const other = visitor(T0, 2);
     expect((await handleVoiciRevoke(m.deps, { revoke, signature: signWebDelegationRevoke(revoke, other.pseud.seed), delegation: v.cred.delegation, delegationSig: v.cred.delegationSig })).status).toBe(403);
-    expect((await handleVoiciRevoke(m.deps, { revoke, signature: signWebDelegationRevoke(revoke, v.pseud.seed), delegation: v.cred.delegation, delegationSig: v.cred.delegationSig })).status).toBe(200);
+    const delegateSig = hex(p256.sign(canonicalWebDelegationRevoke(revoke), v.browserPriv, { lowS: true }));
+    expect((await handleVoiciRevoke(m.deps, { revoke, signature: signWebDelegationRevoke(revoke, v.pseud.seed), delegation: v.cred.delegation, delegationSig: v.cred.delegationSig, delegateSig })).status).toBe(200);
     expect((await m.send(v.message(T0))).body.code).toBe("revoked");
     const w = visitor(T0, 3);
     await m.send(w.message(T0));
@@ -201,7 +210,7 @@ describe("voi.ci thread, inbox, revoke, state", () => {
     // A stranger who knows w's browser key signs with its own pseudonym: it never sent with that key, so nothing is stored.
     const stranger = await handleVoiciRevoke(m.deps, { revoke: r3, signature: signWebDelegationRevoke(r3, other.pseud.seed), principalPub: other.pPub });
     expect([stranger.status, (stranger.body as { code: string }).code]).toEqual([404, "unknown-delegate"]);
-    expect(await m.deps.voici.isRevoked(w.browserPub, T0)).toBe(false);
+    expect(await m.deps.voici.isRevoked(w.browserPub, w.pPub, T0)).toBe(false);
     expect((await handleVoiciRevoke(m.deps, { revoke: r3, signature: signWebDelegationRevoke(r3, w.pseud.seed), principalPub: w.pPub })).status).toBe(200);
     expect((await m.send(w.message(T0))).body.code).toBe("revoked");
     const inbox = await handleVoiciInbox(m.owner, USER, "", null);
@@ -230,5 +239,134 @@ describe("voi.ci thread, inbox, revoke, state", () => {
     expect(await runVoiciGc({ voici: m.storage.voici, bucket: m.bucket }, T0 + 31 * 86_400_000)).toEqual({ pieces: 1, messages: 0, drafts: 0, revoked: 0, alerts: 0 });
     expect(m.bucket.objects.has(voiciPieceKey(PAGE_ID, "ab".repeat(32)))).toBe(false);
     expect((await runVoiciGc({ voici: m.storage.voici, bucket: m.bucket }, T0 + 181 * 86_400_000)).messages).toBe(1);
+  });
+});
+
+/** A voici-reply signed by any page owner's key, into any conversation. */
+function forgedReply(pageId: string, seed: Uint8Array, conv: string, msgId: string, sentAt: number) {
+  const from = hex(ed.getPublicKey(seed));
+  const body = sealVoiciBody({ conv, msgId, sentAt, fromPub: from, recipients: [inbox.publicKey, inbox.publicKey], plaintext: { v: 1, text: "Hi!", replyTo: null } });
+  return signWebEnvelopeEd25519({ v: 1, kind: "voici-reply", audience: pageId, conv, from, msgId, seq: 1, sentAt, bodyB64: b64Encode(body), cred: { pageSeq: 1 } }, seed);
+}
+
+const MALLORY_PAGE = "a0".repeat(16);
+const mallorySeed = new Uint8Array(32).fill(0x7a);
+async function malloryPage(m: Awaited<ReturnType<typeof mailbox>>) {
+  await m.storage.voici.publishPage(
+    { username: "mallory", pageId: MALLORY_PAGE, seq: 1, issuedAt: 1, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: hex(ed.getPublicKey(mallorySeed)), indexJson: "{}", publishedAt: 1 },
+    0,
+  );
+}
+
+describe("a reply stays in its own page's conversations (security review M2)", () => {
+  it("refuses a reply another page's owner signs into this page's conversation, and the cap still holds", async () => {
+    const m = await mailbox();
+    await malloryPage(m);
+    const v = visitor(T0);
+    for (let i = 0; i < 3; i++) expect((await m.send(v.message(T0))).status).toBe(200);
+    const forged = await m.send(forgedReply(MALLORY_PAGE, mallorySeed, v.conv, "ee".repeat(16), T0));
+    expect([forged.status, forged.body.code]).toEqual([404, "not-found"]);
+    expect(await m.storage.voici.listInbox(MALLORY_PAGE, 0, 10)).toEqual([]);
+    const fourth = await m.send(v.message(T0));
+    expect([fourth.status, fourth.body.code]).toEqual([429, "awaiting-reply"]);
+    // The real owner's reply still opens the conversation.
+    expect((await m.send(v.reply(T0, "aa".repeat(16)))).body.status).toBe("accepted");
+    expect((await m.send(v.message(T0))).status).toBe(200);
+  });
+
+  it("never counts or shows another page's row in a conversation, however it got there", async () => {
+    const m = await mailbox();
+    const v = visitor(T0);
+    for (let i = 0; i < 3; i++) await m.send(v.message(T0));
+    const planted = forgedReply(MALLORY_PAGE, mallorySeed, v.conv, "ef".repeat(16), T0);
+    await m.storage.voici.insertMessage({
+      pageId: MALLORY_PAGE, conv: v.conv, msgId: planted.msgId, kind: "voici-reply", fromPub: planted.from, delegatePub: null, sentAt: T0,
+      envelope: JSON.stringify(planted), size: 1, direct: false, pushed: false, storedAt: T0,
+    });
+    expect((await m.send(v.message(T0))).body.code).toBe("awaiting-reply");
+    const fetch = { conv: v.conv, since: "", issuedAt: T0 };
+    const thread = (await handleVoiciThread(m.deps, { ...fetch, sig: signVoiciThreadFetchP256(fetch, v.browserPriv), cred: v.cred })).body as { items: { envelope: { kind: string } }[] };
+    expect(thread.items.map((x) => x.envelope.kind)).toEqual(["voici-message", "voici-message", "voici-message"]);
+  });
+});
+
+describe("voi.ci send: a replay costs the network's budget, not the signature checks (Low b)", () => {
+  it("counts a replayed envelope against the per-IP limit and answers it without verifying again", async () => {
+    const m = await mailbox();
+    const env = visitor(T0).message(T0);
+    expect((await m.send(env)).body.storedAt).toBe(T0);
+    const [ca, ip] = [m.calls.caKeys, m.calls.limitSend];
+    expect((await m.send(env)).body).toEqual({ ok: true, status: "accepted", msgId: env.msgId });
+    expect([m.calls.caKeys, m.calls.limitSend]).toEqual([ca, ip + 1]);
+    m.limits.ip = 90;
+    const limited = await m.send(env);
+    expect([limited.status, limited.body.code, limited.body.retryAfterSec]).toEqual([429, "rate-limited", 90]);
+    expect(m.calls.caKeys).toBe(ca);
+  });
+
+  it("still verifies an envelope that reuses a stored msgId with other content", async () => {
+    const m = await mailbox();
+    const v = visitor(T0);
+    const env = v.message(T0, "Hello", "12".repeat(16));
+    await m.send(env);
+    const tampered = { ...env, seq: env.seq + 1 };
+    expect((await m.send(tampered)).body.code).toBe("bad-signature");
+  });
+});
+
+describe("voi.ci revoke: only the key's own pseudonym, only for itself (Low a)", () => {
+  it("refuses a stranger's self-made delegation for someone else's browser key", async () => {
+    const m = await mailbox();
+    const v = visitor(T0);
+    await m.send(v.message(T0));
+    const stranger = visitor(T0, 2);
+    // The stranger delegates to v's browser key under its own pseudonym and signs the revoke itself.
+    const delegation = { ...stranger.cred.delegation, delegatePub: v.browserPub };
+    const revoke = { delegatePub: v.browserPub, issuedAt: T0 };
+    const r = await handleVoiciRevoke(m.deps, {
+      revoke,
+      signature: signWebDelegationRevoke(revoke, stranger.pseud.seed),
+      delegation,
+      delegationSig: signWebDelegation(delegation, stranger.pseud.seed),
+    });
+    expect([r.status, (r.body as { code: string }).code]).toEqual([404, "unknown-delegate"]);
+    expect((await m.send(v.message(T0))).status).toBe(200);
+    // A signature by a key that is not the delegate's proves nothing either.
+    const wrongSig = hex(p256.sign(canonicalWebDelegationRevoke(revoke), stranger.browserPriv, { lowS: true }));
+    const r2 = await handleVoiciRevoke(m.deps, {
+      revoke,
+      signature: signWebDelegationRevoke(revoke, stranger.pseud.seed),
+      delegation,
+      delegationSig: signWebDelegation(delegation, stranger.pseud.seed),
+      delegateSig: wrongSig,
+    });
+    expect(r2.status).toBe(403);
+    expect((await m.send(v.message(T0))).status).toBe(200);
+  });
+
+  it("keeps one pseudonym's revocation from touching another pseudonym's use of the same key", async () => {
+    const m = await mailbox();
+    const v = visitor(T0);
+    await m.send(v.message(T0));
+    const stranger = visitor(T0, 2);
+    // Even a stored revocation under the stranger's pseudonym leaves v's delegation alone.
+    await m.storage.voici.revokeDelegate({ delegatePub: v.browserPub, pageId: PAGE_ID, principalPub: stranger.pPub, expiresAt: T0 + 86_400_000, revokedAt: T0 });
+    expect((await m.send(v.message(T0))).status).toBe(200);
+    const revoke = { delegatePub: v.browserPub, issuedAt: T0 };
+    expect((await handleVoiciRevoke(m.deps, { revoke, signature: signWebDelegationRevoke(revoke, v.pseud.seed), principalPub: v.pPub })).status).toBe(200);
+    expect((await m.send(v.message(T0))).body.code).toBe("revoked");
+  });
+
+  it("keeps a revocation no longer than a delegation can live, whatever expiry the delegation names", async () => {
+    const m = await mailbox();
+    const v = visitor(T0);
+    await m.send(v.message(T0));
+    const delegation = { ...v.cred.delegation, expiresAt: T0 + 3650 * 86_400_000 };
+    const revoke = { delegatePub: v.browserPub, issuedAt: T0 };
+    expect(
+      (await handleVoiciRevoke(m.deps, { revoke, signature: signWebDelegationRevoke(revoke, v.pseud.seed), delegation, delegationSig: signWebDelegation(delegation, v.pseud.seed) })).status,
+    ).toBe(200);
+    expect(await m.storage.voici.isRevoked(v.browserPub, v.pPub, T0 + 29 * 86_400_000)).toBe(true);
+    expect(await m.storage.voici.isRevoked(v.browserPub, v.pPub, T0 + 31 * 86_400_000)).toBe(false);
   });
 });

@@ -498,6 +498,49 @@ describe("rateLimit — wired into route()", () => {
     expect(calls.some((k) => k === "share-key-attestation|usernameHash|alice")).toBe(true);
   });
 
+  it("rate-limits the signed voi.ci name set per source and per account before the handler runs (B2 #12)", async () => {
+    expect(endpointFor("POST", "/api/users/alice/apps/alice--chess/voici-name")).toBe("voici-name-set");
+    expect(endpointFor("GET", "/api/users/alice/apps/alice--chess/voici-name")).toBeNull();
+    expect(extractUsernameHash("/api/users/Alice/apps/alice--chess/voici-name")).toBe("alice");
+    expect(LIMITS["voici-name-set"]?.map((a) => a.axis).sort()).toEqual(["ip", "ip", "usernameHash"]);
+    const { ns, calls } = makeCounters((key) => !key.startsWith("voici-name-set|usernameHash|"));
+    const r = await route(
+      new Request("https://flagshipserver.com/api/users/Alice/apps/alice--chess/voici-name", {
+        method: "POST",
+        body: JSON.stringify({ request: { username: "alice", serviceId: "alice--chess", name: "chess", issuedAt: 1 }, signature: "bb".repeat(64) }),
+        headers: { "content-type": "application/json", "cf-connecting-ip": "1.2.3.4" },
+      }),
+      makeEnv(ns),
+    );
+    expect(r.status).toBe(429);
+    const body = JSON.parse(await r.text());
+    expect([body.endpoint, body.limit]).toEqual(["voici-name-set", "usernameHash"]);
+    expect(calls).toContain("voici-name-set|ip|1.2.3.4");
+    expect(calls).toContain("voici-name-set|usernameHash|alice");
+  });
+
+  it("rate-limits the re-pair veto per source and per (source, account), never per account alone (B2 #12)", async () => {
+    expect(endpointFor("POST", "/api/users/alice/re-pair/veto")).toBe("re-pair-veto");
+    expect(endpointFor("POST", "/api/users/alice/re-pair")).toBe("re-pair-initiate");
+    expect(bindingSubject("re-pair-veto", "/api/users/Alice/re-pair/veto")).toBe("users:alice");
+    // A budget counted per account alone would let anyone spend it and keep the owner from vetoing a hostile recovery.
+    expect(LIMITS["re-pair-veto"]?.map((a) => a.axis).sort()).toEqual(["ip", "ip", "ipSubject"]);
+    const { ns, calls } = makeCounters((key) => !key.startsWith("re-pair-veto|ipSubject|"));
+    const r = await route(
+      new Request("https://flagshipserver.com/api/users/Alice/re-pair/veto", {
+        method: "POST",
+        body: JSON.stringify({ request: { username: "alice", issuedAt: 1 }, signature: "bb".repeat(64) }),
+        headers: { "content-type": "application/json", "cf-connecting-ip": "1.2.3.4" },
+      }),
+      makeEnv(ns),
+    );
+    expect(r.status).toBe(429);
+    const body = JSON.parse(await r.text());
+    expect([body.endpoint, body.limit]).toEqual(["re-pair-veto", "ipSubject"]);
+    expect(calls).toContain("re-pair-veto|ip|1.2.3.4");
+    expect(calls).toContain("re-pair-veto|ipSubject|1.2.3.4|users:alice");
+  });
+
   it("rate-limits the recovery endpoint (GET, pre-auth path with usernameHash axis)", async () => {
     const { ns, calls } = makeCounters((key) => !key.startsWith("recovery-by-username|usernameHash|"));
     const env = makeEnv(ns);

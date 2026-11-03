@@ -499,7 +499,10 @@ The **thread statement** binds T to P: `flagship/voici-thread-key/v1|<pageId>|<P
 
 Revocation: the app lists "Websites you're signed in to" (Settings → Messages) from the Messages state blob;
 "Sign out" signs `flagship/web-delegation-revoke/v1|<delegatePub>|<issuedAt>` with P and posts it to
-`POST /api/voici/web/revoke`; `.com` refuses B from then on (kept until the delegation's expiry). The phone learns
+`POST /api/voici/web/revoke`. `.com` stores it only once B is proven P's (a stored message P sent with B, or
+`delegateSig`, B's own P-256 signature over the same bytes; else 404 `unknown-delegate`), and then refuses B for P
+only: a revocation is keyed by (B, P), so one pseudonym can never sign another's browser out. It is kept until the
+delegation's expiry, at most 30 days (no delegation outlives its attestation). The phone learns
 revocations from the mailbox fetch (`revoked: [delegatePub]`) and refuses them on direct delivery.
 
 ### 6.5 The QR pipe
@@ -603,6 +606,7 @@ fetched thread plus 1 (so two browsers of the same visitor continue one sequence
 1. **Direct to the phone.** When the visitor opens the compose box, flagship-web pings
    `GET https://<u>.<servicesApex>/api/phone/live` (2 s timeout). A `200 {live:true, ownerSignPub}` with the
    page's `ownerSignPub` means the admin phone holds the name: messages go there. Anything else: mailbox.
+   The owner's phone then sees the visitor's IP address (privacy policy §2.11 says so).
 2. **Mailbox.** `POST https://<control apex>/api/voici/web/send`.
 
 Native draft delivery (§5.2) uses the same two paths from the apps.

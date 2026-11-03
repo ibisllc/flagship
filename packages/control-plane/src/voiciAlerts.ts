@@ -118,9 +118,9 @@ export async function handleVoiciAlerts(deps: VoiciAlertsDeps, body: unknown): P
   }
   const d = auth.delegation;
   const [revoked, page, thread, block, banned] = await Promise.all([
-    deps.voici.isRevoked(d.delegatePub, now),
+    deps.voici.isRevoked(d.delegatePub, d.principalPub, now),
     deps.voici.getPageById(d.audience),
-    deps.voici.listThread(order.conv, 0, 1),
+    deps.voici.listThread(d.audience, order.conv, 0, 1),
     deps.voici.getBlock(d.audience, d.principalPub),
     deps.isPseudonymBanned?.(d.principalPub) ?? false,
   ]);

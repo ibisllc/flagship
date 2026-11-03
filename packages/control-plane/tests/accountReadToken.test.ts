@@ -182,6 +182,7 @@ describe("reading with an account read token", () => {
   it("lets anyone read a demo account", async () => {
     const h = await harness(null);
     await h.storage.demoUsers.insert({ username: U } as DemoUserRecord);
+    await h.storage.usernames.setDemo(U, true);
     expect(await read(h.deps)).toEqual({ ok: true, demo: true });
   });
 
@@ -277,6 +278,7 @@ describe("a server's read of its own consume-once deposit", () => {
     const demo = `home.demo-user.flagship.services`;
     await h.storage.servers.put({ serverDomain: demo, username: "demo-user", identityPubKeyHex: hex(key(90).publicKey), registeredAt: 1 });
     await h.storage.demoUsers.insert({ username: "demo-user" } as unknown as DemoUserRecord);
+    await h.storage.usernames.put({ username: "demo-user", irkPubHex: hex(key(91).publicKey), claimedAt: 1, isDemo: true });
     expect((await requireServerRead(h.deps, demo, null)).ok).toBe(true);
   });
 });

@@ -59,8 +59,8 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
   it("T1: voi.ci/Plucky-Avocet/ 301s to voi.ci/plucky-avocet", async () => {
     const w = await world();
     expect((await w.claim("plucky-avocet")).status).toBe(200);
-    expect(await w.resolve("/Plucky-Avocet/")).toEqual({ kind: "redirect", location: "/plucky-avocet" });
-    expect(await w.resolve("/plucky-avocet/")).toEqual({ kind: "redirect", location: "/plucky-avocet" });
+    expect(await w.resolve("/Plucky-Avocet/")).toEqual({ kind: "redirect", location: "https://voi.ci/plucky-avocet" });
+    expect(await w.resolve("/plucky-avocet/")).toEqual({ kind: "redirect", location: "https://voi.ci/plucky-avocet" });
   });
 
   it("T2: claiming pluckyavocet next to plucky-avocet is refused as taken or too similar", async () => {
@@ -99,7 +99,7 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
   it("T7: voi.ci/@50cent 301s to voi.ci/50cent, which shows the page once it is published", async () => {
     const w = await world();
     await w.claim("50cent");
-    expect(await w.resolve("/@50cent")).toEqual({ kind: "redirect", location: "/50cent" });
+    expect(await w.resolve("/@50cent")).toEqual({ kind: "redirect", location: "https://voi.ci/50cent" });
     expect(await w.resolve("/50cent")).toEqual({ kind: "not-found" });
     await w.publish("50cent");
     expect(await w.resolve("/50cent")).toEqual({ kind: "page", username: "50cent" });
@@ -175,8 +175,8 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
     const w = await world();
     await w.claim("alice");
     expect(await w.s.names.renameUsername("alice", "alice-smith", NOW)).toEqual({ ok: true });
-    expect(await w.resolve("/alice")).toEqual({ kind: "redirect", location: "/alice-smith" });
-    expect(await w.resolve("/@alice")).toEqual({ kind: "redirect", location: "/alice-smith" });
+    expect(await w.resolve("/alice")).toEqual({ kind: "redirect", location: "https://voi.ci/alice-smith" });
+    expect(await w.resolve("/@alice")).toEqual({ kind: "redirect", location: "https://voi.ci/alice-smith" });
     expect(body(await w.claim("alice", 2)).code).toBe("taken");
   });
 

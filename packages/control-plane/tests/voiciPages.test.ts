@@ -167,9 +167,9 @@ describe("voi.ci paths and the one namespace", () => {
     await w.upload(p1);
     await w.publish(p1);
     const resolve = (p: string) => resolveVoiciPath({ names: w.storage.names, pages: w.storage.voici }, p);
-    expect(await resolve("/Alice")).toEqual({ kind: "redirect", location: "/alice" });
+    expect(await resolve("/Alice")).toEqual({ kind: "redirect", location: "https://voi.ci/alice" });
     expect(await resolve("/alice")).toEqual({ kind: "page", username: USER });
-    expect(await resolve("/@alice")).toEqual({ kind: "redirect", location: "/alice" });
+    expect(await resolve("/@alice")).toEqual({ kind: "redirect", location: "https://voi.ci/alice" });
     expect(await resolve("/bob")).toEqual({ kind: "not-found" });
     expect(await resolve("/a_b")).toEqual({ kind: "not-found" });
     await w.storage.voici.setTakedown(USER, T0, "spam");
@@ -198,7 +198,8 @@ describe("voi.ci drafts", () => {
       },
       readTokens: {
         secret: undefined,
-        usernames: w.storage.usernames,
+        // A demo account: its demo row and an account row marked demo (security review M5).
+        usernames: { get: async (u: string) => ({ ...(await w.storage.usernames.get(u))!, isDemo: demo }) } as never,
         identities: w.storage.deviceIdentities,
         servers: w.storage.servers,
         demoUsers: { get: async () => (demo ? ({ username: USER } as never) : undefined) } as never,

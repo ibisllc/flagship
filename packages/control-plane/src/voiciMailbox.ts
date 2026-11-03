@@ -20,6 +20,7 @@ import {
   canonicalVoiciThreadFetch,
   canonicalVoiciThreadStatement,
   canonicalWebDelegation,
+  canonicalWebDelegationRevoke,
   canonicalWebEnvelope,
   checkMessagesKeyAttestation,
   checkVoiciReply,
@@ -83,7 +84,8 @@ export interface VoiciFastCheckContext {
   now: number;
   /** The page blocked this pseudonym, or Flagship banned it. */
   isBlocked?: (pseudonymPub: string) => Promise<boolean>;
-  isRevoked?: (delegatePub: string) => Promise<boolean>;
+  /** This pseudonym signed this browser key out (revocations are per (browser key, pseudonym)). */
+  isRevoked?: (delegatePub: string, principalPub: string) => Promise<boolean>;
   rateLimit?: (env: WebEnvelope) => Promise<VoiciCheckRefusal | null>;
 }
 
@@ -165,7 +167,7 @@ export async function checkVoiciMessageFast(
   if (!ctx.acceptsMessages) return no("not-accepting");
   if (ctx.isBlocked && (await ctx.isBlocked(env.from))) return no("blocked");
   const delegatePub = c.delegation && typeof c.delegation === "object" ? (c.delegation as Record<string, unknown>).delegatePub : undefined;
-  if (typeof delegatePub === "string" && ctx.isRevoked && (await ctx.isRevoked(delegatePub))) return no("revoked");
+  if (typeof delegatePub === "string" && ctx.isRevoked && (await ctx.isRevoked(delegatePub, env.from))) return no("revoked");
   const limited = ctx.rateLimit ? await ctx.rateLimit(env) : null;
   if (limited) return no(limited);
   await warmCred(c);
@@ -311,6 +313,11 @@ export async function handleVoiciSend(deps: VoiciMailboxDeps, bodyText: string):
   if (!outer.ok) return voiciRefusal(SEND_STATUS[outer.code] ?? 400, outer.code);
   const page = await deps.voici.getPageById(outer.envelope.audience);
   if (!page || page.takenDownAt !== null) return voiciRefusal(404, "not-found");
+  // The network's budget first, for every attempt (a replay included), and a replay of a stored envelope is answered
+  // before any signature is checked again (security review, voi.ci Low b).
+  const [ip, existing] = await Promise.all([deps.limitSend?.() ?? null, deps.voici.getMessage(page.pageId, outer.envelope.conv, outer.envelope.msgId)]);
+  if (ip !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: ip });
+  if (existing && sameEnvelope(existing.envelope, body.envelope)) return accepted(outer.envelope.msgId, null);
   let retryAfterSec = 0;
   let isNew = false;
   let stats: Awaited<ReturnType<VoiciStorage["convStats"]>> | null = null;
@@ -326,16 +333,12 @@ export async function handleVoiciSend(deps: VoiciMailboxDeps, bodyText: string):
       acceptedConv = block?.op === "unblock";
       return block?.op === "block" || banned;
     },
-    isRevoked: (dp) => deps.voici.isRevoked(dp, now),
+    isRevoked: (dp, principal) => deps.voici.isRevoked(dp, principal, now),
     rateLimit: async (env) => {
-      const existing = await deps.voici.getMessage(env.conv, env.msgId);
+      // The same (conv, msgId) with other content: checked in full, then refused as a duplicate by the insert.
       if (existing) return null;
-      const [ip, s] = await Promise.all([deps.limitSend?.() ?? null, deps.voici.convStats(env.conv, now - HOUR, now - DAY)]);
+      const s = await deps.voici.convStats(page.pageId, env.conv, now - HOUR, now - DAY);
       stats = s;
-      if (ip !== null) {
-        retryAfterSec = ip;
-        return "rate-limited";
-      }
       isNew = s.messages === 0 && s.replies === 0;
       if (s.replies === 0 && !acceptedConv && s.messages >= VOICI_AWAITING_REPLY_CAP) return "awaiting-reply" as VoiciCheckRefusal;
       if (s.messagesLastHour >= VOICI_CONV_PER_HOUR) {
@@ -392,13 +395,20 @@ async function sendReply(deps: VoiciMailboxDeps, body: SendBody, envBytes: numbe
   if (!env) return voiciRefusal(400, "malformed");
   const page = await deps.voici.getPageById(env.audience);
   if (!page || page.takenDownAt !== null) return voiciRefusal(404, "not-found");
-  const [prior, retry] = await Promise.all([deps.voici.getMessage(env.conv, env.msgId), deps.limitSend?.() ?? null]);
+  // Everything about the conversation is read under this page (security review M2): a page's owner may reply only in a
+  // conversation a visitor opened with that page, never in another page's, which would lift that conversation's cap
+  // and put words in the other owner's mouth.
+  const [prior, retry, stats] = await Promise.all([
+    deps.voici.getMessage(page.pageId, env.conv, env.msgId),
+    deps.limitSend?.() ?? null,
+    deps.voici.convStats(page.pageId, env.conv, now - HOUR, now - DAY),
+  ]);
   if (retry !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: retry });
+  if (prior && sameEnvelope(prior.envelope, body.envelope)) return accepted(env.msgId, null);
   await edVerifyFast(env.sig, safeCanonical(env), page.ownerSignPub).catch(() => false);
   const r = checkVoiciReply(body.envelope, { pageId: page.pageId, ownerSignPub: page.ownerSignPub, freshAt: now });
   if (!r.ok) return voiciRefusal(SEND_STATUS[r.code] ?? 403, r.code);
   if (prior) return accepted(env.msgId, null);
-  const stats = await deps.voici.convStats(env.conv, now - HOUR, now - DAY);
   if (stats.messages === 0) return voiciRefusal(404, "not-found");
   const stored = await deps.voici.insertMessage({
     pageId: page.pageId,
@@ -416,6 +426,15 @@ async function sendReply(deps: VoiciMailboxDeps, body: SendBody, envBytes: numbe
   });
   if (stored.ok && deps.replyStored) await deps.replyStored(page.username, env.conv);
   return accepted(env.msgId, stored.ok ? now : null);
+}
+
+/** A stored envelope (as received, JSON) is the one sent again, compared in canonical form. */
+function sameEnvelope(stored: string, sent: unknown): boolean {
+  try {
+    return canonicalJson(JSON.parse(stored)) === canonicalJson(sent);
+  } catch {
+    return false;
+  }
 }
 
 function safeCanonical(env: WebEnvelope): Bytes {
@@ -452,7 +471,8 @@ const wireMessage = (m: { id: number; envelope: string; storedAt: number; fetche
  * voiciAlerts.ts): `issuedAt` within the send window; cred's attestation still holds (when CA keys are given); its
  * delegation (by P, for voi.ci, not expired) binds B to P; `conv` is P's conversation with the delegation's page;
  * `sig` is B's P-256 signature over `bytes`. Refusals are `.com` answers. The caller checks B is not signed out
- * (`voici.isRevoked(delegation.delegatePub)`, refusal `revoked`), alongside its own read so they leave as one batch.
+ * (`voici.isRevoked(delegation.delegatePub, delegation.principalPub)`, refusal `revoked`), alongside its own read so
+ * they leave as one batch.
  */
 export async function authorizeBrowserKey(
   deps: VoiciThreadDeps,
@@ -511,7 +531,11 @@ export async function handleVoiciThread(deps: VoiciThreadDeps, body: unknown): P
   const fetch = { conv: f.conv, since: f.since, issuedAt: f.issuedAt };
   const auth = await authorizeBrowserKey(deps, { conv: f.conv, issuedAt: f.issuedAt, sig, cred, bytes: () => canonicalVoiciThreadFetch(fetch) });
   if (!auth.ok) return auth.response;
-  const [revoked, rows] = await Promise.all([deps.voici.isRevoked(auth.delegation.delegatePub, nowOf(deps)), deps.voici.listThread(f.conv, since, VOICI_FETCH_LIMIT + 1)]);
+  const d = auth.delegation;
+  const [revoked, rows] = await Promise.all([
+    deps.voici.isRevoked(d.delegatePub, d.principalPub, nowOf(deps)),
+    deps.voici.listThread(d.audience, f.conv, since, VOICI_FETCH_LIMIT + 1),
+  ]);
   if (revoked) return voiciRefusal(403, "revoked");
   const page = rows.slice(0, VOICI_FETCH_LIMIT);
   return okNoStore({
@@ -523,40 +547,53 @@ export async function handleVoiciThread(deps: VoiciThreadDeps, body: unknown): P
 
 // ── revoke a browser key (§6.4) ─────────────────────────────────────────────
 
+/** The longest a revocation is kept: a delegation cannot outlive its attestation, which lives at most 30 days. */
+export const VOICI_REVOCATION_MAX_MS = 30 * DAY;
+
 /**
- * Body {revoke:{delegatePub, issuedAt}, signature} with either {delegation, delegationSig} (the delegation proves
- * which pseudonym the browser key belongs to) or {principalPub} (then a stored message of that pseudonym signed with
- * that key does; otherwise 404 unknown-delegate and nothing is stored). Only that pseudonym may sign it out.
- * Kept until the delegation's expiry (30 days when `.com` never saw the delegation).
+ * Body {revoke:{delegatePub, issuedAt}, signature} with either {delegation, delegationSig} (the delegation names the
+ * pseudonym and its page) or {principalPub}. The pseudonym P signs the revoke. P must also show the browser key B is
+ * really its own: a stored message P sent with B, or `delegateSig`, B's P-256 signature over the same revoke bytes;
+ * otherwise 404 unknown-delegate and nothing is stored, since anyone can sign a delegation to somebody else's B.
+ * The revocation ends P's delegation to B only (it is keyed by (B, P)), its reply alerts in P's conversation with that
+ * page go, and it is kept until the delegation's expiry, at most VOICI_REVOCATION_MAX_MS.
  */
 export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
-  const b = body as { revoke?: unknown; signature?: unknown; delegation?: unknown; delegationSig?: unknown; principalPub?: unknown };
+  const b = body as { revoke?: unknown; signature?: unknown; delegation?: unknown; delegationSig?: unknown; principalPub?: unknown; delegateSig?: unknown };
   const r = parseWebDelegationRevoke(b?.revoke);
   if (!r || typeof b.signature !== "string") return voiciRefusal(400, "malformed");
+  if (b.delegateSig !== undefined && typeof b.delegateSig !== "string") return voiciRefusal(400, "malformed");
   if (Math.abs(now - r.issuedAt) > VOICI_SEND_SKEW_MS) return voiciRefusal(403, "stale");
   let principalPub: string;
-  let pageId = "";
-  let expiresAt = now + 30 * DAY;
+  let claimedPage = "";
+  let expiresAt = now + VOICI_REVOCATION_MAX_MS;
   if (b.delegation !== undefined) {
     const d = parseWebDelegation(b.delegation);
     if (!d || typeof b.delegationSig !== "string" || d.delegatePub !== r.delegatePub || !/^[0-9a-f]{32}$/.test(d.audience)) return voiciRefusal(400, "malformed");
     if (!ed25519VerifyHex(b.delegationSig, canonicalWebDelegation(d), d.principalPub)) return voiciRefusal(403, "bad-delegation");
     principalPub = d.principalPub;
-    pageId = d.audience;
-    expiresAt = d.expiresAt;
+    claimedPage = d.audience;
+    expiresAt = Math.min(d.expiresAt, expiresAt);
   } else {
     if (!isLowerHex(b.principalPub, 32)) return voiciRefusal(400, "malformed");
     principalPub = b.principalPub;
   }
   if (!verifyWebDelegationRevoke(r, b.signature, principalPub)) return voiciRefusal(403, "bad-signature");
-  // Revocation is looked up by browser key alone, so a pseudonym that never proved the key is its own (no delegation,
-  // no stored message sent with it) must not be able to sign a stranger's browser out.
-  if (!pageId) pageId = (await deps.voici.delegatePage(principalPub, r.delegatePub)) ?? "";
+  // B is P's: B signed this revoke itself, or P stored a message sent with B (on the page the delegation names).
+  let pageId = "";
+  if (typeof b.delegateSig === "string") {
+    if (!claimedPage) return voiciRefusal(400, "malformed");
+    if (!(await p256VerifyFast(b.delegateSig, canonicalWebDelegationRevoke(r), r.delegatePub))) return voiciRefusal(403, "bad-signature");
+    pageId = claimedPage;
+  } else {
+    const sentOn = await deps.voici.delegatePage(principalPub, r.delegatePub);
+    if (sentOn && (!claimedPage || sentOn === claimedPage)) pageId = sentOn;
+  }
   if (!pageId) return voiciRefusal(404, "unknown-delegate");
   await Promise.all([
     expiresAt > now ? deps.voici.revokeDelegate({ delegatePub: r.delegatePub, pageId, principalPub, expiresAt, revokedAt: now }) : null,
-    deps.voici.deleteAlertsForDelegate(r.delegatePub),
+    deps.voici.deleteAlertsForDelegate(r.delegatePub, voiciConv(pageId, principalPub)),
   ]);
   return okNoStore({ ok: true });
 }

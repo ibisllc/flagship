@@ -106,11 +106,10 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toContain("iOS soon");
     expect(r.body).not.toContain("Android soon");
     expect(r.body).toContain('aria-disabled="true"');
-    expect(r.body).toContain('data-studio-platform="mac"');
-    expect(r.body).toContain('href="/download/mac"');
-    expect(r.body).toContain('data-studio-platform="windows"');
-    expect(r.body).toContain('href="/download/windows"');
-    expect(r.body).toContain("userAgentData?.platform");
+    // Studio is one quiet link to /studio; the store buttons stay the call to action.
+    expect(r.body).toContain("Download Flagship Studio on your computer");
+    expect(r.body).not.toContain("/download/mac");
+    expect(r.body).not.toContain("/download/windows");
   });
 
   it("every app-promotion fallback points to the live web app without dead native links", async () => {
@@ -161,13 +160,32 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toContain('data-link="/qr"');
   });
 
-  it("never promotes one available desktop build without the other", async () => {
+  it("the homepage sends desktop visitors to /studio with one link; /studio offers every desktop build", async () => {
     const app = buildServer();
-    for (const path of ["/", "/studio/"]) {
-      const r = await app.inject({ method: "GET", url: path });
-      expect(r.statusCode, path).toBe(200);
-      expect(r.body, path).toContain("/download/mac");
-      expect(r.body, path).toContain("/download/windows");
+    const home = await app.inject({ method: "GET", url: "/" });
+    expect(home.statusCode).toBe(200);
+    const links = home.body.match(/<a class="studio-link" href="\/studio"[^>]*>[^]*?<\/a>/g) ?? [];
+    expect(links.length).toBe(2);
+    for (const link of links) {
+      expect(link).toContain("<span>Download Flagship Studio on your computer</span>");
+      // Both icons are decorative: the text is the link's name.
+      expect(link.match(/<svg [^>]*aria-hidden="true"/g)?.length).toBe(2);
+      expect(link).not.toContain("aria-label");
+    }
+    // The whole line is one link (one tab stop, one hit area): the row holds nothing but that <a>.
+    const rows = home.body.match(/<p class="studio-link-row[^"]*">([^]*?)<\/p>/g) ?? [];
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      const inner = row.replace(/^<p[^>]*>\s*/, "").replace(/\s*<\/p>$/, "");
+      expect(inner.startsWith('<a class="studio-link"')).toBe(true);
+      expect(inner.endsWith("</a>")).toBe(true);
+      expect(inner.match(/<a\b/g)?.length).toBe(1);
+    }
+    expect(home.body).not.toMatch(/data-studio-platform|\/download\/(mac|windows|linux)/);
+    const studio = await app.inject({ method: "GET", url: "/studio/" });
+    expect(studio.statusCode).toBe(200);
+    for (const os of ["mac", "windows", "linux"]) {
+      expect(studio.body).toContain(`data-platform="${os}" href="/download/${os}"`);
     }
   });
 
@@ -363,15 +381,27 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
 
 describe("Studio platforms that have not passed a hardware run say so", () => {
   const pub = join(__dirname, "../public");
-  it("the Windows downloads on the home page and /studio, and the Linux AppImage, are labelled Experimental", () => {
-    const home = readFileSync(join(pub, "index.html"), "utf8");
-    const windowsLinks = home.match(/data-studio-platform="windows"[^>]*>[^<]*<span class="studio-tag">Experimental<\/span>/g) ?? [];
-    expect(windowsLinks.length).toBe(2);
-    expect(home).not.toMatch(/data-studio-platform="mac"[^>]*>[^<]*Experimental/);
+  it("the Windows and Linux downloads on /studio carry an Experimental tag driven by one switch per platform", () => {
     const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
-    expect(studio).toMatch(/Download for Windows <em class="tag">Experimental<\/em>/);
-    expect(studio).toMatch(/Get the AppImage<\/a> <em class="tag">Experimental<\/em>/);
-    expect(studio).not.toMatch(/Download for macOS[^]{0,40}Experimental/);
+    expect(studio).toContain('Download for Windows <em class="tag" data-studio-experimental="windows">Experimental</em>');
+    expect(studio).toContain('Download for Linux <em class="tag" data-studio-experimental="linux">Experimental</em>');
+    expect(studio).not.toMatch(/Download for macOS[^]{0,80}Experimental/);
+    // Every tag is under the switch, so dropping one is a one-line change (docs/runbooks/final-deploy.md §10).
+    expect(studio.match(/>Experimental</g)?.length).toBe(studio.match(/data-studio-experimental="/g)?.length);
+    // The switch: app-stores.js runs (not deferred) after the tags are parsed.
+    expect(studio).toContain('<script src="/app-stores.js"></script>');
+    const stores = readFileSync(join(pub, "app-stores.js"), "utf8");
+    const sw = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(stores)?.[1] ?? "";
+    expect(sw).toMatch(/\bmac: false,/);
+    expect(sw).toMatch(/\bwindows: true,/);
+    expect(sw).toMatch(/\blinux: true,/);
+    // The localised pages keep the marker on the translated tag.
+    for (const lang of ["es", "fr", "de", "pt-br", "ja", "zh-hans"]) {
+      const page = readFileSync(join(pub, lang, "studio/index.html"), "utf8");
+      expect(page, lang).toContain('data-studio-experimental="windows"');
+      expect(page, lang).toContain('data-studio-experimental="linux"');
+      expect(page, lang).toContain('href="/download/linux"');
+    }
   });
   it("the floors on /studio are the ones the owner set: Windows 11, Node.js 22", () => {
     const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
@@ -425,6 +455,10 @@ describe("public claims match what the product does (GA review, B7)", () => {
     expect(priv).toMatch(/Play Integrity/);
     expect(priv).toMatch(/180 days/);
     expect(priv).toMatch(/never reach any AI model/);
+    // A message delivered straight to the page owner's phone (docs/voici-and-messages.md §8.1, direct path) shows
+    // the owner's phone the visitor's IP address: the policy says so (security review, voi.ci Low c).
+    const messages = priv.slice(priv.indexOf('<h3 id="messages">'), priv.indexOf('<section id="processors">'));
+    expect(messages).toMatch(/page owner's phone[^<]*IP address/);
     const abuse = page("abuse.html");
     for (const id of ['id="voici"', 'id="report-page"', 'id="what-happens"', 'id="reasons"', 'id="appeal"', 'id="authorities"']) expect(abuse).toContain(id);
     expect(abuse).toContain("Report this page");

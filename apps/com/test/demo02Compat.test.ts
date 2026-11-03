@@ -30,7 +30,8 @@ function demoRow(username: string): DemoUserRecord {
 async function setup() {
   const sqlite = createSqliteD1();
   const storage = new D1Storage(sqlite as unknown as D1Database);
-  for (const u of ["demo02", "alice"]) await storage.usernames.put({ username: u, irkPubHex: hex(irk.publicKey), claimedAt: 1 });
+  // Demo provisioning marks the account row demo (`is_demo = 1`) in the batch that writes its demo row.
+  for (const u of ["demo02", "alice"]) await storage.usernames.put({ username: u, irkPubHex: hex(irk.publicKey), claimedAt: 1, isDemo: u === "demo02" });
   await storage.demoUsers.insert(demoRow("demo02"));
   await storage.servers.put({ serverDomain: DEMO_HOST, username: "demo02", identityPubKeyHex: DEMO_BOX, registeredAt: 1 });
   await storage.servers.put({ serverDomain: REAL_HOST, username: "alice", identityPubKeyHex: REAL_BOX, registeredAt: 1 });

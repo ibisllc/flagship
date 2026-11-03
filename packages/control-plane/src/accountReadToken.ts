@@ -34,6 +34,7 @@ import {
   type DirectoryAuthorization,
   type DirectoryNonceStore,
 } from "./accountDirectory.js";
+import { currentDemoRow } from "./accountGone.js";
 import { hexToBytes } from "./hex.js";
 import { forbidden, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -210,7 +211,11 @@ export async function requireServerRead(
   // Started together (one D1 round trip on the Worker), and remembered for the checks below: the
   // server's row and the demo flag of the account its name says (`<server>.<account>.<apex>`).
   const named = domain.split(".")[1];
-  const [reg] = await Promise.all([deps.servers.get(domain), named ? deps.demoUsers.get(named) : undefined]);
+  const [reg] = await Promise.all([
+    deps.servers.get(domain),
+    named ? deps.demoUsers.get(named) : undefined,
+    named ? deps.usernames.get(named) : undefined,
+  ]);
   if (!reg || reg.revokedAt) return { ok: false, response: unauthorized("this server's read token is required") };
   return await requireAccountRead(deps, reg.username, authorization, thisServerOnly(domain));
 }
@@ -228,7 +233,8 @@ export async function requireAccountRead(
   opts: AccountReadOptions = {},
 ): Promise<AccountReadCheck> {
   const u = username.toLowerCase();
-  if (await deps.demoUsers.get(u)) return { ok: true, demo: true };
+  const [demo, user] = await Promise.all([deps.demoUsers.get(u), deps.usernames.get(u)]);
+  if (currentDemoRow(demo, user)) return { ok: true, demo: true };
   const denied = { ok: false as const, response: unauthorized("an account read token is required") };
   const match = /^Bearer\s+(\S+)$/i.exec(authorization ?? "");
   if (!match || !deps.secret) return denied;

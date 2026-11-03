@@ -339,7 +339,7 @@ describe("the voi.ci redirect (resolveVoiciPath)", () => {
     for (const p of ["3k9x2q", "halloween-party"]) {
       expect(await resolve(p, canonical), p).toEqual({ kind: "link", target: "https://party.alice.flagship.services/#alice--party" });
     }
-    expect(await resolve("Halloween-Party", canonical)).toEqual({ kind: "redirect", location: "/halloween-party" });
+    expect(await resolve("Halloween-Party", canonical)).toEqual({ kind: "redirect", location: "https://voi.ci/halloween-party" });
     // Exact names only: a look-alike is not the link.
     expect(await resolve("halloweenparty", canonical)).toEqual({ kind: "not-found" });
   });

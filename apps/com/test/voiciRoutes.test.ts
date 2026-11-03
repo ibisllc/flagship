@@ -117,7 +117,7 @@ describe("voi.ci routes", () => {
       expect(shell.headers.get("content-security-policy")).toContain("img-src 'self' blob:;");
       expect(shell.headers.get("x-frame-options")).toBe("DENY");
       const at = await w.call("https://voi.ci/@alice");
-      expect([at.status, at.headers.get("location")]).toEqual([301, "/alice"]);
+      expect([at.status, at.headers.get("location")]).toEqual([301, "https://voi.ci/alice"]);
       expect((await w.call("https://voi.ci/nobody-here")).status).toBe(404);
       await w.seed.voici.setTakedown(USER, Date.now(), "spam");
       expect((await w.call("https://voi.ci/alice")).status).toBe(410);

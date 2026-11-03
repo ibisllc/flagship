@@ -251,6 +251,7 @@ describe("downloading the sealed disk key", () => {
     const storage = await setup({ irk, identity: makeKey() });
     await deposit(storage);
     await storage.demoUsers.insert({ username: USERNAME } as DemoUserRecord);
+    expect(await storage.usernames.setDemo(USERNAME, true)).toBe(true);
     expect((await handleGetSealedLuksKey(readDeps(storage), HOST, null)).status).toBe(200);
   });
 });

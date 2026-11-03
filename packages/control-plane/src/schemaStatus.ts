@@ -117,6 +117,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0126",
   // voi.ci namespace: one `names` registry for usernames, link names, codes and reserved words (unique safety key).
   "0127",
+  // voi.ci: browser-key revocations keyed by (browser key, pseudonym), so one pseudonym never signs another's out.
+  "0128",
 ];
 
 export interface SchemaStatusDeps {

@@ -196,28 +196,54 @@ export interface VoiciResolveDeps {
   resolveCanonical?: (username: string, serviceId: string) => Promise<string | null>;
   /** An app-bound link's current target (the box that leads the app now). Null keeps the stored one. */
   resolveAppUrl?: (username: string, serviceId: string) => Promise<string | null>;
+  /** voi.ci's own origin ("https://voi.ci", gym "https://gym.voi.ci"): every redirect Location is absolute on it. */
+  origin?: string;
   now?: () => number;
 }
 
+const VOICI_ORIGIN_RE = /^https:\/\/[a-z0-9.-]+$/;
+/** The characters a voi.ci path may hold outside `/-/` (names, codes, `@`, the slashes around them); upper case is
+ *  allowed only to be folded by the canonicalising 301. */
+const VOICI_PATH_RE = /^[A-Za-z0-9@\/-]*$/;
+
+/** One decode of a raw path, or null when it is not valid percent-encoding. */
+function decodeOnce(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Every request to voi.ci goes through here. `pathname` is the URL's path as received (it is never decoded, so
- * `%40x` is not `@x`); `search` rides along on a canonicalising 301. Lookups match the exact name, never the safety
- * key: voi.ci/pluckyavocet does not reach plucky-avocet.
+ * Every request to voi.ci goes through here. `pathname` is the URL's path as received; `search` rides along on a
+ * canonicalising 301. Lookups match the exact name, never the safety key: voi.ci/pluckyavocet does not reach
+ * plucky-avocet.
+ *
+ * Never an open redirect (security review M1): outside `/-/` the path, raw and decoded once, must hold only
+ * a-z 0-9 - @ / (so `%40x` is a 404, not `@x`, and no `\`, `.` or `%2F` ever reaches a Location); a name part that
+ * starts with `/` (`//evil.com`) or holds a `/` is a 404 before any redirect; and every Location is absolute on
+ * voi.ci's origin, so a browser can never read it as another host.
  */
 export async function resolveVoiciPath(deps: VoiciResolveDeps, pathname: string, search = ""): Promise<VoiciResolution> {
   const raw = pathname.startsWith("/") ? pathname.slice(1) : pathname;
   // D11 first: the site's files keep their case (fonts/Geist-Variable.woff2), so `/-/` is exempt from D13.
   if (raw === "-" || raw.startsWith("-/")) return { kind: "system", rest: raw.slice(2) };
+  const decoded = decodeOnce(raw);
+  if (decoded === null || decoded !== raw || !VOICI_PATH_RE.test(raw)) return { kind: "not-found" };
+  if (raw.startsWith("/")) return { kind: "not-found" };
   const p = raw.toLowerCase().replace(/\/+$/, "");
-  if (p !== raw) return { kind: "redirect", location: `/${p}${search}` };
-  if (p === "") return { kind: "home" };
   if (p.includes("/")) return { kind: "not-found" };
+  const origin = deps.origin && VOICI_ORIGIN_RE.test(deps.origin) ? deps.origin : `https://${DEFAULT_VOICI_HOST}`;
+  const at = (name: string, query = "") => ({ kind: "redirect" as const, location: `${origin}/${name}${query}` });
+  if (p !== raw) return at(p, search.startsWith("?") ? search : "");
+  if (p === "") return { kind: "home" };
 
   if (p.startsWith("@")) {
     // D10: the @ form only ever names a username.
     const row = await deps.names.lookup(p.slice(1), "username");
     const current = row?.owner ? await deps.names.activeUsername(row.owner) : undefined;
-    return current ? { kind: "redirect", location: `/${current.name}` } : { kind: "not-found" };
+    return current ? at(current.name) : { kind: "not-found" };
   }
 
   const row = await deps.names.lookup(p);
@@ -245,7 +271,7 @@ export async function resolveVoiciPath(deps: VoiciResolveDeps, pathname: string,
   const current = row.owner ? await deps.names.activeUsername(row.owner) : undefined;
   if (row.status === "held") {
     // During the grace period an old name redirects to the owner's current one; a deleted account's is a 404.
-    return current ? { kind: "redirect", location: `/${current.name}` } : { kind: "not-found" };
+    return current ? at(current.name) : { kind: "not-found" };
   }
   const page = await deps.pages.getPage(row.owner ?? row.name);
   if (!page) return { kind: "not-found" };

@@ -144,13 +144,15 @@ export interface VoiciStorage {
 
   /** False when (conv, msgId) is already stored. */
   insertMessage(rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">): Promise<{ ok: true; id: number } | { ok: false }>;
-  getMessage(conv: string, msgId: string): Promise<VoiciMessageRecord | null>;
-  convStats(conv: string, hourAgo: number, dayAgo: number): Promise<VoiciConvStats>;
+  /** Conversation reads are scoped to (pageId, conv): a row stored under another page never counts as this page's
+   *  (security review M2). */
+  getMessage(pageId: string, conv: string, msgId: string): Promise<VoiciMessageRecord | null>;
+  convStats(pageId: string, conv: string, hourAgo: number, dayAgo: number): Promise<VoiciConvStats>;
   /** Messages of a page with id > sinceId, oldest first. */
   listInbox(pageId: string, sinceId: number, limit: number): Promise<VoiciMessageRecord[]>;
   /** Marks the page's voici-messages in (afterId, throughId] fetched. */
   markFetched(pageId: string, afterId: number, throughId: number, at: number): Promise<number>;
-  listThread(conv: string, sinceId: number, limit: number): Promise<VoiciMessageRecord[]>;
+  listThread(pageId: string, conv: string, sinceId: number, limit: number): Promise<VoiciMessageRecord[]>;
   /** The highest id of a voici-message in the conversation an owner device fetched, 0 when none. */
   deliveredThrough(conv: string): Promise<number>;
   deleteMessagesBefore(before: number, limit: number): Promise<number>;
@@ -162,8 +164,10 @@ export interface VoiciStorage {
   getBlock(pageId: string, pseudonymPub: string): Promise<VoiciBlockRecord | null>;
   listBlocked(pageId: string): Promise<string[]>;
 
+  /** Keyed by (delegatePub, principalPub): one pseudonym's revocation never ends another's delegation to the same
+   *  browser key. A second revocation keeps the later expiry. */
   revokeDelegate(rec: VoiciRevokedDelegate): Promise<void>;
-  isRevoked(delegatePub: string, now: number): Promise<boolean>;
+  isRevoked(delegatePub: string, principalPub: string, now: number): Promise<boolean>;
   listRevoked(pageId: string, now: number): Promise<string[]>;
   deleteExpiredRevoked(now: number, limit: number): Promise<number>;
 
@@ -188,7 +192,8 @@ export interface VoiciStorage {
   listAlerts(conv: string): Promise<VoiciAlertRecord[]>;
   deleteAlert(conv: string, endpointHash: string): Promise<boolean>;
   deleteAlertsForPage(pageId: string): Promise<number>;
-  deleteAlertsForDelegate(delegatePub: string): Promise<number>;
+  /** The browser key's alerts in one conversation (the one its revoked delegation was for). */
+  deleteAlertsForDelegate(delegatePub: string, conv: string): Promise<number>;
 
   /** Account deletion (§10.3): the page, its mailbox, reply alerts, blocks, revocations, drafts and the state blob go; its pieces
    *  are left for the cron to delete (unreferenced at 0). Returns the page id, if there was a page. */
@@ -442,12 +447,12 @@ export class D1VoiciStorage implements VoiciStorage {
         .prepare("DELETE FROM voici_drafts WHERE rowid IN (SELECT rowid FROM voici_drafts WHERE created_at < ?1 ORDER BY created_at LIMIT ?2)")
         .bind(o.draftsBefore, o.limit),
       this.db
-        .prepare("DELETE FROM voici_revoked_delegates WHERE delegate_pub IN (SELECT delegate_pub FROM voici_revoked_delegates WHERE expires_at <= ?1 LIMIT ?2)")
+        .prepare("DELETE FROM voici_revoked_keys WHERE rowid IN (SELECT rowid FROM voici_revoked_keys WHERE expires_at <= ?1 LIMIT ?2)")
         .bind(o.now, o.limit),
       this.db
         .prepare(
           "DELETE FROM voici_alerts WHERE rowid IN (SELECT a.rowid FROM voici_alerts a WHERE a.expires_at <= ?1 " +
-            "OR NOT EXISTS (SELECT 1 FROM voici_messages m WHERE m.conv = a.conv) LIMIT ?2)",
+            "OR NOT EXISTS (SELECT 1 FROM voici_messages m WHERE m.page_id = a.page_id AND m.conv = a.conv) LIMIT ?2)",
         )
         .bind(o.now, o.limit),
     ]);
@@ -476,19 +481,22 @@ export class D1VoiciStorage implements VoiciStorage {
     }
   }
 
-  async getMessage(conv: string, msgId: string) {
-    const r = await this.db.prepare(`SELECT ${MSG_COLS} FROM voici_messages WHERE conv = ?1 AND msg_id = ?2`).bind(conv, msgId).first<MessageRow>();
+  async getMessage(pageId: string, conv: string, msgId: string) {
+    const r = await this.db
+      .prepare(`SELECT ${MSG_COLS} FROM voici_messages WHERE page_id = ?1 AND conv = ?2 AND msg_id = ?3`)
+      .bind(pageId, conv, msgId)
+      .first<MessageRow>();
     return r ? messageFromRow(r) : null;
   }
 
-  async convStats(conv: string, hourAgo: number, dayAgo: number) {
+  async convStats(pageId: string, conv: string, hourAgo: number, dayAgo: number) {
     const r = await this.db
       .prepare(
         "SELECT COALESCE(SUM(kind = 'voici-message'), 0) AS m, COALESCE(SUM(kind = 'voici-reply'), 0) AS r, " +
-          "COALESCE(SUM(kind = 'voici-message' AND stored_at > ?2), 0) AS h, COALESCE(SUM(kind = 'voici-message' AND stored_at > ?3), 0) AS d, " +
-          "MAX(CASE WHEN pushed = 1 THEN stored_at END) AS p FROM voici_messages WHERE conv = ?1",
+          "COALESCE(SUM(kind = 'voici-message' AND stored_at > ?3), 0) AS h, COALESCE(SUM(kind = 'voici-message' AND stored_at > ?4), 0) AS d, " +
+          "MAX(CASE WHEN pushed = 1 THEN stored_at END) AS p FROM voici_messages WHERE page_id = ?1 AND conv = ?2",
       )
-      .bind(conv, hourAgo, dayAgo)
+      .bind(pageId, conv, hourAgo, dayAgo)
       .first<{ m: number; r: number; h: number; d: number; p: number | null }>();
     return {
       messages: r?.m ?? 0,
@@ -517,10 +525,10 @@ export class D1VoiciStorage implements VoiciStorage {
     return res.meta.changes ?? 0;
   }
 
-  async listThread(conv: string, sinceId: number, limit: number) {
+  async listThread(pageId: string, conv: string, sinceId: number, limit: number) {
     const rs = await this.db
-      .prepare(`SELECT ${MSG_COLS} FROM voici_messages WHERE conv = ?1 AND id > ?2 ORDER BY id LIMIT ?3`)
-      .bind(conv, sinceId, limit)
+      .prepare(`SELECT ${MSG_COLS} FROM voici_messages WHERE page_id = ?1 AND conv = ?2 AND id > ?3 ORDER BY id LIMIT ?4`)
+      .bind(pageId, conv, sinceId, limit)
       .all<MessageRow>();
     return (rs.results ?? []).map(messageFromRow);
   }
@@ -579,22 +587,26 @@ export class D1VoiciStorage implements VoiciStorage {
 
   async revokeDelegate(rec: VoiciRevokedDelegate) {
     await this.db
-      .prepare("INSERT OR IGNORE INTO voici_revoked_delegates (delegate_pub, page_id, principal_pub, expires_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5)")
-      .bind(rec.delegatePub, rec.pageId, rec.principalPub, rec.expiresAt, rec.revokedAt)
+      .prepare(
+        "INSERT INTO voici_revoked_keys (delegate_pub, principal_pub, page_id, expires_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5) " +
+          "ON CONFLICT (delegate_pub, principal_pub) DO UPDATE SET expires_at = excluded.expires_at, revoked_at = excluded.revoked_at " +
+          "WHERE excluded.expires_at > voici_revoked_keys.expires_at",
+      )
+      .bind(rec.delegatePub, rec.principalPub, rec.pageId, rec.expiresAt, rec.revokedAt)
       .run();
   }
 
-  async isRevoked(delegatePub: string, now: number) {
+  async isRevoked(delegatePub: string, principalPub: string, now: number) {
     const r = await this.db
-      .prepare("SELECT 1 AS x FROM voici_revoked_delegates WHERE delegate_pub = ?1 AND expires_at > ?2")
-      .bind(delegatePub, now)
+      .prepare("SELECT 1 AS x FROM voici_revoked_keys WHERE delegate_pub = ?1 AND principal_pub = ?2 AND expires_at > ?3")
+      .bind(delegatePub, principalPub, now)
       .first<{ x: number }>();
     return !!r;
   }
 
   async listRevoked(pageId: string, now: number) {
     const rs = await this.db
-      .prepare("SELECT delegate_pub FROM voici_revoked_delegates WHERE page_id = ?1 AND expires_at > ?2 ORDER BY delegate_pub")
+      .prepare("SELECT DISTINCT delegate_pub FROM voici_revoked_keys WHERE page_id = ?1 AND expires_at > ?2 ORDER BY delegate_pub")
       .bind(pageId, now)
       .all<{ delegate_pub: string }>();
     return (rs.results ?? []).map((r) => r.delegate_pub);
@@ -602,7 +614,7 @@ export class D1VoiciStorage implements VoiciStorage {
 
   async deleteExpiredRevoked(now: number, limit: number) {
     const res = await this.db
-      .prepare("DELETE FROM voici_revoked_delegates WHERE delegate_pub IN (SELECT delegate_pub FROM voici_revoked_delegates WHERE expires_at <= ?1 LIMIT ?2)")
+      .prepare("DELETE FROM voici_revoked_keys WHERE rowid IN (SELECT rowid FROM voici_revoked_keys WHERE expires_at <= ?1 LIMIT ?2)")
       .bind(now, limit)
       .run();
     return res.meta.changes ?? 0;
@@ -744,8 +756,8 @@ export class D1VoiciStorage implements VoiciStorage {
     return res.meta.changes ?? 0;
   }
 
-  async deleteAlertsForDelegate(delegatePub: string) {
-    const res = await this.db.prepare("DELETE FROM voici_alerts WHERE delegate_pub = ?1").bind(delegatePub).run();
+  async deleteAlertsForDelegate(delegatePub: string, conv: string) {
+    const res = await this.db.prepare("DELETE FROM voici_alerts WHERE delegate_pub = ?1 AND conv = ?2").bind(delegatePub, conv).run();
     return res.meta.changes ?? 0;
   }
 
@@ -760,7 +772,7 @@ export class D1VoiciStorage implements VoiciStorage {
         this.db.prepare("DELETE FROM voici_messages WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_blocks WHERE page_id = ?1").bind(page.pageId),
-        this.db.prepare("DELETE FROM voici_revoked_delegates WHERE page_id = ?1").bind(page.pageId),
+        this.db.prepare("DELETE FROM voici_revoked_keys WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("UPDATE voici_pieces SET unreferenced_at = 0 WHERE page_id = ?1").bind(page.pageId),
         this.db.prepare("DELETE FROM voici_pages WHERE username = ?1").bind(username),
       );
@@ -905,13 +917,13 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return { ok: true as const, id };
   }
 
-  async getMessage(conv: string, msgId: string) {
-    const m = this.messages.find((x) => x.conv === conv && x.msgId === msgId);
+  async getMessage(pageId: string, conv: string, msgId: string) {
+    const m = this.messages.find((x) => x.pageId === pageId && x.conv === conv && x.msgId === msgId);
     return m ? { ...m } : null;
   }
 
-  async convStats(conv: string, hourAgo: number, dayAgo: number) {
-    const ms = this.messages.filter((m) => m.conv === conv);
+  async convStats(pageId: string, conv: string, hourAgo: number, dayAgo: number) {
+    const ms = this.messages.filter((m) => m.pageId === pageId && m.conv === conv);
     const msgs = ms.filter((m) => m.kind === "voici-message");
     const pushed = ms.filter((m) => m.pushed).map((m) => m.storedAt);
     return {
@@ -938,8 +950,8 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return n;
   }
 
-  async listThread(conv: string, sinceId: number, limit: number) {
-    return this.messages.filter((m) => m.conv === conv && m.id > sinceId).slice(0, limit).map((m) => ({ ...m }));
+  async listThread(pageId: string, conv: string, sinceId: number, limit: number) {
+    return this.messages.filter((m) => m.pageId === pageId && m.conv === conv && m.id > sinceId).slice(0, limit).map((m) => ({ ...m }));
   }
 
   async deliveredThrough(conv: string) {
@@ -984,20 +996,23 @@ export class InMemoryVoiciStorage implements VoiciStorage {
       .sort();
   }
 
-  async revokeDelegate(rec: VoiciRevokedDelegate) {
-    if (!this.revoked.has(rec.delegatePub)) this.revoked.set(rec.delegatePub, { ...rec });
+  private static rk(delegatePub: string, principalPub: string) {
+    return `${delegatePub}|${principalPub}`;
   }
 
-  async isRevoked(delegatePub: string, now: number) {
-    const r = this.revoked.get(delegatePub);
+  async revokeDelegate(rec: VoiciRevokedDelegate) {
+    const k = InMemoryVoiciStorage.rk(rec.delegatePub, rec.principalPub);
+    const cur = this.revoked.get(k);
+    if (!cur || rec.expiresAt > cur.expiresAt) this.revoked.set(k, { ...(cur ?? rec), expiresAt: rec.expiresAt, revokedAt: rec.revokedAt });
+  }
+
+  async isRevoked(delegatePub: string, principalPub: string, now: number) {
+    const r = this.revoked.get(InMemoryVoiciStorage.rk(delegatePub, principalPub));
     return !!r && r.expiresAt > now;
   }
 
   async listRevoked(pageId: string, now: number) {
-    return [...this.revoked.values()]
-      .filter((r) => r.pageId === pageId && r.expiresAt > now)
-      .map((r) => r.delegatePub)
-      .sort();
+    return [...new Set([...this.revoked.values()].filter((r) => r.pageId === pageId && r.expiresAt > now).map((r) => r.delegatePub))].sort();
   }
 
   async deleteExpiredRevoked(now: number, limit: number) {
@@ -1058,8 +1073,8 @@ export class InMemoryVoiciStorage implements VoiciStorage {
   }
 
   private collectAlerts(now: number, limit: number) {
-    const live = new Set(this.messages.map((m) => m.conv));
-    const doomed = new Set(this.alerts.filter((a) => a.expiresAt <= now || !live.has(a.conv)).slice(0, limit));
+    const live = new Set(this.messages.map((m) => `${m.pageId}|${m.conv}`));
+    const doomed = new Set(this.alerts.filter((a) => a.expiresAt <= now || !live.has(`${a.pageId}|${a.conv}`)).slice(0, limit));
     this.alerts = this.alerts.filter((a) => !doomed.has(a));
     return doomed.size;
   }
@@ -1104,9 +1119,9 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return n - this.alerts.length;
   }
 
-  async deleteAlertsForDelegate(delegatePub: string) {
+  async deleteAlertsForDelegate(delegatePub: string, conv: string) {
     const n = this.alerts.length;
-    this.alerts = this.alerts.filter((a) => a.delegatePub !== delegatePub);
+    this.alerts = this.alerts.filter((a) => !(a.delegatePub === delegatePub && a.conv === conv));
     return n - this.alerts.length;
   }
 
