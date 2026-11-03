@@ -404,7 +404,7 @@ export interface ControlPlaneEnv {
    * `flagship` promo issue is refused (503) rather than minting a dead
    * key. Rotating the RunPod endpoint is purely a matter of changing this
    * value server-side — it never appears in a recipe or client build.
-   * Set via `wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT`.
+   * Set in wrangler.toml [vars] (not a secret: nothing in it is confidential).
    */
   FLAGSHIP_INFERENCE_ENDPOINT?: string;
 

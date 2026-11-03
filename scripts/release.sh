@@ -1445,7 +1445,9 @@ run_kickoff() {
   say "  amd64 takes about an hour, arm64 (TCG) up to three. Step 14 collects them."
 }
 
-KNOWN_SECRETS=(SERVING_REVOCATION_SEED ISSUANCE_ACME_ACCOUNT_KEY RELAY_MESH_KEY_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY VOICI_DEVICE_SECRET APPLE_TEAM_ID APPLE_DEVICECHECK_KEY_ID APPLE_DEVICECHECK_KEY PLAY_INTEGRITY_SA_JSON CLOUDFLARE_PURGE_TOKEN)
+KNOWN_SECRETS=(SERVING_REVOCATION_SEED ISSUANCE_ACME_ACCOUNT_KEY RELAY_MESH_KEY_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY VOICI_DEVICE_SECRET APPLE_TEAM_ID APPLE_DEVICECHECK_KEY_ID APPLE_DEVICECHECK_KEY PLAY_INTEGRITY_SA_JSON CLOUDFLARE_PURGE_TOKEN)
+# Former secrets now set in wrangler.toml [vars] (owner, 2026-11-02: nothing confidential in them).
+SECRETS_NOW_VARS=(FLAGSHIP_INFERENCE_ENDPOINT)
 run_secrets() {
   ensure_wt
   local prod gym
@@ -1461,6 +1463,17 @@ run_secrets() {
     if echo "$prod" | grep -qx "$n"; then ok "$n is set on prod"; else warn "$n is NOT on prod (create: cd apps/com && wrangler secret put $n)"; missing=1; fi
   done
   if [ "$missing" = 1 ]; then confirm "Some names are missing on prod. Continue anyway?" || return 10; fi
+  # Settings that used to be secrets and are now plain [vars] in wrangler.toml: a deploy fails while a secret of the
+  # same name exists, so the secret goes first (free AI reads as unavailable for the minutes until the deploy).
+  for n in "${SECRETS_NOW_VARS[@]}"; do
+    if echo "$prod" | grep -qx "$n"; then
+      warn "$n is still a prod secret; it is now a plain setting in apps/com/wrangler.toml"
+      confirm "Delete the prod secret $n now (the .com deploy then sets it from wrangler.toml)?" || return 10
+      XA "$WT/apps/com" npx wrangler secret delete "$n"
+    else
+      ok "$n is not a secret on prod (it comes from wrangler.toml)"
+    fi
+  done
 }
 
 # "on" or "off": release/box-release.json `appBrowser` in the worktree (absent means off).

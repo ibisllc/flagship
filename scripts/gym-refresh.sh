@@ -78,7 +78,7 @@ SERVICES_HEALTH="https://flagship-services-gym.fly.dev:8443/api/health"
 # public adapter index, the inference shim (the gym has none), and the
 # suspended Hetzner account.
 GYM_ONLY_SECRETS="PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET"
-NOT_NEEDED_IN_GYM="ADAPTERS_GITHUB_TOKEN APNS_BUNDLE_ID APNS_KEY_ID APNS_PRIVATE_KEY_PEM APNS_TEAM_ID FLAGSHIP_INFERENCE_ENDPOINT HCLOUD_TOKEN"
+NOT_NEEDED_IN_GYM="ADAPTERS_GITHUB_TOKEN APNS_BUNDLE_ID APNS_KEY_ID APNS_PRIVATE_KEY_PEM APNS_TEAM_ID HCLOUD_TOKEN"
 
 phase() { echo; echo "──── gym-refresh: $1"; }
 say() { echo "  $*"; }

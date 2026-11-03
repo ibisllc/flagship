@@ -459,7 +459,8 @@ A name on the gym but not on prod is a candidate to create. Known ones tied to
 recent work: `ACCOUNT_READ_TOKEN_SECRET` (`docs/account-read-token.md`),
 `PB_TOKEN_RSA_JWK`, `PB_FILLER_SECRET`, `PB_TAG_SECRET` (peer backup,
 `docs/peer-backup.md` section 15; until set the routes answer 503), and for
-Flagship Inference `FLAGSHIP_INFERENCE_TOKEN_SECRET` + `FLAGSHIP_INFERENCE_ENDPOINT`
+Flagship Inference `FLAGSHIP_INFERENCE_TOKEN_SECRET` (`FLAGSHIP_INFERENCE_ENDPOINT` is a plain
+setting in `apps/com/wrangler.toml` since 0.3; the secrets step deletes the old secret before the deploy)
 (`infra/inference/README.md`; also the shim's own `UPSTREAM_*` secrets, which the
 owner still has to choose).
 Release 0.3, certificate issuance (`docs/architecture-v2/issuance-service.md`): `ISSUANCE_ACME_ACCOUNT_KEY`, the

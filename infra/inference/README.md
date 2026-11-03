@@ -77,8 +77,9 @@ day however it's abused.
    ```sh
    cd apps/com
    npx wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET   # SAME value as the shim
-   npx wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT
+   # FLAGSHIP_INFERENCE_ENDPOINT is a plain setting in apps/com/wrangler.toml [vars]
    #   {"baseUrl":"https://inference.flagshipserver.com","model":"flagship-free"}
+   #   (not a secret since 0.3: nothing in it is confidential; release.sh deletes the old secret)
    cd ../.. && npx tsc -b && (cd apps/com && npm run deploy)
    ```
    `model` here is only a label (the shim pins the real one). The `baseUrl`

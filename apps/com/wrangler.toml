@@ -323,6 +323,10 @@ tag = "v5"
 new_sqlite_classes = ["ServingFeed"]
 
 [vars]
+# Flagship Inference (free AI): where boxes send build calls and the model label they name. Not a secret: every box
+# receives both in its pass. Must be the shim's custom domain, never *.workers.dev (.com refuses one; a workers.dev
+# address hid as a secret broke every free build from 2026-10-18 to 11-02). infra/inference/README.md.
+FLAGSHIP_INFERENCE_ENDPOINT = '{"baseUrl":"https://inference.flagshipserver.com","model":"flagship-free"}'
 # Name dibs window (docs/naming-recovery-and-name-change.md §7, docs/named-links.md): six months
 # from the 0.3 release (owner, 2026-10-23). Removing both turns dibs off and opens every free name.
 DIBS_WINDOW_START = "2026-10-25T00:00:00Z"
