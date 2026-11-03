@@ -457,7 +457,10 @@
 //       the format problem.
 //  v194: names are 3 to 30 characters (docs/voici-namespace-spec.md, owner clarification 4): usernames and link names
 //       (lib/nameRules.js), app names (lib/vibeNames.js, refused before the box is asked) and app address stems.
-const SHELL_VERSION = "v194";
+//  v195: a server from before 0.3 (`/pods` `updateRequired`) reads "Needs an update" on Home, and its page opens with
+//       "This server needs an update to keep working with Flagship 0.3" above the Software update card
+//       (lib/updateRequired.js, precached).
+const SHELL_VERSION = "v195";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -679,6 +682,7 @@ const OPTIONAL_SHELL = [
   "/lib/serverTransfer.js",
   "/lib/serverTrust.js",
   "/lib/serverUpdate.js",
+  "/lib/updateRequired.js",
   "/lib/serverPins.js",
   "/lib/serverKeyCard.js",
   "/lib/serverWildcardGrant.js",

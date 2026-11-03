@@ -3358,5 +3358,9 @@
   "access_list_not_a_valid_host": "ea256aa059c1",
   "provision_quiet_installer_finished": "52a8ea882f62",
   "provision_quiet_stuck": "02b65179ff38",
-  "provision_quiet_stuck_advice": "f062e170ac2e"
+  "provision_quiet_stuck_advice": "f062e170ac2e",
+  "needs_an_update": "bd6af9f6333a",
+  "update_required_title": "d034c377354d",
+  "update_required_cert_ends": "f5bf218acf0f",
+  "update_required_cert_unknown": "1756fe6e8116"
 }

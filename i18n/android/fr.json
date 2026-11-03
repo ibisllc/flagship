@@ -3418,5 +3418,9 @@
   "access_list_not_a_valid_host": "« %1$s » n’est pas un nom d’hôte valide",
   "provision_quiet_installer_finished": "L’installation est terminée. Le serveur démarre et devrait s’enregistrer d’ici quelques minutes.",
   "provision_quiet_stuck": "Ce serveur ne donne plus de nouvelles et ne s’est pas enregistré. Il est peut-être bloqué.",
-  "provision_quiet_stuck_advice": "S’il tourne dans Flagship Studio, regardez-le là. Sinon, redémarrez la machine. S’il ne démarre toujours pas, annulez la commande et recréez le serveur."
+  "provision_quiet_stuck_advice": "S’il tourne dans Flagship Studio, regardez-le là. Sinon, redémarrez la machine. S’il ne démarre toujours pas, annulez la commande et recréez le serveur.",
+  "needs_an_update": "Mise à jour requise",
+  "update_required_title": "Ce serveur doit être mis à jour pour continuer à fonctionner avec Flagship 0.3",
+  "update_required_cert_ends": "Son certificat ne peut pas être renouvelé et expire le %1$s. Mettez-le à jour avant cette date.",
+  "update_required_cert_unknown": "Son certificat ne pourra pas être renouvelé tant qu’il n’est pas mis à jour."
 }

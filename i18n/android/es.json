@@ -3418,5 +3418,9 @@
   "access_list_not_a_valid_host": "«%1$s» no es un nombre de host válido",
   "provision_quiet_installer_finished": "El instalador terminó. El servidor se está iniciando y debería registrarse en unos minutos.",
   "provision_quiet_stuck": "Este servidor dejó de informar y no se ha registrado. Puede que esté atascado.",
-  "provision_quiet_stuck_advice": "Si se ejecuta en Flagship Studio, revísalo allí. Si no, reinicia la máquina. Si aun así no arranca, cancela el pedido y vuelve a crear el servidor."
+  "provision_quiet_stuck_advice": "Si se ejecuta en Flagship Studio, revísalo allí. Si no, reinicia la máquina. Si aun así no arranca, cancela el pedido y vuelve a crear el servidor.",
+  "needs_an_update": "Necesita una actualización",
+  "update_required_title": "Este servidor necesita una actualización para seguir funcionando con Flagship 0.3",
+  "update_required_cert_ends": "Su certificado no se puede renovar y caduca el %1$s. Actualízalo antes.",
+  "update_required_cert_unknown": "Su certificado no se puede renovar hasta que se actualice."
 }

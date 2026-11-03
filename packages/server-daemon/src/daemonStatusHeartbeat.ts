@@ -1,5 +1,6 @@
 import { X509Certificate } from "node:crypto";
 import {
+  BOX_LEVEL,
   signDaemonStatusReport,
   signDaemonStatusReportHybrid,
   signBoxTrustStatusReport,
@@ -207,6 +208,8 @@ export async function postDaemonStatus(args: {
         },
         signature: bytesToHex(sig),
         ...(pqSignature ? { pqSignature } : {}),
+        // UNSIGNED: this box's compatibility level. `.com` tells the owner to update a box that sends none (0.2).
+        boxLevel: BOX_LEVEL,
         // UNSIGNED advisory field (NOT in the canonical bytes) — `.com` relays it
         // on /pods so clients can show which services this box currently leads.
         ...(args.leadsServices ? { leadsServices: args.leadsServices } : {}),

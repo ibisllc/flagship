@@ -3421,4 +3421,8 @@
     <string name="provision_quiet_installer_finished">インストーラーが終了しました。サーバーは起動中で、数分以内に登録されるはずです。</string>
     <string name="provision_quiet_stuck">このサーバーからの報告が止まり、登録もされていません。停止している可能性があります。</string>
     <string name="provision_quiet_stuck_advice">Flagship Studio で動かしている場合は、そちらで確認してください。そうでなければ、マシンを再起動してください。それでも起動しない場合は、注文をキャンセルしてサーバーを作成し直してください。</string>
+    <string name="needs_an_update">更新が必要です</string>
+    <string name="update_required_title">このサーバーを Flagship 0.3 で使い続けるには更新が必要です</string>
+    <string name="update_required_cert_ends">証明書を更新できず、%1$s に期限切れになります。それまでにサーバーを更新してください。</string>
+    <string name="update_required_cert_unknown">サーバーを更新するまで、証明書は更新できません。</string>
 </resources>

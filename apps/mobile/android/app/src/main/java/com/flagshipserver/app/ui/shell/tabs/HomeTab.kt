@@ -316,6 +316,7 @@ fun HomeTab() {
                 dismissed = bannerDismissed,
             )
             val awaitingBackup by app.podsAwaitingBackup.collectAsState()
+            val updateRequired by app.podsUpdateRequired.collectAsState()
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
@@ -400,6 +401,7 @@ fun HomeTab() {
                 },
                 awaitingBackup = awaitingBackup,
                 onSendBackup = { pod -> nav.navigate("import-backup?target=${URLEncoder.encode(pod.fqdn, "UTF-8")}") },
+                updateRequired = updateRequired,
             )
         }
         composable("restore-backup") {

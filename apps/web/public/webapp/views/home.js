@@ -562,7 +562,7 @@ export function renderServerCard(server, pod, opts = {}) {
     // full line rather than being crushed into the right margin against the title.
     // The server order (docs/server-order.md): only the leader wears a badge;
     // the order itself is read from position.
-    trailing: `${orderPillHtml(opts.order)}<span class="${pillClass}">${escapeHtml(c.label)}</span>`,
+    trailing: `${orderPillHtml(opts.order)}<span class="${pillClass}">${escapeHtml(c.label)}</span>${updateRequiredPillHtml(pod)}`,
     trailingBelow: true,
   });
   return `
@@ -572,6 +572,12 @@ export function renderServerCard(server, pod, opts = {}) {
     ${approveUnlock}
     ${keyChanged}
   `;
+}
+
+/** A server running a release this `.com` no longer fully serves (`/pods` `updateRequired`, a 0.2 box under 0.3). */
+export function updateRequiredPillHtml(pod) {
+  if (!pod?.updateRequired || pod.revokedAt) return "";
+  return `<span class="pill warn" data-testid="pod-card-update-required">${escapeHtml(tr("Needs an update"))}</span>`;
 }
 
 export const LEADER_LABEL = tr("Leader");

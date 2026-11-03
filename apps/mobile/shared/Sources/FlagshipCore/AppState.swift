@@ -163,6 +163,11 @@ public final class AppState {
     /// Home shows "Waiting for its backup" and offers to send it.
     public var podsAwaitingBackup: [String: AwaitingBackupWire] = [:]
 
+    /// Servers running a release this `.com` no longer fully serves (a 0.2
+    /// box under 0.3), per lowercased fqdn, from `/pods` `updateRequired`.
+    /// Home marks them and their page asks the owner to update them.
+    public var podsUpdateRequired: [String: UpdateRequiredWire] = [:]
+
     /// The Box Request Inbox (docs/box-request-inbox.md): ONE typed object,
     /// keyed by lowercased fqdn → the list of approvals that box is currently
     /// asking its owner for. Mirrors the backend's `/pods` `pendingRequests`

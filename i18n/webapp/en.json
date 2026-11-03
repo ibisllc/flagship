@@ -13201,5 +13201,21 @@
   "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": {
     "en": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.",
     "ctx": "webapp/lib/provisionProgress.js (install progress, box gone quiet)"
+  },
+  "Needs an update": {
+    "en": "Needs an update",
+    "ctx": "webapp/views/home.js: Home row pill, the server runs a release from before 0.3"
+  },
+  "This server needs an update to keep working with Flagship 0.3": {
+    "en": "This server needs an update to keep working with Flagship 0.3",
+    "ctx": "webapp/lib/updateRequired.js: server page banner title"
+  },
+  "Its certificate can't be renewed and runs out on {0}. Update it before then.": {
+    "en": "Its certificate can't be renewed and runs out on {0}. Update it before then.",
+    "ctx": "webapp/lib/updateRequired.js: banner line, {0} is a long date"
+  },
+  "Its certificate can't be renewed until it is updated.": {
+    "en": "Its certificate can't be renewed until it is updated.",
+    "ctx": "webapp/lib/updateRequired.js: banner line when the date is unknown"
   }
 }

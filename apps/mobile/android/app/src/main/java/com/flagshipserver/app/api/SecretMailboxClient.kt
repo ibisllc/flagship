@@ -15,6 +15,7 @@ import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
 
 interface SecretMailboxClient {
     /** POST /api/secret-requests — phone, IRK mailbox-auth. Returns the
@@ -644,6 +645,33 @@ data class BoxHealthDaemonWire(
     val lastExit: Long? = null,
 )
 
+/** `/pods` `updateRequired`: the box runs a release from before the one `.com`
+ *  needs (control-plane boxUpdateRequired.ts, a 0.2 box under 0.3), so its
+ *  certificate can't renew. Mirror of iOS UpdateRequiredWire. */
+@Serializable
+data class UpdateRequiredWire(
+    /** `box-too-old` */
+    val reason: String = "box-too-old",
+    /** When its current certificate runs out (ms), or null when `.com` doesn't know. */
+    val certificateExpiresAt: Long? = null,
+)
+
+/** Decodes `updateRequired` leniently: a garbled value reads as null instead
+ *  of failing the whole pods-list decode (as iOS's `try?`). */
+object LenientUpdateRequiredSerializer : kotlinx.serialization.KSerializer<UpdateRequiredWire?> {
+    override val descriptor = UpdateRequiredWire.serializer().nullable.descriptor
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): UpdateRequiredWire? {
+        val input = decoder as? kotlinx.serialization.json.JsonDecoder
+            ?: return runCatching { UpdateRequiredWire.serializer().deserialize(decoder) }.getOrNull()
+        val element = input.decodeJsonElement()
+        if (element !is kotlinx.serialization.json.JsonObject) return null
+        return runCatching { input.json.decodeFromJsonElement(UpdateRequiredWire.serializer(), element) }.getOrNull()
+    }
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: UpdateRequiredWire?) {
+        if (value == null) encoder.encodeNull() else UpdateRequiredWire.serializer().serialize(encoder, value)
+    }
+}
+
 /** `/pods` `awaitingBackup`: the backup a server waits for, and whether it is restoring it. */
 @Serializable
 data class AwaitingBackupWire(
@@ -717,6 +745,11 @@ data class PodDirectoryEntry(
      *  restoring it): Home says so. Advisory, from the box's heartbeat; null
      *  once the backup is in (docs/server-backup-and-clone.md). */
     val awaitingBackup: AwaitingBackupWire? = null,
+    /** The box runs a release this `.com` no longer fully serves (a 0.2 box
+     *  under 0.3): Home and its page tell the owner to update it. null when it
+     *  needs none (and for demo accounts, which Flagship updates itself). */
+    @Serializable(with = LenientUpdateRequiredSerializer::class)
+    val updateRequired: UpdateRequiredWire? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

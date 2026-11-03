@@ -273,6 +273,7 @@ public struct HomeTab: View {
                 .backupWaits(app.podsAwaitingBackup) { pod in
                     path.append(.importBackup(targetFqdn: pod.fqdn))
                 }
+                .updatesRequired(app.podsUpdateRequired)
             } else {
                 ProgressView()
             }
@@ -1052,6 +1053,7 @@ struct ServerDetailContainer: View {
                         CertPinRegistry.shared.verifiedReport(for: $0.fqdn)
                     },
                     health: pod.flatMap { app.podHealth[$0.fqdn.lowercased()] },
+                    updateRequired: pod.flatMap { app.podsUpdateRequired[$0.fqdn.lowercased()] },
                     revoked: pod?.isRevoked ?? false,
                     identityPubKeyHex: shownPod?.identityPubKeyHex ?? "",
                     apps: serverApps,

@@ -63,6 +63,24 @@ describe("0.2 demo clients against the 0.3 .com", () => {
     }
   });
 
+  it("the demo's 0.2 box gets no \"needs an update\" on /pods: Flagship updates it itself", async () => {
+    const { env, close } = await setup();
+    try {
+      const storage = new D1Storage(env.DB as D1Database);
+      // A 0.2 heartbeat: no boxLevel beside the signed report.
+      const report = { serverDomain: DEMO_HOST, certSha256: null, certValidUntil: 1_900_000_000_000, certIssuer: null, appsServed: [], nonce: "00".repeat(16), issuedAt: 1 };
+      await storage.daemonStatus.put({
+        serverDomain: DEMO_HOST, certSha256: null, certValidUntil: 1_900_000_000_000, certIssuer: null,
+        servicesServedJson: "[]", lastReported: Date.now(), reportJson: JSON.stringify(report), signatureHex: "00".repeat(64),
+      });
+      const body = (await (await call(env, "GET", "/api/users/demo02/pods")).json()) as { pods: Array<{ updateRequired?: unknown }> };
+      expect(body.pods).toHaveLength(1);
+      expect(body.pods[0]?.updateRequired).toBeUndefined();
+    } finally {
+      close();
+    }
+  });
+
   it("the 0.2 box's tokenless deposit reads still pass on a demo account (a real account's get 401)", async () => {
     const { env, close } = await setup();
     try {

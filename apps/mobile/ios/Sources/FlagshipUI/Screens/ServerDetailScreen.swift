@@ -59,6 +59,10 @@ public struct ServerDetailScreen: View {
     /// The box's latest signed health report from `/pods`, nil before the box
     /// runs the reporter.
     let health: BoxHealth?
+    /// `/pods` `updateRequired`: the box runs a release from before the one
+    /// `.com` needs (a 0.2 box under 0.3). Shows the banner and moves the
+    /// Software update card to the top. nil: it needs none.
+    let updateRequired: UpdateRequiredWire?
     /// The owner revoked this box (lost / stolen / decommissioned). It can't
     /// connect, so its BFF never answers; the page offers Un-revoke instead.
     let revoked: Bool
@@ -103,6 +107,7 @@ public struct ServerDetailScreen: View {
         pairing: Bool = false,
         verifiedCertStatus: DaemonStatusReport? = nil,
         health: BoxHealth? = nil,
+        updateRequired: UpdateRequiredWire? = nil,
         revoked: Bool = false,
         identityPubKeyHex: String = "",
         apps: ServerAppsController? = nil,
@@ -130,6 +135,7 @@ public struct ServerDetailScreen: View {
         self.pairing = pairing
         self.verifiedCertStatus = verifiedCertStatus
         self.health = health
+        self.updateRequired = updateRequired
         self.revoked = revoked
         self.identityPubKeyHex = identityPubKeyHex
         self.apps = apps
@@ -209,6 +215,9 @@ public struct ServerDetailScreen: View {
                         listedStkPubHex: identityPubKeyHex
                     )
                 }
+                if let updateRequired, !revoked {
+                    UpdateRequiredBanner(view: updateRequired)
+                }
                 switch state {
                 case .idle, .loading:
                     // HONEST LIVENESS (Fix B) — an unreachable/coming-up box won't
@@ -258,6 +267,10 @@ public struct ServerDetailScreen: View {
                         DebugAccessBanner(expiresAt: until)
                     }
                     overview(d: d, c: c)
+                    if updateRequired != nil, !revoked {
+                        // The banner's action: the same signed, endorsed update.
+                        UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
+                    }
                     ServingLineCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn,
                                     serving: d.serving, identityPubKeyHex: identityPubKeyHex,
                                     onChanged: onRefreshDetail)
@@ -306,7 +319,9 @@ public struct ServerDetailScreen: View {
                         // Classic → new stack (archV2Switch.ts): a signed dry run, then the move.
                         StackSwitchCard(serverDomain: d.serverFqdn)
                     }
-                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
+                    if updateRequired == nil || revoked {
+                        UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
+                    }
                     // An older box doesn't report debug access and can't take a grant.
                     if d.debugAccess != nil {
                         DebugAccessCard(serverDomain: d.serverFqdn, view: d.debugAccess, onChanged: onRefreshDetail)

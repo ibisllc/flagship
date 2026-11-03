@@ -84,7 +84,11 @@ be told to update, clearly. What in this run reaches them early, in order:
    Flagship. Update the app…" (`packages/control-plane/src/clientUpdate.ts`). A 0.2 box keeps its
    tunnel and control name; once the relay holds the serving key its app names stop (it pins no
    admin key) and its certificate can no longer renew (DNS-01 answers 410 "Update this server.").
-   The investor demo is waived (`demo02Compat.test.ts`).
+   The 0.3 apps tell the owner: a 0.3 box sends `boxLevel` beside its heartbeat, `.com` marks a box
+   without it `updateRequired` on `/pods` (with its certificate's end; `boxUpdateRequired.ts`), and
+   Home shows "Needs an update" and its page "This server needs an update to keep working with
+   Flagship 0.3" above the Update card. The 0.2 apps show nothing new. Demo accounts are left out
+   (we update their boxes). The investor demo is waived (`demo02Compat.test.ts`).
 6. **Appliance manifests (steps 20-21, 30)** overwrite `/downloads/FlagshipVMAppliance-*.json`. A
    0.2 Studio accepts any `version: 1` qcow2 manifest whose `installerGitRef` matches its recipe
    ("main"), so after step 21 a 0.2 Studio hosts the 0.3 appliance with its 0.2 seed. Not run on the

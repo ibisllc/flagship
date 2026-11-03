@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ed, type Keypair } from "@flagship/protocol";
+import { BOX_LEVEL, ed, type Keypair } from "@flagship/protocol";
 import {
   postDaemonStatus,
   startDaemonStatusHeartbeat,
@@ -193,6 +193,8 @@ describe("daemon-status heartbeat", () => {
     hb.stop();
     expect(calls).toHaveLength(1);
     expect(calls[0].request.appsServed).toEqual(["home1.harry.flagship.services"]);
+    // The compatibility level rides beside the signed report: a box without it is a 0.2 box to `.com`.
+    expect(calls[0].boxLevel).toBe(BOX_LEVEL);
   });
 
   it("reports the apps the box runs, and again as soon as they change", async () => {

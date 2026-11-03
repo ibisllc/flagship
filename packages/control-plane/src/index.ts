@@ -64,6 +64,7 @@ export * from "./modelCapabilities.js";
 export * from "./userIdentity.js";
 export * from "./inheritance.js";
 export * from "./podInventory.js";
+export * from "./boxUpdateRequired.js";
 export * from "./peerBackupMatch.js";
 export * from "./userStream.js";
 export * from "./demoUsers.js";

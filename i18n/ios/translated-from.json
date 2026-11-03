@@ -3163,5 +3163,9 @@
   "No hyphen at the start or end, or two in a row": "432338d9f4a9",
   "The installer finished. The server is starting and should register in a few minutes.": "52a8ea882f62",
   "This server stopped reporting and hasn't registered. It may be stuck.": "02b65179ff38",
-  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "f062e170ac2e"
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "f062e170ac2e",
+  "Needs an update": "bd6af9f6333a",
+  "This server needs an update to keep working with Flagship 0.3": "d034c377354d",
+  "Its certificate can't be renewed and runs out on %@. Update it before then.": "850c6ae93372",
+  "Its certificate can't be renewed until it is updated.": "1756fe6e8116"
 }

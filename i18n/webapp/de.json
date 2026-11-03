@@ -3225,5 +3225,9 @@
   "3 to 30 lowercase letters, numbers and hyphens": "3 bis 30 Kleinbuchstaben, Ziffern und Bindestriche",
   "The installer finished. The server is starting and should register in a few minutes.": "Die Installation ist beendet. Der Server startet und sollte sich in wenigen Minuten registrieren.",
   "This server stopped reporting and hasn't registered. It may be stuck.": "Dieser Server meldet sich nicht mehr und hat sich nicht registriert. Er hängt möglicherweise.",
-  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Läuft er in Flagship Studio, sieh dort nach. Andernfalls starte das Gerät neu. Kommt er dann immer noch nicht hoch, brich die Bestellung ab und erstelle den Server neu."
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Läuft er in Flagship Studio, sieh dort nach. Andernfalls starte das Gerät neu. Kommt er dann immer noch nicht hoch, brich die Bestellung ab und erstelle den Server neu.",
+  "Needs an update": "Update erforderlich",
+  "This server needs an update to keep working with Flagship 0.3": "Dieser Server braucht ein Update, um weiter mit Flagship 0.3 zu funktionieren",
+  "Its certificate can't be renewed and runs out on {0}. Update it before then.": "Sein Zertifikat kann nicht erneuert werden und läuft am {0} ab. Aktualisiere ihn vorher.",
+  "Its certificate can't be renewed until it is updated.": "Sein Zertifikat kann erst nach einem Update erneuert werden."
 }

@@ -3418,5 +3418,9 @@
   "access_list_not_a_valid_host": "„%1$s“ ist kein gültiger Hostname",
   "provision_quiet_installer_finished": "Die Installation ist beendet. Der Server startet und sollte sich in wenigen Minuten registrieren.",
   "provision_quiet_stuck": "Dieser Server meldet sich nicht mehr und hat sich nicht registriert. Er hängt möglicherweise.",
-  "provision_quiet_stuck_advice": "Läuft er in Flagship Studio, sieh dort nach. Andernfalls starte das Gerät neu. Kommt er dann immer noch nicht hoch, brich die Bestellung ab und erstelle den Server neu."
+  "provision_quiet_stuck_advice": "Läuft er in Flagship Studio, sieh dort nach. Andernfalls starte das Gerät neu. Kommt er dann immer noch nicht hoch, brich die Bestellung ab und erstelle den Server neu.",
+  "needs_an_update": "Update erforderlich",
+  "update_required_title": "Dieser Server braucht ein Update, um weiter mit Flagship 0.3 zu funktionieren",
+  "update_required_cert_ends": "Sein Zertifikat kann nicht erneuert werden und läuft am %1$s ab. Aktualisiere ihn vorher.",
+  "update_required_cert_unknown": "Sein Zertifikat kann erst nach einem Update erneuert werden."
 }

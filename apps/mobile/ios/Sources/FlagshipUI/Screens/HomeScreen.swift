@@ -86,6 +86,9 @@ public struct HomeScreen: View {
     /// fqdn → state), and the action that sends it (docs/server-backup-and-clone.md).
     var awaitingBackup: [String: AwaitingBackupWire] = [:]
     var onSendBackup: (PodInfo) -> Void = { _ in }
+    /// Servers that run a release this `.com` no longer fully serves (a 0.2
+    /// box under 0.3), lowercased fqdn → what `/pods` says; their row says so.
+    var updateRequired: [String: UpdateRequiredWire] = [:]
     /// Move a server to the top of the owner's order (docs/server-order.md).
     var onMakeLeader: (PodInfo) -> Void = { _ in }
     /// The owner dropped a server elsewhere in the list: the new order, by pod id.
@@ -764,6 +767,13 @@ public struct HomeScreen: View {
         return s
     }
 
+    /// Home with the servers that need an update marked (`/pods` `updateRequired`).
+    public func updatesRequired(_ outdated: [String: UpdateRequiredWire]) -> HomeScreen {
+        var s = self
+        s.updateRequired = outdated
+        return s
+    }
+
     /// A server row: a drag handle on the left while the list can be
     /// reordered, the name behind a small server glyph, the status pill
     /// (and Leader badge) under it, and the long-press context menu.
@@ -827,6 +837,10 @@ public struct HomeScreen: View {
                                     kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
                                 )
                                 .accessibilityIdentifier(PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status))
+                            }
+                            if !pod.isRevoked, updateRequired[pod.fqdn.lowercased()] != nil {
+                                FSPill(String(localized: "Needs an update"), kind: .renewing)
+                                    .accessibilityIdentifier("pod-card-update-required")
                             }
                         }
                         .padding(.top, 2)

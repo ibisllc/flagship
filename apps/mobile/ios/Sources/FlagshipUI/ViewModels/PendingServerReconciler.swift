@@ -123,6 +123,9 @@ public struct PendingServerReconciler {
         var waiting = app.podsAwaitingBackup
         for entry in directory.pods { waiting[entry.serverDomain.lowercased()] = entry.revokedAt == nil ? entry.awaitingBackup : nil }
         if app.podsAwaitingBackup != waiting { app.podsAwaitingBackup = waiting }
+        var outdated: [String: UpdateRequiredWire] = [:]
+        for entry in registeredEntries { if let u = entry.updateRequired { outdated[entry.serverDomain.lowercased()] = u } }
+        if app.podsUpdateRequired != outdated { app.podsUpdateRequired = outdated }
         // A server revoked for any reason the owner can't undo was deleted,
         // transferred or retired: drop it if an earlier pass listed it.
         for entry in directory.pods where entry.revokedAt != nil {

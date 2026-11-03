@@ -778,6 +778,10 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// restoring it): Home says so. Advisory, from the box's heartbeat; nil
     /// once the backup is in (docs/server-backup-and-clone.md).
     public let awaitingBackup: AwaitingBackupWire?
+    /// The box runs a release this `.com` no longer fully serves (a 0.2 box
+    /// under 0.3): Home and its page tell the owner to update it. nil when it
+    /// needs none (and for demo accounts, which Flagship updates itself).
+    public let updateRequired: UpdateRequiredWire?
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -794,7 +798,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         leadsServices: [String] = [],
         health: BoxHealth? = nil,
         orderIssuedAt: Int64? = nil,
-        awaitingBackup: AwaitingBackupWire? = nil
+        awaitingBackup: AwaitingBackupWire? = nil,
+        updateRequired: UpdateRequiredWire? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -809,6 +814,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.health = health
         self.orderIssuedAt = orderIssuedAt
         self.awaitingBackup = awaitingBackup
+        self.updateRequired = updateRequired
     }
 
     public init(from decoder: Decoder) throws {
@@ -832,6 +838,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.health = (try? c.decodeIfPresent(BoxHealth.self, forKey: .health)) ?? nil
         self.orderIssuedAt = (try? c.decodeIfPresent(Int64.self, forKey: .orderIssuedAt)) ?? nil
         self.awaitingBackup = (try? c.decodeIfPresent(AwaitingBackupWire.self, forKey: .awaitingBackup)) ?? nil
+        self.updateRequired = (try? c.decodeIfPresent(UpdateRequiredWire.self, forKey: .updateRequired)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -855,6 +862,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(health, forKey: .health)
         try c.encodeIfPresent(orderIssuedAt, forKey: .orderIssuedAt)
         try c.encodeIfPresent(awaitingBackup, forKey: .awaitingBackup)
+        try c.encodeIfPresent(updateRequired, forKey: .updateRequired)
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -873,7 +881,20 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt, awaitingBackup
+        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt, awaitingBackup, updateRequired
+    }
+}
+
+/// `/pods` `updateRequired`: the box runs a release from before the one `.com`
+/// needs (control-plane boxUpdateRequired.ts), so its certificate can't renew.
+public struct UpdateRequiredWire: Codable, Equatable, Sendable {
+    /// `box-too-old`
+    public let reason: String
+    /// When its current certificate runs out (ms), or nil when `.com` doesn't know.
+    public let certificateExpiresAt: Int64?
+    public init(reason: String = "box-too-old", certificateExpiresAt: Int64? = nil) {
+        self.reason = reason
+        self.certificateExpiresAt = certificateExpiresAt
     }
 }
 

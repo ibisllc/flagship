@@ -14119,5 +14119,22 @@
   "provision_quiet_stuck_advice": {
     "en": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.",
     "ctx": "core/ProvisionQuiet.kt (install progress, box gone quiet)"
+  },
+  "needs_an_update": {
+    "en": "Needs an update",
+    "ctx": "ui/screens/HomeScreen.kt (Home row pill: the server runs a release from before 0.3)"
+  },
+  "update_required_title": {
+    "en": "This server needs an update to keep working with Flagship 0.3",
+    "ctx": "ui/screens/UpdateRequiredBanner.kt (server page banner title)"
+  },
+  "update_required_cert_ends": {
+    "en": "Its certificate can't be renewed and runs out on %1$s. Update it before then.",
+    "ctx": "ui/screens/UpdateRequiredBanner.kt (banner line; %1$s is a long date)",
+    "args": 1
+  },
+  "update_required_cert_unknown": {
+    "en": "Its certificate can't be renewed until it is updated.",
+    "ctx": "ui/screens/UpdateRequiredBanner.kt (banner line when the date is unknown)"
   }
 }

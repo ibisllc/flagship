@@ -276,6 +276,15 @@ class AppState(
         val next = waiting.mapKeys { it.key.lowercase() }
         if (_podsAwaitingBackup.value != next) _podsAwaitingBackup.value = next
     }
+    /** Servers running a release this `.com` no longer fully serves (a 0.2
+     *  box under 0.3), per lowercased fqdn, from `/pods` `updateRequired`.
+     *  Home marks them and their page asks the owner to update them. */
+    private val _podsUpdateRequired = MutableStateFlow<Map<String, com.flagshipserver.app.api.UpdateRequiredWire>>(emptyMap())
+    val podsUpdateRequired: StateFlow<Map<String, com.flagshipserver.app.api.UpdateRequiredWire>> = _podsUpdateRequired.asStateFlow()
+    fun setPodsUpdateRequired(outdated: Map<String, com.flagshipserver.app.api.UpdateRequiredWire>) {
+        val next = outdated.mapKeys { it.key.lowercase() }
+        if (_podsUpdateRequired.value != next) _podsUpdateRequired.value = next
+    }
     fun clearAwaitingBackup(fqdn: String) {
         _podsAwaitingBackup.value = _podsAwaitingBackup.value - fqdn.lowercase()
     }

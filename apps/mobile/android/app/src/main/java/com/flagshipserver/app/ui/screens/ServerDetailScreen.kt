@@ -382,6 +382,10 @@ fun ServerDetailScreen(
         }
 
         val revoked = pod?.isRevoked == true
+        // A box from before the release `.com` needs (`/pods` `updateRequired`): say so first, with its update.
+        val updatesRequired by appState.podsUpdateRequired.collectAsState()
+        val updateRequired = (pod?.fqdn ?: serverFqdn)?.lowercase()?.let { updatesRequired[it] }?.takeIf { !revoked }
+        updateRequired?.let { UpdateRequiredBanner(it) }
         when (val d = detail) {
             is LoadingState.Loaded -> {
                 SyncServingFromBox(d.value)
@@ -393,6 +397,15 @@ fun ServerDetailScreen(
                     box = client,
                     onChanged = { detailVm?.load() },
                 )
+                if (updateRequired != null) {
+                    // The banner's action: the same signed, endorsed update.
+                    UpdateServerCard(
+                        serverDomain = d.value.serverFqdn,
+                        currentCommit = d.value.currentCommit,
+                        lastUpdate = d.value.lastUpdate,
+                        onRefresh = { detailVm?.load() },
+                    )
+                }
             }
             // The revoked card above already says why nothing loads.
             else -> if (!revoked) {
@@ -452,12 +465,14 @@ fun ServerDetailScreen(
             }
             ServerBackupsSection(serverDomain = d.value.serverFqdn)
             BackupMigrateCard(serverDomain = d.value.serverFqdn)
-            UpdateServerCard(
-                serverDomain = d.value.serverFqdn,
-                currentCommit = d.value.currentCommit,
-                lastUpdate = d.value.lastUpdate,
-                onRefresh = { detailVm?.load() },
-            )
+            if (updateRequired == null) {
+                UpdateServerCard(
+                    serverDomain = d.value.serverFqdn,
+                    currentCommit = d.value.currentCommit,
+                    lastUpdate = d.value.lastUpdate,
+                    onRefresh = { detailVm?.load() },
+                )
+            }
         }
 
         if (detail !is LoadingState.Loaded && pod?.isRevoked != true) {

@@ -34,6 +34,7 @@ import {
 import { sha256 } from "@noble/hashes/sha256";
 import type {
   DaemonStatusStorage,
+  DemoUsersStorage,
   ServerHealthStorage,
   ServerStorage,
   RoutingStorage,
@@ -48,6 +49,7 @@ import type {
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import { healthForPods, type BoxHealthReport } from "./serverHealth.js";
 import { readServerOrder } from "./serverOrder.js";
+import { parseBoxLevel, updateRequiredFor, type UpdateRequiredView } from "./boxUpdateRequired.js";
 import { gateBoxMessage, installationPolicy, verifiedStoredStkBinding } from "./pqKeyBindings.js";
 import {
   forbidden,
@@ -100,6 +102,9 @@ export interface PodInventoryDeps {
   /** Architecture v2: the installation policy and the STK's hybrid binding, so the report goes
    *  through the critical-signature gate (pqKeyBindings.ts). Absent: classical check only. */
   pqTrust?: PqTrustStorage;
+  /** Demo accounts get no `updateRequired`: Flagship updates their boxes itself (boxUpdateRequired.ts). Absent:
+   *  every account is treated as real. */
+  demoUsers?: DemoUsersStorage;
   now?: () => number;
 }
 
@@ -237,6 +242,9 @@ export interface OnlinePodEntry {
   /** Latest box-signed health report (memory, OOM kills, daemon restarts,
    *  tunnel, disk), or absent when the box never sent one. */
   health?: BoxHealthReport & { receivedAt: number };
+  /** The box runs a release this `.com` no longer fully serves (a 0.2 box under 0.3): the apps tell the owner to
+   *  update it (boxUpdateRequired.ts). Absent when it needs none, for demo accounts and before a heartbeat. */
+  updateRequired?: UpdateRequiredView;
   pendingRequests: PendingRequestSummary[];
   state: "online";
 }
@@ -297,12 +305,17 @@ export async function buildPodInventory(
   const serverOrderP: Promise<SignedServerOrder | null> = deps.serverOrders
     ? readServerOrder(deps.serverOrders, username).catch(() => null)
     : Promise.resolve(null);
-  const [allServers, statuses, pendingReqs, outstanding, serverOrder] = await Promise.all([
+  const demoP: Promise<boolean> =
+    deps.demoUsers && !light
+      ? deps.demoUsers.get(username).then((d) => d !== undefined, () => false)
+      : Promise.resolve(false);
+  const [allServers, statuses, pendingReqs, outstanding, serverOrder, demo] = await Promise.all([
     deps.servers.listForUser(username),
     deps.daemonStatus.listForUser(username),
     mailboxP,
     outstandingP,
     serverOrderP,
+    demoP,
   ]);
   // A revoked server stays listed only while the owner can un-revoke it
   // (lost / stolen / decommissioned). A deleted one (released by its owner,
@@ -431,9 +444,13 @@ export async function buildPodInventory(
       // aggregates warnings by `failingCertHash` ACROSS all a user's pods (one
       // sliver line + one override per DISTINCT faulty authority, not per box).
       let trustStatus: { report: unknown; signatureHex: string } | null = null;
+      let storedReport: Record<string, unknown> | null = null;
       if (!light && status?.reportJson && status.signatureHex) {
         try {
           const parsedReport = JSON.parse(status.reportJson) as unknown;
+          if (parsedReport && typeof parsedReport === "object" && !Array.isArray(parsedReport)) {
+            storedReport = parsedReport as Record<string, unknown>;
+          }
           signedStatus = {
             report: parsedReport,
             signatureHex: status.signatureHex,
@@ -467,6 +484,12 @@ export async function buildPodInventory(
         }
       }
       const { liveness, lastSeenMsAgo } = computeLiveness(realLastReported, now);
+      const updateRequired = updateRequiredFor({
+        storedReport,
+        certValidUntil: status?.certValidUntil ?? null,
+        revoked: Boolean(s.revokedAt),
+        demo,
+      });
       return {
         ...(health ? { health } : {}),
         serverDomain: s.serverDomain,
@@ -494,6 +517,7 @@ export async function buildPodInventory(
         leadsServices,
         ...(orderIssuedAt !== undefined ? { orderIssuedAt } : {}),
         ...(awaitingBackup ? { awaitingBackup } : {}),
+        ...(updateRequired ? { updateRequired } : {}),
         // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
         // the typed list of approvals this box is currently asking its owner
         // for. The generic client inbox is the flatMap of this across pods.
@@ -571,6 +595,8 @@ interface DaemonStatusBody {
   orderIssuedAt?: number;
   /** UNSIGNED advisory: the box waits for (or is restoring) its backup. */
   awaitingBackup?: unknown;
+  /** UNSIGNED: the box's compatibility level (protocol `BOX_LEVEL`); a 0.2 box sends none (boxUpdateRequired.ts). */
+  boxLevel?: unknown;
   /**
    * SIBLING signed envelope — the box's PER-BOX relay-trust verdict
    * (`flagship/box-trust-status/v1`). Signed independently of the daemon-status
@@ -639,6 +665,7 @@ export async function handlePostDaemonStatus(
       ? body.orderIssuedAt
       : undefined;
   const awaitingBackup = parseAwaitingBackup(body.awaitingBackup);
+  const boxLevel = parseBoxLevel(body.boxLevel);
   // Read together so they leave as one D1 batch.
   const [server, pq] = await Promise.all([
     deps.servers.get(r.serverDomain),
@@ -721,6 +748,7 @@ export async function handlePostDaemonStatus(
     ...(runsServices ? { runsServices } : {}),
     ...(orderIssuedAt !== undefined ? { orderIssuedAt } : {}),
     ...(awaitingBackup ? { awaitingBackup } : {}),
+    ...(boxLevel !== null ? { boxLevel } : {}),
     ...(trustStatusForStore ? { trustStatus: trustStatusForStore } : {}),
   };
   await deps.daemonStatus.put({

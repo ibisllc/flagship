@@ -13667,5 +13667,21 @@
   "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": {
     "en": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/ProvisionTimelineLadder.swift: ProvisionQuiet (install progress when the box goes quiet)"
+  },
+  "Needs an update": {
+    "en": "Needs an update",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift: Home row pill, the server runs a release from before 0.3"
+  },
+  "This server needs an update to keep working with Flagship 0.3": {
+    "en": "This server needs an update to keep working with Flagship 0.3",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpdateRequiredBanner.swift: server page banner title"
+  },
+  "Its certificate can't be renewed and runs out on %@. Update it before then.": {
+    "en": "Its certificate can't be renewed and runs out on %@. Update it before then.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpdateRequiredBanner.swift: banner line, %@ is a long date"
+  },
+  "Its certificate can't be renewed until it is updated.": {
+    "en": "Its certificate can't be renewed until it is updated.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/UpdateRequiredBanner.swift: banner line when the date is unknown"
   }
 }

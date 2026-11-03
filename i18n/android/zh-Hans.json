@@ -3418,5 +3418,9 @@
   "access_list_not_a_valid_host": "“%1$s”不是有效的主机名",
   "provision_quiet_installer_finished": "安装程序已结束。服务器正在启动，应会在几分钟内完成注册。",
   "provision_quiet_stuck": "此服务器已停止报告且尚未注册，可能已卡住。",
-  "provision_quiet_stuck_advice": "如果它在 Flagship Studio 中运行，请在那里查看。否则请重启这台机器。如果仍然无法启动，请取消订单并重新创建服务器。"
+  "provision_quiet_stuck_advice": "如果它在 Flagship Studio 中运行，请在那里查看。否则请重启这台机器。如果仍然无法启动，请取消订单并重新创建服务器。",
+  "needs_an_update": "需要更新",
+  "update_required_title": "此服务器需要更新才能继续与 Flagship 0.3 配合使用",
+  "update_required_cert_ends": "其证书无法续期，将于 %1$s 到期。请在此之前更新此服务器。",
+  "update_required_cert_unknown": "在此服务器更新之前，其证书无法续期。"
 }

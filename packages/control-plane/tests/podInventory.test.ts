@@ -13,6 +13,8 @@ import {
   type AuthCodeRecord,
   type ProvisionStatusStorage,
 } from "@flagship/storage";
+import { BOX_LEVEL } from "@flagship/protocol";
+import { MIN_BOX_LEVEL } from "../src/boxUpdateRequired.js";
 import {
   handleGetUserPods,
   handlePostDaemonStatus,
@@ -729,6 +731,61 @@ describe("POST /api/daemon-status — a box waiting for its backup", () => {
     expect((await handlePostDaemonStatus(deps(storage), signedBody(report()))).status).toBe(200);
     out = (await handleGetUserPods(deps(storage), "harry")).body as Pods;
     expect(out.pods[0]?.awaitingBackup).toBeUndefined();
+  });
+});
+
+describe("/pods updateRequired — a box from before 0.3 (boxUpdateRequired.ts)", () => {
+  type Pods = PodsResponse & { pods: Array<{ updateRequired?: { reason: string; certificateExpiresAt: number | null } }> };
+  const pods = async (storage: InMemoryStorage) =>
+    ((await handleGetUserPods(deps(storage, { demoUsers: storage.demoUsers }), "harry")).body as Pods).pods;
+
+  it("flags a box whose heartbeat carries no boxLevel (a 0.2 box), with its certificate's end", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    expect((await handlePostDaemonStatus(deps(storage), signedBody(report()))).status).toBe(200);
+    expect((await pods(storage))[0]?.updateRequired).toEqual({
+      reason: "box-too-old",
+      certificateExpiresAt: NOW + 30 * 86_400_000,
+    });
+  });
+
+  it("clears it once the box reports BOX_LEVEL, and keeps the stored report re-verifiable", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    await handlePostDaemonStatus(deps(storage), signedBody(report()));
+    expect((await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), boxLevel: BOX_LEVEL })).status).toBe(200);
+    const [pod] = await pods(storage);
+    expect(pod?.updateRequired).toBeUndefined();
+    const relayed = (pod as unknown as { signedStatus: { report: DaemonStatusReport; signatureHex: string } }).signedStatus;
+    expect(verifyDaemonStatusReport(relayed.report, Uint8Array.from(Buffer.from(relayed.signatureHex, "hex")), ed.getPublicKey(STK_PRIV))).toBe(true);
+  });
+
+  it("flags a level below MIN_BOX_LEVEL and a junk level; null certificate end when the box has none", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    await handlePostDaemonStatus(deps(storage), { ...signedBody(report({ certValidUntil: null })), boxLevel: MIN_BOX_LEVEL - 1 });
+    expect((await pods(storage))[0]?.updateRequired).toEqual({ reason: "box-too-old", certificateExpiresAt: null });
+    await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), boxLevel: "3" });
+    expect((await pods(storage))[0]?.updateRequired?.reason).toBe("box-too-old");
+  });
+
+  it("does not judge a box that never sent a heartbeat", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    expect((await pods(storage))[0]?.updateRequired).toBeUndefined();
+  });
+
+  it("leaves demo accounts out: Flagship updates their boxes itself", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    await storage.demoUsers.insert({
+      username: "harry", idempotencyKey: "k", snapshotId: null, isoR2Key: null, ttlIdleMinutes: 30, region: "fsn1",
+      size: "cpx11", activeServerId: null, activeServerIp: null, image: "debian-12",
+      activeServerFqdn: "home1.harry.flagship.services", lastActivityAt: NOW, state: "ready", createdAt: NOW,
+      provisionPhase: "live", provisionPhaseAt: NOW, provisionLastError: null,
+    } as never);
+    await handlePostDaemonStatus(deps(storage), signedBody(report()));
+    expect((await pods(storage))[0]?.updateRequired).toBeUndefined();
   });
 });
 

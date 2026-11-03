@@ -164,6 +164,7 @@ class PendingServerReconciler(
             if (w != null) waiting[key] = w else waiting.remove(key)
         }
         app.setPodsAwaitingBackup(waiting)
+        app.setPodsUpdateRequired(updatesRequired(directory.pods))
 
         // The non-pending pods are the live ones now (including the ones we
         // just flipped online).
@@ -257,3 +258,11 @@ class PendingServerReconciler(
         return label.ifEmpty { fqdn }
     }
 }
+
+/** The `/pods` `updateRequired` of each registered (not revoked) server, per
+ *  lowercased fqdn (Home's "Needs an update" and the server page's banner). */
+internal fun updatesRequired(
+    pods: List<com.flagshipserver.app.api.PodDirectoryEntry>,
+): Map<String, com.flagshipserver.app.api.UpdateRequiredWire> =
+    pods.filter { it.revokedAt == null && it.updateRequired != null }
+        .associate { it.serverDomain.lowercase() to it.updateRequired!! }

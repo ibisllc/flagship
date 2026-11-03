@@ -3165,5 +3165,9 @@
   "No hyphen at the start or end, or two in a row": "先頭と末尾にハイフンは使えず、2つ続けることもできません",
   "The installer finished. The server is starting and should register in a few minutes.": "インストーラーが終了しました。サーバーは起動中で、数分以内に登録されるはずです。",
   "This server stopped reporting and hasn't registered. It may be stuck.": "このサーバーからの報告が止まり、登録もされていません。停止している可能性があります。",
-  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Flagship Studio で動かしている場合は、そちらで確認してください。そうでなければ、マシンを再起動してください。それでも起動しない場合は、注文をキャンセルしてサーバーを作成し直してください。"
+  "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again.": "Flagship Studio で動かしている場合は、そちらで確認してください。そうでなければ、マシンを再起動してください。それでも起動しない場合は、注文をキャンセルしてサーバーを作成し直してください。",
+  "Needs an update": "更新が必要です",
+  "This server needs an update to keep working with Flagship 0.3": "このサーバーを Flagship 0.3 で使い続けるには更新が必要です",
+  "Its certificate can't be renewed and runs out on %@. Update it before then.": "証明書を更新できず、%@ に期限切れになります。それまでにサーバーを更新してください。",
+  "Its certificate can't be renewed until it is updated.": "サーバーを更新するまで、証明書は更新できません。"
 }

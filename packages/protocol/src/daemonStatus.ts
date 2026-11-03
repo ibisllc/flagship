@@ -35,6 +35,15 @@ export interface DaemonStatusReport {
   issuedAt: number;
 }
 
+/**
+ * The box's compatibility level, sent UNSIGNED beside every daemon-status report as `boxLevel` (not part of
+ * the canonical bytes, so the pinned vector and its native mirrors are unchanged). 3 = Flagship 0.3: the box
+ * takes its certificate from Flagship's issuance service and pins the admin key the relay's serving leases are
+ * signed with. A 0.2 box sends none. `.com` compares it with `MIN_BOX_LEVEL` (control-plane boxUpdateRequired.ts)
+ * and tells the owner to update a box below it. Raise it only when a box must be told to update.
+ */
+export const BOX_LEVEL = 3;
+
 const TAG_DAEMON_STATUS = "flagship/daemon-status/v1";
 
 export function canonicalDaemonStatusReport(r: DaemonStatusReport): Bytes {

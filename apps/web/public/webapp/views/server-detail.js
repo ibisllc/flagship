@@ -123,6 +123,7 @@ import { humanError } from "../lib/humanError.js";
 import { inlineConfirm } from "../lib/modal.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { updateRequiredBannerHtml } from "../lib/updateRequired.js";
 import { liveSync } from "../lib/liveSync.js";
 import { podStk } from "../lib/serverPins.js";
 import { wireServerKeyCard } from "../lib/serverKeyCard.js";
@@ -454,7 +455,7 @@ export async function renderServerDetail() {
     if (seq !== renderSeq) return;
     const username = session?.username || "";
     const revoked = isRestorableRevokedPod(pod);
-    root.innerHTML = renderUnreachableDetail({
+    root.innerHTML = updateRequiredBannerHtml(pod) + renderUnreachableDetail({
       serverFqdn: knownFqdn,
       username,
       revoked,
@@ -476,7 +477,28 @@ export async function renderServerDetail() {
     // Only trust a `/pods` row for the box that answered.
     const detailPod = findPod(lookedUp ? [lookedUp] : [], body?.serverFqdn);
     if (!detailFqdn && body?.serverFqdn) startHealthWatch(body.serverFqdn);
+    // A box from before 0.3 (`/pods` `updateRequired`): the banner, and the update card right under it.
+    const updateRequiredBanner = updateRequiredBannerHtml(detailPod);
+    const updateSection = `
+      <h2 class="mt-4">${tr("Software update")}</h2>
+      <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <div class="row mt-2">
+          <span class="label">${tr("Running")}</span>
+          <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
+        </div>
+        <p class="note small mt-2 hidden" id="update-available"></p>
+        <p class="note small mt-2${describeLastUpdate(body.lastUpdate) ? "" : " hidden"}${lastUpdateNeedsAttention(body.lastUpdate) ? " warn-text" : ""}" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate) || "")}</p>
+        <div class="mt-2 hidden" id="update-pending"></div>
+        <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>${tr("Update this server")}</button>
+        <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
+          ${tr("Waiting for this server to report its current version — it can't be updated in place until it does.")}
+        </p>
+        ${isCompanionProfile() ? "" : updateReportsSwitchHtml()}
+      </div>
+`;
     root.innerHTML = `
+      ${updateRequiredBanner}
+      ${updateRequiredBanner ? updateSection : ""}
       ${body.debugAccess ? debugAccessBannerHtml(body.debugAccess) : ""}
       <div id="server-key-slot"></div>
       <div class="card">
@@ -577,21 +599,7 @@ export async function renderServerDetail() {
         <button id="migrate-start-btn" class="full-width mt-2">${escapeHtml(MIGRATE_LABEL)}</button>
       </div>
 
-      <h2 class="mt-4">${tr("Software update")}</h2>
-      <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <div class="row mt-2">
-          <span class="label">${tr("Running")}</span>
-          <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
-        </div>
-        <p class="note small mt-2 hidden" id="update-available"></p>
-        <p class="note small mt-2${describeLastUpdate(body.lastUpdate) ? "" : " hidden"}${lastUpdateNeedsAttention(body.lastUpdate) ? " warn-text" : ""}" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate) || "")}</p>
-        <div class="mt-2 hidden" id="update-pending"></div>
-        <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>${tr("Update this server")}</button>
-        <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
-          ${tr("Waiting for this server to report its current version — it can't be updated in place until it does.")}
-        </p>
-        ${isCompanionProfile() ? "" : updateReportsSwitchHtml()}
-      </div>
+      ${updateRequiredBanner ? "" : updateSection}
 
       ${renderDangerZoneCard({
         serverFqdn: body.serverFqdn,

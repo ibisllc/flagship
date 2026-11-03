@@ -205,6 +205,9 @@ fun HomeScreen(
      *  fqdn → state), and the action that sends it (docs/server-backup-and-clone.md). */
     awaitingBackup: Map<String, com.flagshipserver.app.api.AwaitingBackupWire> = emptyMap(),
     onSendBackup: (PodInfo) -> Unit = {},
+    /** Servers that run a release this `.com` no longer fully serves (a 0.2
+     *  box under 0.3), lowercased fqdn → what `/pods` says; their row says so. */
+    updateRequired: Map<String, com.flagshipserver.app.api.UpdateRequiredWire> = emptyMap(),
     /** "Build a service" (iOS's quick action): opens the Services tab's
      *  build chooser. Null hides it. */
     onBuildService: (() -> Unit)? = null,
@@ -380,6 +383,7 @@ fun HomeScreen(
                             onOpen = { onOpenPod(pod) },
                             backupWait = backupWait,
                             onSendBackup = { onSendBackup(pod) },
+                            needsUpdate = updateRequired.containsKey(pod.fqdn.lowercase()),
                             onSetLeader = { onMakeLeader(pod) },
                             onDelete = { onDeleteServer(pod) },
                             leader = leader?.takeIf { it.podId == pod.podId },
@@ -716,6 +720,8 @@ fun ServerRow(
     /** Set while the server waits for its backup, or restores it (docs/server-backup-and-clone.md). */
     backupWait: com.flagshipserver.app.api.AwaitingBackupWire? = null,
     onSendBackup: () -> Unit = {},
+    /** The server runs a release from before the one `.com` needs (`/pods` `updateRequired`). */
+    needsUpdate: Boolean = false,
     /** Delete releases the name, an admin order (AdminOrderGate). */
     canDelete: Boolean = true,
 ) {
@@ -805,6 +811,13 @@ fun ServerRow(
                                 label = PodStatusStyle.label(pod, liveness),
                                 kind = PodStatusStyle.pillKind(liveness, pod.status),
                                 modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
+                            )
+                        }
+                        if (needsUpdate && liveness != PodInfo.LivenessState.REVOKED) {
+                            FSPill(
+                                label = stringResource(R.string.needs_an_update),
+                                kind = FSPillKind.Renewing,
+                                modifier = Modifier.testTag("pod-card-update-required"),
                             )
                         }
                     }

@@ -429,7 +429,10 @@ describe("the server page's Backup / Migrate card", () => {
     expect(inner).not.toMatch(/<p\b/);
     expect(src).not.toContain('id="backup-card"');
     expect(src).not.toContain('id="migrate-card"');
-    expect(src.indexOf("Backup / Migrate")).toBeLessThan(src.indexOf("Software update"));
+    // The Software update card is built once (`updateSection`) and placed after Backup / Migrate, or at the top
+    // under the "needs an update" banner (lib/updateRequired.js).
+    expect(src.indexOf("Backup / Migrate")).toBeLessThan(src.indexOf('${updateRequiredBanner ? "" : updateSection}'));
+    expect(src).toContain('${updateRequiredBanner ? updateSection : ""}');
   });
 
   it("Diagnostics opens straight on its controls, with no explainer", async () => {

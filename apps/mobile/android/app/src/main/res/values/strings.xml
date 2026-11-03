@@ -3425,4 +3425,8 @@
     <string name="provision_quiet_installer_finished">The installer finished. The server is starting and should register in a few minutes.</string>
     <string name="provision_quiet_stuck">This server stopped reporting and hasn\'t registered. It may be stuck.</string>
     <string name="provision_quiet_stuck_advice">If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn\'t come up, cancel the order and create the server again.</string>
+    <string name="needs_an_update">Needs an update</string>
+    <string name="update_required_title">This server needs an update to keep working with Flagship 0.3</string>
+    <string name="update_required_cert_ends">Its certificate can\'t be renewed and runs out on %1$s. Update it before then.</string>
+    <string name="update_required_cert_unknown">Its certificate can\'t be renewed until it is updated.</string>
 </resources>

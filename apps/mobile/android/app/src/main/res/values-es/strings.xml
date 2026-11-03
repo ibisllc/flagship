@@ -3421,4 +3421,8 @@
     <string name="provision_quiet_installer_finished">El instalador terminó. El servidor se está iniciando y debería registrarse en unos minutos.</string>
     <string name="provision_quiet_stuck">Este servidor dejó de informar y no se ha registrado. Puede que esté atascado.</string>
     <string name="provision_quiet_stuck_advice">Si se ejecuta en Flagship Studio, revísalo allí. Si no, reinicia la máquina. Si aun así no arranca, cancela el pedido y vuelve a crear el servidor.</string>
+    <string name="needs_an_update">Necesita una actualización</string>
+    <string name="update_required_title">Este servidor necesita una actualización para seguir funcionando con Flagship 0.3</string>
+    <string name="update_required_cert_ends">Su certificado no se puede renovar y caduca el %1$s. Actualízalo antes.</string>
+    <string name="update_required_cert_unknown">Su certificado no se puede renovar hasta que se actualice.</string>
 </resources>
