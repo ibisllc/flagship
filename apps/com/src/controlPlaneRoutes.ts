@@ -995,6 +995,9 @@ export async function tryBootHost(
     watchDelegates: storage.watchDelegates,
     serverShares: storage.serverShares,
     serverBootKeys: storage.serverBootKeys,
+    // The owner IRK is found from the account label under the services apex; without it a gym box
+    // (`<server>.<user>.gym.flagship.services`) parsed as user "gym" and every owner answer was "unknown server".
+    ...(env.SERVICES_APEX ? { apex: env.SERVICES_APEX } : {}),
   });
   const notify = new InProcessNotifyPipe({
     servers: storage.servers,
