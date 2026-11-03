@@ -134,7 +134,7 @@ async function lane(rec: Recorder): Promise<void> {
     const appr = approver;
 
     const installed = await rec.check("the box installs from the personalized ISO and seals its disk (one LUKS key slot)", async () => {
-      isoPath = await personalizedIso(`bootchain-${a.username}`, preseedFor(recipe.recipeJson));
+      isoPath = await personalizedIso(`bootchain-${a.username}`, await preseedFor(recipe.recipeJson));
       const srv = await bootIsoServer(isoPath, `flagship-gym-bootchain-${a.username}`, (s) => storages.push(s), log);
       made.box = isoBox(a, recipe, srv);
       return await waitInstallEvidence(recipe.authCode.serial, (h) => h.some((x) => typeof x.detail === "string" && x.detail.includes(EVIDENCE)), 45, log);

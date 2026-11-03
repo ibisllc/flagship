@@ -40,7 +40,7 @@ export function cutScript(o: { runnerV4: string; sshPort?: number }): string {
     "    type filter hook output priority -50; policy accept;",
     ...rules("output"),
     "  }",
-    "  chain fwd {",
+    "  chain cut_forward {",
     "    type filter hook forward priority -50; policy accept;",
     ...rules("forward"),
     "  }",

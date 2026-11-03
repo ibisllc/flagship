@@ -92,7 +92,7 @@ async function recipeLane(rec: Recorder, dir: string, cleanup: Cleanup): Promise
 
   await rec.check("the 0.3 engine refuses the 0.2 recipe as it stands (\"main\" is a branch, not the exact commit)", async () => {
     try {
-      preseedFor(recipe.recipeJson);
+      await preseedFor(recipe.recipeJson);
     } catch (e) {
       const m = (e as Error).message;
       assert(BRANCH_REF_REFUSAL.test(m), `refused, but with another reason: ${m}`);
@@ -106,7 +106,7 @@ async function recipeLane(rec: Recorder, dir: string, cleanup: Cleanup): Promise
   cleanup.stops.push(() => approver.stop());
   const made: { box: Box | null } = { box: null };
   const installed = await rec.check("with the endorsed commit as the burn ref, the 0.3 ISO installs the 0.2 recipe and seals the disk (one key slot)", async () => {
-    const iso = await personalizedIso(`f9-recipe-${acct.username}`, preseedFor(recipe.recipeJson, { installerGitRef: release }));
+    const iso = await personalizedIso(`f9-recipe-${acct.username}`, await preseedFor(recipe.recipeJson, { installerGitRef: release }));
     cleanup.isoPaths.push(iso);
     const srv = await bootIsoServer(iso, `flagship-gym-f9-recipe-${acct.username}`, (s) => cleanup.isoStorages.push(s), log);
     made.box = isoBox(acct, recipe, srv);

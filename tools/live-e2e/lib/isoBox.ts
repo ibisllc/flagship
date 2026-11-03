@@ -13,9 +13,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signAuthCode, signInstallBlob, type AuthCode, type InstallBlob } from "@flagship/protocol";
-import { PINNED_DISTROS, buildDebianPreseed, optionsFromRecipeJson, remasterIsoWithPreseed } from "@flagship/builder";
+import { PINNED_DISTROS, remasterIsoWithPreseed } from "@flagship/builder";
 import { issueAuthCode, newAuthCode, type Account, type Box } from "./fleet.js";
 import { CONTROL, SERVICES, adminHeaders, assert, http, short, sleep } from "./harness.js";
 
@@ -137,7 +138,20 @@ export interface IsoBurn {
 }
 
 /** The preseed the 0.3 engine generates for a recipe (throws as the engine does on a recipe it refuses). */
-export function preseedFor(recipeJson: string, burn: IsoBurn = {}): string {
+/**
+ * The GYM worktree's built `@flagship/builder`. The builder bakes BOX_RELEASE (artifact base, release keys, minimum
+ * sequence) into the bootstrap at build time, and this checkout's copy names production's: a gym release artifact is only
+ * in the gym bucket, so a preseed built from here 404s on the download a second into the install ("bootstrap exited 1").
+ */
+export async function gymBuilder(): Promise<typeof import("@flagship/builder")> {
+  const wt = process.env.GYM_WORKTREE || join(homedir(), ".cache/flagship/gym-worktree");
+  const entry = join(wt, "packages/flagship-builder/dist/index.js");
+  if (!existsSync(entry)) throw new Error(`no built builder in the gym worktree (${entry}): run scripts/gym-refresh.sh`);
+  return (await import(pathToFileURL(entry).href)) as typeof import("@flagship/builder");
+}
+
+export async function preseedFor(recipeJson: string, burn: IsoBurn = {}): Promise<string> {
+  const { buildDebianPreseed, optionsFromRecipeJson } = await gymBuilder();
   let preseed = buildDebianPreseed(optionsFromRecipeJson(recipeJson, { bootHost: burn.bootHost ?? `https://boot.${CONTROL}`, ...(burn.installerGitRef ? { installerGitRef: burn.installerGitRef } : {}) }));
   // Never touch production: the installer's progress beacons are hard-coded to it (luks-burn.ts).
   preseed = preseed.replace("d-i preseed/early_command string ", "d-i preseed/early_command string echo '127.0.0.1 flagshipserver.com' >> /etc/hosts; ");

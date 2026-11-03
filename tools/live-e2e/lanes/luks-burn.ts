@@ -57,7 +57,8 @@ import {
   type InstallBlob,
   type Keypair,
 } from "@flagship/protocol";
-import { PINNED_DISTROS, buildDebianPreseed, optionsFromRecipeJson, remasterIsoWithPreseed } from "@flagship/builder";
+import { PINNED_DISTROS, remasterIsoWithPreseed } from "@flagship/builder";
+import { gymBuilder } from "../lib/isoBox.js";
 import { ADMIN, CONTROL, SERVICES, adminHeaders, http, sleep } from "../lib/harness.js";
 
 const UPCLOUD = "https://api.upcloud.com/1.3";
@@ -218,6 +219,7 @@ async function main(): Promise<number> {
     }
     const sha = createHash("sha256").update(readFileSync(src)).digest("hex");
     if (sha !== distro.sha256) throw new Error(`ISO sha256 ${sha} does not match the pinned ${distro.sha256}`);
+    const { buildDebianPreseed, optionsFromRecipeJson } = await gymBuilder();
     let preseed = buildDebianPreseed(optionsFromRecipeJson(recipeJson, {}));
     // Never touch production: the installer's progress beacons are hard-coded to it.
     preseed = preseed.replace(
