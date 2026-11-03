@@ -485,7 +485,9 @@ describe("upgrade tickets", () => {
         ws.once("unexpected-response", (_r, res) => { resolve(res.statusCode ?? -1); res.resume(); });
         ws.once("error", () => resolve(-2));
       });
-    expect(await statusOf(connect(server.port, "/api/screens/events?sessionToken=good-tok"))).toBe(400);
+    // A browser (it always sends Origin) may not put the session in the URL.
+    const fromBrowser = new WebSocket(`ws://127.0.0.1:${server.port}/api/screens/events?sessionToken=good-tok`, { origin: "https://webapp.example" });
+    expect(await statusOf(fromBrowser)).toBe(400);
     const ticket = tickets.issue({ token: "good-tok", route: "/api/screens/events", origin: null });
     const ok = connect(server.port, `/api/screens/events?ticket=${ticket}`);
     expect(await statusOf(ok)).toBe(101);

@@ -1,0 +1,134 @@
+{
+  "about": "What the 0.2 store apps (iOS 1.1 build 5, Android versionCode 9; release commit e9155777e, box dbdf2e08875a) send and verify, copied from their sources at that commit (git show e9155777e:<file>). Each entry has the wire object the app sends and the exact canonical string the app signs (or, for box -> phone, the string the app verifies). tools/compat-0.2/tests/compat02.test.ts replays them against 0.3. Never edit an entry to make a 0.3 change pass: a mismatch means 0.2 apps break.",
+  "issuedAt": 1800000000000,
+  "signed": [
+    {
+      "name": "env set (app page, Environment)",
+      "route": "POST https://<server>/api/screens/services/<id>/env/set {change, value, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift:1038-1102; android api/ScreensModels.kt:1090; packages/protocol/src/serviceEnvChange.ts",
+      "kind": "service-env-change",
+      "wire": { "serverId": "home.demo02.flagship.services", "serviceId": "demo02--notes", "op": "set", "name": "API_KEY", "valueSha256": "6cd3556deb0da54bca060b4c39479839d3d6f4a3e0d1c7b0a26e6a8f3f2e1a00", "issuedAt": 1800000000000, "nonce": "0123456789abcdef0123456789abcdef" },
+      "canonical": "flagship/service-env-change/v1|home.demo02.flagship.services|demo02--notes|set|API_KEY|6cd3556deb0da54bca060b4c39479839d3d6f4a3e0d1c7b0a26e6a8f3f2e1a00|1800000000000|0123456789abcdef0123456789abcdef"
+    },
+    {
+      "name": "env unset",
+      "route": "POST https://<server>/api/screens/services/<id>/env/unset {change, signature}",
+      "source": "same as env set",
+      "kind": "service-env-change",
+      "wire": { "serverId": "home.demo02.flagship.services", "serviceId": "demo02--notes", "op": "unset", "name": "API_KEY", "valueSha256": "", "issuedAt": 1800000000000, "nonce": "fedcba9876543210fedcba9876543210" },
+      "canonical": "flagship/service-env-change/v1|home.demo02.flagship.services|demo02--notes|unset|API_KEY||1800000000000|fedcba9876543210fedcba9876543210"
+    },
+    {
+      "name": "member rank (Access control, Members)",
+      "route": "POST https://<server>/api/screens/services/<id>/members/rank {order, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessOrders.swift:59-98; android core/AppMemberRoles.kt:49",
+      "kind": "app-rank",
+      "wire": { "serviceRef": "demo02-notes", "target": "device:1111111111111111111111111111111111111111111111111111111111111111", "rank": "manager", "issuedAt": 1800000000000 },
+      "canonical": "flagship/app-rank/v1|demo02-notes|device:1111111111111111111111111111111111111111111111111111111111111111|manager|1800000000000"
+    },
+    {
+      "name": "access mode (Open to all / Members only)",
+      "route": "POST https://<server>/api/service-access/... {order, signature}",
+      "source": "AppAccessOrders.swift; packages/protocol/src/appAccessOrders.ts",
+      "kind": "service-access-mode-v2",
+      "wire": { "serviceRef": "demo02-notes", "mode": "restricted", "issuedAt": 1800000000000 },
+      "canonical": "flagship/service-access-mode/v2|demo02-notes|restricted|1800000000000"
+    },
+    {
+      "name": "remove a member",
+      "route": "POST https://<server>/api/service-access/allow-remove {order, signature}",
+      "source": "AppAccessOrders.swift; packages/protocol/src/appAccessOrders.ts",
+      "kind": "service-allow-remove-v2",
+      "wire": { "serviceRef": "demo02-notes", "aid": "2222222222222222222222222222222222222222222222222222222222222222", "issuedAt": 1800000000000 },
+      "canonical": "flagship/service-allow-remove/v2|demo02-notes|2222222222222222222222222222222222222222222222222222222222222222|1800000000000"
+    },
+    {
+      "name": "internet access list (app page)",
+      "route": "POST https://<server>/api/screens/services/<id>/access {list, grant, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift:230",
+      "kind": "app-access",
+      "wire": { "serverDomain": "home.demo02.flagship.services", "serviceId": "demo02--notes", "listSha256": "3333333333333333333333333333333333333333333333333333333333333333", "issuedAt": 1800000000000 },
+      "canonical": "flagship/app-access/v1|home.demo02.flagship.services|demo02--notes|3333333333333333333333333333333333333333333333333333333333333333|1800000000000"
+    },
+    {
+      "name": "update card: order the update",
+      "route": "POST https://flagshipserver.com/api/server/<domain>/update {auth, authSignature, deposit, order, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipCore/ServerUpdateOrder.swift; android api/SecretMailboxClient.kt:844",
+      "kind": "server-update",
+      "wire": { "serverDomain": "home.demo02.flagship.services", "targetCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fromCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "nonce": "44444444444444444444444444444444", "issuedAt": 1800000000000 },
+      "canonical": "flagship/server-update/v1|home.demo02.flagship.services|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|44444444444444444444444444444444|1800000000000"
+    },
+    {
+      "name": "backups: approve a download",
+      "route": "POST https://<server>/api/screens/server-archive/approve {approval, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift:244",
+      "kind": "archive-download",
+      "wire": { "serverDomain": "home.demo02.flagship.services", "archiveId": "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0", "requestId": "d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0", "issuedAt": 1800000000000 },
+      "canonical": "flagship/archive-download/v1|home.demo02.flagship.services|c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0|d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0|1800000000000"
+    },
+    {
+      "name": "free AI pass (build chat)",
+      "route": "POST https://flagshipserver.com/api/free-ai/token {request, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipAPI/Models/FreeAiModels.swift:93-115; android core/FreeAiCredits.kt:288",
+      "kind": "llm-promo-issue",
+      "wire": { "username": "demo02", "serverFqdn": "home.demo02.flagship.services", "provider": "flagship", "desiredDailyInputTokenCap": 2000000, "desiredDailyOutputTokenCap": 500000, "issuedAt": 1800000000000 },
+      "canonical": "flagship/llm-promo-issue/v1|demo02|home.demo02.flagship.services|flagship|2000000|500000|1800000000000"
+    },
+    {
+      "name": "invite someone (single-use)",
+      "route": "POST https://flagshipserver.com/api/users/<u>/service-invites {request, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipCore/ServiceInvite.swift:229-262; android api/ServiceAccessClient.kt:338",
+      "kind": "service-invite-create",
+      "wire": { "inviteId": "inv-1", "authorAIDHex": "5555555555555555555555555555555555555555555555555555555555555555", "serviceRef": "demo02-notes", "secretHash": "6666666666666666666666666666666666666666666666666666666666666666", "encryptedBundle": "abcd", "issuedAt": 1800000000000 },
+      "canonical": "flagship/service-invite/create/v1|inv-1|5555555555555555555555555555555555555555555555555555555555555555|demo02-notes|6666666666666666666666666666666666666666666666666666666666666666|abcd|1800000000000"
+    },
+    {
+      "name": "withdraw an invite (.com, then the box)",
+      "route": "POST https://flagshipserver.com/api/users/<u>/service-invites/revoke and https://<server>/api/service-access/invite-withdraw",
+      "source": "ServiceInvite.swift; android api/ServiceAccessClient.kt:178",
+      "kind": "service-invite-revoke",
+      "wire": { "inviteId": "inv-1", "issuedAt": 1800000000000 },
+      "canonical": "flagship/service-invite/revoke/v1|inv-1|1800000000000"
+    },
+    {
+      "name": "open a members-only app (knock)",
+      "route": "POST https://<server>/api/service-access/knock/authorize {authorization, sig}",
+      "source": "apps/mobile/shared/Sources/FlagshipCore/ServiceInvite.swift:408-418; android api/ServiceAccessClient.kt:284",
+      "kind": "service-knock",
+      "wire": { "serverId": "home.demo02.flagship.services", "serviceRef": "demo02-notes", "pageId": "page-1", "visitorAIDHex": "7777777777777777777777777777777777777777777777777777777777777777", "issuedAt": 1800000000000 },
+      "canonical": "flagship/service-knock/v1|home.demo02.flagship.services|demo02-notes|page-1|7777777777777777777777777777777777777777777777777777777777777777|1800000000000"
+    },
+    {
+      "name": "pair the phone with the box (real accounts; .com signs the same order for demo accounts)",
+      "route": "sealed to /api/server/<domain>/pairing-deposit, or POST https://<server>/api/orders-from-user {request, signature}",
+      "source": "apps/mobile/shared/Sources/FlagshipCore/PodPairOrder.swift:26-70; packages/control-plane/src/demoUsers.ts",
+      "kind": "add-paired-session",
+      "wire": { "type": "add-paired-session", "serverId": "home.demo02.flagship.services", "token": "8888888888888888888888888888888888888888888888888888888888888888", "issuedAt": 1800000000000 },
+      "canonical": "flagship/order/add-paired-session/v2|home.demo02.flagship.services|8888888888888888888888888888888888888888888888888888888888888888|1800000000000"
+    }
+  ],
+  "verifiedByPhone": [
+    {
+      "name": "the box's signed status on /pods: the certificate pin",
+      "source": "apps/mobile/shared/Sources/FlagshipCore/DaemonStatus.swift:23-40; android core/DaemonStatusReport.kt",
+      "kind": "daemon-status",
+      "wire": { "serverDomain": "home.demo02.flagship.services", "certSha256": "9999999999999999999999999999999999999999999999999999999999999999", "certValidUntil": 1810000000000, "certIssuer": "R11", "appsServed": ["notes", "chess"], "nonce": "abababababababababababababababab", "issuedAt": 1800000000000 },
+      "canonical": "flagship/daemon-status/v1|home.demo02.flagship.services|9999999999999999999999999999999999999999999999999999999999999999|1810000000000|R11|chess,notes|abababababababababababababababab|1800000000000"
+    },
+    {
+      "name": "LAN-direct hint",
+      "source": "apps/mobile/shared/Sources/FlagshipAPI/Client/LanHint.swift:85-110; android core/LanHint.kt:54-64",
+      "kind": "lan-hint",
+      "wire": { "serverDomain": "home.demo02.flagship.services", "certSha256": "9999999999999999999999999999999999999999999999999999999999999999", "endpoints": [{ "address": "192.168.1.20", "port": 443 }, { "address": "fd00::20", "port": 443 }], "issuedAt": 1800000000000, "expiresAt": 1800003600000 },
+      "canonical": "flagship/lan-hint/v1|home.demo02.flagship.services|9999999999999999999999999999999999999999999999999999999999999999|192.168.1.20:443,[fd00::20]:443|1800000000000|1800003600000"
+    }
+  ],
+  "decodedByPhone": {
+    "source": "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift (non-optional Codable fields); android api/ScreensModels.kt",
+    "server-detail": ["serverFqdn", "username", "daemonVersion", "startedAt", "uptimeMs", "serviceCount", "pairedSessionCount", "recentInstallEvents"],
+    "appSummary": ["serviceId", "creator", "slug", "urlLabel", "url", "status", "installedAt"],
+    "app-detail": ["app", "manifest", "dataLayerInstances", "members", "browserTabs", "recentLogs"],
+    "member": ["stableIdPrefix", "role", "addedAt"],
+    "paired-session": ["tokenPrefix", "addedAt"]
+  }
+}

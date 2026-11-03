@@ -100,6 +100,7 @@ import { ServingLockController } from "./servingLock.js";
 import { BootSuspensionClient, bootBaseFromControl } from "./bootSuspensionClient.js";
 import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 import { buildJournalHttp, JournalctlReader } from "./journalHttp.js";
+import { buildLegacyClientRoutes } from "./legacyClientRoutes.js";
 import {
   buildAccessEnforcementHandler,
   buildRevocationPoller,
@@ -5132,6 +5133,8 @@ async function wireOwnerHandlers(deps: {
       usedNonces: fileUsedNonceStore(`${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/journal-used-nonces.json`, undefined, "Journal reads sent before now are refused; read it again."),
     }),
   );
+  // Routes 0.3 retired that a 0.2 app still calls: a sentence telling it to update (F9).
+  runtime.addHandler(buildLegacyClientRoutes());
   // Per-service access gating (docs/service-access-gating.md): the owner-IRK
   // set-mode endpoint + the friend redeem endpoint + the serve-path enforcement.
   // The household key (for the invite-bundle decrypt) is provisioned to the box
