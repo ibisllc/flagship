@@ -1,44 +1,67 @@
 // A malicious sibling web app against the phone's endpoint (Appendix H scenario 11; Appendix I §7 and the last item of
-// §8). A simulated admin phone (lib/phoneSim.ts: the apps' endpoint routes, decided by the shared
-// `phoneEndpointCheck` the iOS and Android endpoints mirror) holds the bare `<account>.<apex>` through the REAL gym
-// relay, terminating TLS itself. The harness then sends, byte for byte through the relay, what a browser would send on
-// behalf of a page served by a sibling app (`https://<app>.<account>.<apex>` or `https://<app>.<box>`: same-site, not
-// same-origin, so the browser attaches the phone's cookie to it): CSRF with and without a token, planted cookies,
-// cross-origin reads and preflights, WebSocket upgrades, a mismatched Host. Sensitive operations must stay refused,
-// the owner's own flow must keep working, and no answer may ever carry a CORS header.
+// §8), as the 0.3 apps serve it: the one-time-code browser session (`/api/phone/session`, `/api/phone/ping`, the
+// `__Host-` cookie) is retired, and the only operations a website reaches are voi.ci's `GET /api/phone/live` and
+// `POST /api/phone/deliver` (docs/voici-and-messages.md §8.2), from the listed voi.ci origins only (the gym:
+// `https://gym.voi.ci`). A simulated admin phone (lib/phoneSim.ts: decided by the shared `phoneWebCheck`, then
+// `phoneEndpointCheck`, which the iOS and Android endpoints mirror) holds the bare `<account>.<apex>` through the REAL
+// gym relay, terminating TLS itself. The harness then sends, byte for byte through the relay, what a browser would send
+// on behalf of a page served by a sibling app (`https://<app>.<account>.<apex>` or `https://<app>.<box>`: same-site,
+// so the browser attaches any cookie it holds) and by the phone's own name: cross-origin reads, preflights and
+// deliveries, form posts, the retired session routes, planted cookies, WebSocket upgrades, a mismatched Host. Every
+// one must be refused with no CORS header; CORS may only ever name the listed origin, on live, deliver and its
+// preflight; no answer sets a cookie. The voi.ci content of live/deliver (signed envelopes, acks) is the voici group's.
 //
 // What it cannot prove: the iOS and Android endpoints' own code (unit tests and the shared vectors do), or a real
-// browser's cookie jar (the requests are the ones a browser would make; a browser additionally refuses to let a
-// sibling set a `__Host-` cookie at all). Runs in its own phase: it holds account A's bare name, which phone-route
-// also uses. Leaves behind: nothing (the phone's grant is revoked).
+// browser's cookie jar. Runs in its own phase: it holds account A's bare name, which phone-route also uses. Leaves
+// behind: nothing (the phone's grant is revoked).
 import { randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { bytesToHex } from "@noble/hashes/utils";
-import { ed, PHONE_CSRF_HEADER, PHONE_SESSION_COOKIE, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
+import { ed, PHONE_DELIVER_PATH, PHONE_ENVELOPE_CONTENT_TYPE, PHONE_LIVE_PATH, PHONE_SESSION_COOKIE, PHONE_WEB_ORIGINS_GYM, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
 import { mintDeviceGrant } from "../../lib/fleet.js";
 import { accountReadHeaders } from "../../readToken.js";
 import { CONTROL, SERVICES, SkipError, assert, http, postJson, short } from "../../lib/harness.js";
 import { SimPhone, phoneRequest, selfSignedPhoneCert, type PhoneHttpAnswer } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
 
-/** Every `access-control-*` header an answer carries (there must be none). */
+/** The origins the gym's phone endpoint lets reach live/deliver (GYM_PHONE_WEB_ORIGIN overrides, e.g. another gym apex). */
+export const GYM_PHONE_ORIGINS: readonly string[] = process.env.GYM_PHONE_WEB_ORIGIN ? [process.env.GYM_PHONE_WEB_ORIGIN] : PHONE_WEB_ORIGINS_GYM;
+
+/** Every `access-control-*` header an answer carries. */
 export function corsHeaders(a: PhoneHttpAnswer): string[] {
   return Object.keys(a.headers).filter((h) => h.startsWith("access-control-"));
 }
 
-/** The session cookie's attributes from a Set-Cookie line, or null when it is not the phone's session cookie. */
-export function sessionCookieOf(setCookie: string | undefined): { token: string; attrs: Set<string>; domain: boolean } | null {
-  if (!setCookie) return null;
-  const parts = setCookie.split(";").map((p) => p.trim());
-  const first = parts[0] ?? "";
-  if (!first.startsWith(`${PHONE_SESSION_COOKIE}=`)) return null;
-  const attrs = new Set(parts.slice(1).map((p) => p.toLowerCase()));
-  return { token: first.slice(PHONE_SESSION_COOKIE.length + 1), attrs, domain: parts.slice(1).some((p) => /^domain=/i.test(p)) };
+/**
+ * Why an answer's CORS is wrong, or null when it is right: CORS only on live, deliver or the deliver preflight, only
+ * for a request whose Origin is listed, naming exactly that origin (never `*`), and never Allow-Credentials.
+ */
+export function corsProblem(a: PhoneHttpAnswer, req: { method: string; path: string; origin: string | null }, listed: readonly string[]): string | null {
+  const h = corsHeaders(a);
+  if (h.length === 0) return null;
+  const path = req.path.split("?")[0]!;
+  const op = path === PHONE_LIVE_PATH || path === PHONE_DELIVER_PATH;
+  if (!op) return `CORS on ${req.method} ${path}`;
+  if (req.origin === null || !listed.includes(req.origin)) return `CORS for an unlisted origin ${req.origin ?? "(none)"}`;
+  const allow = a.headers["access-control-allow-origin"];
+  if (allow !== req.origin) return `Allow-Origin ${allow ?? "(missing)"} for ${req.origin}`;
+  if (a.headers["access-control-allow-credentials"] !== undefined) return "Allow-Credentials sent";
+  return null;
+}
+
+/** The refusal code in an endpoint answer's JSON body, or null. */
+export function refusalCode(a: PhoneHttpAnswer): string | null {
+  try {
+    const c = (JSON.parse(a.body) as { code?: unknown }).code;
+    return typeof c === "string" ? c : null;
+  } catch {
+    return null;
+  }
 }
 
 export const phoneEndpoint: Group = {
   name: "phone-endpoint",
-  title: "a sibling app's page cannot use the phone endpoint: CSRF, planted cookies, cross-origin reads and preflights, WebSocket upgrades and Host confusion are refused through the real relay; the owner's session still works; no CORS ever",
+  title: "a sibling app's page cannot use the phone endpoint (0.3: voi.ci live/deliver only): cross-origin reads, preflights, deliveries and form posts, the retired session routes, planted cookies, WebSocket upgrades and Host confusion are refused through the real relay; CORS only ever for the listed voi.ci origin; no cookie",
   needs: ["A1"],
   phase: 4.2,
   async run({ A, rec, box }) {
@@ -53,7 +76,7 @@ export const phoneEndpoint: Group = {
     const cert = selfSignedPhoneCert(bare);
     let phone: SimPhone;
     try {
-      phone = await SimPhone.connect(url, { account: acct.username, seed, label: "P", tls: cert, com: { control: CONTROL, readHeaders: async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk)) } });
+      phone = await SimPhone.connect(url, { account: acct.username, seed, label: "P", tls: cert, origins: GYM_PHONE_ORIGINS, com: { control: CONTROL, readHeaders: async () => (acct.demo ? {} : accountReadHeaders(CONTROL, acct.username, acct.keys.irk)) } });
     } catch (e) {
       await rec.check("the gym relay offers /phone-tunnel", async () => {
         throw new SkipError(`no phone tunnel at ${url || "(no tunnelHub)"}: ${String(e)} (the relay needs the serving authority on)`);
@@ -61,26 +84,26 @@ export const phoneEndpoint: Group = {
       return;
     }
     const relayIp = (await lookup(box("A1").fqdn, { family: 4 })).address;
-    const answers: PhoneHttpAnswer[] = [];
+    const answers: Array<{ a: PhoneHttpAnswer; req: { method: string; path: string; origin: string | null } }> = [];
     const req = async (method: string, path: string, headers: Record<string, string>, body?: string): Promise<PhoneHttpAnswer> => {
       for (let i = 0; i < 4; i++) {
         const a = await phoneRequest({ ip: relayIp, sni: bare, ca: [cert.cert], method, path, headers: { host: bare, ...headers }, ...(body !== undefined ? { body } : {}) });
         if (a) {
-          answers.push(a);
+          answers.push({ a, req: { method, path, origin: headers.origin ?? null } });
           return a;
         }
       }
       throw new Error(`no answer from the phone for ${method} ${path}`);
     };
-    const refused = (what: string, a: PhoneHttpAnswer, code: string) => {
-      assert(a.status === 403, `${what}: ${a.status} ${short(a.body)} (expected 403 ${code})`);
-      assert(a.body.includes(`"code":"${code}"`), `${what}: refused ${short(a.body)}, expected ${code}`);
-      return `${what}: ${code}`;
+    const refused = (what: string, a: PhoneHttpAnswer, status: number, code: string) => {
+      assert(a.status === status && refusalCode(a) === code, `${what}: ${a.status} ${short(a.body)} (expected ${status} ${code})`);
+      assert(corsHeaders(a).length === 0, `${what}: a refusal carried CORS (${corsHeaders(a).join(", ")})`);
+      return `${what}: ${status} ${code}`;
     };
+    const listed = GYM_PHONE_ORIGINS[0]!;
+    const envelope = JSON.stringify({ kind: "voici-message", v: 1 });
+    const planted = `${PHONE_SESSION_COOKIE}=${"ab".repeat(32)}; flagship-phone=${"cd".repeat(32)}`;
     let grantId = "";
-    let token = "";
-    let csrf = "";
-    const cookie = () => `${PHONE_SESSION_COOKIE}=${token}`;
 
     try {
       const ready = await rec.check("setup: an admin-granted simulated phone holds the bare name through the relay", async () => {
@@ -96,93 +119,81 @@ export const phoneEndpoint: Group = {
       });
       if (!ready) return;
 
-      await rec.check("the owner's flow works: the one-time code from the exact origin opens a session with a host-only __Host- cookie (Secure, HttpOnly, SameSite=Strict, Path=/, no Domain) and a CSRF token; a ping with both is allowed", async () => {
-        const code = phone.endpoint.newCode();
-        const s = await req("POST", "/api/phone/session", { origin: self, "content-type": "application/json" }, JSON.stringify({ code }));
-        assert(s.status === 200, `session ${s.status} ${short(s.body)}`);
-        const c = sessionCookieOf(s.headers["set-cookie"]);
-        assert(c, `no ${PHONE_SESSION_COOKIE} in ${short(s.headers["set-cookie"])}`);
-        for (const a of ["secure", "httponly", "samesite=strict", "path=/"]) assert(c.attrs.has(a), `the cookie lacks ${a}: ${s.headers["set-cookie"]}`);
-        assert(!c.domain, `the cookie names a Domain: ${s.headers["set-cookie"]}`);
-        token = c.token;
-        csrf = String(JSON.parse(s.body).csrf ?? "");
-        assert(/^[0-9a-f]{64}$/.test(csrf), `no CSRF token: ${short(s.body)}`);
-        const ping = await req("POST", "/api/phone/ping", { origin: self, cookie: cookie(), [PHONE_CSRF_HEADER]: csrf });
-        assert(ping.status === 200, `owner's ping ${ping.status} ${short(ping.body)}`);
-        const reuse = await req("POST", "/api/phone/session", { origin: self }, JSON.stringify({ code }));
-        return `${refused("the code used twice", reuse, "bad-code")}; ping 200`;
+      await rec.check("the native reads the apps use still work: GET / and the well-known answer 200 with no Origin, no CORS and no cookie", async () => {
+        const root = await req("GET", "/", {});
+        const w = await req("GET", "/.well-known/flagship-phone", {});
+        for (const [n, a] of [["GET /", root], ["well-known", w]] as const) {
+          assert(a.status === 200, `${n}: ${a.status} ${short(a.body)}`);
+          assert(corsHeaders(a).length === 0 && a.headers["set-cookie"] === undefined, `${n}: CORS or a cookie: ${short(a.headers)}`);
+        }
+        return "200, 200";
       });
 
-      await rec.check("CSRF: a sibling page's POST (the browser attaches the phone's same-site cookie) is refused with or without the token; a null or missing Origin too; the exact origin still needs the token", async () => {
+      await rec.check("the retired one-time-code session is gone: /api/phone/session and /api/phone/ping are refused from the phone's own origin, a sibling and with no Origin, and no answer sets a cookie", async () => {
         const out: string[] = [];
-        for (const sib of siblings) {
-          out.push(refused(`${sib} no token`, await req("POST", "/api/phone/ping", { origin: sib, cookie: cookie() }), "cross-origin"));
-          out.push(refused(`${sib} with token`, await req("POST", "/api/phone/ping", { origin: sib, cookie: cookie(), [PHONE_CSRF_HEADER]: csrf }), "cross-origin"));
-          out.push(refused(`${sib} form post`, await req("POST", "/api/phone/ping", { origin: sib, cookie: cookie(), "content-type": "text/plain" }, "x=1"), "cross-origin"));
-          const code = phone.endpoint.newCode();
-          out.push(refused(`${sib} opening a session with a valid code`, await req("POST", "/api/phone/session", { origin: sib, "content-type": "application/json" }, JSON.stringify({ code })), "cross-origin"));
+        const code = JSON.stringify({ code: "123456" });
+        out.push(refused("session, own origin", await req("POST", "/api/phone/session", { origin: self, "content-type": "application/json" }, code), 403, "origin"));
+        out.push(refused("ping, own origin", await req("POST", "/api/phone/ping", { origin: self, cookie: planted }), 403, "origin"));
+        for (const sib of siblings) out.push(refused(`session, ${sib}`, await req("POST", "/api/phone/session", { origin: sib, "content-type": "application/json" }, code), 403, "origin"));
+        out.push(refused("session, no Origin", await req("POST", "/api/phone/session", { "content-type": "application/json" }, code), 403, "cross-origin"));
+        out.push(refused("ping, no Origin, planted cookie", await req("POST", "/api/phone/ping", { cookie: planted }), 403, "cross-origin"));
+        return out.join("; ");
+      });
+
+      await rec.check("a sibling app's page (cookie attached) cannot read live, preflight or post a delivery, or post a form; nor can the phone's own name as an origin, Origin: null or http://", async () => {
+        const out: string[] = [];
+        const bad = [...siblings, self, "null", `http://${bare}`];
+        for (const o of bad) {
+          out.push(refused(`${o} live`, await req("GET", PHONE_LIVE_PATH, { origin: o, cookie: planted }), 403, "origin"));
+          out.push(refused(`${o} preflight`, await req("OPTIONS", PHONE_DELIVER_PATH, { origin: o, "access-control-request-method": "POST", "access-control-request-headers": "content-type" }), 403, "origin"));
+          out.push(refused(`${o} deliver`, await req("POST", PHONE_DELIVER_PATH, { origin: o, cookie: planted, "content-type": PHONE_ENVELOPE_CONTENT_TYPE }, envelope), 403, "origin"));
+          out.push(refused(`${o} form post`, await req("POST", PHONE_DELIVER_PATH, { origin: o, cookie: planted, "content-type": "application/x-www-form-urlencoded" }, "x=1"), 403, "origin"));
         }
-        out.push(refused("Origin: null", await req("POST", "/api/phone/ping", { origin: "null", cookie: cookie(), [PHONE_CSRF_HEADER]: csrf }), "cross-origin"));
-        out.push(refused("no Origin", await req("POST", "/api/phone/ping", { cookie: cookie(), [PHONE_CSRF_HEADER]: csrf }), "cross-origin"));
-        out.push(refused("http:// origin", await req("POST", "/api/phone/ping", { origin: `http://${bare}`, cookie: cookie(), [PHONE_CSRF_HEADER]: csrf }), "cross-origin"));
-        out.push(refused("exact origin, no token", await req("POST", "/api/phone/ping", { origin: self, cookie: cookie() }), "csrf"));
-        out.push(refused("exact origin, wrong token", await req("POST", "/api/phone/ping", { origin: self, cookie: cookie(), [PHONE_CSRF_HEADER]: "0".repeat(64) }), "csrf"));
         return `${out.length} refused`;
       });
 
-      await rec.check("cookie injection: cookies a sibling can plant (Domain-wide `flagship-phone`, a case-variant `__host-` name, an attacker-chosen value) never authenticate; a session opened over a planted cookie gets a fresh token and the planted one stays useless", async () => {
+      await rec.check(`the listed origin (${listed}) gets only what voi.ci needs: live and the deliver preflight with CORS for exactly that origin; a preflight asking for more, a simple-request content type, GET deliver and any other path are refused`, async () => {
+        const live = await req("GET", PHONE_LIVE_PATH, { origin: listed });
+        assert((live.status === 200 || live.status === 404) && live.headers["access-control-allow-origin"] === listed, `live ${live.status} ${short(live.headers)}`);
+        const pre = await req("OPTIONS", PHONE_DELIVER_PATH, { origin: listed, "access-control-request-method": "POST", "access-control-request-headers": "content-type" });
+        assert(pre.status === 204 && pre.headers["access-control-allow-origin"] === listed && pre.headers["access-control-allow-credentials"] === undefined, `preflight ${pre.status} ${short(pre.headers)}`);
         const out = [
-          refused("Domain-wide name", await req("POST", "/api/phone/ping", { origin: self, cookie: `flagship-phone=${token}`, [PHONE_CSRF_HEADER]: csrf }), "no-session"),
-          refused("__host- (case variant)", await req("POST", "/api/phone/ping", { origin: self, cookie: `__host-flagship-phone=${token}`, [PHONE_CSRF_HEADER]: csrf }), "no-session"),
-          refused("planted value", await req("POST", "/api/phone/ping", { origin: self, cookie: `${PHONE_SESSION_COOKIE}=${"ab".repeat(32)}`, [PHONE_CSRF_HEADER]: csrf }), "no-session"),
+          refused("preflight + authorization", await req("OPTIONS", PHONE_DELIVER_PATH, { origin: listed, "access-control-request-method": "POST", "access-control-request-headers": "content-type,authorization" }), 403, "preflight"),
+          refused("preflight for live", await req("OPTIONS", PHONE_LIVE_PATH, { origin: listed, "access-control-request-method": "GET" }), 403, "preflight"),
+          refused("text/plain deliver", await req("POST", PHONE_DELIVER_PATH, { origin: listed, "content-type": "text/plain" }, envelope), 415, "content-type"),
+          refused("GET deliver", await req("GET", PHONE_DELIVER_PATH, { origin: listed }), 405, "method"),
+          refused("well-known from the listed origin", await req("GET", "/.well-known/flagship-phone", { origin: listed }), 403, "origin"),
+          refused("the retired ping from the listed origin", await req("POST", "/api/phone/ping", { origin: listed }), 403, "origin"),
         ];
-        const planted = "cd".repeat(32);
-        const code = phone.endpoint.newCode();
-        const s = await req("POST", "/api/phone/session", { origin: self, cookie: `${PHONE_SESSION_COOKIE}=${planted}`, "content-type": "application/json" }, JSON.stringify({ code }));
-        const c = sessionCookieOf(s.headers["set-cookie"]);
-        assert(s.status === 200 && c && c.token !== planted, `session over a planted cookie: ${s.status} ${short(s.headers["set-cookie"])}`);
-        const newCsrf = String(JSON.parse(s.body).csrf ?? "");
-        out.push(refused("the planted token with the new CSRF", await req("POST", "/api/phone/ping", { origin: self, cookie: `${PHONE_SESSION_COOKIE}=${planted}`, [PHONE_CSRF_HEADER]: newCsrf }), "no-session"));
-        return out.join("; ");
+        return `live ${live.status} + preflight 204 with CORS for ${listed}; ${out.join("; ")}`;
       });
 
-      await rec.check("cross-origin reads: a sibling's read gets no CORS grant and nothing secret; its preflight is refused", async () => {
-        const out: string[] = [];
-        for (const sib of siblings) {
-          const w = await req("GET", "/.well-known/flagship-phone", { origin: sib, cookie: cookie() });
-          assert(w.status === 200, `well-known ${w.status}`);
-          assert(corsHeaders(w).length === 0, `CORS on a read: ${corsHeaders(w).join(", ")}`);
-          assert(!w.body.includes(csrf) && !w.body.includes(token), "the read answer holds the session's secrets");
-          const pre = await req("OPTIONS", "/api/phone/ping", { origin: sib, "access-control-request-method": "POST", "access-control-request-headers": PHONE_CSRF_HEADER });
-          out.push(refused(`${sib} preflight`, pre, "cross-origin"));
-        }
-        return out.join("; ");
-      });
-
-      await rec.check("WebSocket: a sibling's upgrade (cookie attached) is refused; an exact-origin upgrade without the CSRF token too; nothing ever answers 101", async () => {
+      await rec.check("WebSocket: no upgrade from a sibling, the listed origin, the phone's own origin or with no Origin; nothing ever answers 101", async () => {
         const ws = { upgrade: "websocket", connection: "Upgrade", "sec-websocket-key": randomBytes(16).toString("base64"), "sec-websocket-version": "13" };
         const out: string[] = [];
-        for (const sib of siblings) out.push(refused(`${sib} upgrade`, await req("GET", "/", { ...ws, origin: sib, cookie: cookie() }), "cross-origin"));
-        out.push(refused("no-Origin upgrade", await req("GET", "/", { ...ws, cookie: cookie() }), "cross-origin"));
-        out.push(refused("exact origin, no token", await req("GET", "/", { ...ws, origin: self, cookie: cookie() }), "csrf"));
-        assert(answers.every((a) => a.status !== 101), "an upgrade was accepted");
+        for (const o of [...siblings, listed, self]) out.push(refused(`${o} upgrade`, await req("GET", "/", { ...ws, origin: o, cookie: planted }), 403, "origin"));
+        out.push(refused("no-Origin upgrade", await req("GET", "/", { ...ws, cookie: planted }), 403, "cross-origin"));
+        assert(answers.every((x) => x.a.status !== 101), "an upgrade was accepted");
         return out.join("; ");
       });
 
-      await rec.check("Host confusion: the phone's name in SNI with a sibling's Host is refused for reads and writes", async () => {
+      await rec.check("Host confusion: the phone's name in SNI with a sibling's Host is refused (421) for reads, live and deliveries", async () => {
         const out: string[] = [];
         for (const sib of siblings) {
           const host = new URL(sib).host;
-          out.push(refused(`GET Host ${host}`, await req("GET", "/", { host }), "wrong-host"));
-          out.push(refused(`POST Host ${host}`, await req("POST", "/api/phone/ping", { host, origin: sib, cookie: cookie(), [PHONE_CSRF_HEADER]: csrf }), "wrong-host"));
+          out.push(refused(`GET / Host ${host}`, await req("GET", "/", { host }), 421, "wrong-host"));
+          out.push(refused(`live Host ${host}`, await req("GET", PHONE_LIVE_PATH, { host, origin: listed }), 421, "wrong-host"));
+          out.push(refused(`deliver Host ${host}`, await req("POST", PHONE_DELIVER_PATH, { host, origin: listed, "content-type": PHONE_ENVELOPE_CONTENT_TYPE }, envelope), 421, "wrong-host"));
         }
         return out.join("; ");
       });
 
-      await rec.check("no answer the phone gave in this group carried an Access-Control-* header", async () => {
-        const bad = answers.filter((a) => corsHeaders(a).length > 0);
-        assert(bad.length === 0, `${bad.length} answers with CORS: ${bad.map((a) => corsHeaders(a).join(",")).join(" | ")}`);
-        return `${answers.length} answers, none with CORS`;
+      await rec.check("across every answer in this group: CORS only on live/deliver for the listed origin and naming exactly it, never credentials; no Set-Cookie at all", async () => {
+        const bad = answers.map((x) => corsProblem(x.a, x.req, GYM_PHONE_ORIGINS)).filter((p): p is string => p !== null);
+        assert(bad.length === 0, `${bad.length} bad CORS answers: ${bad.slice(0, 5).join(" | ")}`);
+        const cookies = answers.filter((x) => x.a.headers["set-cookie"] !== undefined);
+        assert(cookies.length === 0, `${cookies.length} answers set a cookie`);
+        return `${answers.length} answers checked`;
       });
     } finally {
       phone.terminate();

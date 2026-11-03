@@ -78,7 +78,15 @@ export async function scp(vm: Vm, local: string, remote: string) {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** A Debian 13 VM from UpCloud's public template, reachable over SSH with a fresh key. */
-export async function createDebianVm(o: { dir: string; title: string; zone?: string; plan?: string; log: (s: string) => void }): Promise<Vm> {
+export async function createDebianVm(o: {
+  dir: string;
+  title: string;
+  zone?: string;
+  plan?: string;
+  log: (s: string) => void;
+  /** Also attach UpCloud's utility (private) network, so the VM reaches other servers' utility addresses in the zone. */
+  utility?: boolean;
+}): Promise<Vm> {
   if (!existsSync(TOKEN_FILE)) throw new Error(`no UpCloud token at ${TOKEN_FILE}`);
   mkdirSync(o.dir, { recursive: true });
   const key = join(o.dir, "id_ed25519");
@@ -97,7 +105,14 @@ export async function createDebianVm(o: { dir: string; title: string; zone?: str
       metadata: "yes",
       login_user: { username: "root", create_password: "no", ssh_keys: { ssh_key: [pub] } },
       storage_devices: { storage_device: [{ action: "clone", storage: tpl.uuid, title: `${o.title}-disk`, size: 60, tier: "maxiops" }] },
-      networking: { interfaces: { interface: [{ type: "public", ip_addresses: { ip_address: [{ family: "IPv4" }] } }] } },
+      networking: {
+        interfaces: {
+          interface: [
+            { type: "public", ip_addresses: { ip_address: [{ family: "IPv4" }] } },
+            ...(o.utility ? [{ type: "utility", ip_addresses: { ip_address: [{ family: "IPv4" }] } }] : []),
+          ],
+        },
+      },
     },
   });
   // The account has a fixed core quota that boxes and other VMs share: wait for room (up to half an hour) rather than fail.
@@ -118,6 +133,21 @@ export async function createDebianVm(o: { dir: string; title: string; zone?: str
     await sleep(10_000);
   }
   throw new Error("the VM never answered on SSH");
+}
+
+/** A server's zone and its public and utility (private) IPv4 addresses, read from UpCloud. */
+export async function serverAddresses(uuid: string): Promise<{ zone: string; publicV4: string[]; utilityV4: string[] }> {
+  const r = await up("GET", `/server/${uuid}`);
+  if (r.status !== 200) throw new Error(`UpCloud server ${uuid}: ${r.status}`);
+  const s = r.json?.server ?? {};
+  const all: Array<{ access?: string; family?: string; address?: string }> = [
+    ...(s.ip_addresses?.ip_address ?? []),
+    ...((s.networking?.interfaces?.interface ?? []) as Array<{ type?: string; ip_addresses?: { ip_address?: Array<{ family?: string; address?: string }> } }>).flatMap((i) =>
+      (i.ip_addresses?.ip_address ?? []).map((a) => ({ access: i.type, family: a.family, address: a.address })),
+    ),
+  ];
+  const pick = (access: string) => [...new Set(all.filter((a) => a.access === access && a.family === "IPv4" && typeof a.address === "string").map((a) => a.address!))];
+  return { zone: String(s.zone ?? ""), publicV4: pick("public"), utilityV4: pick("utility") };
 }
 
 export async function destroyVm(vm: Vm, log: (s: string) => void): Promise<void> {

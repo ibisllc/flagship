@@ -31,7 +31,11 @@
 #      GYM_INSTALLER_GIT_REF  the exact commit demo boxes install (default: the commit the gym box
 #                         release from phase 4b names; a branch name is refused since boxes
 #                         install a signed artifact for one exact commit)
+#      GYM_ROLLBACK_TARGET=1  also build the rollback drill release (gym-update-target.sh --flavor broken)
+#                         for the live update-rollback group (one more VM build, ~20 min)
 #      GYM_REFRESH_DRY_RUN=1  same as --dry-run
+#      GYM_ARTIFACT_ARCHES  the box artifact's architectures (default amd64; amd64,arm64 for the arm64 lane,
+#                         tools/live-e2e/lanes/arm64-box.ts)
 #
 # Never touches prod: prod is only READ (its secret names, to compare).
 
@@ -291,10 +295,17 @@ if [ "$DRY" = "1" ]; then
 elif [ "${GYM_SKIP_BOX_ARTIFACT:-0}" = "1" ]; then
   say "GYM_SKIP_BOX_ARTIFACT=1: leaving the gym's box release as it is"
 else
-  bash "$REPO/scripts/gym-box-artifact.sh" --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) || die "gym box artifact failed"
+  bash "$REPO/scripts/gym-box-artifact.sh" --worktree "$WT" --arch "${GYM_ARTIFACT_ARCHES:-amd64}" $([ "$push" = "1" ] || echo --no-push) || die "gym box artifact failed"
   # The update group's destination: one newer signed release, kept out of the index until that group runs.
   bash "$REPO/scripts/gym-update-target.sh" build --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) \
     || say "no update target built (the live update group will report nothing to update to)"
+  # The update-rollback group's destination (plan G1): a child of the update target whose daemon exits at
+  # start, so the guard and the Rust updater must roll it back. One more VM build: opt-in (the release
+  # gate's scripts/gym-release-run.sh turns it on).
+  if [ "${GYM_ROLLBACK_TARGET:-0}" = "1" ]; then
+    bash "$REPO/scripts/gym-update-target.sh" build --flavor broken --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) \
+      || say "no rollback target built (the live update-rollback group will skip)"
+  fi
 fi
 # Demo boxes install the gym's own box release, named by its exact commit (a branch name is refused).
 if [ -z "$GYM_INSTALLER_GIT_REF" ] && [ "$DRY" != "1" ]; then

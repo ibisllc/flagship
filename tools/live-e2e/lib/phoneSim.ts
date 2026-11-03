@@ -24,7 +24,6 @@ import {
   FRAME_OPEN,
 } from "@flagship/tunnel-protocol";
 import { connect as tlsConnect } from "node:tls";
-import { randomBytes, randomInt } from "node:crypto";
 import {
   canonicalPhonePresence,
   canonicalRouteRelease,
@@ -33,9 +32,8 @@ import {
   phoneBeginGrants,
   phoneBeginMessage,
   phoneEndpointCheck,
-  phoneSessionCookie,
-  PHONE_CSRF_HEADER,
-  PHONE_SESSION_COOKIE,
+  phoneWebCheck,
+  PHONE_WEB_ORIGINS_GYM,
   signServingRecord,
   type PhoneBeginGrant,
   type PhonePresence,
@@ -69,6 +67,8 @@ export interface SimPhoneOptions {
   grants?: PhoneBeginGrant[];
   /** Read the chain from `.com`'s `/api/users/:u/device-grants` before every `begin`, as the apps do. */
   com?: { control: string; readHeaders: () => Promise<Record<string, string>> };
+  /** The website origins the endpoint lets reach `live` / `deliver` (default the gym's, PHONE_WEB_ORIGINS_GYM). */
+  origins?: readonly string[];
 }
 
 /** The phone's own admin grants from `.com` (`https://<control>/api/users/<u>/device-grants`), as the apps pick them. */
@@ -107,6 +107,7 @@ export class SimPhone {
       label: opts.label ?? this.pub.slice(0, 8),
       phoneRoutePub: this.pub,
       onHello: (device) => this.seen.set(device, Date.now()),
+      ...(opts.origins ? { origins: opts.origins } : {}),
     });
     this.closed = new Promise((r) => (this.closedResolve = r));
     ws.on("message", (raw: Buffer, isBinary: boolean) => (isBinary ? this.onFrame(raw) : this.onControl(raw)));
@@ -382,70 +383,73 @@ export function cookieValue(header: string | undefined, name: string): string | 
 }
 
 /**
- * The phone endpoint, in node: the same routes and the same policy as the apps' endpoint (Android `PhoneEndpoint.kt`,
- * iOS `PhoneEndpoint*.swift`), with the shared `phoneEndpointCheck` deciding every request. GET / and the well-known
- * answer also carry `phone` (the sim's label) so a visitor can tell phones apart.
+ * The phone endpoint, in node, as the 0.3 apps serve it (Android `PhoneEndpoint.kt`, iOS `PhoneEndpoint*.swift`;
+ * docs/voici-and-messages.md §8.2): the shared `phoneWebCheck` decides first (Host exactly the phone's name, 421;
+ * an Origin only from the listed voi.ci origins, 403 with no CORS; `GET /api/phone/live`, `OPTIONS` + `POST
+ * /api/phone/deliver` with CORS for that origin only). Anything else falls to `phoneEndpointCheck` with no session
+ * (the one-time-code session, `/api/phone/session` + `/api/phone/ping` and its `__Host-` cookie, is retired): a safe
+ * read with no Origin is answered (`GET /` signed hello, the well-known), everything else is refused. No cookie is
+ * read or set. GET / and the well-known also carry `phone` (the sim's label) so a visitor can tell phones apart.
+ * With `web` unset (no voi.ci page on this phone) `live` and `deliver` answer 404, as the apps without a handler do.
  */
 export class PhoneEndpointSim {
-  private code: { value: string; expiresAt: number } | null = null;
-  private readonly sessions = new Map<string, { csrf: string; expiresAt: number }>();
-
   constructor(
-    private readonly o: { account: string; label: string; phoneRoutePub: string; onHello?: (device: string) => void; now?: () => number },
+    private readonly o: {
+      account: string;
+      label: string;
+      phoneRoutePub: string;
+      onHello?: (device: string) => void;
+      now?: () => number;
+      origins?: readonly string[];
+    },
   ) {}
 
   private now(): number {
     return this.o.now?.() ?? Date.now();
   }
 
-  /** A fresh one-time code (6 digits, 5 minutes), what the phone shows its owner. */
-  newCode(): string {
-    const v = String(randomInt(100_000, 1_000_000));
-    this.code = { value: v, expiresAt: this.now() + 5 * 60_000 };
-    return v;
+  /** The origins `live` / `deliver` accept when no `web` handler brings its own. */
+  get origins(): readonly string[] {
+    return this.o.origins ?? PHONE_WEB_ORIGINS_GYM;
   }
 
   /** The voi.ci operations (deliver, live), when the sim plays a phone with a page (lib/voiciPhone.ts). */
   web: { respond(req: HttpRequestHead, hostname: string): string | Promise<string> | null } | null = null;
 
   respond(req: HttpRequestHead, hostname: string): string | Promise<string> {
-    const viaWeb = this.web?.respond(req, hostname);
-    if (viaWeb) return viaWeb;
     const host = (req.headers.host ?? "").split(":")[0]!;
-    const establish = req.method === "POST" && req.path === "/api/phone/session";
-    const token = cookieValue(req.headers.cookie, PHONE_SESSION_COOKIE);
-    const session = token ? this.sessions.get(token) : undefined;
-    const live = session && session.expiresAt > this.now() ? session : undefined;
+    const path = req.path.split("?")[0]!;
+    if (this.web) {
+      const viaWeb = this.web.respond(req, hostname);
+      if (viaWeb) return viaWeb;
+    } else {
+      const v = phoneWebCheck(
+        {
+          method: req.method,
+          path,
+          host,
+          origin: req.headers.origin ?? null,
+          contentType: req.headers["content-type"] ?? null,
+          acrMethod: req.headers["access-control-request-method"] ?? null,
+          acrHeaders: req.headers["access-control-request-headers"] ?? null,
+        },
+        { hostname, origins: this.origins },
+      );
+      if (v.kind === "refuse") return answer(v.status, { error: "refused", code: v.code });
+      if (v.kind === "preflight") return answer(204, null, headerLines(v.headers));
+      if (v.kind === "live" || v.kind === "deliver") return answer(404, { error: "not found", code: "not-found" }, headerLines(v.corsHeaders));
+    }
     const verdict = phoneEndpointCheck(
-      {
-        method: req.method,
-        host,
-        origin: req.headers.origin ?? null,
-        sessionCookie: token,
-        csrf: req.headers[PHONE_CSRF_HEADER] ?? null,
-        upgrade: req.headers.upgrade !== undefined,
-        establish,
-      },
-      { hostname, sessionToken: live ? token : null, csrfToken: live?.csrf ?? null },
+      { method: req.method, host, origin: req.headers.origin ?? null, sessionCookie: null, csrf: null, upgrade: req.headers.upgrade !== undefined, establish: false },
+      { hostname, sessionToken: null, csrfToken: null },
     );
     if (verdict !== "allow") return answer(403, { code: verdict });
-    if (req.method === "GET" && req.path === "/") {
+    if (req.method === "GET" && path === "/") {
       return answer(200, { present: true, recorded: this.hello(req, hostname), phone: this.o.label, account: this.o.account, sni: hostname });
     }
-    if (req.method === "GET" && req.path === "/.well-known/flagship-phone") {
+    if (req.method === "GET" && path === "/.well-known/flagship-phone") {
       return answer(200, { account: this.o.account, hostname, phoneRoutePub: this.o.phoneRoutePub, phone: this.o.label });
     }
-    if (establish) {
-      const typed = /"code"\s*:\s*"(\d{6})"/.exec(req.body)?.[1];
-      const c = this.code;
-      if (!typed || !c || c.expiresAt <= this.now() || typed !== c.value) return answer(403, { code: "bad-code" });
-      this.code = null;
-      const t = randomBytes(32).toString("hex");
-      const csrf = randomBytes(32).toString("hex");
-      this.sessions.set(t, { csrf, expiresAt: this.now() + 3_600_000 });
-      return answer(200, { csrf }, `set-cookie: ${phoneSessionCookie(t)}\r\n`);
-    }
-    if (req.method === "POST" && req.path === "/api/phone/ping") return answer(200, { ok: true });
     return answer(404, { code: "not-found" });
   }
 
@@ -459,6 +463,12 @@ export class PhoneEndpointSim {
     this.o.onHello?.(device);
     return true;
   }
+}
+
+function headerLines(h: Record<string, string>): string {
+  return Object.entries(h)
+    .map(([k, v]) => `${k.toLowerCase()}: ${v}\r\n`)
+    .join("");
 }
 
 const REASONS: Record<number, string> = { 200: "OK", 204: "No Content", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type", 421: "Misdirected Request", 429: "Too Many Requests", 500: "Internal Server Error", 503: "Service Unavailable" };

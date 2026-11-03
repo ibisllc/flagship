@@ -28,6 +28,8 @@ import { relayAuthority } from "./relayAuthority.js";
 import { relayMesh } from "./relayMesh.js";
 import { phoneEndpoint } from "./phoneEndpoint.js";
 import { voici } from "./voici.js";
+import { updateRollback } from "./updateRollback.js";
+import { rustCustody } from "./rustCustody.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
   firstContact,
@@ -51,6 +53,8 @@ export const RELEASE_03_GROUPS: Group[] = [
   localAi,
   stackSwitch,
   rustCore,
+  rustCustody,
+  updateRollback,
   serving,
   issuance,
   phoneRoute,

@@ -6,11 +6,18 @@
 # Exits 0 when both are green, 3 when nothing failed but something was skipped (not proven), 5 when
 # classic is green but arch-v2 is not (new boxes must be built on classic), 6 when every group is green
 # except the policed app browser's (browser-grants: the browser must ship off, release/box-release.json
-# `appBrowser`), any other code when classic failed. The browser group's verdict is also written to
+# `appBrowser`), 7 when both passes are green but a GYM_RELEASE_LANES lane failed, any other code when
+# classic failed. The browser group's verdict is also written to
 # gym-results/release-<stamp>-arch-v2/browser-verdict (pass | fail | skip | off | not-run) and printed
 # on its own line.
 #
 #   bash scripts/gym-release-run.sh [--skip-refresh] [--groups a,b] [--dry-run]
+#
+# GYM_RELEASE_LANES (comma list of tools/live-e2e/lanes/<name>.ts, with arguments after a colon, e.g.
+# "boot-chain-refresh,sovereignty,upgrade-02:recipe,upgrade-02:box,arm64-box") runs those standalone lanes
+# after both passes, one at a time, under this run's gym lock (GYM_LOCK_HELD=1). Exit 7 when every pass is
+# green but a lane failed; a lane that only skipped makes the run 3. Off by default (each lane makes its own
+# boxes and takes 30-100 min; see each lane's header).
 #
 # Env (passed through to scripts/gym-refresh.sh): GYM_REFRESH_ARGS (e.g. --skip-fly-deploy when only box code changed), GYM_BASE_REF, GYM_START_REF (e.g. origin/gym-ux to run
 # the UX branch's gym), and the gym secrets file (.gym-secrets.env: GYM_ADMIN_SECRET, GYM_DEMO_IRK_KEK).
@@ -72,6 +79,8 @@ if [ "$DRY" = 0 ] && { [ -z "${GYM_ADMIN_SECRET:-}" ] || [ -z "${GYM_DEMO_IRK_KE
 fi
 
 cd "$REPO"
+# The update-rollback group's drill release (scripts/gym-update-target.sh --flavor broken): built by the refresh.
+export GYM_ROLLBACK_TARGET="${GYM_ROLLBACK_TARGET:-1}"
 if [ "$REFRESH" = 1 ]; then
   # shellcheck disable=SC2086
   run bash scripts/gym-refresh.sh ${GYM_REFRESH_ARGS:-}
@@ -81,7 +90,7 @@ fi
 # group on boxes built like a real new box (Podman + the Rust path); classic runs the groups that
 # cover the boxes already out there (Docker + TS), which this release updates in place.
 STACKS="${GYM_STACKS:-arch-v2 classic}"
-CLASSIC_GROUPS="${GYM_CLASSIC_GROUPS:-core,gating,invites,one-list,update,backups,stack-switch,serving}"
+CLASSIC_GROUPS="${GYM_CLASSIC_GROUPS:-core,gating,invites,one-list,update,update-rollback,backups,stack-switch,serving}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 report() { # report <run dir> <stack>
   local summary="$1/summary.json"
@@ -143,6 +152,20 @@ for STACK in $STACKS; do
     echo "policed app browser (appBrowser $(node -p 'require(process.argv[1]).appBrowser === true' "$REPO/release/box-release.json")): $BROWSER (written to $RUN_DIR/browser-verdict)"
   fi
 done
+# Standalone lanes (opt-in), under this run's lock.
+LANES_FAILED=0 LANES_SKIPPED=0
+for L in ${GYM_RELEASE_LANES//,/ }; do
+  NAME="${L%%:*}"; LARG=""; [ "$NAME" != "$L" ] && LARG="${L#*:}"
+  [ -f "$REPO/tools/live-e2e/lanes/$NAME.ts" ] || { echo "✗ no lane tools/live-e2e/lanes/$NAME.ts"; LANES_FAILED=1; continue; }
+  echo "── lane: $NAME${LARG:+ $LARG}"
+  set +e
+  GYM_LOCK_HELD=1 GYM_RUN_DIR="gym-results/release-$STAMP-lane-$NAME${LARG:+-$LARG}" run npx tsx "tools/live-e2e/lanes/$NAME.ts" ${LARG:+"$LARG"}
+  lc=$?
+  set -e
+  [ "$DRY" = 1 ] && continue
+  echo "lane $NAME${LARG:+ $LARG}: exit $lc"
+  case "$lc" in 0) ;; 3) LANES_SKIPPED=1 ;; *) LANES_FAILED=1 ;; esac
+done
 [ "$DRY" = 1 ] && { echo "dry run: nothing ran"; exit 0; }
 
 # 0 both green · 3 nothing failed but something skipped · 5 classic green, arch-v2 not (build new
@@ -157,6 +180,7 @@ fi
 if [ "$CODE_ARCH" != 0 ] && [ "$CODE_ARCH" != 3 ]; then
   echo "✗ the arch-v2 stack failed (exit $CODE_ARCH); classic is green: new boxes must be built on classic"; exit 5
 fi
-if [ "$CODE_ARCH" = 3 ] || [ "$CODE_CLASSIC" = 3 ]; then echo "· nothing failed, but something was skipped: not proven"; exit 3; fi
+if [ "$LANES_FAILED" = 1 ]; then echo "✗ both passes are green, but a lane failed (GYM_RELEASE_LANES)"; exit 7; fi
+if [ "$CODE_ARCH" = 3 ] || [ "$CODE_CLASSIC" = 3 ] || [ "$LANES_SKIPPED" = 1 ]; then echo "· nothing failed, but something was skipped: not proven"; exit 3; fi
 echo "✓ every live check passed on both stacks"
 exit 0

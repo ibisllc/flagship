@@ -35,6 +35,7 @@ import { writeFileDurable } from "./durableFile.js";
 import { ARCH_V2_CONFIG, parseArchV2Config, type ArchV2Config, type EngineKind } from "./engine/engine.js";
 import { hybridOrderSignature } from "./pqAuthority.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import type { RustComponentStatuses } from "./rustStack/componentStatus.js";
 import type { CommandRunner } from "./serviceRunner.js";
 
 export const SWITCH_ORDER_FILE = "/var/flagship/arch-v2-order.json";
@@ -530,10 +531,13 @@ export interface ArchV2SwitchHttpOptions {
   engine: () => EngineKind;
   requestRestart: () => void;
   now?: () => number;
+  /** Which implementation each Rust-path component runs (rustStack/componentStatus.ts); absent: not shown. */
+  components?: () => Promise<RustComponentStatuses>;
 }
 
 /**
- * `GET /api/stack` (owner sessions): the stack, the switch's record and the plan for the other stack.
+ * `GET /api/stack` (owner sessions): the stack, the switch's record, the plan for the other stack and,
+ * where the box can read them, which implementation each Rust-path component runs (`components`).
  * `POST /api/stack/switch` `{ order, signature, pqSignature?, dryRun? }`: the owner's signed
  * order; a dry run answers with the plan and changes nothing.
  */
@@ -546,7 +550,15 @@ export function buildArchV2SwitchHttp(o: ArchV2SwitchHttpOptions) {
       if (denied) return denied;
       const config = o.config();
       const target: BoxStackTarget = stackOf(config) === "arch-v2" && o.engine() === "podman" ? "classic" : "arch-v2";
-      return json(200, { stack: stackOf(config), engine: o.engine(), rust: config.rust, switch: await o.switcher.record(), plan: await o.switcher.plan(target) });
+      const components = o.components ? await o.components().catch(() => null) : undefined;
+      return json(200, {
+        stack: stackOf(config),
+        engine: o.engine(),
+        rust: config.rust,
+        switch: await o.switcher.record(),
+        plan: await o.switcher.plan(target),
+        ...(components !== undefined ? { components } : {}),
+      });
     }
     if (req.path !== "/api/stack/switch") return null;
     if (req.method !== "POST") return json(405, { error: "method not allowed" });

@@ -89,9 +89,11 @@ release from a session that holds nothing), `wrong-session`, `wrong-generation`,
     seen, in memory, at most 32; exposed as the endpoint's `lastSeen`, the UI is a follow-up).
   - `GET /.well-known/flagship-phone` → `{account, hostname, phoneRoutePub}` (proves the TLS peer is this account's
     admin phone; no secrets).
-  - `POST /api/phone/session` with `{code}` (the one-time code the app shows): opens a session, sets
-    `__Host-flagship-phone` (Secure, HttpOnly, SameSite=Strict, Path=/, no Domain) and returns `{csrf}`.
-  - `POST /api/phone/ping`: a session operation (needs the cookie and `x-flagship-csrf`).
+  - Retired in 0.3 (H11): the one-time-code session (`POST /api/phone/session`, `POST /api/phone/ping`, the
+    `__Host-flagship-phone` cookie). A website now reaches only `GET /api/phone/live` and `POST
+    /api/phone/deliver` (plus its preflight), from the listed voi.ci origin, with no cookie
+    (docs/voici-and-messages.md; `phoneWebCheck`, then `phoneEndpointCheck` with no session; live group
+    `phone-endpoint`).
   - Every non-GET (and every WebSocket upgrade) passes `phoneEndpointCheck`: Host exactly the phone's name, Origin
     exactly `https://<name>` (a sibling app is same-site, not same-origin), the host-only cookie, the CSRF header. No
     CORS headers are ever sent.

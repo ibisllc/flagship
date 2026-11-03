@@ -713,5 +713,21 @@ imports the file into account B on a new box and checks the apps start and the
 data is there. The reboot cliff gets its own check: reboot the blocked box and
 assert it does **not** unlock (documenting D2) until a recovery key exists.
 
+**Built (2026-11-02), not yet run:** `tools/live-e2e/lanes/sovereignty.ts` (helpers
+`tools/live-e2e/lib/sovereignty.ts`, tests `tools/live-e2e/tests/sovereignty.test.ts`). It is a
+standalone lane, not a shared-run group: two real accounts (A with an SWK the phone derives from
+its UMK, so the hello is checked against the derived STK), the cut as one counted nft table applied
+over the gym-only root SSH key (private ranges and the runner's SSH replies only), the phone's
+steps over the box's UpCloud utility address through an SSH forward on a sibling VM, offline
+control (stop, start, restart, replay refused), the backup and download, the counters and a frozen
+`/pods lastReported` as the "sent nothing" proof, and the import into B opened with the passcode.
+Deviations from the paragraph above: (1) no gym-only `.com` 404 rule: the runner asks `.com`
+nothing during the rescue and the box cannot reach it through the cut, so the rule would test
+nothing the cut doesn't; the N1 screen's 404 handling stays with the apps' mock gyms. (2) The
+reboot cliff is recorded as info only: gym boxes have no LUKS and the nft cut does not survive a
+restart, so a gym box comes back by itself; the cliff is proven on hardware
+(`docs/runbooks/0.3-hardware-acceptance.md` section 3 step 5). (3) Discovery is by address, not
+mDNS (no multicast between UpCloud servers).
+
 Total: about 4 to 5 weeks for one engineer across the phones, gym and the
 decisions, excluding D1 (a project of its own).

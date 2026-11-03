@@ -29,6 +29,7 @@ import { ARCH_V2_CONFIG, parseArchV2Config, type ArchV2Config, type EngineKind }
 import { bootArchV2 } from "../src/archV2Boot.js";
 import { setPqAuthority } from "../src/pqAuthority.js";
 import { ENGINE_APT_PACKAGES, ENGINE_SETUP_BLOCK } from "../../flagship-builder/src/engineSetup.js";
+import type { RustComponentStatuses } from "../src/rustStack/componentStatus.js";
 
 const SERVER = "home.alice.flagship.services";
 const T = 1_790_000_000_000;
@@ -350,7 +351,7 @@ describe("the trial", () => {
 
 // ── HTTP ──────────────────────────────────────────────────────────────────
 
-function http(over: { adminRootPub?: Uint8Array | null; gateDenies?: boolean } = {}) {
+function http(over: { adminRootPub?: Uint8Array | null; gateDenies?: boolean; components?: () => Promise<RustComponentStatuses> } = {}) {
   const d = daemon();
   let restarts = 0;
   const handle = buildArchV2SwitchHttp({
@@ -364,11 +365,31 @@ function http(over: { adminRootPub?: Uint8Array | null; gateDenies?: boolean } =
     engine: () => "docker",
     requestRestart: () => void restarts++,
     now: () => T + 1000,
+    ...(over.components ? { components: over.components } : {}),
   });
   const post = (body: unknown) => handle({ method: "POST", path: "/api/stack/switch", headers: {}, body: Buffer.from(JSON.stringify(body)) });
   const body = (o: ArchV2SwitchOrder, k = ADMIN, extra: Record<string, unknown> = {}) => ({ order: o, signature: signed(o, k).signatureHex, ...extra });
   return { d, handle, post, body, restarts: () => restarts };
 }
+
+describe("GET /api/stack", () => {
+  const get = (h: ReturnType<typeof http>) => h.handle({ method: "GET", path: "/api/stack", headers: {}, body: Buffer.alloc(0) });
+  it("shows which implementation each Rust-path component runs, when the box can read it", async () => {
+    const keyd = { component: "keyd" as const, choice: "rust" as const, reason: "running", sha256: "ab".repeat(32), pinned: "ab".repeat(32), switch: "on" as const, at: 1 };
+    const h = http({ components: async () => ({ keyd, broker: null, core: null, access: null }) });
+    const r = await get(h);
+    expect(r!.status).toBe(200);
+    expect(JSON.parse(String(r!.body)).components).toEqual({ keyd, broker: null, core: null, access: null });
+  });
+  it("leaves components out without a reader, and answers null when the reader fails", async () => {
+    expect(JSON.parse(String((await get(http()))!.body))).not.toHaveProperty("components");
+    const failing = http({ components: async () => Promise.reject(new Error("EACCES")) });
+    expect(JSON.parse(String((await get(failing))!.body)).components).toBeNull();
+  });
+  it("is for the owner's sessions only", async () => {
+    expect((await get(http({ gateDenies: true, components: async () => ({ keyd: null, broker: null, core: null, access: null }) })))!.status).toBe(401);
+  });
+});
 
 describe("POST /api/stack/switch", () => {
   it("refuses the IRK on an admin-pinned box, a stranger, another server and a stale order, and moves nothing", async () => {

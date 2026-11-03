@@ -15,21 +15,30 @@
 #   unpublish  takes it out of releases.json again, so a box made later does not move onto it at its
 #              first boot (the catalog keeps it: listing a release allows it, nothing more)
 #
-# Usage: bash scripts/gym-update-target.sh build|publish|unpublish --worktree <gym worktree> [--no-push]
+# --flavor broken (the live `update-rollback` group, plan G1): the same three modes for a THIRD release, one
+# sequence above the update target and a child of it, whose daemon exits at start (one line prepended to
+# packages/server-daemon/src/index.ts in a commit made with git plumbing: the gym worktree's checkout and
+# branch never change). A box ordered onto it crash-loops until the update guard hands over to the Rust
+# flagship-updater, which rolls it back to the update target. Its file is rollback-target.json; it is built
+# only after the update target of the same gym tip exists, and publish refuses one built from another.
+#
+# Usage: bash scripts/gym-update-target.sh build|publish|unpublish --worktree <gym worktree> [--no-push] [--flavor normal|broken]
 # Env: the same keys and bucket as scripts/gym-box-artifact.sh. Never touches production.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MODE="${1:-}"; shift || true
-WT="" PUSH=1
+WT="" PUSH=1 FLAVOR=normal
 while [ $# -gt 0 ]; do
   case "$1" in
     --worktree) WT="$2"; shift 2 ;;
     --no-push) PUSH=0; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    --flavor) FLAVOR="$2"; shift 2 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 case "$MODE" in build|publish|unpublish) ;; *) echo "usage: gym-update-target.sh build|publish|unpublish --worktree <gym worktree>" >&2; exit 2 ;; esac
+case "$FLAVOR" in normal|broken) ;; *) echo "--flavor takes normal or broken, not $FLAVOR" >&2; exit 2 ;; esac
 [ -n "$WT" ] && [ -e "$WT/.git" ] || { echo "--worktree <gym worktree> is required" >&2; exit 2; }
 say() { echo "  $*"; }
 die() { echo "gym-update-target: $*" >&2; exit 1; }
@@ -48,6 +57,56 @@ put() { # <file> <name>
   die "upload of $2 failed"
 }
 fetch() { curl -fsS -m 25 -H 'cache-control: no-cache' "$BASE/$1?t=$(date +%s)" -o "$2"; }
+jget() { node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"))[process.argv[2]])' "$1" "$2"; }
+TARGET_FILE=update-target.json
+[ "$FLAVOR" = broken ] && TARGET_FILE=rollback-target.json
+# The one line that makes a release's daemon exit at start (the rollback drill). Kept out of the update target.
+DRILL_FAULT='if (process.env.FLAGSHIP_ROLLBACK_DRILL !== "off") process.exit(97); // gym rollback drill (scripts/gym-update-target.sh --flavor broken)'
+
+if [ "$MODE" = "build" ] && [ "$FLAVOR" = "broken" ]; then
+  fetch update-target.json "$OUT/ut.json" || die "no update-target.json: build the update target of this gym tip first"
+  FROM="$(jget "$OUT/ut.json" commit)"
+  [ "$FROM" = "$(git -C "$WT" rev-parse HEAD)" ] || die "the update target ${FROM:0:12} is not this gym tip; build it first"
+  if fetch rollback-target.json "$OUT/prev.json" 2>/dev/null && [ "$(jget "$OUT/prev.json" from)" = "$FROM" ]; then
+    say "rollback target for ${FROM:0:12} already built"; exit 0
+  fi
+  SEQ=$(( $(jget "$OUT/ut.json" sequence) + 1 ))
+  # A commit on top of the update target whose only change is the fault line, made without touching the
+  # worktree's index, checkout or branch.
+  IDX="$OUT/drill.index"
+  GIT_INDEX_FILE="$IDX" git -C "$WT" read-tree "$FROM"
+  SRC=packages/server-daemon/src/index.ts
+  BLOB="$( { printf '%s\n' "$DRILL_FAULT"; git -C "$WT" show "$FROM:$SRC"; } | git -C "$WT" hash-object -w --stdin)"
+  GIT_INDEX_FILE="$IDX" git -C "$WT" update-index --cacheinfo "100644,$BLOB,$SRC"
+  TREE="$(GIT_INDEX_FILE="$IDX" git -C "$WT" write-tree)"
+  TO="$(GIT_AUTHOR_DATE="$(git -C "$WT" show -s --format=%cI "$FROM")" GIT_COMMITTER_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    git -C "$WT" commit-tree "$TREE" -p "$FROM" -m "gym: rollback drill release (its daemon exits at start; never on a branch)")"
+  say "rollback target: ${FROM:0:12} → ${TO:0:12} (sequence $SEQ, daemon exits at start)"
+  mkdir -p "$OUT/a"
+  bash "$HERE/box-artifact-vm.sh" --repo "$WT" --commit "$TO" --sequence "$SEQ" --out "$OUT/a" || die "the VM build failed"
+  NAME="flagship-box-${TO:0:12}-amd64"
+  (cd "$WT" && npx tsx tools/box-artifact/build.ts sign --manifest "$OUT/a/$NAME.manifest.unsigned.json" --out "$OUT/a/$NAME.manifest.json" --key-file "$KEY_FILE") || die "signing failed"
+  (cd "$WT" && npx tsx tools/box-artifact/build.ts verify --manifest "$OUT/a/$NAME.manifest.json" --artifact "$OUT/a/$NAME.tar.gz" --commit "$TO" --arch amd64 --trust release/box-artifact-trust.json) || die "the signed manifest does not verify against the gym trust file"
+  rm -f "$OUT/a/$NAME.manifest.unsigned.json"
+  for f in "$OUT/a"/*; do
+    say "upload $(basename "$f")"
+    ok=0
+    for attempt in 1 2 3 4 5; do
+      if (cd "$WT/apps/com" && npx wrangler r2 object put "$BUCKET/$(basename "$f")" --file "$f" --remote >/dev/null); then ok=1; break; fi
+      sleep $((attempt * 15))
+    done
+    [ "$ok" = 1 ] || die "upload of $(basename "$f") failed"
+  done
+  node -e 'const fs=require("node:fs");const [m,from,out]=process.argv.slice(1);const x=JSON.parse(fs.readFileSync(m,"utf8")).manifest;fs.writeFileSync(out,JSON.stringify({from,commit:x.commit,sequence:x.sequence,arch:["amd64"],endorsedAt:new Date(x.issuedAt).toISOString(),artifactSha256:x.artifactSha256,drill:"daemon-exits-at-start"},null,2)+"\n")' \
+    "$OUT/a/$NAME.manifest.json" "$FROM" "$OUT/rollback-target.json"
+  put "$OUT/rollback-target.json" rollback-target.json
+  if [ "$PUSH" = "1" ]; then
+    # The commit is on no branch; a tag keeps it (and the artifact's source) reachable on origin.
+    (cd "$WT" && git tag -f "gym-artifact-${TO:0:12}" "$TO" >/dev/null && git push -q -f origin "gym-artifact-${TO:0:12}") || say "could not tag $TO"
+  fi
+  say "rollback target ${TO:0:12} built (hidden until the update-rollback group publishes it)"
+  exit 0
+fi
 
 if [ "$MODE" = "build" ]; then
   FROM="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).commit)' "$WT/release/box-release.json")"
@@ -86,11 +145,16 @@ if [ "$MODE" = "build" ]; then
   exit 0
 fi
 
-fetch update-target.json "$OUT/target.json" || die "no update-target.json: run gym-update-target.sh build first"
+fetch "$TARGET_FILE" "$OUT/target.json" || die "no $TARGET_FILE: run gym-update-target.sh build$( [ "$FLAVOR" = broken ] && echo ' --flavor broken') first"
 fetch releases.json "$OUT/index.json" || echo '{"releases":[]}' > "$OUT/index.json"
 COMMIT="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).commit)' "$OUT/target.json")"
 
-if [ "$MODE" = "publish" ]; then
+if [ "$MODE" = "publish" ] && [ "$FLAVOR" = "broken" ]; then
+  # Only a drill built on this run's update target is newer than the release the box was moved to.
+  fetch update-target.json "$OUT/ut.json" || die "no update-target.json"
+  [ "$(jget "$OUT/target.json" from)" = "$(jget "$OUT/ut.json" commit)" ] \
+    || die "the rollback target ${COMMIT:0:12} was built on $(jget "$OUT/target.json" from | cut -c1-12), not on the update target $(jget "$OUT/ut.json" commit | cut -c1-12)"
+elif [ "$MODE" = "publish" ]; then
   # Only a target built from the release the gym's boxes install now is newer than it; an older run's would be a move
   # back, which the catalog refuses (gym 12: the refresh's build failed and the previous target was published).
   FROM_NOW="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).commit)' "$WT/release/box-release.json")"
@@ -101,7 +165,7 @@ fi
 if [ "$MODE" = "unpublish" ]; then
   node -e 'const fs=require("node:fs");const [i,c]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(i,"utf8"));j.releases=(j.releases||[]).filter(e=>e.commit!==c);fs.writeFileSync(i,JSON.stringify(j,null,2)+"\n")' "$OUT/index.json" "$COMMIT"
   put "$OUT/index.json" releases.json
-  say "update target ${COMMIT:0:12} taken out of releases.json"
+  say "${TARGET_FILE%.json} ${COMMIT:0:12} taken out of releases.json"
   exit 0
 fi
 
@@ -109,10 +173,10 @@ fi
 [ -f "$CATALOG_KEY" ] && [ -f "$WT/release/catalog-root.json" ] || die "no gym catalog key or pinned root"
 fetch catalog-targets.json "$OUT/prev-targets.json" || echo '{"signed":{"version":0,"releases":[]}}' > "$OUT/prev-targets.json"
 PREV_TS=(); fetch catalog-timestamp.json "$OUT/prev-ts.json" && PREV_TS=(--previous-timestamp "$OUT/prev-ts.json")
-CV="$(node -e 'const fs=require("node:fs");const [p,t,out]=process.argv.slice(1);const s=JSON.parse(fs.readFileSync(p,"utf8")).signed;const u=JSON.parse(fs.readFileSync(t,"utf8"));const r=(s.releases||[]).filter(x=>x.commit!==u.commit);r.push({commit:u.commit,label:"gym update target",securityVersion:u.sequence,artifactSha256:u.artifactSha256,rolloutPercent:100});fs.writeFileSync(out,JSON.stringify(r));console.log(Math.max((s.version||0)+1,u.sequence))' "$OUT/prev-targets.json" "$OUT/target.json" "$OUT/releases.json")"
+CV="$(node -e 'const fs=require("node:fs");const [p,t,out]=process.argv.slice(1);const s=JSON.parse(fs.readFileSync(p,"utf8")).signed;const u=JSON.parse(fs.readFileSync(t,"utf8"));const r=(s.releases||[]).filter(x=>x.commit!==u.commit);r.push({commit:u.commit,label:u.drill?"gym rollback drill":"gym update target",securityVersion:u.sequence,artifactSha256:u.artifactSha256,rolloutPercent:100});fs.writeFileSync(out,JSON.stringify(r));console.log(Math.max((s.version||0)+1,u.sequence))' "$OUT/prev-targets.json" "$OUT/target.json" "$OUT/releases.json")"
 (cd "$WT" && npx tsx tools/release-catalog/catalog.ts sign --root release/catalog-root.json --releases "$OUT/releases.json" --version "$CV" --floor 0 \
   --targets-days 180 --snapshot-days 120 --timestamp-days 90 --key "$CATALOG_KEY" "${PREV_TS[@]}" --out-dir "$OUT/cat" >/dev/null) || die "the catalog was not signed"
 for n in targets snapshot timestamp; do put "$OUT/cat/$n.json" "catalog-$n.json"; done
 node -e 'const fs=require("node:fs");const [i,t]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(i,"utf8"));const u=JSON.parse(fs.readFileSync(t,"utf8"));j.releases=(j.releases||[]).filter(e=>e.commit!==u.commit);j.releases.push({commit:u.commit,sequence:u.sequence,arch:u.arch,endorsedAt:u.endorsedAt});j.releases.sort((a,b)=>b.sequence-a.sequence);fs.writeFileSync(i,JSON.stringify(j,null,2)+"\n")' "$OUT/index.json" "$OUT/target.json"
 put "$OUT/index.json" releases.json
-say "update target ${COMMIT:0:12} published (catalog v$CV and releases.json)"
+say "${TARGET_FILE%.json} ${COMMIT:0:12} published (catalog v$CV and releases.json)"

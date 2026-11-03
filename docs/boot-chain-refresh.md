@@ -174,3 +174,10 @@ zh-Hans.
   `grub-efi-arm64`, `DRILL_BACKEND=qemu`). Neither VM has an encrypted root, so the premount stops
   at its LUKS check; a real phone-approved unlock through a trial is still to be drilled on a
   box.
+- `tools/live-e2e/lanes/boot-chain-refresh.ts` (live, built 2026-11-02, not yet run): that drill on a
+  real encrypted box. A box installed from the personalized ISO on UpCloud, its start-up unlocked by a
+  simulated owner phone (`tools/live-e2e/lib/bootApprover.ts`), the installed premount made older than
+  the release, an endorsed update applied, a trial staged, the owner's Lock-and-restart, the trial boot
+  unlocked by the phone and promoted, one more restart on the promoted default. It also reads
+  FLAGSHIP_BOOT over the owner's debug SSH on each boot: the unlock log the premount wrote there and the
+  one-shot lock marker written and consumed (the B0 proof).
