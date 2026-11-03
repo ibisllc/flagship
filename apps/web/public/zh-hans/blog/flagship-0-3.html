@@ -41,7 +41,6 @@
       <ul class="notes">
         <li><strong>你的手机会确认它正在与你的新服务器通信。</strong>你的服务器第一次请求批准时，手机会保存该服务器自己的密钥，此后所有内容都以它为准进行核对。如果这台机器有屏幕，它会显示一个 6 位代码，你的手机也会在“批准”上方显示同一个代码。如果两者不一致，请不要批准。当 Flagship Studio 在你的电脑上托管服务器时，Studio 会替你核对代码。</li>
         <li><strong>不是由你的配方构建的服务器会被拒绝。</strong>你的配方带有一个一次性秘密值，只有你自己的服务器才能证明它持有该值。</li>
-        <!-- TODO-RM usb-burn: remove the next item if the seed is not published or the real phone + stick run (journal A5) fails. -->
         <li><strong>用你的 Android 手机制作安装 U 盘。</strong>用 OTG 转接头把 U 盘接到手机上，应用会自己写入安装程序，无需电脑。U 盘以原版 Debian 镜像为基础，任何人都可以<a href="/zh-hans/security/iso-seed">重新构建并逐字节核对</a>。</li>
         <li><strong>服务器从一个已签名的软件包安装。</strong>新服务器在安装过程中不再从代码仓库下载代码。它会核实 Flagship 维护者提供的一个软件包的签名，然后在不再下载任何内容的情况下完成安装。</li>
       </ul>
@@ -114,7 +113,6 @@
       <h2 id="updates">更安全的更新</h2>
       <ul class="notes">
         <li><strong>服务器更新要么证明自己正常，要么自动退回。</strong>新版本安装在旧版本旁边，并有三次启动机会来证明它运行正常。如果失败，你的服务器会自行回到之前运行的版本。更新和回滚从不触及你的应用、数据、密钥或设置。</li>
-        <!-- TODO-RM canary: remove the next item if release/catalog-root.json is not pinned in this release. -->
         <li><strong>更新会先推送到一小批服务器，</strong>只有在这些服务器运行正常后才会推送到更多服务器。</li>
         <li><strong>共享更新结果。</strong>服务器页面上有一个可选开关，默认关闭；开启后，每次更新都会向 Flagship 发送一份回执，说明更新是否成功。它不包含任何应用名称，也不包含任何内容。</li>
         <li><strong>新服务器采用更新的基础架构。</strong>新服务器用 Podman 运行应用，并把密钥保存在用 Rust 编写的小型独立程序中。你已有的服务器保持当前配置不变。</li>
@@ -126,8 +124,7 @@
         <li><strong>服务器程序不再以 root 身份运行。</strong>少数需要 root 的工作都经过一个小型中介程序（broker），它只接受一份固定的请求列表，其他一切都会拒绝。</li>
         <li><strong>密钥与服务器程序分开存放。</strong>服务器的身份密钥、TLS 密钥和 Let's Encrypt 密钥存放在一个独立的密钥服务中。服务器程序请它签名，自己从不持有这些密钥。</li>
         <li><strong>敏感操作需要你的管理员密钥。</strong>更新、级别变更、日志读取和显卡批准，除非由你的管理员设备签名，否则都会被拒绝。</li>
-        <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
-        <li><strong>审查发现的问题已修复。</strong>此版本修复了针对整个产品的一次安全审查中阻止发布级别的问题，以及我们自己的对抗性测试套件发现的 24 个问题；该测试套件现在每次发布都会运行。</li>
+        <li><strong>审查发现的问题已修复。</strong>此版本经过了覆盖整个产品的安全审查。它修复了该审查中阻止发布级别的问题，以及我们自己的对抗性测试套件发现的 24 个问题；该测试套件现在每次发布都会运行。审查提出的几项加固工作已部分完成，将在下一次更新中继续。</li>
         <li><strong>抗量子基础工作。</strong>服务器和手机除了 Ed25519 密钥外还持有 ML-DSA-65 密钥，混合通道（ML-KEM-768 加 X25519）也已构建完成，iPhone 和 Android 上还有一个可选开启的“抗量子保护”设置。以上全部尚待外部审查。</li>
         <li><strong>核对服务器运行的 Node.js。</strong>服务器有一部分运行在 Node.js 上，而且是 nodejs.org 的官方构建，从不是我们重新构建的版本。每台服务器的页面都有一张“运行时”卡片，比对它实际运行的版本与其发行版锁定的确切构建。<a href="/zh-hans/security/runtime">运行时页面</a>列出签名清单，并说明如何用 Node 自己的签名亲自核对。</li>
         <li><strong>不变的部分。</strong>TLS 依然在你自己的服务器上终止，所以我们读不到你的应用发送的内容。我们的中继能看到连接元数据：哪台服务器、什么时候、多少流量。AI 模型永远不会知道你是谁、你在哪里。</li>

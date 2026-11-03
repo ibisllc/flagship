@@ -53,7 +53,6 @@
       <ul class="notes">
         <li><strong>Your phone checks it is talking to your new server.</strong> The first time your server asks to be approved, your phone keeps that server's own key and checks everything against it from then on. If the machine has a screen, it shows a six-digit code, and your phone shows the same code above Approve. If they don't match, don't approve. When Flagship Studio hosts the server on your computer, Studio checks the code for you.</li>
         <li><strong>A server that was not built from your recipe is refused.</strong> Your recipe carries a one-time secret that only your own server can prove it holds.</li>
-        <!-- TODO-RM usb-burn: remove the next item if the seed is not published or the real phone + stick run (journal A5) fails. -->
         <li><strong>Make the installer stick with your Android phone.</strong> Plug a USB stick into your phone with an OTG adapter and the app writes the installer itself, no computer needed. The stick starts from a stock Debian image that anyone can <a href="/security/iso-seed.html">rebuild and check byte for byte</a>.</li>
         <li><strong>Servers install from one signed package.</strong> A new server no longer downloads code from a repository while it installs. It checks the signature of one package from Flagship's maintainers, then installs it with no further downloads.</li>
       </ul>
@@ -126,7 +125,6 @@
       <h2 id="updates">Safer updates</h2>
       <ul class="notes">
         <li><strong>A server update proves itself or steps back.</strong> The new release installs beside the old one and gets three starts to prove it is healthy. If it fails, your server goes back to the release it ran before, by itself. Updates and rollbacks never touch your apps, data, keys or settings.</li>
-        <!-- TODO-RM canary: remove the next item if release/catalog-root.json is not pinned in this release. -->
         <li><strong>Updates reach a small group of servers first,</strong> and more only once those are healthy.</li>
         <li><strong>Share update results.</strong> An optional switch on your server's page, off by default, sends Flagship one receipt per update saying whether it worked. It names no app and holds no content.</li>
         <li><strong>A newer foundation for new servers.</strong> New servers run apps with Podman and keep their keys in small, separate programs written in Rust. Servers you already have keep their current setup.</li>
@@ -138,8 +136,7 @@
         <li><strong>The server program no longer runs as root.</strong> The few jobs that need root go through a small broker that accepts a fixed list of requests and refuses everything else.</li>
         <li><strong>Keys live apart from the server program.</strong> The server's identity, TLS and Let's Encrypt keys sit in a separate key service. The server program asks it to sign; it never holds the keys.</li>
         <li><strong>Sensitive actions need your admin key.</strong> Updates, rank changes, journal reads and graphics-card approvals are refused unless your admin device signed them.</li>
-        <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
-        <li><strong>Review findings fixed.</strong> This release fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release.</li>
+        <li><strong>Review findings fixed.</strong> This release was reviewed for security across the whole product. It fixes the stop-ship findings of that review and the 24 findings of our own adversarial test suite, which now runs on every release. A few hardening items from the review are partly done and continue in the next update.</li>
         <li><strong>Quantum-safe groundwork.</strong> Servers and phones hold ML-DSA-65 keys beside their Ed25519 keys, a hybrid channel (ML-KEM-768 with X25519) is built, and iPhone and Android have an opt-in Quantum-safe protection setting. All of it is pending external review.</li>
         <li><strong>Check the Node.js your server runs.</strong> Part of the server runs on Node.js, and it is the official build from nodejs.org, never one we rebuilt. Each server's page has a Runtime card that compares what it runs with the exact build its release locks. The <a href="/security/runtime.html">runtime page</a> shows the signed list and how to check it yourself against Node's own signatures.</li>
         <li><strong>What has not changed.</strong> TLS still ends on your own server, so we can't read what your apps send. Our relay sees connection metadata: which server, when, and how much. An AI model never learns who or where you are.</li>

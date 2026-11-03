@@ -2,7 +2,7 @@
   "_about": "Flagship 0.3 の App Store と Google Play の掲載文（日本語）。store/listings/en.json から翻訳したものです。",
   "_todo": [
     "appstore.name / playstore.title: confirm against the live listings (the store name must match what App Store Connect and the Play Console hold).",
-    "usb-burn: the sentence 'Make the installer USB stick with your phone ...' in playstore.fullDescription and playstore.whatsNew depends on journal A5 (seed published, one real phone + stick run). Android only; never in the App Store texts.",
+    "usb-burn: kept (owner 2026-11-02). The sentence 'Make the installer USB stick with your phone ...' in playstore.fullDescription and playstore.whatsNew stays unless act 4 of docs/runbooks/0.3-hardware-acceptance.md fails or the seed is not published at release step 21. Android only; never in the App Store texts.",
     "local-ai and graphics cards: true as written (CPU path runs; GPU apps wait for qualification). Keep 'wait for your approval'; never claim GPU apps run today.",
     "voici: the voi.ci page and Messages sentences in appstore.description, appstore.whatsNew, playstore.fullDescription and playstore.whatsNew ship only if VOICI_ENABLED is on in production at the release (journal H11). Remove them in every language if it stays off."
   ],

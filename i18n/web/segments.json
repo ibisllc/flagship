@@ -2628,8 +2628,8 @@
       "security.html"
     ]
   },
-  "scf8cfc8dc9": {
-    "en": "<1>Findings fixed.</1> 0.3 fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release. An external assessment has not been done yet.",
+  "s7c085043c1": {
+    "en": "<1>Findings fixed.</1> 0.3 was reviewed for security across the whole product. It fixes the stop-ship findings of that review and the 24 findings of our own adversarial test suite, which now runs on every release. A few hardening items from the review are partly done and continue in the next update. An external assessment has not been done yet.",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -5360,8 +5360,8 @@
       "blog/flagship-0-3.html"
     ]
   },
-  "se0287867e3": {
-    "en": "<1>Review findings fixed.</1> This release fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release.",
+  "s16500919f0": {
+    "en": "<1>Review findings fixed.</1> This release was reviewed for security across the whole product. It fixes the stop-ship findings of that review and the 24 findings of our own adversarial test suite, which now runs on every release. A few hardening items from the review are partly done and continue in the next update.",
     "kind": "text",
     "ctx": "li",
     "pages": [
