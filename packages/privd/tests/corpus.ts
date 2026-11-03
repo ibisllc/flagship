@@ -302,6 +302,14 @@ add("release", { action: "install", commit: "b".repeat(40) });
 add("release", { action: "install", commit: "B".repeat(40), sha256: "c".repeat(64) });
 add("release", { action: "upgrade", commit: "b".repeat(40) });
 add("release", { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64) }, { arch: "riscv64" });
+// G2: the signed runtime manifest beside the artifact (install only, true or absent)
+add("release", { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64), runtimeManifest: true }, { arch: "amd64" });
+add("release", { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64), runtimeManifest: true }, { arch: "arm64", trust: PQ_TRUST });
+add("release", { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64), runtimeManifest: false });
+add("release", { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64), runtimeManifest: "/etc/shadow" });
+add("release", { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64), runtimeManifest: null });
+add("release", { action: "restore", commit: "d".repeat(40), runtimeManifest: true });
+add("release", { action: "install", commit: "b".repeat(40), runtimeManifest: true });
 add("wipe", { target: "data" });
 add("wipe", { target: "/" });
 add("wipe", { target: "data", path: "/" });

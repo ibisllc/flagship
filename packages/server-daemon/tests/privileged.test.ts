@@ -96,6 +96,22 @@ describe("routing a command", () => {
     await expect(routePrivileged("docker", ["run", "--privileged", "img"])).rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it.skipIf(process.getuid?.() === 0)("hands an install the runtime manifest by its fixed name only when the daemon staged one (G2)", async () => {
+    process.env[UNPRIVILEGED_ENV] = "1";
+    const commit = "b".repeat(40);
+    const base = ["/opt/flagship/installer/install-box-artifact.sh", "--manifest", "/var/tmp/x/m.json", "--artifact", "/var/tmp/x/a.tar.gz", "--expect-sha256", "c".repeat(64), "--expect-commit", commit, "--arch", "amd64"];
+    ran.length = 0;
+    await routePrivileged("bash", [...base, "--runtime-manifest", "/etc/shadow"]);
+    await routePrivileged("bash", base);
+    const [withM, without] = ran;
+    const at = (e: Exec) => e.args.indexOf("--runtime-manifest");
+    // The broker's own staged path, from the folder it derives from the commit: never the path the daemon gave.
+    expect(withM!.args[at(withM!) + 1]).toBe("/var/lib/flagship-privd/release/runtime-manifest.json");
+    expect(withM!.copyIn).toContainEqual({ from: `/var/tmp/.flagship-update-${commit.slice(0, 12)}/runtime-manifest.json`, to: "/var/lib/flagship-privd/release/runtime-manifest.json" });
+    expect(at(without!)).toBe(-1);
+    expect(without!.copyIn).toHaveLength(2);
+  });
+
   it.skipIf(process.getuid?.() === 0)("reads a WASI app's output through the broker, like docker logs, and nothing else of the journal", async () => {
     process.env[UNPRIVILEGED_ENV] = "1";
     ran.length = 0;

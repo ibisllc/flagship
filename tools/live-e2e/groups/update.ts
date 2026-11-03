@@ -159,6 +159,18 @@ export const update: Group = {
       assert(appliedAfterMs <= 12 * 60_000, `applied ${(appliedAfterMs / 60_000).toFixed(1)} min after the order`);
       return `${(appliedAfterMs / 60_000).toFixed(1)} min`;
     });
+    // G2 runtime pin (owner decision 2026-11-02): before the switch the daemon either staged the signed runtime manifest
+    // for the root updater (`--runtime-manifest`, which refuses a release whose runtime lock it does not accept) or said
+    // why it did not (nothing published, expired, unverifiable), and the update went through on the artifact's signed
+    // lock. While the gym's .com serves no manifest this proves the fail-safe half live; the refusal half is the Rust
+    // updater's install tests and the privd/broker conformance corpus.
+    await rec.check("the update decided about the signed runtime manifest before switching (G2)", async () => {
+      const daemon = await journal(acct, b, 4000);
+      const skipped = daemon.filter((l) => /runtime manifest not checked/.test(l));
+      const passed = daemon.filter((l) => /runtime manifest checked by the installer/.test(l));
+      assert(skipped.length > 0 || passed.length > 0, "no runtime-manifest decision in the daemon's journal: the box ran an update without the G2 wiring");
+      return passed.length ? "passed to the updater (--runtime-manifest) and the update applied" : `not passed: ${skipped.at(-1)!.replace(/^.*runtime manifest not checked: /, "").slice(0, 120)}`;
+    });
     // Evidence for the release journal: which program staged, switched and verified the release (the Rust
     // flagship-updater on an arch-v2 box, the shell installers as its fallback).
     await rec.check("the box's journal names what installed the release (info)", async () => {

@@ -94,9 +94,9 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
+STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
           canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android upgradenotice hof final)
-LAST_A=22   # the last step of phase A (status)
+LAST_A=23   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
 step_count() { echo "${#STEP_IDS[@]}"; }
@@ -184,6 +184,21 @@ git add -- release/catalog-releases.json && git commit -m "Release catalog v<V>"
 EOF
   GATE="The tool's own check passed; the timestamp workflow is green; the served catalog-targets.json names this release."
   ROLLBACK="Publish a newer targets version without the release (or with rolloutPercent 0); versions only go up. A floor raised by mistake cannot be lowered: boxes refuse rollbacks below it until a newer release ships."
+}
+meta_runtime() {
+  TITLE="Sign and commit the runtime manifest (YubiKey), so .com serves it at /api/runtime/manifest and /runtime"
+  RUNBOOK="3d. Sign and commit the runtime manifest"
+  REQUIRED=1
+  WHAT="Builds the signed runtime manifest (flagship/runtime-manifest/v1 + its PQ companion) from release/runtime-lock.json with the next sequence above the committed release/runtime-manifest.json and this release's product version, previews it, signs it on your yes with the YubiKey (Ed25519 through scripts/yubikey-sign.mjs, then the PQ companion with the release ML-DSA key), checks it against release/box-artifact-trust.json and the committed lock, writes release/runtime-manifest.json, commits and pushes to main, then re-pins. The .com deploy step then serves it; until then boxes and apps show 'not published'. Boxes hand it to the updater, which refuses an update whose runtime lock it does not accept; an absent or expired manifest never stops a box (the artifact's signed lock decides). It is valid 45 days: re-sign (bash scripts/release.sh --only <this step>, or the same commands) and deploy .com before it ends."
+  read -r -d '' CMDS <<'EOF' || true
+npx tsx tools/box-artifact/runtime-manifest.ts release                    (preview: no signature, no write)
+npx tsx tools/box-artifact/runtime-manifest.ts release --sign --pq-key-file ~/.flagship-release/pq-release-key.age     (YubiKey PIN + touch, twice)
+npx tsx tools/box-artifact/runtime-manifest.ts verify --manifest release/runtime-manifest.json
+git add -- release/runtime-manifest.json && git commit -m "Runtime manifest: node <version>, sequence <N>"
+git push origin HEAD:main            (then the pin moves to this commit; .com serves it once the .com step deploys)
+EOF
+  GATE="verify prints 'verified: node <lock version> sequence <N>'; the commit is on origin/main and pinned. After the .com deploy: curl -fsS https://flagshipserver.com/api/runtime/manifest answers 200 with that sequence."
+  ROLLBACK="Before the .com deploy: revert the commit. After: a signed manifest cannot be taken back; sign a newer sequence (boxes refuse a lower one). Committing null again makes .com answer 204; boxes keep the last one they accepted, and updates fall back to the artifact's signed lock."
 }
 meta_canary() {
   TITLE="Canary cohorts: widen the box release on update receipts, stop it on bad news"
@@ -371,7 +386,7 @@ meta_com() {
   TITLE="Deploy .com (Cloudflare Worker) and check it"
   RUNBOOK="7. Deploy \`.com\` (two Workers)"
   REQUIRED=1
-  WHAT="Runs 'npm run deploy' in apps/com in the foreground of your terminal: the guards, then the NEW static-only Worker flagship-webapp, then flagship-com. The first run moves the webapp. and remote. custom domains and wrangler ASKS to confirm: answer yes. Refuses without the D1 backup step. Then probes the webapp and remote hosts (200, strict CSP), the tree's shell version, the marketing page, health, notices, account-not-found, the boot route, the shim, and runs zone-health as a post-check."
+  WHAT="Runs 'npm run deploy' in apps/com in the foreground of your terminal: the guards, then the NEW static-only Worker flagship-webapp, then flagship-com. The first run moves the webapp. and remote. custom domains and wrangler ASKS to confirm: answer yes. Refuses without the D1 backup step, and asks for a typed reason while release/runtime-manifest.json is still null. Then probes the webapp and remote hosts (200, strict CSP), the tree's shell version, the marketing page, health, notices, account-not-found, the boot route, the shim, and runs zone-health as a post-check."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler deployments list)         (the rollback target)
 (cd apps/com && npm run deploy)     (flagship-webapp first, then flagship-com; answer YES to the custom-domain prompt; no pipe, no redirect)
@@ -381,13 +396,14 @@ curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/              
 curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/health
 curl -s https://webapp.flagshipserver.com/service-worker.js | grep "^const SHELL_VERSION"     (equals the tree's)
 curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/notices        (204 until a notice is signed)
+curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/runtime/manifest   (200 once the runtime step committed it; a null file asks for a typed no-runtime-manifest first)
 curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/users/<unknown>/pods   (404 account-not-found)
 curl -s -o /dev/null -w "%{http_code}" https://boot.flagshipserver.com/not-a-route   (404 from the boot host)
 curl -s https://inference.flagshipserver.com/healthz                                 (shim; warning only)
 curl -sI https://flagshipserver.com/ | grep -i "x-frame-options\|strict-transport"
 npm run zone-health                                                                  (post-check: wildcard + CAA lines must be OK; legacy account records are listed until the reap; admin secret)
 EOF
-  GATE="webapp. and remote. answer 200 with the strict CSP, the live shell version equals the tree's, / answers, health 200, notices 204, account-not-found 404, boot route 404, framing headers present."
+  GATE="webapp. and remote. answer 200 with the strict CSP, the live shell version equals the tree's, / answers, health 200, notices 204, the runtime manifest 200, account-not-found 404, boot route 404, framing headers present."
   ROLLBACK="Move of the webapp hosts: put the two custom_domain lines for webapp. and remote. back in the routes array of apps/com/wrangler.toml (git history has them) and deploy flagship-com (answer yes at the prompt). Code: (cd apps/com && wrangler deployments list && wrangler rollback <version-id>), which leaves custom domains and D1 untouched."
 }
 meta_cpu() {
@@ -1073,10 +1089,10 @@ touched_test_filters() { # a vitest filter list from the files changed since the
 run_plan() {
   say "  .com runs on the Workers Free plan today (owner, 2026-10-18): 10 ms CPU a request, 100,000"
   say "  requests a day (about 75 always-on accounts), 50 subrequests a request. The 6-hourly D1 backup"
-  say "  made 89 D1 calls and does not run on Free: step 8 moves it to GitHub Actions."
+  say "  made 89 D1 calls and does not run on Free: step $(step_index backup) moves it to GitHub Actions."
   say "  Upgrade to Paid (USD 5 a month) if wrangler tail shows exceededCpu, or the dashboard shows"
   say "  more than 70,000 requests in a day (Workers & Pages -> flagship-com -> Metrics)."
-  say "  The flagship.services 200-record zone cap is removed by the root wildcard (step 13)."
+  say "  The flagship.services 200-record zone cap is removed by the root wildcard (step $(step_index dns))."
   local a; a=$(ask_word "Which plan is flagship-com on? type: free or paid")
   case "$a" in free|paid) st_w set workersPlan "$a"; ok "recorded: $a" ;; *) fail "type free or paid" ;; esac
 }
@@ -1332,6 +1348,23 @@ run_catalog() {
   commit_paths "Release catalog v$v: $(short "$commit") at security version $sv" release/catalog-releases.json
   land_commits || return $?
   probe_end
+}
+
+run_runtime() {
+  ensure_wt
+  local out; out="$WT/release/runtime-manifest.json"
+  say "  Preview (no signature, no write):"
+  XA "$WT" npx tsx tools/box-artifact/runtime-manifest.ts release
+  confirm "Sign the runtime manifest now? (YubiKey PIN + touch for the Ed25519 signature, then again to open the PQ key)" || return 10
+  local pq=()
+  if pq_pinned; then pq=(--pq-key-file "$PQ_KEY_FILE"); fi
+  with_maintainers XA "$WT" npx tsx tools/box-artifact/runtime-manifest.ts release --sign ${pq[@]+"${pq[@]}"}
+  XA "$WT" npx tsx tools/box-artifact/runtime-manifest.ts verify --manifest "$out"
+  local seq ver; seq=$(json_field manifest.sequence < "$out"); ver=$(json_field manifest.version < "$out")
+  commit_paths "Runtime manifest: node $ver, sequence $seq" release/runtime-manifest.json
+  st_w set runtimeManifestSequence "$seq"
+  st_w set runtimeManifestValidUntil "$(json_field manifest.validUntil < "$out")"
+  land_commits || return $?
 }
 
 canary_percent() { # canary_percent <list file> <commit> -> the release's rollout percent, or nothing
@@ -1618,7 +1651,7 @@ run_migrations() {
   pending=$(printf '%s' "$json" | pending_migrations "$WT/packages/storage/migrations")
   if [ -z "$pending" ]; then ok "nothing is pending: every migration file is in the prod ledger"; return 0; fi
   warn "pending migrations:"; echo "$pending" | sed 's/^/    /'
-  say "  Make sure the backup of step 8 is fresh: a migration cannot be undone."
+  say "  Make sure the backup of step $(step_index backup) is fresh: a migration cannot be undone."
   local f ver
   for f in $pending; do
     ver=${f:0:4}
@@ -1635,6 +1668,10 @@ run_migrations() {
 run_com() {
   require_gym_gate || return $?
   require_done migrations services dns || return 10
+  if [ "$(tr -d '[:space:]' < "$WT/release/runtime-manifest.json")" = null ]; then
+    warn "release/runtime-manifest.json is still null (step $(step_index runtime)): /api/runtime/manifest will answer 204 and every Runtime card says 'not published'. Boxes keep updating on the artifact's signed lock."
+    [ "$(ask_word "Type  no-runtime-manifest  to deploy anyway, or press Enter to stop and run step $(step_index runtime)")" = no-runtime-manifest ] || return 10
+  fi
   if ! st_has done "$(step_index backup)" && [ -z "$(st_get d1BackupAt)" ]; then
     err "the D1 backup prerequisites (step $(step_index backup)) are not recorded. This deploy REMOVES the Worker's own D1 backup: without them there is no backup at all (Time Travel's 7 days is the only net)."
     [ "$(ask_word "Type  no-backup-accepted  to deploy anyway, or press Enter to stop")" = no-backup-accepted ] || return 10
@@ -1642,6 +1679,9 @@ run_com() {
   fi
   com_deploy || return $?
   com_checks zone
+  if [ "$(tr -d '[:space:]' < "$WT/release/runtime-manifest.json")" != null ]; then
+    probe_code "runtime manifest served" "$COM_URL/api/runtime/manifest" 200
+  fi
   serving_relay_key
 }
 

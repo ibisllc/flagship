@@ -3,7 +3,8 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { BOX_ARTIFACT_PQ_PIN, BOX_RELEASE, boxArtifactPqPinConfigured } from "@flagship/protocol";
+import { writeFile } from "node:fs/promises";
+import { BOX_ARTIFACT_PQ_PIN, BOX_RELEASE, boxArtifactPqPinConfigured, verifyRuntimeManifest, type RuntimeManifest, type RuntimeManifestSignature } from "@flagship/protocol";
 
 /**
  * Self-update by signed artifact (SEC-UPD-001, SEC-INSTALL-001). The box never
@@ -89,6 +90,63 @@ export interface ArtifactSwapperOptions {
     trust: { keys: readonly string[]; threshold: number };
   };
   onLog?: (m: string) => void;
+  /**
+   * Where the signed runtime manifest is published (G2). Default: `/api/runtime/manifest` on the artifact host's
+   * origin. `null` turns the runtime-manifest check off for this swapper.
+   */
+  runtimeManifestUrl?: string | null;
+  now?: () => number;
+}
+
+/** The fixed name privd/the broker copy in (packages/privd/src/policy.ts RUNTIME_MANIFEST_FILE). */
+export const RUNTIME_MANIFEST_FILE = "runtime-manifest.json";
+export const MAX_RUNTIME_MANIFEST_BYTES = 256 * 1024;
+
+type RuntimeTrust = { keys: string[]; threshold: number; pq?: { keyIds?: string[]; legacyManifests?: string[] } };
+
+/**
+ * Whether the published runtime manifest goes to the installer (release plan G2; owner decision 2026-11-02). THE RULE:
+ * a manifest that verifies under this release's own trust and has not expired is passed, and the root updater then
+ * refuses (exit 1, nothing changed) a release whose runtime lock that manifest does not accept, or a manifest older
+ * than one the box already accepted. Anything else (nothing published: 204; `.com` unreachable; unreadable; a bad
+ * signature; expired, e.g. the owner did not re-sign in time) is NOT passed, and the artifact's own signed runtime
+ * lock decides, exactly as before the manifest existed. A missing or stale manifest therefore never stops an
+ * update, a rollback, a boot or the update guard; only a valid, current manifest that disagrees refuses an update.
+ */
+export function pickRuntimeManifest(body: string | null, trust: RuntimeTrust | null, now: number): { pass: true } | { pass: false; why: string } {
+  if (body === null) return { pass: false, why: "none is published, or .com did not answer" };
+  if (!trust) return { pass: false, why: "this release pins no release trust" };
+  let doc: { manifest: RuntimeManifest; signatures: RuntimeManifestSignature[]; pqBindings?: unknown[]; lockJson: string };
+  try {
+    doc = JSON.parse(body);
+    if (!doc || typeof doc !== "object" || !doc.manifest || !Array.isArray(doc.signatures) || typeof doc.lockJson !== "string") throw new Error("shape");
+  } catch {
+    return { pass: false, why: "the published one is unreadable" };
+  }
+  let signers: string[] = [];
+  try {
+    signers = ((JSON.parse(doc.lockJson) as { keyring?: { signers?: { fingerprint: string }[] } }).keyring?.signers ?? []).map((s) => s.fingerprint);
+  } catch {
+    return { pass: false, why: "the published one carries an unreadable lock" };
+  }
+  const r = verifyRuntimeManifest(doc.manifest, doc.signatures, {
+    trust: { keys: trust.keys, threshold: trust.threshold },
+    ...(trust.pq ? { pqPin: { version: 1 as const, keyIds: trust.pq.keyIds ?? [], legacyManifests: trust.pq.legacyManifests ?? [] } } : {}),
+    pqBindings: doc.pqBindings ?? [],
+    lockText: doc.lockJson,
+    lockSigners: signers,
+    now,
+  });
+  if (!r.ok) return { pass: false, why: r.code === "expired" ? `the published one expired at ${new Date(doc.manifest.validUntil).toISOString()}` : `the published one does not verify (${r.code})` };
+  return { pass: true };
+}
+
+async function fetchRuntimeManifest(fetchImpl: typeof fetch, url: string): Promise<string | null> {
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(15_000) });
+  if (res.status === 204 || !res.ok) return null;
+  const text = await res.text();
+  if (text.length > MAX_RUNTIME_MANIFEST_BYTES) return null;
+  return text;
 }
 
 async function download(fetchImpl: typeof fetch, url: string, file: string, maxBytes: number): Promise<void> {
@@ -112,6 +170,28 @@ export function buildArtifactSwapper(opts: ArtifactSwapperOptions): ReleaseSwapp
   const work = opts.workDir ?? "/var/tmp";
   const cfg = opts.config ?? BOX_RELEASE;
   const arch = nodeArch(opts.arch);
+  const runtimeUrl = opts.runtimeManifestUrl === undefined ? `${new URL(cfg.artifactBase).origin}/api/runtime/manifest` : opts.runtimeManifestUrl;
+  const readTrust = (): RuntimeTrust | null => {
+    try {
+      return JSON.parse(readFileSync(join(opts.repoPath, "release/box-artifact-trust.json"), "utf8")) as RuntimeTrust;
+    } catch {
+      return null;
+    }
+  };
+  /** Puts the runtime manifest beside the artifact when the rule says so; the installer flags to add. Never throws. */
+  async function stageRuntimeManifest(dir: string): Promise<string[]> {
+    if (!runtimeUrl) return [];
+    const body = await fetchRuntimeManifest(fetchImpl, runtimeUrl).catch(() => null);
+    const pick = pickRuntimeManifest(body, readTrust(), (opts.now ?? Date.now)());
+    if (!pick.pass) {
+      log(`[self-update] runtime manifest not checked: ${pick.why}; the release's own signed runtime lock decides`);
+      return [];
+    }
+    const path = join(dir, RUNTIME_MANIFEST_FILE);
+    await writeFile(path, body!, { mode: 0o600 });
+    log(`[self-update] runtime manifest checked by the installer: it must accept the release's runtime lock`);
+    return ["--runtime-manifest", path];
+  }
   return {
     async install(commit) {
       if (!COMMIT.test(commit)) throw new ArtifactRefusedError("the target is not an exact commit");
@@ -130,6 +210,7 @@ export function buildArtifactSwapper(opts: ArtifactSwapperOptions): ReleaseSwapp
         } catch {
           throw new ArtifactRefusedError("the release manifest has no digest");
         }
+        const runtimeFlags = await stageRuntimeManifest(dir);
         log(`[self-update] verifying ${name}`);
         try {
           const out = await opts.runner("bash", [
@@ -146,6 +227,7 @@ export function buildArtifactSwapper(opts: ArtifactSwapperOptions): ReleaseSwapp
             ...(boxArtifactPqPinConfigured(BOX_ARTIFACT_PQ_PIN)
               ? ["--pq-key-ids", BOX_ARTIFACT_PQ_PIN.keyIds.join(","), ...(BOX_ARTIFACT_PQ_PIN.legacyManifests.length ? ["--legacy-manifests", BOX_ARTIFACT_PQ_PIN.legacyManifests.join(",")] : [])]
               : []),
+            ...runtimeFlags,
           ]);
           // "installed: <commit> <arch> sequence <n>", with "(flagship-updater)" when the Rust updater did it.
           const said = out?.stdout?.trim().split("\n").pop();

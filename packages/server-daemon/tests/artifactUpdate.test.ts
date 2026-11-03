@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -6,7 +6,9 @@ import {
   ArtifactRefusedError,
   buildArtifactSwapper,
   nodeArch,
+  pickRuntimeManifest,
   readInstalledRelease,
+  RUNTIME_MANIFEST_FILE,
   type ArtifactCommandRunner,
 } from "../src/artifactUpdate.js";
 import { buildArtifactCatalog } from "../src/artifactCatalog.js";
@@ -46,7 +48,7 @@ describe("buildArtifactSwapper", () => {
     const seen: string[] = [];
     const swapper = buildArtifactSwapper({ repoPath: "/opt/flagship", runner, fetchImpl: fetchFiles(files, seen), workDir: dir, arch: "x64", config: CONFIG });
     await swapper.install(COMMIT);
-    expect(seen).toEqual([`${BASE}/${name}.manifest.json`, `${BASE}/${name}.tar.gz`]);
+    expect(seen).toEqual([`${BASE}/${name}.manifest.json`, `${BASE}/${name}.tar.gz`, "https://downloads.example/api/runtime/manifest"]);
     expect(calls).toHaveLength(1);
     const { cmd, args } = calls[0]!;
     expect(cmd).toBe("bash");
@@ -59,6 +61,7 @@ describe("buildArtifactSwapper", () => {
     expect(flag("--arch")).toBe("amd64");
     expect(flag("--node-floor")).toBe("24.22.1");
     expect(flag("--min-sequence")).toBe("3");
+    expect(args).not.toContain("--runtime-manifest"); // nothing published (404 here): the release's own lock decides
   });
 
   it("maps the verifier's refusal (exit 1) to ArtifactRefusedError and leaves no download behind", async () => {
@@ -179,5 +182,103 @@ describe("buildArtifactCatalog", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("the signed runtime manifest goes to the installer (G2, owner decision 2026-11-02)", () => {
+  const LOCK = readFileSync(join(__dirname, "../../../release/runtime-lock.json"), "utf8");
+  const SEED = new Uint8Array(32).fill(9);
+  const NOW = 1_800_000_000_000;
+  let dir: string;
+  let repo: string;
+  let pub: string;
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "artifact-runtime-"));
+    repo = mkdtempSync(join(tmpdir(), "artifact-repo-"));
+    const { ed } = await import("../../protocol/src/edSync.js");
+    pub = Buffer.from(ed.getPublicKey(SEED)).toString("hex");
+    mkdirSync(join(repo, "release"));
+    writeFileSync(join(repo, "release/box-artifact-trust.json"), JSON.stringify({ keys: [pub], threshold: 1 }));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  const name = `flagship-box-${COMMIT.slice(0, 12)}-amd64`;
+  const RUNTIME_URL = "https://downloads.example/api/runtime/manifest";
+  async function signed(o: { validUntil?: number; seed?: Uint8Array } = {}) {
+    const { signRuntimeManifest } = await import("@flagship/protocol");
+    const { createHash } = await import("node:crypto");
+    const lock = JSON.parse(LOCK) as { version: string; securityFloor: string };
+    const manifest = {
+      runtime: "node" as const,
+      version: lock.version,
+      lockSha256: createHash("sha256").update(LOCK).digest("hex"),
+      securityFloor: lock.securityFloor,
+      release: "0.3",
+      sequence: 2,
+      issuedAt: NOW - 1000,
+      validUntil: o.validUntil ?? NOW + 86_400_000,
+      revokedSigners: [],
+    };
+    return JSON.stringify({ manifest, signatures: [signRuntimeManifest(manifest, o.seed ?? SEED)], lockJson: LOCK });
+  }
+  async function installWith(runtime: { status: number; body?: string } | null, url?: string | null) {
+    const files: Record<string, Response> = {};
+    const seen: string[] = [];
+    const fetchImpl = (async (u: string) => {
+      seen.push(u);
+      if (u === `${BASE}/${name}.manifest.json`) return new Response(JSON.stringify({ manifest: { artifactSha256: DIGEST } }));
+      if (u === `${BASE}/${name}.tar.gz`) return new Response("tarball");
+      if (u === RUNTIME_URL && runtime) return new Response(runtime.status === 204 ? null : runtime.body ?? "", { status: runtime.status });
+      return files[u] ?? new Response("no", { status: 404 });
+    }) as unknown as typeof fetch;
+    let args: string[] = [];
+    let staged: string | null = null;
+    const logs: string[] = [];
+    const runner: ArtifactCommandRunner = async (_c, a) => {
+      args = a;
+      const i = a.indexOf("--runtime-manifest");
+      if (i >= 0) staged = readFileSync(a[i + 1]!, "utf8");
+      return { stdout: "" };
+    };
+    const swapper = buildArtifactSwapper({ repoPath: repo, runner, fetchImpl, workDir: dir, arch: "x64", config: CONFIG, now: () => NOW, onLog: (m) => logs.push(m), ...(url !== undefined ? { runtimeManifestUrl: url } : {}) });
+    await swapper.install(COMMIT);
+    return { args, staged, logs, seen };
+  }
+
+  it("passes a manifest that verifies under the release's trust and has not expired, beside the artifact", async () => {
+    const body = await signed();
+    const r = await installWith({ status: 200, body });
+    const i = r.args.indexOf("--runtime-manifest");
+    expect(i).toBeGreaterThan(0);
+    expect(r.args[i + 1]).toBe(join(dir, `.flagship-update-${COMMIT.slice(0, 12)}`, RUNTIME_MANIFEST_FILE));
+    expect(r.staged).toBe(body);
+  });
+
+  it("never stops an update for want of a manifest: absent, unreachable, expired, forged or unreadable all fall back to the signed lock", async () => {
+    for (const [runtime, why] of [
+      [{ status: 204 }, "none is published"],
+      [{ status: 503, body: "down" }, "none is published"],
+      [{ status: 200, body: await signed({ validUntil: NOW - 1 }) }, "expired"],
+      [{ status: 200, body: await signed({ seed: new Uint8Array(32).fill(1) }) }, "does not verify"],
+      [{ status: 200, body: "{not json" }, "unreadable"],
+    ] as const) {
+      const r = await installWith(runtime);
+      expect(r.args, why).not.toContain("--runtime-manifest");
+      expect(r.logs.join("\n"), why).toContain(why);
+      expect(r.logs.join("\n")).toContain("the release's own signed runtime lock decides");
+    }
+  });
+
+  it("does not ask .com at all when the check is off", async () => {
+    const r = await installWith({ status: 200, body: await signed() }, null);
+    expect(r.seen).not.toContain(RUNTIME_URL);
+    expect(r.args).not.toContain("--runtime-manifest");
+  });
+
+  it("a release without a trust file passes nothing", () => {
+    expect(pickRuntimeManifest("{}", null, NOW)).toEqual({ pass: false, why: "this release pins no release trust" });
   });
 });

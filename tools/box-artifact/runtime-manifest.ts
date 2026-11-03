@@ -12,12 +12,20 @@
  *          verifies against the repository's release trust and lock, refuses a sequence that is not above the committed
  *          one, and writes the file flagshipserver.com serves (/api/runtime/manifest) once committed and deployed.
  *
+ *   release [--sign] [--valid-days 45] [--sequence N] [--signing-key yubikey-piv:slot=9c] [--pq-key-file <age file>]
+ *          the release step (scripts/release.sh step "runtime", runbook 3d). Builds the next manifest from the committed
+ *          lock (sequence one above the committed release/runtime-manifest.json) and prints a preview; nothing is signed
+ *          or written. Only with `--sign` (the owner, in a real terminal, with the maintainers clone at ./maintainers) does
+ *          the YubiKey sign it (Ed25519 through scripts/yubikey-sign.mjs, then the PQ companion when the release trust
+ *          pins a PQ key), and only a manifest that passes `publish`'s checks is written to release/runtime-manifest.json.
+ *
  * `--signer-cmd` is the box artifact's contract (scripts/yubikey-sign.mjs): it reads the canonical bytes on stdin and
  * prints `<pubkeyhex> <signaturehex>`. The PQ companion is added by `node scripts/pq-release-key.mjs
  * sign-runtime-manifest` (the same release key, a YubiKey-encrypted seed), then `verify` again.
  */
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import {
@@ -153,6 +161,81 @@ function publish(argv: string[]): void {
   console.log(`wrote ${to}: commit it and deploy .com to publish sequence ${doc.manifest.sequence}`);
 }
 
+type Trust = Parameters<typeof verifyRuntimeManifestFile>[1];
+
+/** The next manifest to publish: the committed lock, one sequence above the committed manifest (or the given one). */
+export function nextRuntimeManifest(o: { lockText: string; published: Doc | null; release: string; now: number; validDays: number; sequence?: number }): Doc {
+  const last = o.published?.manifest.sequence ?? 0;
+  const sequence = o.sequence ?? last + 1;
+  if (!Number.isSafeInteger(sequence) || sequence <= last) throw new Error(`the sequence must be above the committed one (${last})`);
+  if (!(o.validDays > 0 && o.validDays <= 366)) throw new Error("--valid-days must be between 1 and 366");
+  return buildRuntimeManifest(o.lockText, { sequence, issuedAt: o.now, validDays: o.validDays, release: o.release });
+}
+
+export function previewRuntimeManifest(doc: Doc, trust: Trust, published: Doc | null): string[] {
+  const m = doc.manifest;
+  const pq = trust.pq?.keyIds?.length ?? 0;
+  return [
+    `runtime manifest preview (nothing signed, nothing written):`,
+    `  runtime:        ${m.runtime} ${m.version} (security floor ${m.securityFloor})`,
+    `  lock sha256:    ${m.lockSha256}  (release/runtime-lock.json)`,
+    `  release:        ${m.release}`,
+    `  sequence:       ${m.sequence}  (committed: ${published ? published.manifest.sequence : "none, release/runtime-manifest.json is null"})`,
+    `  valid:          ${new Date(m.issuedAt).toISOString()} to ${new Date(m.validUntil).toISOString()}  (re-sign before it ends; boxes then show "expired")`,
+    `  revoked signers: ${m.revokedSigners.length ? m.revokedSigners.join(", ") : "none"}`,
+    `  signed by:      ${trust.threshold} of [${trust.keys.join(", ")}] (release/box-artifact-trust.json)${pq ? `, with the PQ companion of key ${trust.pq!.keyIds![0]}` : ", Ed25519 only (no PQ key pinned)"}`,
+  ];
+}
+
+function release(argv: string[]): void {
+  const lockText = readFileSync(join(REPO, "release/runtime-lock.json"), "utf8");
+  const published = JSON.parse(readFileSync(PUBLISHED_PATH, "utf8")) as Doc | null;
+  const trust = JSON.parse(readFileSync(join(REPO, "release/box-artifact-trust.json"), "utf8")) as Trust;
+  const product = (JSON.parse(readFileSync(join(REPO, "release/version.json"), "utf8")) as { product: string }).product;
+  const seq = arg(argv, "sequence");
+  const doc = nextRuntimeManifest({
+    lockText,
+    published,
+    release: product,
+    now: Date.now(),
+    validDays: Number(arg(argv, "valid-days") ?? 45),
+    ...(seq !== undefined ? { sequence: Number(seq) } : {}),
+  });
+  for (const l of previewRuntimeManifest(doc, trust, published)) console.log(l);
+  if (!argv.includes("--sign")) {
+    console.log("Preview only. To sign (YubiKey PIN + touch), run the same command with --sign in a real terminal.");
+    return;
+  }
+  if (!existsSync(join(REPO, "maintainers/packages/cli"))) throw new Error("the maintainers clone is missing at ./maintainers (scripts/release.sh links it in)");
+  const signingKey = arg(argv, "signing-key") ?? "yubikey-piv:slot=9c";
+  console.log("Signing the runtime manifest: YubiKey PIN, then touch.");
+  const r = spawnSync("node", [join(REPO, "scripts/yubikey-sign.mjs"), signingKey], {
+    input: Buffer.from(canonicalRuntimeManifest(doc.manifest)),
+    stdio: ["pipe", "pipe", "inherit"],
+  });
+  const m = /^([0-9a-f]{64})\s+([0-9a-f]{128})\s*$/.exec(String(r.stdout ?? ""));
+  if (r.status !== 0 || !m) throw new Error("the YubiKey signer did not print '<pubkeyhex> <signaturehex>'; nothing written");
+  if (!trust.keys.map((k) => k.toLowerCase()).includes(m[1]!)) throw new Error(`the YubiKey's key ${m[1]!.slice(0, 16)} is not in release/box-artifact-trust.json; nothing written`);
+  let signed: Doc = { ...doc, signatures: [{ keyHex: m[1]!, signatureHex: m[2]! }] };
+  if (trust.pq?.keyIds?.length) {
+    const dir = mkdtempSync(join(tmpdir(), "runtime-manifest-"));
+    try {
+      const f = join(dir, "manifest.json");
+      writeFileSync(f, JSON.stringify(signed, null, 2) + "\n");
+      const pqKey = arg(argv, "pq-key-file");
+      const pq = spawnSync("node", [join(REPO, "scripts/pq-release-key.mjs"), "sign-runtime-manifest", "--manifest", f, "--out", f, "--signing-key", signingKey, ...(pqKey ? ["--key-file", pqKey] : [])], { stdio: "inherit" });
+      if (pq.status !== 0) throw new Error("the PQ companion was not added; nothing written");
+      signed = JSON.parse(readFileSync(f, "utf8")) as Doc;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const why = checkForPublication(signed, { trust, lockText, published, now: Date.now() });
+  if (why) throw new Error(`${why}; nothing written`);
+  writeFileSync(PUBLISHED_PATH, JSON.stringify(signed, null, 2) + "\n");
+  console.log(`wrote ${PUBLISHED_PATH}: sequence ${signed.manifest.sequence}. Commit it and deploy .com to publish it at /api/runtime/manifest and /runtime.`);
+}
+
 const cmd = process.argv[2];
 if (process.argv[1] && basename(process.argv[1]).startsWith("runtime-manifest")) {
   try {
@@ -160,7 +243,8 @@ if (process.argv[1] && basename(process.argv[1]).startsWith("runtime-manifest"))
     else if (cmd === "sign") sign(process.argv.slice(3));
     else if (cmd === "verify") verify(process.argv.slice(3));
     else if (cmd === "publish") publish(process.argv.slice(3));
-    else throw new Error("usage: runtime-manifest.ts build|sign|verify|publish ... (see the header)");
+    else if (cmd === "release") release(process.argv.slice(3));
+    else throw new Error("usage: runtime-manifest.ts build|sign|verify|publish|release ... (see the header)");
   } catch (e) {
     console.error((e as Error).message);
     process.exit(1);

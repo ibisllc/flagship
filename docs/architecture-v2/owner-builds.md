@@ -83,6 +83,7 @@ Measured:
 | Date | Commit, arch | A | B | Result |
 |---|---|---|---|---|
 | 2026-11-01 | `f0c3bcb8c17e` (release/0.3), amd64, `--no-rust`, PGP check skipped (offline; the archive digest was checked) | this Mac (Darwin arm64, M4): build tools on Node 24.2.0, Go 1.26.3 cross-compiling, official Node 24.22.1 linux-x64 archive | the same Mac, a second staging folder (own HOME, TMPDIR, npm and Go caches, fresh installs), umask 0002 instead of 0022 | **identical**: 79,731,382 bytes, 9,778 entries, SHA-256 `f731cfccf6895cfb94eb75e242c41f4964fdf358c657187e94b1991e16422d0f`; the SBOM and provenance files were identical too |
+| 2026-11-02 | `3ee8a991913a` (release/0.3), amd64, `--no-rust` on both sides, full PGP check of SHASUMS256 on both | this Mac (Darwin arm64): build tools on Node 24.2.0 / npm 11.3.0, Go 1.26.3 cross-compiling | a throwaway UpCloud Debian 13 VM (`--second-where vm`, 2xCPU-4GB, de-fra1, labelled `flagship-env=gym`, deleted at the end): Node 24.22.1 / npm 11.19.1, Go 1.26.3 linux/amd64 | **one entry differs**, 9,933 entries each: `flagship/app/node_modules/.package-lock.json` (npm's hidden lockfile; 126,214 vs 89,814 bytes). npm 11.3.0 keeps 71 entries for optional platform packages it did not install (`@esbuild/*` for other platforms); npm 11.19.1 leaves them out; the 203 shared entries are identical and no installed file differs. The SBOMs are byte-identical (`5dd235bb…`); the provenance differs only in the artifact digest and the recorded tool versions. Archives: A `92e1552b…` (80,219,209 bytes), B `e60a2e51…` (81,776,437 bytes; gzip from a different zlib) |
 
 What this does and does not show: the JS half (export, `npm ci` for linux-x64, `tsc`, the bundled Node, the Go
 helpers, the archive writer) does not depend on the staging folder, caches, umask or timing on one machine. It used
@@ -92,9 +93,16 @@ not pin TypeScript exactly). **Not measured:** the Rust binaries (this Mac canno
 machines, CI against the VM, and any owner build against an endorsed artifact. Expected sources of difference across
 machines, in order: the build OS for Rust (section 2), the Node that runs the build tools (its zlib writes the gzip:
 CI and the VM use 24.22.1; this measurement used 24.2.0 for both A and B, so it says nothing across Node versions), and
-the Go version (now pinned). A comparison of a VM build with the CI-built endorsed artifact (`repro-compare.sh
---second-where vm`, or `--against` the downloaded endorsed artifact) is the next measurement; it needs the owner's
-UpCloud token and was not run.
+the Go version (now pinned). The 2026-11-02 row is the first two-machine measurement (Mac against a Linux VM, `--no-rust` on both:
+`box-artifact-vm.sh --no-rust`, so the Mac, which cannot link Rust for Linux, compares like with like). Its one
+difference comes from the npm that runs the install, not from the machine: the build tools' Node/npm is not pinned
+for owner builds, and npm's hidden lockfile records what that npm chose to keep. To close it, either pin the build
+tools' Node (as CI and the VM already use 24.22.1) and refuse another, or have `build.ts` drop
+`node_modules/.package-lock.json` (npm's cache of the tree; nothing on a box reads it). Neither is done; it is an
+owner decision because it changes what an owner build must match. Still not measured: the Rust binaries across
+machines, arm64, and a comparison against the CI-built endorsed artifact (`--against`; no 0.3 artifact is published
+yet). Run it with a short `TMPDIR` on macOS (`TMPDIR=/tmp`): under the default `/var/folders/…` path the gpg agent's
+socket path is too long and the build stops at "could not import any pinned Node release key".
 
 ## 5. Reconciling plan §12.1
 

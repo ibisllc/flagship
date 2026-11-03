@@ -11,7 +11,14 @@
 #   install-box-artifact.sh --manifest F --artifact F \
 #       --trust-keys K1,K2 --threshold N --expect-sha256 H --expect-commit C \
 #       --arch A --node-floor X.Y.Z [--releases /opt/flagship-releases] \
-#       [--current /opt/flagship] [--state /var/flagship] [--bin /usr/local/bin]
+#       [--current /opt/flagship] [--state /var/flagship] [--bin /usr/local/bin] \
+#       [--runtime-manifest F]
+#
+# --runtime-manifest (release plan G2) is checked by the Rust updater
+# (installer/rust/flagship-updater install), which the broker runs in place of
+# this script. This shell fallback only runs for a release built without the
+# updater; it accepts the flag so such an update still goes through, and the
+# artifact's own signed runtime lock decides, as it always did here.
 #
 # Exit 0 on success. 1 = refused by the verifier (nothing changed). 3 = the
 # unpacked tree failed its own checks (nothing was switched). 2 = usage.
@@ -23,7 +30,7 @@ releases=/opt/flagship-releases current=/opt/flagship state=/var/flagship bin=/u
 manifest="" artifact="" trust="" threshold="" expect_sha="" expect_commit="" arch="" node_floor="" min_sequence=""
 pq_key_ids="" legacy_manifests=""
 
-usage() { echo "usage: $0 --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H --expect-commit C --arch A --node-floor V [--min-sequence N] [--pq-key-ids K] [--legacy-manifests D] [--releases D] [--current P] [--state D] [--bin D]" >&2; exit 2; }
+usage() { echo "usage: $0 --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H --expect-commit C --arch A --node-floor V [--min-sequence N] [--pq-key-ids K] [--legacy-manifests D] [--releases D] [--current P] [--state D] [--bin D] [--runtime-manifest F]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --manifest) manifest="$2"; shift 2 ;;
@@ -41,6 +48,7 @@ while [ $# -gt 0 ]; do
     --current) current="$2"; shift 2 ;;
     --state) state="$2"; shift 2 ;;
     --bin) bin="$2"; shift 2 ;;
+    --runtime-manifest) echo "note: the shell installer does not check the runtime manifest; the artifact's signed runtime lock decides" >&2; shift 2 ;;
     *) usage ;;
   esac
 done

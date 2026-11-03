@@ -42,8 +42,10 @@ if [ -n "$AGAINST" ]; then
   cp "$AGAINST/$NAME.tar.gz" "$OUT/b/" || { echo "no $NAME.tar.gz in $AGAINST" >&2; exit 2; }
   B_DESC="given artifact from $AGAINST"
 elif [ "$SECOND" = vm ]; then
-  bash "$HERE/box-artifact-vm.sh" --repo "$REPO" --commit "$COMMIT" --sequence 0 --out "$OUT/b" || exit 3
-  B_DESC="UpCloud Debian 13 VM"
+  # --no-rust applies to both builds, so a Mac (which cannot link Rust for Linux) compares like with like.
+  vm_flags=(); [ "$NO_RUST" = 1 ] && vm_flags+=(--no-rust)
+  bash "$HERE/box-artifact-vm.sh" --repo "$REPO" --commit "$COMMIT" --sequence 0 --out "$OUT/b" --arch "$ARCH" ${vm_flags[@]+"${vm_flags[@]}"} || exit 3
+  B_DESC="UpCloud Debian 13 VM ($(if [ "$NO_RUST" = 1 ]; then echo "no Rust"; else echo "with Rust"; fi))"
 else
   # A second, independent staging folder; a different umask too, which a reproducible build must not see.
   echo "▸ build B (local, second staging folder, umask 0002)"

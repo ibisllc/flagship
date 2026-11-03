@@ -145,10 +145,10 @@ export class PrivdClient {
     return this.call("iptables.restore", { family, rules });
   }
 
-  release(action: "install", commit: string, sha256: string): Promise<unknown>;
+  release(action: "install", commit: string, sha256: string, opts?: { runtimeManifest?: boolean }): Promise<unknown>;
   release(action: "restore", commit: string): Promise<unknown>;
-  release(action: "install" | "restore", commit: string, sha256?: string): Promise<unknown> {
-    return this.call("release", { action, commit, ...(sha256 ? { sha256 } : {}) });
+  release(action: "install" | "restore", commit: string, sha256?: string, opts?: { runtimeManifest?: boolean }): Promise<unknown> {
+    return this.call("release", { action, commit, ...(sha256 ? { sha256 } : {}), ...(opts?.runtimeManifest ? { runtimeManifest: true } : {}) });
   }
 
   wipeData(): Promise<unknown> {

@@ -24,9 +24,9 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 37 steps, with phase, commands, gate, rollback
-bash scripts/release.sh --phase A             # deploy the real state (steps 1-22), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 23-37; 23 is the canary, re-run with --only 23)
+bash scripts/release.sh --list                # the 38 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --phase A             # deploy the real state (steps 1-23), before the Windows test
+bash scripts/release.sh --phase B             # after the Windows results (steps 24-38; 24 is the canary, re-run with --only 24)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
@@ -50,7 +50,7 @@ wildcard starts answering them. Adding the wildcard first is safe for existing
 accounts, whose own records keep answering. `zone-health` ships with the `.com`
 deploy, so the DNS step is checked with `dig` and `zone-health` runs as a post-check
 of the `.com` deploy. The canary (9b) opens phase B: it is deferred, not done, until the
-release reaches 100%, so run it again with `--only 23` after each observation window; it never
+release reaches 100%, so run it again with `--only 24` after each observation window; it never
 holds the other phase B steps. The maintenance notice (12.1) is its own step after it. What it cannot do for you: the DNS canary after the gym run (the gym itself runs from the
 script: `scripts/gym-release-run.sh`, gated on its exit code), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
@@ -65,20 +65,20 @@ be told to update, clearly. What in this run reaches them early, in order:
 1. **Landing `release/0.3` on `main`** (before step 1): every 0.2 app writes `installerGitRef:
    "main"` into its recipes, and a USB/ISO install (and a 0.2 Studio's installer fallback) clones
    `main` at install time. From this push on, a server created from a 0.2 app installs the 0.3 tree
-   with the 0.2 bootstrap, against the 0.2 `.com` until step 18. Keep the time from this push to
+   with the 0.2 bootstrap, against the 0.2 `.com` until step 19. Keep the time from this push to
    the `.com` deploy as short as you can (one sitting), and don't push 0.3 to `main` days ahead.
 2. **The endorsement (step 7)**: a 0.2 box lists releases from `origin/main` itself. From this
    push on, every 0.2 box offers "Update to latest" (0.3) while `.com` is still 0.2, and a NEW 0.2
-   box (no update history, no apps) moves to it on its first boot. Run steps 7 to 18 in one
+   box (no update history, no apps) moves to it on its first boot. Run steps 7 to 19 in one
    sitting; publish the maintenance notice (12.1) before it, from a 0.2 commit (below).
-3. **Migrations (step 14)** are additive (new tables, nullable columns, AFTER triggers): the 0.2
+3. **Migrations (step 15)** are additive (new tables, nullable columns, AFTER triggers): the 0.2
    `.com` keeps working on them. One gap: 0127 copies usernames, codes and link names into `names`
-   once; anything the 0.2 `.com` creates between step 14 and step 18 is missing there. Keep 14-18
-   together, or re-run its steps 4a-4c (`INSERT OR IGNORE`, idempotent) after step 18.
-4. **`.services` (step 15)** is deployed before `.com`. Without `FLAGSHIP_SERVING_REVOCATION_PUB`
+   once; anything the 0.2 `.com` creates between step 15 and step 19 is missing there. Keep 15-19
+   together, or re-run its steps 4a-4c (`INSERT OR IGNORE`, idempotent) after step 19.
+4. **`.services` (step 16)** is deployed before `.com`. Without `FLAGSHIP_SERVING_REVOCATION_PUB`
    the 0.3 relay routes every name a box proves, as the 0.2 one did; the key is given only after the
    `.com` deploy (`serving_relay_key`). (Section 8's "right after `.com`" predates this order.)
-5. **`.com` (step 18) is the release moment for the apps.** After it, a real (non-demo) account's
+5. **`.com` (step 19) is the release moment for the apps.** After it, a real (non-demo) account's
    0.2 app: Home, sign-in, pairing and orders keep working; start-up approval, accepting a shared
    server, saving cloud recovery and a passkey recovery answer with "…needs the newest version of
    Flagship. Update the app…" (`packages/control-plane/src/clientUpdate.ts`). A 0.2 box keeps its
@@ -89,17 +89,17 @@ be told to update, clearly. What in this run reaches them early, in order:
    Home shows "Needs an update" and its page "This server needs an update to keep working with
    Flagship 0.3" above the Update card. The 0.2 apps show nothing new. Demo accounts are left out
    (we update their boxes). The investor demo is waived (`demo02Compat.test.ts`).
-6. **Appliance manifests (steps 20-21, 30)** overwrite `/downloads/FlagshipVMAppliance-*.json`. A
+6. **Appliance manifests (steps 21-22, 31)** overwrite `/downloads/FlagshipVMAppliance-*.json`. A
    0.2 Studio accepts any `version: 1` qcow2 manifest whose `installerGitRef` matches its recipe
-   ("main"), so after step 21 a 0.2 Studio hosts the 0.3 appliance with its 0.2 seed. Not run on the
-   gym; until the 0.3 Studios are out (steps 28-29) that is what 0.2 Studio hosting does.
-7. **Studio downloads (steps 28-29, 31)**: the 0.2 downloads stay until the redeploy; the same
+   ("main"), so after step 22 a 0.2 Studio hosts the 0.3 appliance with its 0.2 seed. Not run on the
+   gym; until the 0.3 Studios are out (steps 29-30) that is what 0.2 Studio hosting does.
+7. **Studio downloads (steps 29-30, 32)**: the 0.2 downloads stay until the redeploy; the same
    redeploy turns on `STUDIO_PIPE_MIN` (asked), after which a 0.2 Studio is refused at pairing with
    "This version of Flagship Studio is out of date. Download the new one…" (the relay's error line,
    the only server text 0.2 Studios show).
-8. **The stores**: the 0.3 builds are submitted in steps 33-34, after the `.com` deploy, and
+8. **The stores**: the 0.3 builds are submitted in steps 34-35, after the `.com` deploy, and
    review takes days. Until both are approved, a 0.2 phone user who is told to update has nothing
-   to update to; submit as soon as phase A is green (`--only 33`, `--only 34`), then step 35 signs
+   to update to; submit as soon as phase A is green (`--only 34`, `--only 35`), then step 36 signs
    the update notice once both stores carry 0.3.
 
 **Before landing 0.3 on `main` (owner, optional but recommended):** sign a maintenance notice on
@@ -120,6 +120,7 @@ The script stops and asks at each of these; nothing else needs you.
 | every release | the product version and the store numbers (they must climb) | 0b |
 | every release | YubiKey PIN + touch: the CA lease, the release endorsement, both box artifacts | 2, 3, 3b |
 | every release | the catalog's security version, floor and rollout percent; the root key file from the stick | 3c |
+| every release, and at least every 45 days | YubiKey PIN + touch (twice): the signed runtime manifest `release/runtime-manifest.json`, then deploy `.com` so `/api/runtime/manifest` and `/runtime` serve it | 3d |
 | every release | the canary: read `npm run canary`, widen 1 → 5 → 20 → 50 → 100 every 48 h or more, or sign the stop; the root key file from the stick each time | 9b |
 | once | turn on update receipts on the maintainers' own boxes (`FLAGSHIP_UPDATE_RECEIPTS=1` in the daemon env, or `POST /api/update-reports {"share":true}`) and run one deliberate rollback drill | 9b |
 | once | prod secrets `FLAGSHIP_RECOVERY_PROOF_SECRET` (passkey recovery challenges; `openssl rand -hex 32`) on prod AND the gym Worker | 5 |
@@ -137,7 +138,7 @@ The script stops and asks at each of these; nothing else needs you.
 | before the voi.ci deploy | `npm run voici-namespace-report`, decide each collision (D2) | 5 |
 | at least daily once Messages is on | `npm run ops -- voici`; act on reports within 24 h (`npm run voici-abuse`) | (outside the script) |
 
-Two things to know before `--phase A`: step 8 (backup prerequisites, runbook step 1b) must be
+Two things to know before `--phase A`: step 14 (backup prerequisites, runbook step 1b) must be
 done before the `.com` deploy because that deploy removes the Worker's own D1 backup, and the
 `.com` step refuses without it unless you type `no-backup-accepted`; and the `.com` deploy
 (`npm run deploy`) runs in the foreground of your terminal because wrangler asks to move the
@@ -456,6 +457,44 @@ and the rollout percent, then signs targets, snapshot and timestamp with the roo
 to `flagship-iso` (the pinned root ships inside the release; `catalog-root.json` is only for a signed
 rotation), checks they are served, starts the timestamp workflow once and
 commits the list. Rollback: sign a new targets version without the release (a version never goes down).
+
+## 3d. Sign and commit the runtime manifest
+
+The signed runtime manifest (`flagship/runtime-manifest/v1` + its PQ companion, release plan G2) says which Node.js
+a box may run: it carries `release/runtime-lock.json` byte for byte, this release's product version, a sequence
+that only climbs and an end date. `.com` only carries it (`/api/runtime/manifest`, rendered at `/runtime`);
+boxes, apps and anyone else verify it against the release trust they already pin. Until it is committed, `.com`
+answers 204 and every Runtime card says "not published".
+
+```sh
+npx tsx tools/box-artifact/runtime-manifest.ts release                      # preview: no signature, no write
+npx tsx tools/box-artifact/runtime-manifest.ts release --sign \
+  --pq-key-file ~/.flagship-release/pq-release-key.age                      # YubiKey PIN + touch (Ed25519), again for the PQ key
+npx tsx tools/box-artifact/runtime-manifest.ts verify --manifest release/runtime-manifest.json
+git add -- release/runtime-manifest.json && git commit -m "Runtime manifest: node <version>, sequence <N>"
+```
+
+Run it yourself in a real terminal with the maintainers clone at `./maintainers` (the script links it in); nothing
+signs without `--sign`. `release --sign` takes the next sequence above the committed file (or `--sequence N`),
+signs with `scripts/yubikey-sign.mjs`, adds the PQ companion (`pq-release-key.mjs sign-runtime-manifest`) when
+`release/box-artifact-trust.json` pins a PQ key, and writes the file only if it passes `publish`'s checks (release
+trust, the committed lock, a higher sequence). The script then commits, pushes and re-pins. It comes after the
+version bump (0b; the manifest names the product version) and the PQ ceremony (2c), and before the gym and the
+`.com` deploy (7), which is what publishes it; the `.com` step asks for a typed `no-runtime-manifest` while the
+file is still `null` and probes `/api/runtime/manifest` for 200 afterwards.
+
+What boxes do with it (owner decision 2026-11-02): before switching to a new release, the daemon downloads the
+manifest beside the artifact and, if it verifies under the running release's trust and has not expired, the
+broker passes it to the Rust updater (`--runtime-manifest`), which refuses the update (nothing changes) unless
+the manifest accepts the release's runtime lock and is not older than one the box accepted. An absent, expired
+or unverifiable manifest is not passed, and the artifact's own signed lock decides as before: a missing or
+stale manifest never stops an update, a rollback, a boot or the update guard.
+
+**Freshness:** it is valid 45 days (`--valid-days`, at most 366). Re-sign with `bash scripts/release.sh --only 10`
+(or the commands above) and deploy `.com` before it ends; an expired one shows "expired" on every server page
+and stops being checked at updates. A release that changes `release/runtime-lock.json` needs a new manifest
+deployed before boxes are ordered onto it. Rollback: before the `.com` deploy, revert the commit; after, sign a
+newer sequence (a lower one is refused by every box that saw the higher).
 
 ## 4. Pending D1 migrations
 
@@ -1116,7 +1155,7 @@ ship a higher version. The notice mechanism (step 12) can ask people to update.
 
 ## 11d. Tell the 0.2 apps to update
 
-Run once both stores carry the 0.3 builds (`bash scripts/release.sh --only 35`). The script
+Run once both stores carry the 0.3 builds (`bash scripts/release.sh --only 36`). The script
 previews an `update-required` notice naming this release's store builds and webapp shell; you
 sign it in another terminal (ca-track YubiKey, plus the PQ half from the release key), and it
 commits `.maintainers/notices`, pushes and redeploys `.com`.
@@ -1188,7 +1227,7 @@ with the go/no-go points:
 4. Verify with the runbook's step 4 (the four orphan counts are 0; the review
    login signs in).
 5. **Reap** DNS and demo servers of removed accounts (needs the `.com` deploy of
-   step 7, which contains the reap rules). `release.sh` step 19 runs all of this:
+   step 7, which contains the reap rules). `release.sh` step 27 runs all of this:
    the gym sweep is part of it by default (`npx tsx tools/live-e2e/sweep-cli.ts`,
    then `--destroy`; the step asks you to type `sweep`, or `skip-gym` to skip it,
    and refuses the sweep while `/private/tmp/claude-501/flagship-locks/gym.lock`

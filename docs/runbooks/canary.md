@@ -2,7 +2,7 @@
 
 Architecture v2 work package V02 (`docs/architecture-v2/IMPLEMENTATION-PLAN.md` §12.3,
 §13.1), on top of the signed release catalog (N13, `packages/protocol/src/releaseMetadata.ts`).
-The release script runs it as step 23, "Canary cohorts" (`docs/runbooks/final-deploy.md` §9b).
+The release script runs it as step 24, "Canary cohorts" (`docs/runbooks/final-deploy.md` §9b).
 
 The order the plan asks for: gym → maintainers' test boxes → consenting canary owners →
 staged cohorts. Each step below says what it proves and what it cannot.
@@ -101,11 +101,11 @@ git add -- release/catalog-releases.json && git commit -m "Canary: <commit> to <
 
 `rollout` signs a new targets version above both the list and the published catalog. Before
 writing anything, it checks the result the way a box holding the published catalog would.
-`release.sh` (step 23) does all of this and records when each stage opened.
+`release.sh` (step 24) does all of this and records when each stage opened.
 
 **Before the first widening:**
 
-1. This release's gym run (step 12) is green for the `update` group (an endorsed update applied and
+1. This release's gym run (step 13) is green for the `update` group (an endorsed update applied and
    rolled back on a real box) and the `canary` group (receipts counted once, extra fields refused,
    only the owner turns sharing on).
 2. One deliberate rollback drill has sent its receipt. On a maintainer box with sharing on, order an

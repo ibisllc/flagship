@@ -78,6 +78,7 @@ function install(f: ReturnType<typeof fixtureArtifact>, t: ReturnType<typeof san
     "--expect-sha256", over["sha"] ?? f.sha, "--expect-commit", over["commit"] ?? f.manifest.commit, "--arch", over["arch"] ?? "arm64",
     "--node-floor", over["floor"] ?? "24.22.1", "--releases", t.releases, "--current", t.current, "--state", t.state, "--bin", t.bin,
     ...(over["minSequence"] ? ["--min-sequence", over["minSequence"]] : []),
+    ...(over["runtimeManifest"] ? ["--runtime-manifest", over["runtimeManifest"]] : []),
   ], { encoding: "utf8" });
 }
 
@@ -97,6 +98,14 @@ run("install-box-artifact.sh", () => {
     expect(JSON.parse(readFileSync(join(t.state, "artifact-current.json"), "utf8"))).toMatchObject({ commit: COMMIT, sequence: 5 });
     // no half-unpacked directory is left behind
     expect(readdirSync(t.releases).filter((n) => n.startsWith(".incoming"))).toEqual([]);
+  });
+
+  it("the shell fallback takes --runtime-manifest (the broker may pass it) and leaves the check to the Rust updater (G2)", () => {
+    const f = fixtureArtifact("rtm");
+    const t = sandbox("rtm-sbx");
+    const r = install(f, t, { runtimeManifest: join(base, "no-such-runtime-manifest.json") });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr).toContain("the shell installer does not check the runtime manifest");
   });
 
   it("a second install at the same sequence is refused as a rollback and changes nothing", () => {

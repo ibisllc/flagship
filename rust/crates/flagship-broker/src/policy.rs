@@ -2242,14 +2242,24 @@ fn is_hex(s: &str, n: usize) -> bool {
     s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
+/// The signed runtime manifest the daemon downloads beside a release, by this fixed name (TS `RUNTIME_MANIFEST_FILE`).
+pub const RUNTIME_MANIFEST_FILE: &str = "runtime-manifest.json";
+
+/// `runtimeManifest: true` (release plan G2): the updater gets `--runtime-manifest` and refuses a release whose runtime
+/// lock the signed manifest does not accept. Install only; absent, the artifact's own signed lock decides (TS twin
+/// `releaseExec`, same order of checks and messages).
 pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<PrivExec, PrivdError> {
-    no_extra(args, &["action", "commit", "sha256"])?;
+    no_extra(args, &["action", "commit", "sha256", "runtimeManifest"])?;
     let commit = match args.get("commit").and_then(Value::as_str) {
         Some(c) if is_hex(c, 40) => c,
         _ => return Err(bad("commit must be 40 hex")),
     };
     let action = args.get("action").and_then(Value::as_str);
+    let runtime_manifest = args.get("runtimeManifest");
     if action == Some("restore") {
+        if runtime_manifest.is_some() {
+            return Err(bad("runtimeManifest is for install only"));
+        }
         return Ok(exec(
             "/bin/sh",
             vec![
@@ -2268,6 +2278,11 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
     let sha = match args.get("sha256").and_then(Value::as_str) {
         Some(s) if is_hex(s, 64) => s,
         _ => return Err(bad("sha256 must be 64 hex")),
+    };
+    let with_runtime = match runtime_manifest {
+        None => false,
+        Some(Value::Bool(true)) => true,
+        Some(_) => return Err(bad("runtimeManifest must be true when given")),
     };
     if arch != "amd64" && arch != "arm64" {
         return Err(PrivdError::new(ErrorCode::Failed, "unknown architecture"));
@@ -2310,6 +2325,11 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
             argv.push(trust.legacy_manifests.join(","));
         }
     }
+    let runtime_staged = format!("{staged}/{RUNTIME_MANIFEST_FILE}");
+    if with_runtime {
+        argv.push("--runtime-manifest".into());
+        argv.push(runtime_staged.clone());
+    }
     Ok(PrivExec {
         copy_in: vec![
             CopyIn {
@@ -2320,7 +2340,13 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
                 from: format!("{dir}/{name}.tar.gz"),
                 to: artifact,
             },
-        ],
+        ]
+        .into_iter()
+        .chain(with_runtime.then(|| CopyIn {
+            from: format!("{dir}/{RUNTIME_MANIFEST_FILE}"),
+            to: runtime_staged,
+        }))
+        .collect(),
         ..exec("/bin/sh", argv, 30 * 60_000)
     })
 }

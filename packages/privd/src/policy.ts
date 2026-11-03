@@ -1119,6 +1119,8 @@ export function iptablesRestoreExec(args: Record<string, unknown>): Exec {
 
 const COMMIT = /^[0-9a-f]{40}$/;
 export const RELEASE_REPO = "/opt/flagship";
+/** The signed runtime manifest the daemon downloads beside a release (artifactUpdate.ts), by this fixed name. */
+export const RUNTIME_MANIFEST_FILE = "runtime-manifest.json";
 
 /**
  * The release op runs the running release's Rust updater (installer/rust/flagship-updater, the same flags and exit
@@ -1150,22 +1152,36 @@ export interface ReleaseTrust {
   legacyManifests?: readonly string[];
 }
 
+/**
+ * `runtimeManifest: true` (release plan G2, owner decision 2026-11-02): the daemon downloaded the signed runtime
+ * manifest beside the artifact (`runtime-manifest.json` in the same folder), and the updater must find that manifest
+ * accepting the release's runtime lock before anything is switched (`--runtime-manifest`; refused = exit 1, nothing
+ * changed). The rule, the same in the Rust broker: only an install takes it; absent (nothing published yet, `.com`
+ * unreachable, the published one expired or not verifiable by the daemon) the artifact's own signed lock decides,
+ * exactly as before, so no box ever stops updating for want of a manifest. Restore and the boot guard never read it.
+ */
 export function releaseExec(args: Record<string, unknown>, trust: ReleaseTrust, arch: string): Exec {
-  noExtra(args, ["action", "commit", "sha256"]);
+  noExtra(args, ["action", "commit", "sha256", "runtimeManifest"]);
   if (typeof args.commit !== "string" || !COMMIT.test(args.commit)) throw new PrivdError("bad-request", "commit must be 40 hex");
-  if (args.action === "restore") return { file: "/bin/sh", args: ["-c", RELEASE_LAUNCHER, "flagship-release", "restore", args.commit], timeoutMs: 20 * 60_000 };
+  if (args.action === "restore") {
+    if (args.runtimeManifest !== undefined) throw new PrivdError("bad-request", "runtimeManifest is for install only");
+    return { file: "/bin/sh", args: ["-c", RELEASE_LAUNCHER, "flagship-release", "restore", args.commit], timeoutMs: 20 * 60_000 };
+  }
   if (args.action !== "install") throw new PrivdError("bad-request", "action is install or restore");
   if (typeof args.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(args.sha256)) throw new PrivdError("bad-request", "sha256 must be 64 hex");
+  if (args.runtimeManifest !== undefined && args.runtimeManifest !== true) throw new PrivdError("bad-request", "runtimeManifest must be true when given");
   if (arch !== "amd64" && arch !== "arm64") throw new PrivdError("failed", "unknown architecture");
   const short = args.commit.slice(0, 12);
   const dir = `/var/tmp/.flagship-update-${short}`;
   const name = `flagship-box-${short}-${arch}`;
   const staged = `${PRIVD_STATE_DIR}/release`;
+  const withRuntime = args.runtimeManifest === true;
   return {
     file: "/bin/sh",
     copyIn: [
       { from: `${dir}/${name}.manifest.json`, to: `${staged}/${name}.manifest.json` },
       { from: `${dir}/${name}.tar.gz`, to: `${staged}/${name}.tar.gz` },
+      ...(withRuntime ? [{ from: `${dir}/${RUNTIME_MANIFEST_FILE}`, to: `${staged}/${RUNTIME_MANIFEST_FILE}` }] : []),
     ],
     args: [
       "-c", RELEASE_LAUNCHER, "flagship-release", "install",
@@ -1181,6 +1197,7 @@ export function releaseExec(args: Record<string, unknown>, trust: ReleaseTrust, 
       // The same PQ pin the root daemon passes (artifactUpdate.ts): once it names a key, every signer
       // needs its hybrid companion here too.
       ...(trust.pqKeyIds?.length ? ["--pq-key-ids", trust.pqKeyIds.join(","), ...(trust.legacyManifests?.length ? ["--legacy-manifests", trust.legacyManifests.join(",")] : [])] : []),
+      ...(withRuntime ? ["--runtime-manifest", `${staged}/${RUNTIME_MANIFEST_FILE}`] : []),
     ],
     timeoutMs: 30 * 60_000,
   };

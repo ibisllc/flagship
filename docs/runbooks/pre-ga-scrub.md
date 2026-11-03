@@ -34,7 +34,7 @@ was verified.
 
 ## After a reap: check what is left
 
-`bash scripts/release.sh --phase B` step 19 runs these; by hand:
+`bash scripts/release.sh --phase B` step 27 (the reap) runs these; by hand:
 
 - **Gym leftovers (the shared zone's gym records and gym servers).** A default part of
   the reap: `release.sh` asks you to type `sweep`, or `skip-gym` (an explicit skip it

@@ -82,14 +82,14 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(37);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 37 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(38);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 38 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(37);
-    expect(phases.slice(0, 22).every((p) => p === "A")).toBe(true);
-    expect(phases.slice(22).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(37);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(37);
+    expect(phases).toHaveLength(38);
+    expect(phases.slice(0, 23).every((p) => p === "A")).toBe(true);
+    expect(phases.slice(23).every((p) => p === "B")).toBe(true);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(38);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(38);
     expect(calls(env)).toBe("");
   });
 
@@ -102,7 +102,7 @@ describe("release.sh", () => {
     // | 8 .services FIRST | 6a DNS wildcard (before .com: the new .com writes no per-box records)
     // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
-      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "9", "5", "6", "1b", "4", "8", "7a", "6a", "7", "14", "9", "9", "9",
+      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "3d", "9", "5", "6", "1b", "4", "8", "7a", "6a", "7", "14", "9", "9", "9",
       "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11d", "11b", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
@@ -132,17 +132,48 @@ describe("release.sh", () => {
     expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("iOS: Release-clean"));
     expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("Android: release-clean"));
     expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
-    expect(idx("Write DEPLOYED-FINAL")).toBe(22);
+    expect(idx("Write DEPLOYED-FINAL")).toBe(23);
     // the canary opens phase B: after the release is published, before the scrub and the stores
-    expect(idx("Canary cohorts")).toBe(23);
+    expect(idx("Canary cohorts")).toBe(24);
+    // G2: the signed runtime manifest is committed with the other signatures, before the gym and the .com deploy that serves it
+    expect(idx("Sign and commit the runtime manifest")).toBeGreaterThan(idx("Sign and publish the release catalog"));
+    expect(idx("Sign and commit the runtime manifest")).toBeLessThan(idx("Gym gate"));
+    expect(idx("Sign and commit the runtime manifest")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("Bump the product version")).toBeLessThan(idx("Sign and commit the runtime manifest"));
+    expect(idx("PQ release key")).toBeLessThan(idx("Sign and commit the runtime manifest"));
     expect(idx("Canary cohorts")).toBeGreaterThan(idx("Sign and publish the release catalog"));
     expect(idx("Canary cohorts")).toBeGreaterThan(idx("Deploy .com"));
+  });
+
+  it("signs the runtime manifest only on --sign, never in a dry run, and the .com step refuses a null one without a typed reason (G2)", () => {
+    const env = sandbox();
+    const plan = run(env, ["--list"]).out;
+    const step = plan.slice(plan.indexOf("Sign and commit the runtime manifest"), plan.indexOf("Start the VM appliance builds"));
+    expect(step).toContain("runtime-manifest.ts release                    (preview: no signature, no write)");
+    expect(step).toContain("runtime-manifest.ts release --sign");
+    expect(step).toContain("runtime-manifest.ts verify --manifest release/runtime-manifest.json");
+    expect(step).toContain("git add -- release/runtime-manifest.json");
+    expect(step).toContain("runbook: 3d. Sign and commit the runtime manifest");
+    expect(step).toContain("required");
+    // the real run previews first, asks, then signs through the maintainers clone (the YubiKey tools) and lands the commit
+    const body = SOURCE.slice(SOURCE.indexOf("run_runtime() {"), SOURCE.indexOf("canary_percent() {"));
+    expect(body.indexOf("runtime-manifest.ts release\n")).toBeLessThan(body.indexOf("confirm \"Sign the runtime manifest"));
+    expect(body.indexOf("confirm \"Sign the runtime manifest")).toBeLessThan(body.indexOf("release --sign"));
+    expect(body).toContain("with_maintainers XA \"$WT\" npx tsx tools/box-artifact/runtime-manifest.ts release --sign");
+    expect(body).toContain("commit_paths \"Runtime manifest: node $ver, sequence $seq\" release/runtime-manifest.json");
+    expect(body).toContain("land_commits");
+    const com = SOURCE.slice(SOURCE.indexOf("run_com() {"), SOURCE.indexOf("serving_relay_key() {"));
+    expect(com).toContain("no-runtime-manifest");
+    expect(com).toContain('probe_code "runtime manifest served" "$COM_URL/api/runtime/manifest" 200');
+    const dry = run(env, ["--dry-run", "--only", "10"]);
+    expect(planSteps(dry.out)).toEqual([{ n: 10, title: expect.stringContaining("Sign and commit the runtime manifest") }]);
+    expect(calls(env)).toBe("");
   });
 
   it("--list --phase B lists only phase B", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
-    expect(steps[0]!.n).toBe(23);
+    expect(steps[0]!.n).toBe(24);
     expect(steps).toHaveLength(15);
   });
 
@@ -152,7 +183,7 @@ describe("release.sh", () => {
     expect(r.code, r.err).toBe(0);
     expect(r.out).toContain("[dry-run]");
     const steps = planSteps(r.out);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 22 }, (_, i) => i + 1));
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 23 }, (_, i) => i + 1));
     expect(r.out).toContain("npm run deploy");
     expect(r.out).toContain("bash scripts/gym-release-run.sh");
     expect(r.out).toContain("node scripts/check-versions.mjs --write");
@@ -211,7 +242,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
       encoding: "utf8",
       env: { PATH: process.env.PATH ?? "", HOME: env.home, FLAGSHIP_RELEASE_HOME: home },
     });
-    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=21"]);
+    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=22"]);
     expect(JSON.parse(readFileSync(join(home, "state.json"), "utf8")).done).toEqual(["2"]);
   });
 
@@ -285,7 +316,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
   });
 });
 
-// Step 19 (the reap): the gym sweep gate, the left-on-purpose review with its typed
+// Step 27 (the reap): the gym sweep gate, the left-on-purpose review with its typed
 // acknowledgement, and the owner checklist. The functions run for real in a sourced
 // shell; every tool that would touch Cloudflare, UpCloud or the gym is a logging stub.
 describe("release.sh step 19 (reap): cleanup review", () => {

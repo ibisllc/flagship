@@ -99,7 +99,10 @@ export async function routePrivileged(cmd: string, args: readonly string[], o: R
       if (script.endsWith("/installer/install-box-artifact.sh")) {
         const at = (flag: string) => a[a.indexOf(flag) + 1] ?? "";
         // Its stdout names the installer ("installed: … (flagship-updater)" from the Rust updater): pass it on.
-        return done((await privd().release("install", at("--expect-commit"), at("--expect-sha256"))) as { stdout?: string; stderr?: string });
+        // `--runtime-manifest` (G2): the daemon put the signed runtime manifest beside the artifact under the fixed name
+        // the broker copies in; the broker never takes a path from here.
+        const runtimeManifest = a.includes("--runtime-manifest");
+        return done((await privd().release("install", at("--expect-commit"), at("--expect-sha256"), runtimeManifest ? { runtimeManifest: true } : undefined)) as { stdout?: string; stderr?: string });
       }
       if (script.endsWith("/installer/rollback-box-artifact.sh")) {
         return done((await privd().release("restore", a[1] ?? "")) as { stdout?: string; stderr?: string });

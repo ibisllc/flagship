@@ -65,3 +65,28 @@ describe("runtime-manifest publication", () => {
     expect(checkForPublication(make(5), { ...o, trust: { keys: ["ab".repeat(32)], threshold: 1 }, published: null })).toMatch(/not-enough-signatures/);
   });
 });
+
+describe("runtime-manifest release step (scripts/release.sh step runtime)", () => {
+  it("takes the next sequence after the committed manifest and refuses one that does not climb", async () => {
+    const { nextRuntimeManifest } = await import("../runtime-manifest.js");
+    const base = { lockText: LOCK, release: "0.3", now: NOW, validDays: 45 };
+    expect(nextRuntimeManifest({ ...base, published: null }).manifest.sequence).toBe(1);
+    const four = buildRuntimeManifest(LOCK, { sequence: 4, issuedAt: NOW, validDays: 30, release: "0.3" });
+    expect(nextRuntimeManifest({ ...base, published: four }).manifest.sequence).toBe(5);
+    expect(nextRuntimeManifest({ ...base, published: four, sequence: 9 }).manifest.sequence).toBe(9);
+    expect(() => nextRuntimeManifest({ ...base, published: four, sequence: 4 })).toThrow(/above the committed one \(4\)/);
+    expect(() => nextRuntimeManifest({ ...base, published: null, validDays: 0 })).toThrow(/valid-days/);
+    expect(nextRuntimeManifest({ ...base, published: null }).manifest.validUntil).toBe(NOW + 45 * 86_400_000);
+  });
+
+  it("previews by default: nothing signed, release/runtime-manifest.json untouched", () => {
+    const published = join(import.meta.dirname, "../../../release/runtime-manifest.json");
+    const before = readFileSync(published, "utf8");
+    const r = spawnSync("npx", ["tsx", join(import.meta.dirname, "../runtime-manifest.ts"), "release"], { encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("nothing signed, nothing written");
+    expect(r.stdout).toContain(`node ${JSON.parse(LOCK).version}`);
+    expect(r.stdout).toContain("with --sign in a real terminal");
+    expect(readFileSync(published, "utf8")).toBe(before);
+  }, 60_000);
+});
