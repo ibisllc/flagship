@@ -1,5 +1,6 @@
-// On a real Keystore: Android 10 keys open for a window after a prompt, Android 11+ per-use keys
-// ride in the prompt (KeyAuthSpec). Needs a secure lock screen (`adb shell locksettings set-pin 1234`).
+// On a real Keystore: Android 10 per-use keys open for a window after a prompt only when no strong
+// biometric is enrolled (else they are per use, like Android 11+ per-use keys riding in the prompt;
+// KeyAuthSpec). Needs a secure lock screen (`adb shell locksettings set-pin 1234`).
 
 package com.flagshipserver.app.keystore
 
@@ -27,7 +28,7 @@ class KeyAuthSpecDeviceTest {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-        gen.init(KeyAuthSpec.require(b, seconds).build())
+        gen.init(KeyAuthSpec.require(b, seconds, KeyAuthSpec.strongBiometricEnrolled(InstrumentationRegistry.getInstrumentation().targetContext)).build())
         return gen.generateKey()
     }
 
@@ -39,7 +40,7 @@ class KeyAuthSpecDeviceTest {
         try {
             val perUse = make("test.keyauth.peruse", 0)
             val window = make("test.keyauth.window", 300)
-            val windowed = !AndroidVersionPolicy.promptCanCarryKey(Build.VERSION.SDK_INT)
+            val windowed = !AndroidVersionPolicy.promptCanCarryKey(Build.VERSION.SDK_INT, KeyAuthSpec.strongBiometricEnrolled(ctx))
             assertEquals("per-use key on API ${Build.VERSION.SDK_INT}", windowed, KeyAuthSpec.isWindowKey(perUse))
             assertEquals(true, KeyAuthSpec.isWindowKey(window))
         } finally {

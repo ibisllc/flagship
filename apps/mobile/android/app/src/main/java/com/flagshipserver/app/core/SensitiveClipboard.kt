@@ -3,9 +3,15 @@
 // Android 13+ honours the clip's IS_SENSITIVE flag: the system's copy preview hides the text.
 // Android 10 to 12 have no such flag (and no preview), so there the app takes the secret off the
 // clipboard a minute after copying it, but only while the clip is still the one it copied: a
-// person who copied something else since keeps it. Android 10+ lets only the focused app read the
-// clipboard, so a minute that ends while the app is in the background is settled the next time it
-// has focus. Only a SHA-256 of the copied text is kept in memory.
+// person who copied something else since keeps it.
+//
+// Android 10+ lets only the focused app (or the keyboard) read the clipboard, its description or
+// its change events, so a minute that ends while the app is in the background can't be checked
+// then. Clearing blindly from the background is possible (writing isn't restricted) but would wipe
+// whatever the person copied since, so a background job (WorkManager) can't keep the rule and isn't
+// used. Instead the pending clear is kept on disk, as a SHA-256 of the copied text and its due
+// time, never the text, and is settled the next time the app has focus, including after the
+// process was killed and started again (MainActivity.onWindowFocusChanged).
 
 package com.flagshipserver.app.core
 
@@ -41,8 +47,34 @@ object SensitiveClipboard {
     fun digest(text: String): String =
         HexUtil.encode(MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)))
 
+    private const val PREFS = "flagship.clipboard.v1"
+    private const val KEY_DIGEST = "pending.digest"
+    private const val KEY_DUE = "pending.dueAt"
+
     @Volatile private var pending: String? = null
     @Volatile private var dueAt: Long = 0
+    /** The on-disk record was read into [pending] / [dueAt] (once per process). */
+    @Volatile private var loaded = false
+
+    private fun prefs(context: Context) =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun load(context: Context) {
+        if (loaded) return
+        loaded = true
+        val p = prefs(context)
+        if (pending == null) {
+            pending = p.getString(KEY_DIGEST, null)
+            dueAt = p.getLong(KEY_DUE, 0L)
+        }
+    }
+
+    private fun save(context: Context) {
+        val e = prefs(context).edit()
+        val d = pending
+        if (d == null) e.remove(KEY_DIGEST).remove(KEY_DUE) else e.putString(KEY_DIGEST, d).putLong(KEY_DUE, dueAt)
+        e.commit()
+    }
     /** Set by MainActivity from onWindowFocusChanged: Android 10+ hides the clipboard otherwise. */
     @Volatile var appHasFocus: Boolean = false
 
@@ -55,14 +87,17 @@ object SensitiveClipboard {
         clip.description.extras = PersistableBundle().apply { putBoolean(EXTRA_IS_SENSITIVE, true) }
         cm.setPrimaryClip(clip)
         if (!AndroidVersionPolicy.clipboardNeedsAutoClear(sdk)) return
+        loaded = true
         pending = digest(text)
         dueAt = System.currentTimeMillis() + CLEAR_AFTER_MS
+        save(context)
         val app = context.applicationContext
         main.postDelayed({ settle(app) }, CLEAR_AFTER_MS)
     }
 
     /** Clear the copied secret if its minute is up and it is still on the clipboard. */
     fun settle(context: Context, now: Long = System.currentTimeMillis()) {
+        load(context)
         val digest = pending ?: return
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
         val readable = appHasFocus
@@ -71,12 +106,24 @@ object SensitiveClipboard {
             Action.CLEAR -> {
                 runCatching { cm.clearPrimaryClip() }
                 pending = null
+                save(context)
             }
-            Action.LEAVE -> pending = null
+            Action.LEAVE -> {
+                pending = null
+                save(context)
+            }
             Action.LATER -> Unit
         }
     }
 
     /** Test seam. */
     internal fun pendingForTest(): Pair<String?, Long> = pending to dueAt
+
+    /** Test seam: forget the in-memory state, as a killed process would. */
+    internal fun simulateProcessDeathForTest() {
+        pending = null
+        dueAt = 0
+        loaded = false
+        appHasFocus = false
+    }
 }

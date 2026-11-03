@@ -1,5 +1,6 @@
 // The calm sliver on Android 10 to 12: this phone no longer gets security updates, and updating
-// Android (or a newer phone) keeps the account's key safer. Nothing is restricted; "Not now" hides
+// Android (or a newer phone) keeps the account's key safer. On Android 10 with no fingerprint it
+// adds that enrolling one makes approvals stronger (per-use keys need one there, KeyAuthSpec). Nothing is restricted; "Not now" hides
 // it for 30 days, and Settings keeps a line about it for good (AndroidVersionPolicy).
 
 package com.flagshipserver.app.ui.components
@@ -40,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.R
 import com.flagshipserver.app.core.AndroidVersionPolicy
+import com.flagshipserver.app.keystore.KeyAuthSpec
 import com.flagshipserver.app.ui.theme.FS
 
 object OutdatedAndroidNotice {
@@ -57,6 +59,21 @@ object OutdatedAndroidNotice {
     fun snooze(ctx: Context, now: Long = System.currentTimeMillis()) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong(KEY, now + SNOOZE_MS).apply()
     }
+}
+
+/** Opens the phone's fingerprint setup (Android 9 and 10), else its security settings. */
+fun openFingerprintSettings(ctx: Context): Boolean {
+    @Suppress("DEPRECATION")
+    val intents = listOf(Intent(Settings.ACTION_FINGERPRINT_ENROLL), Intent(Settings.ACTION_SECURITY_SETTINGS), Intent(Settings.ACTION_SETTINGS))
+    for (i in intents) {
+        try {
+            ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return true
+        } catch (_: ActivityNotFoundException) {
+        } catch (_: SecurityException) {
+        }
+    }
+    return false
 }
 
 /** Opens the phone's system-update screen where the maker provides one, else About phone. */
@@ -99,6 +116,13 @@ fun OutdatedAndroidSliver() {
                 verticalArrangement = Arrangement.spacedBy(FS.space.s2),
             ) {
                 Text(stringResource(R.string.android_version_no_longer_gets_updates), style = MaterialTheme.typography.bodyMedium)
+                if (AndroidVersionPolicy.suggestAddingFingerprint(Build.VERSION.SDK_INT, KeyAuthSpec.strongBiometricEnrolled(ctx))) {
+                    Text(
+                        stringResource(R.string.add_fingerprint_for_stronger_approvals),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("outdated-android-fingerprint"),
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = Alignment.CenterVertically) {
                     FSSecondaryButton(
                         label = stringResource(R.string.check_for_android_updates),

@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.core.AndroidVersionPolicy.KeyBinding as B
 import androidx.biometric.BiometricManager.Authenticators
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,22 +27,57 @@ class AndroidVersionPolicyTest {
     }
 
     @Test fun keyAuthKeepsParametersFrom30() {
-        assertEquals(AndroidVersionPolicy.KeyAuth.Parameters(0), p.keyAuth(30, 0))
-        assertEquals(AndroidVersionPolicy.KeyAuth.Parameters(300), p.keyAuth(36, 300))
+        for (strong in listOf(true, false)) {
+            assertEquals(AndroidVersionPolicy.KeyAuth.Parameters(0), p.keyAuth(30, 0, strong))
+            assertEquals(AndroidVersionPolicy.KeyAuth.Parameters(300), p.keyAuth(36, 300, strong))
+        }
     }
 
-    @Test fun keyAuthOnAndroid10IsAWindowOfTheSameLengthOrAShortOneForPerUseKeys() {
-        assertEquals(AndroidVersionPolicy.KeyAuth.Window(300), p.keyAuth(29, 300))
-        assertEquals(AndroidVersionPolicy.KeyAuth.Window(AndroidVersionPolicy.PER_USE_WINDOW_ON_API_29), p.keyAuth(29, 0))
+    @Test fun perUseKeysOnAndroid10NeedAStrongBiometricPerUseAndNoWindow() {
+        // M6: with a fingerprint enrolled, a per-use key is auth-per-use (no window any unlock opens).
+        assertEquals(AndroidVersionPolicy.KeyAuth.PerUseBiometric, p.keyAuth(29, 0, strongBiometric = true))
+        // Without one, the short window is the only way the PIN still works.
+        assertEquals(AndroidVersionPolicy.KeyAuth.Window(AndroidVersionPolicy.PER_USE_WINDOW_ON_API_29), p.keyAuth(29, 0, strongBiometric = false))
         assertTrue(AndroidVersionPolicy.PER_USE_WINDOW_ON_API_29 in 1..30)
+        // Keys that are a window anyway keep their length.
+        assertEquals(AndroidVersionPolicy.KeyAuth.Window(300), p.keyAuth(29, 300, strongBiometric = true))
+        assertEquals(AndroidVersionPolicy.KeyAuth.Window(300), p.keyAuth(29, 300, strongBiometric = false))
     }
 
-    @Test fun promptOffersBiometricOrPinOnEveryVersion() {
-        assertFalse(p.promptCanCarryKey(29))
-        assertTrue(p.promptCanCarryKey(30))
-        assertEquals(Authenticators.BIOMETRIC_WEAK or Authenticators.DEVICE_CREDENTIAL, p.promptAuthenticators(29))
-        assertEquals(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL, p.promptAuthenticators(30))
-        assertEquals(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL, p.promptAuthenticators(36))
+    @Test fun aKeysBindingIsReadFromHowItWasMade() {
+        assertEquals(B.WINDOW, p.keyBinding(29, 15, null))
+        assertEquals(B.WINDOW, p.keyBinding(33, 15, true)) // an Android 10 window key after an upgrade
+        assertEquals(B.PER_USE_BIOMETRIC_ONLY, p.keyBinding(29, -1, null))
+        assertEquals(B.PER_USE_BIOMETRIC_ONLY, p.keyBinding(33, -1, false)) // made per use on Android 10, phone upgraded
+        assertEquals(B.PER_USE_BIOMETRIC_OR_PIN, p.keyBinding(30, 0, true))
+        assertEquals(B.PER_USE_BIOMETRIC_OR_PIN, p.keyBinding(36, -1, null))
+    }
+
+    @Test fun promptAuthenticatorsPerVersionAndKey() {
+        // Android 10 with a fingerprint: strong biometric only, so a weak 2D face never answers the gate.
+        assertEquals(Authenticators.BIOMETRIC_STRONG, p.promptAuthenticators(29, strongBiometric = true))
+        assertEquals(Authenticators.BIOMETRIC_STRONG, p.promptAuthenticators(29, true, B.PER_USE_BIOMETRIC_ONLY))
+        // Android 10 without one: the PIN must still work.
+        assertEquals(Authenticators.BIOMETRIC_WEAK or Authenticators.DEVICE_CREDENTIAL, p.promptAuthenticators(29, strongBiometric = false))
+        for (sdk in listOf(30, 33, 36)) {
+            assertEquals(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL, p.promptAuthenticators(sdk, false))
+            assertEquals(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL, p.promptAuthenticators(sdk, true, B.PER_USE_BIOMETRIC_OR_PIN))
+            // An Android 10 per-use key after an upgrade: the PIN would never authorize it.
+            assertEquals(Authenticators.BIOMETRIC_STRONG, p.promptAuthenticators(sdk, true, B.PER_USE_BIOMETRIC_ONLY))
+        }
+    }
+
+    @Test fun promptCarriesAKeyFrom30OrWithAFingerprintOnAndroid10() {
+        assertFalse(p.promptCanCarryKey(29, strongBiometric = false))
+        assertTrue(p.promptCanCarryKey(29, strongBiometric = true))
+        assertTrue(p.promptCanCarryKey(30, strongBiometric = false))
+        assertTrue(p.canMakePerUseKey(29, true)); assertFalse(p.canMakePerUseKey(29, false)); assertTrue(p.canMakePerUseKey(31, false))
+    }
+
+    @Test fun suggestsAFingerprintOnlyOnAndroid10WithoutOne() {
+        assertTrue(p.suggestAddingFingerprint(29, strongBiometric = false))
+        assertFalse(p.suggestAddingFingerprint(29, strongBiometric = true))
+        for (sdk in 30..36) assertFalse(p.suggestAddingFingerprint(sdk, strongBiometric = false))
     }
 
     @Test fun copiedAuthenticatorConstantsMatchAndroidx() {

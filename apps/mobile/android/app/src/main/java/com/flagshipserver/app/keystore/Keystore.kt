@@ -80,6 +80,8 @@ object Keystore {
 
     private val rng = SecureRandom()
     @Volatile private var prefs: SharedPreferences? = null
+    /** For [generateUMK]'s strong-biometric check (KeyAuthSpec). */
+    @Volatile private var appContext: Context? = null
     @Volatile private var activeProfileId: String? = null
     /** The PQ identity keys' entries (PqKeyPrefs) and the held assurance policy (QuantumSafetyStore). */
     @Volatile private var pqPrefs: List<SharedPreferences> = emptyList()
@@ -88,6 +90,7 @@ object Keystore {
      *  this from MainActivity.onCreate. */
     fun attach(context: Context) {
         if (prefs != null) return
+        appContext = context.applicationContext
         pqPrefs = listOf(
             context.getSharedPreferences("flagship.pqkeys.v1", Context.MODE_PRIVATE),
             context.getSharedPreferences("flagship.assurance.v1", Context.MODE_PRIVATE),
@@ -178,6 +181,22 @@ object Keystore {
      *  This is the symmetric "anchor" key; in production it would wrap
      *  the cached seeds. Stub left over from the scaffolding step. */
     fun generateUMK(useStrongBox: Boolean = true): SecretKey {
+        // Accept a strong biometric OR the device credential (PIN / pattern /
+        // password) to unlock the key — device-agnostic, and usable on phones
+        // with a screen lock but no enrolled biometric. 0: auth for every use
+        // (Android 10: a strong biometric per use when one is enrolled, else a
+        // short window; see KeyAuthSpec).
+        val strong = appContext?.let { KeyAuthSpec.strongBiometricEnrolled(it) } ?: false
+        return try {
+            generateUmkKey(useStrongBox, strong)
+        } catch (e: Exception) {
+            // Android 10 can refuse a per-use key (it checks the biometric itself): keep the window.
+            if (!strong || android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) throw e
+            generateUmkKey(useStrongBox, strongBiometric = false)
+        }
+    }
+
+    private fun generateUmkKey(useStrongBox: Boolean, strongBiometric: Boolean): SecretKey {
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
         val builder = KeyGenParameterSpec.Builder(
             UMK_ALIAS,
@@ -187,11 +206,7 @@ object Keystore {
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
             .setIsStrongBoxBacked(useStrongBox)
-        // Accept a strong biometric OR the device credential (PIN / pattern /
-        // password) to unlock the key — device-agnostic, and usable on phones
-        // with a screen lock but no enrolled biometric. 0: auth for every use
-        // (Android 10: a short window, see KeyAuthSpec).
-        KeyAuthSpec.require(builder, 0)
+        KeyAuthSpec.require(builder, 0, strongBiometric)
         gen.init(builder.build())
         return gen.generateKey()
     }

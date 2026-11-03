@@ -464,6 +464,24 @@ fun SettingsScreen(nav: NavController) {
                             testTag = "settings-android-outdated",
                         ),
                     )
+                    // Android 10 with no fingerprint: per-use keys fall back to a short window there.
+                    if (com.flagshipserver.app.core.AndroidVersionPolicy.suggestAddingFingerprint(
+                            android.os.Build.VERSION.SDK_INT,
+                            com.flagshipserver.app.keystore.KeyAuthSpec.strongBiometricEnrolled(ctx),
+                        )
+                    ) {
+                        FSDivider()
+                        FSSettingsRow(
+                            FSSettingsRowData(
+                                icon = Icons.Outlined.Info,
+                                title = stringResource(R.string.add_a_fingerprint),
+                                subtitle = stringResource(R.string.add_fingerprint_for_stronger_approvals),
+                                showsChevron = true,
+                                onClick = { com.flagshipserver.app.ui.components.openFingerprintSettings(ctx) },
+                                testTag = "settings-android-add-fingerprint",
+                            ),
+                        )
+                    }
                 }
             }
         }

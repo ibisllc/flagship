@@ -76,7 +76,8 @@ class KeystorePqSeedWrapper(
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-        val spec = KeyAuthSpec.require(builder, authWindowSeconds)
+        // A window (never per use), so whether a strong biometric is enrolled doesn't matter here.
+        val spec = KeyAuthSpec.require(builder, authWindowSeconds, strongBiometric = false)
             // Enrolling a new fingerprint must not silently destroy the PQ keys: the binding on
             // `.com` keeps the first ML-DSA key per Ed25519 key, so a lost seed can't be rebound.
             .setInvalidatedByBiometricEnrollment(false)

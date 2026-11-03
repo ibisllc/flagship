@@ -46,29 +46,42 @@ object BiometricGate {
     suspend fun evaluate(activity: FragmentActivity, title: String, subtitle: String) {
         if (com.flagshipserver.app.core.Variant.refuseBiometricGates) throw BiometricCancelled()
         if (com.flagshipserver.app.core.Variant.bypassBiometricGates) return
+        val authenticators = AndroidVersionPolicy.promptAuthenticators(
+            Build.VERSION.SDK_INT,
+            KeyAuthSpec.strongBiometricEnrolled(activity),
+        )
         withContext(Dispatchers.Main.immediate) {
-            run(activity.lifecycle, PlatformPromptStarter(activity, title, subtitle))
+            run(activity.lifecycle, PlatformPromptStarter(activity, title, subtitle, authenticators))
         }
     }
 
     /**
      * The prompt that opens a session: it also carries the PQ session KEK's cipher as its
      * CryptoObject ([PqSessionKek]), so the one answer releases the PQ seeds for the whole
-     * session and a hybrid signature never asks again (pq-suites.md §18). Without a vault, or
-     * when its cipher cannot be made, it is the plain prompt.
+     * session and a hybrid signature never asks again (pq-suites.md §18). The answer is load-bearing:
+     * the KEK opens only because the Keystore authorized that cipher, never on the prompt's say-so.
+     * On Android 10 that needs a strong biometric (the prompt then takes nothing else); a key made
+     * there without one opens for a short window after the plain prompt instead (KeyAuthSpec).
+     * Without a vault, or when its cipher cannot be made, it is the plain prompt.
      */
     suspend fun evaluateUnlockingPq(activity: FragmentActivity, title: String, subtitle: String) {
+        if (com.flagshipserver.app.core.Variant.refuseBiometricGates) throw BiometricCancelled()
         if (com.flagshipserver.app.core.Variant.bypassBiometricGates) return
-        if (!AndroidVersionPolicy.promptCanCarryKey(Build.VERSION.SDK_INT) || PqSessionKek.opensAfterPrompt()) {
-            // Android 10: a prompt carrying a key could only take a fingerprint, so the KEK's key
-            // opens for a few seconds after the plain prompt instead (KeyAuthSpec).
+        val strong = KeyAuthSpec.strongBiometricEnrolled(activity)
+        if (PqSessionKek.opensAfterPrompt(strong)) {
             evaluate(activity, title, subtitle)
-            PqSessionKek.begin()?.let { PqSessionKek.finish(it, null) }
+            PqSessionKek.begin(strong)?.let { PqSessionKek.finish(it, null) }
             return
         }
-        val pending = PqSessionKek.begin()
-        if (pending == null) return evaluate(activity, title, subtitle)
-        val starter = PlatformPromptStarter(activity, title, subtitle, BiometricPrompt.CryptoObject(pending.cipher))
+        val pending = PqSessionKek.begin(strong) ?: run {
+            evaluate(activity, title, subtitle)
+            // The key couldn't ride in the prompt (e.g. the OS refused a per-use key): a window key
+            // made now still opens after this prompt.
+            if (PqSessionKek.opensAfterPrompt(strong)) PqSessionKek.begin(strong)?.let { PqSessionKek.finish(it, null) }
+            return
+        }
+        val authenticators = AndroidVersionPolicy.promptAuthenticators(Build.VERSION.SDK_INT, strong, pending.binding)
+        val starter = PlatformPromptStarter(activity, title, subtitle, authenticators, BiometricPrompt.CryptoObject(pending.cipher))
         withContext(Dispatchers.Main.immediate) { run(activity.lifecycle, starter) }
         PqSessionKek.finish(pending, starter.authenticatedCipher)
     }
@@ -149,11 +162,12 @@ object BiometricGate {
 }
 
 /** The real system prompt: fingerprint / face / iris OR the device PIN,
- *  pattern or password. */
-private class PlatformPromptStarter(
+ *  pattern or password, as [authenticators] allows (AndroidVersionPolicy.promptAuthenticators). */
+internal class PlatformPromptStarter(
     private val activity: FragmentActivity,
     private val title: String,
     private val subtitle: String,
+    private val authenticators: Int,
     private val crypto: BiometricPrompt.CryptoObject? = null,
 ) : PromptStarter {
     /** The CryptoObject's cipher once the prompt authenticated it. */
@@ -183,18 +197,21 @@ private class PlatformPromptStarter(
                 }
             },
         )
-        // Accept ANY strong device unlock — biometrics OR the device PIN /
+        // Normally ANY strong device unlock — biometrics OR the device PIN /
         // pattern / password (DEVICE_CREDENTIAL), so a phone with a screen
         // lock but no enrolled biometric still authenticates. With
         // DEVICE_CREDENTIAL the system supplies its own cancel affordance, so
-        // a negative button must NOT be set (the two are mutually exclusive).
-        // Android 10 takes BIOMETRIC_WEAK | DEVICE_CREDENTIAL for the same choice
-        // (AndroidVersionPolicy.promptAuthenticators).
-        val info = BiometricPrompt.PromptInfo.Builder()
+        // a negative button must NOT be set (the two are mutually exclusive);
+        // without it (a strong biometric only: Android 10 with a fingerprint,
+        // or a key made there) the prompt needs its own Cancel.
+        val builder = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
-            .setAllowedAuthenticators(AndroidVersionPolicy.promptAuthenticators(Build.VERSION.SDK_INT))
-            .build()
+            .setAllowedAuthenticators(authenticators)
+        if (authenticators and AndroidVersionPolicy.DEVICE_CREDENTIAL == 0) {
+            builder.setNegativeButtonText(com.flagshipserver.app.core.FSStrings.get(com.flagshipserver.app.R.string.cancel))
+        }
+        val info = builder.build()
         try {
             if (crypto != null) prompt.authenticate(info, crypto) else prompt.authenticate(info)
         } catch (t: Throwable) {

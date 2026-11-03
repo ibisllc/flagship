@@ -943,6 +943,14 @@ class MainActivity : FragmentActivity() {
         if (::biometric.isInitialized) BiometricAuthority.set(biometric)
     }
 
+    /** Android 10+ lets only the focused app read the clipboard: a copied secret's pending clear
+     *  (kept on disk across process death) is settled whenever the window gains focus. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        com.flagshipserver.app.core.SensitiveClipboard.appHasFocus = hasFocus
+        if (hasFocus) runCatching { com.flagshipserver.app.core.SensitiveClipboard.settle(applicationContext) }
+    }
+
     override fun onStop() {
         super.onStop()
         foreground.value = false

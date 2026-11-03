@@ -23,8 +23,37 @@ class SensitiveClipboardTest {
     private val d = SensitiveClipboard.digest("key-123")
 
     @After fun reset() {
-        SensitiveClipboard.appHasFocus = false
-        SensitiveClipboard.settle(ctx, Long.MAX_VALUE) // drops anything pending
+        ctx.getSharedPreferences("flagship.clipboard.v1", Context.MODE_PRIVATE).edit().clear().commit()
+        SensitiveClipboard.simulateProcessDeathForTest()
+    }
+
+    @Test fun aPendingClearSurvivesTheProcessAndKeepsOnlyADigest() {
+        SensitiveClipboard.copy(ctx, "Flagship API key", "key-123", sdk = 29)
+        val due = SensitiveClipboard.pendingForTest().second
+        val stored = ctx.getSharedPreferences("flagship.clipboard.v1", Context.MODE_PRIVATE).all
+        assertTrue(stored.values.none { it.toString().contains("key-123") })
+        // The process dies before the minute is up (the in-memory timer is gone with it).
+        SensitiveClipboard.simulateProcessDeathForTest()
+        assertNull(SensitiveClipboard.pendingForTest().first)
+        assertEquals("key-123", clipText())
+        // Next start: the window gains focus and the clear is settled from disk.
+        SensitiveClipboard.appHasFocus = true
+        SensitiveClipboard.settle(ctx, due + 1)
+        assertTrue(clipText().isNullOrEmpty())
+        SensitiveClipboard.simulateProcessDeathForTest()
+        SensitiveClipboard.appHasFocus = true
+        SensitiveClipboard.settle(ctx, due + 2)
+        assertNull(SensitiveClipboard.pendingForTest().first)
+    }
+
+    @Test fun afterARestartSomethingCopiedSinceIsStillKept() {
+        SensitiveClipboard.copy(ctx, "Flagship API key", "key-123", sdk = 31)
+        val due = SensitiveClipboard.pendingForTest().second
+        SensitiveClipboard.simulateProcessDeathForTest()
+        cm.setPrimaryClip(ClipData.newPlainText("note", "my own text"))
+        SensitiveClipboard.appHasFocus = true
+        SensitiveClipboard.settle(ctx, due + 1)
+        assertEquals("my own text", clipText())
     }
 
     @Test fun decisions() {

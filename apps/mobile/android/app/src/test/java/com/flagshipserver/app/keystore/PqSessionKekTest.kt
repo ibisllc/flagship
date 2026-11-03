@@ -1,5 +1,6 @@
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.AndroidVersionPolicy.KeyBinding as B
 import com.flagshipserver.app.core.pq.PqHex
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -39,7 +40,7 @@ class PqSessionKekTest {
     private class FakeVault : PqKekVault {
         val key = SecretKeySpec(ByteArray(32) { 3 }, "AES")
         var blob: ByteArray? = null
-        override fun begin(): PqKekVault.Pending {
+        override fun begin(strongBiometric: Boolean): PqKekVault.Pending {
             val c = Cipher.getInstance("AES/GCM/NoPadding")
             val b = blob
             return if (b != null) {
@@ -69,7 +70,7 @@ class PqSessionKekTest {
     }
 
     private fun unlock() {
-        val p = PqSessionKek.begin()!!
+        val p = PqSessionKek.begin(strongBiometric = false)!!
         PqSessionKek.finish(p, p.cipher)
     }
 
@@ -118,9 +119,35 @@ class PqSessionKekTest {
     @Test fun withoutAVaultTheOldWrappingStays() {
         val legacy = WindowWrapper()
         val w = SessionKekPqSeedWrapper(legacy)
-        assertTrue(PqSessionKek.begin() == null)
+        assertTrue(PqSessionKek.begin(strongBiometric = true) == null)
         val blob = w.wrap(ByteArray(32) { 1 })
         assertTrue(w.isLegacy(blob))
         assertArrayEquals(ByteArray(32) { 1 }, w.unwrap(blob))
+    }
+
+    @Test fun kekPlanOnAndroid10FollowsTheFingerprint() {
+        // A new KEK: per use with a fingerprint, the window only without one.
+        assertEquals(PqKekPlan.CREATE_PER_USE, PqKekPlan.plan(29, true, null, hasBlob = false, upgradeFailed = false))
+        assertEquals(PqKekPlan.CREATE_WINDOW, PqKekPlan.plan(29, false, null, hasBlob = false, upgradeFailed = false))
+        assertEquals(PqKekPlan.CREATE_WINDOW, PqKekPlan.plan(29, false, B.WINDOW, hasBlob = false, upgradeFailed = false))
+        // A window key made before a fingerprint was enrolled moves to per use at the next unlock.
+        assertEquals(PqKekPlan.UPGRADE_WINDOW, PqKekPlan.plan(29, true, B.WINDOW, hasBlob = true, upgradeFailed = false))
+        assertEquals(PqKekPlan.OPEN_WINDOW, PqKekPlan.plan(29, false, B.WINDOW, hasBlob = true, upgradeFailed = false))
+        assertEquals(PqKekPlan.OPEN_WINDOW, PqKekPlan.plan(29, true, B.WINDOW, hasBlob = true, upgradeFailed = true))
+        // A per-use key needs the fingerprint; with none enrolled the KEK stays closed (no window).
+        assertEquals(PqKekPlan.OPEN_PER_USE, PqKekPlan.plan(29, true, B.PER_USE_BIOMETRIC_ONLY, hasBlob = true, upgradeFailed = false))
+        assertEquals(PqKekPlan.UNAVAILABLE, PqKekPlan.plan(29, false, B.PER_USE_BIOMETRIC_ONLY, hasBlob = true, upgradeFailed = false))
+        assertTrue(PqKekPlan.CREATE_WINDOW.opensAfterPrompt && PqKekPlan.OPEN_WINDOW.opensAfterPrompt)
+        assertFalse(PqKekPlan.UPGRADE_WINDOW.opensAfterPrompt || PqKekPlan.OPEN_PER_USE.opensAfterPrompt || PqKekPlan.CREATE_PER_USE.opensAfterPrompt)
+    }
+
+    @Test fun kekPlanAfterAnUpgradeToAndroid11Plus() {
+        // Keys made on Android 10 keep working: judged by how they were made.
+        assertEquals(PqKekPlan.OPEN_PER_USE, PqKekPlan.plan(33, true, B.PER_USE_BIOMETRIC_ONLY, hasBlob = true, upgradeFailed = false))
+        assertEquals(PqKekPlan.UNAVAILABLE, PqKekPlan.plan(33, false, B.PER_USE_BIOMETRIC_ONLY, hasBlob = true, upgradeFailed = false))
+        // An Android 10 window key becomes a biometric-or-PIN per-use key at the next unlock.
+        assertEquals(PqKekPlan.UPGRADE_WINDOW, PqKekPlan.plan(30, false, B.WINDOW, hasBlob = true, upgradeFailed = false))
+        assertEquals(PqKekPlan.OPEN_PER_USE, PqKekPlan.plan(30, false, B.PER_USE_BIOMETRIC_OR_PIN, hasBlob = true, upgradeFailed = false))
+        assertEquals(PqKekPlan.CREATE_PER_USE, PqKekPlan.plan(36, false, null, hasBlob = false, upgradeFailed = false))
     }
 }
