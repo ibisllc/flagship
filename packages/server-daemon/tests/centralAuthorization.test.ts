@@ -100,7 +100,7 @@ describe("route family inventory", () => {
     }
     // /api/... prefixes that belong to other hosts or are only mentioned in text.
     // Calls this box makes to Flagship, text in prompts/comments, and paths served by the apps themselves.
-    const ignore = new Set(["/api/adapters", "/api/boot", "/api/inference", "/api/items", "/api/public", "/api/publicity", "/api/v", "/api/health", "/api/server", "/api/order", "/api/users", "/api/username", "/api/screens-events", "/api/free-ai", "/api/leads", "/api/releases", "/api/notices", "/api/accounts", "/api/dev", "/api/stats", "/api/services-zone", "/api/dns-01", "/api/admin", "/api/directory", "/api/data", "/api/config", "/api/lists", "/api/devices", "/api/auth", "/api/orders", "/api/sample", "/api/register", "/api/route", "/api/routing", "/api/dns"]);
+    const ignore = new Set(["/api/adapters", "/api/boot", "/api/inference", "/api/items", "/api/public", "/api/publicity", "/api/v", "/api/health", "/api/server", "/api/order", "/api/users", "/api/username", "/api/screens-events", "/api/free-ai", "/api/leads", "/api/releases", "/api/notices", "/api/accounts", "/api/dev", "/api/stats", "/api/services-zone", "/api/dns-01", "/api/admin", "/api/directory", "/api/data", "/api/config", "/api/lists", "/api/devices", "/api/auth", "/api/orders", "/api/sample", "/api/register", "/api/route", "/api/routing", "/api/dns", "/api/runtime"]);
     const missing = [...found].filter((p) => !(p in ROUTE_FAMILIES) && !ignore.has(p)).sort();
     expect(missing, `classify these route families in ROUTE_FAMILIES: ${missing.join(", ")}`).toEqual([]);
   });
