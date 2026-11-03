@@ -101,7 +101,9 @@ vm_send_commit() { # vm_send_commit <repo> <40-hex commit>
 
 vm_toolchains() { # vm_toolchains <repo> [log file]
   local node_v
-  node_v=$(node -e 'console.log(require(process.argv[1]).node.minimum)' "$1/release/security-floor.json")
+  # The Node the box artifact is built with is the locked runtime (release/runtime-lock.json), not merely the floor:
+  # build.ts refuses any other Node or npm (the official archive's own npm comes with it).
+  node_v=$(node -e 'const fs=require("fs"),p=process.argv[1];console.log(fs.existsSync(p+"/release/runtime-lock.json")?require(p+"/release/runtime-lock.json").version:require(p+"/release/security-floor.json").node.minimum)' "$1")
   say "installing toolchains (Node $node_v, Rust from rust-toolchain.toml, $VM_GO)"
   # A fresh Debian 13 image can restart sshd while libraries upgrade, which drops this session ("Connection reset by
   # peer", exit 255). needrestart is told not to, and the whole setup is safe to repeat, so it is retried once.

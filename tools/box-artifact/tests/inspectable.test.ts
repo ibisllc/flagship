@@ -10,8 +10,8 @@ import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { ed } from "../../../packages/protocol/src/edSync.js";
 import { canonicalBoxArtifact, type BoxArtifactManifest } from "../../../packages/protocol/src/boxArtifact.js";
-import { assembleArtifact, type BuildInfo } from "../assemble.js";
-import { assertCompilerPinned } from "../build.js";
+import { assembleArtifact, skipInApp, type BuildInfo } from "../assemble.js";
+import { assertBuildToolchain, assertCompilerPinned } from "../build.js";
 import { checkAgainstEndorsed, compareArtifacts, readTar, summarizeDifferences } from "../compare.js";
 import { OWNER_LOCAL_BUILDER, buildProvenance, builderId } from "../provenance.js";
 import { buildSbom, componentsWithoutIntegrity, integrityHashes, parseCargoLock, parseGoSum } from "../sbom.js";
@@ -233,6 +233,26 @@ describe("the pins a reproducible build depends on", () => {
     expect(/node-version: ([0-9.]+)/.exec(wf)?.[1]).toBe(floor);
     const pins = JSON.parse(readFileSync(join(REPO, "tools/box-artifact/node-pins.json"), "utf8")).node.version as string;
     expect(pins).toBe(floor);
+    // The VM builder installs the locked runtime's Node, and build.ts refuses any other Node or npm.
+    expect(vm).toContain("release/runtime-lock.json");
+    const locked = JSON.parse(readFileSync(join(REPO, "release/runtime-lock.json"), "utf8")).version as string;
+    expect(/node-version: ([0-9.]+)/.exec(wf)?.[1]).toBe(locked);
+    expect(wf).not.toMatch(/npm (install|i) (-g|--global) npm/);
+  });
+
+  it("builds only with the locked Node and the npm its official archive ships", () => {
+    const pinned = { node: "24.22.1", npm: "11.19.1" };
+    expect(() => assertBuildToolchain({ node: "v24.22.1", npm: "11.19.1" }, pinned)).not.toThrow();
+    expect(() => assertBuildToolchain({ node: "v24.2.0", npm: "11.3.0" }, pinned)).toThrow(/Node 24.2.0 with npm 11.3.0.*only with Node 24.22.1.*\(11.19.1\)/);
+    expect(() => assertBuildToolchain({ node: "v24.22.1", npm: "11.21.1" }, pinned)).toThrow(/npm 11.21.1/);
+  });
+
+  it("leaves npm's hidden lockfile out of the artifact (it records the builder's npm, not what is installed)", () => {
+    expect(skipInApp("node_modules/.package-lock.json")).toBe(true);
+    expect(skipInApp("packages/server-daemon/node_modules/.package-lock.json")).toBe(true);
+    expect(skipInApp("node_modules/some-pkg/.package-lock.json")).toBe(false);
+    expect(skipInApp("package-lock.json")).toBe(false);
+    expect(skipInApp("node_modules/tsx/package.json")).toBe(false);
   });
 
   it("the release workflow publishes the SBOM and the provenance beside the artifact", () => {

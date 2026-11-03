@@ -34,6 +34,10 @@ export function skipInApp(rel: string): boolean {
   const base = parts[parts.length - 1]!;
   if (parts.includes(".git") || parts.includes(".cache") || base === ".DS_Store") return true;
   if (/\.tsbuildinfo$/.test(base) || /\.test\.(ts|js|mjs)$/.test(base)) return true;
+  // npm's hidden lockfile: a cache of the tree for npm's own next run (no npm runs on a box). Its contents depend on
+  // the npm version that wrote it (11.3.0 keeps optional packages it did not install, 11.19.1 does not), so two
+  // builders with identical installed files differed only here (owner-builds.md §4, 2026-11-02).
+  if (base === ".package-lock.json" && parts[parts.length - 2] === "node_modules") return true;
   // Tests of our own packages (not dependencies' folders named test, which some need).
   if (parts[0] === "packages" && parts.length >= 3 && (parts[2] === "tests" || parts[2] === "test-vectors")) return true;
   if (parts[0] === "scripts" && /\.test\.ts$/.test(base)) return true;

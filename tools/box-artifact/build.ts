@@ -86,6 +86,22 @@ export function verifyShasumsSignature(shasums: string, sig: string, fingerprint
   }
 }
 
+/**
+ * The Node and npm that run the build must be the pinned release's (release/runtime-lock.json `version`, and the npm
+ * that release's official archive bundles): the build tools' Node writes the gzip and its npm lays out node_modules,
+ * so another version gives other bytes (owner-builds.md §4). CI (box-artifact.yml) and the VM builder already run
+ * that Node; an owner build on another one is refused here rather than producing an artifact that cannot match.
+ */
+export function assertBuildToolchain(running: { node: string; npm: string }, pinned: { node: string; npm: string }): void {
+  const node = running.node.replace(/^v/, "");
+  if (node !== pinned.node || running.npm !== pinned.npm) {
+    throw new Error(
+      `this build runs on Node ${node} with npm ${running.npm}; a box artifact builds only with Node ${pinned.node} and the npm it ships (${pinned.npm}), ` +
+        `as pinned by release/runtime-lock.json. Install that Node (the official archive from nodejs.org) and run the build with it.`,
+    );
+  }
+}
+
 export function archiveDigestFromShasums(shasumsText: string, file: string): string {
   for (const line of shasumsText.split("\n")) {
     const m = /^([0-9a-f]{64})\s+\*?(\S+)$/.exec(line.trim());
@@ -218,6 +234,13 @@ async function build(argv: string[]): Promise<void> {
     mkdirSync(nodeDir);
     const prefix = pin.file.replace(/\.tar\.xz$/, "");
     execFileSync("tar", ["-xJf", nodeArchive, "-C", nodeDir, "--strip-components=1", `${prefix}/bin/node`, `${prefix}/LICENSE`]);
+    // The build tools' Node/npm: the pinned release's own (the lock's version; the npm inside its verified archive).
+    const lockedVersion = existsSync(join(src, "release/runtime-lock.json"))
+      ? (JSON.parse(readFileSync(join(src, "release/runtime-lock.json"), "utf8")) as { version: string }).version
+      : pins.node.version;
+    const bundledNpm = (JSON.parse(execFileSync("tar", ["-xJOf", nodeArchive, `${prefix}/lib/node_modules/npm/package.json`], { encoding: "utf8", maxBuffer: 1 << 20 })) as { version: string }).version;
+    const buildNpm = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
+    assertBuildToolchain({ node: process.version, npm: buildNpm }, { node: lockedVersion, npm: bundledNpm });
 
     // The exact lockfile, scripts off, then compile the daemon's workspace.
     const lockText = readFileSync(join(src, "package-lock.json"), "utf8");
@@ -350,7 +373,7 @@ async function build(argv: string[]): Promise<void> {
       ...(process.env["GITHUB_REPOSITORY"] ? { repository: `https://github.com/${process.env["GITHUB_REPOSITORY"]}` } : {}),
       materials,
       toolchain: {
-        node: process.version, npm: execFileSync("npm", ["--version"], { encoding: "utf8" }).trim(), typescript: tsVersion, go: goVersion,
+        node: process.version, npm: buildNpm, typescript: tsVersion, go: goVersion,
         ...(rust ? { rustc: rust.rustc } : {}), ...(cargoVersion ? { cargo: cargoVersion } : {}),
       },
       builder: {

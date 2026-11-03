@@ -31,7 +31,8 @@ build and never produces a manifest claiming the release keys.
 - JS: `npm ci --ignore-scripts --os=linux --cpu=<arch>` from the committed lock; the TypeScript compiler pinned exactly
   (`typescript: 5.9.3` in the root `package.json`, `assertCompilerPinned`) and run by path.
 - Node: 24.22.1, the official archive by SHA-256 (`node-pins.json`, `release/runtime-lock.json`); also the Node that
-  runs the build tools in CI and on the VM (its zlib writes the gzip).
+  runs the build tools on every builder, with the npm its archive ships (its zlib writes the gzip, its npm lays out
+  `node_modules`); `build.ts` refuses another Node or npm (`assertBuildToolchain`), owner builds included.
 - Go: **1.26.3** on every builder. Until 2026-11-01 the release workflow took Go from `go.mod`'s `go 1.26.0` line while
   the VM path installed 1.26.3, so the two builders' Go binaries could not have matched; the workflow now names 1.26.3
   and a test keeps it equal to `VM_GO` (`tools/box-artifact/tests/inspectable.test.ts`). `GOTOOLCHAIN=local` in owner builds.
@@ -95,11 +96,15 @@ machines, in order: the build OS for Rust (section 2), the Node that runs the bu
 CI and the VM use 24.22.1; this measurement used 24.2.0 for both A and B, so it says nothing across Node versions), and
 the Go version (now pinned). The 2026-11-02 row is the first two-machine measurement (Mac against a Linux VM, `--no-rust` on both:
 `box-artifact-vm.sh --no-rust`, so the Mac, which cannot link Rust for Linux, compares like with like). Its one
-difference comes from the npm that runs the install, not from the machine: the build tools' Node/npm is not pinned
-for owner builds, and npm's hidden lockfile records what that npm chose to keep. To close it, either pin the build
-tools' Node (as CI and the VM already use 24.22.1) and refuse another, or have `build.ts` drop
-`node_modules/.package-lock.json` (npm's cache of the tree; nothing on a box reads it). Neither is done; it is an
-owner decision because it changes what an owner build must match. Still not measured: the Rust binaries across
+difference comes from the npm that runs the install, not from the machine: npm's hidden lockfile records what that
+npm chose to keep. Both causes are now closed (2026-11-02, after that run): `node_modules/.package-lock.json` (npm's
+cache of the tree for its own next run; no npm runs on a box) is left out of every artifact (`assemble.ts`
+`skipInApp`), and `build.ts` refuses to build unless the Node running it is `release/runtime-lock.json`'s version
+and its npm is the one inside that release's verified official archive (`assertBuildToolchain`; for 24.22.1, npm
+11.19.1). CI (`box-artifact.yml`, `node-version: 24.22.1`, setup-node's bundled npm; `runtime-pins.test.ts` keeps it
+equal to the lock) and the VM builder (`upcloud-vm.sh`, now from the lock rather than the floor) already met it; an
+owner build on a Mac needs Node 24.22.1 installed (this Mac ran 24.2.0 and would now be refused). The npm and Node
+versions stay in the provenance's `toolchain`. Still not measured: the Rust binaries across
 machines, arm64, and a comparison against the CI-built endorsed artifact (`--against`; no 0.3 artifact is published
 yet). Run it with a short `TMPDIR` on macOS (`TMPDIR=/tmp`): under the default `/var/folders/…` path the gpg agent's
 socket path is too long and the build stops at "could not import any pinned Node release key".
