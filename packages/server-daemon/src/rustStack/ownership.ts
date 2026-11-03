@@ -17,7 +17,13 @@
  * for the reconciler, core is running from this release's pinned binary and its shadow comparison
  * agreed with the engine on the last CUTOVER_PASSES passes; for the proxy, this release carries a
  * pinned flagship-ingress and the app network is known. Going back to TS is never refused.
- * Both defaults stay TS/shadow until the release gym proves the Rust side (rustCore group).
+ *
+ * Defaults (owner, 2026-11-02): on arch-v2 the Rust owners ARE the default; TypeScript is the fallback
+ * and the rollback. A box whose owner never sent an order (`chosenBy: "default"`) moves each setting to
+ * Rust on its own as soon as the same cut-over rule clears it ({@link autoCutover}: core agreed on
+ * CUTOVER_PASSES passes; the ingress is pinned and the app network known), then restarts. Until then,
+ * and on classic, it runs shadow/TS as before. Any admin-signed order (`chosenBy: "owner"`), including
+ * one back to TS, ends the automatic moves for good.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -52,9 +58,11 @@ export interface RustOwnership {
   /** The last orders' nonces: an order is used once. */
   nonces: string[];
   at: number;
+  /** `default`: nobody ordered anything, so the Rust owners are taken as soon as they qualify. `owner`: an order set it. */
+  chosenBy: "default" | "owner";
 }
 
-export const DEFAULT_OWNERSHIP: RustOwnership = { version: 1, reconciler: "shadow", proxy: "ts", proxyAllow: [], nonces: [], at: 0 };
+export const DEFAULT_OWNERSHIP: RustOwnership = { version: 1, reconciler: "shadow", proxy: "ts", proxyAllow: [], nonces: [], at: 0, chosenBy: "default" };
 
 /** A private app network (10/8, 172.16/12, 192.168/16, 100.64/10), never loopback or the world. */
 export function isAppNetwork(cidr: string): boolean {
@@ -76,10 +84,13 @@ export function parseOwnership(text: string | null): RustOwnership {
       proxyAllow: Array.isArray(v.proxyAllow) ? v.proxyAllow.filter((c): c is string => typeof c === "string" && isAppNetwork(c)).slice(0, 8) : [],
       nonces: Array.isArray(v.nonces) ? v.nonces.filter((n): n is string => typeof n === "string" && /^[0-9a-f]{32}$/.test(n)).slice(-64) : [],
       at: typeof v.at === "number" ? v.at : 0,
+      // A file written before this field came from an owner's order.
+      chosenBy: v.chosenBy === "default" ? "default" : "owner",
     };
   } catch {
-    // A damaged file is the safe default: everything stays with the TS daemon.
-    return { ...DEFAULT_OWNERSHIP };
+    // A damaged file is the safe default: everything stays with the TS daemon, and no automatic move
+    // (the file may have held an owner's rollback).
+    return { ...DEFAULT_OWNERSHIP, chosenBy: "owner" };
   }
 }
 
@@ -87,7 +98,7 @@ export function loadOwnership(path = process.env.FLAGSHIP_RUST_OWNERSHIP_FILE ??
   try {
     return parseOwnership(existsSync(path) ? readFileSync(path, "utf8") : null);
   } catch {
-    return { ...DEFAULT_OWNERSHIP };
+    return { ...DEFAULT_OWNERSHIP, chosenBy: "owner" };
   }
 }
 
@@ -226,6 +237,7 @@ export function buildOwnershipHttp(o: OwnershipHttpOptions) {
         reconciler: cur.reconciler,
         proxy: cur.proxy,
         proxyAllow: cur.proxyAllow,
+        chosenBy: cur.chosenBy,
         core: f.core,
         coreChoice: f.coreChoice,
         ingressPinned: f.ingressPinned,
@@ -267,10 +279,43 @@ export function buildOwnershipHttp(o: OwnershipHttpOptions) {
       proxyAllow: order.proxy === "rust" ? f.appNetworks.filter(isAppNetwork).slice(0, 8) : cur.proxyAllow,
       nonces: [...cur.nonces, order.nonce].slice(-64),
       at: now(),
+      chosenBy: "owner",
     };
     await o.save(next);
     const changed = next.reconciler !== cur.reconciler || next.proxy !== cur.proxy;
     if (changed) setTimeout(() => o.requestRestart(), 500).unref?.();
     return json(changed ? 202 : 200, { ok: true, reconciler: next.reconciler, proxy: next.proxy, state: changed ? "restarting" : "unchanged" });
   };
+}
+
+/**
+ * The arch-v2 default (owner, 2026-11-02): while no order was ever sent, take each Rust owner as soon as the
+ * cut-over rule clears it, one setting at a time, and say whether anything changed (the caller restarts).
+ * Never moves anything back, never acts on classic, never overrides an owner's order.
+ */
+export async function autoCutover(o: {
+  current: () => RustOwnership;
+  facts: () => Promise<CutoverFacts>;
+  save: (next: RustOwnership) => Promise<void>;
+  now?: () => number;
+  log?: (m: string) => void;
+}): Promise<boolean> {
+  const cur = o.current();
+  if (cur.chosenBy !== "default") return false;
+  const f = await o.facts();
+  if (f.stack !== "arch-v2" || f.engine !== "podman") return false;
+  const reconciler = cur.reconciler === "rust" || cutoverBlockers({ reconciler: "rust", proxy: cur.proxy }, cur, f).length === 0 ? "rust" : "shadow";
+  const proxy = cur.proxy === "rust" || cutoverBlockers({ reconciler: cur.reconciler, proxy: "rust" }, cur, f).length === 0 ? "rust" : "ts";
+  if (reconciler === cur.reconciler && proxy === cur.proxy) return false;
+  const next: RustOwnership = {
+    ...cur,
+    reconciler,
+    proxy,
+    proxyAllow: proxy === "rust" && cur.proxy !== "rust" ? f.appNetworks.filter(isAppNetwork).slice(0, 8) : cur.proxyAllow,
+    at: (o.now ?? Date.now)(),
+    chosenBy: "default",
+  };
+  await o.save(next);
+  o.log?.(`[rust-ownership] arch-v2 default: reconciler ${cur.reconciler} → ${reconciler}, proxy ${cur.proxy} → ${proxy}`);
+  return true;
 }

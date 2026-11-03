@@ -389,7 +389,7 @@ Two owner settings decide who owns apps, kept in `/var/flagship/rust-ownership.j
 component starts under the new setting. `GET` (owner sessions) shows the setting, what runs, core's
 last answer, the proxy's decision counts and what blocks each move.
 
-| Setting | Default | Other value |
+| Setting | Start (and classic) | Arch-v2 default once qualified / other value |
 |---|---|---|
 | `reconciler` | `shadow`: the daemon deploys, stops and restarts app containers; core keeps the desired state, compares it with the engine every sync and journals each change of verdict, and acts on nothing | `rust`: core (`apps.rs`) decides every container effect for plain apps on the live network and for the local-AI model server; the daemon performs only what core hands it |
 | `proxy` | `ts`: flagship-tlsd (Go) pipes bytes; the daemon's TS proxy carries app traffic | `rust`: flagship-ingress replaces flagship-tlsd (drop-in, Go as its fallback after three failed runs) and carries app traffic after the daemon's decision |
@@ -398,8 +398,16 @@ last answer, the proxy's decision counts and what blocks each move.
 (Podman, the Rust units on) and, for the reconciler, core runs this release's pinned binary in
 `serve` mode and its shadow comparison agreed with the engine on the last 3 passes; for the proxy,
 the release pins `flagship-ingress` and the app network's subnet is known. Going back is never
-refused. Both defaults stay `shadow`/`ts` until the release gym's `rust-core` group is green on
-arch-v2; then a release may change the defaults for new boxes.
+refused.
+
+**The arch-v2 default is Rust (owner, 2026-11-02).** The file records who chose the setting
+(`chosenBy`). A box nobody has sent an order to (`default`; no file yet) starts on `shadow`/`ts` and,
+every minute, takes each Rust owner on its own as soon as the same cut-over rule clears it
+(`autoCutover`), then restarts so every component starts under it. Any admin-signed order
+(`owner`), including one back to `shadow`/`ts`, is the rollback and ends the automatic moves for
+good; a damaged file reads as `shadow`/`ts` chosen by the owner, so it never moves on its own.
+Classic boxes never move. The access authority follows the same rule by its own switch
+(`FLAGSHIP_ACCESS_AUTHORITY`, default `rust` wherever its socket is up). Gym proof: `rust-core`.
 
 **One writer.** Core is the only decider in `rust` mode: it journals each effect as intent
 (SQLite WAL, `synchronous=FULL`, fenced by its term) before handing it to the daemon's executor

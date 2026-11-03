@@ -12,6 +12,7 @@ import { ed, signRustOwnershipOrder, type RustOwnershipOrder } from "@flagship/p
 import {
   CUTOVER_PASSES,
   DEFAULT_OWNERSHIP,
+  autoCutover,
   buildOwnershipHttp,
   cutoverBlockers,
   isAppNetwork,
@@ -52,9 +53,13 @@ const facts = (over: Partial<CutoverFacts> = {}): CutoverFacts => ({
 });
 
 describe("the ownership setting", () => {
-  it("defaults to TS/shadow and reads a damaged file as the default", () => {
+  it("starts TS/shadow, chosen by default; a damaged file is TS/shadow chosen by the owner (no automatic move)", () => {
     expect(parseOwnership(null)).toEqual(DEFAULT_OWNERSHIP);
-    expect(parseOwnership("{not json")).toEqual(DEFAULT_OWNERSHIP);
+    expect(DEFAULT_OWNERSHIP.chosenBy).toBe("default");
+    expect(parseOwnership("{not json")).toEqual({ ...DEFAULT_OWNERSHIP, chosenBy: "owner" });
+    // A file from before the field came from an order.
+    expect(parseOwnership(JSON.stringify({ reconciler: "shadow", proxy: "ts" })).chosenBy).toBe("owner");
+    expect(parseOwnership(JSON.stringify({ reconciler: "rust", proxy: "ts", chosenBy: "default" })).chosenBy).toBe("default");
     expect(parseOwnership(JSON.stringify({ reconciler: "rust", proxy: "rust", proxyAllow: ["10.89.0.0/24", "127.0.0.0/8", "0.0.0.0/0"] }))).toMatchObject({
       reconciler: "rust",
       proxy: "rust",
@@ -71,6 +76,31 @@ describe("the ownership setting", () => {
   it("reads core's status file", () => {
     expect(parseCoreStatus(JSON.stringify({ ok: true, mode: "serve", at: 5, apps: { live: true, agreePasses: 4, lastShadow: "agree" } }))).toEqual({ ok: true, mode: "serve", live: true, agreePasses: 4, lastShadow: "agree", at: 5 });
     expect(parseCoreStatus("x")).toBeNull();
+  });
+});
+
+describe("the arch-v2 default (owner, 2026-11-02): Rust owners once they qualify", () => {
+  const run = async (cur: RustOwnership, f: CutoverFacts) => {
+    let saved: RustOwnership | null = null;
+    const changed = await autoCutover({ current: () => cur, facts: async () => f, save: async (n) => void (saved = n), now: () => 7 });
+    return { changed, saved: saved as RustOwnership | null };
+  };
+  it("takes both Rust owners on a qualified arch-v2 box nobody ordered, with the app network for the proxy", async () => {
+    const r = await run(DEFAULT_OWNERSHIP, facts());
+    expect(r.changed).toBe(true);
+    expect(r.saved).toMatchObject({ reconciler: "rust", proxy: "rust", proxyAllow: ["10.89.0.0/24"], chosenBy: "default", at: 7 });
+  });
+  it("takes each one as it qualifies: the proxy first while core still compares", async () => {
+    const r = await run(DEFAULT_OWNERSHIP, facts({ core: { ok: true, mode: "serve", live: false, agreePasses: 1, lastShadow: "agree", at: 1 } }));
+    expect(r.saved).toMatchObject({ reconciler: "shadow", proxy: "rust" });
+    const again = await run(r.saved!, facts());
+    expect(again.saved).toMatchObject({ reconciler: "rust", proxy: "rust", proxyAllow: ["10.89.0.0/24"] });
+  });
+  it("does nothing on classic, nothing unqualified, and never overrides an owner's order (a rollback included)", async () => {
+    expect((await run(DEFAULT_OWNERSHIP, facts({ stack: "classic", engine: "docker" }))).changed).toBe(false);
+    expect((await run(DEFAULT_OWNERSHIP, facts({ coreChoice: "ts", ingressPinned: false }))).changed).toBe(false);
+    expect((await run({ ...DEFAULT_OWNERSHIP, chosenBy: "owner" }, facts())).changed).toBe(false);
+    expect((await run({ ...DEFAULT_OWNERSHIP, reconciler: "rust", proxy: "rust" }, facts())).changed).toBe(false);
   });
 });
 

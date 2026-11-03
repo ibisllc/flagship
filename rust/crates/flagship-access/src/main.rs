@@ -2,7 +2,8 @@
 //!
 //! Environment: `FLAGSHIP_ACCESS_SOCKET` (`/run/flagship-access/access.sock`), `FLAGSHIP_ACCESS_STATE`
 //! (`/var/flagship/data/flagship-access/service-access.json`), `FLAGSHIP_ACCESS_SESSIONS`
-//! (`/var/flagship/service-sessions.json`), `FLAGSHIP_ACCESS_ALLOW_UIDS` (`0`: the uids admitted).
+//! (`/var/flagship/service-sessions.json`), `FLAGSHIP_ACCESS_ALLOW_UIDS` (`0`: the uids admitted), and for the
+//! writes `FLAGSHIP_ACCESS_JOURNAL`, `FLAGSHIP_ACCESS_BOOK`, `FLAGSHIP_ACCESS_REVOCATIONS`, `FLAGSHIP_ACCESS_SHARES`.
 #![forbid(unsafe_code)]
 
 use flagship_access::server::{Context, peer_uid, serve_connection};
@@ -43,6 +44,27 @@ fn run() -> Result<(), String> {
             "/var/flagship/service-sessions.json",
         )
         .into(),
+        writes: Some(std::sync::Arc::new(
+            flagship_access::writes::WritePaths::new(
+                env_or(
+                    "FLAGSHIP_ACCESS_STATE",
+                    "/var/flagship/data/flagship-access/service-access.json",
+                )
+                .into(),
+                env_or(
+                    "FLAGSHIP_ACCESS_JOURNAL",
+                    "/var/flagship/data/flagship-access/access-journal.json",
+                )
+                .into(),
+                env_or("FLAGSHIP_ACCESS_BOOK", "/var/flagship/account-devices.json").into(),
+                env_or(
+                    "FLAGSHIP_ACCESS_REVOCATIONS",
+                    "/var/flagship/data/flagship-access/device-revocations.json",
+                )
+                .into(),
+                env_or("FLAGSHIP_ACCESS_SHARES", "/var/flagship/shares.json").into(),
+            ),
+        )),
     };
     let allowed: Vec<u32> = env_or("FLAGSHIP_ACCESS_ALLOW_UIDS", "0")
         .split(',')

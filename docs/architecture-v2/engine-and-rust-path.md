@@ -85,8 +85,10 @@ signature covers them). Reproducibility across two clean builders is not yet sho
 
 - Engine: R03 scorecard (both arches, two weeks), arm64 run, rootless, Podman's own CVE cadence.
 - Broker: v1 `docker` op still on; most host ops still in the daemon; no capability issuer.
-- Core: shadow by default; the owner's signed `rust-ownership` order moves app reconciling to core and app
-  traffic to the Rust ingress (broker-runtime-core.md §11). The checkpoint still lists the TS desired set only.
+- Core: on arch-v2 the Rust owners are the default (owner, 2026-11-02): a box with no order takes app
+  reconciling (core) and app traffic (the Rust ingress) as soon as each qualifies; the owner's signed
+  `rust-ownership` order sets or rolls back either (broker-runtime-core.md §11). The access authority
+  (flagship-access) decides and writes in `rust` by default where its socket is up. The checkpoint still lists the TS desired set only.
 - Appliances/ISOs with Podman not built or published; no gym run (the gym was not used).
 - The owner's stack switch (§7) has run only in unit tests with fakes: no real box, no gym, and no
   app sends the order yet.

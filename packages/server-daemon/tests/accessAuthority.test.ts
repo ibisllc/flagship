@@ -45,8 +45,9 @@ async function run(mode: "shadow" | "rust", answer: AccessVerdict | Error, sessi
 }
 
 describe("accessAuthorityMode", () => {
-  it("is shadow when the socket is up, TypeScript otherwise, and the flag overrides both", () => {
-    expect(accessAuthorityMode({}, "/s", () => true)).toBe("shadow");
+  it("is Rust when the socket is up (arch-v2), TypeScript otherwise, and the flag overrides both", () => {
+    expect(accessAuthorityMode({}, "/s", () => true)).toBe("rust");
+    expect(accessAuthorityMode({ FLAGSHIP_ACCESS_AUTHORITY: "shadow" }, "/s", () => true)).toBe("shadow");
     expect(accessAuthorityMode({}, "/s", () => false)).toBe("ts");
     expect(accessAuthorityMode({ FLAGSHIP_ACCESS_AUTHORITY: "rust" }, "/s", () => false)).toBe("rust");
     expect(accessAuthorityMode({ FLAGSHIP_ACCESS_AUTHORITY: "TS" }, "/s", () => true)).toBe("ts");
@@ -150,7 +151,7 @@ describe("the flagship-access unit", () => {
     const { ACCESS_SOCKET_PATH, accessServiceUnit, rustSelectScript, rustExecScript } = await import("../src/rustStack/units.js");
     expect(ACCESS_SOCKET_PATH).toBe(ACCESS_SOCKET);
     const u = accessServiceUnit();
-    for (const line of ["PrivateNetwork=yes", "CapabilityBoundingSet=CAP_DAC_READ_SEARCH", "ProtectSystem=strict", "NoNewPrivileges=yes", "RestrictAddressFamilies=AF_UNIX", `confirm access ${ACCESS_SOCKET}`]) {
+    for (const line of ["PrivateNetwork=yes", "CapabilityBoundingSet=CAP_DAC_READ_SEARCH", "ProtectSystem=strict", "NoNewPrivileges=yes", "RestrictAddressFamilies=AF_UNIX", `confirm access ${ACCESS_SOCKET}`, "ReadWritePaths=-/var/flagship/data/flagship-access", "SystemCallFilter=@chown"]) {
       expect(u).toContain(line);
     }
     expect(rustSelectScript()).toContain("FLAGSHIP_ACCESS_ALLOW_UIDS=0");

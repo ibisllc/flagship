@@ -72,6 +72,7 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
 import type { AccessEntry } from "./accessJournal.js";
+import type { AccessWrites } from "./accessWrites.js";
 import { serialFileWriter } from "./serialFileWriter.js";
 import { keepCorruptAside } from "./durableFile.js";
 import type { RestoredAccessDrafts } from "./restoredAccessDrafts.js";
@@ -472,9 +473,19 @@ export class ServiceAccessStore {
         return;
       }
     }
-    this.byService.clear();
     this.loadFailedClosed = false;
     this.loadErrorMessage = null;
+    this.fromRaw(raw);
+    if (fromLegacy && this.legacyPath) {
+      // Into the data folder Migrate carries; the old file is set aside.
+      await this.persist();
+      await rename(this.legacyPath, `${this.legacyPath}.moved`).catch(() => {});
+    }
+  }
+
+  /** The rows of a parsed state file (load, and the Rust authority's answers). */
+  private fromRaw(raw: PersistShape): void {
+    this.byService.clear();
     this.defaultMode = raw[DEFAULT_ROW]?.mode === "restricted" ? "restricted" : "open";
     for (const [ref, e] of Object.entries(raw)) {
       if (ref === DEFAULT_ROW) continue;
@@ -491,11 +502,6 @@ export class ServiceAccessStore {
         }
       }
       this.byService.set(ref, { mode: e.mode, allow: [...new Set(allow)], groups, roles: readRoles(e.roles) });
-    }
-    if (fromLegacy && this.legacyPath) {
-      // Into the data folder Migrate carries; the old file is set aside.
-      await this.persist();
-      await rename(this.legacyPath, `${this.legacyPath}.moved`).catch(() => {});
     }
   }
 
@@ -608,7 +614,7 @@ export class ServiceAccessStore {
   }
 
   /** Take a copied service's mode and allow-list (appCopy/), replacing whatever this box had. */
-  async importEntry(
+  private async ts_importEntry(
     serviceRef: string,
     e: {
       mode: ServiceAccessMode;
@@ -635,13 +641,13 @@ export class ServiceAccessStore {
   }
 
   /** Drop everything about an app (its uninstall): a reinstall under the same id starts clean. */
-  async forget(serviceRef: string): Promise<boolean> {
+  private async ts_forget(serviceRef: string): Promise<boolean> {
     if (!this.byService.delete(serviceRef)) return false;
     await this.persist();
     return true;
   }
 
-  async setMode(serviceRef: string, mode: ServiceAccessMode): Promise<void> {
+  private async ts_setMode(serviceRef: string, mode: ServiceAccessMode): Promise<void> {
     this.entry(serviceRef).mode = mode;
     await this.persist();
   }
@@ -650,7 +656,7 @@ export class ServiceAccessStore {
    * Apply a verified mode order, latest order wins: one no newer than the last
    * applied for this app is refused (`stale`).
    */
-  async applyModeOrder(serviceRef: string, mode: ServiceAccessMode, issuedAt: number): Promise<"ok" | "stale"> {
+  private async ts_applyModeOrder(serviceRef: string, mode: ServiceAccessMode, issuedAt: number): Promise<"ok" | "stale"> {
     const e = this.entry(serviceRef);
     const last = e.roles.seq.mode;
     if (last !== undefined && issuedAt <= last) return "stale";
@@ -661,7 +667,7 @@ export class ServiceAccessStore {
   }
 
   /** Apply a verified removal order (latest order wins per person); true when someone was removed. */
-  async applyRemoveOrder(serviceRef: string, aidHex: string, issuedAt: number): Promise<"removed" | "absent" | "stale"> {
+  private async ts_applyRemoveOrder(serviceRef: string, aidHex: string, issuedAt: number): Promise<"removed" | "absent" | "stale"> {
     const aid = aidHex.toLowerCase();
     const e = this.entry(serviceRef);
     const key = `remove:${aid}`;
@@ -678,7 +684,7 @@ export class ServiceAccessStore {
    * whole set. Returns whether the AID was newly added. Rejects (false) once the
    * list hits {@link ALLOW_LIST_CAP} unless the AID is already present.
    */
-  async addAllowed(serviceRef: string, visitorAidHex: string, inviteId?: string): Promise<boolean> {
+  private async ts_addAllowed(serviceRef: string, visitorAidHex: string, inviteId?: string): Promise<boolean> {
     const e = this.entry(serviceRef);
     const aid = visitorAidHex.toLowerCase();
     const already = e.allow.includes(aid);
@@ -703,7 +709,7 @@ export class ServiceAccessStore {
   }
 
   /** Remove an AID from a service's allow-list (idempotent). Also drops it from any group. */
-  async removeAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
+  private async ts_removeAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
     const e = this.byService.get(serviceRef);
     if (!e) return false;
     const aid = visitorAidHex.toLowerCase();
@@ -732,7 +738,7 @@ export class ServiceAccessStore {
    * pruned. `serviceRef` is optional — when omitted, prunes the group from every
    * service that carries it (the box revocation poller doesn't always know which).
    */
-  async revokeGroup(inviteId: string, serviceRef?: string): Promise<number> {
+  private async ts_revokeGroup(inviteId: string, serviceRef?: string): Promise<number> {
     let pruned = 0;
     let changed = false;
     const refs = serviceRef ? [serviceRef] : [...this.byService.keys()];
@@ -762,7 +768,7 @@ export class ServiceAccessStore {
   }
 
   /** Keep a withdraw of an invite (even one not seen here yet), first one wins. */
-  async noteWithdrawn(serviceRef: string, inviteId: string, issuedAt: number, signatureHex: string): Promise<void> {
+  private async ts_noteWithdrawn(serviceRef: string, inviteId: string, issuedAt: number, signatureHex: string): Promise<void> {
     const e = this.entry(serviceRef);
     if (e.roles.withdrawn[inviteId]) return;
     e.roles.withdrawn[inviteId] = `${issuedAt}:${signatureHex.toLowerCase()}`;
@@ -827,7 +833,7 @@ export class ServiceAccessStore {
    * treated as an admin one, so a replayed or substituted create can only
    * lower a rank.
    */
-  async setInviteTier(serviceRef: string, inviteId: string, tier: InviteTier): Promise<void> {
+  private async ts_setInviteTier(serviceRef: string, inviteId: string, tier: InviteTier): Promise<void> {
     const e = this.entry(serviceRef);
     const was = e.roles.tiers[inviteId];
     if (was === tier || cappedTier(was)) return;
@@ -842,7 +848,7 @@ export class ServiceAccessStore {
   }
 
   /** Record the key that signed an invite's create (first one wins). */
-  async setInviteCreator(serviceRef: string, inviteId: string, pubHex: string): Promise<void> {
+  private async ts_setInviteCreator(serviceRef: string, inviteId: string, pubHex: string): Promise<void> {
     const e = this.entry(serviceRef);
     if (e.roles.creators[inviteId]) return;
     e.roles.creators[inviteId] = pubHex.toLowerCase();
@@ -915,7 +921,7 @@ export class ServiceAccessStore {
    * Remove a member only when they hold no grant any more (the revocation
    * poller's fallback for binds the grant map didn't capture).
    */
-  async removeIfUngranted(serviceRef: string, aidHex: string): Promise<boolean> {
+  private async ts_removeIfUngranted(serviceRef: string, aidHex: string): Promise<boolean> {
     const e = this.byService.get(serviceRef);
     if (!e || this.grantsOf(e, aidHex.toLowerCase()).length > 0) return false;
     return this.removeAllowed(serviceRef, aidHex);
@@ -926,7 +932,7 @@ export class ServiceAccessStore {
    * order no newer than the last one applied to that target is refused, so a
    * captured order can't be replayed or undo a later one.
    */
-  async setRole(
+  private async ts_setRole(
     serviceRef: string,
     target: AppMemberRoleTarget,
     targetKey: string,
@@ -951,7 +957,7 @@ export class ServiceAccessStore {
    * Keep what a verified `share` journal entry says about a co-manager of the
    * app: the newer grant replaces an older one; an end is final.
    */
-  async noteCoManager(serviceRef: string, shareId: string, rec: CoManagerRecord): Promise<"applied" | "unchanged" | "stale"> {
+  private async ts_noteCoManager(serviceRef: string, shareId: string, rec: CoManagerRecord): Promise<"applied" | "unchanged" | "stale"> {
     const e = this.entry(serviceRef);
     const prev = e.roles.coManagers[shareId];
     if (prev) {
@@ -1022,7 +1028,7 @@ export class ServiceAccessStore {
   }
 
   /** Apply a verified override of an account device (`device:<pub>`) or co-manager (`share:<id>`). */
-  async setAccountRank(serviceRef: string, targetKey: string, rank: AccountRank, issuedAt: number, evidence?: string): Promise<"ok" | "stale"> {
+  private async ts_setAccountRank(serviceRef: string, targetKey: string, rank: AccountRank, issuedAt: number, evidence?: string): Promise<"ok" | "stale"> {
     const e = this.entry(serviceRef);
     const last = e.roles.seq[targetKey];
     if (last !== undefined && issuedAt <= last) return "stale";
@@ -1032,6 +1038,109 @@ export class ServiceAccessStore {
     else delete e.roles.evidence[targetKey];
     await this.persist();
     return "ok";
+  }
+
+
+  // ── Writes (release plan R4): through the Rust access authority when it is wired (accessWrites.ts) ──────────
+
+  private writes: AccessWrites | null = null;
+
+  /** Route every change through the Rust authority (`rust`: it writes; `shadow`: it is compared). */
+  setWrites(w: AccessWrites | null): void {
+    this.writes = w;
+  }
+
+  /** The state file's text as this store holds it. */
+  snapshotText(): string {
+    return this.snapshot();
+  }
+
+  /** Take the Rust authority's state as the read copy (it wrote the file). */
+  adoptState(state: unknown): void {
+    if (!state || typeof state !== "object" || Array.isArray(state)) return;
+    this.fromRaw(state as PersistShape);
+  }
+
+  private async write<T>(method: string, args: Record<string, unknown>, ts: () => Promise<T>): Promise<T> {
+    const w = this.writes;
+    if (!w) return ts();
+    if (w.mode === "rust") return (await w.storeMutate(method, args, this)) as T;
+    const pre = this.snapshot();
+    const r = await ts();
+    w.shadowStore(method, args, pre, r === undefined ? null : r, this.snapshot());
+    return r;
+  }
+
+  async forget(serviceRef: string): Promise<boolean> {
+    return this.write("forget", { serviceRef }, () => this.ts_forget(serviceRef)) as Promise<boolean>;
+  }
+
+  async setMode(serviceRef: string, mode: ServiceAccessMode): Promise<void> {
+    return this.write("setMode", { serviceRef, mode }, () => this.ts_setMode(serviceRef, mode)) as Promise<void>;
+  }
+
+  async applyModeOrder(serviceRef: string, mode: ServiceAccessMode, issuedAt: number): Promise<"ok" | "stale"> {
+    return this.write("applyModeOrder", { serviceRef, mode, issuedAt }, () => this.ts_applyModeOrder(serviceRef, mode, issuedAt)) as Promise<"ok" | "stale">;
+  }
+
+  async applyRemoveOrder(serviceRef: string, aidHex: string, issuedAt: number): Promise<"removed" | "absent" | "stale"> {
+    return this.write("applyRemoveOrder", { serviceRef, aid: aidHex, issuedAt }, () => this.ts_applyRemoveOrder(serviceRef, aidHex, issuedAt)) as Promise<"removed" | "absent" | "stale">;
+  }
+
+  async addAllowed(serviceRef: string, visitorAidHex: string, inviteId?: string): Promise<boolean> {
+    return this.write("addAllowed", { serviceRef, aid: visitorAidHex, inviteId }, () => this.ts_addAllowed(serviceRef, visitorAidHex, inviteId)) as Promise<boolean>;
+  }
+
+  async removeAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
+    return this.write("removeAllowed", { serviceRef, aid: visitorAidHex }, () => this.ts_removeAllowed(serviceRef, visitorAidHex)) as Promise<boolean>;
+  }
+
+  async revokeGroup(inviteId: string, serviceRef?: string): Promise<number> {
+    return this.write("revokeGroup", { inviteId, serviceRef }, () => this.ts_revokeGroup(inviteId, serviceRef)) as Promise<number>;
+  }
+
+  async noteWithdrawn(serviceRef: string, inviteId: string, issuedAt: number, signatureHex: string): Promise<void> {
+    return this.write("noteWithdrawn", { serviceRef, inviteId, issuedAt, signature: signatureHex }, () => this.ts_noteWithdrawn(serviceRef, inviteId, issuedAt, signatureHex)) as Promise<void>;
+  }
+
+  async setInviteTier(serviceRef: string, inviteId: string, tier: InviteTier): Promise<void> {
+    return this.write("setInviteTier", { serviceRef, inviteId, tier }, () => this.ts_setInviteTier(serviceRef, inviteId, tier)) as Promise<void>;
+  }
+
+  async setInviteCreator(serviceRef: string, inviteId: string, pubHex: string): Promise<void> {
+    return this.write("setInviteCreator", { serviceRef, inviteId, pub: pubHex }, () => this.ts_setInviteCreator(serviceRef, inviteId, pubHex)) as Promise<void>;
+  }
+
+  async removeIfUngranted(serviceRef: string, aidHex: string): Promise<boolean> {
+    return this.write("removeIfUngranted", { serviceRef, aid: aidHex }, () => this.ts_removeIfUngranted(serviceRef, aidHex)) as Promise<boolean>;
+  }
+
+  async noteCoManager(serviceRef: string, shareId: string, rec: CoManagerRecord): Promise<"applied" | "unchanged" | "stale"> {
+    return this.write("noteCoManager", { serviceRef, shareId, rec }, () => this.ts_noteCoManager(serviceRef, shareId, rec)) as Promise<"applied" | "unchanged" | "stale">;
+  }
+
+  async setAccountRank(serviceRef: string, targetKey: string, rank: AccountRank, issuedAt: number, evidence?: string): Promise<"ok" | "stale"> {
+    return this.write("setAccountRank", { serviceRef, targetKey, rank, issuedAt, evidence }, () => this.ts_setAccountRank(serviceRef, targetKey, rank, issuedAt, evidence)) as Promise<"ok" | "stale">;
+  }
+
+  async setRole(
+    serviceRef: string,
+    target: AppMemberRoleTarget,
+    targetKey: string,
+    role: MemberRole,
+    issuedAt: number,
+    evidence?: string,
+  ): Promise<"ok" | "stale"> {
+    return this.write("setRole", { serviceRef, target, targetKey, role, issuedAt, evidence }, () =>
+      this.ts_setRole(serviceRef, target, targetKey, role, issuedAt, evidence),
+    ) as Promise<"ok" | "stale">;
+  }
+
+  async importEntry(
+    serviceRef: string,
+    e: { mode: ServiceAccessMode; allow: readonly string[]; groups: Readonly<Record<string, readonly string[]>>; roles?: MemberRoles },
+  ): Promise<void> {
+    await this.write("importEntry", { serviceRef, entry: e }, () => this.ts_importEntry(serviceRef, e));
   }
 
   private snapshot(): string {

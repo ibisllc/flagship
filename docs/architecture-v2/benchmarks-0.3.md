@@ -113,8 +113,9 @@ the session file (by design: only the file counts), so the number is IPC + two f
 
 This is the one place where the Rust path is clearly slower: an out-of-process authority costs about 0.15-0.25 ms
 per decision on the amd64 guest against 14 µs in process. It is a decision per request (not per byte), well under the
-§5.3 "management p95 ≤ 1 s", and it buys the effect-boundary isolation G5 asks for; but if `FLAGSHIP_ACCESS_AUTHORITY=rust`
-becomes the default, a persistent connection and caching the parsed files by mtime are the obvious optimisations
+§5.3 "management p95 ≤ 1 s", and it buys the effect-boundary isolation G5 asks for. `FLAGSHIP_ACCESS_AUTHORITY=rust`
+is the arch-v2 default since 2026-11-02 (owner); the account people are now verified on the Rust side and cached by the
+files' size and time (`writes.rs`), and a persistent connection is the next obvious optimisation
 (§5.1: a disappointing benchmark triggers optimisation, not removal). Every answer was checked against the vectors
 before timing; the first run of this bench found that the socket path disagreed with the contract (below).
 

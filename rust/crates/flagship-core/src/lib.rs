@@ -12,8 +12,8 @@
 //! - [`ipc`]: core's socket, where the daemon syncs and settles.
 #![forbid(unsafe_code)]
 
-pub mod access_entry;
-pub mod access_journal;
+pub use flagship_access::access_entry;
+pub use flagship_access::access_journal;
 pub mod apps;
 pub mod controller;
 pub mod endpoints;

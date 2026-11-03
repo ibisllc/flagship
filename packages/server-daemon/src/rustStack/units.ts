@@ -339,9 +339,11 @@ WantedBy=multi-user.target
 }
 
 /**
- * The access decision socket (rust/crates/flagship-access, release plan R4). Root only to read the daemon's
- * access state and session files (mode 0600); otherwise it can do nothing: no capabilities but reading past
- * file modes, no network, a read-only system. Its fallback idles: no socket, and the daemon decides alone.
+ * The access authority socket (rust/crates/flagship-access, release plan R4): decisions, the account people and
+ * the access writes. Root only to read the daemon's access, session, device-book and share files (mode 0600) and,
+ * in `rust` mode, to be the one writer of the access state and journal in their own folder (keeping the files'
+ * owner); otherwise it can do nothing: no network, a read-only system but that folder. Its fallback idles: no
+ * socket, and the daemon decides and writes alone.
  */
 export function accessServiceUnit(): string {
   return `[Unit]
@@ -362,6 +364,7 @@ RuntimeDirectory=flagship-access
 RuntimeDirectoryMode=0750
 Environment=FLAGSHIP_ACCESS_SOCKET=${ACCESS_SOCKET_PATH}
 ${UNSET_ENV_LINE}
+ReadWritePaths=-/var/flagship/data/flagship-access
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -379,12 +382,14 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
-CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN
 AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources @mount @debug @module @raw-io @reboot @swap @obsolete
+# Writes keep the daemon account as the files' owner (fchown); @privileged would kill it.
+SystemCallFilter=@chown
 LimitCORE=0
 UMask=0077
 

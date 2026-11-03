@@ -1359,6 +1359,7 @@ dependencies = [
  "flagship-crypto",
  "rustix",
  "serde_json",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -1400,6 +1401,7 @@ dependencies = [
 name = "flagship-core"
 version = "0.3.0"
 dependencies = [
+ "flagship-access",
  "flagship-crypto",
  "flagship-runtime",
  "rusqlite",

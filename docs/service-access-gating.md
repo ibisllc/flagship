@@ -600,6 +600,17 @@ beside the access state in `<dataDir>/data/flagship-access/`, so Migrate
 carries both; archive and copy carry the state; uninstall drops the app's
 state and journal.
 
+**Who verifies and writes (0.3, release plan R4).** On an arch-v2 box the
+Rust access authority (`rust/crates/flagship-access`) is the default
+(`FLAGSHIP_ACCESS_AUTHORITY=rust`, owner 2026-11-02): it classifies the
+account people itself from the box's device book, device revocations and
+share list against the anchors the daemon pinned at boot, verifies and
+applies every handed-over entry (and the rank orders), keeps an entry in the
+journal only when its proof verifies there, and is the only writer of the
+access state and the journal; the daemon keeps a read copy and still
+distributes. The TypeScript store, applier and resolver are the `ts`/`shadow`
+fallback. Both are held to `packages/server-daemon/test-vectors/access-writes.json`.
+
 **Per-server lists.** `scope(serviceRef)` is `"account"` for every app on
 `main`. The Pro option that returns `"server"` is built on `feat/marketplace`
 only: "Separate lists per server (Pro)", below.

@@ -1,14 +1,18 @@
 // The Rust controller and the Rust proxy taking over apps on an arch-v2 box (plan G3/G4;
-// docs/architecture-v2/broker-runtime-core.md §11). The box starts on the defaults (core compares in
-// shadow mode, the TS proxy carries app traffic). A probe app (python: SSE, WebSocket echo, uploads,
-// a crash switch) is deployed on the TS path; once core's shadow comparison agrees, the admin's
-// signed order turns both on. The app must be adopted (same container) across the daemon restart, a
+// docs/architecture-v2/broker-runtime-core.md §11). Owner 2026-11-02: on arch-v2 the Rust owners are
+// the DEFAULT. A fresh box starts on shadow/ts with `chosenBy: "default"` and moves each one to Rust on
+// its own once it qualifies (core's agreeing passes, the pinned ingress and a known app network). A
+// probe app (python: SSE, WebSocket echo, uploads, a crash switch) is deployed; the box must take both
+// Rust owners with no order sent, keeping the app's container across that restart (the admin's signed
+// order is then a no-op, or turns on what a box from before this default still runs on TS). The app must be adopted (same container) across the daemon restart, a
 // new app must install and serve under core, SSE must stream event by event, a WebSocket must echo
 // and a large upload must arrive intact through the Rust proxy (the daemon's decision counter shows
 // the ingress asked), forged identity headers must not reach the app, a dead app process must be
-// brought back by core, and a second daemon restart must adopt again. The order then turns both off.
-// Arch-v2 pass only (GYM_BOX_STACK=arch-v2, the default). Leaves behind: nothing (both apps removed,
-// the box back on shadow/ts).
+// brought back by core, and a second daemon restart must adopt again. The access authority (G5) must
+// run in `rust` by default (decisions and writes through flagship-access, none unavailable). The order
+// then turns both off, and that owner's rollback must hold (no automatic move back to Rust).
+// Arch-v2 pass only (GYM_BOX_STACK=arch-v2, the default). Leaves behind: both apps removed, the box on
+// shadow/ts by the owner's order.
 import { createHash, randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { ed, signRustOwnershipOrder, type RustOwnershipOrder } from "@flagship/protocol";
@@ -148,6 +152,7 @@ ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), H).serve_f
 interface OwnershipView {
   reconciler?: string;
   proxy?: string;
+  chosenBy?: "default" | "owner";
   coreChoice?: string | null;
   core?: { ok?: boolean; mode?: string; agreePasses?: number; lastShadow?: string | null } | null;
   ingressPinned?: boolean;
@@ -157,6 +162,11 @@ interface OwnershipView {
     core?: { live?: boolean; workloads?: Array<{ installation: string; state: string; reason?: string | null }> } | null;
     proxyDecisions?: { proxy: number; daemon: number };
     ingress?: { choice?: string; reason?: string } | null;
+    access?: {
+      mode?: string | null;
+      decisions?: { asked: number; disagreed: number; unavailable: number } | null;
+      writes?: { calls: number; disagreed: number; unavailable: number } | null;
+    } | null;
   } | null;
 }
 
@@ -229,10 +239,10 @@ export const rustCore: Group = {
     };
     const proxied = async () => (await view()).running?.proxyDecisions?.proxy ?? -1;
 
-    const onArchV2 = await rec.check("setup: the box is on arch-v2, core serves, and both settings start on their defaults", async () => {
+    const onArchV2 = await rec.check("setup: the box is on arch-v2, core serves, and nobody has chosen its owners (the arch-v2 default)", async () => {
       const v = await view();
       if (!v.reconciler) throw new SkipError("GET /api/stack/rust-ownership is not served (a box older than this release)");
-      assert(v.reconciler === "shadow" && v.proxy === "ts", `not on the defaults: ${short(v, 200)}`);
+      assert(v.chosenBy === "default", `the owners were set by an order, not the default: ${short(v, 200)}`);
       assert(v.coreChoice === "rust", `core runs ${v.coreChoice ?? "nothing"} (the Rust units are not on)`);
       assert(v.ingressPinned === true, "this release carries no pinned flagship-ingress");
       return `core ${v.core?.mode ?? "?"}, ${v.core?.agreePasses ?? 0} agreeing passes`;
@@ -259,7 +269,30 @@ export const rustCore: Group = {
     if (!ready) return;
 
     try {
-      const on = await rec.check("the admin's signed order turns on both; the daemon restarts and core adopts the running app (same container)", async () => {
+      await rec.check("the arch-v2 default: with no order sent, the box takes both Rust owners once they qualify and keeps the app's container", async () => {
+        const deadline = Date.now() + 8 * 60_000;
+        let v = await view().catch(() => ({}) as OwnershipView);
+        while (!(v.running?.reconciler === "rust" && v.running?.core?.live === true && v.proxy === "rust" && v.running?.ingress?.choice === "rust") && Date.now() < deadline) {
+          await sleep(15_000);
+          v = await view().catch(() => ({}) as OwnershipView);
+        }
+        assert(v.running?.reconciler === "rust" && v.proxy === "rust", `still ${short({ r: v.running?.reconciler, p: v.proxy, blockers: v.blockers }, 300)} after 8 min`);
+        assert(v.chosenBy === "default", `chosenBy ${v.chosenBy}`);
+        const p = await probeAfterRestart();
+        assert(p.host === host0, `the app was restarted by the automatic move (container ${host0} → ${p.host})`);
+        return `reconciler rust, proxy rust by default; container ${p.host} kept`;
+      });
+
+      await rec.check("the access authority is Rust by default: decisions and writes go through flagship-access, none unavailable", async () => {
+        await probe();
+        const a = (await view()).running?.access;
+        assert(a?.mode === "rust", `access authority ${a?.mode ?? "not reported"} (FLAGSHIP_ACCESS_AUTHORITY default on arch-v2 is rust)`);
+        assert((a.decisions?.asked ?? 0) > 0, `no decision was asked: ${short(a, 200)}`);
+        assert((a.decisions?.unavailable ?? 1) === 0 && (a.writes?.unavailable ?? 0) === 0, `the Rust side was unavailable: ${short(a, 200)}`);
+        return `decisions ${a.decisions?.asked}, writes ${a.writes?.calls ?? 0}`;
+      });
+
+      const on = await rec.check("the admin's signed order for both is accepted under the default and core still runs the app (same container)", async () => {
         const how = await setOwnership("rust", "rust");
         // The daemon has just restarted under the new owners: core adopts on its next pass (gym 22: one probe at once got 503).
         let p: { host: string } | null = null;
@@ -389,11 +422,15 @@ export const rustCore: Group = {
         return `${how}; container ${after} kept`;
       });
     } finally {
-      await rec.check("cleanup: both back to TS/shadow; the apps still serve; both removed", async () => {
+      await rec.check("cleanup: the owner's rollback to TS/shadow holds (no automatic move back); the apps still serve; both removed", async () => {
         const how = await setOwnership("shadow", "ts");
         await waitServing(`${appUrl}/`);
+        // The automatic default runs every minute: an owner's order must end it for good.
+        await sleep(90_000);
+        const v = await view();
+        assert(v.chosenBy === "owner" && v.reconciler === "shadow" && v.proxy === "ts", `the rollback did not hold: ${short(v, 200)}`);
         for (const s of [SLUG, WHO]) await uninstall(A, b, s).catch(() => {});
-        return how;
+        return `${how}; held`;
       });
     }
   },

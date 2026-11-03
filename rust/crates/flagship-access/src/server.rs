@@ -8,11 +8,16 @@ use crate::decide::{
     ApiKeyCheck, AppFacts, Decision, Principal, Principals, RequestFacts, SessionFact, decide,
 };
 use crate::state::AccessState;
+use crate::writes::{
+    WritePaths, handle_apply_entry, handle_journal_add, handle_journal_forget,
+    handle_journal_peers, handle_people, handle_store_mutate,
+};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const MAX_FRAME: usize = 1 << 20;
@@ -22,6 +27,8 @@ pub const MAX_FRAME: usize = 1 << 20;
 pub struct Context {
     pub state_path: PathBuf,
     pub sessions_path: PathBuf,
+    /// The access writes (people, entries, store changes, journal); `None` answers only decisions.
+    pub writes: Option<Arc<WritePaths>>,
 }
 
 fn now_ms() -> u64 {
@@ -189,12 +196,13 @@ pub fn handle_decide(ctx: &Context, a: &Value) -> Result<Value, String> {
         external_fresh: a.get("externalFresh").and_then(Value::as_bool) != Some(false),
         catching_up: a.get("catchingUp").and_then(Value::as_bool) == Some(true),
     };
-    Ok(decision_json(&decide(
-        &state,
-        &principals_from(a),
-        &app,
-        &req,
-    )))
+    // With the anchors given, the account people are this side's own verification of the box's files; the
+    // caller's list is then ignored (it cannot name a key an admin device or a co-manager).
+    let principals = match (&ctx.writes, a.get("anchors")) {
+        (Some(w), Some(_)) => crate::writes::people(w, a)?.principals(),
+        _ => principals_from(a),
+    };
+    Ok(decision_json(&decide(&state, &principals, &app, &req)))
 }
 
 fn read_frame(s: &mut UnixStream) -> io::Result<Option<Value>> {
@@ -223,6 +231,13 @@ fn write_frame(s: &mut UnixStream, v: &Value) -> io::Result<()> {
     s.write_all(body.as_bytes())
 }
 
+fn answer(id: &Value, r: Result<Value, String>) -> Value {
+    match r {
+        Ok(r) => json!({ "id": id, "ok": true, "result": r }),
+        Err(m) => json!({ "id": id, "ok": false, "code": "unavailable", "message": m }),
+    }
+}
+
 /// Serve one admitted connection until it closes.
 ///
 /// # Errors
@@ -245,9 +260,26 @@ pub fn serve_connection(ctx: &Context, mut s: UnixStream) -> io::Result<()> {
             (_, false) => {
                 json!({ "id": id, "ok": false, "code": "hello-first", "message": "send hello first" })
             }
-            ("decide", true) => match handle_decide(ctx, &args) {
-                Ok(r) => json!({ "id": id, "ok": true, "result": r }),
-                Err(m) => json!({ "id": id, "ok": false, "code": "unavailable", "message": m }),
+            ("decide", true) => answer(&id, handle_decide(ctx, &args)),
+            (
+                op @ ("people" | "apply-entry" | "store-mutate" | "journal-add"
+                | "journal-note-peers" | "journal-forget"),
+                true,
+            ) => match &ctx.writes {
+                None => {
+                    json!({ "id": id, "ok": false, "code": "unknown-op", "message": "writes are not served here" })
+                }
+                Some(w) => answer(
+                    &id,
+                    match op {
+                        "people" => handle_people(w, &args),
+                        "apply-entry" => handle_apply_entry(w, &args),
+                        "store-mutate" => handle_store_mutate(w, &args),
+                        "journal-add" => handle_journal_add(w, &args),
+                        "journal-note-peers" => handle_journal_peers(w, &args),
+                        _ => handle_journal_forget(w, &args),
+                    },
+                ),
             },
             _ => json!({ "id": id, "ok": false, "code": "unknown-op", "message": "unknown op" }),
         };

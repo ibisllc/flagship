@@ -14,6 +14,7 @@ workspace = true
 flagship-crypto = { path = "../flagship-crypto" }
 rustix = { version = "=1.1.4", features = ["fs", "net"] }
 serde_json = "=1.0.151"
+sha2 = "=0.11.0"
 
 [[bin]]
 name = "flagship-access"

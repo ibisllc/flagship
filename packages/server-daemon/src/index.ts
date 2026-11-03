@@ -133,7 +133,7 @@ import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
-import { buildOwnershipHttp, loadOwnership, readCutoverFacts, saveOwnership } from "./rustStack/ownership.js";
+import { autoCutover, buildOwnershipHttp, loadOwnership, readCutoverFacts, saveOwnership } from "./rustStack/ownership.js";
 import { CORE_SOCKET, coreOwnership } from "./rustStack/coreOwnership.js";
 import { decisionStats } from "./rustProxyDecide.js";
 import { inspectNetwork } from "./egress/networks.js";
@@ -155,6 +155,7 @@ import { localInferenceFor, startLocalAi } from "./localAi/wire.js";
 import { denyCompanionWrite } from "./screens/companion.js";
 import type { LocalAi } from "./localAi/index.js";
 import { BROKER_V1_SOCKET } from "./rustStack/units.js";
+import { readRustComponentStatuses } from "./rustStack/componentStatus.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
 import { CompanionDelegations } from "./authority/companionDelegations.js";
@@ -382,7 +383,8 @@ import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
-import { accessAuthorityMode, buildAccessAuthority } from "./accessAuthority.js";
+import { accessAuthorityMode, accessAuthorityStatus, buildAccessAuthority } from "./accessAuthority.js";
+import { AccessWrites, type AccessAnchors } from "./accessWrites.js";
 import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
 import { setPqAuthority } from "./pqAuthority.js";
 import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard, siblingChainRefusal } from "./pqChannel.js";
@@ -2433,6 +2435,7 @@ async function main(): Promise<void> {
   if (cfg && env.serverFqdn) {
     runtime.addHandler(
       buildArchV2SwitchHttp({
+        components: () => readRustComponentStatuses(),
         serverId: env.serverFqdn,
         ownerIrkPub: cfg.irkPublicKey,
         ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
@@ -2450,6 +2453,30 @@ async function main(): Promise<void> {
     );
   }
   if (cfg && env.serverFqdn) {
+    const ownershipFacts = async () => {
+      const apps = await inspectNetwork(realCommandRunnerStatic, "flagship-apps").catch(() => null);
+      return readCutoverFacts({
+        repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+        stack: loadArchV2Config().rust === "on" ? "arch-v2" : "classic",
+        engine: activeEngine(),
+        appNetworks: apps?.subnets ?? [],
+      });
+    };
+    // The arch-v2 default is Rust (owner, 2026-11-02): with no order ever sent, each Rust owner is taken
+    // once the cut-over rule clears it (core's agreeing passes, the pinned ingress), then the daemon restarts.
+    if (rustOnBox && rustOwnership.chosenBy === "default") {
+      const tryCutover = () =>
+        void autoCutover({ current: () => rustOwnership, facts: ownershipFacts, save: (o) => saveOwnership(o), log: (m) => console.log(m) })
+          .then((changed) => {
+            if (!changed) return;
+            console.log("[rust-ownership] restarting so every component starts under the new setting");
+            process.exit(0);
+          })
+          .catch((e: Error) => console.warn(`[rust-ownership] arch-v2 default not taken yet: ${e.message}`));
+      const t = setInterval(tryCutover, 60_000);
+      if (typeof t.unref === "function") t.unref();
+      setTimeout(tryCutover, 15_000).unref?.();
+    }
     runtime.addHandler(
       buildOwnershipHttp({
         serverId: env.serverFqdn,
@@ -2459,15 +2486,7 @@ async function main(): Promise<void> {
         activeGrants: () => accessPrincipals.book?.adminGrants() ?? [],
         gate: ownerOnlyGate(pairedSessions, pairedSessions),
         current: () => rustOwnership,
-        facts: async () => {
-          const apps = await inspectNetwork(realCommandRunnerStatic, "flagship-apps").catch(() => null);
-          return readCutoverFacts({
-            repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
-            stack: loadArchV2Config().rust === "on" ? "arch-v2" : "classic",
-            engine: activeEngine(),
-            appNetworks: apps?.subnets ?? [],
-          });
-        },
+        facts: ownershipFacts,
         save: (o) => saveOwnership(o),
         running: () => {
           const last = coreOwnership()?.lastResponse() ?? null;
@@ -2482,6 +2501,11 @@ async function main(): Promise<void> {
             core: last ? { mode: last.mode, live: last.live, agreePasses: last.agreePasses, divergent: last.divergent, workloads: last.workloads, term: last.term } : null,
             proxyDecisions: { ...decisionStats },
             ingress,
+            access: {
+              mode: accessAuthorityStatus.mode,
+              decisions: accessAuthorityStatus.decisions?.() ?? null,
+              writes: accessAuthorityStatus.writes?.() ?? null,
+            },
           };
         },
         requestRestart: () => {
@@ -5290,6 +5314,35 @@ async function wireOwnerHandlers(deps: {
   });
   await accessStore.load();
   deps.serviceAccessRef.current = accessStore;
+  // The Rust access authority (release plan R4): with FLAGSHIP_ACCESS_AUTHORITY=rust (the arch-v2 default once its
+  // socket is up) it classifies the account people from the box's own files, verifies and applies handed-over
+  // entries and is the only writer of the access state and journal; in shadow it is asked and compared.
+  const accessAuthority = accessAuthorityMode();
+  const accessAnchors = (): AccessAnchors => ({
+    username: cfg.userId,
+    ownerIrkHex: bytesToHexStr(cfg.irkPublicKey),
+    ...(cfg.adminRootPub && cfg.adminRootPub.length === 32 ? { adminRootHex: bytesToHexStr(cfg.adminRootPub) } : {}),
+    ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
+    serverDomain: env.serverFqdn.toLowerCase(),
+    strict: strictInForce(assurance.policy()),
+  });
+  const accessWrites = accessAuthority === "ts" ? null : new AccessWrites(accessAuthority, accessAnchors);
+  accessAuthorityStatus.mode = accessAuthority;
+  accessAuthorityStatus.writes = accessWrites ? () => accessWrites.stats() : null;
+  accessStore.setWrites(accessWrites);
+  if (accessWrites) {
+    // Classification in shadow: the people both sides verified, every ten minutes (and once at boot).
+    const comparePeople = () =>
+      void accessWrites
+        .comparePeople({
+          devices: deps.accessPrincipals.devices().map((d) => ({ pub: d.pub, deviceId: d.deviceId, tier: d.tier })),
+          coManagers: deps.accessPrincipals.coManagers().map((c) => ({ pub: c.pub, shareId: c.shareId, label: c.label, level: c.level })),
+        })
+        .catch(() => {});
+    setTimeout(comparePeople, 30_000).unref?.();
+    const t = setInterval(comparePeople, 10 * 60_000);
+    if (typeof t.unref === "function") t.unref();
+  }
   // Browser-session cookie store: lets a redeemed friend reach a restricted
   // service's WEBSITE in a plain browser (which can't sign the visit header).
   const sessionStore = new ServiceSessionStore();
@@ -5329,6 +5382,11 @@ async function wireOwnerHandlers(deps: {
     const journal = new AccessJournal(`${accessDataDir}/data/flagship-access/access-journal.json`);
     await journal.load();
     const installedIds = () => (deps.servicePlatformRef.current?.list() ?? []).map((a) => a.serviceId);
+    const appFacts = (ref: string) => ({
+      installed: installedIds().includes(ref),
+      catchingUp: installedIds().filter((id) => accessStore.isCatchingUp(id)),
+    });
+    if (accessWrites) journal.setWrites({ writes: accessWrites, facts: appFacts, stateText: () => accessStore.snapshotText() });
     const applyRank = buildRankEntryApplier({
       ownerIrkPub: cfg.irkPublicKey,
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
@@ -5344,7 +5402,11 @@ async function wireOwnerHandlers(deps: {
       selfFqdn: env.serverFqdn,
       journal,
       store: accessStore,
-      apply: async (ref, e) => (e.kind === "rank" ? applyRank(ref, e) : access.applyEntry(ref, e)),
+      apply: async (ref, e) => {
+        const ts = () => (e.kind === "rank" ? applyRank(ref, e) : access.applyEntry(ref, e));
+        if (!accessWrites) return ts();
+        return accessWrites.apply(ref, e, appFacts(ref), accessStore, ts, () => accessStore.refreshAccountPeople());
+      },
       peers: () => deps.accessPeersRef.current,
       key: deps.custodian.hasCgk ? accessSyncKeyFromOps(deps.custodian) : null,
       installed: (ref) => installedIds().includes(ref),
@@ -5714,12 +5776,14 @@ async function wireOwnerHandlers(deps: {
   // and a denied browser navigation gets the knock page to sign in.
   // The Rust access decision (release plan R4): shadow by default once its socket is up, authoritative
   // with FLAGSHIP_ACCESS_AUTHORITY=rust, off with =ts (accessAuthority.ts).
-  const authorityMode = accessAuthorityMode();
+  const authorityMode = accessAuthority;
   const authority =
     authorityMode === "ts"
       ? null
       : buildAccessAuthority({
           mode: authorityMode,
+          // With the anchors, Rust classifies the people from the box's files itself and ignores the list below.
+          anchors: accessAnchors,
           context: (ref) => {
             const ownerAid = deps.accessPrincipals.ownerAidHex();
             // The account's legacy id signs in as a device too (an admin one only on a box with no admin root).
@@ -5735,7 +5799,10 @@ async function wireOwnerHandlers(deps: {
             };
           },
         });
-  if (authority) console.log(`[daemon] access decisions: ${authorityMode === "rust" ? "Rust decides" : "Rust in shadow"}`);
+  if (authority) {
+    accessAuthorityStatus.decisions = () => authority.stats();
+    console.log(`[daemon] access decisions and writes: ${authorityMode === "rust" ? "Rust decides and writes" : "Rust in shadow"}`);
+  }
   runtime.setAppIdentity({
     ...(authority ? { authority } : {}),
     resolveSession: buildAppSessionResolver({ sessions: sessionStore, access: accessStore }),

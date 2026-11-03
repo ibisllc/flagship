@@ -21,7 +21,7 @@ moves; no broad daemon rewrite (owner, 2026-10-30).
 | `flagship-broker` (Rust) | Rust | root | The same ops plus core's typed v2 socket | Its audit log | Artifact pins (`installer/rust/PINS.json`) | Artifact |
 | `flagship-keyd` (Rust; TS `packages/keyd` fallback) | Rust; TS fallback on Node `--jitless` | `flagship-keyd` | Box identity, workload and TLS key custody; signs fixed shapes | All box private keys | Release Node for the fallback (`MemoryDenyWriteExecute` needs `--jitless`) | Artifact |
 | `flagship-ingress` (Rust; Go `flagship-tlsd` fallback) | Rust / Go | `flagship-tlsd` | Terminates TLS with keys held in keyd | None (asks keyd) | Artifact | Artifact |
-| `flagship-core`, `flagship-access` | Rust | `flagship-core`; access: root with only `CAP_DAC_READ_SEARCH` | Reconciler (shadow); access decisions | None | Artifact | Artifact |
+| `flagship-core`, `flagship-access` | Rust | `flagship-core`; access: root with only `CAP_DAC_READ_SEARCH`, `CAP_DAC_OVERRIDE`, `CAP_CHOWN`, writable only `/var/flagship/data/flagship-access` | Reconciler (arch-v2 default once qualified); access decisions, account-people classification, the access state and journal writes (`rust` by default on arch-v2) | None | Artifact | Artifact |
 | `flagship-gpud`, `flagship-wasi@` | Rust | gpud root (devices, CDI); wasi `DynamicUser` per app | Device allocation; WASI sandbox | None | Artifact | Artifact |
 | `flagship-data-services` (`installer/data-services/init.sh`, compose) | bash + container engine | root | Starts Postgres, Forgejo, Chromium containers | Generates their root credentials into `/var/flagship/data-services.env` | Distro bash | Artifact |
 | `flagship-health.timer` (`healthReporter.ts` writes the script) | bash + `openssl pkeyutl` | root (no `User=`) | Signs a fixed-field health report | Reads the boot key or STK file directly (`/boot/flagship-boot-key.pem` or the identity key), not through keyd | Distro tools | Artifact (rewritten by the `health-reporter` step) |
@@ -111,6 +111,24 @@ not of the platform.
   unit or the broker looks Node up on `PATH`.
 - The daemon cannot change its runtime or code: the release tree is unpacked as root (`--no-same-owner`) under
   `/opt/flagship-releases`, `/usr/local/bin` is root's, and the sandbox makes both read-only on top of ownership.
+- The pin (owner decision 2026-11-02, release plan G2): a Node reaches the box only through an install, and the
+  install takes it only if (1) it is byte for byte the executable the artifact's own signed `release/runtime-lock.json`
+  names (`flagship-updater`, `install-box-artifact.sh`) and (2) when a current signed runtime manifest is published,
+  that manifest accepts this lock. The daemon downloads `/api/runtime/manifest` beside the artifact and keeps it only
+  if it verifies under the running release's trust and has not expired (`artifactUpdate.ts pickRuntimeManifest`);
+  the broker (TS privd and Rust broker, `release` op `runtimeManifest: true`, conformance corpus) copies it in under
+  its fixed name and passes `--runtime-manifest` to the Rust updater, which refuses (exit 1, nothing switched) a lock
+  the manifest does not accept, a revoked lock signer, or a sequence below one the box accepted. THE RULE: an absent
+  (nothing published, `.com` down), expired or unverifiable manifest is not passed and the artifact's signed lock
+  decides, as before the manifest existed; restore, the update guard and boot never read it. So a box mid-update, a
+  rollback and a box before the first signed manifest can never be stopped by it; only a valid, current manifest that
+  disagrees refuses an update. Not covered: the shell fallback installer (a release built without the Rust updater)
+  and the classic root daemon's direct `install-box-artifact.sh` call accept the flag but leave the check to the Rust
+  updater, i.e. only (1) applies there. No start-time re-check: `/usr/local/bin/node` points into a root-owned,
+  read-only release tree that passed (1) and (2) when it was installed. Proof: Rust `flagship-updater` install tests
+  (`the_published_runtime_manifest_binds_the_endorsed_release`), `packages/privd/tests/conformance.test.ts` (TS and
+  Rust brokers agree), `artifactUpdate.test.ts`, `privileged.test.ts`; live: gym group `update` ("the update decided
+  about the signed runtime manifest before switching (G2)").
 - Gap: a box that never received an artifact (a legacy git-clone install) still runs whatever `/usr/local/bin/node`
   its install put there; such boxes are replaced, not patched (`docs/architecture-v2/owner-builds.md`).
 

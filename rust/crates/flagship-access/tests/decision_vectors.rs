@@ -120,6 +120,7 @@ fn the_socket_handler_reads_the_state_and_sessions_itself() {
     let ctx = Context {
         state_path: dir.join("state.json"),
         sessions_path: dir.join("sessions.json"),
+        writes: None,
     };
     let ask = |token: &str| {
         handle_decide(&ctx, &json!({ "serviceRef": "alice--club", "routedHost": "club.h.alice.flagship.services", "publicRoutes": [], "defaultRole": "member", "method": "GET", "path": "/", "sessionToken": token, "principals": [] })).unwrap()
@@ -147,6 +148,7 @@ fn the_socket_speaks_privd_framing_and_wants_hello_first() {
     let ctx = Context {
         state_path: dir.join("absent.json"),
         sessions_path: dir.join("absent-sessions.json"),
+        writes: None,
     };
     let (mut client, server) = UnixStream::pair().unwrap();
     let t = std::thread::spawn(move || serve_connection(&ctx, server));

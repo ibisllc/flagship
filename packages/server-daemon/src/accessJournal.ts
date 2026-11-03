@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { keepCorruptAside, writeFileDurable } from "./durableFile.js";
 import type { AppRankOrder, ServiceAccessModeOrder, ServiceAllowRemoveOrder } from "@flagship/protocol";
+import type { AccessWrites, AppFacts, JournalApp } from "./accessWrites.js";
 
 export type AccessEntry =
   | { kind: "rank"; order: AppRankOrder; signature: string }
@@ -221,6 +222,20 @@ export class AccessJournal {
    * supersedes). A join or withdraw already held under its key is kept as is.
    */
   async add(serviceRef: string, e: AccessEntry): Promise<boolean> {
+    const w = this.writes;
+    if (w?.writes.mode === "rust") {
+      // Rust verifies the entry's proof against the box's own people before it keeps it, and writes the file.
+      const r = await w.writes.journalAdd(serviceRef, e, w.facts(serviceRef));
+      this.adoptApp(serviceRef, r.app);
+      return r.kept;
+    }
+    const pre = w ? this.text() : "";
+    const kept = await this.tsAdd(serviceRef, e);
+    if (w) w.writes.shadowJournalAdd(serviceRef, e, w.facts(serviceRef), pre, w.stateText(), kept);
+    return kept;
+  }
+
+  private async tsAdd(serviceRef: string, e: AccessEntry): Promise<boolean> {
     const j = this.app(serviceRef);
     const key = entryKey(e);
     const prev = j.entries[key];
@@ -258,6 +273,10 @@ export class AccessJournal {
   /** Remember the other servers running an app (union; capped). */
   async notePeers(serviceRef: string, fqdns: readonly string[]): Promise<void> {
     if (fqdns.length === 0) return;
+    if (this.writes?.writes.mode === "rust") {
+      this.adoptApp(serviceRef, await this.writes.writes.journalPeers(serviceRef, fqdns));
+      return;
+    }
     const j = this.app(serviceRef);
     const next = [...new Set([...j.peers, ...fqdns.map((f) => f.toLowerCase())])].slice(0, 64);
     if (next.length === j.peers.length) return;
@@ -270,7 +289,37 @@ export class AccessJournal {
   }
 
   async forget(serviceRef: string): Promise<void> {
+    if (this.writes?.writes.mode === "rust") {
+      await this.writes.writes.journalForget(serviceRef);
+      this.byApp.delete(serviceRef);
+      return;
+    }
     if (this.byApp.delete(serviceRef)) await this.persist();
+  }
+
+  // ── Writes through the Rust access authority (release plan R4, accessWrites.ts) ─────────────────────────────
+
+  private writes: { writes: AccessWrites; facts: (serviceRef: string) => AppFacts; stateText: () => string } | null = null;
+
+  /** `rust`: Rust verifies, keeps and writes; this journal is the read copy. `shadow`: Rust is compared. */
+  setWrites(w: { writes: AccessWrites; facts: (serviceRef: string) => AppFacts; stateText: () => string } | null): void {
+    this.writes = w;
+  }
+
+  private adoptApp(serviceRef: string, app: JournalApp): void {
+    const entries: Record<string, AccessEntry> = {};
+    for (const v of Object.values(app?.entries ?? {})) {
+      const e = parseEntry(v);
+      if (e) entries[entryKey(e)] = e;
+    }
+    this.byApp.set(serviceRef, { entries, peers: Array.isArray(app?.peers) ? [...app.peers] : [] });
+  }
+
+  /** The file's text as this journal holds it. */
+  private text(): string {
+    const out: Record<string, AppJournal> = {};
+    for (const [ref, j] of this.byApp) out[ref] = j;
+    return JSON.stringify(out);
   }
 
   private app(serviceRef: string): AppJournal {
@@ -286,9 +335,7 @@ export class AccessJournal {
 
   private persist(): Promise<void> {
     this.writing = this.writing.then(async () => {
-      const out: Record<string, AppJournal> = {};
-      for (const [ref, j] of this.byApp) out[ref] = j;
-      await writeFileDurable(this.path, JSON.stringify(out));
+      await writeFileDurable(this.path, this.text());
     }).catch(() => {});
     return this.writing;
   }

@@ -209,7 +209,7 @@ fn verify_com_create(
     })
 }
 
-fn share_grant(v: &Value) -> Option<ServerShareGrant> {
+pub fn share_grant(v: &Value) -> Option<ServerShareGrant> {
     let g = obj(v)?;
     Some(ServerShareGrant {
         server_domain: text(g, "serverDomain")?.to_string(),
