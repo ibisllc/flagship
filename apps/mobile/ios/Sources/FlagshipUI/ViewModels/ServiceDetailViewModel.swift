@@ -505,7 +505,7 @@ public final class ServiceDetailViewModel {
             renamePhase = .failed(String(localized: "Another service already uses that name. Pick something else."))
             return false
         } catch ScreensClientError.http(let status, _) where status == 400 {
-            renamePhase = .failed(String(localized: "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars)."))
+            renamePhase = .failed(String(localized: "That name isn't valid — use lowercase letters, digits, or hyphens (1–30 chars)."))
             return false
         } catch ScreensClientError.http(let status, _) where status == 403 {
             renamePhase = .failed(String(localized: "Sign-in is needed. Re-open the app and try again."))

@@ -992,7 +992,7 @@ private fun wrapAtDots(s: String): String = s.replace(".", ".​")
 
 // Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync — drift
 // means the button enables for stems the server then rejects.
-private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$")
 
 internal val UNINSTALL_ADMIN_ONLY_LINE get() = com.flagshipserver.app.core.AdminOrderGate.UNINSTALL
 

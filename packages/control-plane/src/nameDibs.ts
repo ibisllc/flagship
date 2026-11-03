@@ -29,11 +29,12 @@ import {
   verifyNameDibsInitiate,
   verifyNameDibsVerify,
   type NameDibsInitiate,
+  voiciNameProblem,
   type NameDibsVerify,
 } from "@flagship/protocol";
 import type { NameDibsClaimStorage, UsernameStorage } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
-import { validateAppLabel, validateUserLabel } from "./labels.js";
+import { validateUserLabel, type LabelValidation } from "./labels.js";
 import {
   conflict,
   forbidden,
@@ -211,9 +212,13 @@ interface SignedBody<T> {
   kind?: unknown;
 }
 
-/** The label rules of the claim: an account name's, or a plain DNS label for a voi.ci name. */
-function labelFor(kind: unknown, raw: string) {
-  return kind === "link" ? validateAppLabel(raw) : validateUserLabel(raw);
+/** The label rules of the claim: an account name's, or a voi.ci name's (the same format, D12: 3–30). */
+function labelFor(kind: unknown, raw: string): LabelValidation {
+  if (kind !== "link") return validateUserLabel(raw);
+  const label = String(raw).toLowerCase();
+  return voiciNameProblem(label) === null
+    ? { ok: true, label }
+    : { ok: false, reason: "a voi.ci name must be 3–30 of a-z 0-9 -, no leading, trailing or double hyphen" };
 }
 
 async function authClaimant(

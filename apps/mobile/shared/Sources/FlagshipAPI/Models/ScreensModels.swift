@@ -1326,6 +1326,16 @@ public struct VibeCodeNameCheck: Codable, Equatable, Sendable {
     }
     public static let unknown = VibeCodeNameCheck(ok: true)
 
+    /// The longest an app name may be: `<name>--<username>` is one DNS label (packages/protocol `APP_SLUG_MAX`).
+    public static let maxLength = 30
+
+    /// The refusal for a name over `maxLength`, given without asking the box.
+    public static func tooLong(_ name: String) -> VibeCodeNameCheck? {
+        name.count > maxLength
+            ? VibeCodeNameCheck(ok: false, name: name, kind: "invalid", message: String(localized: "At most 30 characters"))
+            : nil
+    }
+
     /// A refused start, if `error` is the box's 409 for a taken name.
     public static func conflict(in error: Error) -> VibeCodeNameCheck? {
         guard case let ScreensClientError.http(status, message) = error, status == 409,

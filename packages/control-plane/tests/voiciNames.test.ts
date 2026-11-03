@@ -80,7 +80,7 @@ describe("checkVoiciName", () => {
     expect(await checkVoiciName(deps, "alice", SVC, "ab")).toEqual({ status: "invalid", problem: "too-short" });
     expect(await checkVoiciName(deps, "alice", SVC, "my party")).toEqual({ status: "invalid", problem: "characters" });
     expect(await checkVoiciName(deps, "alice", SVC, "my--party")).toEqual({ status: "invalid", problem: "hyphens" });
-    expect(await checkVoiciName(deps, "alice", SVC, "x".repeat(64))).toEqual({ status: "invalid", problem: "too-long" });
+    expect(await checkVoiciName(deps, "alice", SVC, "x".repeat(31))).toEqual({ status: "invalid", problem: "too-long" });
     expect(await checkVoiciName(deps, "alice", SVC, "log-in")).toEqual({ status: "taken" });
     expect(await checkVoiciName(deps, "alice", SVC, "abc")).toEqual({ status: "available" });
     expect(await checkVoiciName(deps, "alice", SVC, "Halloween-Party")).toEqual({ status: "available" });

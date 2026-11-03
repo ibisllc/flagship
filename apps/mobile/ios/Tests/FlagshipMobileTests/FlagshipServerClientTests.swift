@@ -110,7 +110,7 @@ final class FlagshipServerClientTests: XCTestCase {
     func test_usernameAvailable_acceptsInteriorDashRejectsDoubleDash() async throws {
         // Interior single dashes are now allowed; `--` is the reserved
         // `<slug>--<creator>` delimiter and must be rejected. The Worker's labels.ts
-        // uses the voi.ci namespace format (D12: 3–63, no edge or double dash) — the
+        // uses the voi.ci namespace format (D12: 3–30, no edge or double dash) — the
         // iOS Mock must agree (docs/voici-namespace-spec.md).
         let c = makeClient()
         let single = try await c.usernameAvailable("play-q2")
@@ -128,17 +128,17 @@ final class FlagshipServerClientTests: XCTestCase {
     }
 
     func test_usernameAvailable_enforces3to63Length() async throws {
-        // Mirror of validateUserLabel (D12): 3–63 chars, a digit may come first.
+        // Mirror of validateUserLabel (D12): 3–30 chars, a digit may come first.
         // Reason string must match the Worker byte-for-byte (Mock ↔ Worker wire parity).
         let c = makeClient()
-        let reason = "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)"
+        let reason = "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)"
         let short = try await c.usernameAvailable("ab")
         XCTAssertFalse(short.available)
         XCTAssertEqual(short.reason, reason)
-        let long = try await c.usernameAvailable(String(repeating: "a", count: 64))
+        let long = try await c.usernameAvailable(String(repeating: "a", count: 31))
         XCTAssertFalse(long.available)
         XCTAssertEqual(long.reason, reason)
-        let okMax = try await c.usernameAvailable(String(repeating: "a", count: 63))
+        let okMax = try await c.usernameAvailable(String(repeating: "a", count: 30))
         XCTAssertTrue(okMax.available)
         let okMin = try await c.usernameAvailable("abc")
         XCTAssertTrue(okMin.available)

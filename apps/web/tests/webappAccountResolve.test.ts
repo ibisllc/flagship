@@ -179,13 +179,13 @@ describe("webapp isBareLoginHandle — login input rule", () => {
     expect(isBareLoginHandle(undefined as any)).toBe(false);
   });
 
-  it("enforces the 3–63 length range (D12, mirror of validateUserLabel)", async () => {
+  it("enforces the 3–30 length range (D12, mirror of validateUserLabel)", async () => {
     const { isBareLoginHandle } = await loadLib();
     expect(isBareLoginHandle("ab")).toBe(false);          // too short
     expect(isBareLoginHandle("abc")).toBe(true);          // min
     expect(isBareLoginHandle("50cent")).toBe(true);       // may start with a digit
-    expect(isBareLoginHandle("a".repeat(63))).toBe(true); // max
-    expect(isBareLoginHandle("a".repeat(64))).toBe(false); // too long
+    expect(isBareLoginHandle("a".repeat(30))).toBe(true); // max
+    expect(isBareLoginHandle("a".repeat(31))).toBe(false); // too long
   });
 });
 

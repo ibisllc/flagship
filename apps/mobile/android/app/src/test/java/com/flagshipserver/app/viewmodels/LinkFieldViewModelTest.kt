@@ -60,7 +60,7 @@ class LinkFieldViewModelTest {
         assertEquals("Letters, numbers and hyphens only", msg(typed = "a_b_c_d").text)
         assertEquals("No hyphen at the start or end, or two in a row", msg(typed = "my--party").text)
         assertEquals("No hyphen at the start or end, or two in a row", msg(typed = "-party").text)
-        assertEquals("At most 63 characters", msg(typed = "x".repeat(64)).text)
+        assertEquals("At most 30 characters", msg(typed = "x".repeat(31)).text)
         assertEquals("At least 3 characters", msg(check = VoiciNameCheck("invalid", problem = "too-short")).text)
     }
 

@@ -8,7 +8,7 @@ listed under "Open decisions" at the end.
 > **Superseded in part by `docs/voici-namespace-spec.md` (owner-approved 2026-11-02, built in 0.3, migration 0127).**
 > Custom names, codes and usernames are rows of ONE registry (`names`, `packages/storage/src/names.ts`) unique on a
 > safety key (lower case, hyphens removed, 0 read as o, 1 as l), so `voici_names` and `voici_links` are no longer read.
-> Where this file differs, the spec wins: the grammar is 3 to 63 characters (D12); a given-up name is **retired for
+> Where this file differs, the spec wins: the grammar is 3 to 30 characters (D12, owner clarification 4); a given-up name is **retired for
 > good** (D7: 410, never claimable again) instead of waiting 30 days and freeing (§2.9 below is replaced); codes are
 > minted with a digit first (D2) and never reused; reserved words live in `packages/control-plane/src/reservedNames.json`
 > and a reserved word answers `taken` (one refusal: "Taken or too similar to an existing name"); a look-up matches the
@@ -46,7 +46,7 @@ rename. After this change:
 ### 2.2 Custom name
 
 - At most one per service.
-- Grammar (as built, D12 of the namespace spec): lowercase `[a-z0-9-]`, 3 to 63 characters, no leading, trailing
+- Grammar (as built, D12 of the namespace spec): lowercase `[a-z0-9-]`, 3 to 30 characters, no leading, trailing
   or doubled hyphen.
 - **Uniqueness is on the safety key** (hyphens removed, 0→o, 1→l), so
   `halloween-party`, `halloweenparty` and `ha1loween-party` can't belong to two parties. The name

@@ -1700,7 +1700,7 @@
     <string name="replace_access_urls">Replace access URLs</string>
     <string name="this_will_update_all_the_links">This will update all the links to this service, replacing “%1$s” with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected.</string>
     <string name="new_stem">New stem</string>
-    <string name="lowercase_letters_digits_or_hyphens_1">Lowercase letters, digits, or hyphens. 1–40 chars. No leading or trailing hyphen.</string>
+    <string name="lowercase_letters_digits_or_hyphens_1">Lowercase letters, digits, or hyphens. 1–30 chars. No leading or trailing hyphen.</string>
     <string name="replacing">Replacing…</string>
     <string name="storage">Storage</string>
     <string name="environment_variables">Environment variables</string>
@@ -2301,7 +2301,7 @@
     <string name="rename_service_url_stem">Rename service URL stem</string>
     <string name="couldnt_access_your_account_keys">Couldn\'t access your account keys: %1$s</string>
     <string name="another_service_already_uses_that_name">Another service already uses that name. Pick something else.</string>
-    <string name="that_name_isnt_valid_use_lowercase">That name isn\'t valid — use lowercase letters, digits, or hyphens (1–40 chars).</string>
+    <string name="that_name_isnt_valid_use_lowercase">That name isn\'t valid — use lowercase letters, digits, or hyphens (1–30 chars).</string>
     <string name="sign_in_is_needed_re_open">Sign-in is needed. Re-open the app and try again.</string>
     <string name="couldnt_rename">Couldn\'t rename: %1$s</string>
     <string name="confirm_replace_device">Confirm replace device</string>
@@ -2567,7 +2567,7 @@
     <string name="next_change">Next change %1$s</string>
     <string name="letters_numbers_and_hyphens_only">Letters, numbers and hyphens only</string>
     <string name="at_least_3_characters">At least 3 characters</string>
-    <string name="at_most_63_characters">At most 63 characters</string>
+    <string name="at_most_30_characters">At most 30 characters</string>
     <string name="no_hyphen_at_the_start_or_end_or_two_in_a_row">No hyphen at the start or end, or two in a row</string>
     <string name="all_names_in_use">All %1$s names in use</string>
     <string name="taken_or_too_similar_to_an_existing_name">Taken or too similar to an existing name</string>

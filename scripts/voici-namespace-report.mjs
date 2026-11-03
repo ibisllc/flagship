@@ -2,7 +2,7 @@
 // voici-namespace-report — the read-only checks to run before migration 0127 (docs/voici-namespace-spec.md,
 // Migration steps 1 to 3). It only runs SELECTs, and never renames anything: it lists what the owner must decide.
 //
-//   1. every existing username against the format (D12: 3 to 63 of a-z 0-9 -, no leading, trailing or double hyphen)
+//   1. every existing username against the format (D12: 3 to 30 of a-z 0-9 -, no leading, trailing or double hyphen)
 //   2. safety-key duplicates (lower case, hyphens removed, 0 read as o, 1 as l) among usernames, custom link names and
 //      codes: of two rows with one key the migration gives the registry row to the older claim (usernames first, then
 //      codes, then link names) and the other keeps working without one

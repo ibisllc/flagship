@@ -1237,15 +1237,15 @@ async function openReplaceModal(service) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const currentLabel = currentServiceLinks?.displayLabel ?? service.urlLabel ?? "";
   const draft = window.prompt(
-    tr("Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):", currentLabel),
+    tr("Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–30 chars; no leading/trailing hyphen):", currentLabel),
     currentLabel,
   );
   if (draft === null) return; // cancelled
   const trimmed = (draft || "").trim().toLowerCase();
   if (trimmed === "" || trimmed === currentLabel) return;
   // Mirrors the Worker's DNS_LABEL_RE in serviceRename.ts.
-  if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(trimmed)) {
-    toast(tr("Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen."), "err");
+  if (!/^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$/.test(trimmed)) {
+    toast(tr("Stem must be a DNS label: lowercase, [a-z0-9-], 1–30 chars, no leading/trailing hyphen."), "err");
     return;
   }
   // Final scare confirm before we fire the destructive op.
@@ -1301,7 +1301,7 @@ async function runRename(service, newLabel) {
       if (r.status === 409) {
         toast(tr("Another service already uses that name."), "err");
       } else if (r.status === 400) {
-        toast(tr("That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars)."), "err");
+        toast(tr("That name isn't valid (lowercase letters, digits, hyphens; 1–30 chars)."), "err");
       } else {
         toast(humanError(r.status), "err");
       }

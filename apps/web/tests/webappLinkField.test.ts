@@ -19,7 +19,7 @@ describe("link field messages", () => {
     expect(msg({ typed: "ab" }).text).toBe("At least 3 characters");
     expect(msg({ typed: "a_b_c_d" }).text).toBe("Letters, numbers and hyphens only");
     expect(msg({ typed: "a--b" }).text).toBe("No hyphen at the start or end, or two in a row");
-    expect(msg({ typed: "a".repeat(64) }).text).toBe("At most 63 characters");
+    expect(msg({ typed: "a".repeat(31) }).text).toBe("At most 30 characters");
   });
   it("offers Save only for an available name", () => {
     expect(msg({ check: { status: "available" } })).toMatchObject({ tone: "ok", canSave: true });

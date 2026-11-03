@@ -33,7 +33,7 @@ struct ReplaceServiceStemSheet: View {
     /// sync — drift means the button enables for stems the server
     /// then rejects.
     private static let stemRegex =
-        try! NSRegularExpression(pattern: "^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+        try! NSRegularExpression(pattern: "^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$")
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -59,7 +59,7 @@ struct ReplaceServiceStemSheet: View {
                     .font(FS.font.scaled(16, design: .monospaced))
                     .fsInputBox()
                     .accessibilityIdentifier("replace-stem-field")
-                Text("Lowercase letters, digits, and hyphens. 1–40 characters. No leading or trailing hyphen.")
+                Text("Lowercase letters, digits, and hyphens. 1–30 characters. No leading or trailing hyphen.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
             }

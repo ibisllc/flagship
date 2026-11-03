@@ -105,6 +105,17 @@ describe("naming a git import", () => {
     expect(deriveServiceName({ gitUrl: "https://github.com/me/---" }, names())).toBe("app");
   });
 
+  it("keeps a derived name within 30 characters, numbered suffix included", () => {
+    const long = "a-very-long-repository-name-for-testing";
+    const { names, apps } = setup({ apps: [] });
+    const first = deriveServiceName({ gitUrl: `https://github.com/me/${long}`, ref: "feature/dark-mode" }, names());
+    expect(first).toBe("a-very-long-repository-name-fo");
+    apps.add(first);
+    const second = deriveServiceName({ gitUrl: `https://github.com/me/${long}`, ref: "feature/dark-mode" }, names());
+    expect(second).toBe("a-very-long-repository-name-2");
+    expect(second.length).toBeLessThanOrEqual(30);
+  });
+
   it("names a blank-name import from its repo, and holds the name until it deploys", async () => {
     const { o, names, deployed } = setup();
     const r = await o.createGit({ gitUrl: "https://github.com/me/helloworld" });

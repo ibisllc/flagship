@@ -61,6 +61,11 @@ describe("checkServiceName", () => {
     expect(checkServiceName("Plant-Tracker", deps)).toEqual({ ok: true, name: "plant-tracker" });
   });
 
+  it("caps a name at 30 characters (`<name>--<username>` is one DNS label)", () => {
+    expect(checkServiceName("x".repeat(30), deps)).toEqual({ ok: true, name: "x".repeat(30) });
+    expect(checkServiceName("x".repeat(31), deps)).toEqual({ ok: false, kind: "invalid", message: "At most 30 characters." });
+  });
+
   it("refuses the name of an installed service, by slug or by its current address", () => {
     expect(checkServiceName("notes", deps)).toMatchObject({ ok: false, kind: "app", serviceId: "alice--notes" });
     expect(checkServiceName("journal", deps)).toMatchObject({ ok: false, kind: "app", serviceId: "alice--journal" });

@@ -1697,7 +1697,7 @@
     <string name="replace_access_urls">Reemplazar las URL de acceso</string>
     <string name="this_will_update_all_the_links">Esto actualizará todos los enlaces a este servicio, reemplazando «%1$s» por una raíz nueva. Todos los enlaces existentes dejan de funcionar de inmediato. Los dominios externos que hayas asociado no se ven afectados.</string>
     <string name="new_stem">Raíz nueva</string>
-    <string name="lowercase_letters_digits_or_hyphens_1">Letras minúsculas, dígitos o guiones. De 1 a 40 caracteres. Sin guion al principio ni al final.</string>
+    <string name="lowercase_letters_digits_or_hyphens_1">Letras minúsculas, dígitos o guiones. De 1 a 30 caracteres. Sin guion al principio ni al final.</string>
     <string name="replacing">Reemplazando…</string>
     <string name="storage">Almacenamiento</string>
     <string name="environment_variables">Variables de entorno</string>
@@ -2298,7 +2298,7 @@
     <string name="rename_service_url_stem">Renombrar la raíz de la URL del servicio</string>
     <string name="couldnt_access_your_account_keys">No se pudo acceder a las claves de tu cuenta: %1$s</string>
     <string name="another_service_already_uses_that_name">Otro servicio ya usa ese nombre. Elige otro.</string>
-    <string name="that_name_isnt_valid_use_lowercase">Ese nombre no es válido: usa minúsculas, dígitos o guiones (de 1 a 40 caracteres).</string>
+    <string name="that_name_isnt_valid_use_lowercase">Ese nombre no es válido: usa minúsculas, dígitos o guiones (de 1 a 30 caracteres).</string>
     <string name="sign_in_is_needed_re_open">Hace falta iniciar sesión. Vuelve a abrir la app e inténtalo de nuevo.</string>
     <string name="couldnt_rename">No se pudo renombrar: %1$s</string>
     <string name="confirm_replace_device">Confirmar el reemplazo del dispositivo</string>
@@ -2563,7 +2563,7 @@
     <string name="next_change">Próximo cambio: %1$s</string>
     <string name="letters_numbers_and_hyphens_only">Solo letras, números y guiones</string>
     <string name="at_least_3_characters">Al menos 3 caracteres</string>
-    <string name="at_most_63_characters">Como máximo 63 caracteres</string>
+    <string name="at_most_30_characters">Como máximo 30 caracteres</string>
     <string name="no_hyphen_at_the_start_or_end_or_two_in_a_row">Sin guion al principio ni al final, ni dos seguidos</string>
     <string name="all_names_in_use">Los %1$s nombres están en uso</string>
     <string name="taken_or_too_similar_to_an_existing_name">Ocupado o demasiado parecido a un nombre existente</string>

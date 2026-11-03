@@ -14,6 +14,18 @@
 /** The reserved slug/creator delimiter. Banned INSIDE either half. */
 export const SERVICE_ID_DELIM = "--";
 
+/**
+ * The longest an app slug (or an app's web-address stem) may be. An app's address label is
+ * `<slug>--<username>` and a DNS label holds at most 63 characters, so slugs and usernames are each capped at 30
+ * (30 + 2 + 30 = 62; docs/voici-namespace-spec.md, owner clarification 4).
+ */
+export const APP_SLUG_MAX = 30;
+
+/** An app slug: 1 to APP_SLUG_MAX of a-z 0-9 -, no leading, trailing or double hyphen. */
+export function isAppSlug(slug: string): boolean {
+  return slug.length >= 1 && slug.length <= APP_SLUG_MAX && /^[a-z0-9](?:-?[a-z0-9])*$/.test(slug);
+}
+
 /** Compose the immutable package id `<creator>--<slug>`. */
 export function composeServiceId(creator: string, slug: string): string {
   return `${creator}${SERVICE_ID_DELIM}${slug}`;

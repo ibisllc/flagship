@@ -1697,7 +1697,7 @@
     <string name="replace_access_urls">Remplacer les URL d’accès</string>
     <string name="this_will_update_all_the_links">Cela mettra à jour tous les liens vers ce service en remplaçant « %1$s » par un nouveau radical. Tous les liens existants cessent immédiatement de fonctionner. Les domaines externes que vous avez rattachés ne sont pas affectés.</string>
     <string name="new_stem">Nouveau radical</string>
-    <string name="lowercase_letters_digits_or_hyphens_1">Lettres minuscules, chiffres ou tirets. 1 à 40 caractères. Pas de tiret au début ni à la fin.</string>
+    <string name="lowercase_letters_digits_or_hyphens_1">Lettres minuscules, chiffres ou tirets. 1 à 30 caractères. Pas de tiret au début ni à la fin.</string>
     <string name="replacing">Remplacement…</string>
     <string name="storage">Stockage</string>
     <string name="environment_variables">Variables d’environnement</string>
@@ -2298,7 +2298,7 @@
     <string name="rename_service_url_stem">Renommer le radical de l’URL du service</string>
     <string name="couldnt_access_your_account_keys">Impossible d’accéder aux clés de votre compte : %1$s</string>
     <string name="another_service_already_uses_that_name">Un autre service utilise déjà ce nom. Choisissez-en un autre.</string>
-    <string name="that_name_isnt_valid_use_lowercase">Ce nom n’est pas valide — utilisez des minuscules, des chiffres ou des tirets (1 à 40 caractères).</string>
+    <string name="that_name_isnt_valid_use_lowercase">Ce nom n’est pas valide — utilisez des minuscules, des chiffres ou des tirets (1 à 30 caractères).</string>
     <string name="sign_in_is_needed_re_open">Une connexion est nécessaire. Rouvrez l’app et réessayez.</string>
     <string name="couldnt_rename">Impossible de renommer : %1$s</string>
     <string name="confirm_replace_device">Confirmer le remplacement de l’appareil</string>
@@ -2563,7 +2563,7 @@
     <string name="next_change">Prochain changement : %1$s</string>
     <string name="letters_numbers_and_hyphens_only">Lettres, chiffres et tirets uniquement</string>
     <string name="at_least_3_characters">Au moins 3 caractères</string>
-    <string name="at_most_63_characters">63 caractères au maximum</string>
+    <string name="at_most_30_characters">30 caractères au maximum</string>
     <string name="no_hyphen_at_the_start_or_end_or_two_in_a_row">Pas de trait d\'union au début ou à la fin, ni deux à la suite</string>
     <string name="all_names_in_use">Les %1$s noms sont utilisés</string>
     <string name="taken_or_too_similar_to_an_existing_name">Déjà pris ou trop proche d\'un nom existant</string>

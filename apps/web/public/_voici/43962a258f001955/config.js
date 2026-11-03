@@ -43,8 +43,8 @@ export function siteConfig(loc = globalThis.location, doc = globalThis.document)
   }
 }
 
-// The username format (docs/voici-namespace-spec.md D12): 3 to 63 of a-z 0-9 -, no leading, trailing or double hyphen.
-const USERNAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+// The username format (docs/voici-namespace-spec.md D12): 3 to 30 of a-z 0-9 -, no leading, trailing or double hyphen.
+const USERNAME = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /**
  * "/alice" → {view:"page", username}; "/-/about" → {view:"about"}; anything else → {view:"missing"}. `status` is the

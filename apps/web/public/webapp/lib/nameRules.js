@@ -1,12 +1,12 @@
 // The voi.ci namespace format (docs/voici-namespace-spec.md D12), for usernames and custom link names alike:
-// 3 to 63 characters, a-z 0-9 and -, no leading, trailing or double hyphen; a name may start with a digit. It mirrors
+// 3 to 30 characters, a-z 0-9 and -, no leading, trailing or double hyphen; a name may start with a digit. It mirrors
 // packages/protocol/src/voiciName.ts byte for byte (pinned by packages/protocol/test-vectors/voici-name/vectors.json);
 // `.com`'s names registry stays the authority on what is taken. No imports but i18n, so state.js can use it too.
 
 import { tr } from "./i18n.js";
 
 export const VOICI_NAME_MIN = 3;
-export const VOICI_NAME_MAX = 63;
+export const VOICI_NAME_MAX = 30;
 
 /** What a client can check alone: "characters" | "hyphens" | "too-short" | "too-long" | null (on the lower-cased input). */
 export function voiciNameProblem(typed) {
@@ -34,7 +34,7 @@ export function nameProblemText(problem) {
     case "too-short":
       return tr("At least 3 characters");
     case "too-long":
-      return tr("At most 63 characters");
+      return tr("At most 30 characters");
     case "hyphens":
       return tr("No hyphen at the start or end, or two in a row");
     default:

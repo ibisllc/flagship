@@ -622,7 +622,7 @@ class LiveScreensClient(
         request("/api/llm/sessions", VibeCodeSessionsResponse.serializer())
 
     override suspend fun vibeCodeNameCheck(name: String): VibeCodeNameCheck =
-        try {
+        VibeCodeNameCheck.tooLong(name) ?: try {
             request(
                 "/api/screens/vibe-code/name-check?name=${java.net.URLEncoder.encode(name, "UTF-8")}",
                 VibeCodeNameCheck.serializer(),

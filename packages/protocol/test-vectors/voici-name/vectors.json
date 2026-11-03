@@ -1,5 +1,5 @@
 {
-  "about": "Custom voi.ci names (docs/named-links.md) and the one namespace they share with usernames (docs/voici-namespace-spec.md). Every platform must build `set.canonical` and `clear.canonical` from `set.fields` / `clear.fields` byte for byte and verify the signatures under keys.pubHex (Ed25519 over the canonical bytes); `reject` must NOT verify. `names` pins the format every username and link name meets (D12: 3 to 63 of a-z 0-9 -, no leading, trailing or double hyphen) that a client checks before asking .com: `problem` is voiciNameProblem(typed) (null = fine; else too-short, too-long, characters or hyphens, checked in that order on the lower-cased input) and `key` is voiciNameKey(typed), the safety key (lower case, hyphens removed, 0 read as o, 1 as l), for a valid name (null otherwise).",
+  "about": "Custom voi.ci names (docs/named-links.md) and the one namespace they share with usernames (docs/voici-namespace-spec.md). Every platform must build `set.canonical` and `clear.canonical` from `set.fields` / `clear.fields` byte for byte and verify the signatures under keys.pubHex (Ed25519 over the canonical bytes); `reject` must NOT verify. `names` pins the format every username and link name meets (D12: 3 to 30 of a-z 0-9 -, no leading, trailing or double hyphen) that a client checks before asking .com: `problem` is voiciNameProblem(typed) (null = fine; else too-short, too-long, characters or hyphens, checked in that order on the lower-cased input) and `key` is voiciNameKey(typed), the safety key (lower case, hyphens removed, 0 read as o, 1 as l), for a valid name (null otherwise).",
   "keys": {
     "seedHex": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
     "pubHex": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff"
@@ -106,14 +106,14 @@
       "key": null
     },
     {
-      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "problem": "too-long",
       "key": null
     },
     {
-      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "problem": null,
-      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     },
     {
       "typed": "café",

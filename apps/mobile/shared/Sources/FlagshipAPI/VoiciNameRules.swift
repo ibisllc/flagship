@@ -2,12 +2,12 @@ import Foundation
 
 /// The rules every username and custom voi.ci link name meets (docs/voici-namespace-spec.md D12), byte-identical to
 /// `voiciNameProblem` / `voiciNameKey` in `packages/protocol/src/voiciName.ts` (vectors in
-/// `packages/protocol/test-vectors/voici-name/`): 3 to 63 of a-z 0-9 and -, no leading, trailing or double hyphen;
+/// `packages/protocol/test-vectors/voici-name/`): 3 to 30 of a-z 0-9 and -, no leading, trailing or double hyphen;
 /// a name may start with a digit. `.com` stays the authority on what is taken (its names registry).
 public enum VoiciName {
     /// Shortest and longest a name may be, hyphens counted.
     public static let minLength = 3
-    public static let maxLength = 63
+    public static let maxLength = 30
 
     public enum Problem: String, Equatable, Sendable {
         case tooShort = "too-short"

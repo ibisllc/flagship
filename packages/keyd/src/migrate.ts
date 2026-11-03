@@ -137,7 +137,7 @@ export function namesFor(fqdn: string, apexes: readonly string[] = SERVICES_APEX
 /** The data-plane apexes a box name may sit under: production, and the test gym's. */
 export const SERVICES_APEXES: readonly string[] = ["flagship.services", "gym.flagship.services"];
 const SERVER_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const USER_LABEL = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+const USER_LABEL = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /**
  * `<user>.<apex>` for a box name of exactly the shape `<server>.<user>.<apex>` under one of the

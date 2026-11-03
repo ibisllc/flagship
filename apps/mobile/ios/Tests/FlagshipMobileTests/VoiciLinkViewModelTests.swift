@@ -39,7 +39,7 @@ final class VoiciLinkMessageTests: XCTestCase {
         XCTAssertEqual(msg(typed: "a_b_c_d").text, "Letters, numbers and hyphens only")
         XCTAssertEqual(msg(typed: "a--b").text, "No hyphen at the start or end, or two in a row")
         XCTAssertEqual(msg(typed: "-abc").text, "No hyphen at the start or end, or two in a row")
-        XCTAssertEqual(msg(typed: String(repeating: "x", count: 64)).text, "At most 63 characters")
+        XCTAssertEqual(msg(typed: String(repeating: "x", count: 31)).text, "At most 30 characters")
     }
 
     func test_offersSaveOnlyForAnAvailableName() {

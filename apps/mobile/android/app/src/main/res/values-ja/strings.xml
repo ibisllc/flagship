@@ -1697,7 +1697,7 @@
     <string name="replace_access_urls">アクセス URL を置き換え</string>
     <string name="this_will_update_all_the_links">このサービスへのすべてのリンクを更新し、「%1$s」を新しい語幹に置き換えます。既存のリンクはただちに使えなくなります。接続済みの外部ドメインには影響しません。</string>
     <string name="new_stem">新しい語幹</string>
-    <string name="lowercase_letters_digits_or_hyphens_1">小文字、数字、ハイフン。1～40 文字。先頭と末尾にハイフンは使えません。</string>
+    <string name="lowercase_letters_digits_or_hyphens_1">小文字、数字、ハイフン。1～30 文字。先頭と末尾にハイフンは使えません。</string>
     <string name="replacing">置き換え中…</string>
     <string name="storage">ストレージ</string>
     <string name="environment_variables">環境変数</string>
@@ -2298,7 +2298,7 @@
     <string name="rename_service_url_stem">サービス URL の語幹の名前を変更</string>
     <string name="couldnt_access_your_account_keys">アカウントキーにアクセスできませんでした：%1$s</string>
     <string name="another_service_already_uses_that_name">そのサービス名はすでに他のサービスが使っています。別の名前を選んでください。</string>
-    <string name="that_name_isnt_valid_use_lowercase">その名前は無効です。小文字、数字、ハイフンを使ってください（1～40 文字）。</string>
+    <string name="that_name_isnt_valid_use_lowercase">その名前は無効です。小文字、数字、ハイフンを使ってください（1～30 文字）。</string>
     <string name="sign_in_is_needed_re_open">サインインが必要です。アプリを開き直して、もう一度お試しください。</string>
     <string name="couldnt_rename">名前を変更できませんでした：%1$s</string>
     <string name="confirm_replace_device">デバイスの置き換えを確認</string>
@@ -2563,7 +2563,7 @@
     <string name="next_change">次に変更できる日時：%1$s</string>
     <string name="letters_numbers_and_hyphens_only">使えるのは英数字とハイフンだけです</string>
     <string name="at_least_3_characters">3文字以上</string>
-    <string name="at_most_63_characters">63文字以内</string>
+    <string name="at_most_30_characters">30文字以内</string>
     <string name="no_hyphen_at_the_start_or_end_or_two_in_a_row">先頭と末尾にハイフンは使えず、2つ続けることもできません</string>
     <string name="all_names_in_use">%1$s 個の名前をすべて使用中です</string>
     <string name="taken_or_too_similar_to_an_existing_name">使用済みか、既存の名前に似すぎています</string>

@@ -104,6 +104,7 @@ describe("username claim — roster gate", () => {
       {
         queue: s.suggestionQueue,
         usernames: s.usernames,
+        names: s.names,
         throttle: s.suggestThrottle,
         offers: s.usernameOffers,
         now,

@@ -7267,8 +7267,8 @@
     "en": "New stem",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceServiceStemSheet.swift:55"
   },
-  "Lowercase letters, digits, and hyphens. 1–40 characters. No leading or trailing hyphen.": {
-    "en": "Lowercase letters, digits, and hyphens. 1–40 characters. No leading or trailing hyphen.",
+  "Lowercase letters, digits, and hyphens. 1–30 characters. No leading or trailing hyphen.": {
+    "en": "Lowercase letters, digits, and hyphens. 1–30 characters. No leading or trailing hyphen.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceServiceStemSheet.swift:62"
   },
   "mynotes": {
@@ -9277,8 +9277,8 @@
     "en": "Another service already uses that name. Pick something else.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceDetailViewModel.swift:505"
   },
-  "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars).": {
-    "en": "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars).",
+  "That name isn't valid — use lowercase letters, digits, or hyphens (1–30 chars).": {
+    "en": "That name isn't valid — use lowercase letters, digits, or hyphens (1–30 chars).",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceDetailViewModel.swift:508"
   },
   "Sign-in is needed. Re-open the app and try again.": {
@@ -11365,8 +11365,8 @@
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2567",
     "translatable": false
   },
-  "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)": {
-    "en": "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+  "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)": {
+    "en": "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2583",
     "translatable": false
   },
@@ -13648,8 +13648,8 @@
     "en": "At least 3 characters",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:13"
   },
-  "At most 63 characters": {
-    "en": "At most 63 characters",
+  "At most 30 characters": {
+    "en": "At most 30 characters",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NameRuleText.swift:14"
   },
   "No hyphen at the start or end, or two in a row": {

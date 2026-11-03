@@ -85,12 +85,12 @@ export function parseSignedVoiciNameOrder(body: unknown): SignedVoiciNameOrder |
 
 // ---- the namespace rules (docs/voici-namespace-spec.md) --------------------------------------
 //
-// Usernames and custom link names share one format (D12): 3 to 63 characters, a-z 0-9 and -, no leading, trailing
+// Usernames and custom link names share one format (D12): 3 to 30 characters, a-z 0-9 and -, no leading, trailing
 // or double hyphen; a name may start with a digit (D5). Codes are minted by `.com` only: a digit first, then 0-9a-z,
 // never a hyphen (D2). Every claim of any kind is unique on the safety key (D9), enforced by `.com`'s registry.
 
 export const VOICI_NAME_MIN = 3;
-export const VOICI_NAME_MAX = 63;
+export const VOICI_NAME_MAX = 30;
 
 export type VoiciNameProblem = "too-short" | "too-long" | "characters" | "hyphens";
 

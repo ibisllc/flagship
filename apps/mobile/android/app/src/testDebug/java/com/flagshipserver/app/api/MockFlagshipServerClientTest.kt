@@ -110,14 +110,14 @@ class MockFlagshipServerClientTest {
     }
 
     @Test fun usernameAvailable_enforces3to63Length() = runTest {
-        // Mirror of validateUserLabel (D12): 3–63 chars, may start with a digit, interior single
+        // Mirror of validateUserLabel (D12): 3–30 chars, may start with a digit, interior single
         // dashes OK, no leading/trailing dash, no `--` (docs/service-addressing-double-dash.md).
         val c = make()
         assertTrue(c.usernameAvailable("ab").available.not())            // too short
         assertTrue(c.usernameAvailable("abc").available)                 // min
         assertTrue(c.usernameAvailable("50cent").available)              // digit first (D5)
-        assertTrue(c.usernameAvailable("a".repeat(63)).available)        // max
-        assertTrue(c.usernameAvailable("a".repeat(64)).available.not())  // too long
+        assertTrue(c.usernameAvailable("a".repeat(30)).available)        // max
+        assertTrue(c.usernameAvailable("a".repeat(31)).available.not())  // too long
         assertTrue(c.usernameAvailable("media-server").available)        // interior single dash OK
         assertTrue(c.usernameAvailable("media--server").available.not()) // `--` is the reserved delimiter
         assertTrue(c.usernameAvailable("-media").available.not())        // leading dash

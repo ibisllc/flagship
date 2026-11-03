@@ -333,7 +333,7 @@ async function renderStepBody(state, step) {
         <input id="wizard-username-input" type="text" inputmode="text" autocapitalize="none"
                autocomplete="username" spellcheck="false" placeholder="alice"
                aria-describedby="wizard-username-hint" />
-        <p id="wizard-username-hint" class="note muted-sm">${tr("3 to 63 lowercase letters, numbers and hyphens")}</p>
+        <p id="wizard-username-hint" class="note muted-sm">${tr("3 to 30 lowercase letters, numbers and hyphens")}</p>
         <div id="wizard-username-taken" class="note err hidden" role="alert"></div>
         <div class="btn-row-sm">
           <button id="wizard-go-username" class="pill primary">${tr("Open my account")}</button>

@@ -6,6 +6,8 @@
  * whether it can be migrated to another user.
  */
 
+import { APP_SLUG_MAX } from "./serviceId.js";
+
 export const MANIFEST_SCHEMA_VERSION = 1;
 
 /** Repo-wide cap on the app one-liner (`manifest.description`). It renders in tight rows
@@ -342,8 +344,10 @@ export type ManifestParseResult =
 const RESERVED_ENV_PREFIX = "FLAGSHIP_";
 const VALID_ROLES = new Set(["member", "manager", "master", "owner", "admin", "editor", "viewer"]);
 const RANKS = ["member", "manager", "master"] as const;
-const NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+// The name becomes the app's slug, so it is held to APP_SLUG_MAX (serviceId.ts).
+const NAME_RE = new RegExp(`^[a-z0-9][a-z0-9-]{0,${APP_SLUG_MAX - 1}}$`);
 const SUBDOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const APP_REF_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 export function parseManifest(input: unknown): ManifestParseResult {
@@ -363,7 +367,7 @@ export function parseManifest(input: unknown): ManifestParseResult {
 
   const name = stringField(m, "name", e);
   if (name && !NAME_RE.test(name)) {
-    e("name must be a DNS label (lowercase, 1–63 chars, [a-z0-9-], not starting with hyphen)");
+    e(`name must be a DNS label (lowercase, 1–${APP_SLUG_MAX} chars, [a-z0-9-], not starting with hyphen)`);
   }
 
   const version = stringField(m, "version", e);
@@ -742,7 +746,7 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
       queryableBy = [];
       const seen = new Set<string>();
       for (const q of a.queryable_by) {
-        if (typeof q !== "string" || !NAME_RE.test(q)) {
+        if (typeof q !== "string" || !APP_REF_RE.test(q)) {
           e(
             `access.queryable_by entries must be DNS-safe app ids (got ${JSON.stringify(q)})`,
           );

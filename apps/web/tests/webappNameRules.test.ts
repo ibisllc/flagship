@@ -18,14 +18,14 @@ describe("webapp name rules", () => {
     expect(isValidName("50cent")).toBe(true);
     expect(isValidName("plucky-avocet")).toBe(true);
     expect(isValidName("Plucky-Avocet")).toBe(false);
-    expect(isValidName("a".repeat(64))).toBe(false);
+    expect(isValidName("a".repeat(31))).toBe(false);
   });
 
   it("turn .com's refusals into the shared sentences", () => {
     expect(nameRefusalText({ code: "taken" })).toBe("Taken or too similar to an existing name");
     expect(nameRefusalText({ code: "reserved" })).toBe(nameTakenText());
     expect(nameRefusalText({ code: "invalid", problem: "too-short" })).toBe("At least 3 characters");
-    expect(nameRefusalText({ code: "invalid", problem: "too-long" })).toBe("At most 63 characters");
+    expect(nameRefusalText({ code: "invalid", problem: "too-long" })).toBe("At most 30 characters");
     expect(nameRefusalText({ code: "invalid", problem: "hyphens" })).toBe("No hyphen at the start or end, or two in a row");
     expect(nameRefusalText({ code: "invalid", problem: "characters" })).toBe("Letters, numbers and hyphens only");
     expect(nameRefusalText({ code: "rate-limited" })).toBeNull();

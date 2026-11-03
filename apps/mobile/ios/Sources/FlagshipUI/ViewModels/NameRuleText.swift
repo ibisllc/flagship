@@ -11,7 +11,7 @@ public enum NameRuleText {
     public static func problem(_ p: VoiciName.Problem) -> String {
         switch p {
         case .tooShort: return String(localized: "At least 3 characters")
-        case .tooLong: return String(localized: "At most 63 characters")
+        case .tooLong: return String(localized: "At most 30 characters")
         case .characters: return String(localized: "Letters, numbers and hyphens only")
         case .hyphens: return String(localized: "No hyphen at the start or end, or two in a row")
         }

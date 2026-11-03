@@ -6,6 +6,8 @@
  * again because the box, not the phone, is the authority.
  */
 
+import { APP_SLUG_MAX } from "@flagship/protocol";
+
 export type ServiceNameCheck =
   | { ok: true; name: string }
   | { ok: false; kind: "invalid"; message: string }
@@ -28,7 +30,7 @@ export interface ServiceNameDeps {
   } | null;
 }
 
-const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 export function checkServiceName(
   raw: string,
@@ -36,6 +38,9 @@ export function checkServiceName(
   exceptSessionId?: string,
 ): ServiceNameCheck {
   const name = raw.trim().toLowerCase();
+  if (name.length > APP_SLUG_MAX) {
+    return { ok: false, kind: "invalid", message: `At most ${APP_SLUG_MAX} characters.` };
+  }
   if (!LABEL.test(name) || name.includes("--")) {
     return {
       ok: false,
@@ -82,7 +87,7 @@ const FALLBACK_NAME = "app";
 const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "default", "head", "develop"]);
 
 /** A label made from free text: lowercase, single dashes, at most `max` long. */
-export function slugifyLabel(raw: string, max = 63): string {
+export function slugifyLabel(raw: string, max = APP_SLUG_MAX): string {
   return raw
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -110,15 +115,16 @@ export function deriveServiceName(
   deps: ServiceNameDeps,
   exceptSessionId?: string,
 ): string {
-  const repo = slugifyLabel(repoNameFromUrl(a.gitUrl), 40) || FALLBACK_NAME;
+  const repo = slugifyLabel(repoNameFromUrl(a.gitUrl)) || FALLBACK_NAME;
   const ref = (a.ref ?? "").trim();
   const branch = ref && !DEFAULT_BRANCHES.has(ref.toLowerCase()) ? slugifyLabel(ref.split("/").pop() ?? ref, 18) : "";
-  const base = branch && branch !== repo ? `${repo}-${branch}` : repo;
+  const base = branch && branch !== repo ? slugifyLabel(`${repo}-${branch}`) : repo;
   for (let n = 1; n < 1000; n++) {
-    const candidate = n === 1 ? base : `${base}-${n}`;
+    const candidate = n === 1 ? base : `${slugifyLabel(base, APP_SLUG_MAX - String(n).length - 1)}-${n}`;
     if (checkServiceName(candidate, deps, exceptSessionId).ok) return candidate;
   }
-  return `${base}-${Date.now().toString(36)}`;
+  const stamp = Date.now().toString(36);
+  return `${slugifyLabel(base, APP_SLUG_MAX - stamp.length - 1)}-${stamp}`;
 }
 
 export type DeployTarget =

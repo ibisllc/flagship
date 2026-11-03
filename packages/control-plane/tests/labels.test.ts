@@ -8,19 +8,19 @@ import {
 // Two DISTINCT rules, enforced here as the authoritative source of truth:
 //
 //   - USERNAME: the voi.ci namespace format (docs/voici-namespace-spec.md D12):
-//     3–63 of a-z 0-9 -, no leading, trailing or double hyphen (`--` is the
+//     3–30 of a-z 0-9 -, no leading, trailing or double hyphen (`--` is the
 //     `<creator>--<slug>` delimiter), + the reserved words of reservedNames.json
 //     and their look-alikes (same safety key).
 //   - SERVER NAME (loose): RFC-1123 DNS label /^[a-z0-9]([a-z0-9-]{0,61}
 //     [a-z0-9])?$/ + a small reserved set. Interior hyphens are SAFE here
 //     (server names never mix with app-names), so `media-server` is fine.
 
-describe("validateUserLabel — D12: 3–63, single interior dashes", () => {
+describe("validateUserLabel — D12: 3–30, single interior dashes", () => {
   it("accepts lowercase alphanumeric handles in range", () => {
     expect(validateUserLabel("harry").ok).toBe(true);
     expect(validateUserLabel("abc").ok).toBe(true); // min length 3
     expect(validateUserLabel("media2").ok).toBe(true);
-    expect(validateUserLabel("a".repeat(63)).ok).toBe(true); // max length 63
+    expect(validateUserLabel("a".repeat(30)).ok).toBe(true); // max length 30
     expect(validateUserLabel("50cent").ok).toBe(true); // may start with a digit (D5)
   });
 
@@ -36,8 +36,8 @@ describe("validateUserLabel — D12: 3–63, single interior dashes", () => {
     expect(validateUserLabel("ab").ok).toBe(false);
   });
 
-  it("rejects too-long labels (> 63)", () => {
-    expect(validateUserLabel("a".repeat(64)).ok).toBe(false);
+  it("rejects too-long labels (> 30)", () => {
+    expect(validateUserLabel("a".repeat(31)).ok).toBe(false);
   });
 
   it("accepts interior single dashes; rejects leading/trailing and `--`", () => {

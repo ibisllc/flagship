@@ -7205,8 +7205,8 @@
     "en": "Couldn't copy — long-press to copy manually.",
     "ctx": "webapp/views/service-detail.js:1156"
   },
-  "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.": {
-    "en": "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.",
+  "Stem must be a DNS label: lowercase, [a-z0-9-], 1–30 chars, no leading/trailing hyphen.": {
+    "en": "Stem must be a DNS label: lowercase, [a-z0-9-], 1–30 chars, no leading/trailing hyphen.",
     "ctx": "webapp/views/service-detail.js:1181"
   },
   "Replace stem with '{0}'?": {
@@ -7233,8 +7233,8 @@
     "en": "Another service already uses that name.",
     "ctx": "webapp/views/service-detail.js:1237"
   },
-  "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).": {
-    "en": "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).",
+  "That name isn't valid (lowercase letters, digits, hyphens; 1–30 chars).": {
+    "en": "That name isn't valid (lowercase letters, digits, hyphens; 1–30 chars).",
     "ctx": "webapp/views/service-detail.js:1239"
   },
   "Renamed to {0}. New short link minted.": {
@@ -10350,8 +10350,8 @@
     "en": "invite sent — not opened yet",
     "ctx": "webapp/views/service-access.js:896"
   },
-  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
-    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–30 chars; no leading/trailing hyphen):": {
+    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–30 chars; no leading/trailing hyphen):",
     "ctx": "webapp/views/service-detail.js:1161"
   },
   "{0}: you can open each app's Database section.": {
@@ -10630,8 +10630,8 @@
     "en": "You've proven you control <strong>{0}.com</strong>, so the name <strong>{1}</strong> is held for you.",
     "ctx": "webapp/views/name-dibs.js:152"
   },
-  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
-    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–30 chars; no leading/trailing hyphen):": {
+    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–30 chars; no leading/trailing hyphen):",
     "ctx": "webapp/views/service-detail.js:1163"
   },
   "Every link to this service changes immediately. Attached external domains are unaffected. Other devices see the new URL on next refresh.": {
@@ -13174,8 +13174,8 @@
     "en": "At least 3 characters",
     "ctx": "webapp/lib/nameRules.js:35"
   },
-  "At most 63 characters": {
-    "en": "At most 63 characters",
+  "At most 30 characters": {
+    "en": "At most 30 characters",
     "ctx": "webapp/lib/nameRules.js:37"
   },
   "No hyphen at the start or end, or two in a row": {
@@ -13186,8 +13186,8 @@
     "en": "Taken or too similar to an existing name",
     "ctx": "webapp/lib/nameRules.js:47"
   },
-  "3 to 63 lowercase letters, numbers and hyphens": {
-    "en": "3 to 63 lowercase letters, numbers and hyphens",
+  "3 to 30 lowercase letters, numbers and hyphens": {
+    "en": "3 to 30 lowercase letters, numbers and hyphens",
     "ctx": "webapp/views/wizard.js:336"
   },
   "The installer finished. The server is starting and should register in a few minutes.": {

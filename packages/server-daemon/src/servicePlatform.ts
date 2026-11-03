@@ -18,7 +18,9 @@ import {
   wantsFiles,
   type AppDataStores,
   signMembershipMutation,
+  APP_SLUG_MAX,
   composeServiceId,
+  isAppSlug,
   parseServiceId as parseServiceIdShared,
   deriveUrlFragment,
   type AppManifest,
@@ -404,6 +406,9 @@ export class ServicePlatform {
       return { ok: false, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
     }
 
+    if (!isAppSlug(r.slug)) {
+      return { ok: false, reason: `app name must be 1–${APP_SLUG_MAX} lowercase letters, digits and single hyphens` };
+    }
     const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
     if (this.apps.has(serviceId)) {
       return { ok: false, reason: `app ${serviceId} already installed` };
@@ -1217,8 +1222,8 @@ export class ServicePlatform {
     const app = this.apps.get(serviceId);
     if (!app) return { ok: false, reason: "unknown serviceId" };
     const lower = newLabel.toLowerCase();
-    if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(lower)) {
-      return { ok: false, reason: "invalid label (DNS-safe; 1..40 chars)" };
+    if (lower.length > APP_SLUG_MAX || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(lower)) {
+      return { ok: false, reason: `invalid label (DNS-safe; 1..${APP_SLUG_MAX} chars)` };
     }
     if (app.urlLabel.toLowerCase() === lower) {
       return { ok: true, unchanged: true };

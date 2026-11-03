@@ -870,6 +870,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         try await request("/api/llm/sessions")
     }
     public func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck {
+        if let refused = VibeCodeNameCheck.tooLong(name) { return refused }
         let q = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
         do {
             return try await request("/api/screens/vibe-code/name-check?name=\(q)")

@@ -73364,43 +73364,43 @@
         }
       }
     },
-    "Lowercase letters, digits, and hyphens. 1–40 characters. No leading or trailing hyphen.": {
+    "Lowercase letters, digits, and hyphens. 1–30 characters. No leading or trailing hyphen.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Letras minúsculas, dígitos y guiones. De 1 a 40 caracteres. Sin guion al principio ni al final."
+            "value": "Letras minúsculas, dígitos y guiones. De 1 a 30 caracteres. Sin guion al principio ni al final."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lettres minuscules, chiffres et tirets. 1 à 40 caractères. Pas de tiret au début ni à la fin."
+            "value": "Lettres minuscules, chiffres et tirets. 1 à 30 caractères. Pas de tiret au début ni à la fin."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kleinbuchstaben, Ziffern und Bindestriche. 1–40 Zeichen. Kein Bindestrich am Anfang oder Ende."
+            "value": "Kleinbuchstaben, Ziffern und Bindestriche. 1–30 Zeichen. Kein Bindestrich am Anfang oder Ende."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Letras minúsculas, dígitos e hifens. 1–40 caracteres. Sem hífen no início ou no fim."
+            "value": "Letras minúsculas, dígitos e hifens. 1–30 caracteres. Sem hífen no início ou no fim."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "小文字、数字、ハイフン。1～40 文字。先頭と末尾にハイフンは使えません。"
+            "value": "小文字、数字、ハイフン。1～30 文字。先頭と末尾にハイフンは使えません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "小写字母、数字和连字符。1–40 个字符。开头和结尾不能是连字符。"
+            "value": "小写字母、数字和连字符。1–30 个字符。开头和结尾不能是连字符。"
           }
         }
       }
@@ -93044,43 +93044,43 @@
         }
       }
     },
-    "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars).": {
+    "That name isn't valid — use lowercase letters, digits, or hyphens (1–30 chars).": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ese nombre no es válido: usa minúsculas, dígitos o guiones (de 1 a 40 caracteres)."
+            "value": "Ese nombre no es válido: usa minúsculas, dígitos o guiones (de 1 a 30 caracteres)."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce nom n’est pas valide — utilisez des minuscules, des chiffres ou des tirets (1 à 40 caractères)."
+            "value": "Ce nom n’est pas valide — utilisez des minuscules, des chiffres ou des tirets (1 à 30 caractères)."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dieser Name ist ungültig – verwende Kleinbuchstaben, Ziffern oder Bindestriche (1–40 Zeichen)."
+            "value": "Dieser Name ist ungültig – verwende Kleinbuchstaben, Ziffern oder Bindestriche (1–30 Zeichen)."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esse nome não é válido — use letras minúsculas, dígitos ou hifens (1–40 caracteres)."
+            "value": "Esse nome não é válido — use letras minúsculas, dígitos ou hifens (1–30 caracteres)."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "その名前は無効です。小文字、数字、ハイフンを使ってください（1～40 文字）。"
+            "value": "その名前は無効です。小文字、数字、ハイフンを使ってください（1～30 文字）。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "该名称无效：请使用小写字母、数字或连字符（1–40 个字符）。"
+            "value": "该名称无效：请使用小写字母、数字或连字符（1–30 个字符）。"
           }
         }
       }
@@ -129657,43 +129657,43 @@
         }
       }
     },
-    "At most 63 characters": {
+    "At most 30 characters": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Como máximo 63 caracteres"
+            "value": "Como máximo 30 caracteres"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "63 caractères au maximum"
+            "value": "30 caractères au maximum"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Höchstens 63 Zeichen"
+            "value": "Höchstens 30 Zeichen"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "No máximo 63 caracteres"
+            "value": "No máximo 30 caracteres"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "63文字以内"
+            "value": "30文字以内"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "最多 63 个字符"
+            "value": "最多 30 个字符"
           }
         }
       }

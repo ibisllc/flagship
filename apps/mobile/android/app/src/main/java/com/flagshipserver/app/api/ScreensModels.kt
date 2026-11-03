@@ -1350,6 +1350,15 @@ data class VibeCodeNameCheck(
         /** What a box too old to answer is taken to say: free. */
         val Unknown = VibeCodeNameCheck(ok = true)
 
+        /** The longest an app name may be: `<name>--<username>` is one DNS label (packages/protocol APP_SLUG_MAX). */
+        const val MAX_LENGTH = 30
+
+        /** The refusal for a name over [MAX_LENGTH], given without asking the box. */
+        fun tooLong(name: String): VibeCodeNameCheck? =
+            if (name.length > MAX_LENGTH) {
+                VibeCodeNameCheck(ok = false, name = name, kind = "invalid", message = FSStrings.get(R.string.at_most_30_characters))
+            } else null
+
         private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
         /** A refused start, if [error] is the box's 409 for a taken name. */

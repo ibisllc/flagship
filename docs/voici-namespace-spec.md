@@ -15,6 +15,11 @@ Source: Harry's Claude Doc "voi.ci namespace: implementation spec"
    itself (paid name change) stays on `feat/custom-names` and uses the registry when it ships.
 3. Account deletion today frees the name at once (`docs/account-deletion-and-name-reclaim.md` §1); with
    the registry it is held 30 days instead. Update that doc.
+4. **Names are 3 to 30 characters (2026-11-02, later the same day).** Every app's web address label is
+   `<app slug>--<username>` and a DNS label holds at most 63 characters, so usernames AND app slugs are each capped
+   at 30 (30 + 2 + 30 = 62 fits): "Limit both to 30 so it's consistent." Custom link names share the username format,
+   so they are 3 to 30 as well. Wherever the spec text below says 63 (D12, Migration step 1, T13, the reference
+   code), read 30: T13's too-long case is a 31-character name. Codes are unaffected.
 
 ## As built in 0.3 (adaptations to the stack)
 
@@ -34,7 +39,8 @@ Source: Harry's Claude Doc "voi.ci namespace: implementation spec"
 - **Formats:** `voiciNameProblem` / `voiciNameKey` (the safety key) / `mintVoiciCode` in
   `packages/protocol/src/voiciName.ts`, pinned by `packages/protocol/test-vectors/voici-name/vectors.json` and ported
   to the webapp (`lib/nameRules.js`), Swift and Kotlin. Problems: `too-short`, `too-long`, `characters`, `hyphens`.
-  Usernames moved from 3–30 to 3–63 everywhere (`.com`, apps, services-zone, the box's parsers).
+  Usernames and custom link names are 3–30 and app slugs at most 30 everywhere (Owner clarification 4; `.com`,
+  apps, services-zone, the box's parsers and manifest checks).
 - **Settings:** CODE_LENGTH is `.com`'s `VOICI_CODE_LENGTH` (default 6, never below it); GRACE is
   `NAME_HOLD_MS` = 30 days (storage). The scheduled job is the six-hourly `names` step of `apps/com/src/cronPlan.ts`
   (release expired holds, add reserved words new in the config file).

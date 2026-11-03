@@ -14,12 +14,13 @@
 //     slug-creator-derived label when no alias row exists.
 //
 // "Service stem" rules:
-//   - DNS-label safe: lowercase, [a-z0-9-], 1..40 chars, no leading
+//   - DNS-label safe: lowercase, [a-z0-9-], 1..30 chars (APP_SLUG_MAX), no leading
 //     or trailing hyphen.
 //   - Must not collide with another app's alias for the same user.
 //   - Reserved labels rejected ("api", "www", "admin", "_", etc).
 
 import {
+  APP_SLUG_MAX,
   verifyServiceRename,
   deriveUrlFragment,
   isVoiciName,
@@ -81,7 +82,8 @@ export interface ServiceRenameDeps {
 }
 
 const USERNAME_RE = { test: (u: string) => isVoiciName(u) }; // the D12 format (labels.ts)
-const DNS_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
+// A stem stands where the slug does in `<stem>--<username>`, so it has the slug's limit (APP_SLUG_MAX).
+const DNS_LABEL_RE = new RegExp(`^[a-z0-9]([a-z0-9-]{0,${APP_SLUG_MAX - 2}}[a-z0-9])?$`);
 const RESERVED_LABELS = new Set([
   "www", "api", "admin", "root", "mail", "smtp", "imap", "pop", "ftp",
   "ns", "ns1", "ns2", "dns", "host", "localhost", "test", "staging",
@@ -118,7 +120,7 @@ export async function handleServiceRename(
 
   const newLabel = r.newDisplayLabel.toLowerCase();
   if (!DNS_LABEL_RE.test(newLabel)) {
-    return malformed("newDisplayLabel must be a DNS label (lowercase, [a-z0-9-], 1..40 chars, no leading/trailing hyphen)");
+    return malformed(`newDisplayLabel must be a DNS label (lowercase, [a-z0-9-], 1..${APP_SLUG_MAX} chars, no leading/trailing hyphen)`);
   }
   if (RESERVED_LABELS.has(newLabel)) {
     return malformed(`'${newLabel}' is reserved`);

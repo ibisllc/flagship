@@ -83,7 +83,7 @@ class UserErrorTextTest {
             "No hyphen at the start or end, or two in a row",
             UserErrorText.of(HttpException(400, "{\"error\":\"not a valid username\",\"code\":\"invalid\",\"problem\":\"hyphens\"}")),
         )
-        assertEquals("At most 63 characters", UserErrorText.of(HttpException(400, "{\"code\":\"invalid\",\"problem\":\"too-long\"}")))
+        assertEquals("At most 30 characters", UserErrorText.of(HttpException(400, "{\"code\":\"invalid\",\"problem\":\"too-long\"}")))
     }
 
     @Test fun anAuthoredMessageStaysAndAShellLineNumberGoes() {

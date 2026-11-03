@@ -321,9 +321,9 @@ describe("allocateDibsName", () => {
 });
 
 describe("a claim for a voi.ci name (kind: link)", () => {
-  const LONG = "the-annual-halloween-block-party-2026";
+  const LONG = "halloween-block-party-2026-ok";
 
-  it("takes a long label (both kinds allow 63 characters now) and one that is another account's name", async () => {
+  it("takes a long label (both kinds allow 30 characters) and one that is another account's name", async () => {
     const { deps } = await setup({ registered: [`${LONG}.com`, "rapid-bison.com"] });
     const own = initiate("fresh-poppy", LONG, alice);
     expect((await handleNameDibsInitiate(deps, { ...own, kind: "link" })).status).toBe(200);

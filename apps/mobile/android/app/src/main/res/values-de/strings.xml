@@ -1697,7 +1697,7 @@
     <string name="replace_access_urls">Zugriffs-URLs ersetzen</string>
     <string name="this_will_update_all_the_links">Dadurch werden alle Links zu diesem Dienst aktualisiert, wobei „%1$s“ durch einen neuen Stamm ersetzt wird. Alle bestehenden Links funktionieren sofort nicht mehr. Angehängte externe Domains bleiben unberührt.</string>
     <string name="new_stem">Neuer Stamm</string>
-    <string name="lowercase_letters_digits_or_hyphens_1">Kleinbuchstaben, Ziffern oder Bindestriche. 1–40 Zeichen. Kein Bindestrich am Anfang oder Ende.</string>
+    <string name="lowercase_letters_digits_or_hyphens_1">Kleinbuchstaben, Ziffern oder Bindestriche. 1–30 Zeichen. Kein Bindestrich am Anfang oder Ende.</string>
     <string name="replacing">Wird ersetzt …</string>
     <string name="storage">Speicher</string>
     <string name="environment_variables">Umgebungsvariablen</string>
@@ -2298,7 +2298,7 @@
     <string name="rename_service_url_stem">URL-Stamm des Dienstes umbenennen</string>
     <string name="couldnt_access_your_account_keys">Zugriff auf deine Kontoschlüssel nicht möglich: %1$s</string>
     <string name="another_service_already_uses_that_name">Ein anderer Dienst verwendet diesen Namen bereits. Wähle einen anderen.</string>
-    <string name="that_name_isnt_valid_use_lowercase">Dieser Name ist ungültig – verwende Kleinbuchstaben, Ziffern oder Bindestriche (1–40 Zeichen).</string>
+    <string name="that_name_isnt_valid_use_lowercase">Dieser Name ist ungültig – verwende Kleinbuchstaben, Ziffern oder Bindestriche (1–30 Zeichen).</string>
     <string name="sign_in_is_needed_re_open">Anmeldung erforderlich. Öffne die App erneut und versuche es noch einmal.</string>
     <string name="couldnt_rename">Umbenennen nicht möglich: %1$s</string>
     <string name="confirm_replace_device">Geräteaustausch bestätigen</string>
@@ -2563,7 +2563,7 @@
     <string name="next_change">Nächste Änderung: %1$s</string>
     <string name="letters_numbers_and_hyphens_only">Nur Buchstaben, Ziffern und Bindestriche</string>
     <string name="at_least_3_characters">Mindestens 3 Zeichen</string>
-    <string name="at_most_63_characters">Höchstens 63 Zeichen</string>
+    <string name="at_most_30_characters">Höchstens 30 Zeichen</string>
     <string name="no_hyphen_at_the_start_or_end_or_two_in_a_row">Kein Bindestrich am Anfang oder Ende und nie zwei hintereinander</string>
     <string name="all_names_in_use">Alle %1$s Namen sind belegt</string>
     <string name="taken_or_too_similar_to_an_existing_name">Vergeben oder einem vorhandenen Namen zu ähnlich</string>

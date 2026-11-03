@@ -48,10 +48,10 @@ class ConnectInputTest {
 
     @Test fun aNameInTheCodeFieldPointsAtSignIn() {
         assertEquals(ConnectInput.PairingField.Error(ConnectInput.NAME_IN_CODE), ConnectInput.readPairingField("bright-maple"))
-        // The account-name format (D12): may start with a digit, up to 63 characters.
+        // The account-name format (D12): may start with a digit, up to 30 characters.
         assertEquals(ConnectInput.PairingField.Error(ConnectInput.NAME_IN_CODE), ConnectInput.readPairingField("50cent"))
-        assertEquals(ConnectInput.PairingField.Error(ConnectInput.NAME_IN_CODE), ConnectInput.readPairingField("a".repeat(63)))
-        assertEquals(ConnectInput.PairingField.Error(ConnectInput.NOT_A_CODE), ConnectInput.readPairingField("a".repeat(64)))
+        assertEquals(ConnectInput.PairingField.Error(ConnectInput.NAME_IN_CODE), ConnectInput.readPairingField("a".repeat(30)))
+        assertEquals(ConnectInput.PairingField.Error(ConnectInput.NOT_A_CODE), ConnectInput.readPairingField("a".repeat(31)))
         assertEquals(ConnectInput.PairingField.Error(ConnectInput.NOT_A_CODE), ConnectInput.readPairingField("a--b"))
         assertEquals(ConnectInput.PairingField.Error(ConnectInput.NOT_A_CODE), ConnectInput.readPairingField("not a code!"))
         assertEquals(ConnectInput.PairingField.None, ConnectInput.readPairingField(""))

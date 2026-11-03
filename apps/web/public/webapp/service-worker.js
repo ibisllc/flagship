@@ -455,7 +455,9 @@
 //  v193: one namespace on voi.ci (docs/voici-namespace-spec.md): usernames and link names share one format, 3 to 63
 //       characters (lib/nameRules.js, precached), refusals read "Taken or too similar to an existing name" or name
 //       the format problem.
-const SHELL_VERSION = "v193";
+//  v194: names are 3 to 30 characters (docs/voici-namespace-spec.md, owner clarification 4): usernames and link names
+//       (lib/nameRules.js), app names (lib/vibeNames.js, refused before the box is asked) and app address stems.
+const SHELL_VERSION = "v194";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

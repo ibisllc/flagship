@@ -30,6 +30,9 @@ export const EXAMPLES = [
 
 export const CONFLICT_TITLE = tr("That name is taken");
 
+/** The longest an app name may be: `<name>--<username>` is one DNS label (packages/protocol APP_SLUG_MAX). */
+export const APP_SLUG_MAX = 30;
+
 /** The address label the box will serve at; the box is the authority. */
 export function slugify(name) {
   return String(name ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -71,6 +74,7 @@ export function conflictFromError(e) {
  * unreachable one reads as free: start and deploy still refuse a clash.
  */
 export async function checkName({ baseUrl, token, name, fetchImpl = globalThis.fetch } = {}) {
+  if (name && String(name).length > APP_SLUG_MAX) return { ok: false, kind: "invalid", name, message: tr("At most 30 characters") };
   if (!baseUrl || !token || !name) return { ok: true };
   try {
     const r = await fetchImpl(

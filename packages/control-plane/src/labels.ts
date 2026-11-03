@@ -7,7 +7,7 @@ import { voiciNameKey, voiciNameProblem } from "@flagship/protocol";
 import reservedNames from "./reservedNames.json" with { type: "json" };
 
 // Usernames follow the voi.ci namespace format (docs/voici-namespace-spec.md D12, shared with custom link names):
-// 3–63 of a-z 0-9 and -, no leading, trailing or double hyphen (`--` stays the slug↔creator delimiter,
+// 3–30 of a-z 0-9 and -, no leading, trailing or double hyphen (`--` stays the slug↔creator delimiter,
 // docs/service-addressing-double-dash.md), and may start with a digit (D5). One rule, `voiciNameProblem` in
 // @flagship/protocol, so every client and the server agree.
 
@@ -73,7 +73,7 @@ export function validateUserLabel(input: string): LabelValidation {
     return {
       ok: false,
       reason:
-        "username must be 3–63 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+        "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
     };
   }
   if (isReservedName(norm)) {

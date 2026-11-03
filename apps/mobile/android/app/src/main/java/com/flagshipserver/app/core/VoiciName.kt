@@ -18,7 +18,7 @@ object VoiciName {
 
     /** Shortest and longest a username or link name may be, hyphens included (docs/voici-namespace-spec.md D12). */
     const val MIN = 3
-    const val MAX = 63
+    const val MAX = 30
 
     /** Wire names: too-short, too-long, characters, hyphens. */
     enum class Problem(val wire: String) { TooShort("too-short"), TooLong("too-long"), Characters("characters"), Hyphens("hyphens");
@@ -45,7 +45,7 @@ object VoiciName {
         Problem.Characters -> FSStrings.get(R.string.letters_numbers_and_hyphens_only)
         Problem.Hyphens -> FSStrings.get(R.string.no_hyphen_at_the_start_or_end_or_two_in_a_row)
         Problem.TooShort -> FSStrings.get(R.string.at_least_3_characters)
-        Problem.TooLong -> FSStrings.get(R.string.at_most_63_characters)
+        Problem.TooLong -> FSStrings.get(R.string.at_most_30_characters)
     }
 
     /** `.com`'s one answer for a name that is taken, held, reserved or a look-alike of one (D9): nothing more is said. */

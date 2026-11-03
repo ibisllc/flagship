@@ -160,9 +160,9 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
     expect((await w.s.voiciLinks.get("1aaaaa"))?.retiredAt).toBe(2);
   });
 
-  it("T13: ab, -ab, ab-, a--b and a 64-character name are all refused for their format", async () => {
+  it("T13: ab, -ab, ab-, a--b and a 31-character name are all refused for their format", async () => {
     const w = await world();
-    const cases: Array<[string, string]> = [["ab", "too-short"], ["-ab", "hyphens"], ["ab-", "hyphens"], ["a--b", "hyphens"], ["a".repeat(64), "too-long"]];
+    const cases: Array<[string, string]> = [["ab", "too-short"], ["-ab", "hyphens"], ["ab-", "hyphens"], ["a--b", "hyphens"], ["a".repeat(31), "too-long"]];
     for (const [name, problem] of cases) {
       const r = await w.claim(name);
       expect(r.status, name).toBe(400);

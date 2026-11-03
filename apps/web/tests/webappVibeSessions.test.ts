@@ -248,6 +248,17 @@ describe("unique build names on the describe form", () => {
     expect(await checkName({ baseUrl: "https://b", token: "t", name: "x", fetchImpl: async () => { throw new Error("down"); } })).toEqual({ ok: true });
   });
 
+  it("refuses a name over 30 characters without asking the box (`<name>--<username>` is one DNS label)", async () => {
+    const { checkName } = await loadNames();
+    const ask = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
+    expect(await checkName({ baseUrl: "https://b", token: "t", name: "a".repeat(31), fetchImpl: ask })).toEqual({
+      ok: false, kind: "invalid", name: "a".repeat(31), message: "At most 30 characters",
+    });
+    expect(ask).not.toHaveBeenCalled();
+    await checkName({ baseUrl: "https://b", token: "t", name: "a".repeat(30), fetchImpl: ask });
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
   it("the form puts the name first, starts with an empty description, and defaults to Invite only", async () => {
     const html = await asset("/webapp/index.html");
     const section = html.slice(html.indexOf('id="view-vibe-code"'), html.indexOf("</section>", html.indexOf('id="view-vibe-code"')));
