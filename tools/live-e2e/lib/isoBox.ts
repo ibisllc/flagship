@@ -321,3 +321,22 @@ export function removeIso(path: string): void {
 
 /** `<server>.<user>.<services>`: the box name the gym zone wildcard answers. */
 export const boxFqdn = (server: string, user: string): string => `${server}.${user}.${SERVICES}`;
+
+/**
+ * Evidence from a box that failed before it could be reached: VNC on, a screenshot of its console, and (when `shellKeys`
+ * is given, e.g. d-i's Alt+F2 shell plus a command) a second screenshot after typing them. vnc-screenshot.py types only
+ * unshifted keys.
+ */
+export async function consoleEvidence(serverId: string, outDir: string, log: (s: string) => void, shellKeys: readonly string[] = []): Promise<void> {
+  const ra = await upcloud("PUT", `/server/${serverId}`, { server: { remote_access_enabled: "yes", remote_access_type: "vnc" } });
+  if (ra.status >= 300) return log(`console evidence: VNC not enabled (${ra.status})`);
+  await sleep(5_000);
+  mkdirSync(outDir, { recursive: true });
+  const py = join(import.meta.dirname, "../lanes/vnc-screenshot.py");
+  const shots: Array<[string, readonly string[]]> = [["console.png", ["wait2"]]];
+  if (shellKeys.length) shots.push(["console-shell.png", shellKeys]);
+  for (const [name, keys] of shots) {
+    const r = spawnSync("python3", [py, serverId, join(outDir, name), ...keys], { encoding: "utf8", timeout: 120_000 });
+    log(`console evidence ${name}: ${r.status === 0 ? join(outDir, name) : `failed (${(r.stderr || "").trim().split("\n").at(-1)})`}`);
+  }
+}

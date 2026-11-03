@@ -45,8 +45,9 @@
  */
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signPhoneOrder, signUpdateOrder, type PhoneOrder, type UpdateOrder } from "@flagship/protocol";
@@ -68,6 +69,7 @@ import { takeGymLock } from "../lib/gymLock.js";
 import { ADMIN, CONTROL, Recorder, SERVICES, SkipError, assert, http, postJson, runDir, short, sleep, tryHttp, writeJson } from "../lib/harness.js";
 import {
   bootFromDisk,
+  consoleEvidence,
   bootIsoServer,
   destroyIsoServer,
   gymCounts,
@@ -149,7 +151,18 @@ async function lane(rec: Recorder): Promise<void> {
       assert(appr.unlocksSince(firstBoot).length >= 1, "online without a phone approval: the disk was not unlocked by the phone");
       return `${r}; ${appr.unlocksSince(firstBoot).length} unlock approval(s)`;
     });
-    if (!online) return;
+    if (!online) {
+      // Whatever the box can tell: its console (unlock prompt? kernel? login?) and, if its daemon came up far enough to
+      // honour the recipe's debug grant, the boot and daemon journals.
+      await consoleEvidence(b.serverId!, join(dir, "first-boot"), log);
+      if (b.ipv4) {
+        const j = await sudoScript(b.ipv4, key, "journalctl -b --no-pager -n 120 -u flagship-daemon -u flagship-first-boot-register; journalctl -b --no-pager -p warning -n 60", 60_000).catch((e: Error) => ({ code: -1, stdout: "", stderr: e.message }));
+        mkdirSync(join(dir, "first-boot"), { recursive: true });
+        writeFileSync(join(dir, "first-boot", "journal.txt"), `${j.stdout}\n--- stderr ---\n${j.stderr}`);
+        log(`first-boot journal over debug SSH: exit ${j.code} (${join(dir, "first-boot", "journal.txt")})`);
+      }
+      return;
+    }
 
     const facts = async (what: string): Promise<BootFacts> => {
       const ip = b.ipv4 ?? "";
