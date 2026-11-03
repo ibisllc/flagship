@@ -6,15 +6,16 @@
  *
  * What it proves, in order:
  *   1. A box of a REAL account A (UMK, admin root pinned) comes online with an SWK the owner's
- *      devices derive (deriveSWK(UMK, fqdn)), so the STK the phone derives is the box's own key
- *      (checked against /pods), and a Python app with a Postgres row and a file runs on it.
+ *      devices derive (deriveSWK(UMK, fqdn)); the box's own identity key (STK, made at install) is read
+ *      on the box and pinned, as a phone pins it at first contact, and a Python app with a Postgres row
+ *      and a file runs on it.
  *   2. The cut: one nft table on the box (lib/sovereignty.ts cutScript) lets the box reach only
  *      loopback, private ranges and the runner's SSH; its public name stops answering through the
  *      relay and its heartbeat (/pods lastReported) stops advancing.
  *   3. Acting as the phone, with NO call to `.com` or `.services` for any rescue step: over the
  *      box's private UpCloud utility address (the LAN-direct listener, raw TLS on :443), reached
  *      through an SSH forward on a sibling VM in the same private network, the runner checks the
- *      key-bound hello (STK derived from the UMK, certificate hash equal to the leaf its own TLS
+ *      key-bound hello (the pinned STK, certificate hash equal to the leaf its own TLS
  *      saw), is refused for an order naming another certificate, for an IRK-signed order on this
  *      admin-pinned box and for a stranger's key, then opens a session with the admin root.
  *   4. Offline control: stop, start and restart the app through owner-signed
@@ -65,11 +66,11 @@ import { readFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import {
   checkRescueHello,
   deriveServerArchiveKey,
-  deriveSTK,
   deriveSWK,
   openBackupWithPasscode,
   parseBackupFile,
@@ -199,7 +200,6 @@ async function main(): Promise<number> {
     log(`account A ${A.username}, account B ${B.username}`);
     const fqdnA = `home.${A.username}.${process.env.GYM_LIVE_SERVICES_APEX || "gym.flagship.services"}`;
     const swk = deriveSWK({ seed: A.keys.umk }, fqdnA);
-    const stk = deriveSTK(swk);
     let a: Box | undefined;
     let b: Box | undefined;
     const madeA = rec.check("A's box is provisioned with an SWK derived from the UMK and an SSH key for the lane", async () => {
@@ -214,10 +214,15 @@ async function main(): Promise<number> {
     if (!(await madeA) || !a) return finish();
     const boxA = a;
     if (!(await rec.check("A's box comes online and serves (≤25 min)", () => waitOnline(boxA, 25, log)))) return finish();
-    await rec.check("the STK the phone derives from the UMK is the box's own key (/pods identityPubKey)", async () => {
+    // A box makes its own identity key (STK) at install; the phone pins it at first contact (ServerKeyPins) and never
+    // derives one. The lane cannot hold a phone's pin, so it pins the key read on the box itself (below), checked against
+    // the one the box registered.
+    let podsStk = "";
+    await rec.check("the box registered its identity key with .com (/pods identityPubKey)", async () => {
       const p = (await pods(A.username)).find((x) => x.serverDomain === boxA.fqdn);
-      assert(String(p?.identityPubKey ?? "").toLowerCase() === bytesToHex(stk.publicKey), `pods ${short(p?.identityPubKey)} vs derived ${bytesToHex(stk.publicKey).slice(0, 16)}`);
-      return bytesToHex(stk.publicKey).slice(0, 16);
+      podsStk = String(p?.identityPubKey ?? "").toLowerCase();
+      assert(/^[0-9a-f]{64}$/.test(podsStk), `pods ${short(p?.identityPubKey)}`);
+      return podsStk.slice(0, 16);
     });
 
     const session = await pair(A, boxA);
@@ -256,6 +261,16 @@ async function main(): Promise<number> {
       return `${addrA.zone}: utility ${utilA}, public ${pubA}`;
     }))) return finish();
     const boxVm: Vm = { uuid: boxA.serverId!, ip: pubA!, key: sib.key };
+    // The pin: the public half of the seed the box holds (keyd's on arch-v2, the daemon's identity file on classic).
+    let pinnedStk = new Uint8Array(0);
+    if (!(await rec.check("the box's own identity key, read on the box, is the key it registered (the phone's first-contact pin)", async () => {
+      const r = await ssh(boxVm, "cat /var/lib/flagship-keyd/identity.key 2>/dev/null || cat /var/flagship/identity/identity.priv.hex", 30_000);
+      const seed = r.stdout.trim().toLowerCase();
+      assert(/^[0-9a-f]{64}$/.test(seed), `no identity seed on the box: ${short(r.stderr)}`);
+      pinnedStk = ed25519.getPublicKey(hexToBytes(seed));
+      assert(bytesToHex(pinnedStk) === podsStk, `box ${bytesToHex(pinnedStk).slice(0, 16)} vs pods ${podsStk.slice(0, 16)}`);
+      return bytesToHex(pinnedStk).slice(0, 16);
+    }))) return finish();
     const sibOk = await rec.check("a sibling Debian VM on the same private network", async () => {
       sibling = await createDebianVm({ dir: keyDir, title: `gym-sovereignty-sibling-${A.username}`, zone: addrA.zone || "de-fra1", plan: process.env.SOV_SIBLING_PLAN || "1xCPU-2GB", log, utility: true });
       const r = await ssh(sibling, `nc -z -w 5 ${utilA} 443 && echo reachable`, 30_000);
@@ -301,7 +316,7 @@ async function main(): Promise<number> {
       assert(r.status === 200, `hello ${r.status}: ${short(r.body.toString("utf8"))}`);
       const h = parseRescueExchange(r.json?.hello);
       assert(h, `hello shape ${short(r.json)}`);
-      const check = checkRescueHello(h, hexToBytes(String(r.json.signatureHex)), stk.publicKey, { serverDomain: boxA.fqdn, clientNonce, seenCertSha256: r.certSha256, now: Date.now() });
+      const check = checkRescueHello(h, hexToBytes(String(r.json.signatureHex)), pinnedStk, { serverDomain: boxA.fqdn, clientNonce, seenCertSha256: r.certSha256, now: Date.now() });
       assert(check.ok, `the hello does not check out: ${check.ok ? "" : check.reason}`);
       return { h, seen: r.certSha256 };
     };
@@ -310,7 +325,7 @@ async function main(): Promise<number> {
       return lan("POST", "/api/rescue/session", { order, signatureHex: bytesToHex(signRescueSession(order, signer)) });
     };
 
-    await rec.check("the box's hello is signed by the STK derived from the UMK and names the certificate this connection saw", async () => {
+    await rec.check("the box's hello is signed by its pinned identity key (STK) and names the certificate this connection saw", async () => {
       const { h, seen } = await hello();
       return `hello names cert ${h.certSha256.slice(0, 16)}, TLS saw ${seen.slice(0, 16)}`;
     });

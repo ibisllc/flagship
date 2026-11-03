@@ -175,8 +175,9 @@ own sentence on refusal.
 1. **mDNS / Bonjour (built).** The box answers multicast DNS for
    `_flagship._tcp.local`. The instance is named by an **opaque id**:
    `hex(HMAC-SHA256(key = the box's STK public key, "flagship/lan-discovery/v1|" + name))[0..8]`
-   (`rescueDiscoveryId`). The phone derives each of its servers' STK from its
-   own account key, recomputes the id, and matches. The announcement carries no
+   (`rescueDiscoveryId`). The phone takes each of its servers' STK from the
+   pin it recorded at first contact (`ServerKeyPins`; a box makes its own key
+   at install, and nothing derives it), recomputes the id, and matches. The announcement carries no
    name, account or owner, only the id, the port and the LAN addresses
    (private ranges only; never a public one). A bystander on the Wi-Fi sees "a
    Flagship box" and cannot tell whose. iOS needs the Bonjour service type
@@ -214,8 +215,9 @@ Two options were weighed:
   server's name as SNI, accepts whatever certificate is presented, and asks
   the box to prove itself: `POST /api/rescue/hello {clientNonce}` returns a
   hello **signed by the box's STK** that names the phone's nonce and the
-  SHA-256 of the certificate the box is presenting. The phone derives that STK
-  itself (`deriveSTK(deriveSWK(UMK, serverName))`), verifies the signature, and
+  SHA-256 of the certificate the box is presenting. The phone checks it
+  against the STK it pinned at first contact (never `.com`'s word, never a
+  derivation), verifies the signature, and
   checks that the certificate hash equals the one its own TLS stack saw. A
   machine in the middle must present a different certificate, so the hash
   differs and the phone stops before signing anything (tested). The check
