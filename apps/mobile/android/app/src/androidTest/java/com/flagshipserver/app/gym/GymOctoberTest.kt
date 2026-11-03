@@ -244,7 +244,7 @@ class GymOctoberTest : GymBase() {
         openAccessControl(adminRoot = true)
         composeRule.onNodeWithText("Kitchen iPad").assertExists()
         composeRule.onNodeWithText("Sam's family").assertExists()
-        composeRule.onNodeWithText("This device · Admin").assertExists()
+        composeRule.onNodeWithText("Admin device · This device").assertExists()
         composeRule.onNodeWithTag("service-access-account-members-title").performScrollTo()
         gymShot("access-account-members-admin")
         composeRule.onNodeWithTag(otherDeviceRank).performScrollTo().performClick()
