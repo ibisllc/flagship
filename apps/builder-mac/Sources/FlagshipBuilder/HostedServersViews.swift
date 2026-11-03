@@ -163,7 +163,7 @@ struct HostedServersSidebar: View {
             // surface an advisory (the unlock poll keeps running underneath).
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 let since = server.record.stateChangedAt ?? server.record.createdAt
-                if VMLifecycle.comingUpIsStalled(
+                if !server.record.sealedButNeverSetUp, VMLifecycle.comingUpIsStalled(
                     state: server.record.state,
                     elapsed: context.date.timeIntervalSince(since)) {
                     Text("Taking longer than expected — check the network or approve on your phone")
@@ -172,7 +172,7 @@ struct HostedServersSidebar: View {
                 } else {
                     Text(server.record.stateLabel)
                         .font(FB.Font.caption())
-                        .foregroundStyle(FB.Colors.textMuted)
+                        .foregroundStyle(server.record.sealedButNeverSetUp ? FB.Colors.warning : FB.Colors.textMuted)
                 }
             }
         } else if case .running = server.record.state, let health = vmManager.healthReports[server.id] {
@@ -448,6 +448,7 @@ struct VMDetailView: View {
         switch server.record.state {
         case .awaitingPhoneUnlock:
             let since = server.record.stateChangedAt ?? server.record.createdAt
+            if server.record.sealedButNeverSetUp { return server.record.awaitingUnlockSubtitle }
             if VMLifecycle.comingUpIsStalled(state: server.record.state, elapsed: now.timeIntervalSince(since)) {
                 return VMRecord.AwaitingUnlockCopy.stalled
             }

@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 // Needs `npx tsc -b` first (imports the built builder).
 const W = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "packages", "flagship-builder");
 const { buildDebianPreseed, remasterIsoWithPreseed } = await import(`${W}/dist/index.js`);
+const { replacePreseedBootstrap } = await import(`${W}/dist/preseed.js`);
 const { optionsFromRecipeJson } = await import(`${W}/dist/preseedEngine.js`);
 const { buildLuksBurnSlotRemovalBlock } = await import(`${W}/dist/userdata.js`);
 const [mode, src, out] = process.argv.slice(2);
@@ -49,10 +50,7 @@ echo "[harness] ENABLED-SLOT-COUNT=$(cryptsetup luksDump "$ROOT_LUKS_PART" | awk
 echo "[harness] DONE"
 } 2>&1 | tee /dev/console
 `;
-const b64 = Buffer.from(bootstrap).toString("base64");
-const re = /(echo ')([A-Za-z0-9+/=]+)(' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh)/;
-if (!re.test(preseed)) throw new Error("bootstrap payload not found");
-preseed = preseed.replace(re, `$1${b64}$3`);
+preseed = replacePreseedBootstrap(preseed, bootstrap);
 // Harness only: never let the install-progress beacons reach prod.
 preseed = preseed.replace("d-i preseed/early_command string ", "d-i preseed/early_command string echo '127.0.0.1 flagshipserver.com' >> /etc/hosts; ");
 writeFileSync(out.replace(/\.iso$/, ".preseed.cfg"), preseed);

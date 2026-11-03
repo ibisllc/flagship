@@ -542,13 +542,21 @@ msgstr "予想より時間がかかっています。箱がネットワークに
 msgid "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there."
 msgstr "スマートフォンが残した鍵でディスクのロックを解除しています。スマートフォンが承認を求めたら、そちらで承認してください。"
 
-#: vm/manager.py:69 (prose)
-msgid "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there."
-msgstr "ディスクは封印されています。最初のロック解除をスマートフォンで承認してください。その後は自動でロック解除されるはずです。再び承認を求められたら、スマートフォンで承認してください。"
-
 #: vm/manager.py:72 (prose)
-msgid "The disk is sealed — approve the unlock on your phone."
-msgstr "ディスクは封印されています。スマートフォンでロック解除を承認してください。"
+msgid "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there."
+msgstr "起動しています。スマートフォンで求められたら、このサーバーの最初のロック解除を承認してください。その後は自動でロック解除されるはずです。再び求められたら、スマートフォンで承認してください。"
+
+#: vm/manager.py:75 (prose)
+msgid "Starting. When your phone asks, approve the unlock there."
+msgstr "起動しています。スマートフォンで求められたら、ロック解除を承認してください。"
+
+#: vm/manager.py:77 (prose)
+msgid "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone."
+msgstr "インストーラーは終了しましたが、このサーバーは一度も登録されなかったため、承認するものはありません。Studio で削除し、スマートフォンから作成し直してください。"
+
+#: vm/manager.py:81 (prose)
+msgid "Setup didn't finish"
+msgstr "セットアップが完了しませんでした"
 
 #: vm/manager.py:86 (prose)
 msgid "Booting the installer"
@@ -648,10 +656,6 @@ msgstr "実行中のサーバーはありません。この PC は再びスリ�
 #: vm/lifecycle.py:89 (prose)
 msgid "Installing…"
 msgstr "インストール中…"
-
-#: vm/lifecycle.py:93 (prose)
-msgid "Waiting for you to unlock"
-msgstr "ロック解除を待っています"
 
 #: vm/lifecycle.py:99 (prose)
 msgid "Install failed"

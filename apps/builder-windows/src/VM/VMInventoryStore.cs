@@ -22,6 +22,17 @@ public sealed record VMRecord
     public DateTimeOffset? LastConnectedAt { get; init; }
     [JsonConverter(typeof(ServerTierJsonConverter))]
     public ServerTier Tier { get; init; } = ServerTier.HostedVM;
+    /// <summary>The install's last order-status phase, recorded when the
+    /// install finished; null = unknown (no serial, .com unreachable, or a
+    /// record from before the field).</summary>
+    public string? InstallLastPhase { get; init; }
+
+    /// <summary>A sealed guest that has never connected and whose install
+    /// never got as far as sealing its key: nothing will ask the phone.
+    /// Mirrors the Mac VMRecord (vm-core-vectors.json "sealedBootSetUp").</summary>
+    [JsonIgnore]
+    public bool SealedBootNeverSetUp => State.Kind == VMStateKind.AwaitingPhoneUnlock
+        && LastConnectedAt is null && VMLifecycle.NeverSetUp(InstallLastPhase);
 
     /// <summary>An auto-unlock server that has run before unlocks itself with
     /// the key the phone left it at its first approval, so a restart needs
@@ -32,9 +43,11 @@ public sealed record VMRecord
 
     /// <summary>State.Label, except a sealed boot that needs no one reads as unlocking.</summary>
     [JsonIgnore]
-    public string StateLabel => State.Kind == VMStateKind.AwaitingPhoneUnlock && UnlocksOnItsOwn
-        ? Strings.T("unlocking")
-        : State.Label;
+    public string StateLabel => SealedBootNeverSetUp
+        ? Strings.T("setupDidntFinish")
+        : State.Kind == VMStateKind.AwaitingPhoneUnlock && UnlocksOnItsOwn
+            ? Strings.T("unlocking")
+            : State.Label;
 }
 
 /// <summary>

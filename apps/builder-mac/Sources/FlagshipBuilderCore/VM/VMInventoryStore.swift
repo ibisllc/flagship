@@ -8,19 +8,24 @@ public struct VMRecord: Codable, Sendable, Equatable {
     public var stateChangedAt: Date?
     public var lastConnectedAt: Date?
     public var tier: ServerTier
+    /// The install's last order-status phase, read as the installer stopped
+    /// (nil: no serial, or `.com` didn't answer). See `neverSetUp`.
+    public var installLastPhase: String?
 
     public init(config: VMConfig,
                 state: VMState = .created,
                 createdAt: Date,
                 stateChangedAt: Date? = nil,
                 lastConnectedAt: Date? = nil,
-                tier: ServerTier = .hostedVM) {
+                tier: ServerTier = .hostedVM,
+                installLastPhase: String? = nil) {
         self.config = config
         self.state = state
         self.createdAt = createdAt
         self.stateChangedAt = stateChangedAt ?? createdAt
         self.lastConnectedAt = lastConnectedAt
         self.tier = tier
+        self.installLastPhase = installLastPhase
     }
 
     /// An auto-unlock server that has run before unlocks itself with the key
@@ -37,21 +42,46 @@ public struct VMRecord: Codable, Sendable, Equatable {
     public enum AwaitingUnlockCopy {
         public static let stalled = String(localized: "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.")
         public static let unlocksOnItsOwn = String(localized: "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.")
-        public static let firstBoot = String(localized: "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.")
-        public static let approveEveryBoot = String(localized: "The disk is sealed — approve the unlock on your phone.")
+        public static let firstBoot = String(localized: "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.")
+        public static let approveEveryBoot = String(localized: "Starting. When your phone asks, approve the unlock there.")
+        public static let notSetUp = String(localized: "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.")
+        public static let label = String(localized: "Starting…")
+        public static let notSetUpLabel = String(localized: "Setup didn't finish")
+    }
+
+    /// The order-status phases a box reports before it has sealed its disk key
+    /// (vm-core-vectors.json "sealedBootSetUp"). An install whose last phase is
+    /// one of these powered off without setting the server up, so its sealed
+    /// disk can never ask the phone for anything.
+    public static let neverSetUpPhases: Set<String> = [
+        "booting", "partitioning", "installing", "downloading", "registering", "error",
+    ]
+
+    public static func neverSetUp(lastInstallPhase: String?) -> Bool {
+        guard let lastInstallPhase else { return false }
+        return neverSetUpPhases.contains(lastInstallPhase)
+    }
+
+    /// A sealed first boot of a server whose install never set it up.
+    public var sealedButNeverSetUp: Bool {
+        guard case .awaitingPhoneUnlock = state, lastConnectedAt == nil else { return false }
+        return Self.neverSetUp(lastInstallPhase: installLastPhase)
     }
 
     /// What the detail pane says while this server's disk is sealed.
     public var awaitingUnlockSubtitle: String {
+        if sealedButNeverSetUp { return AwaitingUnlockCopy.notSetUp }
         if unlocksOnItsOwn { return AwaitingUnlockCopy.unlocksOnItsOwn }
         return config.bootUnlockMode == "approve"
             ? AwaitingUnlockCopy.approveEveryBoot
             : AwaitingUnlockCopy.firstBoot
     }
 
-    /// `state.label`, except a sealed boot that needs no one reads as unlocking.
+    /// `state.label`, except a sealed boot that needs no one reads as unlocking
+    /// and one whose install never finished says so.
     public var stateLabel: String {
-        if case .awaitingPhoneUnlock = state, unlocksOnItsOwn { return "Unlocking…" }
+        if sealedButNeverSetUp { return AwaitingUnlockCopy.notSetUpLabel }
+        if case .awaitingPhoneUnlock = state, unlocksOnItsOwn { return String(localized: "Unlocking…") }
         return state.label
     }
 }

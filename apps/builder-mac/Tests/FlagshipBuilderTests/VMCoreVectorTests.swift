@@ -265,5 +265,20 @@ final class VMCoreVectorTests: XCTestCase {
         XCTAssertEqual(VMRecord.AwaitingUnlockCopy.unlocksOnItsOwn, section["unlocksOnItsOwn"] as? String)
         XCTAssertEqual(VMRecord.AwaitingUnlockCopy.firstBoot, section["firstBoot"] as? String)
         XCTAssertEqual(VMRecord.AwaitingUnlockCopy.approveEveryBoot, section["approveEveryBoot"] as? String)
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.notSetUp, section["notSetUp"] as? String)
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.label, section["label"] as? String)
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.notSetUpLabel, section["notSetUpLabel"] as? String)
+        XCTAssertEqual(VMState.awaitingPhoneUnlock.label, section["label"] as? String)
+    }
+
+    func testSealedBootSetUpMatchesVectors() throws {
+        let section = try loadVectors()["sealedBootSetUp"] as! [String: Any]
+        XCTAssertEqual(VMRecord.neverSetUpPhases, Set(section["neverSetUpPhases"] as! [String]))
+        let cases = section["cases"] as! [[String: Any]]
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let phase = c["lastPhase"] as? String
+            XCTAssertEqual(VMRecord.neverSetUp(lastInstallPhase: phase), c["neverSetUp"] as? Bool, phase ?? "null")
+        }
     }
 }

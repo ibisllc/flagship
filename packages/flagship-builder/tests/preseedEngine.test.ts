@@ -208,7 +208,7 @@ describe("preseed engine bundle", () => {
   it("preserves adminRootPubKey into the install-time auth code", () => {
     const preseed = engine.buildPreseed(buildSignedRecipe({ adminRoot: true }), "{}");
     const match = preseed.match(
-      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/,
+      /^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m,
     );
     expect(match).not.toBeNull();
     const embedded = JSON.parse(Buffer.from(match![1]!, "base64").toString("utf8"));
@@ -233,7 +233,7 @@ describe("preseed engine bundle", () => {
       readFileSync(join(here, "..", "engine", "golden", "preseed-vectors.json"), "utf8"),
     ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string }> };
     for (const v of fixture.vectors) {
-      const embedded = /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/
+      const embedded = /^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m
         .exec(v.expectedPreseed)![1]!;
       const seeded = engine.buildInstallBlobJson(v.recipeJson);
       expect(seeded, v.name).toBe(Buffer.from(embedded, "base64").toString("utf8"));
@@ -255,7 +255,7 @@ describe("preseed engine bundle", () => {
   it("the one-time enrollment secret reaches install-blob.json, and a malformed one does not", () => {
     const blobOf = (extra: Record<string, unknown>) => {
       const preseed = engine.buildPreseed(buildSignedRecipe(extra), "{}");
-      const m = preseed.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/);
+      const m = preseed.match(/^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m);
       return JSON.parse(Buffer.from(m![1]!, "base64").toString("utf8")) as { enrollmentKeyHex?: string };
     };
     expect(blobOf({ enrollmentKeyHex: "AB".repeat(32) }).enrollmentKeyHex).toBe("ab".repeat(32));
@@ -266,7 +266,7 @@ describe("preseed engine bundle", () => {
     const grant = JSON.stringify({ grant: { serverDomain: "home.harry.flagship.services", sshAuthorizedKey: "ssh-ed25519 AAAA", issuedAt: 1700000000000 }, signatureHex: "ab".repeat(64) });
     const preseed = engine.buildPreseed(buildSignedRecipe({ debugGrant: grant }), "{}");
     const m = preseed.match(
-      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/,
+      /^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m,
     );
     expect(m).toBeTruthy();
     const decoded = Buffer.from(m![1]!, "base64").toString("utf8");
@@ -275,7 +275,7 @@ describe("preseed engine bundle", () => {
     // And a recipe WITHOUT the grant must NOT carry it (production image).
     const plain = engine.buildPreseed(buildSignedRecipe({}), "{}");
     const pm = plain.match(
-      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/,
+      /^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m,
     );
     const plainJson = JSON.parse(Buffer.from(pm![1]!, "base64").toString("utf8")) as { debugGrant?: string };
     expect(plainJson.debugGrant).toBeUndefined();

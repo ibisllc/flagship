@@ -119,8 +119,6 @@
 "Waiting for an installer checkpoint" = "インストーラーのチェックポイントを待っています";
 "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry." = "予想より時間がかかっています。箱がネットワークに届いていないか、スマートフォンでのロック解除の承認を待っている可能性があります。オンラインか確認するか、電源を切ってやり直してください。";
 "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there." = "スマートフォンが残した鍵でディスクのロックを解除しています。スマートフォンが承認を求めたら、そちらで承認してください。";
-"The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there." = "ディスクは封印されています。最初のロック解除をスマートフォンで承認してください。その後は自動でロック解除されるはずです。再び承認を求められたら、スマートフォンで承認してください。";
-"The disk is sealed — approve the unlock on your phone." = "ディスクは封印されています。スマートフォンでロック解除を承認してください。";
 "Library/Application Support" = "Library/Application Support";
 "The app quit while the install was running." = "インストールの実行中にアプリが終了しました。";
 "Hosting Flagship servers for the internet" = "インターネット向けに Flagship サーバーをホストしています";
@@ -220,3 +218,9 @@
 "The helper would not accept that disk." = "ヘルパーがそのディスクを受け付けませんでした。";
 "Couldn't unmount the disk: %@" = "ディスクをアンマウントできませんでした: %@";
 "Beta" = "ベータ";
+"Starting…" = "開始しています…";
+"Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there." = "起動しています。スマートフォンで求められたら、このサーバーの最初のロック解除を承認してください。その後は自動でロック解除されるはずです。再び求められたら、スマートフォンで承認してください。";
+"Starting. When your phone asks, approve the unlock there." = "起動しています。スマートフォンで求められたら、ロック解除を承認してください。";
+"The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone." = "インストーラーは終了しましたが、このサーバーは一度も登録されなかったため、承認するものはありません。Studio で削除し、スマートフォンから作成し直してください。";
+"Setup didn't finish" = "セットアップが完了しませんでした";
+"Unlocking…" = "ロック解除中…";

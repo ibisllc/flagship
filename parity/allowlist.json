@@ -193,6 +193,11 @@
     },
     {
       "check": "test-vectors",
+      "key": "ts:provision-quiet",
+      "reason": "A display rule for the three apps' install progress (iOS, Android, webapp); no TypeScript package, .com or box code judges a quiet box."
+    },
+    {
+      "check": "test-vectors",
       "key": "swift:box-artifact",
       "reason": "Checked by installer/verify-box-artifact.sh and scripts/verify-box-artifact.test.ts: only the box installer and the builder read it, no phone verifies an artifact."
     },

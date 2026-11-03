@@ -123,6 +123,9 @@ object ProvisionProgress {
         phase: String?,
         lastError: String? = null,
         prevPhase: String? = null,
+        /** A box gone quiet (ProvisionQuiet.of): replaces the current row's
+         *  detail; the row stays ACTIVE. */
+        quiet: ProvisionQuiet = ProvisionQuiet.NONE,
     ): List<StepView> {
         if (phase == "live") {
             return stepGroups.map { StepView(it.key, it.label, StepState.DONE, null) }
@@ -161,7 +164,7 @@ object ProvisionProgress {
             when {
                 i < activeIdx -> StepView(g.key, g.label, StepState.DONE, null)
                 i == activeIdx -> {
-                    val detail = if (phase == "installed") INSTALLED_UNPLUG_DETAIL else phaseTitles[phase]
+                    val detail = quiet.detail ?: if (phase == "installed") INSTALLED_UNPLUG_DETAIL else phaseTitles[phase]
                     StepView(g.key, g.label, StepState.ACTIVE, detail)
                 }
                 else -> StepView(g.key, g.label, StepState.PENDING, null)

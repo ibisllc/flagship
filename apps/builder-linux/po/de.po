@@ -542,13 +542,21 @@ msgstr "Dauert länger als erwartet – die Box hat das Netzwerk vielleicht nich
 msgid "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there."
 msgstr "Der Datenträger wird mit dem Schlüssel entsperrt, den dein Telefon hinterlassen hat. Wenn dein Telefon um Freigabe bittet, genehmige dort."
 
-#: vm/manager.py:69 (prose)
-msgid "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there."
-msgstr "Der Datenträger ist versiegelt – genehmige die erste Entsperrung am Telefon. Danach sollte er sich von selbst entsperren; fragt dein Telefon erneut, genehmige dort."
-
 #: vm/manager.py:72 (prose)
-msgid "The disk is sealed — approve the unlock on your phone."
-msgstr "Der Datenträger ist versiegelt – genehmige die Entsperrung am Telefon."
+msgid "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there."
+msgstr "Startet. Wenn dein Telefon fragt, genehmige dort die erste Entsperrung dieses Servers. Danach sollte er sich von selbst entsperren; fragt dein Telefon erneut, genehmige dort."
+
+#: vm/manager.py:75 (prose)
+msgid "Starting. When your phone asks, approve the unlock there."
+msgstr "Startet. Wenn dein Telefon fragt, genehmige dort die Entsperrung."
+
+#: vm/manager.py:77 (prose)
+msgid "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone."
+msgstr "Die Installation ist beendet, aber dieser Server hat sich nie registriert, daher gibt es nichts zu genehmigen. Lösche ihn in Studio und erstelle ihn auf deinem Telefon neu."
+
+#: vm/manager.py:81 (prose)
+msgid "Setup didn't finish"
+msgstr "Einrichtung nicht abgeschlossen"
 
 #: vm/manager.py:86 (prose)
 msgid "Booting the installer"
@@ -648,10 +656,6 @@ msgstr "Kein Server aktiv: Dieser PC darf wieder in den Ruhezustand"
 #: vm/lifecycle.py:89 (prose)
 msgid "Installing…"
 msgstr "Installiere …"
-
-#: vm/lifecycle.py:93 (prose)
-msgid "Waiting for you to unlock"
-msgstr "Warte auf deine Entsperrung"
 
 #: vm/lifecycle.py:99 (prose)
 msgid "Install failed"

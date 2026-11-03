@@ -265,9 +265,6 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="installing" xml:space="preserve">
     <value>Instalando…</value>
   </data>
-  <data name="waitingForYouToUnlock" xml:space="preserve">
-    <value>Aguardando você desbloquear</value>
-  </data>
   <data name="installFailed" xml:space="preserve">
     <value>Falha na instalação</value>
   </data>
@@ -340,11 +337,17 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="unlockingItsDiskWithTheKey" xml:space="preserve">
     <value>Desbloqueando o disco com a chave que o seu celular deixou. Se o celular pedir aprovação, aprove nele.</value>
   </data>
-  <data name="theDiskIsSealedApproveThe" xml:space="preserve">
-    <value>O disco está selado — aprove o primeiro desbloqueio no celular. Depois disso ele deve desbloquear sozinho; se o celular pedir de novo, aprove nele.</value>
+  <data name="startingWhenYourPhoneAsksApproveFirst" xml:space="preserve">
+    <value>Iniciando. Quando o celular pedir, aprove nele o primeiro desbloqueio deste servidor. Depois disso ele deve desbloquear sozinho; se o celular pedir de novo, aprove nele.</value>
   </data>
-  <data name="theDiskIsSealedApproveThe2" xml:space="preserve">
-    <value>O disco está selado — aprove o desbloqueio no celular.</value>
+  <data name="startingWhenYourPhoneAsksApprove" xml:space="preserve">
+    <value>Iniciando. Quando o celular pedir, aprove nele o desbloqueio.</value>
+  </data>
+  <data name="theInstallerFinishedButThisServerNever" xml:space="preserve">
+    <value>O instalador terminou, mas este servidor nunca se registrou, então não há nada para aprovar. Exclua-o no Studio e crie-o de novo pelo celular.</value>
+  </data>
+  <data name="setupDidntFinish" xml:space="preserve">
+    <value>A configuração não terminou</value>
   </data>
   <data name="waitingForTheFirstGuestCheckpoint" xml:space="preserve">
     <value>Aguardando o primeiro ponto de verificação do convidado.</value>

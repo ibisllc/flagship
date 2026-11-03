@@ -44,7 +44,7 @@ public enum VMState: Codable, Sendable, Equatable {
         case .created: return "Created"
         case .installing: return "Installing…"
         case .installed: return "Installed"
-        case .awaitingPhoneUnlock: return "Waiting for you to unlock"
+        case .awaitingPhoneUnlock: return VMRecord.AwaitingUnlockCopy.label
         case .running: return "Running"
         case .stopped: return "Stopped"
         case .failed(let f):

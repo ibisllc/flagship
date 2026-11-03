@@ -88,7 +88,7 @@ def seed(store, name, state):
 
 
 def manager(store, host=None, toolchain=TOOLCHAIN, error=None, clock=None, probe=None,
-            health=None):
+            health=None, status=None):
     return VMManager(
         store,
         toolchain,
@@ -99,6 +99,7 @@ def manager(store, host=None, toolchain=TOOLCHAIN, error=None, clock=None, probe
         unlock_interval=0.01,
         health_fetch=health or (lambda url: None),
         health_interval=0.01,
+        install_status_fetch=status or (lambda url: None),
     )
 
 
@@ -241,6 +242,59 @@ def test_clean_stop_after_plausible_duration_is_success_then_first_boot(store, t
     # The order serial outlives the install: it reads the running server's health.
     assert store.load("a.h.flagship.services").config.provision_status_serial == "01VMTEST"
     m._cancel_unlock_poll("a.h.flagship.services")
+
+
+def test_install_success_records_the_last_install_phase(store):
+    from vm.manager import InstallObservation
+
+    now = [1000.0]
+    host = FakeHost()
+    fetched = []
+
+    def status(url):
+        fetched.append(url)
+        return b'{"phase":"sealing","updatedAt":1}'
+
+    m = manager(store, host=host, clock=lambda: now[0], status=status)
+    m.create_server(config(encrypted=True, provision_status_serial="01VMTEST"))
+    m.begin_install("a.h.flagship.services")
+    m._cancel_install_poll("a.h.flagship.services")
+    m.servers[0].install_observation = InstallObservation("registering", None, now[0])
+    now[0] += 600.0
+    m._guest_stopped("a.h.flagship.services", 0, "")
+    assert fetched and fetched[0].endswith("/api/order/01VMTEST/status")
+    assert m.servers[0].record.install_last_phase == "sealing"
+    assert store.load("a.h.flagship.services").install_last_phase == "sealing"
+    m._cancel_unlock_poll("a.h.flagship.services")
+
+
+def test_install_success_falls_back_to_the_polled_phase(store):
+    from vm.manager import InstallObservation
+
+    now = [1000.0]
+    m = manager(store, host=FakeHost(), clock=lambda: now[0], status=lambda url: None)
+    m.create_server(config(encrypted=True, provision_status_serial="01VMTEST"))
+    m.begin_install("a.h.flagship.services")
+    m._cancel_install_poll("a.h.flagship.services")
+    m.servers[0].install_observation = InstallObservation("installing", None, now[0])
+    now[0] += 600.0
+    m._guest_stopped("a.h.flagship.services", 0, "")
+    (s,) = m.servers
+    assert store.load("a.h.flagship.services").install_last_phase == "installing"
+    assert s.state_label == "Setup didn't finish"
+    m._cancel_unlock_poll("a.h.flagship.services")
+
+
+def test_a_failed_install_leaves_the_last_phase_alone(store):
+    now = [1000.0]
+    m = manager(store, host=FakeHost(), clock=lambda: now[0],
+                status=lambda url: b'{"phase":"sealing"}')
+    m.create_server(config())
+    m.begin_install("a.h.flagship.services")
+    now[0] += 5.0
+    m._guest_stopped("a.h.flagship.services", 0, "")
+    assert m.servers[0].record.state.kind == VMStateKind.FAILED
+    assert store.load("a.h.flagship.services").install_last_phase is None
 
 
 def test_too_fast_clean_stop_is_a_retryable_failure_that_keeps_the_iso(store):
@@ -531,14 +585,68 @@ def test_hosted_server_display_props():
     assert s.console_enabled is False
 
 
+def test_a_never_connected_sealed_server_that_never_sealed_its_key_says_so():
+    from vm.manager import (
+        AWAITING_UNLOCK_FIRST_BOOT,
+        AWAITING_UNLOCK_NOT_SET_UP,
+        AWAITING_UNLOCK_NOT_SET_UP_LABEL,
+        AWAITING_UNLOCK_ON_ITS_OWN,
+    )
+
+    base = config("home.harry.flagship.services")
+    now = time.time()
+    never = HostedServer(
+        VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=now,
+                 state_changed_at=now, install_last_phase="installing")
+    )
+    assert never.status_subtitle == AWAITING_UNLOCK_NOT_SET_UP
+    assert never.status_subtitle_at(now) == AWAITING_UNLOCK_NOT_SET_UP
+    assert never.state_label == AWAITING_UNLOCK_NOT_SET_UP_LABEL == "Setup didn't finish"
+    # It wins over the stall advisory.
+    assert never.coming_up_stalled(now + 3600)
+    assert never.status_subtitle_at(now + 3600) == AWAITING_UNLOCK_NOT_SET_UP
+    sealed = HostedServer(
+        VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=now,
+                 state_changed_at=now, install_last_phase="sealing")
+    )
+    assert sealed.status_subtitle_at(now) == AWAITING_UNLOCK_FIRST_BOOT
+    assert sealed.state_label == "Starting…"
+    unknown = HostedServer(
+        VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=now,
+                 state_changed_at=now)
+    )
+    assert unknown.status_subtitle_at(now) == AWAITING_UNLOCK_FIRST_BOOT
+    # A server that connected before is never judged by its install.
+    ran = HostedServer(
+        VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=now,
+                 state_changed_at=now, last_connected_at=5.0, install_last_phase="installing")
+    )
+    assert ran.status_subtitle_at(now) == AWAITING_UNLOCK_ON_ITS_OWN
+    assert ran.state_label == "Unlocking…"
+
+
+def test_install_last_phase_round_trips_and_old_records_read_as_unknown(store):
+    seed(store, "a.h.flagship.services", VMState.stopped())
+    path = store.layout.config_path("a.h.flagship.services")
+    raw = json.loads(open(path).read())
+    raw.pop("installLastPhase", None)
+    open(path, "w").write(json.dumps(raw))
+    assert store.load("a.h.flagship.services").install_last_phase is None
+    from dataclasses import replace
+
+    store.save(replace(store.load("a.h.flagship.services"), install_last_phase="sealing"))
+    assert json.loads(open(path).read())["installLastPhase"] == "sealing"
+    assert store.load("a.h.flagship.services").install_last_phase == "sealing"
+
+
 def test_status_subtitles_follow_state_and_unlock_mode():
     base = config("home.harry.flagship.services")
     sealed = HostedServer(
         VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=1.0)
     )
-    assert "approve the first unlock" in sealed.status_subtitle
+    assert "When your phone asks, approve this server's first unlock" in sealed.status_subtitle
     assert "if your phone asks again" in sealed.status_subtitle
-    assert sealed.state_label == "Waiting for you to unlock"
+    assert sealed.state_label == "Starting…"
     ran_before = HostedServer(
         VMRecord(
             config=base,

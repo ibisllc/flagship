@@ -265,9 +265,6 @@ https://flagshipserver.com</value>
   <data name="installing" xml:space="preserve">
     <value>正在安装…</value>
   </data>
-  <data name="waitingForYouToUnlock" xml:space="preserve">
-    <value>等待你解锁</value>
-  </data>
   <data name="installFailed" xml:space="preserve">
     <value>安装失败</value>
   </data>
@@ -340,11 +337,17 @@ https://flagshipserver.com</value>
   <data name="unlockingItsDiskWithTheKey" xml:space="preserve">
     <value>正在使用你的手机留下的密钥解锁其磁盘。如果手机要求批准，请在手机上批准。</value>
   </data>
-  <data name="theDiskIsSealedApproveThe" xml:space="preserve">
-    <value>磁盘已密封：请在手机上批准首次解锁。之后它应能自行解锁；如果手机再次提示，请在手机上批准。</value>
+  <data name="startingWhenYourPhoneAsksApproveFirst" xml:space="preserve">
+    <value>正在启动。手机提示时，请在手机上批准此服务器的首次解锁。之后它应能自行解锁；如果手机再次提示，请在手机上批准。</value>
   </data>
-  <data name="theDiskIsSealedApproveThe2" xml:space="preserve">
-    <value>磁盘已密封：请在手机上批准解锁。</value>
+  <data name="startingWhenYourPhoneAsksApprove" xml:space="preserve">
+    <value>正在启动。手机提示时，请在手机上批准解锁。</value>
+  </data>
+  <data name="theInstallerFinishedButThisServerNever" xml:space="preserve">
+    <value>安装程序已结束，但此服务器从未注册，因此没有需要批准的内容。请在 Studio 中删除它，然后在手机上重新创建。</value>
+  </data>
+  <data name="setupDidntFinish" xml:space="preserve">
+    <value>设置未完成</value>
   </data>
   <data name="waitingForTheFirstGuestCheckpoint" xml:space="preserve">
     <value>正在等待第一个客户机检查点。</value>

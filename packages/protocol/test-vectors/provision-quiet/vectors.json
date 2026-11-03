@@ -1,0 +1,26 @@
+{
+  "notes": "What a pending server's install progress says when the box goes quiet (2026-11-02, home.serene-parrot: the d-i installer's last checkpoint 'Installing the bootloader' stayed on screen as 'Installing' for an hour after the installer had stopped). d-i's installer telemetry reports at least every 2 minutes while it runs, so a phase 'installing' older than installerQuietAfterMs means the installer has finished (or died): show installerFinished on the current row. Any phase in stuckPhases older than stuckAfterMs means the box stopped reporting before it registered: show stuck on the current row and the stuckAdvice under the checklist. 'installed' (powered off, waiting for the owner), 'pairing', 'live' and 'error' are never judged. quietMs = nowMs - updatedAt (the status's own updatedAt). Identical on iOS, Android and the webapp.",
+  "installerQuietAfterMs": 300000,
+  "stuckAfterMs": 1200000,
+  "stuckPhases": ["booting", "partitioning", "installing", "downloading", "registering", "sealing"],
+  "copy": {
+    "installerFinished": "The installer finished. The server is starting and should register in a few minutes.",
+    "stuck": "This server stopped reporting and hasn't registered. It may be stuck.",
+    "stuckAdvice": "If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again."
+  },
+  "cases": [
+    { "name": "installer still reporting", "phase": "installing", "updatedAt": 1800000000000, "nowMs": 1800000120000, "quiet": "none" },
+    { "name": "installer quiet 5 minutes", "phase": "installing", "updatedAt": 1800000000000, "nowMs": 1800000300000, "quiet": "installerFinished" },
+    { "name": "installer quiet 19 minutes", "phase": "installing", "updatedAt": 1800000000000, "nowMs": 1800001140000, "quiet": "installerFinished" },
+    { "name": "installer quiet 20 minutes", "phase": "installing", "updatedAt": 1800000000000, "nowMs": 1800001200000, "quiet": "stuck" },
+    { "name": "downloading quiet 10 minutes (bootstrap fetch, still normal)", "phase": "downloading", "updatedAt": 1800000000000, "nowMs": 1800000600000, "quiet": "none" },
+    { "name": "downloading quiet 25 minutes", "phase": "downloading", "updatedAt": 1800000000000, "nowMs": 1800001500000, "quiet": "stuck" },
+    { "name": "partitioning quiet 30 minutes", "phase": "partitioning", "updatedAt": 1800000000000, "nowMs": 1800001800000, "quiet": "stuck" },
+    { "name": "sealing quiet 21 minutes", "phase": "sealing", "updatedAt": 1800000000000, "nowMs": 1800001260000, "quiet": "stuck" },
+    { "name": "installed waits for the owner, never stuck", "phase": "installed", "updatedAt": 1800000000000, "nowMs": 1800003600000, "quiet": "none" },
+    { "name": "pairing never judged", "phase": "pairing", "updatedAt": 1800000000000, "nowMs": 1800003600000, "quiet": "none" },
+    { "name": "error never judged", "phase": "error", "updatedAt": 1800000000000, "nowMs": 1800003600000, "quiet": "none" },
+    { "name": "live never judged", "phase": "live", "updatedAt": 1800000000000, "nowMs": 1800003600000, "quiet": "none" },
+    { "name": "clock behind the server", "phase": "installing", "updatedAt": 1800000000000, "nowMs": 1799999000000, "quiet": "none" }
+  ]
+}

@@ -34,12 +34,42 @@ final class VMInventoryStoreTests: XCTestCase {
                         tier: .hostedVM)
     }
 
+    /// home.serene-parrot (2026-11-02): the installer powered off without the
+    /// late command, the sealed disk could never ask, and Studio told the owner
+    /// to approve the first unlock.
+    func testASealedBootWhoseInstallNeverRegisteredSaysSoInsteadOfAskingForAnApproval() {
+        var r = record(name: "home.harry.flagship.services")
+        r.state = .awaitingPhoneUnlock
+        r.installLastPhase = "installing"
+        XCTAssertTrue(r.sealedButNeverSetUp)
+        XCTAssertEqual(r.stateLabel, VMRecord.AwaitingUnlockCopy.notSetUpLabel)
+        XCTAssertEqual(r.awaitingUnlockSubtitle, VMRecord.AwaitingUnlockCopy.notSetUp)
+        r.installLastPhase = "sealing"
+        XCTAssertFalse(r.sealedButNeverSetUp)
+        XCTAssertEqual(r.awaitingUnlockSubtitle, VMRecord.AwaitingUnlockCopy.firstBoot)
+        r.installLastPhase = nil
+        XCTAssertEqual(r.awaitingUnlockSubtitle, VMRecord.AwaitingUnlockCopy.firstBoot)
+        // Once it has connected, a restart is judged as before.
+        r.installLastPhase = "installing"
+        r.lastConnectedAt = Date()
+        XCTAssertFalse(r.sealedButNeverSetUp)
+        XCTAssertEqual(r.stateLabel, "Unlocking…")
+    }
+
+    func testARecordWithoutTheInstallPhaseStillDecodes() throws {
+        let r = record(name: "home.harry.flagship.services")
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(r)) as! [String: Any]
+        json.removeValue(forKey: "installLastPhase")
+        let back = try JSONDecoder().decode(VMRecord.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(back.installLastPhase)
+    }
+
     // MARK: - Layout
 
     func testOnlyAFirstOrApproveBootWaitsForThePhone() {
         var r = record(name: "home.harry.flagship.services")
         r.state = .awaitingPhoneUnlock
-        XCTAssertEqual(r.stateLabel, "Waiting for you to unlock")
+        XCTAssertEqual(r.stateLabel, "Starting…")
         r.lastConnectedAt = Date()
         XCTAssertEqual(r.stateLabel, "Unlocking…")
         r.state = .running

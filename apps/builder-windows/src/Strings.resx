@@ -350,10 +350,6 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Installing…</value>
     <comment>VM/VMLifecycle.cs:55 (prose)</comment>
   </data>
-  <data name="waitingForYouToUnlock" xml:space="preserve">
-    <value>Waiting for you to unlock</value>
-    <comment>VM/VMLifecycle.cs:57 (prose)</comment>
-  </data>
   <data name="installFailed" xml:space="preserve">
     <value>Install failed</value>
     <comment>VM/VMLifecycle.cs:60 (prose)</comment>
@@ -450,13 +446,21 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.</value>
     <comment>VM/VMManager.cs:96 (prose)</comment>
   </data>
-  <data name="theDiskIsSealedApproveThe" xml:space="preserve">
-    <value>The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.</value>
-    <comment>VM/VMManager.cs:98 (prose)</comment>
+  <data name="startingWhenYourPhoneAsksApproveFirst" xml:space="preserve">
+    <value>Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.</value>
+    <comment>VM/VMManager.cs:95 (prose)</comment>
   </data>
-  <data name="theDiskIsSealedApproveThe2" xml:space="preserve">
-    <value>The disk is sealed — approve the unlock on your phone.</value>
-    <comment>VM/VMManager.cs:100 (prose)</comment>
+  <data name="startingWhenYourPhoneAsksApprove" xml:space="preserve">
+    <value>Starting. When your phone asks, approve the unlock there.</value>
+    <comment>VM/VMManager.cs:96 (prose)</comment>
+  </data>
+  <data name="theInstallerFinishedButThisServerNever" xml:space="preserve">
+    <value>The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.</value>
+    <comment>VM/VMManager.cs:97 (prose)</comment>
+  </data>
+  <data name="setupDidntFinish" xml:space="preserve">
+    <value>Setup didn't finish</value>
+    <comment>VM/VMManager.cs:99 (prose)</comment>
   </data>
   <data name="waitingForTheFirstGuestCheckpoint" xml:space="preserve">
     <value>Waiting for the first guest checkpoint.</value>

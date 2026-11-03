@@ -265,9 +265,6 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="installing" xml:space="preserve">
     <value>Installiere …</value>
   </data>
-  <data name="waitingForYouToUnlock" xml:space="preserve">
-    <value>Warte auf deine Entsperrung</value>
-  </data>
   <data name="installFailed" xml:space="preserve">
     <value>Installation fehlgeschlagen</value>
   </data>
@@ -340,11 +337,17 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="unlockingItsDiskWithTheKey" xml:space="preserve">
     <value>Der Datenträger wird mit dem Schlüssel entsperrt, den dein Telefon hinterlassen hat. Wenn dein Telefon um Freigabe bittet, genehmige dort.</value>
   </data>
-  <data name="theDiskIsSealedApproveThe" xml:space="preserve">
-    <value>Der Datenträger ist versiegelt – genehmige die erste Entsperrung am Telefon. Danach sollte er sich von selbst entsperren; fragt dein Telefon erneut, genehmige dort.</value>
+  <data name="startingWhenYourPhoneAsksApproveFirst" xml:space="preserve">
+    <value>Startet. Wenn dein Telefon fragt, genehmige dort die erste Entsperrung dieses Servers. Danach sollte er sich von selbst entsperren; fragt dein Telefon erneut, genehmige dort.</value>
   </data>
-  <data name="theDiskIsSealedApproveThe2" xml:space="preserve">
-    <value>Der Datenträger ist versiegelt – genehmige die Entsperrung am Telefon.</value>
+  <data name="startingWhenYourPhoneAsksApprove" xml:space="preserve">
+    <value>Startet. Wenn dein Telefon fragt, genehmige dort die Entsperrung.</value>
+  </data>
+  <data name="theInstallerFinishedButThisServerNever" xml:space="preserve">
+    <value>Die Installation ist beendet, aber dieser Server hat sich nie registriert, daher gibt es nichts zu genehmigen. Lösche ihn in Studio und erstelle ihn auf deinem Telefon neu.</value>
+  </data>
+  <data name="setupDidntFinish" xml:space="preserve">
+    <value>Einrichtung nicht abgeschlossen</value>
   </data>
   <data name="waitingForTheFirstGuestCheckpoint" xml:space="preserve">
     <value>Warte auf den ersten Gast-Checkpoint.</value>

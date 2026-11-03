@@ -240,6 +240,28 @@ public class VMCoreVectorTests
         Assert.Equal(section.GetProperty("unlocksOnItsOwn").GetString(), HostedServer.AwaitingUnlockOnItsOwn);
         Assert.Equal(section.GetProperty("firstBoot").GetString(), HostedServer.AwaitingUnlockFirstBoot);
         Assert.Equal(section.GetProperty("approveEveryBoot").GetString(), HostedServer.AwaitingUnlockApproveEveryBoot);
+        Assert.Equal(section.GetProperty("notSetUp").GetString(), HostedServer.AwaitingUnlockNotSetUp);
+        Assert.Equal(section.GetProperty("label").GetString(), HostedServer.AwaitingUnlockLabel);
+        Assert.Equal(section.GetProperty("label").GetString(), VMState.AwaitingPhoneUnlock.Label);
+        Assert.Equal(section.GetProperty("notSetUpLabel").GetString(), HostedServer.AwaitingUnlockNotSetUpLabel);
+    }
+
+    [Fact]
+    public void SealedBootSetUpMatchesVectors()
+    {
+        var section = Vectors.GetProperty("sealedBootSetUp");
+        var never = section.GetProperty("neverSetUpPhases").EnumerateArray().Select(p => p.GetString()!).ToHashSet();
+        Assert.True(never.SetEquals(VMLifecycle.NeverSetUpPhases));
+        foreach (var phase in section.GetProperty("setUpPhases").EnumerateArray())
+            Assert.False(VMLifecycle.NeverSetUp(phase.GetString()), phase.GetString());
+        int count = 0;
+        foreach (var c in section.GetProperty("cases").EnumerateArray())
+        {
+            var phase = c.GetProperty("lastPhase").ValueKind == JsonValueKind.Null ? null : c.GetProperty("lastPhase").GetString();
+            Assert.True(c.GetProperty("neverSetUp").GetBoolean() == VMLifecycle.NeverSetUp(phase), phase ?? "null");
+            count++;
+        }
+        Assert.True(count >= 6, "vector file must actually contain sealedBootSetUp cases");
     }
 
     // ---- disk durability ----

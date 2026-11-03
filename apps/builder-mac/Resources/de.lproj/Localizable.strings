@@ -119,8 +119,6 @@
 "Waiting for an installer checkpoint" = "Warte auf einen Installer-Checkpoint";
 "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry." = "Dauert länger als erwartet – die Box hat das Netzwerk vielleicht nicht erreicht oder wartet darauf, dass du die Entsperrung am Telefon genehmigst. Prüfe, ob sie online ist, oder schalte sie aus und versuche es erneut.";
 "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there." = "Der Datenträger wird mit dem Schlüssel entsperrt, den dein Telefon hinterlassen hat. Wenn dein Telefon um Freigabe bittet, genehmige dort.";
-"The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there." = "Der Datenträger ist versiegelt – genehmige die erste Entsperrung am Telefon. Danach sollte er sich von selbst entsperren; fragt dein Telefon erneut, genehmige dort.";
-"The disk is sealed — approve the unlock on your phone." = "Der Datenträger ist versiegelt – genehmige die Entsperrung am Telefon.";
 "Library/Application Support" = "Library/Application Support";
 "The app quit while the install was running." = "Die App wurde beendet, während die Installation lief.";
 "Hosting Flagship servers for the internet" = "Flagship-Server für das Internet werden gehostet";
@@ -220,3 +218,9 @@
 "The helper would not accept that disk." = "Das Hilfsprogramm hat diesen Datenträger nicht angenommen.";
 "Couldn't unmount the disk: %@" = "Der Datenträger konnte nicht ausgehängt werden: %@";
 "Beta" = "Beta";
+"Starting…" = "Starte …";
+"Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there." = "Startet. Wenn dein Telefon fragt, genehmige dort die erste Entsperrung dieses Servers. Danach sollte er sich von selbst entsperren; fragt dein Telefon erneut, genehmige dort.";
+"Starting. When your phone asks, approve the unlock there." = "Startet. Wenn dein Telefon fragt, genehmige dort die Entsperrung.";
+"The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone." = "Die Installation ist beendet, aber dieser Server hat sich nie registriert, daher gibt es nichts zu genehmigen. Lösche ihn in Studio und erstelle ihn auf deinem Telefon neu.";
+"Setup didn't finish" = "Einrichtung nicht abgeschlossen";
+"Unlocking…" = "Entsperre …";

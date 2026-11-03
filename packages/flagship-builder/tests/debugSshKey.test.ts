@@ -65,7 +65,7 @@ const DEV_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITESTKEYdiagnostic dev@flag
 /** Decode the first-boot bootstrap out of the preseed's in-target echo. */
 function bootstrapFromPreseed(cfg: string): string {
   const m = cfg.match(
-    /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/,
+    /^d-i flagship\/bootstrap string ([A-Za-z0-9+/=]+)$/m,
   );
   if (!m) throw new Error("bootstrap not found in preseed");
   return Buffer.from(m[1]!, "base64").toString("utf8");

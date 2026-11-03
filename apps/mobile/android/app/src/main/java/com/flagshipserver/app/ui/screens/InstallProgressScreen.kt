@@ -72,6 +72,15 @@ fun InstallProgressScreen(
     var detail by remember { mutableStateOf<String?>(null) }
     var resolvedFqdn by remember { mutableStateOf<String?>(null) }
     var hadFirstReport by remember { mutableStateOf(false) }
+    var updatedAt by remember { mutableStateOf<Long?>(null) }
+    // Re-judge a quiet box even when no new status arrives.
+    var quietTick by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(com.flagshipserver.app.core.ProvisionQuiet.RECHECK_MS)
+            quietTick = System.currentTimeMillis()
+        }
+    }
 
     LaunchedEffect(serial) {
         // Poll the ONE canonical channel until a terminal phase
@@ -85,6 +94,7 @@ fun InstallProgressScreen(
                 prevPhase = rec.history.dropLast(1).lastOrNull()?.phase
                 phase = rec.phase
                 detail = rec.detail
+                updatedAt = rec.updatedAt
                 if (rec.serverDomain != null) resolvedFqdn = rec.serverDomain
                 com.flagshipserver.app.companion.ProvisionProgressCenter.report(
                     context,
@@ -114,7 +124,8 @@ fun InstallProgressScreen(
                     modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
                 )
             }
-            val steps = ProvisionProgress.stepStates(phase, detail, prevPhase)
+            val quiet = com.flagshipserver.app.core.ProvisionQuiet.of(phase, updatedAt, maxOf(quietTick, System.currentTimeMillis()))
+            val steps = ProvisionProgress.stepStates(phase, detail, prevPhase, quiet)
             for (step in steps) {
                 InstallStepRow(step)
             }

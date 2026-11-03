@@ -119,8 +119,6 @@
 "Waiting for an installer checkpoint" = "Esperando un punto de control del instalador";
 "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry." = "Tarda más de lo esperado: puede que el equipo no haya llegado a la red o esté esperando a que apruebes el desbloqueo en tu teléfono. Comprueba que esté en línea, o apágalo y reinténtalo.";
 "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there." = "Desbloqueando su disco con la clave que el teléfono le dejó. Si el teléfono te pide aprobar, hazlo allí.";
-"The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there." = "El disco está sellado: aprueba el primer desbloqueo en tu teléfono. Después debería desbloquearse solo; si el teléfono te lo vuelve a pedir, apruébalo allí.";
-"The disk is sealed — approve the unlock on your phone." = "El disco está sellado: aprueba el desbloqueo en tu teléfono.";
 "Library/Application Support" = "Library/Application Support";
 "The app quit while the install was running." = "La app se cerró mientras se ejecutaba la instalación.";
 "Hosting Flagship servers for the internet" = "Alojando servidores Flagship para internet";
@@ -220,3 +218,9 @@
 "The helper would not accept that disk." = "El asistente no aceptó ese disco.";
 "Couldn't unmount the disk: %@" = "No se pudo desmontar el disco: %@";
 "Beta" = "Beta";
+"Starting…" = "Iniciando…";
+"Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there." = "Iniciando. Cuando tu teléfono te lo pida, aprueba allí el primer desbloqueo de este servidor. Después debería desbloquearse solo; si el teléfono te lo vuelve a pedir, apruébalo allí.";
+"Starting. When your phone asks, approve the unlock there." = "Iniciando. Cuando tu teléfono te lo pida, aprueba allí el desbloqueo.";
+"The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone." = "El instalador terminó, pero este servidor nunca se registró, así que no hay nada que aprobar. Elimínalo en Studio y vuelve a crearlo desde tu teléfono.";
+"Setup didn't finish" = "La configuración no terminó";
+"Unlocking…" = "Desbloqueando…";

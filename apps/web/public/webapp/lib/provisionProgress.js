@@ -69,6 +69,39 @@ export const PROVISION_STEP_GROUPS = Object.freeze([
 export const INSTALLED_DONE_DETAIL =
   tr("Install complete. If it ran from a USB stick, unplug it and power the server back on.");
 
+/** A box gone quiet (packages/protocol/test-vectors/provision-quiet, the same
+ *  on iOS and Android). d-i reports at least every 2 minutes while it runs, so
+ *  an `installing` status older than 5 minutes means the installer finished
+ *  (or died); a pre-registration phase older than 20 minutes means the box
+ *  stopped reporting before it registered. */
+export const PROVISION_INSTALLER_QUIET_AFTER_MS = 300_000;
+export const PROVISION_STUCK_AFTER_MS = 1_200_000;
+export const PROVISION_STUCK_PHASES = Object.freeze(["booting", "partitioning", "installing", "downloading", "registering", "sealing"]);
+
+export const PROVISION_QUIET_COPY = Object.freeze({
+  installerFinished: tr("The installer finished. The server is starting and should register in a few minutes."),
+  stuck: tr("This server stopped reporting and hasn't registered. It may be stuck."),
+  stuckAdvice: tr("If it runs in Flagship Studio, look at it there. Otherwise restart the machine. If it still doesn't come up, cancel the order and create the server again."),
+});
+
+/** @param {string|null|undefined} phase
+ *  @param {number|null|undefined} updatedAt  the status's own updatedAt (ms)
+ *  @param {number} nowMs
+ *  @returns {"none"|"installerFinished"|"stuck"} */
+export function provisionQuiet(phase, updatedAt, nowMs) {
+  if (!phase || typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) return "none";
+  const quietMs = nowMs - updatedAt;
+  if (quietMs < 0) return "none";
+  if (PROVISION_STUCK_PHASES.includes(phase) && quietMs >= PROVISION_STUCK_AFTER_MS) return "stuck";
+  if (phase === "installing" && quietMs >= PROVISION_INSTALLER_QUIET_AFTER_MS) return "installerFinished";
+  return "none";
+}
+
+/** The advice under the checklist of a stuck pending server. */
+export function renderStuckAdvice() {
+  return `<p class="note mt-2" id="provision-stuck-advice">${esc(PROVISION_QUIET_COPY.stuckAdvice)}</p>`;
+}
+
 /** The box's failure text for a person: "Setup stopped while Expanding the
  *  disk (line 66)" loses the shell line number; empty becomes the title.
  *  MIRRORS: Android ProvisionProgress.failureDetail.
@@ -115,9 +148,10 @@ function groupKeyForPhase(phase) {
  * @param {string|null|undefined} phase
  * @param {string|null} [lastError]
  * @param {string|null} [prevPhase]
+ * @param {"none"|"installerFinished"|"stuck"} [quiet]  provisionQuiet(): replaces the current row's detail
  * @returns {Array<{key: string, label: string, state: "done"|"active"|"pending"|"failed", detail: string|null}>}
  */
-export function provisionStepStates(phase, lastError, prevPhase) {
+export function provisionStepStates(phase, lastError, prevPhase, quiet = "none") {
   const groups = PROVISION_STEP_GROUPS;
 
   if (phase === "live") {
@@ -162,7 +196,9 @@ export function provisionStepStates(phase, lastError, prevPhase) {
   return groups.map((g, i) => {
     if (i < activeIdx) return { key: g.key, label: g.label, state: "done", detail: null };
     if (i === activeIdx) {
-      const detail = phase === "installed" ? INSTALLED_DONE_DETAIL : PROVISION_PHASE_TITLES[phase];
+      const detail =
+        (quiet === "installerFinished" || quiet === "stuck" ? PROVISION_QUIET_COPY[quiet] : null) ??
+        (phase === "installed" ? INSTALLED_DONE_DETAIL : PROVISION_PHASE_TITLES[phase]);
       return { key: g.key, label: g.label, state: "active", detail };
     }
     return { key: g.key, label: g.label, state: "pending", detail: null };
@@ -216,7 +252,7 @@ export function renderListProgressBar(block) {
  *  @returns {string} */
 export function renderProgressDetail(block) {
   if (!block) return "";
-  const steps = provisionStepStates(block.phase, block.lastError);
+  const steps = provisionStepStates(block.phase, block.lastError, null, block.quiet);
   const pct = Math.round(provisionFraction(block.phase) * 100);
   const failed = block.phase === "error";
   const rows = steps

@@ -527,13 +527,21 @@
     "en": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
     "ctx": "vm/manager.py:65 (prose)"
   },
-  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": {
-    "en": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
-    "ctx": "vm/manager.py:69 (prose)"
-  },
-  "The disk is sealed — approve the unlock on your phone.": {
-    "en": "The disk is sealed — approve the unlock on your phone.",
+  "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.": {
+    "en": "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.",
     "ctx": "vm/manager.py:72 (prose)"
+  },
+  "Starting. When your phone asks, approve the unlock there.": {
+    "en": "Starting. When your phone asks, approve the unlock there.",
+    "ctx": "vm/manager.py:75 (prose)"
+  },
+  "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.": {
+    "en": "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.",
+    "ctx": "vm/manager.py:77 (prose)"
+  },
+  "Setup didn't finish": {
+    "en": "Setup didn't finish",
+    "ctx": "vm/manager.py:81 (prose)"
   },
   "Booting the installer": {
     "en": "Booting the installer",
@@ -690,10 +698,6 @@
   "Installing…": {
     "en": "Installing…",
     "ctx": "vm/lifecycle.py:89 (prose)"
-  },
-  "Waiting for you to unlock": {
-    "en": "Waiting for you to unlock",
-    "ctx": "vm/lifecycle.py:93 (prose)"
   },
   "Install failed": {
     "en": "Install failed",

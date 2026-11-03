@@ -307,6 +307,7 @@ final class VMManager: ObservableObject {
                         ? "specialization finished"
                         : "install finished"
                     log(String(localized: "VM \(name): \(verb) — booting sealed disk"))
+                    await recordInstallLastPhase(name: name, installStartedAt: startedAt)
                     await apply(.installSucceeded, to: name)
                     // First boot from disk follows immediately; an encrypted
                     // guest then sits sealed in awaiting-phone-unlock.
@@ -452,6 +453,36 @@ final class VMManager: ObservableObject {
                 self?.reportInstallStallIfNeeded(name: name)
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
             }
+        }
+    }
+
+    /// Keep the install's last order-status phase on the record, so a sealed
+    /// first boot of a box that never registered says so instead of asking
+    /// for an approval that can't come (vm-core-vectors.json "sealedBootSetUp").
+    /// The box reports `sealing` / `installed` just before it powers off, which
+    /// the 15 s poll can miss, so the status is read once more here.
+    private func recordInstallLastPhase(name: String, installStartedAt: Date) async {
+        guard var server = server(named: name) else { return }
+        var phase = installObservations[name]?.phase
+        if let serial = server.record.config.provisionStatusSerial,
+           let url = VMInstallObservation.statusURL(serial: serial) {
+            let session = URLSession(configuration: {
+                let c = URLSessionConfiguration.ephemeral
+                c.timeoutIntervalForRequest = 8
+                return c
+            }())
+            if let (data, response) = try? await session.data(from: url),
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let observation = VMInstallObservation.decode(data),
+               observation.updatedAt >= installStartedAt.addingTimeInterval(-30) {
+                phase = observation.phase
+            }
+        }
+        server.record.installLastPhase = phase
+        upsert(server)
+        try? store.save(server.record)
+        if VMRecord.neverSetUp(lastInstallPhase: phase) {
+            log(String(localized: "VM \(name): the installer stopped before the server registered (last checkpoint: \(phase ?? "")); its disk has nothing to ask your phone"))
         }
     }
 

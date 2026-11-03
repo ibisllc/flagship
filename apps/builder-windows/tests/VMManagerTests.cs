@@ -231,7 +231,8 @@ public sealed class VMManagerTests : IDisposable
         var s = Manager().Servers.Single();
         s.Record = s.Record with { State = VMState.AwaitingPhoneUnlock, StateChangedAt = DateTimeOffset.UtcNow };
         Assert.Equal(VMState.AwaitingPhoneUnlock.Label, s.StateLabel);
-        Assert.Contains("approve the first unlock", s.StatusSubtitle);
+        Assert.Equal("Starting…", s.StateLabel);
+        Assert.Contains("When your phone asks, approve this server's first unlock", s.StatusSubtitle);
         Assert.Contains("if your phone asks again", s.StatusSubtitle);
         Assert.Equal("Not connected yet", s.LastConnectedText);
 
@@ -244,6 +245,64 @@ public sealed class VMManagerTests : IDisposable
         s.Record = s.Record with { Config = s.Record.Config with { BootUnlockMode = "approve" } };
         Assert.Equal(VMState.AwaitingPhoneUnlock.Label, s.StateLabel);
         Assert.Contains("approve the unlock", s.StatusSubtitle);
+    }
+
+    [Fact]
+    public void ANeverConnectedSealedServerThatNeverSealedItsKeySaysSetupDidntFinish()
+    {
+        Seed("home.harry.flagship.services", VMState.Stopped);
+        var s = Manager().Servers.Single();
+        s.Record = s.Record with
+        {
+            State = VMState.AwaitingPhoneUnlock,
+            StateChangedAt = DateTimeOffset.UtcNow,
+            InstallLastPhase = "installing",
+        };
+        Assert.Equal(HostedServer.AwaitingUnlockNotSetUp, s.StatusSubtitle);
+        Assert.Equal(HostedServer.AwaitingUnlockNotSetUpLabel, s.StateLabel);
+
+        // It takes precedence over the stall advisory.
+        s.Record = s.Record with { StateChangedAt = DateTimeOffset.UtcNow.AddHours(-1) };
+        Assert.True(s.ComingUpStalled);
+        Assert.Equal(HostedServer.AwaitingUnlockNotSetUp, s.StatusSubtitle);
+
+        s.Record = s.Record with { InstallLastPhase = "sealing", StateChangedAt = DateTimeOffset.UtcNow };
+        Assert.Equal(HostedServer.AwaitingUnlockFirstBoot, s.StatusSubtitle);
+        Assert.Equal(HostedServer.AwaitingUnlockLabel, s.StateLabel);
+
+        // A server that connected before is never judged by its install.
+        s.Record = s.Record with { InstallLastPhase = "installing", LastConnectedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        Assert.Equal(HostedServer.AwaitingUnlockOnItsOwn, s.StatusSubtitle);
+        Assert.Equal("Unlocking…", s.StateLabel);
+    }
+
+    [Fact]
+    public void InstallLastPhaseRoundTripsAndOldRecordsReadAsUnknown()
+    {
+        Seed("home.harry.flagship.services", VMState.Stopped);
+        Assert.Null(_store.Load("home.harry.flagship.services").InstallLastPhase);
+        var path = _store.Layout.ConfigPath("home.harry.flagship.services");
+        // A config.json written before the field existed decodes as unknown.
+        var legacy = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        Assert.True(legacy.Remove("installLastPhase"));
+        File.WriteAllText(path, legacy.ToJsonString());
+        Assert.Null(_store.Load("home.harry.flagship.services").InstallLastPhase);
+        _store.Save(_store.Load("home.harry.flagship.services") with { InstallLastPhase = "sealing" });
+        Assert.Contains("\"installLastPhase\"", File.ReadAllText(path));
+        Assert.Equal("sealing", _store.Load("home.harry.flagship.services").InstallLastPhase);
+    }
+
+    [Fact]
+    public void TheFinalInstallPhasePrefersTheLastFetchThenThePoll()
+    {
+        var polled = new InstallObservation("registering", null, DateTimeOffset.UtcNow);
+        Assert.Equal("sealing", VMManager.LastInstallPhase("sealing", polled));
+        Assert.Equal("registering", VMManager.LastInstallPhase(null, polled));
+        Assert.Null(VMManager.LastInstallPhase(null, null));
+        Assert.Equal("installed", VMManager.ParseInstallPhase("{\"phase\":\"installed\",\"updatedAt\":1}"));
+        Assert.Null(VMManager.ParseInstallPhase("{\"phase\":\"nonsense\"}"));
+        Assert.Null(VMManager.ParseInstallPhase("not json"));
+        Assert.Null(VMManager.ParseInstallPhase(null));
     }
 
     [Fact]

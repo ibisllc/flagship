@@ -18,7 +18,7 @@ import {
   type AuthCode,
   type InstallBlob,
 } from "@flagship/protocol";
-import { buildDebianPreseed } from "../src/preseed.js";
+import { assertPreseedCommandsFit, buildDebianPreseed, PRESEED_COMMAND_MAX_BYTES, replacePreseedBootstrap } from "../src/preseed.js";
 import { DEFAULT_BOOT_HOST } from "../src/userdata.js";
 
 function makeKeypair(seedByte: number) {
@@ -67,16 +67,14 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string } {
 
 /** Pull the install-blob.json base64 out of the late_command. */
 function extractEmbeddedBlob(cfg: string): Record<string, any> {
-  const m = cfg.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/);
+  const m = cfg.match(/^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m);
   if (!m) throw new Error("install-blob late_command not found in preseed");
   return JSON.parse(Buffer.from(m[1]!, "base64").toString("utf8"));
 }
 
 /** Decode the embedded first-boot bootstrap script out of the late_command. */
 function extractBootstrap(cfg: string): string {
-  const m = cfg.match(
-    /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/,
-  );
+  const m = cfg.match(/^d-i flagship\/bootstrap string ([A-Za-z0-9+/=]+)$/m);
   if (!m) throw new Error("bootstrap late_command not found in preseed");
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
@@ -352,6 +350,55 @@ describe("buildDebianPreseed — first-boot bootstrap ", () => {
     expect(c).toContain("/target/usr/local/sbin/flagship-bootstrap.sh");
   });
 
+  // d-i execs each preseeded command as ONE argument (and logs it through
+  // logger); Linux refuses arguments over 128 KiB and d-i then skips the
+  // late_command silently and powers off "installed" with a disk nobody can
+  // unlock (home.serene-parrot, 2026-11-02: Wi-Fi took it to ~134 KB).
+  it("keeps every preseeded command far under d-i's 128 KiB argument limit, Wi-Fi and debug grant included", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const variants = [
+      {},
+      { wifiSSID: "A".repeat(32), wifiPassword: "p".repeat(63) },
+      { encryptRoot: false, wifiSSID: "HomeNet", wifiPassword: "s3cret" },
+      { debugSshAuthorizedKey: "ssh-ed25519 AAAA dev@x" },
+    ];
+    for (const v of variants) {
+      const c = buildDebianPreseed({ blob, blobSignatureHex, ...v });
+      for (const line of c.replace(/\\\n/g, " ").split("\n")) {
+        const m = /^d-i (preseed\/early_command|partman\/early_command|preseed\/late_command) string (.*)$/.exec(line);
+        if (m) expect(m[2]!.length, m[1]).toBeLessThan(PRESEED_COMMAND_MAX_BYTES);
+      }
+      const late = c.slice(c.indexOf("d-i preseed/late_command"));
+      expect(late).not.toMatch(/[A-Za-z0-9+/=]{2048}/);
+    }
+  });
+
+  it("reads the payloads back with debconf-get, checks their length and holds when one is cut", () => {
+    const c = buildDebianPreseed({ ...signedBlob(), wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    const late = c.slice(c.indexOf("d-i preseed/late_command"));
+    const boot = extractBootstrap(c);
+    expect(late).toContain(`debconf-get flagship/bootstrap | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh && [ "$(wc -c < /target/usr/local/sbin/flagship-bootstrap.sh)" -eq ${Buffer.byteLength(boot)} ]`);
+    expect(late).toContain(`[ "$(wc -c < /target/var/flagship/install-blob.json)" -eq ${Buffer.byteLength(JSON.stringify(extractEmbeddedBlob(c)))} ]`);
+    expect(late).toContain("debconf-get flagship/wifi-setup | base64 -d > /target/tmp/flagship-wifi.sh");
+    // A cut payload writes a FATAL line and lands in the hold, never the poweroff.
+    expect(late).toMatch(/FATAL: the install payload did not arrive whole' > \/target\/var\/log\/flagship-bootstrap\.log; false; \}; \} && \( in-target \/usr\/local\/sbin\/flagship-bootstrap\.sh/);
+    // The payload answers come before the late_command that reads them.
+    expect(c.indexOf("d-i flagship/bootstrap string")).toBeLessThan(c.indexOf("d-i preseed/late_command"));
+  });
+
+  it("refuses a preseed whose command would cross the limit", () => {
+    const big = "x".repeat(PRESEED_COMMAND_MAX_BYTES + 1);
+    expect(() => assertPreseedCommandsFit(`d-i preseed/late_command string ${big}\n`)).toThrow(/late_command/);
+    expect(() => assertPreseedCommandsFit(`d-i partman/early_command string a \\\n${big}\n`)).toThrow(/early_command/);
+    expect(() => assertPreseedCommandsFit(`d-i flagship/bootstrap string ${big}\n`)).not.toThrow();
+  });
+
+  it("replacePreseedBootstrap swaps the payload and its length check together", () => {
+    const c = replacePreseedBootstrap(buildDebianPreseed(signedBlob()), "#!/bin/bash\necho hi\n");
+    expect(extractBootstrap(c)).toBe("#!/bin/bash\necho hi\n");
+    expect(c).toContain(`flagship-bootstrap.sh)" -eq 20 ]`);
+  });
+
   it("sets up the daemon (env, relay-fetched entitlements, units)", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/flagship/daemon.env");
@@ -433,7 +480,7 @@ describe("buildDebianPreseed — optional Wi-Fi (burn-time local input)", () => 
 
   /** Decode the base64 Wi-Fi script out of the late_command. */
   function extractWifiScript(c: string): string {
-    const m = c.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/tmp\/flagship-wifi\.sh/);
+    const m = c.match(/^d-i flagship\/wifi-setup string ([A-Za-z0-9+/=]+)$/m);
     if (!m) throw new Error("wifi setup command not found in preseed");
     return Buffer.from(m[1]!, "base64").toString("utf8");
   }

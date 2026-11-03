@@ -19,14 +19,17 @@ public struct ProvisionTimelineView: View {
 
     /// The latest status, or nil before the first checkpoint.
     let status: ProvisionStatus?
+    /// When the quiet-box copy is judged; the pending screen ticks it.
+    let now: Date
 
-    public init(status: ProvisionStatus?) {
+    public init(status: ProvisionStatus?, now: Date = Date()) {
         self.status = status
+        self.now = now
     }
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        let rows = ProvisionTimelineLadder.rows(for: status)
+        let rows = ProvisionTimelineLadder.rows(for: status, now: now)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.phase) { idx, row in
                 timelineRow(

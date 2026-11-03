@@ -73,14 +73,27 @@ public struct PendingServerScreen: View {
                 // While the box waits for the owner, the install checklist is
                 // finished and only pushes the Approve card off the screen.
                 if !awaitingUnlock {
-                    FSCard {
-                        VStack(alignment: .leading, spacing: FS.space.s3) {
-                            FSPill(pillLabel, kind: pillKind)
-                            Text(headline)
-                                .font(FS.font.body())
-                                .foregroundColor(c.text)
-                            ProvisionTimelineView(status: timeline?.status)
-                                .padding(.top, FS.space.s1)
+                    // Ticks so a box that went quiet reads as "installer finished",
+                    // then "may be stuck", with no new checkpoint arriving.
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        let quiet = timeline?.status.map {
+                            ProvisionQuiet.of(phase: $0.phase.rawValue, updatedAtMs: $0.updatedAt, now: context.date)
+                        } ?? .none
+                        FSCard {
+                            VStack(alignment: .leading, spacing: FS.space.s3) {
+                                FSPill(pillLabel, kind: pillKind)
+                                Text(headline)
+                                    .font(FS.font.body())
+                                    .foregroundColor(c.text)
+                                ProvisionTimelineView(status: timeline?.status, now: context.date)
+                                    .padding(.top, FS.space.s1)
+                                if quiet == .stuck {
+                                    Text(ProvisionQuiet.stuckAdvice)
+                                        .font(FS.font.bodySm())
+                                        .foregroundColor(c.textMuted)
+                                        .accessibilityIdentifier("pending-stuck-advice")
+                                }
+                            }
                         }
                     }
                 }

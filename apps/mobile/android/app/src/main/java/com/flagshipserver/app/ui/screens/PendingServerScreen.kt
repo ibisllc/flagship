@@ -90,6 +90,14 @@ fun PendingServerScreen(
         }
     }
     LaunchedEffect(timeline) { timeline?.runUntilTerminal() }
+    // Re-judge a quiet box even when no new status arrives.
+    var quietTick by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(com.flagshipserver.app.core.ProvisionQuiet.RECHECK_MS)
+            quietTick = System.currentTimeMillis()
+        }
+    }
     // Mirror each checkpoint onto the ongoing setup notification (and watch).
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(timeline) {
@@ -137,10 +145,21 @@ fun PendingServerScreen(
                         )
                     }
                     val prevPhase = status?.history?.dropLast(1)?.lastOrNull()?.phase
-                    val steps = ProvisionProgress.stepStates(status?.phase, status?.detail, prevPhase)
+                    val quiet = com.flagshipserver.app.core.ProvisionQuiet.of(
+                        status?.phase, status?.updatedAt, maxOf(quietTick, System.currentTimeMillis()),
+                    )
+                    val steps = ProvisionProgress.stepStates(status?.phase, status?.detail, prevPhase, quiet)
                     for (step in steps) {
                         // The card's own gutter already insets the rows.
                         InstallStepRow(step, horizontalPadding = 0.dp)
+                    }
+                    if (quiet == com.flagshipserver.app.core.ProvisionQuiet.STUCK) {
+                        Text(
+                            stringResource(R.string.provision_quiet_stuck_advice),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = FS.space.s2).testTag("pending-stuck-advice"),
+                        )
                     }
                 }
             }

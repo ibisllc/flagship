@@ -34,7 +34,7 @@ def test_labels_are_user_facing():
     assert VMState.created().label == "Created"
     assert VMState.installing().label == "Installing…"
     assert VMState.installed().label == "Installed"
-    assert VMState.awaiting_phone_unlock().label == "Waiting for you to unlock"
+    assert VMState.awaiting_phone_unlock().label == "Starting…"
     assert VMState.running().label == "Running"
     assert VMState.stopped().label == "Stopped"
     assert VMState.failed(VMFailurePhase.INSTALL, "x").label == "Install failed"

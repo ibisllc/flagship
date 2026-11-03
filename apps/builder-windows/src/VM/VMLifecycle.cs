@@ -54,7 +54,7 @@ public sealed record VMState(VMStateKind Kind, VMFailure? Failure = null)
         VMStateKind.Created => "Created",
         VMStateKind.Installing => Strings.T("installing"),
         VMStateKind.Installed => "Installed",
-        VMStateKind.AwaitingPhoneUnlock => Strings.T("waitingForYouToUnlock"),
+        VMStateKind.AwaitingPhoneUnlock => Strings.T("starting"),
         VMStateKind.Running => "Running",
         VMStateKind.Stopped => "Stopped",
         VMStateKind.Failed => Failure?.Phase == VMFailurePhase.Install ? Strings.T("installFailed") : Strings.T("stoppedUnexpectedly"),
@@ -198,6 +198,19 @@ public sealed class VMLifecycle
     /// </summary>
     public static bool ComingUpIsStalled(VMStateKind state, TimeSpan elapsed) =>
         state == VMStateKind.AwaitingPhoneUnlock && elapsed >= ComingUpStallThreshold;
+
+    /// <summary>Order-status phases that mean the box never registered or
+    /// sealed its disk key, so nothing will ever ask the phone to unlock it
+    /// (vm-core-vectors.json "sealedBootSetUp"; mirrors the Mac and Linux).</summary>
+    public static readonly IReadOnlySet<string> NeverSetUpPhases = new HashSet<string>
+    {
+        "booting", "partitioning", "installing", "downloading", "registering", "error",
+    };
+
+    /// <summary>True iff the install's last order-status phase shows the box
+    /// never set itself up. null or an unknown phase keeps the normal copy.</summary>
+    public static bool NeverSetUp(string? lastPhase) =>
+        lastPhase is not null && NeverSetUpPhases.Contains(lastPhase);
 
     public VMEvent VerdictForCleanInstallStop(DateTimeOffset now)
     {

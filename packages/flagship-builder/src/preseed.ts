@@ -172,7 +172,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // script's `systemctl enable`-style symlinks land in the installed system.
   // The script is pinned by sha256 across the builders.
   const wifiLateCommand = hasWifi
-    ? `echo '${wifiScript64}' | base64 -d > /target/tmp/flagship-wifi.sh && in-target bash /tmp/flagship-wifi.sh; `
+    ? `${payloadToFile(PAYLOAD_WIFI, wifiScript64, "/target/tmp/flagship-wifi.sh")} && in-target bash /tmp/flagship-wifi.sh; `
     : "";
 
   // The preseed/late_command. d-i runs it with the target at /target; `in-target`
@@ -189,12 +189,16 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     // server booting the ISO: the install sat at "Running preseed..." for 30+
     // minutes). Every package comes from the network mirror, so drop the line.
     `sed -i '/^deb cdrom:/d' /target/etc/apt/sources.list; ` +
-    `echo '${blobB64}' | base64 -d > /target/var/flagship/install-blob.json; ` +
-    `chmod 600 /target/var/flagship/install-blob.json; ` +
     burnKeyHandoff +
-    `echo '${bootstrapB64}' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; ` +
-    `chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     wifiLateCommand +
+    // The install blob and the bootstrap are their own debconf answers (below),
+    // read back here with debconf-get and checked for length: a missing or cut
+    // payload holds the install rather than powering off as if it were done.
+    `{ { ${payloadToFile(PAYLOAD_BLOB, blobB64, "/target/var/flagship/install-blob.json")} && ` +
+    `chmod 600 /target/var/flagship/install-blob.json && ` +
+    `${payloadToFile(PAYLOAD_BOOTSTRAP, bootstrapB64, "/target/usr/local/sbin/flagship-bootstrap.sh")} && ` +
+    `chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; } || ` +
+    `{ echo '[flagship-bootstrap] FATAL: the install payload did not arrive whole' > /target/var/log/flagship-bootstrap.log; false; }; } && ` +
     // Run the first-boot bootstrap capturing its output to a log on the target
     // (/var/log/flagship-bootstrap.log). On SUCCESS, fire the `installed` beacon
     // (best-effort `|| true`, so it never blocks the imminent poweroff and never
@@ -212,7 +216,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     `( ${installedBeacon} ) || ` +
     installFailedHold;
 
-  return `# Flagship Studio — debian-installer preseed
+  const preseed = `# Flagship Studio — debian-installer preseed
 # Generated at burn time. Don't edit by hand.
 
 ### Localization — fixed, non-interactive.
@@ -324,9 +328,77 @@ d-i finish-install/reboot_in_progress note
 d-i debian-installer/exit/poweroff boolean true
 
 ### First-boot bootstrap — the install-blob + bootstrap, run in the installed
-### target (d-i in-target).
-d-i preseed/late_command string ${lateCommand}
+### target (d-i in-target). The payloads are debconf answers of their own; the
+### late_command reads them back (see PRESEED_COMMAND_MAX_BYTES).
+d-i ${PAYLOAD_BLOB} string ${blobB64}
+d-i ${PAYLOAD_BOOTSTRAP} string ${bootstrapB64}
+${hasWifi ? `d-i ${PAYLOAD_WIFI} string ${wifiScript64}\n` : ""}d-i preseed/late_command string ${lateCommand}
 `;
+  assertPreseedCommandsFit(preseed);
+  return preseed;
+}
+
+/**
+ * The largest preseeded command (early_command, partman/early_command,
+ * late_command) a preseed may carry. d-i's `preseed_command` logs each command
+ * through `logger "...$command"` under `sh -e` and then runs it as one
+ * `sh -c "$command"` argument; Linux refuses any single exec argument over
+ * 128 KiB (MAX_ARG_STRLEN), and d-i then skips the command WITHOUT an error
+ * and powers off as if the install had finished (proved in QEMU on the 13.6.0
+ * arm64 installer). That left a server with a LUKS disk nobody holds the key
+ * to (home.serene-parrot, 2026-11-02: the bootstrap and a Wi-Fi script took
+ * the late_command to ~134 KB). So the large payloads ride as their own
+ * debconf answers (cdebconf round-trips 1 MB values) and every command stays
+ * far below the limit.
+ */
+export const PRESEED_COMMAND_MAX_BYTES = 32 * 1024;
+/** Upper bound for one payload answer (proved to 1 MB through debconf-get). */
+export const PRESEED_PAYLOAD_MAX_BYTES = 768 * 1024;
+
+const PAYLOAD_BLOB = "flagship/install-blob";
+const PAYLOAD_BOOTSTRAP = "flagship/bootstrap";
+const PAYLOAD_WIFI = "flagship/wifi-setup";
+
+/** Decoded byte length of a padded base64 string. */
+function base64DecodedLength(b64: string): number {
+  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+  return (b64.length / 4) * 3 - pad;
+}
+
+/** Shell that writes one debconf payload answer to `path` and checks its size. */
+function payloadToFile(question: string, b64: string, path: string): string {
+  return (
+    `debconf-get ${question} | base64 -d > ${path} && ` +
+    `[ "$(wc -c < ${path})" -eq ${base64DecodedLength(b64)} ]`
+  );
+}
+
+/**
+ * Test harnesses only: swap the bootstrap payload (answer + length check) in a
+ * generated preseed for another script.
+ */
+export function replacePreseedBootstrap(preseed: string, script: string): string {
+  const b64 = utf8ToBase64(script);
+  const answer = new RegExp(`^d-i ${PAYLOAD_BOOTSTRAP} string [A-Za-z0-9+/=]+$`, "m");
+  const length = /(flagship-bootstrap\.sh\)" -eq )\d+/;
+  if (!answer.test(preseed) || !length.test(preseed)) throw new Error("bootstrap payload not found in preseed");
+  return preseed
+    .replace(answer, `d-i ${PAYLOAD_BOOTSTRAP} string ${b64}`)
+    .replace(length, `$1${base64DecodedLength(b64)}`);
+}
+
+export function assertPreseedCommandsFit(preseed: string): void {
+  const logical = preseed.replace(/\\\n/g, " ").split("\n");
+  for (const line of logical) {
+    const command = /^d-i (preseed\/early_command|partman\/early_command|preseed\/late_command) string (.*)$/.exec(line);
+    if (command && command[2]!.length > PRESEED_COMMAND_MAX_BYTES) {
+      throw new Error(`preseed ${command[1]} is ${command[2]!.length} bytes; d-i skips commands over 128 KiB, keep it under ${PRESEED_COMMAND_MAX_BYTES}`);
+    }
+    const payload = /^d-i (flagship\/[a-z-]+) string (.*)$/.exec(line);
+    if (payload && payload[2]!.length > PRESEED_PAYLOAD_MAX_BYTES) {
+      throw new Error(`preseed payload ${payload[1]} is ${payload[2]!.length} bytes, over ${PRESEED_PAYLOAD_MAX_BYTES}`);
+    }
+  }
 }
 
 /**

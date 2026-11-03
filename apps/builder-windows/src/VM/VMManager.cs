@@ -92,13 +92,20 @@ public sealed class HostedServer : INotifyPropertyChanged
     // has to act.
     public static string AwaitingUnlockStalled => Strings.T("takingLongerThanExpectedTheBox");
     public static string AwaitingUnlockOnItsOwn => Strings.T("unlockingItsDiskWithTheKey");
-    public static string AwaitingUnlockFirstBoot => Strings.T("theDiskIsSealedApproveThe");
-    public static string AwaitingUnlockApproveEveryBoot => Strings.T("theDiskIsSealedApproveThe2");
+    public static string AwaitingUnlockFirstBoot => Strings.T("startingWhenYourPhoneAsksApproveFirst");
+    public static string AwaitingUnlockApproveEveryBoot => Strings.T("startingWhenYourPhoneAsksApprove");
+    public static string AwaitingUnlockNotSetUp => Strings.T("theInstallerFinishedButThisServerNever");
+    public static string AwaitingUnlockLabel => Strings.T("starting");
+    public static string AwaitingUnlockNotSetUpLabel => Strings.T("setupDidntFinish");
 
     public string StatusSubtitle
     {
         get
         {
+            // A box that never sealed its key can't ask the phone: say so
+            // before the stall advisory, which would suggest approving.
+            if (_record.SealedBootNeverSetUp)
+                return AwaitingUnlockNotSetUp;
             if (ComingUpStalled)
                 return AwaitingUnlockStalled;
             return _record.State.Kind switch
@@ -209,6 +216,9 @@ public sealed class VMManager
     private readonly Func<string, CancellationToken, Task<bool>> _unlockProbe;
     private readonly TimeSpan _unlockInterval;
     private readonly Func<ulong?> _availableMemory;
+    /// <summary>One GET of /api/order/&lt;serial&gt;/status (the body, or null).</summary>
+    private readonly Func<string, CancellationToken, Task<string?>> _installStatusFetch;
+    private static readonly HttpClient FinalInstallProbe = new() { Timeout = TimeSpan.FromSeconds(5) };
     private readonly HashSet<string> _installStallLogged = new();
     private readonly SynchronizationContext? _sync;
     private readonly Func<DateTimeOffset> _clock;
@@ -228,7 +238,8 @@ public sealed class VMManager
                      TimeSpan? healthInterval = null,
                      Func<string, CancellationToken, Task<bool>>? unlockProbe = null,
                      TimeSpan? unlockInterval = null,
-                     Func<ulong?>? availableMemory = null)
+                     Func<ulong?>? availableMemory = null,
+                     Func<string, CancellationToken, Task<string?>>? installStatusFetch = null)
     {
         Store = store;
         _toolchain = toolchain;
@@ -239,6 +250,7 @@ public sealed class VMManager
         _unlockProbe = unlockProbe ?? ProbeNameAsync;
         _unlockInterval = unlockInterval ?? TimeSpan.FromSeconds(15);
         _availableMemory = availableMemory ?? HostResources.AvailableMemoryBytes;
+        _installStatusFetch = installStatusFetch ?? FetchInstallStatusAsync;
         _sync = SynchronizationContext.Current;
         LoadAndNormalize();
     }
@@ -628,6 +640,10 @@ public sealed class VMManager
                     var verb = config.ProvisioningMode == VMProvisioningMode.PrebuiltAppliance
                         ? "specialization" : "install";
                     Log($"VM {name}: {verb} finished — booting sealed disk");
+                    var lastPhase = LastInstallPhase(await FetchFinalInstallPhaseAsync(config),
+                                                     Server(name)?.InstallObservation);
+                    if (Server(name) is { } finished)
+                        finished.Record = finished.Record with { InstallLastPhase = lastPhase };
                     await ApplyAsync(VMEvent.InstallSucceeded, name);
                     // First boot from disk follows immediately; an encrypted
                     // guest then sits sealed in awaiting-phone-unlock.
@@ -904,6 +920,50 @@ public sealed class VMManager
             server.Health = null;
             server.RefreshTimeDerivedState();
         }
+    }
+
+    /// <summary>The phase to keep for a finished install: the one fetched as
+    /// it stopped, else the last one the poll saw, else unknown.</summary>
+    internal static string? LastInstallPhase(string? fetched, InstallObservation? polled)
+        => fetched ?? polled?.Phase;
+
+    /// <summary>The box reports "sealing" and "installed" just before it powers
+    /// off, often between two 15 s polls, so ask once more as the install
+    /// stops. Best effort: null on any failure.</summary>
+    private async Task<string?> FetchFinalInstallPhaseAsync(VMConfig config)
+    {
+        var serial = config.ProvisionStatusSerial;
+        if (string.IsNullOrEmpty(serial) || !ProvisionSerial.IsMatch(serial)) return null;
+        var url = $"https://{Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST") ?? "flagshipserver.com"}/api/order/{serial}/status";
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var body = await _installStatusFetch(url, cts.Token);
+            return ParseInstallPhase(body);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>The known phase in an order-status body, or null.</summary>
+    internal static string? ParseInstallPhase(string? body)
+    {
+        if (string.IsNullOrEmpty(body)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("phase", out var p)
+                && p.ValueKind == JsonValueKind.String
+                && p.GetString() is { } phase && ProvisionPhases.Contains(phase)
+                ? phase : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static async Task<string?> FetchInstallStatusAsync(string url, CancellationToken ct)
+    {
+        using var response = await FinalInstallProbe.GetAsync(url, ct);
+        return response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(ct) : null;
     }
 
     private static async Task<string?> FetchHealthAsync(string url, CancellationToken ct)

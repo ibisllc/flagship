@@ -505,7 +505,9 @@ final class WizardModel: ObservableObject {
 
     /// Read + verify the recipe and build the Debian d-i preseed for it (pure
     /// string work; keeps the privilege-split flow simple).
-    private func installerPreseed(forRecipe recipe: URL) throws -> String {
+    /// `hostedVM`: a hosted server has a NAT'd virtual NIC and no radio, so the
+    /// remembered Wi-Fi never goes into its installer (Linux Studio does the same).
+    private func installerPreseed(forRecipe recipe: URL, hostedVM: Bool = false) throws -> String {
         // The phone delivers the FULL recipe with its Advanced choices already
         // baked in — including the unsigned `debugGrant` sibling (consent-as-
         // crypto, verified box-side against the owner IRK). The builder passes the
@@ -522,8 +524,8 @@ final class WizardModel: ObservableObject {
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
-                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
+                                                 wifiSSID: hostedVM || wifiSSID.isEmpty ? nil : wifiSSID,
+                                                 wifiPassword: hostedVM || wifiPassword.isEmpty ? nil : wifiPassword)
         return preseed
     }
 
@@ -896,7 +898,7 @@ final class WizardModel: ObservableObject {
             return
         }
         do {
-            let preseed = try installerPreseed(forRecipe: recipe)
+            let preseed = try installerPreseed(forRecipe: recipe, hostedVM: true)
             let outISO = vmManager.installerISOPath(for: config.name)
             appendLog(stream: .stdout, text: String(localized: "+ remaster \(srcISO.lastPathComponent) → VM installer"))
             let used = try await Task.detached(priority: .userInitiated) { () -> String in

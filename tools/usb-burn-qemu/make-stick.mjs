@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const W = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "packages", "flagship-builder");
 const { buildDebianPreseed } = await import(`${W}/dist/index.js`);
+const { replacePreseedBootstrap } = await import(`${W}/dist/preseed.js`);
 const { optionsFromRecipeJson } = await import(`${W}/dist/preseedEngine.js`);
 const [seed, out] = process.argv.slice(2);
 if (!seed || !out) throw new Error("usage: make-stick.mjs <seed.iso> <out.img>");
@@ -23,9 +24,7 @@ const bootstrap = `#!/bin/bash
 echo "[stick] BOOTSTRAP-RAN blob=$(wc -c < /var/flagship/install-blob.json) luks-key=$([ -s /var/flagship/luks-burn.key ] && echo present || echo missing)"
 } 2>&1 | tee /dev/console
 `;
-const re = /(echo ')([A-Za-z0-9+/=]+)(' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh)/;
-if (!re.test(preseed)) throw new Error("bootstrap payload not found");
-preseed = preseed.replace(re, `$1${Buffer.from(bootstrap).toString("base64")}$3`);
+preseed = replacePreseedBootstrap(preseed, bootstrap);
 const before = preseed.split("https://flagshipserver.com").length - 1;
 if (before < 1) throw new Error("expected the production beacons to be present");
 preseed = preseed.replaceAll("https://flagshipserver.com", "http://127.0.0.1:9");

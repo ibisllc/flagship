@@ -265,9 +265,6 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="installing" xml:space="preserve">
     <value>Instalando…</value>
   </data>
-  <data name="waitingForYouToUnlock" xml:space="preserve">
-    <value>Esperando a que desbloquees</value>
-  </data>
   <data name="installFailed" xml:space="preserve">
     <value>Falló la instalación</value>
   </data>
@@ -340,11 +337,17 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="unlockingItsDiskWithTheKey" xml:space="preserve">
     <value>Desbloqueando su disco con la clave que el teléfono le dejó. Si el teléfono te pide aprobar, hazlo allí.</value>
   </data>
-  <data name="theDiskIsSealedApproveThe" xml:space="preserve">
-    <value>El disco está sellado: aprueba el primer desbloqueo en tu teléfono. Después debería desbloquearse solo; si el teléfono te lo vuelve a pedir, apruébalo allí.</value>
+  <data name="startingWhenYourPhoneAsksApproveFirst" xml:space="preserve">
+    <value>Iniciando. Cuando tu teléfono te lo pida, aprueba allí el primer desbloqueo de este servidor. Después debería desbloquearse solo; si el teléfono te lo vuelve a pedir, apruébalo allí.</value>
   </data>
-  <data name="theDiskIsSealedApproveThe2" xml:space="preserve">
-    <value>El disco está sellado: aprueba el desbloqueo en tu teléfono.</value>
+  <data name="startingWhenYourPhoneAsksApprove" xml:space="preserve">
+    <value>Iniciando. Cuando tu teléfono te lo pida, aprueba allí el desbloqueo.</value>
+  </data>
+  <data name="theInstallerFinishedButThisServerNever" xml:space="preserve">
+    <value>El instalador terminó, pero este servidor nunca se registró, así que no hay nada que aprobar. Elimínalo en Studio y vuelve a crearlo desde tu teléfono.</value>
+  </data>
+  <data name="setupDidntFinish" xml:space="preserve">
+    <value>La configuración no terminó</value>
   </data>
   <data name="waitingForTheFirstGuestCheckpoint" xml:space="preserve">
     <value>Esperando el primer punto de control del invitado.</value>

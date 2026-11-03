@@ -568,7 +568,8 @@ public sealed class Wizard : INotifyPropertyChanged
             DidRemasterForTest = true;
             var outIso = Vm.InstallerIsoPath(config.Name);
             var remastered = false;
-            try { await _nativeBuild.PrepareAsync(recipe, baseIso, outIso, WifiSsid, WifiPassword, _cts.Token); remastered = true; }
+            // A hosted server has a NAT'd virtual NIC and no radio: no Wi-Fi in its installer (as Linux and Mac).
+            try { await _nativeBuild.PrepareAsync(recipe, baseIso, outIso, null, null, _cts.Token); remastered = true; }
             catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
             if (!remastered)
             {

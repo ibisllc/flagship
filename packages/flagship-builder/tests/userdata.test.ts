@@ -85,7 +85,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string; userPub: U
 
 /** Pull the install-blob.json base64 out of the late-command line. */
 function extractEmbeddedBlob(yaml: string): Record<string, any> {
-  const m = yaml.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/);
+  const m = yaml.match(/^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m);
   if (!m) throw new Error("install-blob late_command not found in preseed");
   return JSON.parse(Buffer.from(m[1]!, "base64").toString("utf8"));
 }
@@ -93,7 +93,7 @@ function extractEmbeddedBlob(yaml: string): Record<string, any> {
 /** Decode the embedded first-boot bootstrap script back to its bash text. */
 function extractBootstrap(yaml: string): string {
   const m = yaml.match(
-    /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/,
+    /^d-i flagship\/bootstrap string ([A-Za-z0-9+/=]+)$/m,
   );
   if (!m) throw new Error("bootstrap late_command not found in preseed");
   return Buffer.from(m[1]!, "base64").toString("utf8");
@@ -486,8 +486,10 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     // else in the user-data is byte-identical.
     expect(extractEmbeddedBlob(dflt).bootUnlockMode).toBeUndefined();
     expect(extractEmbeddedBlob(explicit).bootUnlockMode).toBe("auto");
-    const BLOB = /echo '[A-Za-z0-9+/=]+' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/;
-    expect(explicit.replace(BLOB, "BLOB")).toBe(dflt.replace(BLOB, "BLOB"));
+    const sansBlob = (c: string) => c
+      .replace(/^d-i flagship\/install-blob string [A-Za-z0-9+/=]+$/m, "BLOB")
+      .replace(/(install-blob\.json\)" -eq )\d+/, "$1N");
+    expect(sansBlob(explicit)).toBe(sansBlob(dflt));
   });
 
   it("install-blob.json carries every signed field, so the box can re-verify the blob", () => {
@@ -744,7 +746,7 @@ describe("optional Wi-Fi — for a box with no Ethernet (burn-time local input)"
 
   /** Decode the base64 Wi-Fi setup script out of the late_command. */
   function extractWifiScript(yaml: string): string {
-    const m = yaml.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/tmp\/flagship-wifi\.sh/);
+    const m = yaml.match(/^d-i flagship\/wifi-setup string ([A-Za-z0-9+/=]+)$/m);
     if (!m) throw new Error("wifi setup command not found in preseed");
     return Buffer.from(m[1]!, "base64").toString("utf8");
   }

@@ -216,7 +216,25 @@ def test_awaiting_unlock_copy_matches_vectors():
     assert manager.AWAITING_UNLOCK_ON_ITS_OWN == section["unlocksOnItsOwn"]
     assert manager.AWAITING_UNLOCK_FIRST_BOOT == section["firstBoot"]
     assert manager.AWAITING_UNLOCK_APPROVE_EVERY_BOOT == section["approveEveryBoot"]
+    assert manager.AWAITING_UNLOCK_NOT_SET_UP == section["notSetUp"]
+    assert manager.AWAITING_UNLOCK_LABEL == section["label"]
+    assert manager.AWAITING_UNLOCK_NOT_SET_UP_LABEL == section["notSetUpLabel"]
+    from vm.lifecycle import VMState
+
+    assert VMState.awaiting_phone_unlock().label == section["label"]
     assert all("Nothing to approve" not in v for k, v in section.items() if k != "notes")
+
+
+def test_sealed_boot_set_up_matches_vectors():
+    from vm.lifecycle import NEVER_SET_UP_PHASES, never_set_up
+
+    section = VECTORS["sealedBootSetUp"]
+    assert NEVER_SET_UP_PHASES == set(section["neverSetUpPhases"])
+    for phase in section["setUpPhases"]:
+        assert not never_set_up(phase), phase
+    assert len(section["cases"]) >= 6
+    for c in section["cases"]:
+        assert never_set_up(c["lastPhase"]) == c["neverSetUp"], c["lastPhase"]
 
 
 def test_qemu_failure_matches_vectors():

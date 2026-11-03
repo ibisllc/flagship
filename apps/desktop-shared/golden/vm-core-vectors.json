@@ -309,11 +309,73 @@
     ]
   },
   "awaitingUnlockCopy": {
-    "notes": "The sidebar/detail copy while a guest is sealed, identical on all three Studios. The phone, not Studio, decides whether a restart needs an approval: the key the phone leaves at its first approval can be missing (on Windows 2026-10-18 a restart still asked the phone while Studio said 'Nothing to approve'), so no line promises that nobody has to act.",
+    "notes": "The sidebar/detail copy while a guest is sealed, identical on all three Studios. The phone, not Studio, decides whether a restart needs an approval: the key the phone leaves at its first approval can be missing (on Windows 2026-10-18 a restart still asked the phone while Studio said 'Nothing to approve'), so no line promises that nobody has to act. A sealed first boot never tells the owner to approve before the phone asks (2026-11-02: an install whose late command never ran booted a disk that could not ask, and Studio said 'approve the first unlock on your phone'). The label is 'label'; when the install's last order-status phase shows the box never sealed its key (sealedBootSetUp), the line is notSetUp and the label notSetUpLabel.",
     "stalled": "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.",
     "unlocksOnItsOwn": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
-    "firstBoot": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
-    "approveEveryBoot": "The disk is sealed — approve the unlock on your phone."
+    "firstBoot": "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "approveEveryBoot": "Starting. When your phone asks, approve the unlock there.",
+    "notSetUp": "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone.",
+    "label": "Starting…",
+    "notSetUpLabel": "Setup didn't finish"
+  },
+  "sealedBootSetUp": {
+    "notes": "Whether a sealed guest's first boot can ask for its unlock, judged from the LAST order-status phase seen for its install (fetched once more as the installer stops). The box seals its disk key and reports 'sealing' (then the installer 'installed') before it powers off; an earlier phase means it never registered or sealed, so nothing will ask the phone. null (no serial, or .com unreachable) or an unknown phase keeps the normal copy. Only a server that has never connected is judged.",
+    "setUpPhases": [
+      "sealing",
+      "installed",
+      "pairing",
+      "live"
+    ],
+    "neverSetUpPhases": [
+      "booting",
+      "partitioning",
+      "installing",
+      "downloading",
+      "registering",
+      "error"
+    ],
+    "cases": [
+      {
+        "lastPhase": null,
+        "neverSetUp": false
+      },
+      {
+        "lastPhase": "installing",
+        "neverSetUp": true
+      },
+      {
+        "lastPhase": "partitioning",
+        "neverSetUp": true
+      },
+      {
+        "lastPhase": "downloading",
+        "neverSetUp": true
+      },
+      {
+        "lastPhase": "registering",
+        "neverSetUp": true
+      },
+      {
+        "lastPhase": "error",
+        "neverSetUp": true
+      },
+      {
+        "lastPhase": "sealing",
+        "neverSetUp": false
+      },
+      {
+        "lastPhase": "installed",
+        "neverSetUp": false
+      },
+      {
+        "lastPhase": "live",
+        "neverSetUp": false
+      },
+      {
+        "lastPhase": "something-new",
+        "neverSetUp": false
+      }
+    ]
   },
   "qemuFailure": {
     "notes": "Plain failure text for a hosted VM's QEMU (Windows and Linux Studio; the Mac's Virtualization.framework errors are already plain). Studio checks free RAM before launching (checkFree: need = the VM's memory, headroom per host OS, null = enough, otherwise the message) and, when QEMU still dies, shows the memory sentence for an out-of-memory failure (WHPX 'failed to map GPA range', 'Cannot allocate memory') and otherwise only the LAST meaningful stderr line: blank lines and 'warning:' lines (the repeated host-CPUID feature warnings) are dropped and the 'qemu-system-x86_64(.exe): ' program prefix is stripped. Windows 2026-10-18 showed the raw stderr in the sidebar when a second 4 GiB VM started with under 5 GB free.",

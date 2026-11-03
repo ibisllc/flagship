@@ -92,7 +92,7 @@ class VMState:
         if self.kind == VMStateKind.INSTALLED:
             return "Installed"
         if self.kind == VMStateKind.AWAITING_PHONE_UNLOCK:
-            return tr("Waiting for you to unlock")
+            return tr("Starting…")
         if self.kind == VMStateKind.RUNNING:
             return "Running"
         if self.kind == VMStateKind.STOPPED:
@@ -194,7 +194,7 @@ def verdict_for_clean_provisioning_stop(elapsed_seconds: float, prebuilt: bool) 
 
 # A sealed guest awaiting phone-unlock should come online within a few minutes;
 # past this it has very likely failed to reach the network (e.g. a first-boot
-# NIC/DHCP failure) and would otherwise spin on "Waiting for you to unlock"
+# NIC/DHCP failure) and would otherwise spin on the sealed "Starting…" state
 # forever with no hint. The UI keeps polling, but past this threshold it surfaces
 # an advisory. Mirrors macOS VMLifecycle.comingUpStallThreshold.
 COMING_UP_STALL_THRESHOLD_SECONDS = 8 * 60.0
@@ -207,6 +207,20 @@ def coming_up_is_stalled(state_kind: VMStateKind, elapsed_seconds: float) -> boo
         state_kind == VMStateKind.AWAITING_PHONE_UNLOCK
         and elapsed_seconds >= COMING_UP_STALL_THRESHOLD_SECONDS
     )
+
+
+# Order-status phases that mean the box never registered or sealed its disk
+# key, so nothing will ever ask the phone to unlock it (vm-core-vectors.json
+# "sealedBootSetUp"; mirrors the Mac and Windows Studios).
+NEVER_SET_UP_PHASES = frozenset(
+    {"booting", "partitioning", "installing", "downloading", "registering", "error"}
+)
+
+
+def never_set_up(last_phase: Optional[str]) -> bool:
+    """True iff the install's last order-status phase shows the box never set
+    itself up. None or an unknown phase keeps the normal copy."""
+    return last_phase in NEVER_SET_UP_PHASES
 
 
 class VMLifecycle:

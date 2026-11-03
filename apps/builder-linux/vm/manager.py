@@ -69,10 +69,16 @@ AWAITING_UNLOCK_ON_ITS_OWN = (
     "approve, approve it there.")
 )
 AWAITING_UNLOCK_FIRST_BOOT = (
-    tr("The disk is sealed — approve the first unlock on your phone. After that it "
-    "should unlock on its own; if your phone asks again, approve it there.")
+    tr("Starting. When your phone asks, approve this server's first unlock there. After "
+    "that it should unlock on its own; if your phone asks again, approve it there.")
 )
-AWAITING_UNLOCK_APPROVE_EVERY_BOOT = tr("The disk is sealed — approve the unlock on your phone.")
+AWAITING_UNLOCK_APPROVE_EVERY_BOOT = tr("Starting. When your phone asks, approve the unlock there.")
+AWAITING_UNLOCK_NOT_SET_UP = (
+    tr("The installer finished, but this server never registered, so there is nothing to "
+    "approve. Delete it in Studio and create it again from your phone.")
+)
+AWAITING_UNLOCK_LABEL = tr("Starting…")
+AWAITING_UNLOCK_NOT_SET_UP_LABEL = tr("Setup didn't finish")
 
 
 class InstallObservation:
@@ -134,6 +140,8 @@ class HostedServer:
 
     @property
     def state_label(self) -> str:
+        if self.record.sealed_boot_never_set_up:
+            return AWAITING_UNLOCK_NOT_SET_UP_LABEL
         return self.record.state_label
 
     @property
@@ -145,6 +153,8 @@ class HostedServer:
         s = self.record.state
         c = self.record.config
         if s.kind == VMStateKind.AWAITING_PHONE_UNLOCK:
+            if self.record.sealed_boot_never_set_up:
+                return AWAITING_UNLOCK_NOT_SET_UP
             if self.record.unlocks_on_its_own:
                 return AWAITING_UNLOCK_ON_ITS_OWN
             if c.boot_unlock_mode == "approve":
@@ -176,7 +186,10 @@ class HostedServer:
 
     def status_subtitle_at(self, now: float) -> str:
         """status_subtitle, but returns the stall advisory once a sealed guest
-        has waited too long to come online."""
+        has waited too long to come online. A box that never sealed its key
+        can't ask the phone, so that line wins over the advisory."""
+        if self.record.sealed_boot_never_set_up:
+            return AWAITING_UNLOCK_NOT_SET_UP
         if self.coming_up_stalled(now):
             return AWAITING_UNLOCK_STALLED
         return self.status_subtitle
@@ -244,6 +257,37 @@ def _default_health_fetch(url: str) -> Optional[bytes]:
         return None
 
 
+def _default_status_fetch(url: str) -> Optional[bytes]:
+    """One GET of /api/order/<serial>/status with a short timeout."""
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            return response.read(64 * 1024)
+    except Exception:
+        return None
+
+
+def parse_install_phase(body: Optional[bytes]) -> Optional[str]:
+    """The known phase in an order-status body, or None."""
+    if not body:
+        return None
+    try:
+        raw = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    phase = raw.get("phase") if isinstance(raw, dict) else None
+    return phase if phase in _PROVISION_PHASES else None
+
+
+def last_install_phase(
+    fetched: Optional[str], polled: Optional["InstallObservation"]
+) -> Optional[str]:
+    """The phase to keep for a finished install: the one fetched as it
+    stopped, else the last one the poll saw, else unknown."""
+    if fetched is not None:
+        return fetched
+    return polled.phase if polled is not None else None
+
+
 def _default_unlock_probe(url: str) -> bool:
     """TLS terminates ON THE BOX (SNI passthrough), so ANY HTTP response —
     including an error status — proves the LUKS unlock completed, the daemon
@@ -281,8 +325,10 @@ class VMManager:
         available_memory: Optional[Callable[[], Optional[int]]] = None,
         seen_post: Optional[Callable[[str, bytes], int]] = None,
         code_watch_interval: float = 2.0,
+        install_status_fetch: Callable[[str], Optional[bytes]] = _default_status_fetch,
     ) -> None:
         self.store = store
+        self._install_status_fetch = install_status_fetch
         # First contact: the phone's key for confirming the next hosted server's code (kept with that
         # server's bundle once it is created), the code each server showed this boot, and who reports it.
         self.pending_studio_confirm_key: Optional[bytes] = None
@@ -758,6 +804,15 @@ class VMManager:
                     else "install"
                 )
                 self.log(tr('VM {0}: {1} finished — booting sealed disk').format(name, verb))
+                finished = self.server(name)
+                if finished is not None:
+                    finished.record = replace(
+                        finished.record,
+                        install_last_phase=last_install_phase(
+                            self._fetch_final_install_phase(finished.record.config),
+                            finished.install_observation,
+                        ),
+                    )
                 self._apply(VMEvent.install_succeeded(), name)
                 # First boot from disk follows immediately; an encrypted guest
                 # then sits sealed in awaiting-phone-unlock.
@@ -953,6 +1008,18 @@ class VMManager:
                 stop.wait(15)
 
         threading.Thread(target=poll, daemon=True).start()
+
+    def _fetch_final_install_phase(self, config: VMConfig) -> Optional[str]:
+        """The box reports "sealing" and "installed" just before it powers off,
+        often between two 15 s polls, so ask once more as the install stops.
+        Best effort: None on any failure."""
+        serial = config.provision_status_serial
+        if not serial or not _SERIAL_RE.fullmatch(serial):
+            return None
+        try:
+            return parse_install_phase(self._install_status_fetch(order_url(serial, "status")))
+        except Exception:
+            return None
 
     def _cancel_install_poll(self, name: str) -> None:
         stop = self._install_polls.pop(name, None)

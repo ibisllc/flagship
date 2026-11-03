@@ -265,9 +265,6 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="installing" xml:space="preserve">
     <value>インストール中…</value>
   </data>
-  <data name="waitingForYouToUnlock" xml:space="preserve">
-    <value>ロック解除を待っています</value>
-  </data>
   <data name="installFailed" xml:space="preserve">
     <value>インストールに失敗しました</value>
   </data>
@@ -340,11 +337,17 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="unlockingItsDiskWithTheKey" xml:space="preserve">
     <value>スマートフォンが残した鍵でディスクのロックを解除しています。スマートフォンが承認を求めたら、そちらで承認してください。</value>
   </data>
-  <data name="theDiskIsSealedApproveThe" xml:space="preserve">
-    <value>ディスクは封印されています。最初のロック解除をスマートフォンで承認してください。その後は自動でロック解除されるはずです。再び承認を求められたら、スマートフォンで承認してください。</value>
+  <data name="startingWhenYourPhoneAsksApproveFirst" xml:space="preserve">
+    <value>起動しています。スマートフォンで求められたら、このサーバーの最初のロック解除を承認してください。その後は自動でロック解除されるはずです。再び求められたら、スマートフォンで承認してください。</value>
   </data>
-  <data name="theDiskIsSealedApproveThe2" xml:space="preserve">
-    <value>ディスクは封印されています。スマートフォンでロック解除を承認してください。</value>
+  <data name="startingWhenYourPhoneAsksApprove" xml:space="preserve">
+    <value>起動しています。スマートフォンで求められたら、ロック解除を承認してください。</value>
+  </data>
+  <data name="theInstallerFinishedButThisServerNever" xml:space="preserve">
+    <value>インストーラーは終了しましたが、このサーバーは一度も登録されなかったため、承認するものはありません。Studio で削除し、スマートフォンから作成し直してください。</value>
+  </data>
+  <data name="setupDidntFinish" xml:space="preserve">
+    <value>セットアップが完了しませんでした</value>
   </data>
   <data name="waitingForTheFirstGuestCheckpoint" xml:space="preserve">
     <value>最初のゲストのチェックポイントを待っています。</value>

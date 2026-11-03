@@ -542,13 +542,21 @@ msgstr "Tarda más de lo esperado: puede que el equipo no haya llegado a la red 
 msgid "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there."
 msgstr "Desbloqueando su disco con la clave que el teléfono le dejó. Si el teléfono te pide aprobar, hazlo allí."
 
-#: vm/manager.py:69 (prose)
-msgid "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there."
-msgstr "El disco está sellado: aprueba el primer desbloqueo en tu teléfono. Después debería desbloquearse solo; si el teléfono te lo vuelve a pedir, apruébalo allí."
-
 #: vm/manager.py:72 (prose)
-msgid "The disk is sealed — approve the unlock on your phone."
-msgstr "El disco está sellado: aprueba el desbloqueo en tu teléfono."
+msgid "Starting. When your phone asks, approve this server's first unlock there. After that it should unlock on its own; if your phone asks again, approve it there."
+msgstr "Iniciando. Cuando tu teléfono te lo pida, aprueba allí el primer desbloqueo de este servidor. Después debería desbloquearse solo; si el teléfono te lo vuelve a pedir, apruébalo allí."
+
+#: vm/manager.py:75 (prose)
+msgid "Starting. When your phone asks, approve the unlock there."
+msgstr "Iniciando. Cuando tu teléfono te lo pida, aprueba allí el desbloqueo."
+
+#: vm/manager.py:77 (prose)
+msgid "The installer finished, but this server never registered, so there is nothing to approve. Delete it in Studio and create it again from your phone."
+msgstr "El instalador terminó, pero este servidor nunca se registró, así que no hay nada que aprobar. Elimínalo en Studio y vuelve a crearlo desde tu teléfono."
+
+#: vm/manager.py:81 (prose)
+msgid "Setup didn't finish"
+msgstr "La configuración no terminó"
 
 #: vm/manager.py:86 (prose)
 msgid "Booting the installer"
@@ -648,10 +656,6 @@ msgstr "No hay servidores en ejecución: este PC puede volver a suspenderse"
 #: vm/lifecycle.py:89 (prose)
 msgid "Installing…"
 msgstr "Instalando…"
-
-#: vm/lifecycle.py:93 (prose)
-msgid "Waiting for you to unlock"
-msgstr "Esperando a que desbloquees"
 
 #: vm/lifecycle.py:99 (prose)
 msgid "Install failed"

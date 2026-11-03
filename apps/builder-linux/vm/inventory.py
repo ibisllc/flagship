@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .config import VMConfig, VMNetworkMode, VMProvisioningMode
-from .lifecycle import VMFailure, VMFailurePhase, VMState, VMStateKind
+from .lifecycle import VMFailure, VMFailurePhase, VMState, VMStateKind, never_set_up
 from .server_tier import ServerTier
 
 
@@ -70,6 +70,20 @@ class VMRecord:
     # When the guest last came online (0.0 = never). An auto-unlock server
     # that has run before unlocks itself with the key its phone left it.
     last_connected_at: float = 0.0
+    # The install's last order-status phase, recorded when the install
+    # finished; None = unknown (no serial, .com unreachable, older record).
+    install_last_phase: Optional[str] = None
+
+    @property
+    def sealed_boot_never_set_up(self) -> bool:
+        """A sealed guest that has never connected and whose install never got
+        as far as sealing its key: nothing will ask the phone. Mirrors the Mac
+        VMRecord (vm-core-vectors.json "sealedBootSetUp")."""
+        return (
+            self.state.kind == VMStateKind.AWAITING_PHONE_UNLOCK
+            and self.last_connected_at <= 0
+            and never_set_up(self.install_last_phase)
+        )
 
     @property
     def unlocks_on_its_own(self) -> bool:
@@ -173,6 +187,7 @@ def _record_to_dict(r: VMRecord) -> dict:
         "stateChangedAt": r.state_changed_at,
         "lastConnectedAt": r.last_connected_at or None,
         "tier": r.tier.value,
+        "installLastPhase": r.install_last_phase,
     }
 
 
@@ -186,6 +201,9 @@ def _record_from_dict(d: dict) -> VMRecord:
         # Legacy bundles predate the field ⇒ fall back to created_at.
         state_changed_at=float(d.get("stateChangedAt", created)),
         last_connected_at=float(d.get("lastConnectedAt") or 0.0),
+        install_last_phase=(
+            d["installLastPhase"] if isinstance(d.get("installLastPhase"), str) else None
+        ),
     )
 
 
