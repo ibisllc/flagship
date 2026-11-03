@@ -1199,9 +1199,15 @@ async function main(): Promise<void> {
 
   // Rolls back an update the gate above can't: one interrupted mid-apply, or
   // one whose code never gets far enough to run the gate (updateGuard.ts).
-  void (
+  // The same root step rebuilds root's config and the daemon's control plane on a box installed
+  // before its bootstrap wrote them (rootConfigRepair.ts); the health reporter waits for it.
+  const updateGuardStep = (
     runsUnprivileged()
-      ? setupStepWhenBrokerAnswers("update-guard")
+      ? setupStepWhenBrokerAnswers("update-guard").then((r) => {
+          const rc = (r as { rootConfig?: { repaired?: unknown; refused?: unknown } } | null)?.rootConfig;
+          if (Array.isArray(rc?.repaired) && rc.repaired.length > 0) console.log(`[root-config] rebuilt from the owner-signed install blob on /boot: ${rc.repaired.join(", ")}`);
+          else if (typeof rc?.refused === "string") console.log(`[root-config] left as it is: ${rc.refused}`);
+        })
       : installUpdateGuard({
           repoPath: selfUpdateRepoPath,
           dataDir,
@@ -1224,7 +1230,7 @@ async function main(): Promise<void> {
   if (cfg && env.controlPlaneBaseUrl) {
     void (
       runsUnprivileged()
-        ? runSetupStep("health-reporter")
+        ? updateGuardStep.then(() => runSetupStep("health-reporter"))
         : installHealthReporter({
             controlPlaneBaseUrl: env.controlPlaneBaseUrl,
             serverDomain: env.serverFqdn,

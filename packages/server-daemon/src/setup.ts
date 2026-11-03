@@ -32,6 +32,7 @@ import { ensureWasiRuntime } from "./wasi/install.js";
 import { installGpudFromRelease } from "./gpu/wire.js";
 import { WASI_APPS_DIR, WASI_MODULES_DIR } from "./wasi/unit.js";
 import { localCommandRunner, type CommandRunner } from "./serviceRunner.js";
+import { repairRootConfig } from "./rootConfigRepair.js";
 import { repairSystemPackages } from "./systemRepair.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { refreshDaemonHardening } from "./privdInstall.js";
@@ -101,6 +102,7 @@ export async function verifiedDebugGrant(o: {
 }
 
 async function openDebugAccess(): Promise<unknown> {
+  await repairRootConfig({ log });
   const env = await daemonEnv();
   const cfg = await loadConfig(env.FLAGSHIP_CONFIG ?? "/etc/flagship/config.json");
   const state = JSON.parse(await readFile(join(DATA_DIR, "debug-access.json"), "utf8").catch(() => "null")) as unknown;
@@ -125,6 +127,7 @@ async function openDebugAccess(): Promise<unknown> {
 
 /** The owner's stack switch (archV2Switch.ts), checked here against root's own copy of the owner's keys. */
 async function switchDeps(): Promise<RootSwitchDeps> {
+  await repairRootConfig({ log });
   const env = await daemonEnv();
   const cfg = await loadConfig(env.FLAGSHIP_CONFIG ?? "/etc/flagship/config.json");
   const base = env.FLAGSHIP_CONTROL_PLANE_BASE_URL;
@@ -178,15 +181,18 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   gvisor: async () =>
     ensureGvisor({ cmd, probeImage: FILES_HELPER_IMAGE, mirrors: gvisorMirrorBases((await daemonEnv()).FLAGSHIP_CONTROL_PLANE_BASE_URL), log }),
   "health-reporter": async () => {
+    await repairRootConfig({ log });
     const env = await daemonEnv();
     if (!env.FLAGSHIP_CONTROL_PLANE_BASE_URL || !env.FLAGSHIP_SUBDOMAIN) return false;
     return installHealthReporter({ controlPlaneBaseUrl: env.FLAGSHIP_CONTROL_PLANE_BASE_URL, serverDomain: env.FLAGSHIP_SUBDOMAIN, run, onLog: log });
   },
   "update-guard": async () => {
+    // Runs as root on every boot, so a box installed before its bootstrap wrote root's config gets it on its first boot of this release.
+    const rootConfig = await repairRootConfig({ log });
     const guard = await installUpdateGuard({ repoPath: REPO, dataDir: DATA_DIR, run, onLog: log });
     // The unprivileged daemon's sandbox (privdInstall.ts): this step runs as root on every boot.
     const sandbox = await refreshDaemonHardening({ run, onLog: log });
-    return guard || sandbox;
+    return { installed: guard || sandbox, rootConfig };
   },
   "container-links": () => ensureContainerLinksUnmanaged(localCommandRunner, { log }),
   "data-unit": syncDataUnit,
