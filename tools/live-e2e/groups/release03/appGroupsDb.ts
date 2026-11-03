@@ -70,9 +70,10 @@ export const appGroupsDb: Group = {
         assert(r.status === 400, `update should fail, got ${r.status}: ${short(r.text)}`);
         const rt = await appRuntime(b, session, sid);
         const members = (rt.members ?? []) as Array<{ name: string; state: string }>;
-        assert(members.length === 3 && members.every((m) => m.state === "running"), short(members));
-        assert((await http(`${base}/`, api())).status === 200, "not serving after the rollback");
         const lines = await journal(A, b);
+        const why = () => short(lines.filter((l) => l.includes(sid) && /service-platform|app-group/.test(l)).slice(-6), 900);
+        assert(members.length === 3 && members.every((m) => m.state === "running"), `${short(members)}; journal: ${why()}`);
+        assert((await http(`${base}/`, api())).status === 200, `not serving after the rollback; journal: ${why()}`);
         assert(lines.some((l) => l.includes(sid) && l.includes("every process of the previous version is back")), "no rollback line in the journal");
         return short(r.json?.error ?? r.text, 120);
       });

@@ -525,7 +525,12 @@ export const relayMesh: Group = {
         await rec.check("§14.1 rogue relay: a forged attachment, a replayed expired one, a hint to an unblessed target and a query flood are refused or rate-limited; real routing unaffected", async () => {
           const a = anchor as { s: SimServer; holder: GymRelay; label: string } | null;
           assert(a, "needs the cross-relay check's box");
-          const bl = await fetchRelayBlessing({ relayId: sim.relayId, seed: sim.seed });
+          // A transport error (status 0) never reached .com: ask again; a refusal is an answer.
+          let bl = await fetchRelayBlessing({ relayId: sim.relayId, seed: sim.seed });
+          for (let i = 0; i < 3 && bl.status === 0; i++) {
+            await new Promise((r) => setTimeout(r, 5_000));
+            bl = await fetchRelayBlessing({ relayId: sim.relayId, seed: sim.seed });
+          }
           assert(bl.blessing, `the gym .com refused ${sim.relayId}'s blessing request: ${bl.status} ${short(bl.body)} (admit it: ${MESH_RUNBOOK})`);
           const rogue = await MeshSimRelay.connect({ relayId: sim.relayId, seed: sim.seed, peer: RB, blessing: bl.blessing });
           held.rogue = rogue;

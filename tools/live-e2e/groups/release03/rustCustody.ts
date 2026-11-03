@@ -84,7 +84,12 @@ export const rustCustody: Group = {
       if (!made || !b) return;
       const bx: Box = b;
       const sh = async (cmd: string, ms = 60_000) => {
-        const r = await run("ssh", [...sshArgs(key, bx.ipv4!), cmd], ms);
+        let r = await run("ssh", [...sshArgs(key, bx.ipv4!), cmd], ms);
+        // ssh exits 255 before running anything when the connection itself failed: only then is it safe to ask again.
+        for (let i = 0; i < 3 && r.code === 255 && /banner exchange|Connection (timed out|refused|reset|closed)/.test(r.stderr); i++) {
+          await new Promise((res) => setTimeout(res, 10_000));
+          r = await run("ssh", [...sshArgs(key, bx.ipv4!), cmd], ms);
+        }
         if (r.code !== 0) throw new Error(`ssh '${short(cmd, 80)}' exit ${r.code}: ${short(r.stderr || r.stdout, 200)}`);
         return r.stdout.trim();
       };
