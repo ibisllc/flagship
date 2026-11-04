@@ -40,10 +40,6 @@ function headerOf(headers: Record<string, string>, name: string): string | null 
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-function hasHeaderSession(headers: Record<string, string>): boolean {
-  return headerOf(headers, "x-flagship-session") !== null || /^Flagship-Session \S/.test(headerOf(headers, "authorization") ?? "");
-}
-
 export interface ScreensWsDeps {
   gate: PairedSessionGate;
   /** A companion (Remote) token may read the event stream, never drive a build or a browser tab. */
@@ -85,20 +81,8 @@ export function buildScreensUpgradeHandler(
       // The bearer never rides in a URL. A browser, which cannot set headers on a WebSocket, uses
       // a single-use ticket; a native client sends its session in a header as for any request.
       if (query.has("sessionToken")) {
-        // A browser always sends Origin on an upgrade: it must use a ticket. The 0.2 iOS and Android apps (store
-        // builds kept working through the 0.3 review, owner rule F9) put the token in the URL of the events and
-        // browser-tab streams; they send no Origin, and that URL never leaves the TLS that ends on this box. Their
-        // token moves into the header and is authenticated as any native request. 0.3 clients never send it.
-        if (headerOf(args.headers, "origin") !== null) {
-          rejectUpgrade(args.socket, 400, "the session token does not go in the URL: use a ticket or the header");
-          return true;
-        }
-        const legacy = query.get("sessionToken")!;
-        query.delete("sessionToken");
-        const rest = query.toString();
-        const headers = { ...args.headers };
-        if (!hasHeaderSession(headers)) headers["x-flagship-session"] = legacy;
-        args = { ...args, path: rest ? `${justPath}?${rest}` : justPath, headers };
+        rejectUpgrade(args.socket, 400, "the session token does not go in the URL: use a ticket or the header");
+        return true;
       }
       const ticket = query.get("ticket");
       if (ticket) {

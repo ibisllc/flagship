@@ -241,16 +241,17 @@ const statusOf = (ws: WebSocket) =>
   });
 
 describe("0.2 app compat: the event stream with the session in the URL", () => {
-  it("iOS and Android (query + header, no Origin) connect; a browser putting it in the URL is still refused", async () => {
+  // Owner decision 2026-11-03: N06 stays strict. A 0.2 app's stream (token in the URL) is refused; the 0.2 apps close
+  // it silently and lose only live in-app events, every screen still loads. 0.3 clients send the header (or a ticket).
+  it("a token in the URL is refused with or without the header; the header alone connects", async () => {
     const s = await sessions();
     const handler = buildScreensUpgradeHandler({ gate: s, events: new ScreensEventBus(), tickets: new UpgradeTicketStore() });
     const srv = await wsServer(handler);
     try {
       const url = `ws://127.0.0.1:${srv.port}/api/screens/events?sessionToken=${TOKEN}`;
-      expect(await statusOf(new WebSocket(url, { headers: { "x-flagship-session": TOKEN } }))).toBe(101);
-      expect(await statusOf(new WebSocket(url))).toBe(101); // the browser-tab stream's shape: URL only
-      expect(await statusOf(new WebSocket(`ws://127.0.0.1:${srv.port}/api/screens/events?sessionToken=wrong`))).toBe(401);
-      expect(await statusOf(new WebSocket(url, { origin: "https://webapp.flagshipserver.com" }))).toBe(400);
+      expect(await statusOf(new WebSocket(url, { headers: { "x-flagship-session": TOKEN } }))).toBe(400);
+      expect(await statusOf(new WebSocket(url))).toBe(400);
+      expect(await statusOf(new WebSocket(`ws://127.0.0.1:${srv.port}/api/screens/events`, { headers: { "x-flagship-session": TOKEN } }))).toBe(101);
     } finally {
       srv.close();
     }

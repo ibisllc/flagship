@@ -635,7 +635,6 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                       var comps = URLComponents(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/events")
                 else { continuation.finish(); return }
                 comps.scheme = comps.scheme?.hasSuffix("s") == true ? "wss" : "ws"
-                comps.queryItems = [URLQueryItem(name: "sessionToken", value: token)]
                 guard let url = comps.url else { continuation.finish(); return }
                 var req = URLRequest(url: url)
                 req.setValue(token, forHTTPHeaderField: "x-flagship-session")
