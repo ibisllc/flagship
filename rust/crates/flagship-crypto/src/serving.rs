@@ -267,7 +267,10 @@ pub fn delegation_canonical(d: &RenewalKeyDelegation) -> Result<String, ServingE
     }
     p256_pub("renewalPub", &d.renewal_pub)?;
     hex64("deviceId", &d.device_id)?;
-    if d.expires_at.checked_sub(d.issued_at).is_none_or(|span| span == 0 || span > RENEWAL_DELEGATION_MAX_MS) {
+    if d.expires_at
+        .checked_sub(d.issued_at)
+        .is_none_or(|span| span == 0 || span > RENEWAL_DELEGATION_MAX_MS)
+    {
         return Err(ServingError::BadNumber("expiresAt"));
     }
     Ok(CanonicalV1::new(TAG_RENEWAL_KEY_DELEGATION)?
