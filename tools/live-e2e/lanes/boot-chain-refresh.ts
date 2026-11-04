@@ -273,11 +273,20 @@ async function lane(rec: Recorder): Promise<void> {
     const stagedFacts: BootFacts = made.staged;
     const trialToken = String(stagedFacts.state.trial!.token);
 
+    let lastPower: { mode: string; suspension: string; said: string } | null = null;
     const restart = async (what: string): Promise<number> => {
       const order: PhoneOrder = { type: "power-off", serverId: b.fqdn, mode: "restart", issuedAt: Date.now() };
       const p = await postJson(`https://${b.fqdn}/api/power`, { request: order, signature: bytesToHex(signPhoneOrder(order, a.keys.adminRoot)) });
       assert(p.status === 200, `${what}: /api/power ${p.status}: ${short(p.text)}`);
       const t = Date.now();
+      // What the box did, not what was asked: "off" means the lock marker was not written (hostPower.ts).
+      log(`${what}: /api/power → ${short(p.text, 200)}`);
+      const said = await Promise.race([
+        sudoScript(b.ipv4!, key, "journalctl -u flagship-daemon --no-pager -n 400 | grep -F '[power]' | tail -n 5").then((r) => r.stdout.trim()).catch(() => ""),
+        sleep(8_000).then(() => ""),
+      ]);
+      if (said) log(`${what}: daemon: ${short(said, 400)}`);
+      lastPower = { mode: String(p.json?.mode ?? "?"), suspension: String(p.json?.suspension ?? "?"), said };
       const deadline = Date.now() + 5 * 60_000;
       while (Date.now() < deadline && (await tryHttp(`https://${b.fqdn}/api/front-page`, {}, 8_000)).status === 200) await sleep(3_000);
       // A restart the boot worker didn't take becomes a shutdown by design: press the power button.
@@ -304,7 +313,7 @@ async function lane(rec: Recorder): Promise<void> {
     await rec.check("B0, trial boot: the unlock log on FLAGSHIP_BOOT says lock-once=yes and that the marker was consumed; the marker is gone", async () => {
       const f = await facts("trial-boot");
       assert(f.unlockLog.premountStarted, `no premount start line: ${short(f.unlockLog.lines, 300)}`);
-      assert(f.unlockLog.lockOnce === "yes", `lock-once=${f.unlockLog.lockOnce}: the premount did not see the marker the restart wrote`);
+      assert(f.unlockLog.lockOnce === "yes", `lock-once=${f.unlockLog.lockOnce}: the premount did not see the marker the restart wrote (the box answered mode=${lastPower?.mode} suspension=${lastPower?.suspension}${lastPower?.said ? `; daemon: ${short(lastPower.said, 300)}` : ""})`);
       assert(f.unlockLog.consumedMarker, "no \"consumed the one-shot lock marker\" line");
       assert(!f.lockOncePresent, "/boot/flagship-lock-once is still there");
       return `${f.unlockLog.lines.length} lines, unlocked by ${f.unlockLog.unlockedBy}`;
@@ -362,8 +371,14 @@ async function lane(rec: Recorder): Promise<void> {
     log(`lease key custody: ${custody.kind}${custody.pcrs.length ? ` (PCRs ${custody.pcrs.join(",")})` : ""}, unlock policy ${custodyFacts.unlockPolicy}`);
     const leased = custodyFacts.unlockPolicy === "strict"
       ? (rec.skip("the owner deposits an auto-unlock lease", "the box's unlock policy is strict: this lane deposits only a classical (v2) lease"), false)
-      : await rec.check("the owner deposits an auto-unlock lease sealed to the box's boot key", async () => {
+      : await rec.check("the owner resumes the locked server and deposits an auto-unlock lease sealed to the box's boot key", async () => {
           assert(appr.lastRequestKey, "no start-up request seen: the boot key is unknown");
+          // SEC-LOCK-001: each Lock and restart left the server suspended at the boot worker; no lease is released
+          // until the owner resumes it (the apps' Resume on the server page).
+          const resumed = await appr.resume();
+          const st = await appr.suspension();
+          assert(!st.suspended, `still suspended after the resume: ${short(st)}`);
+          log(`boot lock: ${resumed}`);
           return `lease ${(await appr.depositLease(appr.lastRequestKey)).slice(0, 8)}`;
         });
     if (!leased) return;

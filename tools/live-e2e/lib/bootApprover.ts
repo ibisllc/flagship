@@ -21,6 +21,7 @@ import {
   openSealedFromEd25519Recipient,
   signAutoUnlockLeaseV2,
   signBootAuth,
+  signBootSuspension,
   signDeviceEndpointClaim,
   signRootEntitlement,
   verifySecretRequest,
@@ -29,7 +30,7 @@ import {
 } from "@flagship/protocol";
 import { accountReadHeaders } from "../readToken.js";
 import type { Account } from "./fleet.js";
-import { CONTROL, assert, postJson, short, sleep, tryHttp } from "./harness.js";
+import { CONTROL, assert, http, postJson, short, sleep, tryHttp } from "./harness.js";
 
 /** The boot worker host `.com`'s CONTROL_APEX names (boot.<apex>), as the gym's bootHost does. */
 export const BOOT_HOST = process.env.GYM_BOOT_HOST || `boot.${CONTROL}`;
@@ -160,6 +161,39 @@ export class BootApprover {
     });
     assert(r.status === 200, `lease-v2 deposit ${r.status}: ${short(r.text)}`);
     return leaseId;
+  }
+
+  private ownerAuth(method: string, path: string): string {
+    return signBootAuth(
+      { role: "owner", serverDomain: this.serverDomain, method, path, pubKeyHex: bytesToHex(this.acct.keys.irk.publicKey), nonceHex: randomBytes(32).toString("hex"), issuedAt: Date.now() },
+      this.acct.keys.irk.privateKey,
+    );
+  }
+
+  /** The boot worker's lock record for this server (SEC-LOCK-001). */
+  async suspension(): Promise<{ suspended: boolean; epoch: number; reason?: string }> {
+    const path = `/api/boot/suspension/${this.serverDomain}`;
+    const r = await tryHttp(`https://${BOOT_HOST}${path}`, { headers: { authorization: this.ownerAuth("GET", path) } }, 20_000);
+    assert(r.status === 200 && typeof r.json?.suspended === "boolean", `suspension ${r.status}: ${short(r.text)}`);
+    return r.json;
+  }
+
+  /**
+   * The apps' "Resume" on a locked server: an owner order for the next epoch. A Lock and restart leaves the server
+   * suspended until the owner resumes it, and no auto-unlock lease is released before.
+   */
+  async resume(): Promise<string> {
+    const cur = await this.suspension();
+    if (!cur.suspended) return "not locked";
+    const order = { serverDomain: this.serverDomain, epoch: cur.epoch + 1, seq: 0, action: "resume" as const, reason: "owner-resume" as const, signer: "owner" as const, issuedAt: Date.now() };
+    const path = "/api/boot/suspension";
+    const r = await http(`https://${BOOT_HOST}${path}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: this.ownerAuth("PUT", path) },
+      body: JSON.stringify({ order, signature: bytesToHex(signBootSuspension(order, this.acct.keys.irk.privateKey)) }),
+    }, 20_000);
+    assert(r.status === 200 && r.json?.durable === true, `resume ${r.status}: ${short(r.text)}`);
+    return `resumed (${cur.reason ?? "locked"}, epoch ${cur.epoch} → ${order.epoch})`;
   }
 
   /** Unlocks answered since `t` (ms). */

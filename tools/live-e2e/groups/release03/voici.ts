@@ -91,6 +91,13 @@ import { GYM_ABUSE_SEED, GYM_K_PUB, gymAbuseKeyEntry } from "../../lib/gymAbuseK
 import type { Group } from "../types.js";
 
 const run = promisify(execFile);
+/** Wrangler's own error lines (its ✘ / [ERROR] text), not the echoed command line. */
+const wranglerWhy = (e: unknown): string => {
+  const x = e as { stderr?: string; stdout?: string; message?: string };
+  const text = `${x.stderr ?? ""}\n${x.stdout ?? ""}`.replace(/\x1b\[[0-9;]*m/g, "");
+  const lines = text.split("\n").map((l) => l.trim()).filter((l) => /ERROR|✘|error|code: /.test(l));
+  return lines.length ? lines.join(" | ") : String(x.message ?? e);
+};
 const REPO = resolvePath(import.meta.dirname, "../../../..");
 /** voi.ci in the gym: the control apex with `flagshipserver.com` swapped for `voi.ci` (gym.flagshipserver.com → gym.voi.ci). */
 export const VOICI_HOST = process.env.GYM_VOICI_HOST || CONTROL.replace(/flagshipserver\.com$/, "voi.ci");
@@ -784,7 +791,7 @@ export const voici: Group = {
             how = `backdated to ${await backdate()}`;
           } catch (e) {
             if (e instanceof SkipError) throw e;
-            throw new SkipError(`a visitor needs device-integrity evidence or an account ≥ 7 days old, and backdating the throwaway account in the gym D1 failed: ${short(String(e), 200)}`);
+            throw new SkipError(`a visitor needs device-integrity evidence or an account ≥ 7 days old, and backdating the throwaway account in the gym D1 failed: ${short(wranglerWhy(e), 400)}`);
           }
           r = await attest(pPub);
         }
