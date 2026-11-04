@@ -273,8 +273,11 @@ async function lane(rec: Recorder): Promise<void> {
     const stagedFacts: BootFacts = made.staged;
     const trialToken = String(stagedFacts.state.trial!.token);
 
-    let lastPower: { mode: string; suspension: string; said: string } | null = null;
+    let lastPower: { mode: string; suspension: string; marker: string; said: string } | null = null;
     const restart = async (what: string): Promise<number> => {
+      // Where the marker goes and who asks for it: /boot's mount options and the daemon's identity and helper socket.
+      const pre = await sudoScript(b.ipv4!, key, "findmnt -no OPTIONS /boot; systemctl show flagship-daemon -p User -p Environment --no-pager | tr ' ' '\\n' | grep -E '^User=|PRIVD|UNPRIV'; ls -l /run/flagship-broker/ /run/flagship-privd/ 2>&1 | grep -E 'sock|No such'; ls -l /boot/flagship-lock-once* 2>&1", 30_000).then((r) => r.stdout.trim()).catch((e: Error) => e.message);
+      log(`${what}: before: ${short(pre, 600)}`);
       const order: PhoneOrder = { type: "power-off", serverId: b.fqdn, mode: "restart", issuedAt: Date.now() };
       const p = await postJson(`https://${b.fqdn}/api/power`, { request: order, signature: bytesToHex(signPhoneOrder(order, a.keys.adminRoot)) });
       assert(p.status === 200, `${what}: /api/power ${p.status}: ${short(p.text)}`);
@@ -286,7 +289,7 @@ async function lane(rec: Recorder): Promise<void> {
         sleep(8_000).then(() => ""),
       ]);
       if (said) log(`${what}: daemon: ${short(said, 400)}`);
-      lastPower = { mode: String(p.json?.mode ?? "?"), suspension: String(p.json?.suspension ?? "?"), said };
+      lastPower = { mode: String(p.json?.mode ?? "?"), suspension: String(p.json?.suspension ?? "?"), marker: String(p.json?.marker ?? "?"), said };
       const deadline = Date.now() + 5 * 60_000;
       while (Date.now() < deadline && (await tryHttp(`https://${b.fqdn}/api/front-page`, {}, 8_000)).status === 200) await sleep(3_000);
       // A restart the boot worker didn't take becomes a shutdown by design: press the power button.
@@ -313,7 +316,7 @@ async function lane(rec: Recorder): Promise<void> {
     await rec.check("B0, trial boot: the unlock log on FLAGSHIP_BOOT says lock-once=yes and that the marker was consumed; the marker is gone", async () => {
       const f = await facts("trial-boot");
       assert(f.unlockLog.premountStarted, `no premount start line: ${short(f.unlockLog.lines, 300)}`);
-      assert(f.unlockLog.lockOnce === "yes", `lock-once=${f.unlockLog.lockOnce}: the premount did not see the marker the restart wrote (the box answered mode=${lastPower?.mode} suspension=${lastPower?.suspension}${lastPower?.said ? `; daemon: ${short(lastPower.said, 300)}` : ""})`);
+      assert(f.unlockLog.lockOnce === "yes", `lock-once=${f.unlockLog.lockOnce}: the premount did not see the marker the restart wrote (the box answered mode=${lastPower?.mode} suspension=${lastPower?.suspension} marker=${lastPower?.marker}${lastPower?.said ? `; daemon: ${short(lastPower.said, 300)}` : ""})`);
       assert(f.unlockLog.consumedMarker, "no \"consumed the one-shot lock marker\" line");
       assert(!f.lockOncePresent, "/boot/flagship-lock-once is still there");
       return `${f.unlockLog.lines.length} lines, unlocked by ${f.unlockLog.unlockedBy}`;

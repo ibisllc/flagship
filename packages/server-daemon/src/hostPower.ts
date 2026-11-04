@@ -118,6 +118,8 @@ export interface LockResult {
    * "unavailable": no boot-worker client is wired (an older config).
    */
   suspension: "confirmed" | "unconfirmed" | "unavailable";
+  /** "written", or why the one-shot lock marker could not be written (which turns a restart into a shutdown). */
+  marker: string;
 }
 
 /**
@@ -141,9 +143,11 @@ export async function executeLockAndPower(args: {
   reason?: "dead-man" | "manual-lock";
 }): Promise<LockResult> {
   let mode = args.mode;
+  let marker = "written";
   try {
     await args.suppressor.suppress();
   } catch (e) {
+    marker = (e as Error).message.slice(0, 300) || "failed";
     // The one-shot marker could not be written (an unprivileged daemon cannot write /boot): a restart would come back
     // up on its auto-unlock lease, so it becomes a shutdown. Never a reboot into an unrevoked lease, never a 500.
     console.warn(`[power] the lock marker was not written (${(e as Error).message}); the box shuts down instead of restarting`);
@@ -166,5 +170,5 @@ export async function executeLockAndPower(args: {
     mode = "off";
   }
   await args.runner.power(mode);
-  return { mode, requestedMode: args.mode, suspension };
+  return { mode, requestedMode: args.mode, suspension, marker };
 }

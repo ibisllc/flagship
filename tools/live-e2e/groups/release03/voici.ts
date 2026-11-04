@@ -14,7 +14,7 @@
 // trip browser → mailbox → owner → reply → browser; the same with the phone live (direct + ack + forward, deduped at
 // .com); reply alerts on/off (push itself is not checked, only that .com takes the subscription); the first-contact
 // limit; block (dropped, no oracle, on .com and on the phone); report → open-tag with the gym abuse key → ban →
-// attestation refused; the revoke rule (a stranger pseudonym gets 404 unknown-delegate); CORS from a fake origin;
+// attestation refused; the revoke rule (a stranger pseudonym signs only itself out); CORS from a fake origin;
 // takedown (410, pieces gone, publish refused).
 //
 // Gym prerequisites, each a SKIP with its reason when missing:
@@ -988,13 +988,14 @@ export const voici: Group = {
         return `report ${reportId.slice(0, 8)}; ${opened[0]}; banned; attestation 403 banned; the pseudonym's sends dropped silently`;
       });
 
-      await rec.check("the revoke rule: a stranger pseudonym can't sign the visitor's browser out (404 unknown-delegate) and the browser keeps reading its thread; the visitor's own pseudonym can (then the thread fetch is 403 revoked)", async () => {
+      await rec.check("the revoke rule: a stranger pseudonym's revoke of the visitor's browser key ends only its own (B, P) pair, so the browser keeps reading its thread; the visitor's own pseudonym can (then the thread fetch is 403 revoked)", async () => {
         const v = needVisitor();
         const delegatePub = v.delegation.delegatePub;
         const strangerSeed = new Uint8Array(randomBytes(32));
         const rv = { delegatePub, issuedAt: Date.now() };
         const s = await postJson(`${API}/api/voici/web/revoke`, { revoke: rv, principalPub: bytesToHex(ed.getPublicKey(strangerSeed)), signature: signWebDelegationRevoke(rv, strangerSeed) });
-        assert(s.status === 404 && s.json?.code === "unknown-delegate", `stranger revoke: ${s.status} ${short(s.text)}`);
+        // Revocations are keyed by (browser key, pseudonym) (d092e945a): a stranger may sign one, and it signs only itself out.
+        assert(s.status === 200, `stranger revoke: ${s.status} ${short(s.text)}`);
         const wrongSig = await postJson(`${API}/api/voici/web/revoke`, { revoke: rv, principalPub: v.pPub, signature: signWebDelegationRevoke(rv, strangerSeed) });
         assert(wrongSig.status === 403 && wrongSig.json?.code === "bad-signature", `revoke naming P, signed by a stranger: ${wrongSig.status} ${short(wrongSig.text)}`);
         const still = await W.fetchThread(v.session, { apiBase: API, fetch: browserFetch });
@@ -1004,7 +1005,7 @@ export const voici: Group = {
         assert(r.status === 200 && r.json?.ok, `own revoke: ${r.status} ${short(r.text)}`);
         const gone = await W.fetchThread(v.session, { apiBase: API, fetch: browserFetch });
         assert(!gone.ok && gone.code === "revoked", `thread after sign-out: ${JSON.stringify(gone)}`);
-        return "stranger 404 unknown-delegate, wrong signer 403; own sign-out ok, then 403 revoked";
+        return "stranger revoke ends only its own pair (thread still reads), wrong signer 403; own sign-out ok, then 403 revoked";
       });
 
       // ── takedown ────────────────────────────────────────────────────────────────────────────────────────────────

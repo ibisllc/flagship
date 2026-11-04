@@ -48,14 +48,14 @@ describe("executeLockAndPower", () => {
     const suspender = confirming(events);
     const r = await executeLockAndPower({ mode: "restart", suppressor, runner, suspender, reason: "manual-lock" });
     expect(events).toEqual(["suppress", "suspend:manual-lock", "power:restart"]);
-    expect(r).toEqual({ mode: "restart", requestedMode: "restart", suspension: "confirmed" });
+    expect(r).toEqual({ mode: "restart", requestedMode: "restart", suspension: "confirmed", marker: "written" });
   });
 
   it("turns a restart into a shutdown when the lock cannot be confirmed (SEC-LOCK-001)", async () => {
     const { events, suppressor, runner } = recorder();
     const r = await executeLockAndPower({ mode: "restart", suppressor, runner, suspender: failing(events), reason: "manual-lock" });
     expect(events).toEqual(["suppress", "suspend:manual-lock", "power:off"]);
-    expect(r).toEqual({ mode: "off", requestedMode: "restart", suspension: "unconfirmed" });
+    expect(r).toEqual({ mode: "off", requestedMode: "restart", suspension: "unconfirmed", marker: "written" });
   });
 
   it("shuts down instead of restarting when the lock marker cannot be written (an unprivileged daemon cannot write /boot)", async () => {
@@ -168,3 +168,17 @@ function bytesToHex(b: Uint8Array): string {
   for (const x of b) s += x.toString(16).padStart(2, "0");
   return s;
 }
+
+describe("executeLockAndPower marker failure", () => {
+  it("says why the marker was not written and shuts down instead of restarting", async () => {
+    const powered: string[] = [];
+    const r = await executeLockAndPower({
+      mode: "restart",
+      suppressor: { suppress: async () => { throw new Error("bootlock with those arguments is not allowed"); } },
+      runner: { power: async (m) => { powered.push(m); } },
+      suspender: { suspend: async () => ({ confirmed: true as const }) },
+    });
+    expect(r).toEqual({ mode: "off", requestedMode: "restart", suspension: "confirmed", marker: "bootlock with those arguments is not allowed" });
+    expect(powered).toEqual(["off"]);
+  });
+});
