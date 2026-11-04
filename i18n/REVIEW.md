@@ -96,3 +96,10 @@ and names bullets in both stores' descriptions and What's new texts, and the rew
 characters at most; `node scripts/store-assets/listings.mjs counts`). Review first: the end-to-end encryption
 sentence, "senders appear as visitors, never by name", and the time-limit sentence (it must match the server page's
 "If no admin opens Flagship for:" wording in each language).
+
+**0.3 launch texts, added 2026-11-03 (drafted by an agent, needs native review).** In `i18n/web/<lang>.json`: the
+new segments of `blog/flagship-0-3.html` (reporting abuse, rescue over home Wi-Fi, the new relay, "Coming from 0.2")
+and the rewritten findings line there and on `security.html`. In `store/listings/<lang>.json`: four new App Store
+What's new bullets and a rewritten Google Play What's new (500 characters at most). Review first: the suspension
+exceptions sentence (CSAM, active phishing, malware), "Rescue my data" (must match the app's Settings label), and the
+relay word (es mixes "relé" and "relay" across older pages).

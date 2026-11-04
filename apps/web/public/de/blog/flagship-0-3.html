@@ -53,6 +53,13 @@
         <li><strong>Blockieren und melden.</strong> Eine blockierte Person erfährt es nicht, und ihre Nachrichten erreichen dich nicht mehr. Eine Meldung schickt genau diese eine Nachricht an Flagship. Um Spam zu bremsen, ohne nach einer Telefonnummer zu fragen, kann ein neues Konto nur wenige Unterhaltungen am Tag beginnen, und die App lässt sich einmal von Apple oder Google bestätigen, dass sie auf einem echten Gerät läuft. Mehr dazu in den <a href="/de/faq#messages">FAQ</a>.</li>
       </ul>
 
+      <h2 id="abuse">Missbrauch melden, und was dann passiert</h2>
+      <ul class="notes">
+        <li><strong>Jeder kann einen voi.ci-Link oder eine voi.ci-Seite melden, oder eine Flagship-App über ihre Webadresse,</strong> auf der <a href="/abuse">Missbrauchsseite</a>. Ein Konto ist nicht nötig.</li>
+        <li><strong>Zuerst erfährt es der Besitzer.</strong> Wenn eine Meldung zutrifft, bekommen die Administratoren des Kontos einen Hinweis in der App: was gemeldet wurde, was zu ändern oder zu entfernen ist und bis wann. Ein Konto kann erst nach Ablauf dieser Frist gesperrt werden. Ausnahmen sind Darstellungen sexuellen Kindesmissbrauchs, laufendes Phishing und Schadsoftware: Dann können wir sofort handeln.</li>
+        <li><strong>Deine Daten bleiben auf deinem Server.</strong> Die Server eines gesperrten Kontos liefern nichts mehr aus und seine voi.ci-Seite geht offline, aber die Daten bleiben auf dem eigenen Server des Besitzers. Backups und die Rettung über das Heim-WLAN funktionieren weiter, und die App erklärt, wie man Einspruch einlegt.</li>
+      </ul>
+
       <h2 id="apps">Führe mehr Arten von Apps aus</h2>
       <ul class="notes">
         <li><strong>Jede App bekommt ihren eigenen Datenbankserver.</strong> Auf neuen Servern läuft die Datenbank einer App für sich, mit eigenen Grenzen für Speicher, Platte und Verbindungen, sodass eine stark ausgelastete App die anderen nicht ausbremsen kann.</li>
@@ -82,9 +89,10 @@
       <ul class="notes">
         <li><strong>Dein Telefon findet deinen Server in deinem Heimnetz,</strong> wenn flagshipserver.com oder unser Relay nicht erreichbar ist. Es sucht deinen Server im selben WLAN und prüft den eigenen Schlüssel des Servers.</li>
         <li><strong>Grundlegende Kontrolle ohne uns:</strong> den Status deines Servers und seine Apps sehen, eine App starten, stoppen oder neu starten, den Server neu starten oder herunterfahren und ein Backup erstellen und auf deinem Telefon speichern.</li>
+        <li><strong>Rette deine Daten.</strong> Meine Daten retten, in den Einstellungen, erstellt über dein Heim-WLAN ein Backup deines Servers und speichert es auf deinem Telefon; bricht die Verbindung ab, macht es dort weiter, wo es aufgehört hat. Ein mit einem Code geschütztes Backup lässt sich auf einem anderen Server wiederherstellen, auch in einem neuen Konto.</li>
         <li><strong>Jede Aktion wird weiterhin von deinem Telefon signiert</strong> und von deinem Server geprüft.</li>
       </ul>
-      <p class="limits">Das funktioniert, solange dein Server läuft. Ein Server, der neu startet, braucht weiterhin flagshipserver.com, um seine Platte zu entsperren. Auch das Erstellen eines Kontos, das Hinzufügen eines Geräts und die Wiederherstellung eines Kontos brauchen weiterhin flagshipserver.com.</p>
+      <p class="limits">Das funktioniert nur im selben Netz wie dein Server und nur, solange dein Server läuft. Ein Server, der neu startet, braucht weiterhin flagshipserver.com, um seine Platte zu entsperren. Auch das Erstellen eines Kontos, das Hinzufügen eines Geräts und die Wiederherstellung eines Kontos brauchen weiterhin flagshipserver.com.</p>
 
       <h2 id="time-limit">Lege fest, wie lange dein Server ohne dich läuft</h2>
       <ul class="notes">
@@ -118,13 +126,24 @@
         <li><strong>Ein neueres Fundament für neue Server.</strong> Neue Server führen Apps mit Podman aus und bewahren ihre Schlüssel in kleinen, separaten Programmen auf, die in Rust geschrieben sind. Server, die du schon hast, behalten ihre bisherige Einrichtung.</li>
       </ul>
 
+      <h2 id="relay">Ein neues Relay</h2>
+      <ul class="notes">
+        <li><strong>Unser Relay wurde in Rust neu geschrieben.</strong> Das Relay leitet den verschlüsselten Verkehr deines Servers zwischen Besuchern und deinem Server weiter. Das neue braucht viel weniger Speicher und ist so gebaut, dass wir später weitere Relays an weiteren Orten hinzufügen können. Wie das alte kann es nicht lesen, was deine Apps senden.</li>
+      </ul>
+
+      <h2 id="from-0-2">Wenn du von 0.2 kommst</h2>
+      <ul class="notes">
+        <li><strong>Aktualisiere die App.</strong> Die 0.2-Apps funktionieren weiter, aber einige ihrer Bildschirme aktualisieren sich nicht mehr von selbst. Aktualisiere Flagship über den App Store oder Google Play und Flagship Studio über <a href="/de/studio">seine Download-Seite</a>; ein älteres Studio sagt dir, wenn es veraltet ist.</li>
+        <li><strong>Aktualisiere deine Server.</strong> Ein Server, der noch auf 0.2 läuft, braucht ein Update, um weiter mit Flagship 0.3 zu funktionieren, und seine Seite in der App sagt dir das.</li>
+      </ul>
+
       <h2 id="security">Für Sicherheitsbewusste</h2>
       <p>Wir sind davon ausgegangen, dass Teile des Servers angegriffen werden können, und haben jedem Teil nur so viel Macht gegeben, wie er braucht. Die Details stehen auf der <a href="/de/security#hardening-0-3">Sicherheitsseite</a>.</p>
       <ul class="notes">
         <li><strong>Das Serverprogramm läuft nicht mehr als root.</strong> Die wenigen Aufgaben, die root brauchen, laufen über einen kleinen Broker, der eine feste Liste von Anfragen annimmt und alles andere ablehnt.</li>
         <li><strong>Die Schlüssel liegen getrennt vom Serverprogramm.</strong> Die Schlüssel des Servers für Identität, TLS und Let's Encrypt liegen in einem separaten Schlüsseldienst. Das Serverprogramm bittet ihn zu signieren; es hält die Schlüssel nie selbst.</li>
         <li><strong>Sensible Aktionen brauchen deinen Administratorschlüssel.</strong> Updates, Rangänderungen, Journal-Abfragen und Grafikkarten-Genehmigungen werden abgelehnt, sofern dein Administratorgerät sie nicht signiert hat.</li>
-        <li><strong>Befunde aus der Prüfung behoben.</strong> Dieses Release wurde über das gesamte Produkt hinweg auf Sicherheit geprüft. Es behebt die veröffentlichungsblockierenden Befunde dieser Prüfung und die 24 Befunde unserer eigenen Angriffs-Testsuite, die jetzt bei jedem Release läuft. Einige Härtungspunkte aus der Prüfung sind teilweise erledigt und werden im nächsten Update fortgesetzt.</li>
+        <li><strong>Befunde aus der Prüfung behoben.</strong> Dieses Release wurde über das gesamte Produkt hinweg auf Sicherheit geprüft, und die neuesten Teile (voi.ci und Nachrichten, Zertifikate, das Relay, Updates und die Rettung über das Heim-WLAN) wurden vor dem Release noch einmal geprüft. Was die Prüfungen gefunden haben, wurde vor dem Release behoben, ebenso jeder Befund unserer eigenen Angriffs-Testsuite, die jetzt bei jedem Release läuft. Einige Härtungspunkte sind teilweise erledigt und werden im nächsten Update fortgesetzt.</li>
         <li><strong>Grundlagen für Quantensicherheit.</strong> Server und Telefone halten ML-DSA-65-Schlüssel neben ihren Ed25519-Schlüsseln, ein hybrider Kanal (ML-KEM-768 mit X25519) wurde entwickelt, und iPhone und Android haben eine Einstellung „Post-Quanten-Schutz“, die du selbst einschaltest. All das wartet noch auf eine externe Prüfung.</li>
         <li><strong>Prüfe das Node.js, das dein Server ausführt.</strong> Ein Teil des Servers läuft auf Node.js, und zwar auf dem offiziellen Build von nodejs.org, nie auf einem, den wir neu gebaut haben. Die Seite jedes Servers hat eine Karte Laufzeit, die vergleicht, was er ausführt, mit dem genauen Build, den sein Release festlegt. Die <a href="/de/security/runtime">Laufzeit-Seite</a> zeigt die signierte Liste und wie du es selbst mit den Signaturen von Node prüfst.</li>
         <li><strong>Was sich nicht geändert hat.</strong> TLS endet weiterhin auf deinem eigenen Server, daher können wir nicht lesen, was deine Apps senden. Unser Relay sieht Verbindungsmetadaten: welcher Server, wann und wie viel. Ein KI-Modell erfährt nie, wer oder wo du bist.</li>

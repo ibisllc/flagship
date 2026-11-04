@@ -2611,8 +2611,8 @@
       "security.html"
     ]
   },
-  "s7c085043c1": {
-    "en": "<1>Findings fixed.</1> 0.3 was reviewed for security across the whole product. It fixes the stop-ship findings of that review and the 24 findings of our own adversarial test suite, which now runs on every release. A few hardening items from the review are partly done and continue in the next update. An external assessment has not been done yet.",
+  "s37a9b3a1f5": {
+    "en": "<1>Findings fixed.</1> 0.3 was reviewed for security across the whole product, and its newest parts (voi.ci and Messages, certificates, the relay, updates and rescue over home Wi-Fi) were reviewed again before release. What the reviews found was fixed before release, and so was every finding of our own adversarial test suite, which now runs on every release. A few hardening items are partly done and continue in the next update. An external assessment has not been done yet.",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -4983,6 +4983,38 @@
       "blog/flagship-0-3.html"
     ]
   },
+  "s9fd6bb66d0": {
+    "en": "Reporting abuse, and what happens next",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sf3e476a7bc": {
+    "en": "<1>Anyone can report a voi.ci link or page, or a Flagship app by its web address,</1> on the <2>abuse page</2>. No account is needed.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "se9e5e2795c": {
+    "en": "<1>The owner hears first.</1> When a report holds up, the account's admins get a notice in the app: what was reported, what to change or take down, and by when. An account can be suspended only after that deadline has passed. Child sexual abuse material, active phishing and malware are the exceptions: for those we can act at once.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s9e05df8874": {
+    "en": "<1>Your data stays on your server.</1> A suspended account's servers stop serving and its voi.ci page comes down, but the data stays on the owner's own server. Backups and rescue over home Wi-Fi keep working, and the app says how to appeal.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
   "s0c5765be41": {
     "en": "Run more kinds of apps",
     "kind": "text",
@@ -5135,6 +5167,14 @@
       "blog/flagship-0-3.html"
     ]
   },
+  "s8c095b7e00": {
+    "en": "<1>Rescue your data.</1> Rescue my data, in Settings, makes a backup of your server over your home Wi-Fi and saves it to your phone, and picks up where it stopped if the connection drops. A backup protected with a passcode can be restored into another server, even on a new account.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
   "s9a1150db73": {
     "en": "<1>Every action is still signed by your phone</1> and checked by your server.",
     "kind": "text",
@@ -5143,8 +5183,8 @@
       "blog/flagship-0-3.html"
     ]
   },
-  "s03f541a65b": {
-    "en": "This works while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.",
+  "s1a805ed7c5": {
+    "en": "This works only on the same network as your server, and only while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -5303,6 +5343,46 @@
       "blog/flagship-0-3.html"
     ]
   },
+  "s6618f33ed6": {
+    "en": "A new relay",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s6e095d2fd1": {
+    "en": "<1>Our relay was rewritten in Rust.</1> The relay passes your server's encrypted traffic between visitors and your server. The new one needs much less memory, and it is built so we can add more relays, in more places, later. Like the old one, it can't read what your apps send.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sa6e3b35c0c": {
+    "en": "Coming from 0.2",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s45877099b1": {
+    "en": "<1>Update the app.</1> The 0.2 apps keep working, but some of their screens no longer refresh on their own. Update Flagship from the App Store or Google Play, and Flagship Studio from <2>its download page</2>; an older Studio tells you when it is out of date.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s443c2f7b3b": {
+    "en": "<1>Update your servers.</1> A server still on 0.2 needs an update to keep working with Flagship 0.3, and its page in the app says so.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
   "s4ca741b757": {
     "en": "For the security-minded",
     "kind": "text",
@@ -5343,8 +5423,8 @@
       "blog/flagship-0-3.html"
     ]
   },
-  "s16500919f0": {
-    "en": "<1>Review findings fixed.</1> This release was reviewed for security across the whole product. It fixes the stop-ship findings of that review and the 24 findings of our own adversarial test suite, which now runs on every release. A few hardening items from the review are partly done and continue in the next update.",
+  "se36c3f1c54": {
+    "en": "<1>Review findings fixed.</1> This release was reviewed for security across the whole product, and its newest parts (voi.ci and Messages, certificates, the relay, updates and rescue over home Wi-Fi) were reviewed again before release. What the reviews found was fixed before release, and so was every finding of our own adversarial test suite, which now runs on every release. A few hardening items are partly done and continue in the next update.",
     "kind": "text",
     "ctx": "li",
     "pages": [

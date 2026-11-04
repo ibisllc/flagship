@@ -53,6 +53,13 @@
         <li><strong>Bloquer et signaler.</strong> Un visiteur bloqué n’est pas prévenu, et ses messages ne vous parviennent plus. Un signalement envoie ce seul message à Flagship. Pour freiner le spam sans demander de numéro de téléphone, un nouveau compte ne peut lancer que quelques conversations par jour, et l’app demande une fois à Apple ou Google de confirmer qu’elle tourne sur un vrai appareil. Plus de détails dans la <a href="/fr/faq#messages">FAQ</a>.</li>
       </ul>
 
+      <h2 id="abuse">Signaler un abus, et la suite</h2>
+      <ul class="notes">
+        <li><strong>Tout le monde peut signaler un lien ou une page voi.ci, ou une app Flagship par son adresse web,</strong> sur la <a href="/abuse">page des abus</a>. Aucun compte n’est nécessaire.</li>
+        <li><strong>Le propriétaire est prévenu en premier.</strong> Quand un signalement est fondé, les administrateurs du compte reçoivent un avis dans l’app : ce qui a été signalé, ce qu’il faut modifier ou retirer, et avant quand. Un compte ne peut être suspendu qu’une fois ce délai passé. Les exceptions sont les contenus d’abus sexuels sur des enfants, l’hameçonnage en cours et les logiciels malveillants : dans ces cas, nous pouvons agir tout de suite.</li>
+        <li><strong>Vos données restent sur votre serveur.</strong> Les serveurs d’un compte suspendu cessent de servir et sa page voi.ci est retirée, mais les données restent sur le serveur du propriétaire. Les sauvegardes et le sauvetage par le Wi-Fi de la maison continuent de fonctionner, et l’app explique comment faire appel.</li>
+      </ul>
+
       <h2 id="apps">Faites tourner plus de types d’apps</h2>
       <ul class="notes">
         <li><strong>Chaque app a son propre serveur de base de données.</strong> Sur les nouveaux serveurs, la base de données d’une app tourne séparément, avec ses propres limites de mémoire, de disque et de connexions, si bien qu’une app très sollicitée ne peut pas ralentir les autres.</li>
@@ -82,9 +89,10 @@
       <ul class="notes">
         <li><strong>Votre téléphone trouve votre serveur sur votre réseau domestique</strong> quand flagshipserver.com ou notre relais est injoignable. Il cherche votre serveur sur le même Wi-Fi et vérifie la clé propre du serveur.</li>
         <li><strong>Un contrôle de base sans nous :</strong> voir l’état de votre serveur et ses apps, démarrer, arrêter ou redémarrer une app, redémarrer ou éteindre le serveur, et faire une sauvegarde puis l’enregistrer sur votre téléphone.</li>
+        <li><strong>Sauvez vos données.</strong> Sauver mes données, dans les Réglages, fait une sauvegarde de votre serveur par le Wi-Fi de la maison et l’enregistre sur votre téléphone, et reprend là où elle s’était arrêtée si la connexion coupe. Une sauvegarde protégée par un code peut être restaurée sur un autre serveur, même sur un nouveau compte.</li>
         <li><strong>Chaque action est toujours signée par votre téléphone</strong> et vérifiée par votre serveur.</li>
       </ul>
-      <p class="limits">Cela fonctionne tant que votre serveur tourne. Un serveur qui redémarre a toujours besoin de flagshipserver.com pour déverrouiller son disque. Créer un compte, ajouter un appareil et récupérer un compte ont aussi toujours besoin de flagshipserver.com.</p>
+      <p class="limits">Cela ne fonctionne que sur le même réseau que votre serveur, et seulement tant que votre serveur tourne. Un serveur qui redémarre a toujours besoin de flagshipserver.com pour déverrouiller son disque. Créer un compte, ajouter un appareil et récupérer un compte ont aussi toujours besoin de flagshipserver.com.</p>
 
       <h2 id="time-limit">Choisissez combien de temps votre serveur tourne sans vous</h2>
       <ul class="notes">
@@ -118,13 +126,24 @@
         <li><strong>Une base plus récente pour les nouveaux serveurs.</strong> Les nouveaux serveurs exécutent les apps avec Podman et gardent leurs clés dans de petits programmes séparés écrits en Rust. Les serveurs que vous avez déjà conservent leur configuration actuelle.</li>
       </ul>
 
+      <h2 id="relay">Un nouveau relais</h2>
+      <ul class="notes">
+        <li><strong>Notre relais a été réécrit en Rust.</strong> Le relais fait passer le trafic chiffré de votre serveur entre les visiteurs et votre serveur. Le nouveau demande beaucoup moins de mémoire, et il est conçu pour que nous puissions ajouter plus tard d’autres relais, à d’autres endroits. Comme l’ancien, il ne peut pas lire ce que vos apps envoient.</li>
+      </ul>
+
+      <h2 id="from-0-2">Si vous venez de la 0.2</h2>
+      <ul class="notes">
+        <li><strong>Mettez l’app à jour.</strong> Les apps 0.2 continuent de fonctionner, mais certains de leurs écrans ne se rafraîchissent plus d’eux-mêmes. Mettez Flagship à jour depuis l’App Store ou Google Play, et Flagship Studio depuis <a href="/fr/studio">sa page de téléchargement</a> ; un ancien Studio vous prévient quand il n’est plus à jour.</li>
+        <li><strong>Mettez vos serveurs à jour.</strong> Un serveur encore en 0.2 doit être mis à jour pour continuer à fonctionner avec Flagship 0.3, et sa page dans l’app vous le dit.</li>
+      </ul>
+
       <h2 id="security">Pour qui s’intéresse à la sécurité</h2>
       <p>Nous sommes partis du principe que des parties du serveur pouvaient être attaquées, et nous avons fait en sorte que chaque partie ne détienne que le pouvoir dont elle a besoin. Les détails sont sur la <a href="/fr/security#hardening-0-3">page sécurité</a>.</p>
       <ul class="notes">
         <li><strong>Le programme du serveur ne tourne plus en root.</strong> Les quelques tâches qui exigent root passent par un petit intermédiaire qui accepte une liste fixe de requêtes et refuse tout le reste.</li>
         <li><strong>Les clés vivent à l’écart du programme du serveur.</strong> Les clés d’identité, TLS et Let's Encrypt du serveur se trouvent dans un service de clés séparé. Le programme du serveur lui demande de signer ; il ne détient jamais les clés.</li>
         <li><strong>Les actions sensibles exigent votre clé d’administrateur.</strong> Les mises à jour, les changements de rang, les lectures du journal et les approbations de carte graphique sont refusés s’ils n’ont pas été signés par votre appareil administrateur.</li>
-        <li><strong>Constats de la revue corrigés.</strong> Cette version a fait l’objet d’une revue de sécurité de l’ensemble du produit. Elle corrige les constats bloquants de cette revue et les 24 constats de notre propre suite de tests adverses, qui tourne désormais à chaque version. Quelques points de renforcement issus de la revue sont faits en partie et se poursuivent dans la prochaine mise à jour.</li>
+        <li><strong>Constats de la revue corrigés.</strong> Cette version a fait l’objet d’une revue de sécurité de l’ensemble du produit, et ses parties les plus récentes (voi.ci et Messages, les certificats, le relais, les mises à jour et le sauvetage par le Wi-Fi de la maison) ont été revues une nouvelle fois avant la sortie. Ce que les revues ont trouvé a été corrigé avant la sortie, comme chaque constat de notre propre suite de tests adverses, qui tourne désormais à chaque version. Quelques points de renforcement sont faits en partie et se poursuivent dans la prochaine mise à jour.</li>
         <li><strong>Les bases du post-quantique.</strong> Les serveurs et les téléphones détiennent des clés ML-DSA-65 à côté de leurs clés Ed25519, un canal hybride (ML-KEM-768 avec X25519) a été développé, et iPhone et Android proposent un réglage « Protection post-quantique » à activer soi-même. Tout cela est en attente d’un examen externe.</li>
         <li><strong>Vérifiez le Node.js que fait tourner votre serveur.</strong> Une partie du serveur tourne sur Node.js, et c’est la version officielle de nodejs.org, jamais une version que nous aurions recompilée. La page de chaque serveur a une carte Environnement d’exécution qui compare ce qu’il fait tourner avec la version exacte que fige sa release. La <a href="/fr/security/runtime">page de l’environnement d’exécution</a> montre la liste signée et comment vérifier par vous-même avec les signatures de Node.</li>
         <li><strong>Ce qui n’a pas changé.</strong> Le TLS se termine toujours sur votre propre serveur, nous ne pouvons donc pas lire ce que vos apps envoient. Notre relais voit les métadonnées de connexion : quel serveur, quand et combien. Un modèle d’IA n’apprend jamais qui vous êtes ni où vous êtes.</li>

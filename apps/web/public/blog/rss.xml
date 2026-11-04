@@ -6,7 +6,7 @@
     <description>Field notes from a personal-cloud project that takes self-hosting seriously.</description>
     <language>en-us</language>
     <atom:link href="https://flagshipserver.com/blog/rss.xml" rel="self" type="application/rss+xml" />
-    <!-- TODO-RM: set pubDate to the release day. -->
+    <!-- TODO-RM OWNER (pubDate): set pubDate below to the release day, RFC 822, then delete this comment (docs/runbooks/0.3-deploy-sheet.md). -->
     <item>
       <title>What's new in Flagship 0.3</title>
       <link>https://flagshipserver.com/blog/flagship-0-3</link>

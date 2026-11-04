@@ -65,6 +65,13 @@
         <li><strong>Block and report.</strong> A blocked visitor isn't told, and their messages stop reaching you. A report sends that one message to Flagship. To slow spam without asking for a phone number, a new account can start only a few conversations a day, and the app asks Apple or Google once to confirm it runs on a real device. More in the <a href="/faq#messages">FAQ</a>.</li>
       </ul>
 
+      <h2 id="abuse">Reporting abuse, and what happens next</h2>
+      <ul class="notes">
+        <li><strong>Anyone can report a voi.ci link or page, or a Flagship app by its web address,</strong> on the <a href="/abuse">abuse page</a>. No account is needed.</li>
+        <li><strong>The owner hears first.</strong> When a report holds up, the account's admins get a notice in the app: what was reported, what to change or take down, and by when. An account can be suspended only after that deadline has passed. Child sexual abuse material, active phishing and malware are the exceptions: for those we can act at once.</li>
+        <li><strong>Your data stays on your server.</strong> A suspended account's servers stop serving and its voi.ci page comes down, but the data stays on the owner's own server. Backups and rescue over home Wi-Fi keep working, and the app says how to appeal.</li>
+      </ul>
+
       <h2 id="apps">Run more kinds of apps</h2>
       <ul class="notes">
         <li><strong>Each app gets its own database server.</strong> On new servers an app's database runs on its own, with its own memory, disk and connection limits, so one busy app can't slow the others down.</li>
@@ -94,9 +101,10 @@
       <ul class="notes">
         <li><strong>Your phone finds your server on your home network</strong> when flagshipserver.com or our relay can't be reached. It looks for your server on the same Wi-Fi and checks the server's own key.</li>
         <li><strong>Basic control without us:</strong> see your server's status and its apps, start, stop or restart an app, restart or shut down the server, and make a backup and save it to your phone.</li>
+        <li><strong>Rescue your data.</strong> Rescue my data, in Settings, makes a backup of your server over your home Wi-Fi and saves it to your phone, and picks up where it stopped if the connection drops. A backup protected with a passcode can be restored into another server, even on a new account.</li>
         <li><strong>Every action is still signed by your phone</strong> and checked by your server.</li>
       </ul>
-      <p class="limits">This works while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.</p>
+      <p class="limits">This works only on the same network as your server, and only while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.</p>
 
       <h2 id="time-limit">Choose how long your server runs without you</h2>
       <ul class="notes">
@@ -130,13 +138,24 @@
         <li><strong>A newer foundation for new servers.</strong> New servers run apps with Podman and keep their keys in small, separate programs written in Rust. Servers you already have keep their current setup.</li>
       </ul>
 
+      <h2 id="relay">A new relay</h2>
+      <ul class="notes">
+        <li><strong>Our relay was rewritten in Rust.</strong> The relay passes your server's encrypted traffic between visitors and your server. The new one needs much less memory, and it is built so we can add more relays, in more places, later. Like the old one, it can't read what your apps send.</li>
+      </ul>
+
+      <h2 id="from-0-2">Coming from 0.2</h2>
+      <ul class="notes">
+        <li><strong>Update the app.</strong> The 0.2 apps keep working, but some of their screens no longer refresh on their own. Update Flagship from the App Store or Google Play, and Flagship Studio from <a href="/studio">its download page</a>; an older Studio tells you when it is out of date.</li>
+        <li><strong>Update your servers.</strong> A server still on 0.2 needs an update to keep working with Flagship 0.3, and its page in the app says so.</li>
+      </ul>
+
       <h2 id="security">For the security-minded</h2>
       <p>We assumed parts of the server could be attacked, and made each part hold as little power as it needs. The details are on the <a href="/security#hardening-0-3">security page</a>.</p>
       <ul class="notes">
         <li><strong>The server program no longer runs as root.</strong> The few jobs that need root go through a small broker that accepts a fixed list of requests and refuses everything else.</li>
         <li><strong>Keys live apart from the server program.</strong> The server's identity, TLS and Let's Encrypt keys sit in a separate key service. The server program asks it to sign; it never holds the keys.</li>
         <li><strong>Sensitive actions need your admin key.</strong> Updates, rank changes, journal reads and graphics-card approvals are refused unless your admin device signed them.</li>
-        <li><strong>Review findings fixed.</strong> This release was reviewed for security across the whole product. It fixes the stop-ship findings of that review and the 24 findings of our own adversarial test suite, which now runs on every release. A few hardening items from the review are partly done and continue in the next update.</li>
+        <li><strong>Review findings fixed.</strong> This release was reviewed for security across the whole product, and its newest parts (voi.ci and Messages, certificates, the relay, updates and rescue over home Wi-Fi) were reviewed again before release. What the reviews found was fixed before release, and so was every finding of our own adversarial test suite, which now runs on every release. A few hardening items are partly done and continue in the next update.</li>
         <li><strong>Quantum-safe groundwork.</strong> Servers and phones hold ML-DSA-65 keys beside their Ed25519 keys, a hybrid channel (ML-KEM-768 with X25519) is built, and iPhone and Android have an opt-in Quantum-safe protection setting. All of it is pending external review.</li>
         <li><strong>Check the Node.js your server runs.</strong> Part of the server runs on Node.js, and it is the official build from nodejs.org, never one we rebuilt. Each server's page has a Runtime card that compares what it runs with the exact build its release locks. The <a href="/security/runtime.html">runtime page</a> shows the signed list and how to check it yourself against Node's own signatures.</li>
         <li><strong>What has not changed.</strong> TLS still ends on your own server, so we can't read what your apps send. Our relay sees connection metadata: which server, when, and how much. An AI model never learns who or where you are.</li>

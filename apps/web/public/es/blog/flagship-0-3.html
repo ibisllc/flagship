@@ -53,6 +53,13 @@
         <li><strong>Bloquear y denunciar.</strong> Un visitante bloqueado no recibe aviso, y sus mensajes dejan de llegarte. Una denuncia envía ese mensaje concreto a Flagship. Para frenar el spam sin pedir un número de teléfono, una cuenta nueva solo puede iniciar unas pocas conversaciones al día, y la app pide una vez a Apple o Google que confirmen que funciona en un dispositivo real. Más información en las <a href="/es/faq#messages">preguntas frecuentes</a>.</li>
       </ul>
 
+      <h2 id="abuse">Denunciar abusos, y qué pasa después</h2>
+      <ul class="notes">
+        <li><strong>Cualquiera puede denunciar un enlace o una página de voi.ci, o una app de Flagship por su dirección web,</strong> en la <a href="/abuse">página de abusos</a>. No hace falta una cuenta.</li>
+        <li><strong>El propietario se entera primero.</strong> Cuando una denuncia tiene fundamento, los administradores de la cuenta reciben un aviso en la app: qué se denunció, qué cambiar o retirar, y hasta cuándo. Una cuenta solo puede suspenderse cuando ese plazo ha pasado. Las excepciones son el material de abuso sexual infantil, el phishing activo y el malware: en esos casos podemos actuar de inmediato.</li>
+        <li><strong>Tus datos se quedan en tu servidor.</strong> Los servidores de una cuenta suspendida dejan de servir y su página de voi.ci se retira, pero los datos se quedan en el propio servidor del propietario. Las copias de seguridad y el rescate por la Wi-Fi de casa siguen funcionando, y la app explica cómo apelar.</li>
+      </ul>
+
       <h2 id="apps">Ejecuta más tipos de apps</h2>
       <ul class="notes">
         <li><strong>Cada app tiene su propio servidor de base de datos.</strong> En los servidores nuevos, la base de datos de una app se ejecuta por separado, con sus propios límites de memoria, disco y conexiones, así que una app muy ocupada no puede ralentizar a las demás.</li>
@@ -82,9 +89,10 @@
       <ul class="notes">
         <li><strong>Tu teléfono encuentra tu servidor en tu red doméstica</strong> cuando no se puede acceder a flagshipserver.com o a nuestro relé. Busca tu servidor en la misma red Wi-Fi y comprueba la clave propia del servidor.</li>
         <li><strong>Control básico sin nosotros:</strong> ver el estado de tu servidor y sus apps, iniciar, detener o reiniciar una app, reiniciar o apagar el servidor, y hacer una copia de seguridad y guardarla en tu teléfono.</li>
+        <li><strong>Rescata tus datos.</strong> Rescatar mis datos, en Ajustes, hace una copia de seguridad de tu servidor por la Wi-Fi de casa y la guarda en tu teléfono, y continúa donde se quedó si la conexión se corta. Una copia protegida con un código puede restaurarse en otro servidor, incluso en una cuenta nueva.</li>
         <li><strong>Cada acción sigue firmada por tu teléfono</strong> y comprobada por tu servidor.</li>
       </ul>
-      <p class="limits">Esto funciona mientras tu servidor está en marcha. Un servidor que se reinicia sigue necesitando flagshipserver.com para desbloquear su disco. Crear una cuenta, añadir un dispositivo y recuperar una cuenta también siguen necesitando flagshipserver.com.</p>
+      <p class="limits">Esto solo funciona en la misma red que tu servidor, y solo mientras tu servidor está en marcha. Un servidor que se reinicia sigue necesitando flagshipserver.com para desbloquear su disco. Crear una cuenta, añadir un dispositivo y recuperar una cuenta también siguen necesitando flagshipserver.com.</p>
 
       <h2 id="time-limit">Elige cuánto tiempo funciona tu servidor sin ti</h2>
       <ul class="notes">
@@ -118,13 +126,24 @@
         <li><strong>Una base más nueva para los servidores nuevos.</strong> Los servidores nuevos ejecutan las apps con Podman y guardan sus claves en programas pequeños y separados escritos en Rust. Los servidores que ya tienes mantienen su configuración actual.</li>
       </ul>
 
+      <h2 id="relay">Un relé nuevo</h2>
+      <ul class="notes">
+        <li><strong>Reescribimos nuestro relé en Rust.</strong> El relé lleva el tráfico cifrado de tu servidor entre los visitantes y tu servidor. El nuevo necesita mucha menos memoria y está hecho para que más adelante podamos añadir más relés, en más lugares. Como el anterior, no puede leer lo que envían tus apps.</li>
+      </ul>
+
+      <h2 id="from-0-2">Si vienes de la 0.2</h2>
+      <ul class="notes">
+        <li><strong>Actualiza la app.</strong> Las apps 0.2 siguen funcionando, pero algunas de sus pantallas ya no se actualizan solas. Actualiza Flagship desde el App Store o Google Play, y Flagship Studio desde <a href="/es/studio">su página de descarga</a>; un Studio antiguo te avisa cuando está desactualizado.</li>
+        <li><strong>Actualiza tus servidores.</strong> Un servidor que sigue en la 0.2 necesita una actualización para seguir funcionando con Flagship 0.3, y su página en la app te lo indica.</li>
+      </ul>
+
       <h2 id="security">Para quien se preocupa por la seguridad</h2>
       <p>Partimos de que partes del servidor podían ser atacadas, e hicimos que cada parte tenga el mínimo poder que necesita. Los detalles están en la <a href="/es/security#hardening-0-3">página de seguridad</a>.</p>
       <ul class="notes">
         <li><strong>El programa del servidor ya no se ejecuta como root.</strong> Las pocas tareas que necesitan root pasan por un pequeño intermediario que acepta una lista fija de peticiones y rechaza todo lo demás.</li>
         <li><strong>Las claves viven aparte del programa del servidor.</strong> Las claves de identidad, TLS y Let's Encrypt del servidor están en un servicio de claves separado. El programa del servidor le pide que firme; nunca tiene las claves.</li>
         <li><strong>Las acciones sensibles necesitan tu clave de administrador.</strong> Las actualizaciones, los cambios de rango, las lecturas del diario y las aprobaciones de tarjetas gráficas se rechazan salvo que las haya firmado tu dispositivo administrador.</li>
-        <li><strong>Hallazgos de la revisión corregidos.</strong> Esta versión se revisó en cuanto a seguridad en todo el producto. Corrige los hallazgos bloqueantes para el lanzamiento de esa revisión y los 24 hallazgos de nuestro propio conjunto de pruebas adversariales, que ahora se ejecuta en cada versión. Algunas mejoras de protección de la revisión están hechas en parte y continúan en la próxima actualización.</li>
+        <li><strong>Hallazgos de la revisión corregidos.</strong> Esta versión se revisó en cuanto a seguridad en todo el producto, y sus partes más nuevas (voi.ci y Mensajes, los certificados, el relé, las actualizaciones y el rescate por la Wi-Fi de casa) se revisaron de nuevo antes del lanzamiento. Lo que encontraron las revisiones se corrigió antes del lanzamiento, igual que todos los hallazgos de nuestro propio conjunto de pruebas adversariales, que ahora se ejecuta en cada versión. Algunas mejoras de protección están hechas en parte y continúan en la próxima actualización.</li>
         <li><strong>Bases poscuánticas.</strong> Los servidores y los teléfonos tienen claves ML-DSA-65 junto a sus claves Ed25519, está construido un canal híbrido (ML-KEM-768 con X25519), e iPhone y Android tienen un ajuste opcional, Protección poscuántica, que puedes activar. Todo ello está pendiente de revisión externa.</li>
         <li><strong>Comprueba el Node.js que ejecuta tu servidor.</strong> Parte del servidor funciona con Node.js, y es la compilación oficial de nodejs.org, nunca una que hayamos recompilado. La página de cada servidor tiene una tarjeta Entorno de ejecución que compara lo que ejecuta con la compilación exacta que fija su versión. La <a href="/es/security/runtime">página del entorno de ejecución</a> muestra la lista firmada y cómo comprobarlo tú mismo con las propias firmas de Node.</li>
         <li><strong>Lo que no ha cambiado.</strong> El TLS sigue terminando en tu propio servidor, así que no podemos leer lo que envían tus apps. Nuestro relé ve metadatos de conexión: qué servidor, cuándo y cuánto. Un modelo de IA nunca sabe quién eres ni dónde estás.</li>
