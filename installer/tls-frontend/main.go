@@ -156,6 +156,18 @@ type connHeader struct {
 	SNI  string `json:"sni"`
 	ALPN string `json:"alpn"`
 	TLS  string `json:"tls"`
+	// The loopback port the connection came from (the relay tunnel and the LAN listener both dial
+	// over loopback); the daemon recognises the LAN listener's ports (server-daemon lanIngress.ts).
+	Peer int `json:"peer,omitempty"`
+}
+
+// loopbackPeerPort is the peer's port when it connected over loopback, else 0 (left out of the header).
+func loopbackPeerPort(a net.Addr) int {
+	t, ok := a.(*net.TCPAddr)
+	if !ok || t == nil || !t.IP.IsLoopback() {
+		return 0
+	}
+	return t.Port
 }
 
 func tlsVersion(v uint16) string {
@@ -182,7 +194,7 @@ func handle(c net.Conn, cfg *config, tc *tls.Config) {
 		return
 	}
 	defer up.Close()
-	hdr, _ := json.Marshal(connHeader{SNI: strings.ToLower(st.ServerName), ALPN: st.NegotiatedProtocol, TLS: tlsVersion(st.Version)})
+	hdr, _ := json.Marshal(connHeader{SNI: strings.ToLower(st.ServerName), ALPN: st.NegotiatedProtocol, TLS: tlsVersion(st.Version), Peer: loopbackPeerPort(c.RemoteAddr())})
 	if _, err := up.Write(append(hdr, '\n')); err != nil {
 		return
 	}

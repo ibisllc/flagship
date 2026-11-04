@@ -262,6 +262,10 @@ func TestServesTLSWithTheKeyInKeydAndForwardsPlaintext(t *testing.T) {
 	if h.SNI != "chess.home.alice.flagship.services" || h.ALPN != "http/1.1" || (h.TLS != "1.3" && h.TLS != "1.2") {
 		t.Fatalf("header = %+v", h)
 	}
+	// The daemon tells a LAN-direct connection from a relayed one by this port (lanIngress.ts).
+	if want := c.LocalAddr().(*net.TCPAddr).Port; h.Peer != want {
+		t.Fatalf("header peer = %d, want the client's loopback port %d", h.Peer, want)
+	}
 	kd.mu.Lock()
 	defer kd.mu.Unlock()
 	if kd.signs == 0 {
@@ -521,5 +525,28 @@ func TestPickPrefersTheClassThenAnyCoveringInDateCertificate(t *testing.T) {
 	}
 	if _, err := pick(set, "", now); err == nil {
 		t.Fatal("no SNI got a certificate")
+	}
+}
+
+func TestOnlyALoopbackPeerHasAPortInTheHeader(t *testing.T) {
+	at := func(ip string, port int) net.Addr { return &net.TCPAddr{IP: net.ParseIP(ip), Port: port} }
+	for _, c := range []struct {
+		a    net.Addr
+		want int
+	}{
+		{at("127.0.0.1", 41234), 41234},
+		{at("::1", 41234), 41234},
+		{at("::ffff:127.0.0.1", 7), 7},
+		{at("192.168.1.5", 41234), 0},
+		{&net.UnixAddr{Name: "/x", Net: "unix"}, 0},
+		{nil, 0},
+	} {
+		if got := loopbackPeerPort(c.a); got != c.want {
+			t.Errorf("loopbackPeerPort(%v) = %d, want %d", c.a, got, c.want)
+		}
+	}
+	b, _ := json.Marshal(connHeader{SNI: "a", ALPN: "", TLS: "1.3"})
+	if string(b) != `{"sni":"a","alpn":"","tls":"1.3"}` {
+		t.Fatalf("a header with no loopback peer = %s", b)
 	}
 }

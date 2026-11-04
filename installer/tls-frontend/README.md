@@ -9,7 +9,7 @@ Go 1.26+): it sends the TLS fields, never a digest, and keyd builds the signed i
   service (`tls.active`, refreshed every few seconds so a renewal needs no restart), and only for
   names that certificate covers.
 - Forwards each decrypted connection to the daemon on `--upstream` (a Unix socket) behind one
-  header line: `{"sni":…,"alpn":…,"tls":…}`.
+  header line: `{"sni":…,"alpn":…,"tls":…,"peer":…}` (`peer`: the loopback port the connection came from, which tells the daemon a LAN-direct connection from a relayed one; left out for a non-loopback peer).
 - TLS 1.2 minimum, `http/1.1` only, `acme-tls/1` is not negotiated, a handshake deadline, and a
   connection cap. It fails closed when keyd cannot sign.
 - Standard library only; built statically (`make build`) as part of the release artifact.

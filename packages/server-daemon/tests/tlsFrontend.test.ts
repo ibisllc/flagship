@@ -10,6 +10,10 @@ import { AcmeAccount, KeydClient, KeydServer, KeydService, TlsKeys } from "@flag
 import { KeydAcmeIssuer } from "../src/acme/keydAcme.js";
 import { keydAcmeApi } from "../src/keydAsync.js";
 import { MockAcme } from "./helpers/mockAcme.js";
+import { startLanListener, type LanListener } from "../src/lanDirect.js";
+import { cameViaLan, LanIngressPorts, refuseRescueOffLan } from "../src/lanIngress.js";
+import { _handleHttpConnectionForTest } from "../src/runtime.js";
+import { listenForFrontend } from "../src/tlsUpstream.js";
 
 const FQDN = "home.alice.flagship.services";
 const hasGo = spawnSync("go", ["version"]).status === 0;
@@ -22,16 +26,19 @@ let frontend: ChildProcess;
 let upstream: Server;
 let port = 0;
 let caPem = "";
+let bin = "";
+let keydSock = "";
 const seen: Array<{ header: string; body: string }> = [];
 
 beforeAll(async () => {
   if (!hasGo) return;
   dir = mkdtempSync(join(tmpdir(), "tlsd-"));
-  const bin = join(dir, "flagship-tlsd");
+  bin = join(dir, "flagship-tlsd");
   execFileSync("go", ["build", "-o", bin, "."], { cwd: new URL("../../../installer/tls-frontend", import.meta.url).pathname, env: { ...process.env, CGO_ENABLED: "0" } });
   const tls = new TlsKeys(new Set([FQDN, `*.${FQDN}`]), join(dir, "tls"));
   const acct = new AcmeAccount(tls, new Set(["acme.test"]), join(dir, "acme.key"));
   const sock = join(dir, "k.sock");
+  keydSock = sock;
   server = new KeydServer({ socketPath: sock, service: new KeydService({ identitySeed: new Uint8Array(32).fill(3), tls, acme: acct }), rateLimits: { "*": { perSecond: 10000, burst: 10000 } } });
   await server.start();
   client = new KeydClient({ socketPath: sock, component: "acme" });
@@ -61,16 +68,21 @@ beforeAll(async () => {
   });
   await new Promise<void>((r) => upstream.listen(upSock, () => r()));
 
-  frontend = spawn(bin, ["--listen", "127.0.0.1:0", "--keyd", sock, "--upstream", upSock, "--refresh", "100ms"], { stdio: ["ignore", "pipe", "inherit"] });
-  port = await new Promise<number>((resolve, reject) => {
-    frontend.stdout!.on("data", (b: Buffer) => {
+  ({ child: frontend, port } = await spawnFrontend(upSock));
+}, 60_000);
+
+async function spawnFrontend(upSock: string): Promise<{ child: ChildProcess; port: number }> {
+  const child = spawn(bin, ["--listen", "127.0.0.1:0", "--keyd", keydSock, "--upstream", upSock, "--refresh", "100ms"], { stdio: ["ignore", "pipe", "inherit"] });
+  const port = await new Promise<number>((resolve, reject) => {
+    child.stdout!.on("data", (b: Buffer) => {
       const m = /listening 127\.0\.0\.1:(\d+)/.exec(b.toString());
       if (m) resolve(Number(m[1]));
     });
-    frontend.once("error", reject);
+    child.once("error", reject);
     setTimeout(() => reject(new Error("frontend did not start")), 8000);
   });
-}, 60_000);
+  return { child, port };
+}
 
 afterAll(async () => {
   if (!hasGo) return;
@@ -117,4 +129,45 @@ d("the Go TLS frontend with a real keyd", () => {
     expect(listed).not.toMatch(/priv/i);
     expect(existsSync(join(dir, "tls"))).toBe(true);
   });
+});
+
+// A box whose TLS key keyd holds (classic or arch-v2 without the Rust proxy) runs this Go frontend: the LAN listener
+// dials it, it dials the daemon's Unix socket, and only the header's `peer` lets the daemon see which one it was.
+d("rescue behind the Go TLS frontend: LAN-direct answers, the relay path is a 404", () => {
+  it("marks a LAN-direct connection by its loopback port and refuses the same request dialled straight in", async () => {
+    const ports = new LanIngressPorts();
+    const daemonSock = join(dir, "d.sock");
+    const daemon = await listenForFrontend(daemonSock, (socket) => {
+      const viaLan = cameViaLan(socket, ports);
+      _handleHttpConnectionForTest(socket, async (r) => refuseRescueOffLan(r, viaLan) ?? { status: 200, headers: { "content-type": "text/plain" }, body: `rescue:${r.path}` });
+    });
+    const fe = await spawnFrontend(daemonSock);
+    let lan: LanListener | null = null;
+    try {
+      lan = await startLanListener({ port: 0, backendPort: fe.port, zone: FQDN, listAddresses: () => ["127.0.0.1"], log: () => {}, lanPorts: ports });
+      const lanPort = lan.endpoints()[0]!.port;
+      const post = (to: number, path: string, extra = "") =>
+        new Promise<string>((resolve, reject) => {
+          const s = tlsConnect({ host: "127.0.0.1", port: to, servername: FQDN, ca: caPem, ALPNProtocols: ["http/1.1"] }, () => {
+            s.write(`POST ${path} HTTP/1.1\r\nHost: ${FQDN}\r\n${extra}content-length: 0\r\nconnection: close\r\n\r\n`);
+          });
+          let out = "";
+          s.on("data", (b) => (out += b.toString()));
+          s.on("end", () => resolve(out));
+          s.on("error", reject);
+        });
+      const lanAnswer = await post(lanPort, "/api/rescue/hello");
+      expect(lanAnswer.split("\r\n")[0]).toBe("HTTP/1.1 200 OK");
+      expect(lanAnswer).toContain("rescue:/api/rescue/hello");
+      // Straight into the frontend, as the relay tunnel delivers it: a 404, whatever the client claims.
+      const relayed = await post(fe.port, "/api/rescue/hello", "x-flagship-ingress: lan\r\nx-forwarded-for: 192.168.1.5\r\n");
+      expect(relayed.split("\r\n")[0]).toMatch(/^HTTP\/1\.1 404/);
+      expect(relayed).toContain("not found");
+      expect((await post(fe.port, "/api/health")).split("\r\n")[0]).toBe("HTTP/1.1 200 OK");
+    } finally {
+      await lan?.close();
+      fe.child.kill();
+      await new Promise<void>((r) => daemon.close(() => r()));
+    }
+  }, 30_000);
 });
