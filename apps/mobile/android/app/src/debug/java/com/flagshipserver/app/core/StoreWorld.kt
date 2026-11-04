@@ -38,12 +38,17 @@ data class StoreWorld(
     val membersApp: String,
     val members: List<Member>,
     val backups: Backups,
+    val messages: Messages? = null,
 ) {
     @Serializable data class Server(val name: String, val fqdn: String, val leader: Boolean, val uptimeHours: Long)
     @Serializable data class Waiting(val server: String, val askedMinutesAgo: Long)
     @Serializable data class App(val slug: String, val name: String, val summary: String, val server: String, val access: String)
     @Serializable data class Member(val name: String, val rank: String)
     @Serializable data class Backups(val server: String, val keep: Int, val policy: String, val lastHoursAgo: Long, val sizeGiB: Double)
+    /** Slide 06: one conversation from the account's voi.ci page, its texts per language. */
+    @Serializable data class Messages(val displayName: String, val nickname: Map<String, String>, val thread: List<Line>) {
+        @Serializable data class Line(val from: String, val minutesAgo: Long, val text: Map<String, String>)
+    }
 
     private val hour get() = 3_600_000L
     private fun serviceId(slug: String) = "$account--$slug"
@@ -185,6 +190,58 @@ data class StoreWorld(
                 creatorDeviceId = MockScreensClient.SELF_DEVICE_ID,
             )
         })
+    }
+
+    /**
+     * Slide 06: [account]'s published voi.ci page and one conversation on it (in [lang], a BCP 47 tag), answered by the
+     * owner and renamed with the owner's nickname, so the thread opens accepted and titled by the nickname.
+     */
+    fun seedMessages(c: com.flagshipserver.app.api.MockVoiciClient, lang: String, now: Long) {
+        val m = messages ?: return
+        val pick = { t: Map<String, String> -> t[lang] ?: t[lang.substringBefore('-')] ?: t["en"].orEmpty() }
+        val umk = com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
+        val pageId = "5a".repeat(16)
+        val profile = com.flagshipserver.app.core.voici.VoiciOwner.defaultProfile(m.displayName)
+        val bytes = com.flagshipserver.app.core.voici.VoiciOwner.profileBytes(profile)
+        val sha = com.flagshipserver.app.core.voici.WebEnvelopes.sha256Hex(bytes)
+        c.pieces["$pageId/$sha"] = bytes
+        val keys = com.flagshipserver.app.core.voici.VoiciOwnerKeys.derive(umk, pageId, 1)
+        val body = com.flagshipserver.app.core.voici.VoiciPageIndexBody(
+            account, pageId, 1, now - 86_400_000, 1, 1, keys.inboxPub, keys.signPub,
+            listOf(com.flagshipserver.app.core.voici.VoiciPieceRef("profile", sha, bytes.size.toLong())), "admin-root",
+        )
+        val clock = c.now
+        try {
+            kotlinx.coroutines.runBlocking {
+                c.now = { now - 86_400_000 }
+                c.publish(account, com.flagshipserver.app.core.voici.VoiciPage.signVoiciPageIndex(body, GymSeams.GYM_ADMIN_ROOT_SEED).toJson())
+                val visitorUmk = ByteArray(32) { 0x5E }
+                val v = com.flagshipserver.app.core.voici.VoiciVisitorKeys.derive(visitorUmk, pageId)
+                val convId = com.flagshipserver.app.core.voici.VoiciMessages.voiciConv(pageId, v.pseudonymPub)
+                var conv = com.flagshipserver.app.core.voici.StoredVoiciConversation(convId, pageId, v.pseudonymPub, v.threadPub)
+                var visitorSeq = 0L
+                for (line in m.thread) {
+                    val at = now - line.minutesAgo * 60_000
+                    c.now = { at }
+                    if (line.from == "owner") {
+                        val env = com.flagshipserver.app.core.voici.VoiciOwner.reply(keys, conv, pick(line.text), null, 1, at)
+                        c.send(env.toJson())
+                        conv = conv.copy(messages = conv.messages + com.flagshipserver.app.core.voici.StoredVoiciMessage(env.msgId, env.from, env.seq, at, pick(line.text), mine = true))
+                    } else {
+                        visitorSeq += 1
+                        c.send(c.visitorMessage(account, visitorUmk, pick(line.text), seq = visitorSeq))
+                    }
+                }
+                val state = com.flagshipserver.app.core.voici.MessagesState(
+                    nicknames = sortedMapOf(v.pseudonymPub to com.flagshipserver.app.core.voici.MessagesNickname(pick(m.nickname), now - 3_000_000)),
+                    accepted = listOf(convId),
+                )
+                val key = com.flagshipserver.app.core.voici.VoiciMessages.deriveMessagesStateKey(umk)
+                c.states[account] = com.flagshipserver.app.core.voici.VoiciMessages.sealMessagesState(key, account, 1, state).toJson()
+            }
+        } finally {
+            c.now = clock
+        }
     }
 
     companion object {

@@ -1,7 +1,8 @@
 // Store screenshots (docs/store-assets/capture-plan.md): the real app over the made-up world in
 // store/demo-world.json, one language per run, light and dark by the slide's place in the strip,
-// written to files/store/<id>.png. Opt-in: skipped unless the runner gets `storeWorld` (the file,
-// base64) and `storeLang`; scripts/store-assets/capture-android.sh passes both and pulls the files.
+// written to files/store/<id>.png (01-06; the watch's 07/07b come from the wear module). Opt-in: skipped
+// unless the runner gets `storeWorld` (the file, base64) and `storeLang`; scripts/store-assets/capture-android.sh
+// passes both and pulls the files.
 // Every step finds its node by test tag or by a demo-world text, never by English UI text.
 
 package com.flagshipserver.app.gym
@@ -142,5 +143,13 @@ class StoreCaptureTest : GymBase() {
         waitUntilExists("sd-backups-status", 20_000)
         bring("sd-backups", 0.11f)
         shot("05")
+
+        // 06 Messages: the conversation someone started from voi.ci/river-otter, under the owner's nickname for them.
+        launchStore("messages", dark = true)
+        waitUntilExists("messages-your-page", 20_000)
+        tapMatching(tagPrefix("messages-row-"), 20_000)
+        waitUntilExists("thread-compose", 15_000)
+        waitUntilExists("bubble-status", 15_000)
+        shot("06")
     }
 }

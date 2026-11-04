@@ -8,7 +8,7 @@ them, and the next render picks the files up with no other change.
 ## The contract
 
 * **Output path:** `store/captures/<platform>/<lang>/<device>/<id>.png`, `platform` `ios` or `android`, `lang` the
-  code from `i18n/locales.json` (`en`, `es`, `fr`, `de`, `pt-BR`, `ja`, `zh-Hans`), `id` the slide (`01`…`06`, `06b`).
+  code from `i18n/locales.json` (`en`, `es`, `fr`, `de`, `pt-BR`, `ja`, `zh-Hans`), `id` the slide (`01`…`07`, `07b`).
   The renderer lists every missing path (`node scripts/store-assets/render.mjs check`).
 * **Pixel size** (`store/store.json` `captureSize`; another size is scaled and reported):
 
@@ -27,7 +27,7 @@ them, and the next render picks the files up with no other change.
   `adb shell cmd locale set-app-locales com.flagshipserver.app --locales <androidId>` (Wear the same on the watch AVD),
   or `AppCompatDelegate.setApplicationLocales` in the test.
 * **Appearance** follows the slide's place in the strip: `01` light, `02` dark, `03` light, `04` dark, `05` light,
-  `06`/`06b` dark. iOS `XCUIDevice`/`-AppleInterfaceStyle Dark`; Android `adb shell cmd uimode night yes|no`.
+  `06` dark (Messages), `07`/`07b` (watch) dark. iOS `XCUIDevice`/`-AppleInterfaceStyle Dark`; Android `adb shell cmd uimode night yes|no`.
 * **Clean status bar:** iOS `xcrun simctl status_bar <udid> override --time 2026-10-21T09:41:00.000<host offset>` (an ISO time with
   fractional seconds also fixes the date the iPad's status bar shows; capture-ios.sh computes it) `--batteryState charged
   --batteryLevel 100 --cellularBars 4 --wifiBars 3`; Android demo mode (`adb shell settings put global
@@ -51,7 +51,7 @@ Both apps already have the smoke/gym fixtures (iOS `-smoke-mode` launch argument
 
 The world needs: two servers online with `home` the confirmed leader; the apps list across both servers; Chess Club
 members-only with the three members and ranks above; `home`'s Backups section with a nightly schedule, policy "On my
-devices", three backups (last one 6 h before the capture), nothing failing; and, for `02`/`06b` only, `cabin`
+devices", three backups (last one 6 h before the capture), nothing failing; and, for `02`/`07b` only, `cabin`
 waiting for its start-up approval (iOS has this as `-smoke-awaiting-unlock`, the watch as `-smoke-watch-waiting`).
 Fix the clock to the same moment the webapp captures use (2026-10-21 09:00 UTC) so dates match across languages.
 
@@ -64,10 +64,12 @@ Fix the clock to the same moment the webapp captures use (2026-10-21 09:00 UTC) 
 | 03 | Services / apps list, "All servers", five apps | `-smoke-tab apps` | `smokeTab=apps` |
 | 04 | Chess Club → Access control: Members only selected, Members (3) with ranks visible | `-smoke-tab apps -smoke-access-fixture` adapted to the store world; open Chess Club → Access control | open Chess Club → Access control |
 | 05 | `home` server page scrolled to Backups (policy, last backup, the list) | open `home`, scroll Backups into view | `smokeBackups` world; open `home`, scroll to Backups |
-| 06 | Watch: servers list, both online, nothing waiting | Watch UI test on the Ultra simulator (`WatchApp` target) | Wear AVD: a `wear` androidTest (none exists yet: add `wear/src/androidTest`) launching `WearMainActivity` with the same world over the Data Layer mock |
-| 06b | Watch: `cabin` waiting, the Approve button | as 06 with the waiting flag (`-smoke-watch-waiting`) | as 06 with cabin waiting |
+| 06 | Messages (0.3, H11): the one conversation in the world's `messages` block (someone wrote from voi.ci/river-otter, the owner answered and renamed them), opened; texts and nickname in the capture's language (the only per-language content in the world) | `-smoke-tab messages`; tap the `messages-row-*` row, wait for `thread-receipt` | `smokeTab=messages`; tap the `messages-row-*` row, wait for `bubble-status` |
+| 07 | Watch: servers list, both online, nothing waiting | Watch UI test on the Ultra simulator (`WatchApp` target) | Wear AVD: a `wear` androidTest (none exists yet: add `wear/src/androidTest`) launching `WearMainActivity` with the same world over the Data Layer mock |
+| 07b | Watch: `cabin` waiting, the Approve button | as 07 with the waiting flag (`-smoke-watch-waiting`) | as 06 with cabin waiting |
 
-`07` (closing) and the feature graphic need no capture.
+`08` (closing) and the feature graphic need no capture. The App Store strip is 01-06 and 08 (7 of its 10); Play's
+phone and tablets are 01-08 (its maximum of 8), so adding a slide there means cutting one (the watch first, brief §4).
 
 ## Running them
 

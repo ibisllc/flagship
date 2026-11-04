@@ -20,5 +20,52 @@
     { "name": "Kenji", "rank": "member" },
     { "name": "Lea",   "rank": "member" }
   ],
-  "backups": { "server": "home", "schedule": "nightly", "keep": 7, "policy": "phone", "lastHoursAgo": 6, "sizeGiB": 3.4 }
+  "backups": { "server": "home", "schedule": "nightly", "keep": 7, "policy": "phone", "lastHoursAgo": 6, "sizeGiB": 3.4 },
+  "messages": {
+    "_about": "Slide 06: one conversation someone started from voi.ci/river-otter, which the owner answered and renamed (the nickname is the owner's own, local name). The only per-language content in the world: a thread in English on a Japanese screen would read as a mistake.",
+    "displayName": "River Otter",
+    "nickname": { "en": "Sam from chess", "es": "Sam del ajedrez", "fr": "Sam des échecs", "de": "Sam vom Schach", "pt-BR": "Sam do xadrez", "ja": "Sam（チェス）", "zh-Hans": "Sam（国际象棋）" },
+    "thread": [
+      { "from": "visitor", "minutesAgo": 52, "text": {
+        "en": "Hi! I found your page. Is the chess club open to new players?",
+        "es": "¡Hola! Vi tu página. ¿El club de ajedrez acepta jugadores nuevos?",
+        "fr": "Bonjour ! J’ai vu votre page. Le club d’échecs accepte-t-il de nouveaux joueurs ?",
+        "de": "Hallo! Ich habe deine Seite gefunden. Nimmt der Schachclub neue Spieler auf?",
+        "pt-BR": "Oi! Vi sua página. O clube de xadrez aceita novos jogadores?",
+        "ja": "こんにちは！ページを見ました。チェスクラブは新しいメンバーを募集していますか？",
+        "zh-Hans": "你好！我看到了你的主页。国际象棋俱乐部还招新成员吗？" } },
+      { "from": "owner", "minutesAgo": 40, "text": {
+        "en": "Yes! We play on Thursday evenings.",
+        "es": "¡Sí! Jugamos los jueves por la tarde.",
+        "fr": "Oui ! On joue le jeudi soir.",
+        "de": "Ja! Wir spielen donnerstagabends.",
+        "pt-BR": "Sim! Jogamos às quintas à noite.",
+        "ja": "はい！毎週木曜の夜に集まっています。",
+        "zh-Hans": "招的！我们每周四晚上下棋。" } },
+      { "from": "visitor", "minutesAgo": 31, "text": {
+        "en": "Great. Can I come this week?",
+        "es": "Genial. ¿Puedo ir esta semana?",
+        "fr": "Super. Je peux venir cette semaine ?",
+        "de": "Super. Kann ich diese Woche kommen?",
+        "pt-BR": "Ótimo. Posso ir esta semana?",
+        "ja": "よかった。今週から参加できますか？",
+        "zh-Hans": "太好了。我这周可以来吗？" } },
+      { "from": "owner", "minutesAgo": 24, "text": {
+        "en": "Of course. I’ll send you an invite to Chess Club.",
+        "es": "Claro. Te envío una invitación a Chess Club.",
+        "fr": "Bien sûr. Je vous envoie une invitation à Chess Club.",
+        "de": "Klar. Ich schicke dir eine Einladung zu Chess Club.",
+        "pt-BR": "Claro. Vou te mandar um convite para o Chess Club.",
+        "ja": "もちろん。Chess Club への招待を送りますね。",
+        "zh-Hans": "当然可以。我给你发一个 Chess Club 的邀请。" } },
+      { "from": "visitor", "minutesAgo": 9, "text": {
+        "en": "Thank you, see you Thursday!",
+        "es": "¡Gracias, nos vemos el jueves!",
+        "fr": "Merci, à jeudi !",
+        "de": "Danke, bis Donnerstag!",
+        "pt-BR": "Obrigado, até quinta!",
+        "ja": "ありがとうございます。木曜日にお会いしましょう！",
+        "zh-Hans": "谢谢，周四见！" } }
+    ]
+  }
 }

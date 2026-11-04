@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Native iOS store captures (docs/store-assets/capture-plan.md): StoreCaptureTests on the iPhone 6.9" and iPad 13"
-# simulators, and the Watch app's 06/06b on an Apple Watch Ultra 3 (launched straight into the store world: there is
+# simulators, and the Watch app's 07/07b on an Apple Watch Ultra 3 (launched straight into the store world: there is
 # no watch UI-test target), every ga language, into store/captures/ios/<lang>/<device>/<id>.png.
 #
 #   bash scripts/store-assets/capture-ios.sh [--lang ja,de] [--device iphone-6.9,ipad-13,watch-ultra] [--keep-build]
@@ -68,10 +68,10 @@ watch() { # <udid>: the Watch app on the store world, both states, every languag
     out="$ROOT/store/captures/ios/$lang/watch-ultra"
     echo "== watch-ultra $lang -> ${out#$ROOT/}"
     mkdir -p "$out"
-    for id in 06 06b; do
+    for id in 07 07b; do
       SIMCTL_CHILD_FLAGSHIP_STORE_WORLD="$(cat "$ROOT/store/demo-world.json")" xcrun simctl launch --terminate-running-process "$udid" \
         com.flagshipserver.app.watchkitapp -AppleLanguages "($lang)" -AppleLocale "$(locale_of "$lang")" -watch-store-world \
-        $([ "$id" = 06b ] && echo -watch-store-waiting) >/dev/null
+        $([ "$id" = 07b ] && echo -watch-store-waiting) >/dev/null
       sleep 6
       xcrun simctl io "$udid" screenshot "$out/$id.png" >/dev/null 2>&1
     done
@@ -100,12 +100,12 @@ for dev in "${devs[@]}"; do
     pid=$!
     # xcodebuild sometimes never returns after the test has finished on an iPad: stop waiting a minute after the last shot.
     while kill -0 "$pid" 2>/dev/null; do
-      if [ -f "$out/05.png" ] && [ $(( $(date +%s) - $(stat -f %m "$out/05.png") )) -gt 60 ]; then kill "$pid"; break; fi
+      if [ -f "$out/06.png" ] && [ $(( $(date +%s) - $(stat -f %m "$out/06.png") )) -gt 60 ]; then kill "$pid"; break; fi
       sleep 5
     done
     wait "$pid" 2>/dev/null || true
     n=$(ls "$out"/0*.png 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$n" != 5 ]; then echo "  only $n of 5 captures; log: $DD/test-$dev-$lang.log" >&2; failed=1; fi
+    if [ "$n" != 6 ]; then echo "  only $n of 6 captures; log: $DD/test-$dev-$lang.log" >&2; failed=1; fi
   done
   [ "$dev" = watch-ultra ] || xcrun simctl status_bar "$udid" clear
   xcrun simctl shutdown "$udid"

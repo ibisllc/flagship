@@ -17,6 +17,13 @@ struct StoreWorld: Decodable {
     struct Backups: Decodable {
         let server: String; let keep: Int; let policy: String; let lastHoursAgo: Int; let sizeGiB: Double
     }
+    /// Slide 06: one conversation from the account's voi.ci page, in the capture's language.
+    struct Messages: Decodable {
+        struct Line: Decodable { let from: String; let minutesAgo: Int; let text: [String: String] }
+        let displayName: String
+        let nickname: [String: String]
+        let thread: [Line]
+    }
     let account: String
     let servers: [Server]
     let unlockRequest: Waiting
@@ -24,6 +31,7 @@ struct StoreWorld: Decodable {
     let membersApp: String
     let members: [Member]
     let backups: Backups
+    let messages: Messages?
 
     static func load() -> StoreWorld? {
         guard let json = ProcessInfo.processInfo.environment["FLAGSHIP_STORE_WORLD"] else { return nil }
@@ -50,6 +58,7 @@ extension GymSweepSeams {
 
     static func storeWorld(_ args: [String], _ app: AppState, _ mocks: GymMocks) {
         guard args.contains("-smoke-store-world"), let world = StoreWorld.load() else { return }
+        defer { storeMessages(world, mocks) }
         let waiting = args.contains("-smoke-store-waiting")
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let hour: Int64 = 3_600_000
@@ -175,6 +184,59 @@ extension GymSweepSeams {
                     purpose: SecretPurpose.unlockKey.rawValue, issuedAt: asked, requestSignature: HexUtil.encode(sig),
                     deviceInfo: nil, postedAt: asked, expiresAt: asked + 600_000)]
             }
+        }
+    }
+
+    /// The capture's language (`-AppleLanguages`), picked from a per-language text: exact, then the language alone, then English.
+    private static func localized(_ texts: [String: String]) -> String {
+        let lang = Bundle.main.preferredLocalizations.first ?? "en"
+        return texts[lang] ?? texts[String(lang.prefix(while: { $0 != "-" }))] ?? texts["en"] ?? ""
+    }
+
+    /// Slide 06: river-otter's published voi.ci page and one conversation on it, answered by the owner and renamed
+    /// with the owner's nickname, so the thread opens accepted, titled by the nickname, nothing unread.
+    static func storeMessages(_ world: StoreWorld, _ mocks: GymMocks) {
+        guard let w = world.messages, let m = mocks.voici, let umk = GymSeams.accountRootSeed.map(Array.init) else { return }
+        let user = world.account
+        let admin = Array(GymSeams.gymAdminRootSeed)
+        m.keys[user] = VoiciAccountKeys(irkPub: Keystore.gymIRK().map { HexUtil.encode($0.publicKey.rawRepresentation) } ?? String(repeating: "11", count: 32),
+                                        adminRootPub: (try? CanonicalJson.ed25519PublicKey(seed: admin)).map(CanonicalJson.hex))
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        guard let idx = try? seedPage(m, username: user, pageId: gymPageId, umk: umk, admin: admin,
+                                      profile: VoiciProfile(displayName: w.displayName, bio: "", avatar: nil, theme: "classic", links: []),
+                                      posts: [], now: now),
+              let inboxPub = try? CanonicalJson.hexToBytes(idx.inboxPub),
+              let visitor = try? MockVoiciVisitor(secret: [UInt8](repeating: 0x5e, count: 32), pageId: gymPageId, origin: Endpoints.voiciOrigin, now: now),
+              let sign = try? VoiciMessages.deriveVoiciOwnerSignKey(umk: umk, pageId: gymPageId, inboxEpoch: 1),
+              let conv = try? VoiciMessages.voiciConv(pageId: gymPageId, pseudonymPub: visitor.pseudonymPub) else { return }
+        let c = VoiciConversation(conv: conv, pseudonymPub: visitor.pseudonymPub, threadPub: CanonicalJson.hex(visitor.thread.publicKey),
+                                  messages: [], hasGap: false)
+        var items: [VoiciInboxItem] = []
+        var visitorSeq: Int64 = 0
+        var ownerSeq: Int64 = 0
+        for line in w.thread {
+            let at = now - Int64(line.minutesAgo) * 60_000
+            let text = localized(line.text)
+            if line.from == "owner" {
+                ownerSeq += 1
+                if let r = try? VoiciOwner.reply(text: text, replyTo: nil, conversation: c, pageId: gymPageId, pageSeq: 1,
+                                                 ownerSign: (sign.seed, idx.ownerSignPub), inboxPub: inboxPub, seq: ownerSeq, now: at) {
+                    items.append(VoiciInboxItem(envelope: r.json, storedAt: at, fetchedAt: at + 60_000))
+                }
+            } else {
+                visitorSeq += 1
+                if let e = try? visitor.message(text, inboxPub: inboxPub, seq: visitorSeq, sentAt: at) {
+                    items.append(VoiciInboxItem(envelope: e, storedAt: at))
+                }
+            }
+        }
+        m.mailbox[user] = items
+        var state = MessagesState()
+        state.nicknames[visitor.pseudonymPub] = MessagesState.Nickname(name: localized(w.nickname), at: now - 3_000_000)
+        state.accepted = [conv]
+        if let sealed = try? VoiciMessages.sealMessagesState(stateKey: VoiciMessages.deriveMessagesStateKey(umk: umk), username: user,
+                                                            version: 1, state: state) {
+            m.states[user] = sealed.json
         }
     }
 

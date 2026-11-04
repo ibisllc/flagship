@@ -1,6 +1,6 @@
 // Store screenshots of the Wear OS app (docs/store-assets/capture-plan.md): the watch's home over the
 // made-up world in store/demo-world.json, every ga language, written to
-// store/captures/android/<lang>/wear/06.png (both servers online) and 06b.png (cabin waiting).
+// store/captures/android/<lang>/wear/07.png (both servers online) and 07b.png (cabin waiting).
 // Rendered by Robolectric's native graphics on a 192dp round screen at 2x (384 x 384 px), since the
 // phone emulator can't hold the watch build. Opt-in: skipped unless STORE_CAPTURE_WEAR is set;
 // scripts/store-assets/capture-android.sh runs it.
@@ -83,7 +83,7 @@ class StoreWatchCaptureTest(private val lang: String, private val waiting: Boole
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         compose.runOnUiThread { view.draw(android.graphics.Canvas(bitmap)) }
-        File(out, if (waiting) "06b.png" else "06.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(out, if (waiting) "07b.png" else "07.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     companion object {

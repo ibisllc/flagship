@@ -9,6 +9,8 @@
   "slide4_caption": { "en": "Invite family. Keep the keys.", "ctx": "store screenshot 4 headline over an app's access control. People invited to an app get that app only, never the account keys" },
   "slide5_theme": { "en": "Your backups", "ctx": "store screenshot 5 label" },
   "slide5_caption": { "en": "Backups only you can open.", "ctx": "store screenshot 5 headline over the Backups section (encrypted to the account)" },
+  "messages_theme": { "en": "Your messages", "ctx": "store screenshot label over Messages (voi.ci Messages: a conversation someone started from the owner's voi.ci page)" },
+  "messages_caption": { "en": "Messages only you can read.", "ctx": "store screenshot headline over a Messages conversation. Messages are end-to-end encrypted to the owner's devices: Flagship cannot read them" },
   "slide6_theme": { "en": "At a glance", "ctx": "store screenshot 6 label (watch slide)" },
   "slide6_caption": { "en": "Status on your wrist.", "ctx": "store screenshot 6 headline over Apple Watch / Wear OS" },
   "closing_caption": { "en": "Flagship. Your cloud, your keys.", "ctx": "store closing card under the logo" },

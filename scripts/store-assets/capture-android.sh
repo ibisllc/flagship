@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Native Android store captures (docs/store-assets/capture-plan.md): StoreCaptureTest on one phone AVD, resized
 # for the 7" and 10" tablets, every ga language, into store/captures/android/<lang>/<device>/<id>.png; and the
-# Wear OS app's 06/06b (wear/src/test StoreWatchCaptureTest, Robolectric: the phone emulator can't hold the watch
+# Wear OS app's 07/07b (wear/src/test StoreWatchCaptureTest, Robolectric: the phone emulator can't hold the watch
 # build, which shares the phone's applicationId) into store/captures/android/<lang>/wear/.
 #
 #   bash scripts/store-assets/capture-android.sh [--lang ja,de] [--device phone,tablet-7,tablet-10,wear] [--avd flagship_api35]
@@ -103,10 +103,10 @@ for dev in "${devs[@]}"; do
         | grep -E "OK \(|FAILURES|Error|Exception" | head -5 || true
       "$ADB" exec-out run-as "$PKG" tar c -C files store 2>/dev/null | tar x -C "$out" --strip-components 1 2>/dev/null || true
       n=$(ls "$out"/0*.png 2>/dev/null | wc -l | tr -d ' ')
-      [ "$n" = 5 ] && break
-      [ "$attempt" = 1 ] && { echo "  $n of 5 captures, retrying once" >&2; rm -f "$out"/0*.png; }
+      [ "$n" = 6 ] && break
+      [ "$attempt" = 1 ] && { echo "  $n of 6 captures, retrying once" >&2; rm -f "$out"/0*.png; }
     done
-    if [ "$n" != 5 ]; then echo "  only $n of 5 captures" >&2; failed=1; fi
+    if [ "$n" != 6 ]; then echo "  only $n of 6 captures" >&2; failed=1; fi
   done
 done
 "$ADB" shell cmd locale set-app-locales "$PKG" --locales "" >/dev/null 2>&1 || true

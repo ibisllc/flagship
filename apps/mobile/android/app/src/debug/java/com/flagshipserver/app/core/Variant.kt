@@ -178,6 +178,12 @@ object Variant : AppVariant {
         GymProbe.boxDirect = boxDirect
         PodDirect.transport = { boxDirect }
         GymVoici.reset(appState.currentUser.value ?: cfg.username, appState.activeProfile?.deviceId)
+        store?.seedMessages(
+            GymVoici.client,
+            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales.get(0)?.toLanguageTag()
+                ?: context.resources.configuration.locales.get(0).toLanguageTag(),
+            now,
+        )
         return GymLaunch(
             tab,
             GymMocks(

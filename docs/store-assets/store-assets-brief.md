@@ -55,7 +55,7 @@ sells. The first draft's palette (`#0B1220`, `#F8FAFC`) and Inter were not Flags
   sized so the cap height is at least 3.2 % of the image height (≈ 92 px on a 2868 px iPhone frame; CJK glyphs at the
   same em size, which reads ~10 % larger, so they are set at 0.92 em), never more than two lines.
 
-## 4. The story (7 slides; Play shows up to 8, the App Store up to 10)
+## 4. The story (8 slides from 0.3; Play shows up to 8, the App Store up to 10)
 
 Seven is enough to tell it once; a ten-slide strip repeated itself (the draft's "nothing leaves unsealed" and "your
 phone is the key" were the same claim twice). The first three carry the listing: they are the ones shown in search.
@@ -67,8 +67,9 @@ phone is the key" were the same claim twice). The first three carry the listing:
 | 3 | YOUR APPS | Apps that live on your server. | Services list with 5 apps (Notes, Photos, Recipes, Chess Club, Budget) | `world=apps` |
 | 4 | YOUR PEOPLE | Invite family. Keep the keys. | An app's Access control: Members only, three members with ranks | `world=members` |
 | 5 | YOUR BACKUPS | Backups only you can open. | Backups section: nightly backup kept on this phone, last backup today | `world=backups` |
-| 6 | AT A GLANCE | Status on your wrist. | Watch (iOS) / Wear OS tile: two servers online, nothing waiting | `world=home-two-servers` |
-| 7 | (none) | Flagship. Your cloud, your keys. | Closing card: the mark, the caption, `flagshipserver.com` | (template only) |
+| 6 | YOUR MESSAGES | Messages only you can read. | Messages (0.3): a conversation someone started from the owner's voi.ci page, renamed by the owner, answered | `world=messages` |
+| 7 | AT A GLANCE | Status on your wrist. | Watch (iOS) / Wear OS tile: two servers online, nothing waiting (Play only; the App Store has the watch in its own class) | `world=home-two-servers` |
+| 8 | (none) | Flagship. Your cloud, your keys. | Closing card: the mark, the caption, `flagshipserver.com` | (template only) |
 
 Why these and not the draft's:
 * **Build with AI is not a slide in 0.2.** Free AI credits are a limited-time promotion with a weekly allowance; a
@@ -78,9 +79,11 @@ Why these and not the draft's:
   features"), so they cannot be shown.
 * **"Encrypted at rest, keys on device"** is real but abstract; slide 2 *shows* it (the server waits for the phone),
   and slide 5 says what it means for backups.
-* **Watch/Wear** moves to slide 6 and is cut first if a listing wants fewer.
+* **Messages** (0.3, H11) comes after the trust story (6), not first: it shows the 0.3 range without crowding the
+  three search slides. Its texts are the only per-language content in the demo world.
+* **Watch/Wear** moves to slide 7 and is cut first if a listing wants fewer.
 
-Five-slide cut (if a store surface trims): 1, 2, 3, 5, 7.
+Five-slide cut (if a store surface trims): 1, 2, 3, 5, 8.
 Caption alternatives the owner may prefer (all ≤ 6 words): slide 1 "A personal cloud you own."; slide 2 "Nothing
 starts without your phone."; slide 3 "Install apps on your server."; slide 5 "Encrypted backups, kept by you."
 
@@ -242,7 +245,7 @@ lines on iPhone.
     iPad inside the portrait 2064 × 2752 image (the App Store accepts both orientations; portrait keeps the iPad set
     matching the iPhone set). The template sizes every device from its capture's own aspect ratio.
   - **Watch slides.** Apple Watch (422 × 514) and Wear OS (384 × 384) images are the bare screen with no caption, two
-    each: `06` (both servers online) and `06b` (cabin waiting). Play phone and tablets also get slide 6 with the
+    each: `07` (both servers online) and `07b` (cabin waiting). Play phone and tablets also get slide 7 with the
     round Wear OS watch drawn on the shelf.
   - **Captures today.** No native capture test exists yet, so `capture-plan.md` specifies them (paths, sizes,
     simulators, the `store world` seam, per-slide states). Meanwhile the real webapp, run in each language by the

@@ -2,7 +2,8 @@ import XCTest
 
 /// Store screenshots (docs/store-assets/capture-plan.md): the real app over the made-up world in
 /// store/demo-world.json (`-smoke-store-world`), one language per run, light and dark by the slide's place
-/// in the strip, written as `<id>.png`. Opt-in (skipped unless `STORE_OUT` is set); run it through
+/// in the strip, written as `<id>.png` (01-06; the watch's 07/07b come from capture-ios.sh). Opt-in (skipped
+/// unless `STORE_OUT` is set); run it through
 /// scripts/store-assets/capture-ios.sh, which passes:
 ///
 ///   TEST_RUNNER_STORE_LANG=ja TEST_RUNNER_STORE_OUT=/abs/store/captures/ios/ja/iphone-6.9 \
@@ -153,5 +154,15 @@ final class StoreCaptureTests: XCTestCase {
         // gap and label, not the Diagnostics card's text overlapping the title.
         bring(app, any(app, "sd-backups-policy"), toY: isPad ? 0.10 : 0.15)
         try shot(app, "05")
+
+        // 06 Messages: the conversation someone started from voi.ci/river-otter, under the owner's nickname for them.
+        app = launch("messages", dark: true)
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'messages-row-'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        row.tap()
+        XCTAssertTrue(any(app, "thread-compose").waitForExistence(timeout: 15))
+        XCTAssertTrue(any(app, "thread-receipt").waitForExistence(timeout: 15))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "bubble-visitor").count, 3)
+        try shot(app, "06")
     }
 }

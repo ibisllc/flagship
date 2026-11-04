@@ -34,7 +34,7 @@ describe("store art plan", () => {
   it("alternates light and dark by position and files App Store and Play under their own language codes", () => {
     const ja = plan("ja");
     const iphone = ja.filter((j: { cls: string }) => j.cls === "iphone-6.9").map((j: { tone: string }) => j.tone);
-    expect(iphone).toEqual(["light", "dark", "light", "dark", "light", "dark"]);
+    expect(iphone).toEqual(["light", "dark", "light", "dark", "light", "dark", "light"]);
     expect(ja.find((j: { store: string }) => j.store === "playstore")?.storeLang).toBe("ja-JP");
     expect(plan("zh-Hans").find((j: { store: string }) => j.store === "playstore")?.storeLang).toBe("zh-CN");
   });
