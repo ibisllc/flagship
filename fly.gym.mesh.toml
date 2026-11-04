@@ -30,6 +30,9 @@ kill_timeout = "30s"
 
 [env]
   NODE_ENV = "production"
+  # Gym only (never production, scripts/fly-relay-mesh.test.ts): every gym visitor comes from one runner address, so the
+  # mesh keys visitors by address AND port, or rebalancing (§10.1: distinct clients, completed sessions) never fires.
+  FLAGSHIP_MESH_CLIENT_KEY_BY_PORT = "1"
   PORT = "3000"
   TUNNEL_TCP_PORT = "8443"
   FLAGSHIP_SURFACE = "services"

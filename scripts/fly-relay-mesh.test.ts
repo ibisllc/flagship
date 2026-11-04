@@ -81,6 +81,14 @@ describe("production relay mesh Fly profiles", () => {
   });
 });
 
+describe("test-only relay switches stay out of production", () => {
+  it("no production Fly profile keys mesh visitors by port (a gym-only switch)", () => {
+    for (const f of ["fly.toml", "fly.relay.toml", "fly.relay.mesh.toml", "fly.mesh.toml"]) {
+      expect(readFileSync(join(ROOT, f), "utf8"), f).not.toMatch(/FLAGSHIP_MESH_CLIENT_KEY_BY_PORT/);
+    }
+  });
+});
+
 describe("prod-mesh-dns", () => {
   const repo = wranglerRelayAddresses(read("apps/com/wrangler.toml"));
 

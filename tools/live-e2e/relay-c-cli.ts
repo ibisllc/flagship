@@ -75,6 +75,7 @@ export function relayEnvFile(i: RelayEnvInput): string {
     "FLAGSHIP_MESH=on",
     `FLAGSHIP_RELAY_ID=${RELAY_ID}`,
     "FLAGSHIP_RELAY_KIND=full",
+    "FLAGSHIP_MESH_CLIENT_KEY_BY_PORT=1", // gym only: one runner address; see fly.gym.relay.mesh.toml
     `FLAGSHIP_RELAY_KEY_SEED=${i.seedHex}`,
     `FLAGSHIP_RELAY_LOG_PUB=${i.logPub}`,
     `FLAGSHIP_RELAY_FEED_URL=https://feed.${i.control}/v1`,
