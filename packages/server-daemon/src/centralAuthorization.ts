@@ -91,6 +91,7 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/alerts": { owner: "session", note: "alert inbox" },
   "/api/identity": { owner: "session", note: "identity rotate; owner only" },
   "/api/journal": { owner: "signed-order", note: "signed journal reads" },
+  "/api/deadman": { owner: "public", note: "retired in 0.3: answers 0.2 apps 410 with an update sentence, nothing else (legacyClientRoutes.ts)" },
   "/api/stack": { owner: "mixed", note: "the stack switch: plan and status for owner sessions; the switch itself is an admin-signed order" },
   "/api/power": { owner: "signed-order", note: "lock/restart/off; phone-signed" },
   "/api/archive-download": { owner: "signed-order", note: "box to box archive transfer" },
