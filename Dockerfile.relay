@@ -10,7 +10,6 @@
 
 FROM rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS builder
 WORKDIR /src
-COPY rust-toolchain.toml ./
 COPY rust rust/
 WORKDIR /src/rust
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
