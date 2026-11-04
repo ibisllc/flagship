@@ -189,7 +189,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       texts and "What's new" covering the whole 0.3 range, in 7 languages; contact sheet for Harry.
 - [x] F4 (`68b32b475`: blog/flagship-0-3, landing/FAQ/help/security/how-it-works, 7 languages; deploys with .com) Website: landing + features + security + /studio + release notes/changelog for 0.3, pricing
       unchanged (free), i18n built; deployed with .com.
-- [~] F4b (SECOND AGENT, 2026-10-25: `offline-control` and `version` markers RESOLVED; left for the verdicts/owner: usb-burn, app-browser, new-box-stack, canary, findings, pubDate, and the other items below) Before launch, resolve every `TODO-RM <tag>` in docs/release-notes/0.3.md,
+- [x] F4b (DONE 2026-11-03 except OWNER: rss.xml pubDate on release day, store name check; translations are drafts in i18n/REVIEW.md. Earlier: SECOND AGENT, 2026-10-25: `offline-control` and `version` markers RESOLVED; left for the verdicts/owner: usb-burn, app-browser, new-box-stack, canary, findings, pubDate, and the other items below) Before launch, resolve every `TODO-RM <tag>` in docs/release-notes/0.3.md,
       store/listings/*.json and apps/web/public (grep TODO-RM): offline-control (keep only if A4
       landed, and the strict-PQ caveat is gone), usb-burn (seed published + hardware-tested),
       app-browser (gym verdict), new-box-stack (gym verdict: "Podman + Rust", "own database server"
