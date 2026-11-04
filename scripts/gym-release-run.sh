@@ -152,7 +152,10 @@ for STACK in $STACKS; do
     echo "policed app browser (appBrowser $(node -p 'require(process.argv[1]).appBrowser === true' "$REPO/release/box-release.json")): $BROWSER (written to $RUN_DIR/browser-verdict)"
   fi
 done
-# Standalone lanes (opt-in), under this run's lock.
+# Standalone lanes (opt-in), under this run's lock. They provision boxes the way new boxes are built (the release's
+# newBoxStack), never on whichever stack the last pass left in GYM_BOX_STACK (run 51: the classic pass leaked into the
+# arm64 lane).
+export GYM_BOX_STACK="${GYM_LANE_STACK:-$(node -p 'require(process.argv[1]).newBoxStack ?? "arch-v2"' "$REPO/release/box-release.json")}"
 LANES_FAILED=0 LANES_SKIPPED=0
 LANES="${GYM_RELEASE_LANES:-}"
 for L in ${LANES//,/ }; do
