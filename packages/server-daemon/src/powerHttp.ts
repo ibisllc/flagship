@@ -102,7 +102,7 @@ export function buildPowerHttp(opts: PowerHttpOptions) {
     return {
       status: 200,
       headers: H,
-      body: JSON.stringify({ ok: true, mode: result.mode, requestedMode: result.requestedMode, suspension: result.suspension }),
+      body: JSON.stringify({ ok: true, mode: result.mode, requestedMode: result.requestedMode, suspension: result.suspension, marker: result.marker }),
     };
   };
 }

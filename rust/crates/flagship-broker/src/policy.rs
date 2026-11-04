@@ -1963,7 +1963,7 @@ fn host_command(name: &str, a: &[String], mounts: MountsReader<'_>) -> Option<Pr
                     30 * 60_000,
                 )
             }),
-        "bootlock" => (n == 0).then(|| {
+        "bootlock" => (n == 1 && s(0) == "approve-once").then(|| {
             exec(
                 "/bin/sh",
                 vec!["-c".to_owned(), BOOT_LOCK_ONCE_SCRIPT.to_owned()],

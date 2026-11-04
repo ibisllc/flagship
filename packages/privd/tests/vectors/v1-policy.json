@@ -6461,6 +6461,28 @@
    "args": {
     "file": "bootlock",
     "argv": [
+     "approve-once"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/bin/sh",
+     "args": [
+      "-c",
+      "printf 'approve-once\\n' > /boot/flagship-lock-once.new && mv -f /boot/flagship-lock-once.new /boot/flagship-lock-once"
+     ],
+     "timeoutMs": 15000
+    }
+   }
+  },
+  {
+   "name": "host-307",
+   "op": "host",
+   "args": {
+    "file": "bootlock",
+    "argv": [
+     "approve-once",
      "x"
     ]
    },
@@ -6471,7 +6493,22 @@
    }
   },
   {
-   "name": "host-307",
+   "name": "host-308",
+   "op": "host",
+   "args": {
+    "file": "bootlock",
+    "argv": [
+     "x"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "bootlock with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-309",
    "op": "host",
    "args": {
     "file": "bootlock",
@@ -6487,7 +6524,7 @@
    }
   },
   {
-   "name": "host-308",
+   "name": "host-310",
    "op": "host",
    "args": {
     "file": "mkdir",
@@ -6503,7 +6540,7 @@
    }
   },
   {
-   "name": "host-309",
+   "name": "host-311",
    "op": "host",
    "args": {
     "file": "mkdir",
@@ -6519,7 +6556,7 @@
    }
   },
   {
-   "name": "host-310",
+   "name": "host-312",
    "op": "host",
    "args": {
     "file": "truncate",
@@ -6535,7 +6572,7 @@
    }
   },
   {
-   "name": "host-311",
+   "name": "host-313",
    "op": "host",
    "args": {
     "file": "fallocate",
@@ -6552,7 +6589,7 @@
    }
   },
   {
-   "name": "host-312",
+   "name": "host-314",
    "op": "host",
    "args": {
     "file": "mkfs.ext4",
@@ -6567,7 +6604,7 @@
    }
   },
   {
-   "name": "host-313",
+   "name": "host-315",
    "op": "host",
    "args": {
     "file": "mkfs.ext4",
@@ -6592,7 +6629,7 @@
    }
   },
   {
-   "name": "host-314",
+   "name": "host-316",
    "op": "host",
    "args": {
     "file": "touch",
@@ -6607,7 +6644,7 @@
    }
   },
   {
-   "name": "host-315",
+   "name": "host-317",
    "op": "host",
    "args": {
     "file": "rm",
@@ -6622,7 +6659,7 @@
    }
   },
   {
-   "name": "host-316",
+   "name": "host-318",
    "op": "host",
    "args": {
     "file": "rm",
@@ -6638,7 +6675,7 @@
    }
   },
   {
-   "name": "host-317",
+   "name": "host-319",
    "op": "host",
    "args": {
     "file": "rm",
@@ -6653,7 +6690,7 @@
    }
   },
   {
-   "name": "host-318",
+   "name": "host-320",
    "op": "host",
    "args": {
     "file": "rmdir",
@@ -6668,7 +6705,7 @@
    }
   },
   {
-   "name": "host-319",
+   "name": "host-321",
    "op": "host",
    "args": {
     "file": "mv",
@@ -6684,7 +6721,7 @@
    }
   },
   {
-   "name": "host-320",
+   "name": "host-322",
    "op": "host",
    "args": {
     "file": "mv",
@@ -6700,7 +6737,7 @@
    }
   },
   {
-   "name": "host-321",
+   "name": "host-323",
    "op": "host",
    "args": {
     "file": "chattr",
@@ -6716,7 +6753,7 @@
    }
   },
   {
-   "name": "host-322",
+   "name": "host-324",
    "op": "host",
    "args": {
     "file": "chmod",
@@ -6732,7 +6769,7 @@
    }
   },
   {
-   "name": "host-323",
+   "name": "host-325",
    "op": "host",
    "args": {
     "file": "chmod",
@@ -6748,7 +6785,7 @@
    }
   },
   {
-   "name": "host-324",
+   "name": "host-326",
    "op": "host",
    "args": {
     "file": "cp",
@@ -6766,7 +6803,7 @@
    }
   },
   {
-   "name": "host-325",
+   "name": "host-327",
    "op": "host",
    "args": {
     "file": "cp",
@@ -6784,7 +6821,7 @@
    }
   },
   {
-   "name": "host-326",
+   "name": "host-328",
    "op": "host",
    "args": {
     "file": "du",
@@ -6800,7 +6837,7 @@
    }
   },
   {
-   "name": "host-327",
+   "name": "host-329",
    "op": "host",
    "args": {
     "file": "fingerprint",
@@ -6815,7 +6852,7 @@
    }
   },
   {
-   "name": "host-328",
+   "name": "host-330",
    "op": "host",
    "args": {
     "file": "networkctl",
@@ -6831,7 +6868,7 @@
    }
   },
   {
-   "name": "host-329",
+   "name": "host-331",
    "op": "host",
    "args": {
     "file": "sh",
@@ -6847,7 +6884,7 @@
    }
   },
   {
-   "name": "host-330",
+   "name": "host-332",
    "op": "host",
    "args": {
     "file": "constructor",
@@ -6862,7 +6899,7 @@
    }
   },
   {
-   "name": "host-331",
+   "name": "host-333",
    "op": "host",
    "args": {
     "file": "toString",
@@ -6877,7 +6914,7 @@
    }
   },
   {
-   "name": "host-332",
+   "name": "host-334",
    "op": "host",
    "args": {
     "file": 5,
@@ -6892,7 +6929,7 @@
    }
   },
   {
-   "name": "host-333",
+   "name": "host-335",
    "op": "host",
    "args": {
     "file": "mount",
@@ -6905,7 +6942,7 @@
    }
   },
   {
-   "name": "host-334",
+   "name": "host-336",
    "op": "host",
    "args": {
     "file": "sh",
@@ -6918,7 +6955,7 @@
    }
   },
   {
-   "name": "host-335",
+   "name": "host-337",
    "op": "host",
    "args": {
     "argv": [
@@ -6932,7 +6969,7 @@
    }
   },
   {
-   "name": "host-336",
+   "name": "host-338",
    "op": "host",
    "args": {
     "file": "mount",
@@ -6948,7 +6985,7 @@
    }
   },
   {
-   "name": "host-337",
+   "name": "host-339",
    "op": "host",
    "args": {
     "file": "fingerprint",
@@ -6963,7 +7000,7 @@
    }
   },
   {
-   "name": "host-338",
+   "name": "host-340",
    "op": "host",
    "args": {
     "file": "ip",
@@ -6991,7 +7028,7 @@
    }
   },
   {
-   "name": "host-339",
+   "name": "host-341",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7019,7 +7056,7 @@
    }
   },
   {
-   "name": "host-340",
+   "name": "host-342",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7047,7 +7084,7 @@
    }
   },
   {
-   "name": "host-341",
+   "name": "host-343",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7075,7 +7112,7 @@
    }
   },
   {
-   "name": "host-342",
+   "name": "host-344",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7101,7 +7138,7 @@
    }
   },
   {
-   "name": "host-343",
+   "name": "host-345",
    "op": "host",
    "args": {
     "file": "sysctl",
@@ -7125,7 +7162,7 @@
    }
   },
   {
-   "name": "host-344",
+   "name": "host-346",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7144,7 +7181,7 @@
    }
   },
   {
-   "name": "host-345",
+   "name": "host-347",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7161,7 +7198,7 @@
    }
   },
   {
-   "name": "host-346",
+   "name": "host-348",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7180,7 +7217,7 @@
    }
   },
   {
-   "name": "host-347",
+   "name": "host-349",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7199,7 +7236,7 @@
    }
   },
   {
-   "name": "host-348",
+   "name": "host-350",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7218,7 +7255,7 @@
    }
   },
   {
-   "name": "host-349",
+   "name": "host-351",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7237,7 +7274,7 @@
    }
   },
   {
-   "name": "host-350",
+   "name": "host-352",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7256,7 +7293,7 @@
    }
   },
   {
-   "name": "host-351",
+   "name": "host-353",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7275,7 +7312,7 @@
    }
   },
   {
-   "name": "host-352",
+   "name": "host-354",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7293,7 +7330,7 @@
    }
   },
   {
-   "name": "host-353",
+   "name": "host-355",
    "op": "host",
    "args": {
     "file": "ip",
@@ -7312,47 +7349,13 @@
    }
   },
   {
-   "name": "host-354",
+   "name": "host-356",
    "op": "host",
    "args": {
     "file": "sysctl",
     "argv": [
      "-w",
      "net.ipv4.ip_forward=0"
-    ]
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "sysctl with those arguments is not allowed"
-   }
-  },
-  {
-   "name": "host-355",
-   "op": "host",
-   "args": {
-    "file": "sysctl",
-    "argv": [
-     "-q",
-     "-w",
-     "net.ipv6.conf.eth0.disable_ipv6=1"
-    ]
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "sysctl with those arguments is not allowed"
-   }
-  },
-  {
-   "name": "host-356",
-   "op": "host",
-   "args": {
-    "file": "sysctl",
-    "argv": [
-     "-q",
-     "-w",
-     "net.ipv6.conf.all.disable_ipv6=1"
     ]
    },
    "expect": {
@@ -7369,7 +7372,7 @@
     "argv": [
      "-q",
      "-w",
-     "net.ipv6.conf.fs-apps.disable_ipv6=0"
+     "net.ipv6.conf.eth0.disable_ipv6=1"
     ]
    },
    "expect": {
@@ -7380,6 +7383,40 @@
   },
   {
    "name": "host-358",
+   "op": "host",
+   "args": {
+    "file": "sysctl",
+    "argv": [
+     "-q",
+     "-w",
+     "net.ipv6.conf.all.disable_ipv6=1"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "sysctl with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-359",
+   "op": "host",
+   "args": {
+    "file": "sysctl",
+    "argv": [
+     "-q",
+     "-w",
+     "net.ipv6.conf.fs-apps.disable_ipv6=0"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "sysctl with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-360",
    "op": "host",
    "args": {
     "file": "icc",
@@ -7402,7 +7439,7 @@
    }
   },
   {
-   "name": "host-359",
+   "name": "host-361",
    "op": "host",
    "args": {
     "file": "icc",
@@ -7428,7 +7465,7 @@
    }
   },
   {
-   "name": "host-360",
+   "name": "host-362",
    "op": "host",
    "args": {
     "file": "icc",
@@ -7443,7 +7480,7 @@
    }
   },
   {
-   "name": "host-361",
+   "name": "host-363",
    "op": "host",
    "args": {
     "file": "icc",
@@ -7466,7 +7503,7 @@
    }
   },
   {
-   "name": "host-362",
+   "name": "host-364",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7493,7 +7530,7 @@
    }
   },
   {
-   "name": "host-363",
+   "name": "host-365",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7526,7 +7563,7 @@
    }
   },
   {
-   "name": "host-364",
+   "name": "host-366",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7558,7 +7595,7 @@
    }
   },
   {
-   "name": "host-365",
+   "name": "host-367",
    "op": "host",
    "args": {
     "file": "ip6tables",
@@ -7585,7 +7622,7 @@
    }
   },
   {
-   "name": "host-366",
+   "name": "host-368",
    "op": "host",
    "args": {
     "file": "ip6tables",
@@ -7612,7 +7649,7 @@
    }
   },
   {
-   "name": "host-367",
+   "name": "host-369",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7630,7 +7667,7 @@
    }
   },
   {
-   "name": "host-368",
+   "name": "host-370",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7647,7 +7684,7 @@
    }
   },
   {
-   "name": "host-369",
+   "name": "host-371",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7668,7 +7705,7 @@
    }
   },
   {
-   "name": "host-370",
+   "name": "host-372",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7686,7 +7723,7 @@
    }
   },
   {
-   "name": "host-371",
+   "name": "host-373",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7701,7 +7738,7 @@
    }
   },
   {
-   "name": "host-372",
+   "name": "host-374",
    "op": "host",
    "args": {
     "file": "iptables",
@@ -7722,7 +7759,7 @@
    }
   },
   {
-   "name": "iptables.restore-373",
+   "name": "iptables.restore-375",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7742,7 +7779,7 @@
    }
   },
   {
-   "name": "iptables.restore-374",
+   "name": "iptables.restore-376",
    "op": "iptables.restore",
    "args": {
     "family": 6,
@@ -7762,7 +7799,7 @@
    }
   },
   {
-   "name": "iptables.restore-375",
+   "name": "iptables.restore-377",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7782,7 +7819,7 @@
    }
   },
   {
-   "name": "iptables.restore-376",
+   "name": "iptables.restore-378",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7802,7 +7839,7 @@
    }
   },
   {
-   "name": "iptables.restore-377",
+   "name": "iptables.restore-379",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7822,7 +7859,7 @@
    }
   },
   {
-   "name": "iptables.restore-378",
+   "name": "iptables.restore-380",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7835,7 +7872,7 @@
    }
   },
   {
-   "name": "iptables.restore-379",
+   "name": "iptables.restore-381",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7848,7 +7885,7 @@
    }
   },
   {
-   "name": "iptables.restore-380",
+   "name": "iptables.restore-382",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7861,7 +7898,7 @@
    }
   },
   {
-   "name": "iptables.restore-381",
+   "name": "iptables.restore-383",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7874,7 +7911,7 @@
    }
   },
   {
-   "name": "iptables.restore-382",
+   "name": "iptables.restore-384",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7887,7 +7924,7 @@
    }
   },
   {
-   "name": "iptables.restore-383",
+   "name": "iptables.restore-385",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7900,7 +7937,7 @@
    }
   },
   {
-   "name": "iptables.restore-384",
+   "name": "iptables.restore-386",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7913,7 +7950,7 @@
    }
   },
   {
-   "name": "iptables.restore-385",
+   "name": "iptables.restore-387",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7926,7 +7963,7 @@
    }
   },
   {
-   "name": "iptables.restore-386",
+   "name": "iptables.restore-388",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7939,7 +7976,7 @@
    }
   },
   {
-   "name": "iptables.restore-387",
+   "name": "iptables.restore-389",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7952,7 +7989,7 @@
    }
   },
   {
-   "name": "iptables.restore-388",
+   "name": "iptables.restore-390",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7965,7 +8002,7 @@
    }
   },
   {
-   "name": "iptables.restore-389",
+   "name": "iptables.restore-391",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7978,7 +8015,7 @@
    }
   },
   {
-   "name": "iptables.restore-390",
+   "name": "iptables.restore-392",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -7991,7 +8028,7 @@
    }
   },
   {
-   "name": "iptables.restore-391",
+   "name": "iptables.restore-393",
    "op": "iptables.restore",
    "args": {
     "family": "4",
@@ -8004,7 +8041,7 @@
    }
   },
   {
-   "name": "iptables.restore-392",
+   "name": "iptables.restore-394",
    "op": "iptables.restore",
    "args": {
     "family": 5,
@@ -8017,7 +8054,7 @@
    }
   },
   {
-   "name": "iptables.restore-393",
+   "name": "iptables.restore-395",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -8030,7 +8067,7 @@
    }
   },
   {
-   "name": "iptables.restore-394",
+   "name": "iptables.restore-396",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -8043,7 +8080,7 @@
    }
   },
   {
-   "name": "iptables.restore-395",
+   "name": "iptables.restore-397",
    "op": "iptables.restore",
    "args": {
     "family": 4,
@@ -8057,7 +8094,7 @@
    }
   },
   {
-   "name": "nft.apply-396",
+   "name": "nft.apply-398",
    "op": "nft.apply",
    "args": {
     "script": "add table inet flagship_egress\nflush table inet flagship_egress\nadd chain inet flagship_egress forward { type filter hook forward priority 0; policy drop; }\nadd rule inet flagship_egress forward iifname \"fs-apps\" ip daddr 10.0.0.1 tcp dport 443 accept"
@@ -8076,7 +8113,7 @@
    }
   },
   {
-   "name": "nft.apply-397",
+   "name": "nft.apply-399",
    "op": "nft.apply",
    "args": {
     "script": "add rule inet flagship_egress forward delete table inet flagship_egress"
@@ -8095,7 +8132,7 @@
    }
   },
   {
-   "name": "nft.apply-398",
+   "name": "nft.apply-400",
    "op": "nft.apply",
    "args": {
     "script": "﻿add table inet flagship_egress　"
@@ -8114,7 +8151,7 @@
    }
   },
   {
-   "name": "nft.apply-399",
+   "name": "nft.apply-401",
    "op": "nft.apply",
    "args": {
     "script": "flush ruleset"
@@ -8126,7 +8163,7 @@
    }
   },
   {
-   "name": "nft.apply-400",
+   "name": "nft.apply-402",
    "op": "nft.apply",
    "args": {
     "script": "delete table inet filter"
@@ -8138,7 +8175,7 @@
    }
   },
   {
-   "name": "nft.apply-401",
+   "name": "nft.apply-403",
    "op": "nft.apply",
    "args": {
     "script": "add table inet other"
@@ -8150,7 +8187,7 @@
    }
   },
   {
-   "name": "nft.apply-402",
+   "name": "nft.apply-404",
    "op": "nft.apply",
    "args": {
     "script": "add rule inet flagship_egress forward exec /bin/sh"
@@ -8162,7 +8199,7 @@
    }
   },
   {
-   "name": "nft.apply-403",
+   "name": "nft.apply-405",
    "op": "nft.apply",
    "args": {
     "script": "add rule inet flagship_egress forward accept; flush ruleset"
@@ -8174,7 +8211,7 @@
    }
   },
   {
-   "name": "nft.apply-404",
+   "name": "nft.apply-406",
    "op": "nft.apply",
    "args": {
     "script": "include \"/etc/x.nft\""
@@ -8186,7 +8223,7 @@
    }
   },
   {
-   "name": "nft.apply-405",
+   "name": "nft.apply-407",
    "op": "nft.apply",
    "args": {
     "script": "add rule ip nat prerouting accept"
@@ -8198,7 +8235,7 @@
    }
   },
   {
-   "name": "nft.apply-406",
+   "name": "nft.apply-408",
    "op": "nft.apply",
    "args": {
     "script": "add rule inet flagship_egress forward `id`"
@@ -8210,7 +8247,7 @@
    }
   },
   {
-   "name": "nft.apply-407",
+   "name": "nft.apply-409",
    "op": "nft.apply",
    "args": {
     "script": "add rule inet flagship_egress forward delete table filter"
@@ -8222,7 +8259,7 @@
    }
   },
   {
-   "name": "nft.apply-408",
+   "name": "nft.apply-410",
    "op": "nft.apply",
    "args": {
     "script": "table bridge flagship_icc"
@@ -8234,7 +8271,7 @@
    }
   },
   {
-   "name": "nft.apply-409",
+   "name": "nft.apply-411",
    "op": "nft.apply",
    "args": {
     "script": 5
@@ -8246,7 +8283,7 @@
    }
   },
   {
-   "name": "nft.apply-410",
+   "name": "nft.apply-412",
    "op": "nft.apply",
    "args": {
     "script": ""
@@ -8258,7 +8295,7 @@
    }
   },
   {
-   "name": "release-411",
+   "name": "release-413",
    "op": "release",
    "args": {
     "action": "install",
@@ -8309,7 +8346,7 @@
    }
   },
   {
-   "name": "release-412",
+   "name": "release-414",
    "op": "release",
    "args": {
     "action": "install",
@@ -8378,7 +8415,7 @@
    }
   },
   {
-   "name": "release-413",
+   "name": "release-415",
    "op": "release",
    "args": {
     "action": "install",
@@ -8443,7 +8480,7 @@
    }
   },
   {
-   "name": "release-414",
+   "name": "release-416",
    "op": "release",
    "args": {
     "action": "restore",
@@ -8465,7 +8502,7 @@
    }
   },
   {
-   "name": "release-415",
+   "name": "release-417",
    "op": "release",
    "args": {
     "action": "install",
@@ -8479,7 +8516,7 @@
    }
   },
   {
-   "name": "release-416",
+   "name": "release-418",
    "op": "release",
    "args": {
     "action": "install",
@@ -8494,7 +8531,7 @@
    }
   },
   {
-   "name": "release-417",
+   "name": "release-419",
    "op": "release",
    "args": {
     "action": "restore",
@@ -8507,7 +8544,7 @@
    }
   },
   {
-   "name": "release-418",
+   "name": "release-420",
    "op": "release",
    "args": {
     "action": "install",
@@ -8520,7 +8557,7 @@
    }
   },
   {
-   "name": "release-419",
+   "name": "release-421",
    "op": "release",
    "args": {
     "action": "install",
@@ -8534,7 +8571,7 @@
    }
   },
   {
-   "name": "release-420",
+   "name": "release-422",
    "op": "release",
    "args": {
     "action": "upgrade",
@@ -8547,7 +8584,7 @@
    }
   },
   {
-   "name": "release-421",
+   "name": "release-423",
    "op": "release",
    "args": {
     "action": "install",
@@ -8562,7 +8599,7 @@
    }
   },
   {
-   "name": "release-422",
+   "name": "release-424",
    "op": "release",
    "args": {
     "action": "install",
@@ -8620,7 +8657,7 @@
    }
   },
   {
-   "name": "release-423",
+   "name": "release-425",
    "op": "release",
    "args": {
     "action": "install",
@@ -8696,7 +8733,7 @@
    }
   },
   {
-   "name": "release-424",
+   "name": "release-426",
    "op": "release",
    "args": {
     "action": "install",
@@ -8711,7 +8748,7 @@
    }
   },
   {
-   "name": "release-425",
+   "name": "release-427",
    "op": "release",
    "args": {
     "action": "install",
@@ -8726,7 +8763,7 @@
    }
   },
   {
-   "name": "release-426",
+   "name": "release-428",
    "op": "release",
    "args": {
     "action": "install",
@@ -8741,7 +8778,7 @@
    }
   },
   {
-   "name": "release-427",
+   "name": "release-429",
    "op": "release",
    "args": {
     "action": "restore",
@@ -8755,7 +8792,7 @@
    }
   },
   {
-   "name": "release-428",
+   "name": "release-430",
    "op": "release",
    "args": {
     "action": "install",
@@ -8769,7 +8806,7 @@
    }
   },
   {
-   "name": "wipe-429",
+   "name": "wipe-431",
    "op": "wipe",
    "args": {
     "target": "data"
@@ -8788,7 +8825,7 @@
    }
   },
   {
-   "name": "wipe-430",
+   "name": "wipe-432",
    "op": "wipe",
    "args": {
     "target": "/"
@@ -8800,7 +8837,7 @@
    }
   },
   {
-   "name": "wipe-431",
+   "name": "wipe-433",
    "op": "wipe",
    "args": {
     "target": "data",
@@ -8813,7 +8850,7 @@
    }
   },
   {
-   "name": "setup-432",
+   "name": "setup-434",
    "op": "setup",
    "args": {
     "step": "gvisor"
@@ -8831,7 +8868,7 @@
    }
   },
   {
-   "name": "setup-433",
+   "name": "setup-435",
    "op": "setup",
    "args": {
     "step": "health-reporter"
@@ -8849,7 +8886,7 @@
    }
   },
   {
-   "name": "setup-434",
+   "name": "setup-436",
    "op": "setup",
    "args": {
     "step": "update-guard"
@@ -8867,7 +8904,7 @@
    }
   },
   {
-   "name": "setup-435",
+   "name": "setup-437",
    "op": "setup",
    "args": {
     "step": "container-links"
@@ -8885,7 +8922,7 @@
    }
   },
   {
-   "name": "setup-436",
+   "name": "setup-438",
    "op": "setup",
    "args": {
     "step": "data-unit"
@@ -8903,7 +8940,7 @@
    }
   },
   {
-   "name": "setup-437",
+   "name": "setup-439",
    "op": "setup",
    "args": {
     "step": "debug-access"
@@ -8921,7 +8958,7 @@
    }
   },
   {
-   "name": "setup-438",
+   "name": "setup-440",
    "op": "setup",
    "args": {
     "step": "debug-access-close"
@@ -8939,7 +8976,7 @@
    }
   },
   {
-   "name": "setup-439",
+   "name": "setup-441",
    "op": "setup",
    "args": {
     "step": "system-repair"
@@ -8957,7 +8994,7 @@
    }
   },
   {
-   "name": "setup-440",
+   "name": "setup-442",
    "op": "setup",
    "args": {
     "step": "server-code"
@@ -8975,7 +9012,7 @@
    }
   },
   {
-   "name": "setup-441",
+   "name": "setup-443",
    "op": "setup",
    "args": {
     "step": "rust-stack"
@@ -8993,7 +9030,7 @@
    }
   },
   {
-   "name": "setup-442",
+   "name": "setup-444",
    "op": "setup",
    "args": {
     "step": "../../tmp/x"
@@ -9005,7 +9042,7 @@
    }
   },
   {
-   "name": "setup-443",
+   "name": "setup-445",
    "op": "setup",
    "args": {
     "step": "constructor"
@@ -9017,7 +9054,7 @@
    }
   },
   {
-   "name": "setup-444",
+   "name": "setup-446",
    "op": "setup",
    "args": {
     "step": ""
@@ -9029,7 +9066,7 @@
    }
   },
   {
-   "name": "setup-445",
+   "name": "setup-447",
    "op": "setup",
    "args": {
     "step": "gvisor",
@@ -9042,7 +9079,7 @@
    }
   },
   {
-   "name": "setup-446",
+   "name": "setup-448",
    "op": "setup",
    "args": {
     "step": 1
@@ -9054,7 +9091,7 @@
    }
   },
   {
-   "name": "docker-447",
+   "name": "docker-449",
    "op": "docker",
    "args": {
     "argv": [
@@ -9081,7 +9118,7 @@
    }
   },
   {
-   "name": "docker-448",
+   "name": "docker-450",
    "op": "docker",
    "args": {
     "argv": [
@@ -9112,7 +9149,7 @@
    }
   },
   {
-   "name": "docker-449",
+   "name": "docker-451",
    "op": "docker",
    "args": {
     "argv": [
@@ -9141,7 +9178,7 @@
    }
   },
   {
-   "name": "docker-450",
+   "name": "docker-452",
    "op": "docker",
    "args": {
     "argv": [
@@ -9170,7 +9207,7 @@
    }
   },
   {
-   "name": "docker-451",
+   "name": "docker-453",
    "op": "docker",
    "args": {
     "argv": [
@@ -9201,7 +9238,7 @@
    }
   },
   {
-   "name": "docker-452",
+   "name": "docker-454",
    "op": "docker",
    "args": {
     "argv": [
@@ -9232,7 +9269,7 @@
    }
   },
   {
-   "name": "docker-453",
+   "name": "docker-455",
    "op": "docker",
    "args": {
     "argv": [
@@ -9261,7 +9298,7 @@
    }
   },
   {
-   "name": "docker-454",
+   "name": "docker-456",
    "op": "docker",
    "args": {
     "argv": [
@@ -9292,7 +9329,7 @@
    }
   },
   {
-   "name": "docker-455",
+   "name": "docker-457",
    "op": "docker",
    "args": {
     "argv": [
@@ -9321,7 +9358,7 @@
    }
   },
   {
-   "name": "docker-456",
+   "name": "docker-458",
    "op": "docker",
    "args": {
     "argv": [
@@ -9352,7 +9389,7 @@
    }
   },
   {
-   "name": "docker-457",
+   "name": "docker-459",
    "op": "docker",
    "args": {
     "argv": [
@@ -9381,7 +9418,7 @@
    }
   },
   {
-   "name": "docker-458",
+   "name": "docker-460",
    "op": "docker",
    "args": {
     "argv": [
@@ -9410,7 +9447,7 @@
    }
   },
   {
-   "name": "docker-459",
+   "name": "docker-461",
    "op": "docker",
    "args": {
     "argv": [
@@ -9439,7 +9476,7 @@
    }
   },
   {
-   "name": "docker-460",
+   "name": "docker-462",
    "op": "docker",
    "args": {
     "argv": [
@@ -9468,7 +9505,7 @@
    }
   },
   {
-   "name": "docker-461",
+   "name": "docker-463",
    "op": "docker",
    "args": {
     "argv": [
@@ -9497,7 +9534,7 @@
    }
   },
   {
-   "name": "docker-462",
+   "name": "docker-464",
    "op": "docker",
    "args": {
     "argv": [
@@ -9526,7 +9563,7 @@
    }
   },
   {
-   "name": "docker-463",
+   "name": "docker-465",
    "op": "docker",
    "args": {
     "argv": [
@@ -9557,7 +9594,7 @@
    }
   },
   {
-   "name": "docker-464",
+   "name": "docker-466",
    "op": "docker",
    "args": {
     "argv": [
@@ -9588,7 +9625,7 @@
    }
   },
   {
-   "name": "docker-465",
+   "name": "docker-467",
    "op": "docker",
    "args": {
     "argv": [
@@ -9617,7 +9654,7 @@
    }
   },
   {
-   "name": "docker-466",
+   "name": "docker-468",
    "op": "docker",
    "args": {
     "argv": [
@@ -9642,7 +9679,7 @@
    }
   },
   {
-   "name": "docker-467",
+   "name": "docker-469",
    "op": "docker",
    "args": {
     "argv": [
@@ -9669,7 +9706,7 @@
    }
   },
   {
-   "name": "docker-468",
+   "name": "docker-470",
    "op": "docker",
    "args": {
     "argv": [
@@ -9752,7 +9789,7 @@
    }
   },
   {
-   "name": "docker-469",
+   "name": "docker-471",
    "op": "docker",
    "args": {
     "argv": [
@@ -9853,7 +9890,7 @@
    }
   },
   {
-   "name": "docker-470",
+   "name": "docker-472",
    "op": "docker",
    "args": {
     "argv": [
@@ -9872,7 +9909,7 @@
    }
   },
   {
-   "name": "docker-471",
+   "name": "docker-473",
    "op": "docker",
    "args": {
     "argv": [
@@ -9891,7 +9928,7 @@
    }
   },
   {
-   "name": "docker-472",
+   "name": "docker-474",
    "op": "docker",
    "args": {
     "argv": [
@@ -9910,7 +9947,7 @@
    }
   },
   {
-   "name": "docker-473",
+   "name": "docker-475",
    "op": "docker",
    "args": {
     "argv": [
@@ -9929,7 +9966,7 @@
    }
   },
   {
-   "name": "docker-474",
+   "name": "docker-476",
    "op": "docker",
    "args": {
     "argv": [
@@ -9949,7 +9986,7 @@
    }
   },
   {
-   "name": "docker-475",
+   "name": "docker-477",
    "op": "docker",
    "args": {
     "argv": [
@@ -9968,7 +10005,7 @@
    }
   },
   {
-   "name": "docker-476",
+   "name": "docker-478",
    "op": "docker",
    "args": {
     "argv": [
@@ -9987,7 +10024,7 @@
    }
   },
   {
-   "name": "docker-477",
+   "name": "docker-479",
    "op": "docker",
    "args": {
     "argv": [
@@ -10006,7 +10043,7 @@
    }
   },
   {
-   "name": "docker-478",
+   "name": "docker-480",
    "op": "docker",
    "args": {
     "argv": [
@@ -10025,7 +10062,7 @@
    }
   },
   {
-   "name": "docker-479",
+   "name": "docker-481",
    "op": "docker",
    "args": {
     "argv": [
@@ -10044,45 +10081,6 @@
    }
   },
   {
-   "name": "docker-480",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--runtime",
-     "runsc",
-     "-u=0",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a container may not run as root"
-   }
-  },
-  {
-   "name": "docker-481",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--runtime",
-     "runsc",
-     "-u",
-     "00",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a container may not run as root"
-   }
-  },
-  {
    "name": "docker-482",
    "op": "docker",
    "args": {
@@ -10091,8 +10089,7 @@
      "-d",
      "--runtime",
      "runsc",
-     "-u",
-     "+0:0",
+     "-u=0",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -10112,7 +10109,7 @@
      "--runtime",
      "runsc",
      "-u",
-     "-0",
+     "00",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -10131,7 +10128,8 @@
      "-d",
      "--runtime",
      "runsc",
-     "--user=0",
+     "-u",
+     "+0:0",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -10150,7 +10148,8 @@
      "-d",
      "--runtime",
      "runsc",
-     "-du0",
+     "-u",
+     "-0",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -10162,6 +10161,44 @@
   },
   {
    "name": "docker-486",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--runtime",
+     "runsc",
+     "--user=0",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container may not run as root"
+   }
+  },
+  {
+   "name": "docker-487",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--runtime",
+     "runsc",
+     "-du0",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container may not run as root"
+   }
+  },
+  {
+   "name": "docker-488",
    "op": "docker",
    "args": {
     "argv": [
@@ -10181,7 +10218,7 @@
    }
   },
   {
-   "name": "docker-487",
+   "name": "docker-489",
    "op": "docker",
    "args": {
     "argv": [
@@ -10200,7 +10237,7 @@
    }
   },
   {
-   "name": "docker-488",
+   "name": "docker-490",
    "op": "docker",
    "args": {
     "argv": [
@@ -10219,7 +10256,7 @@
    }
   },
   {
-   "name": "docker-489",
+   "name": "docker-491",
    "op": "docker",
    "args": {
     "argv": [
@@ -10238,7 +10275,7 @@
    }
   },
   {
-   "name": "docker-490",
+   "name": "docker-492",
    "op": "docker",
    "args": {
     "argv": [
@@ -10257,7 +10294,7 @@
    }
   },
   {
-   "name": "docker-491",
+   "name": "docker-493",
    "op": "docker",
    "args": {
     "argv": [
@@ -10276,7 +10313,7 @@
    }
   },
   {
-   "name": "docker-492",
+   "name": "docker-494",
    "op": "docker",
    "args": {
     "argv": [
@@ -10295,7 +10332,7 @@
    }
   },
   {
-   "name": "docker-493",
+   "name": "docker-495",
    "op": "docker",
    "args": {
     "argv": [
@@ -10314,7 +10351,7 @@
    }
   },
   {
-   "name": "docker-494",
+   "name": "docker-496",
    "op": "docker",
    "args": {
     "argv": [
@@ -10333,7 +10370,7 @@
    }
   },
   {
-   "name": "docker-495",
+   "name": "docker-497",
    "op": "docker",
    "args": {
     "argv": [
@@ -10352,7 +10389,7 @@
    }
   },
   {
-   "name": "docker-496",
+   "name": "docker-498",
    "op": "docker",
    "args": {
     "argv": [
@@ -10371,7 +10408,7 @@
    }
   },
   {
-   "name": "docker-497",
+   "name": "docker-499",
    "op": "docker",
    "args": {
     "argv": [
@@ -10390,7 +10427,7 @@
    }
   },
   {
-   "name": "docker-498",
+   "name": "docker-500",
    "op": "docker",
    "args": {
     "argv": [
@@ -10409,7 +10446,7 @@
    }
   },
   {
-   "name": "docker-499",
+   "name": "docker-501",
    "op": "docker",
    "args": {
     "argv": [
@@ -10428,7 +10465,7 @@
    }
   },
   {
-   "name": "docker-500",
+   "name": "docker-502",
    "op": "docker",
    "args": {
     "argv": [
@@ -10447,7 +10484,7 @@
    }
   },
   {
-   "name": "docker-501",
+   "name": "docker-503",
    "op": "docker",
    "args": {
     "argv": [
@@ -10466,7 +10503,7 @@
    }
   },
   {
-   "name": "docker-502",
+   "name": "docker-504",
    "op": "docker",
    "args": {
     "argv": [
@@ -10485,7 +10522,7 @@
    }
   },
   {
-   "name": "docker-503",
+   "name": "docker-505",
    "op": "docker",
    "args": {
     "argv": [
@@ -10505,7 +10542,7 @@
    }
   },
   {
-   "name": "docker-504",
+   "name": "docker-506",
    "op": "docker",
    "args": {
     "argv": [
@@ -10524,7 +10561,7 @@
    }
   },
   {
-   "name": "docker-505",
+   "name": "docker-507",
    "op": "docker",
    "args": {
     "argv": [
@@ -10543,7 +10580,7 @@
    }
   },
   {
-   "name": "docker-506",
+   "name": "docker-508",
    "op": "docker",
    "args": {
     "argv": [
@@ -10563,7 +10600,7 @@
    }
   },
   {
-   "name": "docker-507",
+   "name": "docker-509",
    "op": "docker",
    "args": {
     "argv": [
@@ -10582,7 +10619,7 @@
    }
   },
   {
-   "name": "docker-508",
+   "name": "docker-510",
    "op": "docker",
    "args": {
     "argv": [
@@ -10602,7 +10639,7 @@
    }
   },
   {
-   "name": "docker-509",
+   "name": "docker-511",
    "op": "docker",
    "args": {
     "argv": [
@@ -10622,7 +10659,7 @@
    }
   },
   {
-   "name": "docker-510",
+   "name": "docker-512",
    "op": "docker",
    "args": {
     "argv": [
@@ -10641,7 +10678,7 @@
    }
   },
   {
-   "name": "docker-511",
+   "name": "docker-513",
    "op": "docker",
    "args": {
     "argv": [
@@ -10661,7 +10698,7 @@
    }
   },
   {
-   "name": "docker-512",
+   "name": "docker-514",
    "op": "docker",
    "args": {
     "argv": [
@@ -10681,7 +10718,7 @@
    }
   },
   {
-   "name": "docker-513",
+   "name": "docker-515",
    "op": "docker",
    "args": {
     "argv": [
@@ -10701,7 +10738,7 @@
    }
   },
   {
-   "name": "docker-514",
+   "name": "docker-516",
    "op": "docker",
    "args": {
     "argv": [
@@ -10721,7 +10758,7 @@
    }
   },
   {
-   "name": "docker-515",
+   "name": "docker-517",
    "op": "docker",
    "args": {
     "argv": [
@@ -10741,7 +10778,7 @@
    }
   },
   {
-   "name": "docker-516",
+   "name": "docker-518",
    "op": "docker",
    "args": {
     "argv": [
@@ -10761,7 +10798,7 @@
    }
   },
   {
-   "name": "docker-517",
+   "name": "docker-519",
    "op": "docker",
    "args": {
     "argv": [
@@ -10780,7 +10817,7 @@
    }
   },
   {
-   "name": "docker-518",
+   "name": "docker-520",
    "op": "docker",
    "args": {
     "argv": [
@@ -10799,7 +10836,7 @@
    }
   },
   {
-   "name": "docker-519",
+   "name": "docker-521",
    "op": "docker",
    "args": {
     "argv": [
@@ -10819,7 +10856,7 @@
    }
   },
   {
-   "name": "docker-520",
+   "name": "docker-522",
    "op": "docker",
    "args": {
     "argv": [
@@ -10838,7 +10875,7 @@
    }
   },
   {
-   "name": "docker-521",
+   "name": "docker-523",
    "op": "docker",
    "args": {
     "argv": [
@@ -10857,7 +10894,7 @@
    }
   },
   {
-   "name": "docker-522",
+   "name": "docker-524",
    "op": "docker",
    "args": {
     "argv": [
@@ -10876,7 +10913,7 @@
    }
   },
   {
-   "name": "docker-523",
+   "name": "docker-525",
    "op": "docker",
    "args": {
     "argv": [
@@ -10895,7 +10932,7 @@
    }
   },
   {
-   "name": "docker-524",
+   "name": "docker-526",
    "op": "docker",
    "args": {
     "argv": [
@@ -10914,7 +10951,7 @@
    }
   },
   {
-   "name": "docker-525",
+   "name": "docker-527",
    "op": "docker",
    "args": {
     "argv": [
@@ -10933,7 +10970,7 @@
    }
   },
   {
-   "name": "docker-526",
+   "name": "docker-528",
    "op": "docker",
    "args": {
     "argv": [
@@ -10952,7 +10989,7 @@
    }
   },
   {
-   "name": "docker-527",
+   "name": "docker-529",
    "op": "docker",
    "args": {
     "argv": [
@@ -10971,7 +11008,7 @@
    }
   },
   {
-   "name": "docker-528",
+   "name": "docker-530",
    "op": "docker",
    "args": {
     "argv": [
@@ -10990,7 +11027,7 @@
    }
   },
   {
-   "name": "docker-529",
+   "name": "docker-531",
    "op": "docker",
    "args": {
     "argv": [
@@ -11009,7 +11046,7 @@
    }
   },
   {
-   "name": "docker-530",
+   "name": "docker-532",
    "op": "docker",
    "args": {
     "argv": [
@@ -11029,7 +11066,7 @@
    }
   },
   {
-   "name": "docker-531",
+   "name": "docker-533",
    "op": "docker",
    "args": {
     "argv": [
@@ -11048,7 +11085,7 @@
    }
   },
   {
-   "name": "docker-532",
+   "name": "docker-534",
    "op": "docker",
    "args": {
     "argv": [
@@ -11068,7 +11105,7 @@
    }
   },
   {
-   "name": "docker-533",
+   "name": "docker-535",
    "op": "docker",
    "args": {
     "argv": [
@@ -11088,7 +11125,7 @@
    }
   },
   {
-   "name": "docker-534",
+   "name": "docker-536",
    "op": "docker",
    "args": {
     "argv": [
@@ -11108,7 +11145,7 @@
    }
   },
   {
-   "name": "docker-535",
+   "name": "docker-537",
    "op": "docker",
    "args": {
     "argv": [
@@ -11124,7 +11161,7 @@
    }
   },
   {
-   "name": "docker-536",
+   "name": "docker-538",
    "op": "docker",
    "args": {
     "argv": [
@@ -11142,7 +11179,7 @@
    }
   },
   {
-   "name": "docker-537",
+   "name": "docker-539",
    "op": "docker",
    "args": {
     "argv": [
@@ -11160,7 +11197,7 @@
    }
   },
   {
-   "name": "docker-538",
+   "name": "docker-540",
    "op": "docker",
    "args": {
     "argv": [
@@ -11176,7 +11213,7 @@
    }
   },
   {
-   "name": "docker-539",
+   "name": "docker-541",
    "op": "docker",
    "args": {
     "argv": [
@@ -11191,7 +11228,7 @@
    }
   },
   {
-   "name": "docker-540",
+   "name": "docker-542",
    "op": "docker",
    "args": {
     "argv": [
@@ -11209,7 +11246,7 @@
    }
   },
   {
-   "name": "docker-541",
+   "name": "docker-543",
    "op": "docker",
    "args": {
     "argv": [
@@ -11225,7 +11262,7 @@
    }
   },
   {
-   "name": "docker-542",
+   "name": "docker-544",
    "op": "docker",
    "args": {
     "argv": [
@@ -11240,7 +11277,7 @@
    }
   },
   {
-   "name": "docker-543",
+   "name": "docker-545",
    "op": "docker",
    "args": {
     "argv": [
@@ -11255,7 +11292,7 @@
    }
   },
   {
-   "name": "docker-544",
+   "name": "docker-546",
    "op": "docker",
    "args": {
     "argv": [
@@ -11273,7 +11310,7 @@
    }
   },
   {
-   "name": "docker-545",
+   "name": "docker-547",
    "op": "docker",
    "args": {
     "argv": [
@@ -11404,7 +11441,7 @@
    }
   },
   {
-   "name": "docker-546",
+   "name": "docker-548",
    "op": "docker",
    "args": {
     "argv": [
@@ -11474,7 +11511,7 @@
    }
   },
   {
-   "name": "docker-547",
+   "name": "docker-549",
    "op": "docker",
    "args": {
     "argv": [
@@ -11543,7 +11580,7 @@
    }
   },
   {
-   "name": "docker-548",
+   "name": "docker-550",
    "op": "docker",
    "args": {
     "argv": [
@@ -11613,7 +11650,7 @@
    }
   },
   {
-   "name": "docker-549",
+   "name": "docker-551",
    "op": "docker",
    "args": {
     "argv": [
@@ -11685,7 +11722,7 @@
    }
   },
   {
-   "name": "docker-550",
+   "name": "docker-552",
    "op": "docker",
    "args": {
     "argv": [
@@ -11757,7 +11794,7 @@
    }
   },
   {
-   "name": "docker-551",
+   "name": "docker-553",
    "op": "docker",
    "args": {
     "argv": [
@@ -11828,7 +11865,7 @@
    }
   },
   {
-   "name": "docker-552",
+   "name": "docker-554",
    "op": "docker",
    "args": {
     "argv": [
@@ -11900,7 +11937,7 @@
    }
   },
   {
-   "name": "docker-553",
+   "name": "docker-555",
    "op": "docker",
    "args": {
     "argv": [
@@ -11972,7 +12009,7 @@
    }
   },
   {
-   "name": "docker-554",
+   "name": "docker-556",
    "op": "docker",
    "args": {
     "argv": [
@@ -12042,7 +12079,7 @@
    }
   },
   {
-   "name": "docker-555",
+   "name": "docker-557",
    "op": "docker",
    "args": {
     "argv": [
@@ -12106,7 +12143,7 @@
    }
   },
   {
-   "name": "docker-556",
+   "name": "docker-558",
    "op": "docker",
    "args": {
     "argv": [
@@ -12170,7 +12207,7 @@
    }
   },
   {
-   "name": "docker-557",
+   "name": "docker-559",
    "op": "docker",
    "args": {
     "argv": [
@@ -12240,7 +12277,7 @@
    }
   },
   {
-   "name": "docker-558",
+   "name": "docker-560",
    "op": "docker",
    "args": {
     "argv": [
@@ -12310,7 +12347,7 @@
    }
   },
   {
-   "name": "docker-559",
+   "name": "docker-561",
    "op": "docker",
    "args": {
     "argv": [
@@ -12380,7 +12417,7 @@
    }
   },
   {
-   "name": "docker-560",
+   "name": "docker-562",
    "op": "docker",
    "args": {
     "argv": [
@@ -12450,7 +12487,7 @@
    }
   },
   {
-   "name": "docker-561",
+   "name": "docker-563",
    "op": "docker",
    "args": {
     "argv": [
@@ -12518,7 +12555,7 @@
    }
   },
   {
-   "name": "docker-562",
+   "name": "docker-564",
    "op": "docker",
    "args": {
     "argv": [
@@ -12588,7 +12625,7 @@
    }
   },
   {
-   "name": "docker-563",
+   "name": "docker-565",
    "op": "docker",
    "args": {
     "argv": [
@@ -12660,7 +12697,7 @@
    }
   },
   {
-   "name": "docker-564",
+   "name": "docker-566",
    "op": "docker",
    "args": {
     "argv": [
@@ -12730,7 +12767,7 @@
    }
   },
   {
-   "name": "docker-565",
+   "name": "docker-567",
    "op": "docker",
    "args": {
     "argv": [
@@ -12763,7 +12800,7 @@
    }
   },
   {
-   "name": "docker-566",
+   "name": "docker-568",
    "op": "docker",
    "args": {
     "argv": [
@@ -12781,7 +12818,7 @@
    }
   },
   {
-   "name": "docker-567",
+   "name": "docker-569",
    "op": "docker",
    "args": {
     "argv": [
@@ -12797,7 +12834,7 @@
    }
   },
   {
-   "name": "docker-568",
+   "name": "docker-570",
    "op": "docker",
    "args": {
     "argv": [
@@ -12840,7 +12877,7 @@
    }
   },
   {
-   "name": "docker-569",
+   "name": "docker-571",
    "op": "docker",
    "args": {
     "argv": [
@@ -12864,7 +12901,7 @@
    }
   },
   {
-   "name": "host-570",
+   "name": "host-572",
    "op": "host",
    "args": {
     "file": "fallocate",
@@ -12888,7 +12925,7 @@
    }
   },
   {
-   "name": "host-571",
+   "name": "host-573",
    "op": "host",
    "args": {
     "file": "fallocate",
@@ -12912,7 +12949,7 @@
    }
   },
   {
-   "name": "host-572",
+   "name": "host-574",
    "op": "host",
    "args": {
     "file": "fallocate",
@@ -12929,7 +12966,7 @@
    }
   },
   {
-   "name": "host-573",
+   "name": "host-575",
    "op": "host",
    "args": {
     "file": "fallocate",
@@ -12946,7 +12983,7 @@
    }
   },
   {
-   "name": "host-574",
+   "name": "host-576",
    "op": "host",
    "args": {
     "file": "truncate",
@@ -12970,7 +13007,7 @@
    }
   },
   {
-   "name": "host-575",
+   "name": "host-577",
    "op": "host",
    "args": {
     "file": "mount",
@@ -12996,7 +13033,7 @@
    }
   },
   {
-   "name": "host-576",
+   "name": "host-578",
    "op": "host",
    "args": {
     "file": "mount",
@@ -13014,7 +13051,7 @@
    }
   },
   {
-   "name": "docker-577",
+   "name": "docker-579",
    "op": "docker",
    "args": {
     "argv": [
@@ -13103,7 +13140,7 @@
    }
   },
   {
-   "name": "docker-578",
+   "name": "docker-580",
    "op": "docker",
    "args": {
     "argv": [
@@ -13196,7 +13233,7 @@
    }
   },
   {
-   "name": "docker-579",
+   "name": "docker-581",
    "op": "docker",
    "args": {
     "argv": [
@@ -13285,7 +13322,7 @@
    }
   },
   {
-   "name": "docker-580",
+   "name": "docker-582",
    "op": "docker",
    "args": {
     "argv": [
@@ -13296,134 +13333,6 @@
      "--runtime=runsc-nvproxy",
      "--device",
      "nvidia.com/gpu=1",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container gets only the devices its allocation holds"
-   }
-  },
-  {
-   "name": "docker-581",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=runsc-nvproxy",
-     "--device",
-     "nvidia.com/gpu=0",
-     "--device",
-     "nvidia.com/gpu=2",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container gets only the devices its allocation holds"
-   }
-  },
-  {
-   "name": "docker-582",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=runsc-nvproxy",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -13489,7 +13398,7 @@
      "--device",
      "nvidia.com/gpu=0",
      "--device",
-     "nvidia.com/gpu=0",
+     "nvidia.com/gpu=2",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -13552,8 +13461,6 @@
      "--name",
      "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
-     "--device",
-     "nvidia.com/gpu=all",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -13617,7 +13524,9 @@
      "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
      "--device",
-     "/dev/nvidia0",
+     "nvidia.com/gpu=0",
+     "--device",
+     "nvidia.com/gpu=0",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -13681,7 +13590,7 @@
      "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
      "--device",
-     "/dev/vfio/12",
+     "nvidia.com/gpu=all",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -13736,6 +13645,134 @@
   },
   {
    "name": "docker-587",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "/dev/nvidia0",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container gets only the devices its allocation holds"
+   }
+  },
+  {
+   "name": "docker-588",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "/dev/vfio/12",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container gets only the devices its allocation holds"
+   }
+  },
+  {
+   "name": "docker-589",
    "op": "docker",
    "args": {
     "argv": [
@@ -13799,7 +13836,7 @@
    }
   },
   {
-   "name": "docker-588",
+   "name": "docker-590",
    "op": "docker",
    "args": {
     "argv": [
@@ -13863,7 +13900,7 @@
    }
   },
   {
-   "name": "docker-589",
+   "name": "docker-591",
    "op": "docker",
    "args": {
     "argv": [
@@ -13927,134 +13964,6 @@
    }
   },
   {
-   "name": "docker-590",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=runsc",
-     "--device",
-     "nvidia.com/gpu=0",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container runs under the runtime its allocation names"
-   }
-  },
-  {
-   "name": "docker-591",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=kata",
-     "--device",
-     "nvidia.com/gpu=0",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container runs under the runtime its allocation names"
-   }
-  },
-  {
    "name": "docker-592",
    "op": "docker",
    "args": {
@@ -14063,7 +13972,7 @@
      "-d",
      "--name",
      "flagship-alice--llm",
-     "--runtime=kata-vfio",
+     "--runtime=runsc",
      "--device",
      "nvidia.com/gpu=0",
      "--label",
@@ -14127,6 +14036,134 @@
      "-d",
      "--name",
      "flagship-alice--llm",
+     "--runtime=kata",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container runs under the runtime its allocation names"
+   }
+  },
+  {
+   "name": "docker-594",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
+     "--runtime=kata-vfio",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container runs under the runtime its allocation names"
+   }
+  },
+  {
+   "name": "docker-595",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
      "--device",
      "nvidia.com/gpu=0",
@@ -14184,7 +14221,7 @@
    }
   },
   {
-   "name": "docker-594",
+   "name": "docker-596",
    "op": "docker",
    "args": {
     "argv": [
@@ -14248,7 +14285,7 @@
    }
   },
   {
-   "name": "docker-595",
+   "name": "docker-597",
    "op": "docker",
    "args": {
     "argv": [
@@ -14312,7 +14349,7 @@
    }
   },
   {
-   "name": "docker-596",
+   "name": "docker-598",
    "op": "docker",
    "args": {
     "argv": [
@@ -14378,7 +14415,7 @@
    }
   },
   {
-   "name": "docker-597",
+   "name": "docker-599",
    "op": "docker",
    "args": {
     "argv": [
@@ -14444,7 +14481,7 @@
    }
   },
   {
-   "name": "docker-598",
+   "name": "docker-600",
    "op": "docker",
    "args": {
     "argv": [
@@ -14509,7 +14546,7 @@
    }
   },
   {
-   "name": "docker-599",
+   "name": "docker-601",
    "op": "docker",
    "args": {
     "argv": [
@@ -14575,7 +14612,7 @@
    }
   },
   {
-   "name": "docker-600",
+   "name": "docker-602",
    "op": "docker",
    "args": {
     "argv": [
@@ -14641,7 +14678,7 @@
    }
   },
   {
-   "name": "docker-601",
+   "name": "docker-603",
    "op": "docker",
    "args": {
     "argv": [
@@ -14707,7 +14744,7 @@
    }
   },
   {
-   "name": "docker-602",
+   "name": "docker-604",
    "op": "docker",
    "args": {
     "argv": [
@@ -14773,7 +14810,7 @@
    }
   },
   {
-   "name": "docker-603",
+   "name": "docker-605",
    "op": "docker",
    "args": {
     "argv": [
@@ -14837,7 +14874,7 @@
    }
   },
   {
-   "name": "docker-604",
+   "name": "docker-606",
    "op": "docker",
    "args": {
     "argv": [
@@ -14871,7 +14908,7 @@
    }
   },
   {
-   "name": "docker-605",
+   "name": "docker-607",
    "op": "docker",
    "args": {
     "argv": [
@@ -14890,7 +14927,7 @@
    }
   },
   {
-   "name": "systemctl-606",
+   "name": "systemctl-608",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -14913,7 +14950,7 @@
    }
   },
   {
-   "name": "systemctl-607",
+   "name": "systemctl-609",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -14934,7 +14971,7 @@
    }
   },
   {
-   "name": "systemctl-608",
+   "name": "systemctl-610",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -14955,7 +14992,7 @@
    }
   },
   {
-   "name": "systemctl-609",
+   "name": "systemctl-611",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -14978,7 +15015,7 @@
    }
   },
   {
-   "name": "systemctl-610",
+   "name": "systemctl-612",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -14999,7 +15036,7 @@
    }
   },
   {
-   "name": "systemctl-611",
+   "name": "systemctl-613",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15020,7 +15057,7 @@
    }
   },
   {
-   "name": "systemctl-612",
+   "name": "systemctl-614",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15035,7 +15072,7 @@
    }
   },
   {
-   "name": "systemctl-613",
+   "name": "systemctl-615",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15050,7 +15087,7 @@
    }
   },
   {
-   "name": "systemctl-614",
+   "name": "systemctl-616",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15065,7 +15102,7 @@
    }
   },
   {
-   "name": "systemctl-615",
+   "name": "systemctl-617",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15080,7 +15117,7 @@
    }
   },
   {
-   "name": "systemctl-616",
+   "name": "systemctl-618",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15095,7 +15132,7 @@
    }
   },
   {
-   "name": "systemctl-617",
+   "name": "systemctl-619",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15110,7 +15147,7 @@
    }
   },
   {
-   "name": "systemctl-618",
+   "name": "systemctl-620",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15125,7 +15162,7 @@
    }
   },
   {
-   "name": "systemctl-619",
+   "name": "systemctl-621",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15140,7 +15177,7 @@
    }
   },
   {
-   "name": "systemctl-620",
+   "name": "systemctl-622",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15155,7 +15192,7 @@
    }
   },
   {
-   "name": "systemctl-621",
+   "name": "systemctl-623",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15170,7 +15207,7 @@
    }
   },
   {
-   "name": "systemctl-622",
+   "name": "systemctl-624",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15185,7 +15222,7 @@
    }
   },
   {
-   "name": "systemctl-623",
+   "name": "systemctl-625",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15200,7 +15237,7 @@
    }
   },
   {
-   "name": "systemctl-624",
+   "name": "systemctl-626",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15215,7 +15252,7 @@
    }
   },
   {
-   "name": "systemctl-625",
+   "name": "systemctl-627",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15231,7 +15268,7 @@
    }
   },
   {
-   "name": "systemctl-626",
+   "name": "systemctl-628",
    "op": "systemctl",
    "args": {
     "argv": [
@@ -15246,7 +15283,7 @@
    }
   },
   {
-   "name": "wasi.unit-627",
+   "name": "wasi.unit-629",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15274,7 +15311,7 @@
    }
   },
   {
-   "name": "wasi.unit-628",
+   "name": "wasi.unit-630",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15303,7 +15340,7 @@
    }
   },
   {
-   "name": "wasi.unit-629",
+   "name": "wasi.unit-631",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15332,7 +15369,7 @@
    }
   },
   {
-   "name": "wasi.unit-630",
+   "name": "wasi.unit-632",
    "op": "wasi.unit",
    "args": {
     "action": "remove",
@@ -15352,48 +15389,12 @@
    }
   },
   {
-   "name": "wasi.unit-631",
-   "op": "wasi.unit",
-   "args": {
-    "action": "write",
-    "instance": "0123456789abcdef",
-    "world": "http-proxy\nExecStartPre=/bin/sh -c id",
-    "memoryMiB": 384,
-    "tasks": 64,
-    "cpuPercent": 50,
-    "restart": "on-failure"
-   },
-   "expect": {
-    "ok": false,
-    "code": "bad-request",
-    "message": "world is command or http-proxy"
-   }
-  },
-  {
-   "name": "wasi.unit-632",
-   "op": "wasi.unit",
-   "args": {
-    "action": "write",
-    "instance": "0123456789abcdef",
-    "world": "http-proxy",
-    "memoryMiB": 384,
-    "tasks": 64,
-    "cpuPercent": 50,
-    "restart": "on-failure\nUser=root"
-   },
-   "expect": {
-    "ok": false,
-    "code": "bad-request",
-    "message": "restart is always, on-failure or never"
-   }
-  },
-  {
    "name": "wasi.unit-633",
    "op": "wasi.unit",
    "args": {
     "action": "write",
     "instance": "0123456789abcdef",
-    "world": "serve",
+    "world": "http-proxy\nExecStartPre=/bin/sh -c id",
     "memoryMiB": 384,
     "tasks": 64,
     "cpuPercent": 50,
@@ -15412,15 +15413,15 @@
     "action": "write",
     "instance": "0123456789abcdef",
     "world": "http-proxy",
-    "memoryMiB": 1000000000,
+    "memoryMiB": 384,
     "tasks": 64,
     "cpuPercent": 50,
-    "restart": "on-failure"
+    "restart": "on-failure\nUser=root"
    },
    "expect": {
     "ok": false,
     "code": "bad-request",
-    "message": "memoryMiB must be a whole number from 32 to 8192"
+    "message": "restart is always, on-failure or never"
    }
   },
   {
@@ -15429,8 +15430,8 @@
    "args": {
     "action": "write",
     "instance": "0123456789abcdef",
-    "world": "http-proxy",
-    "memoryMiB": 64.5,
+    "world": "serve",
+    "memoryMiB": 384,
     "tasks": 64,
     "cpuPercent": 50,
     "restart": "on-failure"
@@ -15438,7 +15439,7 @@
    "expect": {
     "ok": false,
     "code": "bad-request",
-    "message": "memoryMiB must be a whole number from 32 to 8192"
+    "message": "world is command or http-proxy"
    }
   },
   {
@@ -15448,7 +15449,7 @@
     "action": "write",
     "instance": "0123456789abcdef",
     "world": "http-proxy",
-    "memoryMiB": "64",
+    "memoryMiB": 1000000000,
     "tasks": 64,
     "cpuPercent": 50,
     "restart": "on-failure"
@@ -15466,6 +15467,42 @@
     "action": "write",
     "instance": "0123456789abcdef",
     "world": "http-proxy",
+    "memoryMiB": 64.5,
+    "tasks": 64,
+    "cpuPercent": 50,
+    "restart": "on-failure"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "memoryMiB must be a whole number from 32 to 8192"
+   }
+  },
+  {
+   "name": "wasi.unit-638",
+   "op": "wasi.unit",
+   "args": {
+    "action": "write",
+    "instance": "0123456789abcdef",
+    "world": "http-proxy",
+    "memoryMiB": "64",
+    "tasks": 64,
+    "cpuPercent": 50,
+    "restart": "on-failure"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "memoryMiB must be a whole number from 32 to 8192"
+   }
+  },
+  {
+   "name": "wasi.unit-639",
+   "op": "wasi.unit",
+   "args": {
+    "action": "write",
+    "instance": "0123456789abcdef",
+    "world": "http-proxy",
     "memoryMiB": 384,
     "tasks": 1,
     "cpuPercent": 50,
@@ -15478,7 +15515,7 @@
    }
   },
   {
-   "name": "wasi.unit-638",
+   "name": "wasi.unit-640",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15496,7 +15533,7 @@
    }
   },
   {
-   "name": "wasi.unit-639",
+   "name": "wasi.unit-641",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15515,7 +15552,7 @@
    }
   },
   {
-   "name": "wasi.unit-640",
+   "name": "wasi.unit-642",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15534,7 +15571,7 @@
    }
   },
   {
-   "name": "wasi.unit-641",
+   "name": "wasi.unit-643",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15553,7 +15590,7 @@
    }
   },
   {
-   "name": "wasi.unit-642",
+   "name": "wasi.unit-644",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15572,7 +15609,7 @@
    }
   },
   {
-   "name": "wasi.unit-643",
+   "name": "wasi.unit-645",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15591,7 +15628,7 @@
    }
   },
   {
-   "name": "wasi.unit-644",
+   "name": "wasi.unit-646",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15609,7 +15646,7 @@
    }
   },
   {
-   "name": "wasi.unit-645",
+   "name": "wasi.unit-647",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15627,7 +15664,7 @@
    }
   },
   {
-   "name": "wasi.unit-646",
+   "name": "wasi.unit-648",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15645,7 +15682,7 @@
    }
   },
   {
-   "name": "wasi.unit-647",
+   "name": "wasi.unit-649",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15664,7 +15701,7 @@
    }
   },
   {
-   "name": "wasi.unit-648",
+   "name": "wasi.unit-650",
    "op": "wasi.unit",
    "args": {
     "action": "write",
@@ -15683,7 +15720,7 @@
    }
   },
   {
-   "name": "wasi.unit-649",
+   "name": "wasi.unit-651",
    "op": "wasi.unit",
    "args": {
     "action": "remove",
@@ -15697,7 +15734,7 @@
    }
   },
   {
-   "name": "wasi.unit-650",
+   "name": "wasi.unit-652",
    "op": "wasi.unit",
    "args": {
     "action": "install",
@@ -15710,7 +15747,7 @@
    }
   },
   {
-   "name": "wasi.unit-651",
+   "name": "wasi.unit-653",
    "op": "wasi.unit",
    "args": {
     "action": "remove",
@@ -15723,7 +15760,7 @@
    }
   },
   {
-   "name": "wasi.unit-652",
+   "name": "wasi.unit-654",
    "op": "wasi.unit",
    "args": {},
    "expect": {
@@ -15733,7 +15770,7 @@
    }
   },
   {
-   "name": "setup-653",
+   "name": "setup-655",
    "op": "setup",
    "args": {
     "step": "wasi-runtime"
@@ -15751,7 +15788,7 @@
    }
   },
   {
-   "name": "setup-654",
+   "name": "setup-656",
    "op": "setup",
    "args": {
     "step": "gpu-broker"
@@ -15769,7 +15806,7 @@
    }
   },
   {
-   "name": "setup-655",
+   "name": "setup-657",
    "op": "setup",
    "args": {
     "step": "arch-v2-switch"
@@ -15787,7 +15824,7 @@
    }
   },
   {
-   "name": "setup-656",
+   "name": "setup-658",
    "op": "setup",
    "args": {
     "step": "arch-v2-settle"
@@ -15805,7 +15842,7 @@
    }
   },
   {
-   "name": "setup-657",
+   "name": "setup-659",
    "op": "setup",
    "args": {
     "step": "engine-migrate"
@@ -15823,7 +15860,7 @@
    }
   },
   {
-   "name": "setup-658",
+   "name": "setup-660",
    "op": "setup",
    "args": {
     "step": "engine-rollback"
@@ -15841,7 +15878,7 @@
    }
   },
   {
-   "name": "setup-659",
+   "name": "setup-661",
    "op": "setup",
    "args": {
     "step": "arch-v2-switch",
@@ -15854,7 +15891,7 @@
    }
   },
   {
-   "name": "setup-660",
+   "name": "setup-662",
    "op": "setup",
    "args": {
     "step": "arch-v2"
@@ -15866,7 +15903,7 @@
    }
   },
   {
-   "name": "setup-661",
+   "name": "setup-663",
    "op": "setup",
    "args": {
     "step": "arch-v2-switch "
@@ -15878,7 +15915,7 @@
    }
   },
   {
-   "name": "setup-662",
+   "name": "setup-664",
    "op": "setup",
    "args": {
     "step": "arch-v2-revert"
@@ -15890,7 +15927,7 @@
    }
   },
   {
-   "name": "docker-663",
+   "name": "docker-665",
    "op": "docker",
    "args": {
     "argv": [
@@ -15975,7 +16012,7 @@
    }
   },
   {
-   "name": "docker-664",
+   "name": "docker-666",
    "op": "docker",
    "args": {
     "argv": [
@@ -16062,7 +16099,7 @@
    }
   },
   {
-   "name": "docker-665",
+   "name": "docker-667",
    "op": "docker",
    "args": {
     "argv": [
@@ -16145,7 +16182,7 @@
    }
   },
   {
-   "name": "docker-666",
+   "name": "docker-668",
    "op": "docker",
    "args": {
     "argv": [
@@ -16249,7 +16286,7 @@
    }
   },
   {
-   "name": "docker-667",
+   "name": "docker-669",
    "op": "docker",
    "args": {
     "argv": [
@@ -16298,7 +16335,7 @@
    }
   },
   {
-   "name": "docker-668",
+   "name": "docker-670",
    "op": "docker",
    "args": {
     "argv": [
@@ -16345,7 +16382,7 @@
    }
   },
   {
-   "name": "docker-669",
+   "name": "docker-671",
    "op": "docker",
    "args": {
     "argv": [
@@ -16392,7 +16429,7 @@
    }
   },
   {
-   "name": "docker-670",
+   "name": "docker-672",
    "op": "docker",
    "args": {
     "argv": [
@@ -16439,7 +16476,7 @@
    }
   },
   {
-   "name": "docker-671",
+   "name": "docker-673",
    "op": "docker",
    "args": {
     "argv": [
@@ -16486,7 +16523,7 @@
    }
   },
   {
-   "name": "docker-672",
+   "name": "docker-674",
    "op": "docker",
    "args": {
     "argv": [
@@ -16533,7 +16570,7 @@
    }
   },
   {
-   "name": "docker-673",
+   "name": "docker-675",
    "op": "docker",
    "args": {
     "argv": [
@@ -16580,7 +16617,7 @@
    }
   },
   {
-   "name": "docker-674",
+   "name": "docker-676",
    "op": "docker",
    "args": {
     "argv": [
@@ -16626,7 +16663,7 @@
    }
   },
   {
-   "name": "docker-675",
+   "name": "docker-677",
    "op": "docker",
    "args": {
     "argv": [
@@ -16673,7 +16710,7 @@
    }
   },
   {
-   "name": "docker-676",
+   "name": "docker-678",
    "op": "docker",
    "args": {
     "argv": [
@@ -16722,7 +16759,7 @@
    }
   },
   {
-   "name": "docker-677",
+   "name": "docker-679",
    "op": "docker",
    "args": {
     "argv": [
@@ -16771,7 +16808,7 @@
    }
   },
   {
-   "name": "docker-678",
+   "name": "docker-680",
    "op": "docker",
    "args": {
     "argv": [
@@ -16820,7 +16857,7 @@
    }
   },
   {
-   "name": "docker-679",
+   "name": "docker-681",
    "op": "docker",
    "args": {
     "argv": [
@@ -16868,7 +16905,7 @@
    }
   },
   {
-   "name": "docker-680",
+   "name": "docker-682",
    "op": "docker",
    "args": {
     "argv": [
@@ -16916,7 +16953,7 @@
    }
   },
   {
-   "name": "docker-681",
+   "name": "docker-683",
    "op": "docker",
    "args": {
     "argv": [
@@ -16964,7 +17001,7 @@
    }
   },
   {
-   "name": "docker-682",
+   "name": "docker-684",
    "op": "docker",
    "args": {
     "argv": [
@@ -17014,7 +17051,7 @@
    }
   },
   {
-   "name": "docker-683",
+   "name": "docker-685",
    "op": "docker",
    "args": {
     "argv": [
@@ -17060,7 +17097,7 @@
    }
   },
   {
-   "name": "docker-684",
+   "name": "docker-686",
    "op": "docker",
    "args": {
     "argv": [
@@ -17106,7 +17143,7 @@
    }
   },
   {
-   "name": "docker-685",
+   "name": "docker-687",
    "op": "docker",
    "args": {
     "argv": [
@@ -17154,7 +17191,7 @@
    }
   },
   {
-   "name": "docker-686",
+   "name": "docker-688",
    "op": "docker",
    "args": {
     "argv": [
@@ -17202,7 +17239,7 @@
    }
   },
   {
-   "name": "docker-687",
+   "name": "docker-689",
    "op": "docker",
    "args": {
     "argv": [
@@ -17264,7 +17301,7 @@
    }
   },
   {
-   "name": "docker-688",
+   "name": "docker-690",
    "op": "docker",
    "args": {
     "argv": [
@@ -17326,7 +17363,7 @@
    }
   },
   {
-   "name": "host-689",
+   "name": "host-691",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17360,7 +17397,7 @@
    }
   },
   {
-   "name": "host-690",
+   "name": "host-692",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17394,7 +17431,7 @@
    }
   },
   {
-   "name": "host-691",
+   "name": "host-693",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17428,7 +17465,7 @@
    }
   },
   {
-   "name": "host-692",
+   "name": "host-694",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17452,7 +17489,7 @@
    }
   },
   {
-   "name": "host-693",
+   "name": "host-695",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17476,7 +17513,7 @@
    }
   },
   {
-   "name": "host-694",
+   "name": "host-696",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17493,7 +17530,7 @@
    }
   },
   {
-   "name": "host-695",
+   "name": "host-697",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17510,7 +17547,7 @@
    }
   },
   {
-   "name": "host-696",
+   "name": "host-698",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17527,7 +17564,7 @@
    }
   },
   {
-   "name": "host-697",
+   "name": "host-699",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17544,7 +17581,7 @@
    }
   },
   {
-   "name": "host-698",
+   "name": "host-700",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17561,7 +17598,7 @@
    }
   },
   {
-   "name": "host-699",
+   "name": "host-701",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17578,7 +17615,7 @@
    }
   },
   {
-   "name": "host-700",
+   "name": "host-702",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17595,7 +17632,7 @@
    }
   },
   {
-   "name": "host-701",
+   "name": "host-703",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17612,7 +17649,7 @@
    }
   },
   {
-   "name": "host-702",
+   "name": "host-704",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17629,7 +17666,7 @@
    }
   },
   {
-   "name": "host-703",
+   "name": "host-705",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17646,7 +17683,7 @@
    }
   },
   {
-   "name": "host-704",
+   "name": "host-706",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17663,7 +17700,7 @@
    }
   },
   {
-   "name": "host-705",
+   "name": "host-707",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17680,7 +17717,7 @@
    }
   },
   {
-   "name": "host-706",
+   "name": "host-708",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17696,7 +17733,7 @@
    }
   },
   {
-   "name": "host-707",
+   "name": "host-709",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17713,7 +17750,7 @@
    }
   },
   {
-   "name": "wasi.logs-708",
+   "name": "wasi.logs-710",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17737,7 +17774,7 @@
    }
   },
   {
-   "name": "wasi.logs-709",
+   "name": "wasi.logs-711",
    "op": "wasi.logs",
    "args": {
     "instance": "fedcba9876543210",
@@ -17761,7 +17798,7 @@
    }
   },
   {
-   "name": "wasi.logs-710",
+   "name": "wasi.logs-712",
    "op": "wasi.logs",
    "args": {
     "lines": 1,
@@ -17785,7 +17822,7 @@
    }
   },
   {
-   "name": "wasi.logs-711",
+   "name": "wasi.logs-713",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17798,7 +17835,7 @@
    }
   },
   {
-   "name": "wasi.logs-712",
+   "name": "wasi.logs-714",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17811,7 +17848,7 @@
    }
   },
   {
-   "name": "wasi.logs-713",
+   "name": "wasi.logs-715",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17824,7 +17861,7 @@
    }
   },
   {
-   "name": "wasi.logs-714",
+   "name": "wasi.logs-716",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17837,7 +17874,7 @@
    }
   },
   {
-   "name": "wasi.logs-715",
+   "name": "wasi.logs-717",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17850,7 +17887,7 @@
    }
   },
   {
-   "name": "wasi.logs-716",
+   "name": "wasi.logs-718",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17863,7 +17900,7 @@
    }
   },
   {
-   "name": "wasi.logs-717",
+   "name": "wasi.logs-719",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef"
@@ -17875,7 +17912,7 @@
    }
   },
   {
-   "name": "wasi.logs-718",
+   "name": "wasi.logs-720",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789ABCDEF",
@@ -17888,7 +17925,7 @@
    }
   },
   {
-   "name": "wasi.logs-719",
+   "name": "wasi.logs-721",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcde",
@@ -17901,7 +17938,7 @@
    }
   },
   {
-   "name": "wasi.logs-720",
+   "name": "wasi.logs-722",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef0",
@@ -17914,7 +17951,7 @@
    }
   },
   {
-   "name": "wasi.logs-721",
+   "name": "wasi.logs-723",
    "op": "wasi.logs",
    "args": {
     "instance": "../../../var/log",
@@ -17927,7 +17964,7 @@
    }
   },
   {
-   "name": "wasi.logs-722",
+   "name": "wasi.logs-724",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef\n",
@@ -17940,7 +17977,7 @@
    }
   },
   {
-   "name": "wasi.logs-723",
+   "name": "wasi.logs-725",
    "op": "wasi.logs",
    "args": {
     "instance": "flagship-daemon",
@@ -17953,7 +17990,7 @@
    }
   },
   {
-   "name": "wasi.logs-724",
+   "name": "wasi.logs-726",
    "op": "wasi.logs",
    "args": {
     "instance": 5,
@@ -17966,7 +18003,7 @@
    }
   },
   {
-   "name": "wasi.logs-725",
+   "name": "wasi.logs-727",
    "op": "wasi.logs",
    "args": {
     "lines": 15
@@ -17978,7 +18015,7 @@
    }
   },
   {
-   "name": "wasi.logs-726",
+   "name": "wasi.logs-728",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17992,7 +18029,7 @@
    }
   },
   {
-   "name": "wasi.logs-727",
+   "name": "wasi.logs-729",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -18009,7 +18046,7 @@
    }
   },
   {
-   "name": "wasi.logs-728",
+   "name": "wasi.logs-730",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -18023,7 +18060,7 @@
    }
   },
   {
-   "name": "wasi.logs-729",
+   "name": "wasi.logs-731",
    "op": "wasi.logs",
    "args": {},
    "expect": {
@@ -18033,7 +18070,7 @@
    }
   },
   {
-   "name": "wasi.logs-730",
+   "name": "wasi.logs-732",
    "op": "wasi.logs",
    "args": {
     "__proto__": {
@@ -18048,7 +18085,7 @@
    }
   },
   {
-   "name": "setup-731",
+   "name": "setup-733",
    "op": "setup",
    "args": {
     "step": "boot-chain"
@@ -18066,7 +18103,7 @@
    }
   },
   {
-   "name": "setup-732",
+   "name": "setup-734",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -18079,7 +18116,7 @@
    }
   },
   {
-   "name": "setup-733",
+   "name": "setup-735",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -18092,7 +18129,7 @@
    }
   },
   {
-   "name": "setup-734",
+   "name": "setup-736",
    "op": "setup",
    "args": {
     "step": "boot-chain-confirm"
@@ -18104,7 +18141,7 @@
    }
   },
   {
-   "name": "setup-735",
+   "name": "setup-737",
    "op": "setup",
    "args": {
     "step": "Boot-Chain"
@@ -18116,7 +18153,7 @@
    }
   },
   {
-   "name": "setup-736",
+   "name": "setup-738",
    "op": "setup",
    "args": {
     "step": "boot-chain\u0000"
@@ -18128,7 +18165,7 @@
    }
   },
   {
-   "name": "setup-737",
+   "name": "setup-739",
    "op": "setup",
    "args": {
     "step": [
@@ -23332,7 +23369,7 @@
    }
   },
   {
-   "name": "docker-447-podman",
+   "name": "docker-449-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23360,7 +23397,7 @@
    }
   },
   {
-   "name": "docker-448-podman",
+   "name": "docker-450-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23392,7 +23429,7 @@
    }
   },
   {
-   "name": "docker-449-podman",
+   "name": "docker-451-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23422,7 +23459,7 @@
    }
   },
   {
-   "name": "docker-450-podman",
+   "name": "docker-452-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23452,7 +23489,7 @@
    }
   },
   {
-   "name": "docker-451-podman",
+   "name": "docker-453-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23484,7 +23521,7 @@
    }
   },
   {
-   "name": "docker-452-podman",
+   "name": "docker-454-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23516,7 +23553,7 @@
    }
   },
   {
-   "name": "docker-453-podman",
+   "name": "docker-455-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23546,7 +23583,7 @@
    }
   },
   {
-   "name": "docker-454-podman",
+   "name": "docker-456-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23578,7 +23615,7 @@
    }
   },
   {
-   "name": "docker-455-podman",
+   "name": "docker-457-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23608,7 +23645,7 @@
    }
   },
   {
-   "name": "docker-456-podman",
+   "name": "docker-458-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23640,7 +23677,7 @@
    }
   },
   {
-   "name": "docker-457-podman",
+   "name": "docker-459-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23670,7 +23707,7 @@
    }
   },
   {
-   "name": "docker-458-podman",
+   "name": "docker-460-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23700,7 +23737,7 @@
    }
   },
   {
-   "name": "docker-459-podman",
+   "name": "docker-461-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23730,7 +23767,7 @@
    }
   },
   {
-   "name": "docker-460-podman",
+   "name": "docker-462-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23760,7 +23797,7 @@
    }
   },
   {
-   "name": "docker-461-podman",
+   "name": "docker-463-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23790,7 +23827,7 @@
    }
   },
   {
-   "name": "docker-462-podman",
+   "name": "docker-464-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23820,7 +23857,7 @@
    }
   },
   {
-   "name": "docker-463-podman",
+   "name": "docker-465-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23852,7 +23889,7 @@
    }
   },
   {
-   "name": "docker-464-podman",
+   "name": "docker-466-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23884,7 +23921,7 @@
    }
   },
   {
-   "name": "docker-465-podman",
+   "name": "docker-467-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23914,7 +23951,7 @@
    }
   },
   {
-   "name": "docker-466-podman",
+   "name": "docker-468-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23940,7 +23977,7 @@
    }
   },
   {
-   "name": "docker-467-podman",
+   "name": "docker-469-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -23968,7 +24005,7 @@
    }
   },
   {
-   "name": "docker-468-podman",
+   "name": "docker-470-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24052,7 +24089,7 @@
    }
   },
   {
-   "name": "docker-469-podman",
+   "name": "docker-471-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24154,7 +24191,7 @@
    }
   },
   {
-   "name": "docker-470-podman",
+   "name": "docker-472-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24174,7 +24211,7 @@
    }
   },
   {
-   "name": "docker-471-podman",
+   "name": "docker-473-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24194,7 +24231,7 @@
    }
   },
   {
-   "name": "docker-472-podman",
+   "name": "docker-474-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24214,7 +24251,7 @@
    }
   },
   {
-   "name": "docker-473-podman",
+   "name": "docker-475-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24234,7 +24271,7 @@
    }
   },
   {
-   "name": "docker-474-podman",
+   "name": "docker-476-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24255,7 +24292,7 @@
    }
   },
   {
-   "name": "docker-475-podman",
+   "name": "docker-477-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24275,7 +24312,7 @@
    }
   },
   {
-   "name": "docker-476-podman",
+   "name": "docker-478-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24295,7 +24332,7 @@
    }
   },
   {
-   "name": "docker-477-podman",
+   "name": "docker-479-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24315,7 +24352,7 @@
    }
   },
   {
-   "name": "docker-478-podman",
+   "name": "docker-480-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24335,7 +24372,7 @@
    }
   },
   {
-   "name": "docker-479-podman",
+   "name": "docker-481-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24355,47 +24392,6 @@
    }
   },
   {
-   "name": "docker-480-podman",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--runtime",
-     "runsc",
-     "-u=0",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "engine": "podman",
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a container may not run as root"
-   }
-  },
-  {
-   "name": "docker-481-podman",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--runtime",
-     "runsc",
-     "-u",
-     "00",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "engine": "podman",
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a container may not run as root"
-   }
-  },
-  {
    "name": "docker-482-podman",
    "op": "docker",
    "args": {
@@ -24404,8 +24400,7 @@
      "-d",
      "--runtime",
      "runsc",
-     "-u",
-     "+0:0",
+     "-u=0",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -24426,7 +24421,7 @@
      "--runtime",
      "runsc",
      "-u",
-     "-0",
+     "00",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -24446,7 +24441,8 @@
      "-d",
      "--runtime",
      "runsc",
-     "--user=0",
+     "-u",
+     "+0:0",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -24466,7 +24462,8 @@
      "-d",
      "--runtime",
      "runsc",
-     "-du0",
+     "-u",
+     "-0",
      "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ]
    },
@@ -24479,6 +24476,46 @@
   },
   {
    "name": "docker-486-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--runtime",
+     "runsc",
+     "--user=0",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container may not run as root"
+   }
+  },
+  {
+   "name": "docker-487-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--runtime",
+     "runsc",
+     "-du0",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container may not run as root"
+   }
+  },
+  {
+   "name": "docker-488-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24499,7 +24536,7 @@
    }
   },
   {
-   "name": "docker-487-podman",
+   "name": "docker-489-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24519,7 +24556,7 @@
    }
   },
   {
-   "name": "docker-488-podman",
+   "name": "docker-490-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24539,7 +24576,7 @@
    }
   },
   {
-   "name": "docker-489-podman",
+   "name": "docker-491-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24559,7 +24596,7 @@
    }
   },
   {
-   "name": "docker-490-podman",
+   "name": "docker-492-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24579,7 +24616,7 @@
    }
   },
   {
-   "name": "docker-491-podman",
+   "name": "docker-493-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24599,7 +24636,7 @@
    }
   },
   {
-   "name": "docker-492-podman",
+   "name": "docker-494-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24619,7 +24656,7 @@
    }
   },
   {
-   "name": "docker-493-podman",
+   "name": "docker-495-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24639,7 +24676,7 @@
    }
   },
   {
-   "name": "docker-494-podman",
+   "name": "docker-496-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24659,7 +24696,7 @@
    }
   },
   {
-   "name": "docker-495-podman",
+   "name": "docker-497-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24679,7 +24716,7 @@
    }
   },
   {
-   "name": "docker-496-podman",
+   "name": "docker-498-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24699,7 +24736,7 @@
    }
   },
   {
-   "name": "docker-497-podman",
+   "name": "docker-499-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24719,7 +24756,7 @@
    }
   },
   {
-   "name": "docker-498-podman",
+   "name": "docker-500-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24739,7 +24776,7 @@
    }
   },
   {
-   "name": "docker-499-podman",
+   "name": "docker-501-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24759,7 +24796,7 @@
    }
   },
   {
-   "name": "docker-500-podman",
+   "name": "docker-502-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24779,7 +24816,7 @@
    }
   },
   {
-   "name": "docker-501-podman",
+   "name": "docker-503-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24799,7 +24836,7 @@
    }
   },
   {
-   "name": "docker-502-podman",
+   "name": "docker-504-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24819,7 +24856,7 @@
    }
   },
   {
-   "name": "docker-503-podman",
+   "name": "docker-505-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24840,7 +24877,7 @@
    }
   },
   {
-   "name": "docker-504-podman",
+   "name": "docker-506-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24860,7 +24897,7 @@
    }
   },
   {
-   "name": "docker-505-podman",
+   "name": "docker-507-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24880,7 +24917,7 @@
    }
   },
   {
-   "name": "docker-506-podman",
+   "name": "docker-508-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24901,7 +24938,7 @@
    }
   },
   {
-   "name": "docker-507-podman",
+   "name": "docker-509-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24921,7 +24958,7 @@
    }
   },
   {
-   "name": "docker-508-podman",
+   "name": "docker-510-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24942,7 +24979,7 @@
    }
   },
   {
-   "name": "docker-509-podman",
+   "name": "docker-511-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24963,7 +25000,7 @@
    }
   },
   {
-   "name": "docker-510-podman",
+   "name": "docker-512-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -24983,7 +25020,7 @@
    }
   },
   {
-   "name": "docker-511-podman",
+   "name": "docker-513-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25004,7 +25041,7 @@
    }
   },
   {
-   "name": "docker-512-podman",
+   "name": "docker-514-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25025,7 +25062,7 @@
    }
   },
   {
-   "name": "docker-513-podman",
+   "name": "docker-515-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25046,7 +25083,7 @@
    }
   },
   {
-   "name": "docker-514-podman",
+   "name": "docker-516-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25067,7 +25104,7 @@
    }
   },
   {
-   "name": "docker-515-podman",
+   "name": "docker-517-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25088,7 +25125,7 @@
    }
   },
   {
-   "name": "docker-516-podman",
+   "name": "docker-518-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25109,7 +25146,7 @@
    }
   },
   {
-   "name": "docker-517-podman",
+   "name": "docker-519-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25129,7 +25166,7 @@
    }
   },
   {
-   "name": "docker-518-podman",
+   "name": "docker-520-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25149,7 +25186,7 @@
    }
   },
   {
-   "name": "docker-519-podman",
+   "name": "docker-521-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25170,7 +25207,7 @@
    }
   },
   {
-   "name": "docker-520-podman",
+   "name": "docker-522-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25190,7 +25227,7 @@
    }
   },
   {
-   "name": "docker-521-podman",
+   "name": "docker-523-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25210,7 +25247,7 @@
    }
   },
   {
-   "name": "docker-522-podman",
+   "name": "docker-524-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25230,7 +25267,7 @@
    }
   },
   {
-   "name": "docker-523-podman",
+   "name": "docker-525-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25250,7 +25287,7 @@
    }
   },
   {
-   "name": "docker-524-podman",
+   "name": "docker-526-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25270,7 +25307,7 @@
    }
   },
   {
-   "name": "docker-525-podman",
+   "name": "docker-527-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25290,7 +25327,7 @@
    }
   },
   {
-   "name": "docker-526-podman",
+   "name": "docker-528-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25310,7 +25347,7 @@
    }
   },
   {
-   "name": "docker-527-podman",
+   "name": "docker-529-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25330,7 +25367,7 @@
    }
   },
   {
-   "name": "docker-528-podman",
+   "name": "docker-530-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25350,7 +25387,7 @@
    }
   },
   {
-   "name": "docker-529-podman",
+   "name": "docker-531-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25370,7 +25407,7 @@
    }
   },
   {
-   "name": "docker-530-podman",
+   "name": "docker-532-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25391,7 +25428,7 @@
    }
   },
   {
-   "name": "docker-531-podman",
+   "name": "docker-533-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25411,7 +25448,7 @@
    }
   },
   {
-   "name": "docker-532-podman",
+   "name": "docker-534-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25432,7 +25469,7 @@
    }
   },
   {
-   "name": "docker-533-podman",
+   "name": "docker-535-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25453,7 +25490,7 @@
    }
   },
   {
-   "name": "docker-534-podman",
+   "name": "docker-536-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25474,7 +25511,7 @@
    }
   },
   {
-   "name": "docker-535-podman",
+   "name": "docker-537-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25491,7 +25528,7 @@
    }
   },
   {
-   "name": "docker-536-podman",
+   "name": "docker-538-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25510,7 +25547,7 @@
    }
   },
   {
-   "name": "docker-537-podman",
+   "name": "docker-539-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25529,7 +25566,7 @@
    }
   },
   {
-   "name": "docker-538-podman",
+   "name": "docker-540-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25546,7 +25583,7 @@
    }
   },
   {
-   "name": "docker-539-podman",
+   "name": "docker-541-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25562,7 +25599,7 @@
    }
   },
   {
-   "name": "docker-540-podman",
+   "name": "docker-542-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25581,7 +25618,7 @@
    }
   },
   {
-   "name": "docker-541-podman",
+   "name": "docker-543-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25598,7 +25635,7 @@
    }
   },
   {
-   "name": "docker-542-podman",
+   "name": "docker-544-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25614,7 +25651,7 @@
    }
   },
   {
-   "name": "docker-543-podman",
+   "name": "docker-545-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25630,7 +25667,7 @@
    }
   },
   {
-   "name": "docker-544-podman",
+   "name": "docker-546-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25649,7 +25686,7 @@
    }
   },
   {
-   "name": "docker-545-podman",
+   "name": "docker-547-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25781,7 +25818,7 @@
    }
   },
   {
-   "name": "docker-546-podman",
+   "name": "docker-548-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25852,7 +25889,7 @@
    }
   },
   {
-   "name": "docker-547-podman",
+   "name": "docker-549-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25922,7 +25959,7 @@
    }
   },
   {
-   "name": "docker-548-podman",
+   "name": "docker-550-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -25993,7 +26030,7 @@
    }
   },
   {
-   "name": "docker-549-podman",
+   "name": "docker-551-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26066,7 +26103,7 @@
    }
   },
   {
-   "name": "docker-550-podman",
+   "name": "docker-552-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26139,7 +26176,7 @@
    }
   },
   {
-   "name": "docker-551-podman",
+   "name": "docker-553-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26211,7 +26248,7 @@
    }
   },
   {
-   "name": "docker-552-podman",
+   "name": "docker-554-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26284,7 +26321,7 @@
    }
   },
   {
-   "name": "docker-553-podman",
+   "name": "docker-555-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26357,7 +26394,7 @@
    }
   },
   {
-   "name": "docker-554-podman",
+   "name": "docker-556-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26428,7 +26465,7 @@
    }
   },
   {
-   "name": "docker-555-podman",
+   "name": "docker-557-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26493,7 +26530,7 @@
    }
   },
   {
-   "name": "docker-556-podman",
+   "name": "docker-558-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26558,7 +26595,7 @@
    }
   },
   {
-   "name": "docker-557-podman",
+   "name": "docker-559-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26629,7 +26666,7 @@
    }
   },
   {
-   "name": "docker-558-podman",
+   "name": "docker-560-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26700,7 +26737,7 @@
    }
   },
   {
-   "name": "docker-559-podman",
+   "name": "docker-561-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26771,7 +26808,7 @@
    }
   },
   {
-   "name": "docker-560-podman",
+   "name": "docker-562-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26842,7 +26879,7 @@
    }
   },
   {
-   "name": "docker-561-podman",
+   "name": "docker-563-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26911,7 +26948,7 @@
    }
   },
   {
-   "name": "docker-562-podman",
+   "name": "docker-564-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -26982,7 +27019,7 @@
    }
   },
   {
-   "name": "docker-563-podman",
+   "name": "docker-565-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27055,7 +27092,7 @@
    }
   },
   {
-   "name": "docker-564-podman",
+   "name": "docker-566-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27126,7 +27163,7 @@
    }
   },
   {
-   "name": "docker-565-podman",
+   "name": "docker-567-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27160,7 +27197,7 @@
    }
   },
   {
-   "name": "docker-566-podman",
+   "name": "docker-568-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27179,7 +27216,7 @@
    }
   },
   {
-   "name": "docker-567-podman",
+   "name": "docker-569-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27196,7 +27233,7 @@
    }
   },
   {
-   "name": "docker-568-podman",
+   "name": "docker-570-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27240,7 +27277,7 @@
    }
   },
   {
-   "name": "docker-569-podman",
+   "name": "docker-571-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27265,7 +27302,7 @@
    }
   },
   {
-   "name": "docker-577-podman",
+   "name": "docker-579-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27355,7 +27392,7 @@
    }
   },
   {
-   "name": "docker-578-podman",
+   "name": "docker-580-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27449,7 +27486,7 @@
    }
   },
   {
-   "name": "docker-579-podman",
+   "name": "docker-581-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27539,7 +27576,7 @@
    }
   },
   {
-   "name": "docker-580-podman",
+   "name": "docker-582-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -27550,136 +27587,6 @@
      "--runtime=runsc-nvproxy",
      "--device",
      "nvidia.com/gpu=1",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "engine": "podman",
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container gets only the devices its allocation holds"
-   }
-  },
-  {
-   "name": "docker-581-podman",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=runsc-nvproxy",
-     "--device",
-     "nvidia.com/gpu=0",
-     "--device",
-     "nvidia.com/gpu=2",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "engine": "podman",
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container gets only the devices its allocation holds"
-   }
-  },
-  {
-   "name": "docker-582-podman",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=runsc-nvproxy",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -27746,7 +27653,7 @@
      "--device",
      "nvidia.com/gpu=0",
      "--device",
-     "nvidia.com/gpu=0",
+     "nvidia.com/gpu=2",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -27810,8 +27717,6 @@
      "--name",
      "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
-     "--device",
-     "nvidia.com/gpu=all",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -27876,7 +27781,9 @@
      "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
      "--device",
-     "/dev/nvidia0",
+     "nvidia.com/gpu=0",
+     "--device",
+     "nvidia.com/gpu=0",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -27941,7 +27848,7 @@
      "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
      "--device",
-     "/dev/vfio/12",
+     "nvidia.com/gpu=all",
      "--label",
      "flagship.gpu.allocation=app-alice--llm-k1",
      "--cap-drop=ALL",
@@ -27997,6 +27904,136 @@
   },
   {
    "name": "docker-587-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "/dev/nvidia0",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container gets only the devices its allocation holds"
+   }
+  },
+  {
+   "name": "docker-588-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "/dev/vfio/12",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container gets only the devices its allocation holds"
+   }
+  },
+  {
+   "name": "docker-589-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28061,7 +28098,7 @@
    }
   },
   {
-   "name": "docker-588-podman",
+   "name": "docker-590-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28126,7 +28163,7 @@
    }
   },
   {
-   "name": "docker-589-podman",
+   "name": "docker-591-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28191,136 +28228,6 @@
    }
   },
   {
-   "name": "docker-590-podman",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=runsc",
-     "--device",
-     "nvidia.com/gpu=0",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "engine": "podman",
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container runs under the runtime its allocation names"
-   }
-  },
-  {
-   "name": "docker-591-podman",
-   "op": "docker",
-   "args": {
-    "argv": [
-     "run",
-     "-d",
-     "--name",
-     "flagship-alice--llm",
-     "--runtime=kata",
-     "--device",
-     "nvidia.com/gpu=0",
-     "--label",
-     "flagship.gpu.allocation=app-alice--llm-k1",
-     "--cap-drop=ALL",
-     "--security-opt=no-new-privileges",
-     "--network",
-     "flagship-apps",
-     "--read-only",
-     "--user",
-     "10001:10001",
-     "--memory",
-     "2048m",
-     "-e",
-     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
-     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ]
-   },
-   "gpu": {
-    "app-alice--llm-k1": {
-     "allocationId": "app-alice--llm-k1",
-     "appId": "alice--llm",
-     "container": "flagship-alice--llm",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=0"
-     ]
-    },
-    "app-carol--mig-k3": {
-     "allocationId": "app-carol--mig-k3",
-     "appId": "carol--mig",
-     "container": "flagship-carol--mig",
-     "runtime": "runsc-nvproxy",
-     "devices": [
-      "nvidia.com/gpu=1:0",
-      "nvidia.com/gpu=2"
-     ]
-    },
-    "app-bob--render-k2": {
-     "allocationId": "app-bob--render-k2",
-     "appId": "bob--render",
-     "container": "flagship-bob--render",
-     "runtime": "kata-vfio",
-     "devices": [
-      "flagship.vfio/group=12"
-     ]
-    }
-   },
-   "engine": "podman",
-   "expect": {
-    "ok": false,
-    "code": "forbidden",
-    "message": "a GPU container runs under the runtime its allocation names"
-   }
-  },
-  {
    "name": "docker-592-podman",
    "op": "docker",
    "args": {
@@ -28329,7 +28236,7 @@
      "-d",
      "--name",
      "flagship-alice--llm",
-     "--runtime=kata-vfio",
+     "--runtime=runsc",
      "--device",
      "nvidia.com/gpu=0",
      "--label",
@@ -28394,6 +28301,136 @@
      "-d",
      "--name",
      "flagship-alice--llm",
+     "--runtime=kata",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container runs under the runtime its allocation names"
+   }
+  },
+  {
+   "name": "docker-594-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
+     "--runtime=kata-vfio",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=app-alice--llm-k1",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--network",
+     "flagship-apps",
+     "--read-only",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "2048m",
+     "-e",
+     "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+   },
+   "gpu": {
+    "app-alice--llm-k1": {
+     "allocationId": "app-alice--llm-k1",
+     "appId": "alice--llm",
+     "container": "flagship-alice--llm",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    },
+    "app-carol--mig-k3": {
+     "allocationId": "app-carol--mig-k3",
+     "appId": "carol--mig",
+     "container": "flagship-carol--mig",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=1:0",
+      "nvidia.com/gpu=2"
+     ]
+    },
+    "app-bob--render-k2": {
+     "allocationId": "app-bob--render-k2",
+     "appId": "bob--render",
+     "container": "flagship-bob--render",
+     "runtime": "kata-vfio",
+     "devices": [
+      "flagship.vfio/group=12"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container runs under the runtime its allocation names"
+   }
+  },
+  {
+   "name": "docker-595-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--llm",
      "--runtime=runsc-nvproxy",
      "--device",
      "nvidia.com/gpu=0",
@@ -28452,7 +28489,7 @@
    }
   },
   {
-   "name": "docker-594-podman",
+   "name": "docker-596-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28517,7 +28554,7 @@
    }
   },
   {
-   "name": "docker-595-podman",
+   "name": "docker-597-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28582,7 +28619,7 @@
    }
   },
   {
-   "name": "docker-596-podman",
+   "name": "docker-598-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28649,7 +28686,7 @@
    }
   },
   {
-   "name": "docker-597-podman",
+   "name": "docker-599-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28716,7 +28753,7 @@
    }
   },
   {
-   "name": "docker-598-podman",
+   "name": "docker-600-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28782,7 +28819,7 @@
    }
   },
   {
-   "name": "docker-599-podman",
+   "name": "docker-601-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28849,7 +28886,7 @@
    }
   },
   {
-   "name": "docker-600-podman",
+   "name": "docker-602-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28916,7 +28953,7 @@
    }
   },
   {
-   "name": "docker-601-podman",
+   "name": "docker-603-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28983,7 +29020,7 @@
    }
   },
   {
-   "name": "docker-602-podman",
+   "name": "docker-604-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29050,7 +29087,7 @@
    }
   },
   {
-   "name": "docker-603-podman",
+   "name": "docker-605-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29115,7 +29152,7 @@
    }
   },
   {
-   "name": "docker-604-podman",
+   "name": "docker-606-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29150,7 +29187,7 @@
    }
   },
   {
-   "name": "docker-605-podman",
+   "name": "docker-607-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29170,7 +29207,7 @@
    }
   },
   {
-   "name": "docker-663-podman",
+   "name": "docker-665-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29256,7 +29293,7 @@
    }
   },
   {
-   "name": "docker-664-podman",
+   "name": "docker-666-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29344,7 +29381,7 @@
    }
   },
   {
-   "name": "docker-665-podman",
+   "name": "docker-667-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29428,7 +29465,7 @@
    }
   },
   {
-   "name": "docker-666-podman",
+   "name": "docker-668-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29533,7 +29570,7 @@
    }
   },
   {
-   "name": "docker-667-podman",
+   "name": "docker-669-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29583,7 +29620,7 @@
    }
   },
   {
-   "name": "docker-668-podman",
+   "name": "docker-670-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29631,7 +29668,7 @@
    }
   },
   {
-   "name": "docker-669-podman",
+   "name": "docker-671-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29679,7 +29716,7 @@
    }
   },
   {
-   "name": "docker-670-podman",
+   "name": "docker-672-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29727,7 +29764,7 @@
    }
   },
   {
-   "name": "docker-671-podman",
+   "name": "docker-673-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29775,7 +29812,7 @@
    }
   },
   {
-   "name": "docker-672-podman",
+   "name": "docker-674-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29823,7 +29860,7 @@
    }
   },
   {
-   "name": "docker-673-podman",
+   "name": "docker-675-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29871,7 +29908,7 @@
    }
   },
   {
-   "name": "docker-674-podman",
+   "name": "docker-676-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29918,7 +29955,7 @@
    }
   },
   {
-   "name": "docker-675-podman",
+   "name": "docker-677-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29966,7 +30003,7 @@
    }
   },
   {
-   "name": "docker-676-podman",
+   "name": "docker-678-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30016,7 +30053,7 @@
    }
   },
   {
-   "name": "docker-677-podman",
+   "name": "docker-679-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30066,7 +30103,7 @@
    }
   },
   {
-   "name": "docker-678-podman",
+   "name": "docker-680-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30116,7 +30153,7 @@
    }
   },
   {
-   "name": "docker-679-podman",
+   "name": "docker-681-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30165,7 +30202,7 @@
    }
   },
   {
-   "name": "docker-680-podman",
+   "name": "docker-682-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30214,7 +30251,7 @@
    }
   },
   {
-   "name": "docker-681-podman",
+   "name": "docker-683-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30263,7 +30300,7 @@
    }
   },
   {
-   "name": "docker-682-podman",
+   "name": "docker-684-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30314,7 +30351,7 @@
    }
   },
   {
-   "name": "docker-683-podman",
+   "name": "docker-685-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30361,7 +30398,7 @@
    }
   },
   {
-   "name": "docker-684-podman",
+   "name": "docker-686-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30408,7 +30445,7 @@
    }
   },
   {
-   "name": "docker-685-podman",
+   "name": "docker-687-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30457,7 +30494,7 @@
    }
   },
   {
-   "name": "docker-686-podman",
+   "name": "docker-688-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30506,7 +30543,7 @@
    }
   },
   {
-   "name": "docker-687-podman",
+   "name": "docker-689-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30569,7 +30606,7 @@
    }
   },
   {
-   "name": "docker-688-podman",
+   "name": "docker-690-podman",
    "op": "docker",
    "args": {
     "argv": [

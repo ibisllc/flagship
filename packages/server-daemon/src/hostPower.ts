@@ -64,7 +64,8 @@ export class BootUnlockModeSuppressor implements AutoUnlockSuppressor {
   async suppress(): Promise<void> {
     // /boot is root's: an unprivileged daemon asks the broker for exactly this marker.
     if (runsUnprivileged()) {
-      await privd().host("bootlock", []);
+      // One fixed word: the helpers refuse an empty argv, so `[]` was refused on every lock.
+      await privd().host("bootlock", ["approve-once"]);
       return;
     }
     await writeFileDurable(this.path, "approve-once\n", 0o644);

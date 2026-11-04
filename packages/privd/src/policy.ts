@@ -1011,7 +1011,7 @@ export function hostExec(args: Record<string, unknown>, mounts: MountsReader): E
       if (a.length === 1 && (IMAGE_DATA.test(a[0]!) || DOCKER_VOLUME_DATA.test(a[0]!))) return { file: "/bin/sh", args: ["-c", FOLDER_FINGERPRINT_SCRIPT, "_", a[0]!], timeoutMs: 30 * 60_000 };
       break;
     case "bootlock":
-      if (a.length === 0) return { file: "/bin/sh", args: ["-c", BOOT_LOCK_ONCE_SCRIPT], timeoutMs: 15_000 };
+      if (a.length === 1 && a[0] === "approve-once") return { file: "/bin/sh", args: ["-c", BOOT_LOCK_ONCE_SCRIPT], timeoutMs: 15_000 };
       break;
     case "networkctl":
       if (a.length === 1 && a[0] === "reload") return { file: "/usr/bin/networkctl", args: a, timeoutMs: 30_000 };

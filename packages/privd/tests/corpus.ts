@@ -221,6 +221,8 @@ host("fingerprint", [`${ROOT}/${VOL}/data`]);
 host("fingerprint", [`/var/lib/containers/storage/volumes/${VOL}/_data`]);
 host("networkctl", ["reload"]);
 host("bootlock", []);
+host("bootlock", ["approve-once"]);
+host("bootlock", ["approve-once", "x"]);
 host("bootlock", ["x"]);
 host("bootlock", ["-c", "id"]);
 for (const [f, a] of [
