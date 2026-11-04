@@ -1,5 +1,7 @@
 # Gym certificates without the public record (proposal, 2026-11-03)
 
+> **Timing (owner, 2026-11-03): build this after the 0.3 release and before any 0.4 work. Not part of 0.3.**
+
 Owner request: gym servers run the real Let's Encrypt (LE) code without real certificates. The gym used 384 certificates in 7 days under `flagship.services`, production's registered domain, all in public Certificate Transparency (CT) logs. Design only.
 
 ## What exists today (and makes this cheap)

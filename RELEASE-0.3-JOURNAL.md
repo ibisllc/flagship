@@ -208,6 +208,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       next, Android versionCode > highest uploaded, Studio 0.3.0).
 - [ ] F5 OWNER runs scripts/release.sh phases A and B (I watch logs, fix, re-run); merge release/0.3
       to main (fast-forward); canary; store submissions (iOS + watch, Android + Wear), Studios.
+- [ ] F6b (OWNER 2026-11-03) After the 0.3 release and BEFORE any 0.4 work: move the gym to the private test CA per docs/gym-test-acme.md (Pebble by default, one real-LE lane per release candidate), so gym runs stop spending flagship.services' Let's Encrypt budget and stop appearing in public CT logs. Not in 0.3.
 - [ ] F6 After launch: hall of fame (hof-jay), translation review request, hardware receipts, the
       weekly rate-limit check; rebase the feature branches onto main.
 - [x] F7 (`9a3717d6f`; release.sh deletes the old prod secret before the .com deploy; gym parity fix in the run-31 note) (owner 2026-11-02) Move the AI inference endpoint OFF a secret: FLAGSHIP_INFERENCE_ENDPOINT
