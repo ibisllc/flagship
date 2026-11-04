@@ -121,6 +121,17 @@ describe("boot facts (B0 / boot-chain lane)", () => {
     expect(splitFacts("noise\n@@flagship-fact:a\n1\n2\n@@flagship-fact:end").get("a")).toBe("1\n2");
   });
 
+  it("reads a fact printed without a final newline (run 51: the daemon's state.json hid the trial and grubenv)", () => {
+    const state = '{"v":1,"trial":{"token":"tok_123-abc","digest":"d1"}}';
+    const glued = OUT.replace(`${state}\n@@flagship-fact:grubenv\nsaved_entry=0\nnext_entry=`, `${state}@@flagship-fact:grubenv\nsaved_entry=0\nnext_entry=flagship-bootchain-trial`);
+    expect(glued).not.toBe(OUT);
+    const f = parseBootFacts(glued);
+    expect(f.state.trial?.token).toBe("tok_123-abc");
+    expect(f.nextEntry).toBe("flagship-bootchain-trial");
+    expect(f.customCfgPresent).toBe(true);
+    expect(splitFacts("@@flagship-fact:a\nx@@flagship-fact:b\ny").get("a")).toBe("x");
+  });
+
   it("keeps the script and the stale-chain edit free of quotes that would break `sudo sh -c '…'`", () => {
     expect(BOOT_FACTS_SCRIPT).not.toContain('"');
     expect(MAKE_CHAIN_STALE).toContain(STALE_CHAIN_LINE);

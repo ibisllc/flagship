@@ -20,14 +20,14 @@ export const BOOT_FACTS_SCRIPT = [
   `echo '${MARK}unlocklog'; cat /boot/flagship-unlock.log 2>&1 || echo 'no-unlock-log'`,
   `echo '${MARK}cmdline'; cat /proc/cmdline`,
   `echo '${MARK}bootid'; cat /proc/sys/kernel/random/boot_id`,
-  `echo '${MARK}state'; cat /var/lib/flagship-bootchain/state.json 2>&1 || echo '{}'`,
+  `echo '${MARK}state'; cat /var/lib/flagship-bootchain/state.json 2>/dev/null || printf '{}'; echo`,
   `echo '${MARK}grubenv'; grub-editenv /boot/grub/grubenv list 2>&1 || true`,
   `echo '${MARK}customcfg'; if [ -e /boot/grub/custom.cfg ]; then echo present; else echo absent; fi`,
   `echo '${MARK}premount'; sha256sum /etc/initramfs-tools/scripts/local-top/flagship-unlock 2>&1; tail -n 1 /etc/initramfs-tools/scripts/local-top/flagship-unlock 2>&1`,
   `echo '${MARK}luks'; blkid -t TYPE=crypto_LUKS -o device 2>&1 | head -n 1`,
   // Where the lease key lives (bootPq.ts): sealed to the TPM under `pcrs`, a file, or nothing yet.
   `echo '${MARK}custody'; if [ -d /boot/flagship-lease-kem.tpm ]; then printf 'tpm %s\\n' $(cat /boot/flagship-lease-kem.tpm/pcrs 2>/dev/null); elif [ -s /boot/flagship-lease-kem.key ]; then echo software; else echo none; fi`,
-  `echo '${MARK}policy'; cat /boot/flagship-unlock-policy 2>/dev/null || echo compat`,
+  `echo '${MARK}policy'; cat /boot/flagship-unlock-policy 2>/dev/null || printf compat; echo`,
   // B2 #8: the UUIDs this boot's initrd pins, next to the disks' own (the boot fs and the crypttab volume).
   `echo '${MARK}uuids'; _d=$(mktemp -d); unmkinitramfs /boot/initrd.img-$(uname -r) $_d >/dev/null 2>&1; ` +
     `printf 'initrd-boot %s\\n' $(find $_d -path '*/boot/flagship-boot-fs-uuid' -exec cat {} + 2>/dev/null | head -n 1); ` +
@@ -114,9 +114,13 @@ export function splitFacts(out: string): Map<string, string> {
   let name: string | null = null;
   let buf: string[] = [];
   for (const line of out.split("\n")) {
-    if (line.startsWith(MARK)) {
+    // A file printed without a final newline (the daemon's state.json is one JSON line) puts the next
+    // marker on the same line, so a marker counts wherever it starts in a line.
+    const at = line.indexOf(MARK);
+    if (at >= 0) {
+      if (name && at > 0) buf.push(line.slice(0, at));
       if (name) m.set(name, buf.join("\n").trim());
-      name = line.slice(MARK.length).trim();
+      name = line.slice(at + MARK.length).trim();
       buf = [];
     } else if (name) {
       buf.push(line);
