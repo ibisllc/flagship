@@ -1951,6 +1951,9 @@ async fn the_home_moves_an_account_toward_the_relay_its_visitors_use() {
         home.rebalance_now().is_empty(),
         "one move per account per interval"
     );
+    let reb = &home.stats_json()["rebalance"];
+    assert_eq!(reb["moves"], 1);
+    assert_eq!(reb["decisions"]["below-threshold"], 1, "{reb}");
     let ah = rm::account_hash("alice").unwrap();
     for id in ["bb1", "cc1"] {
         eventually("the move reaches the peers", || {

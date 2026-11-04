@@ -449,7 +449,7 @@ export const relayMesh: Group = {
           const pump = async () => {
             while (!stop) {
               const t = Date.now();
-              const v = await visitSim(RC!.ip, s.fqdn, 6_000);
+              const v = await visitSim(RC!.ip, s.fqdn, 6_000, { talk: true });
               visits++;
               if (v.label !== "K") {
                 failed++;

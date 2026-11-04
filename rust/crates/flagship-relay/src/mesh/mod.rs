@@ -846,6 +846,7 @@ impl Mesh {
         serde_json::json!({
             "relayId": self.relay_id(), "kind": self.0.cfg.kind.as_str(), "ready": ready, "readiness": why,
             "fresh": self.fresh(), "state": st, "peers": peers,
+            "rebalance": self.0.traffic.lock().map_or(Value::Null, |t| t.decisions_json()),
             "counters": {
                 "feedPolls": n(&s.feed_polls), "feedErrors": n(&s.feed_errors), "badEntries": n(&s.bad_entries),
                 "forwarded": n(&s.forwarded), "forwardRefused": n(&s.forward_refused), "queriesSent": n(&s.queries_sent),

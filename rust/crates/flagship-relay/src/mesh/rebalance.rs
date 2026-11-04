@@ -25,6 +25,8 @@ type Bucket = (u64, HashMap<String, HashMap<String, u64>>);
 #[derive(Debug, Default)]
 pub struct Traffic {
     per: HashMap<String, VecDeque<Bucket>>,
+    /// Every decision this home made, by outcome: `move` or the §10.2 refusal reason (ops, as the TS relay reports).
+    decisions: std::collections::BTreeMap<&'static str, u64>,
 }
 
 impl Traffic {
@@ -92,6 +94,20 @@ impl Traffic {
 
     pub fn clear(&mut self, account: &str) {
         self.per.remove(account);
+    }
+
+    fn decided(&mut self, outcome: &'static str) {
+        let e = self.decisions.entry(outcome).or_insert(0);
+        *e = e.saturating_add(1);
+    }
+
+    /// `{ moves, decisions }` for `/api/stats` (§10.2).
+    #[must_use]
+    pub fn decisions_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "moves": self.decisions.get("move").copied().unwrap_or(0),
+            "decisions": self.decisions,
+        })
     }
 }
 
@@ -296,7 +312,11 @@ impl Mesh {
                     (last, legacy)
                 })
                 .unwrap_or((None, true));
-            if let Ok(to) = rebalance_decision(&me, &window, &relays, last, legacy, t) {
+            let d = rebalance_decision(&me, &window, &relays, last, legacy, t);
+            if let Ok(mut x) = self.0.traffic.lock() {
+                x.decided(d.as_ref().map_or_else(|why| *why, |_| "move"));
+            }
+            if let Ok(to) = d {
                 self.move_account(&account, &to);
                 if let Ok(mut x) = self.0.traffic.lock() {
                     x.clear(&account);
