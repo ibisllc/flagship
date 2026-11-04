@@ -180,6 +180,7 @@ export class GroupRunner {
     const { order, members, main } = memberSpecs(spec, gateway);
     const startedNow: string[] = [];
     const linked: number[] = [];
+    const targets = new Map<string, { linkPort: number; host: string; port: number }>();
     try {
       for (const m of spec.group!.members) {
         if (m.port === undefined) continue;
@@ -190,12 +191,14 @@ export class GroupRunner {
         const ok = await this.links!.link(m.linkPort!, target, spec.serviceId);
         if (!ok) throw new Error(`the box could not connect component ${m.name} (link port ${m.linkPort} unavailable)`);
         linked.push(m.linkPort!);
+        targets.set(m.name, { linkPort: m.linkPort!, ...target });
       }
       for (let i = 0; i < members.length; i++) {
         const member = members[i]!;
         const name = order[i]!;
         await this.app.deploy(member);
         startedNow.push(member.containerName!);
+        await this.follow(spec.serviceId, name, targets);
         const check = await (this.opts.memberCheck ?? realMemberCheck(this.cmd))({
           container: member.containerName!,
           ...(member.port !== undefined ? { hostPort: member.port } : {}),
@@ -214,6 +217,17 @@ export class GroupRunner {
       throw e;
     }
     this.started.set(spec.serviceId, { containers: startedNow, links: linked });
+  }
+
+  /** The engine refused a member's address and its run took another: its link follows it there. */
+  private async follow(serviceId: string, name: string, targets: Map<string, { linkPort: number; host: string; port: number }>): Promise<void> {
+    const t = targets.get(name);
+    if (!t || !dialsContainersDirectly()) return;
+    const now = await this.app.addressFor({ serviceId, component: name });
+    if (now === t.host) return;
+    await this.links!.unlink(t.linkPort);
+    if (!(await this.links!.link(t.linkPort, { host: now, port: t.port }, serviceId))) throw new Error(`the box could not connect component ${name} (link port ${t.linkPort} unavailable)`);
+    t.host = now;
   }
 
   private async removeContainer(name: string): Promise<void> {

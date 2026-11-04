@@ -271,6 +271,11 @@ export class AddressPool {
     return this.byOwner.get(owner);
   }
 
+  /** Every owner and the address it keeps. */
+  owned(): Array<[string, string]> {
+    return [...this.byOwner.entries()];
+  }
+
   /** Only for a service that is being deleted. The address stays out of use for the quarantine. */
   release(owner: string): void {
     const ip = this.byOwner.get(owner);

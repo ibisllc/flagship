@@ -708,7 +708,7 @@ function ownerOfContainer(name: string, service: string): string | null {
 }
 
 /** Addresses containers on this network already hold (a daemon restart forgets what it gave out; Podman refuses a duplicate). */
-async function seedFromEngine(cmd: CommandRunner, network: string, pool: AddressPool): Promise<void> {
+async function seedFromEngine(cmd: CommandRunner, network: string, pool: AddressPool, opts: { occupyOnly?: boolean } = {}): Promise<void> {
   if (!cmd.capture) return;
   try {
     const names = (await cmd.capture("docker", ["ps", "-a", "--filter", `network=${network}`, "--format", "{{.Names}}"])).stdout.split("\n").map((x) => x.trim()).filter(Boolean);
@@ -716,9 +716,9 @@ async function seedFromEngine(cmd: CommandRunner, network: string, pool: Address
       const out = (await cmd.capture("docker", ["inspect", "-f", `{{with index .NetworkSettings.Networks "${network}"}}{{.IPAddress}}{{end}}|{{index .Config.Labels "${LABEL_SERVICE}"}}`, name])).stdout.trim();
       const [ip = "", service = ""] = out.split("|");
       if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) continue;
-      const owner = ownerOfContainer(name, service);
+      const owner = opts.occupyOnly ? null : ownerOfContainer(name, service);
       if (owner) pool.adopt(owner, ip);
-      else pool.occupy(ip, name);
+      else if (pool.ownerOf(ip) === undefined) pool.occupy(ip, name);
     }
   } catch {
     // The engine will still refuse a duplicate; the pool just starts empty.
@@ -742,13 +742,26 @@ export async function assignAddress(cmd: CommandRunner, network: string, owner: 
   return (await p).assign(owner);
 }
 
-/** The engine says `conflictIp` is taken by something the pool did not place: never offer it again, and give the owner another. */
+/**
+ * The engine says `conflictIp` is taken by something the pool did not place: never offer it again, and give the owner
+ * another that no container on the bridge holds now. Core places its own containers on the same bridge after this pool
+ * was seeded, so the pool asks the engine again before it picks: walking up one address per refusal ran out of tries
+ * (gym run 51: an app group's rollback left every member missing).
+ */
 export async function reassignAddress(cmd: CommandRunner, network: string, owner: string, conflictIp: string): Promise<string> {
   await assignAddress(cmd, network, owner);
   const pool = await addressPools.get(network)!;
-  pool.occupy(conflictIp, "unknown-holder");
+  // Release first: while the owner holds it, occupy() is a no-op and the address would only be quarantined.
   pool.release(owner);
+  pool.occupy(conflictIp, "unknown-holder");
+  await seedFromEngine(cmd, network, pool, { occupyOnly: true });
   return pool.assign(owner);
+}
+
+/** The addresses this daemon keeps for its owners on `network`, containers or not (core must not give them out). */
+export async function heldAddresses(network: string): Promise<string[]> {
+  const pool = await addressPools.get(network)?.catch(() => null);
+  return pool ? pool.owned().map(([, ip]) => ip) : [];
 }
 
 export async function releaseAddressFor(network: string, owner: string): Promise<void> {
@@ -859,9 +872,9 @@ export class AppRunner {
     if (core) {
       // Core keeps the address and the desired state: it forgets both (shadow: the record only).
       await core.forget(serviceId, "main");
-      if (core.live()) return;
     }
-    // No component: the service and every component of it (an app group's members).
+    // No component: the service and every component of it (an app group's members). Under core this pool holds at most
+    // a mirror of core's address (it is reported to core as held, so it goes too).
     const pool = await addressPools.get(this.limits.network)?.catch(() => null);
     if (component === undefined) pool?.releasePrefix(`${serviceId}/`);
     else pool?.release(deployedKeyId({ serviceId, component }));

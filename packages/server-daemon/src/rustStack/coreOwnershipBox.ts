@@ -3,8 +3,10 @@
  * and model-server networks, and the removal of exactly one generation of a workload.
  */
 import type { AppRunner, CommandRunner } from "../serviceRunner.js";
-import { stopEndpoint } from "../serviceRunner.js";
+import { heldAddresses, stopEndpoint } from "../serviceRunner.js";
 import { CoreOwnership, networksFor, observeContainers, observeEngine, type ReconcilerMode } from "./coreOwnership.js";
+
+const CORE_NETWORKS = ["flagship-apps", "flagship-staging"];
 
 export function createBoxCoreOwnership(o: { cmd: CommandRunner; runner: AppRunner; mode: () => ReconcilerMode; log?: (m: string) => void }): CoreOwnership {
   let occupied: Array<{ network: string; ip: string }> = [];
@@ -12,11 +14,14 @@ export function createBoxCoreOwnership(o: { cmd: CommandRunner; runner: AppRunne
     mode: o.mode,
     observe: async () => {
       const r = await observeEngine(o.cmd);
-      occupied = r.occupied;
+      // The daemon's own pool keeps addresses for what it runs itself (an app group's members, a dedicated
+      // database) also while their containers are gone, as during an update's rollback: core must not take one then.
+      const held = await Promise.all(CORE_NETWORKS.map(async (network) => (await heldAddresses(network)).map((ip) => ({ network, ip }))));
+      occupied = [...r.occupied, ...held.flat()];
       return r.observed;
     },
     occupied: async () => occupied,
-    networks: () => networksFor(o.cmd, ["flagship-apps", "flagship-staging"]),
+    networks: () => networksFor(o.cmd, CORE_NETWORKS),
     removeContainer: async (w) => {
       if (w.installation !== "local-ai") return o.runner.removeOwned(w);
       // The model server's name changes with every start: find the one of this generation.
