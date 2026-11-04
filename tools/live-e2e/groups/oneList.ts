@@ -159,19 +159,22 @@ export const oneList: Group = {
       return "200 on home";
     });
 
-    await rec.check("a withdraw made while home2 restarts holds on home2 once it is back", async () => {
-      const power: PhoneOrder = { type: "power-off", serverId: b2.fqdn, mode: "restart", issuedAt: Date.now() };
+    await rec.check("a withdraw made while home2 is down holds on home2 once it is back", async () => {
+      // Shut down, not restart: a real restart is back in well under a minute (the bootlock fix, 508d9feb9), so the
+      // withdraw below could land after home2 returned and prove nothing about catching up. Powered on after it.
+      const power: PhoneOrder = { type: "power-off", serverId: b2.fqdn, mode: "off", issuedAt: Date.now() };
       const p = await postJson(`https://${b2.fqdn}/api/power`, { request: power, signature: bytesToHex(signPhoneOrder(power, A.keys.adminRoot)) });
-      assert(p.status === 200, `restart home2 ${p.status}: ${short(p.text)}`);
-      await until("home2 is down", async () => (await tryHttp(`https://${b2.fqdn}/api/front-page`, {}, 8_000)).status !== 200, 120_000, 3_000);
-      // A gym box has no boot worker, so the box turns the restart into a shutdown; the harness presses the power button.
-      const powered = b2.serverId ? await startIfStopped(b2.serverId) : "no server id";
-      rec.log(`home2 power: ${powered}`);
+      assert(p.status === 200, `power off home2 ${p.status}: ${short(p.text)}`);
+      await until("home2 is down", async () => (await tryHttp(`https://${b2.fqdn}/api/front-page`, {}, 8_000)).status !== 200, 3 * 60_000, 3_000);
       const revoke = { inviteId, issuedAt: Date.now() };
       const signature = bytesToHex(signRevokeServiceInvite(revoke, A.keys.adminRoot));
       const w = await postJson(`https://${b1.fqdn}/api/service-access/invite-withdraw`, { revoke, signature });
       assert(w.status === 200, `withdraw on home ${w.status}: ${short(w.text)}`);
       assert((await knock(b1, friend)) === 401, "the friend still gets in on home");
+      // The VM may still be shutting down ("already running"): press the button once it has really stopped.
+      let powered = "no server id";
+      for (const end = Date.now() + 4 * 60_000; b2.serverId && powered !== "started" && Date.now() < end; await sleep(5_000)) powered = await startIfStopped(b2.serverId, 10_000);
+      rec.log(`home2 power: ${powered}`);
       await until("home2 is back", async () => (await tryHttp(`https://${b2.fqdn}/api/front-page`, {}, 8_000)).status === 200, 10 * 60_000, 10_000);
       // From the moment it answers, home2 never lets the friend in: first it is
       // catching up (503), then it has the withdraw (401).
