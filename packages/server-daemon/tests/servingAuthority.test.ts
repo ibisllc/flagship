@@ -511,9 +511,9 @@ describe("HELLO carries the serving fields", () => {
 });
 
 describe("the old dead-man routes are gone", () => {
-  it("no /api/deadman route family, and a Remote session can't post serving records", () => {
-    expect(Object.keys(ROUTE_FAMILIES)).not.toContain("/api/deadman");
-    expect(authorizeRoute("companion", "GET", "/api/deadman").allow).toBe(false);
+  it("/api/deadman only answers 0.2 apps with the update sentence, and a Remote session can't post serving records", () => {
+    expect(ROUTE_FAMILIES["/api/deadman"]?.owner).toBe("public");
+    expect(ROUTE_FAMILIES["/api/deadman"]?.note).toMatch(/retired in 0\.3/);
     expect(authorizeRoute("companion", "POST", "/api/screens/serving").allow).toBe(false);
     expect(authorizeRoute("companion", "GET", "/api/screens/serving").allow).toBe(true);
   });
