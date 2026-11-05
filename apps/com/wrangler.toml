@@ -470,7 +470,8 @@ CA_ENDORSEMENT_ENFORCE = "true"
 DEMO_CLOUD_PROVIDER = "upcloud"
 UPCLOUD_ZONE = "de-fra1"
 UPCLOUD_PLAN = "STARTER-2xCPU-4GB"
-UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020070100"
+# Debian 13 (Trixie): 0.3 boxes need OpenSSL 3.5+ to check the artifact's ML-DSA half (Bookworm has 3.0).
+UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020080100"
 UPCLOUD_STORAGE_GB = "30"
 # DnsBroker Worker (Task #13) — when set, the main Worker forwards ALL
 # DNS mutations to the broker. Production posture: drop
