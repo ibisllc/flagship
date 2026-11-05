@@ -1081,7 +1081,7 @@ pin_guard() { # stop (or re-pin) when origin/main is not the pinned commit
   hdr "origin/main moved"
   say "pinned:      $PIN"
   say "origin/main: $cur"
-  git -C "$REPO" log --oneline --no-decorate "$PIN..$cur" 2>/dev/null | head -25 | sed 's/^/  /'
+  { git -C "$REPO" log --oneline --no-decorate "$PIN..$cur" 2>/dev/null || true; } | head -25 | sed 's/^/  /' || true
   if ! git -C "$REPO" merge-base --is-ancestor "$PIN" "$cur" 2>/dev/null; then
     warn "origin/main is not a descendant of the pinned commit (history was rewritten?)."
   fi
@@ -3141,6 +3141,7 @@ main() {
     l=$(phase_last "$phase")
     if [ -n "$from" ]; then f=$from; forced_first=1
     else
+      [ "$(st_get phaseB)" = finished ] && fail "the state file belongs to a finished release (pinned $(short "$(st_get pinned)"), whose phase B is done: start this one with --new (the old file is kept aside), or name a step with --from N / --only N"
       f=$(phase_first "$phase")
       local i; for ((i = f; i <= l; i++)); do st_has done "$i" || { f=$i; break; }; done
       if [ "$i" -gt "$l" ]; then say "phase $phase has every step recorded done. Use --new for a new release or --from N to redo a step."; exit 0; fi
