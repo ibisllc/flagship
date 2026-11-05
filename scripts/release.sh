@@ -1134,8 +1134,13 @@ BOX_PATHS=(packages/server-daemon installer packages/boot-core packages/protocol
 with_maintainers() { # run a command with the maintainers clone linked into the worktree
   [ -d "$MAIN_CHECKOUT/maintainers/packages/cli" ] || fail "the maintainers clone is missing at $MAIN_CHECKOUT/maintainers"
   ln -s "$MAIN_CHECKOUT/maintainers" "$WT/maintainers"
+  # yubikey-sign.mjs prints its signature but never exits (the PC/SC context keeps Node alive), so every
+  # caller waited forever: end it once it has printed (restored afterwards, so the worktree stays clean).
+  local sg="$WT/scripts/yubikey-sign.mjs"
+  if [ -f "$sg" ] && ! grep -q '^process.exit(0);$' "$sg"; then printf '\nprocess.exit(0);\n' >> "$sg"; fi
   local rc=0
   "$@" || rc=$?
+  git -C "$WT" checkout -q -- scripts/yubikey-sign.mjs 2>/dev/null || true
   rm -f "$WT/maintainers"
   return $rc
 }
@@ -1456,12 +1461,20 @@ run_artifacts() {
   say "  box release now: $(json_field commit < "$WT/release/box-release.json" | cut -c1-12), sequence $last"
   seq=$(ask_word "Sequence for $(short "$PIN") (must be above $last)")
   num_ge "$seq" "$((last + 1))" || fail "the sequence must be above $last"
-  confirm "Build the box artifacts for $(short "$PIN") (amd64 and arm64) in GitHub Actions now?" || return 10
-  XA "$REPO" gh workflow run box-artifact.yml --ref main -f commit="$PIN" -f sequence="$seq"
-  [ "$DRY" = 1 ] && return 0
-  sleep 8
-  local run; run=$(gh run list --workflow box-artifact.yml --limit 1 --json databaseId --jq '.[0].databaseId')
-  XA "$REPO" gh run watch "$run" --exit-status
+  local run
+  if [ -n "${BOX_ARTIFACT_RUN:-}" ]; then
+    # Reuse a finished box-artifact run (it must have been dispatched for this commit and this sequence).
+    run=$BOX_ARTIFACT_RUN
+    confirm "Reuse box-artifact run $run for $(short "$PIN") (sequence $seq) instead of building again?" || return 10
+    XA "$REPO" gh run watch "$run" --exit-status
+  else
+    confirm "Build the box artifacts for $(short "$PIN") (amd64 and arm64) in GitHub Actions now?" || return 10
+    XA "$REPO" gh workflow run box-artifact.yml --ref main -f commit="$PIN" -f sequence="$seq"
+    [ "$DRY" = 1 ] && return 0
+    sleep 8
+    run=$(gh run list --workflow box-artifact.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+    XA "$REPO" gh run watch "$run" --exit-status
+  fi
   local out="$ARTIFACTS/box-$(short "$PIN")" dl; rm -rf "$out"; mkdir -p "$out"; dl=$(mktemp -d)
   XA "$REPO" gh run download "$run" -D "$dl"
   find "$dl" -type f -name 'flagship-box-*' -exec mv {} "$out"/ \;
@@ -1471,7 +1484,13 @@ run_artifacts() {
     name="flagship-box-${PIN:0:12}-$arch"
     [ -f "$out/$name.manifest.unsigned.json" ] && [ -f "$out/$name.tar.gz" ] || fail "the run has no $name artifact"
     say "  sign $name (YubiKey PIN + touch):"
-    with_maintainers XA "$WT" npx tsx tools/box-artifact/build.ts sign --manifest "$out/$name.manifest.unsigned.json" --out "$out/$name.manifest.json" --signer-cmd "node $WT/scripts/yubikey-sign.mjs"
+    # The YubiKey signer runs as a direct child of this script (not under npx/tsx, which share the terminal and
+    # swallowed the PIN), on the canonical bytes written to a file; build.ts then takes its printed signature.
+    local bytes="$out/$name.canonical.bin" sigf="$out/$name.signature.txt"
+    ( cd "$WT" && IN="$out/$name.manifest.unsigned.json" OUT="$bytes" npx tsx -e 'import { readFileSync, writeFileSync } from "node:fs"; import { canonicalBoxArtifact } from "./packages/protocol/src/boxArtifact.ts"; writeFileSync(process.env.OUT!, Buffer.from(canonicalBoxArtifact(JSON.parse(readFileSync(process.env.IN!, "utf8")).manifest)));' ) || fail "could not write the canonical bytes of $name"
+    with_maintainers XA "$WT" sh -c 'node scripts/yubikey-sign.mjs < "$1" > "$2"' _ "$bytes" "$sigf"
+    XA "$WT" npx tsx tools/box-artifact/build.ts sign --manifest "$out/$name.manifest.unsigned.json" --out "$out/$name.manifest.json" --signer-cmd "cat '$sigf'"
+    rm -f "$bytes" "$sigf"
     if pq_pinned; then
       say "  PQ companion for $name (YubiKey PIN + touch to open the key):"
       with_maintainers XA "$WT" node scripts/pq-release-key.mjs sign-box-artifact --manifest "$out/$name.manifest.json" --out "$out/$name.manifest.json" --key-file "$PQ_KEY_FILE" --signing-key yubikey-piv:slot=9c
@@ -1490,7 +1509,9 @@ run_artifacts() {
   probe_code "amd64 manifest served" "$COM_URL/build/iso/flagship-box-${PIN:0:12}-amd64.manifest.json" 200
   XA "$WT" bash scripts/publish-gvisor-mirror.sh --skip-if-at "$COM_URL/build/iso"
   node -e 'const fs=require("fs");const [f,c,s]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.commit=c;j.sequence=Number(s);fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' "$WT/release/box-release.json" "$PIN" "$seq"
-  WX node scripts/gen-box-release.mjs --write
+  # box-release-regen: the generated constants AND the installer engine bundle Studio and Android ship, its golden
+  # vectors and the bootstrap pin (without it new burns installed the previous release).
+  WX node scripts/box-release-regen.mjs
   WX node scripts/repin-bootstrap-sha.mjs --write
   WX node scripts/gen-box-release.mjs --check
   local changed; changed=$(wt_git status --porcelain --untracked-files=no | awk '{print $2}')
@@ -2074,7 +2095,8 @@ run_meshseed() {
 relay_log_pub() { # .com's relay-log key (public), or nothing
   curl -fsS -m 15 "$COM_URL/api/serving/revocation-key" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const k=JSON.parse(s).publicKey;if(/^[0-9a-f]{64}$/.test(k))process.stdout.write(k)}catch{}})' || true
 }
-fly_secret_names() { flyctl secrets list -a "$RELAY_APP" 2>/dev/null | awk 'NR>1 && $1 ~ /^[A-Z_]+$/ {print $1}' | sort -u; }
+# --json: the table marks a staged secret "* NAME", which a first-word parse read as "*".
+fly_secret_names() { flyctl secrets list -a "$RELAY_APP" --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{for(const x of JSON.parse(s))console.log(x.name??x.Name)}catch{}})' | sort -u; }
 mesh_relay_key() { ( cd "$WT" && node scripts/relay-key.mjs pub "$MESH_SEED_FILE" ) 2>/dev/null | tail -1; }
 
 run_relaykey() {

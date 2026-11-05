@@ -22,3 +22,5 @@ if (message.length === 0) {
 const signer = await loadSigner(source, { pivPin: pivPinFromTty({ interactive: true }) });
 const sig = await signer.sign(message);
 process.stdout.write(`${signer.pubKey} ${sig}\n`);
+// The PC/SC context keeps Node alive after the signature is printed.
+process.exit(0);
