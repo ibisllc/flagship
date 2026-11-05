@@ -333,7 +333,9 @@ DIBS_WINDOW_START = "2026-10-25T00:00:00Z"
 DIBS_WINDOW_END = "2027-04-25T00:00:00Z"
 # voi.ci pages and Messages (docs/voici-and-messages.md, "Interfaces the chunks share"): "on" only after migration
 # 0123 and the store builds that speak it; off, every voi.ci page and Messages route answers 404.
-VOICI_ENABLED = "off"
+VOICI_ENABLED = "on"
+# The voi.ci zone, for takedown cache purges with the CLOUDFLARE_PURGE_TOKEN secret (voiciAbuse.ts).
+VOICI_FILES_ZONE_ID = "40579a73601f73c2a3cfeaac6d00366c"
 # 0.2 Studios send no `&studio=` level on the pairing relay: "2" refuses them with "This version of Flagship Studio
 # is out of date..." (builderRelay.ts). Turn on in the commit that publishes the 0.3 Studio downloads (release.sh
 # step studiowl), never before: until then a 0.2 Studio is the only one people can download.

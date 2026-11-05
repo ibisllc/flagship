@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 /**
  * POST /api/accounts/<u>/messages-attestation (docs/voici-and-messages.md §6.3, §9.4, §9.5) over a real
  * D1-over-sqlite binding, with the device checks faked (FakeDeviceIntegrity). The last case is the privacy rule:
@@ -275,8 +276,10 @@ describe("abuse key list", () => {
     expect(verifiedAbuseKeys(null, [trackPub])).toEqual([]);
   });
 
-  it("reads the committed chain and the committed (empty) list", () => {
+  it("reads the committed chain and the committed list, every entry verified under the ca track", () => {
     expect(caTrackHolders().length).toBeGreaterThan(0);
-    expect(bundledAbuseKeys()).toEqual([]);
+    const raw = JSON.parse(readFileSync(new URL("../../../.maintainers/abuse-keys/list.json", import.meta.url), "utf8")) as { entries: unknown[] };
+    expect(bundledAbuseKeys().length).toBe(raw.entries.length);
+    expect(bundledAbuseKeys().map((e) => e.epoch)).toContain(1);
   });
 });
