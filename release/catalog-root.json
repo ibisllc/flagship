@@ -1,0 +1,36 @@
+{
+  "role": "root",
+  "format": 1,
+  "version": 1,
+  "expiresAt": 1856946242927,
+  "keys": {
+    "root-1": "fd6eac57e7fb13a11429ee6de243879a2871b247e01163bdc61c5ebe39a59df1",
+    "timestamp-1": "f6ac34b60ab5243d83eb3f7659a26d2f1cf6fc820532d4043d4d3e863f224e77"
+  },
+  "roles": {
+    "root": {
+      "keyIds": [
+        "root-1"
+      ],
+      "threshold": 1
+    },
+    "timestamp": {
+      "keyIds": [
+        "timestamp-1"
+      ],
+      "threshold": 1
+    },
+    "snapshot": {
+      "keyIds": [
+        "root-1"
+      ],
+      "threshold": 1
+    },
+    "targets": {
+      "keyIds": [
+        "root-1"
+      ],
+      "threshold": 1
+    }
+  }
+}
