@@ -74,6 +74,8 @@ private fun clientContext(trust: X509Certificate): SSLContext {
 }
 
 /** Drives a client SSLEngine against a TlsServerStream in memory; returns the plaintext answer. */
+private var lastPeerCertificate: X509Certificate? = null
+
 private fun roundTrip(server: (toClient: (ByteArray) -> Unit) -> TlsServerStream, client: SSLEngine, request: String): String {
     val toClient = LinkedBlockingQueue<ByteArray>()
     val s = server { toClient.add(it) }
@@ -95,6 +97,8 @@ private fun roundTrip(server: (toClient: (ByteArray) -> Unit) -> TlsServerStream
             else -> {}
         }
         if (!sent && client.handshakeStatus == SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
+            // Read the peer certificate now: newer JDKs invalidate the session once the server closes it.
+            lastPeerCertificate = runCatching { client.session.peerCertificates[0] as X509Certificate }.getOrNull()
             val out = ByteBuffer.allocate(client.session.packetBufferSize)
             client.wrap(ByteBuffer.wrap(request.toByteArray()), out)
             out.flip()
@@ -150,7 +154,7 @@ class PhoneEndpointTest {
         }, client, "GET /.well-known/flagship-phone HTTP/1.1\r\nhost: $HOST\r\n\r\n")
         assertTrue(answer, answer.startsWith("HTTP/1.1 200"))
         assertTrue(answer.contains("\"phoneRoutePub\":\"$pub\""))
-        assertEquals(HOST, (client.session.peerCertificates[0] as X509Certificate).subjectX500Principal.name.substringAfter("CN="))
+        assertEquals(HOST, lastPeerCertificate!!.subjectX500Principal.name.substringAfter("CN="))
         assertFalse("no CORS header is ever sent", answer.lowercase().contains("access-control-"))
     }
 
