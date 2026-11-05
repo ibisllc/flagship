@@ -439,11 +439,11 @@ SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
 # WebSocket URL daemons dial for the tunnel hub. Surfaced at
 # /api/services/endpoints so daemons can discover migrations silently
 # (no need to update each daemon's environment when we move the hub).
-TUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"
+TUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"
 # The relay mesh (relay-mesh.md): "on" publishes the relay feed and runs its 5 s head alarm, and
 # GET /api/services/endpoints defaults tunnelHub to wss://tunnel.<servicesApex>:8443/tunnel. Off until
 # rollout step 1 (§13.2): the current relay keeps using the internal routes.
-RELAY_MESH = "off"
+RELAY_MESH = "on"
 # Cloudflare zone ID for flagship.services. Used ONLY in the legacy
 # direct-CF-token mode below; production routes DNS through the
 # dns-broker Worker via DNS_BROKER_URL.
