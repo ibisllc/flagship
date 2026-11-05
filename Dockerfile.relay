@@ -24,6 +24,9 @@ COPY --from=builder /out/flagship-relay /usr/local/bin/flagship-relay
 # `.maintainers/` (the gym worktree's carries the gym-root mandate; the gym also sets FLAGSHIP_RELAY_MAINTAINER_PIN).
 # Public files, read-only to the relay. A relay, like a box, needs a new image before the newest CA lease ends.
 COPY .maintainers /app/.maintainers
+# A checkout made under umask 077 copies in as 0700/0600, which the relay user cannot read (the first prod deploy
+# exited with "Permission denied" on tracks/ca/mandates): make the tree readable whatever the build tree's modes.
+RUN chmod -R a+rX /app/.maintainers
 USER relay
 ENV PORT=3000 TUNNEL_TCP_PORT=8443 RELAY_ECHO_PORT=3001 FLAGSHIP_RELAY_MAINTAINERS_DIR=/app/.maintainers
 EXPOSE 3000 8443 3001
