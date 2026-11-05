@@ -348,9 +348,11 @@ The gym Worker has its own, different value (`--config wrangler.gym.toml`).
 
 ## 2. Renew the CA lease (due 2026-11-05, and do it before anything that needs the CA)
 
-The production CA's only live lease expires 2026-11-05 (`.maintainers/
-ca-endorsements/bundle.json`, last entry `notAfter 2026-11-05T19:31:05Z`). After
-it every CA-chain check fails closed: app trust checks, relay blessing, boxes
+Renewed in `072ee32de`: the live lease ends 2027-01-17 (`.maintainers/
+ca-endorsements/bundle.json`), so sign a new one only when `rotate-ca.mjs status`
+says it is within 14 days of its end. A box reads the lease from its own checkout,
+so a box not updated since `072ee32de` lost its lease on 2026-11-05 until it
+updates. After a lease ends every CA-chain check fails closed: app trust checks, relay blessing, boxes
 accepting a share, the box's own bootstrap. Renew **before** you deploy, so the
 deploy bundles a lease with runway.
 
@@ -1542,7 +1544,7 @@ account. The plan file and its `.log.jsonl` list exactly what went.
 
 (From the release-candidate pass; the owner decides.)
 
-- The CA lease expiring 2026-11-05 (step 2): a hard date.
+- The CA lease end (step 2): live lease ends 2027-01-17; renew within 14 days of it.
 - Store builds: the iOS and Android builds in review/live predate a lot of
   `main` (including the Android lease fix); the current Play build does not
   create servers on a real account (`add-server-admin-only`) until new builds

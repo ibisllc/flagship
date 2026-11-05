@@ -2603,8 +2603,8 @@
       "security.html"
     ]
   },
-  "s1713373fd3": {
-    "en": "<1>Quantum-safe groundwork.</1> Servers and phones hold ML-DSA-65 keys bound to their Ed25519 keys, and a hybrid channel (X-Wing: ML-KEM-768 with X25519) is built, with an opt-in setting on iPhone and Android. Release signatures, install packages and boot leases need their quantum-safe half only after our signing ceremony. All of this is pending external review; it is not a claim that Flagship is quantum-safe today.",
+  "s67b59929c6": {
+    "en": "<1>Quantum-safe groundwork.</1> Servers and phones hold ML-DSA-65 keys bound to their Ed25519 keys, and a hybrid channel (X-Wing: ML-KEM-768 with X25519) is built, with an opt-in setting on iPhone and Android. Release signatures, install packages and new CA leases now carry a quantum-safe signature (ML-DSA-65) beside the classical one, and servers and apps refuse them without it. All of this is pending external review; it is not a claim that Flagship is quantum-safe today.",
     "kind": "text",
     "ctx": "li",
     "pages": [
