@@ -25,3 +25,16 @@ Work the owner has put on 0.4. F6b (the gym on a private test CA, `docs/gym-test
      (nothing breaks; most traffic becomes quantum-safe). Measure how many sessions fall back.
   3. After the external review and with the bypass list empty: strict on by default for new accounts, a clear
      switch for existing ones, and the apps explain each refusal.
+
+- **Take the zone-wide DNS token off `.com` (owner, 2026-11-05).** Cloudflare can't scope a token by record type or
+  name, so `.com`'s `CLOUDFLARE_DNS_API_TOKEN` can rewrite all of `flagship.services`, including the `*` wildcard; a
+  `.com` compromise could redirect every server name (it still could not read traffic: TLS ends on the box and the
+  apps pin box certificates). `apps/dns-broker` was built to be the only holder of that token, but production never
+  turned it on (`DNS_BROKER_URL` unset, the Worker never deployed; release step 20 was skipped for 0.3) and in 0.3 its
+  remaining job, challenge TXT records, moved to the issuance service (`apps/com/src/certificateIssuance.ts`). Move
+  those `_acme-challenge` writes (and any other DNS write `.com` still makes) behind the broker, or a small dedicated
+  Worker, with a policy that allows only challenge TXT under names `.com` has an open order for, set `DNS_BROKER_URL`,
+  then delete the token from `.com`. Also make release step 20 skip itself while `DNS_BROKER_URL` is unset.
+- **A hybrid release catalog (owner, 2026-11-05).** The catalog root and timestamp keys are Ed25519 only
+  (`tools/release-catalog/catalog.ts`). A forged catalog can only delay or withhold releases, since every release it
+  names also needs the hybrid endorsement and a hybrid-signed artifact, but it belongs with the quantum-safe item.
