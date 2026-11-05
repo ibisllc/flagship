@@ -107,9 +107,9 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
   // src/boxReleaseConfig.ts
   var BOX_RELEASE = {
     /** The exact source commit new servers install. Never a branch or a tag. */
-    commit: "386e29c84899283c167c9ce983d2dc2acbaa4f11",
+    commit: "52c67f8848eeb878cc9f63e84786b81f6933d19c",
     /** The manifest sequence a box must not go below. */
-    minSequence: 1,
+    minSequence: 2,
     artifactBase: "https://flagshipserver.com/build/iso",
     trust: {
       threshold: 1,

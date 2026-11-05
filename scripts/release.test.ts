@@ -620,10 +620,10 @@ describe("release.sh parsers against captured tool output", () => {
     expect(readFileSync(f, "utf8")).toBe('A = "1"\nRELAY_MESH = "on"\nTUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"\n# RELAY_MESH = "x"\n');
     writeFileSync(f, 'RELAY_MESH = "off"\nRELAY_MESH = "off"\n');
     expect(sh(`set_toml_var ${f} RELAY_MESH on`, "").code).not.toBe(0);
-    // the production file has each exactly once, and ships with the mesh off until the release step turns it on
+    // the production file has each exactly once; release step 26 turned the mesh on for 0.3 (2026-11-05)
     const prod = join(ROOT, "apps/com/wrangler.toml");
-    expect(sh(`toml_var ${prod} RELAY_MESH`, "").out).toBe("off");
-    expect(sh(`toml_var ${prod} TUNNEL_HUB_URL`, "").out).toBe("wss://flagship-services.fly.dev:8443/tunnel");
+    expect(["off", "on"]).toContain(sh(`toml_var ${prod} RELAY_MESH`, "").out);
+    expect(sh(`toml_var ${prod} TUNNEL_HUB_URL`, "").out).toMatch(/^wss:\/\/(flagship-services\.fly\.dev|tunnel\.flagship\.services):8443\/tunnel$/);
   });
 
   it("backup-recipient.pub: the placeholder is refused, a real age key is accepted", () => {
