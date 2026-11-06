@@ -11,6 +11,11 @@ public struct VoiciComError: Error, Equatable, Sendable {
     public var limit: Int?
     /// What a 409 carries: the stored index (`seq-conflict`) or state blob (`version-conflict`).
     public let stored: JSONValue?
+    /// A `seq-conflict` 409 also names the stored seq, pageId and whether the owner removed the page: after a removal
+    /// the stored seq is the removal's, one above the index's. `wrong-page` names the stored pageId.
+    public var storedSeq: Int64?
+    public var storedPageId: String?
+    public var storedRemoved = false
 
     public init(status: Int, code: String, retryAfterSec: Int? = nil, stored: JSONValue? = nil) {
         self.status = status; self.code = code; self.retryAfterSec = retryAfterSec; self.stored = stored
@@ -22,6 +27,9 @@ public struct VoiciComError: Error, Equatable, Sendable {
                               retryAfterSec: v?["retryAfterSec"]?.safeInt.map(Int.init),
                               stored: v?["index"] ?? v?["state"])
         e.limit = v?["limit"]?.safeInt.map(Int.init)
+        e.storedSeq = v?["seq"]?.safeInt
+        e.storedPageId = v?["pageId"]?.string
+        e.storedRemoved = v?["removed"] == .bool(true)
         return e
     }
 }
@@ -69,6 +77,8 @@ public protocol VoiciComClient: Sendable {
     func piece(pageId: String, sha256: String) async throws -> [UInt8]
     func uploadPiece(username: String, upload: VoiciPieceUpload, signerPub: String, signature: String, bytes: [UInt8]) async throws
     func publish(username: String, index: JSONValue) async throws
+    /// `POST /api/voici/pages/<u>/remove` with a signed VoiciPageRemove: the page reads as "no page" afterwards.
+    func removePage(username: String, remove: JSONValue) async throws
     func depositDraft(username: String, envelope: JSONValue, device: VoiciDeviceSigner) async throws
     func drafts(username: String) async throws -> [JSONValue]
     func consumeDrafts(username: String, opIds: [String], issuedAt: Int64, signerPub: String, signature: String) async throws
@@ -99,6 +109,7 @@ public enum VoiciComPaths {
     public static func page(_ u: String) -> String { "/api/voici/pages/\(seg(u))" }
     public static func pieces(_ u: String) -> String { page(u) + "/pieces" }
     public static func publish(_ u: String) -> String { page(u) + "/publish" }
+    public static func remove(_ u: String) -> String { page(u) + "/remove" }
     public static func inbox(_ u: String) -> String { page(u) + "/inbox" }
     public static func block(_ u: String) -> String { page(u) + "/block" }
     public static func drafts(_ u: String) -> String { "/api/accounts/\(seg(u))/voici-drafts" }
@@ -207,6 +218,10 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
 
     public func publish(username: String, index: JSONValue) async throws {
         try await call(try json("POST", VoiciComPaths.publish(username), ["index": index]))
+    }
+
+    public func removePage(username: String, remove: JSONValue) async throws {
+        try await call(try json("POST", VoiciComPaths.remove(username), remove))
     }
 
     public func depositDraft(username: String, envelope: JSONValue, device: VoiciDeviceSigner) async throws {

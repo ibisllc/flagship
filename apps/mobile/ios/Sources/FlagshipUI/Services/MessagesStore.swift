@@ -33,7 +33,12 @@ public final class MessagesStore {
 
     // MARK: the page
 
+    /// The last signed index this device saw. After "Remove my page" it stays (its pageId and inbox keys still open the
+    /// conversations) and `isRemoved` is set.
     public private(set) var index: VoiciPageIndex?
+    /// The page was taken down (here or on another device): `.com` answers "no page". Its content stays on the device.
+    public private(set) var isRemoved = false
+    /// The last published content; kept after a removal so turning the page on again republishes it.
     public private(set) var published: VoiciPageState?
     public private(set) var accountKeys: VoiciAccountKeys?
     /// This device's edits not yet in a published index.
@@ -81,13 +86,15 @@ public final class MessagesStore {
         guard changed else { return }
         self.username = u
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
-        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil
+        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false
         local = Local()
         guard !u.isEmpty else { return }
         load()
     }
 
     public var isAdmin: Bool { Keystore.hasAdminRoot }
+    /// Visitors see the page on voi.ci now.
+    public var isPublic: Bool { index != nil && !isRemoved }
     public var hasAccount: Bool {
         #if DEBUG
         if sampleAccountsHavePages { return !username.isEmpty }
@@ -226,9 +233,6 @@ public final class MessagesStore {
             await checkReplies()
             phase = .ready
             lastError = nil
-            if isAdmin, index != nil, pendingCount > 0, Keystore.messagesUMKIfCached() != nil, silentSigner() != nil {
-                await publish(signer: silentSigner())
-            }
             updatePhoneInbox()
         } catch {
             lastError = Self.sentence(error)
@@ -253,13 +257,32 @@ public final class MessagesStore {
     }
 
     private func loadPage(_ client: any VoiciComClient, _ keys: VoiciAccountKeys) async throws {
-        guard let raw = try await client.page(username: username) else { return }
+        guard let raw = try await client.page(username: username) else {
+            // No page on `.com`: never made, or removed (here or on another device). Its content stays here.
+            if index != nil, !isRemoved {
+                isRemoved = true
+                save()
+            }
+            return
+        }
+        try await adopt(raw, client, keys)
+    }
+
+    /// Takes a signed index read from `.com` (a read, or the one a 409 carries), checked against the account's own key and
+    /// never older than the highest seq this device saw (an old index or a removal can't be replayed).
+    private func adopt(_ raw: JSONValue, _ client: any VoiciComClient, _ keys: VoiciAccountKeys) async throws {
         let s = keys.sensitive
         guard case .ok(let idx) = VoiciPage.checkVoiciPageIndex(raw, username: username, sensitiveKind: s.kind, sensitivePub: s.pub,
                                                                   highestSeenSeq: local.highestSeq) else {
             throw VoiciComError(status: 200, code: "page-unchecked")
         }
-        if let i = index, i.seq == idx.seq, published != nil { return }
+        if let i = index, i.seq == idx.seq, published != nil {
+            if isRemoved {
+                isRemoved = false
+                save()
+            }
+            return
+        }
         guard let content = try await VoiciOwner.content(idx, fetch: { try await client.piece(pageId: idx.pageId, sha256: $0.sha256) }) else {
             throw VoiciComError(status: 200, code: "page-unchecked")
         }
@@ -270,6 +293,8 @@ public final class MessagesStore {
         published = content
         local.highestSeq = max(local.highestSeq, idx.seq)
         local.pageId = idx.pageId
+        isRemoved = false
+        PageWelcomeCardStore.recordPublished(username: username)
         save()
     }
 
@@ -353,24 +378,52 @@ public final class MessagesStore {
     private func record(_ op: VoiciDraftOp) async {
         ownOps.append(op)
         save()
-        if isAdmin {
-            if index != nil, let signer = silentSigner() { await publish(signer: signer) }
-        } else {
-            await handOff(op)
-        }
+        // Every edit is a draft until Publish on an admin device (or the quick controls on the Messages header).
+        if !isAdmin { await handOff(op) }
     }
 
+    /// A profile draft. It replaces this device's earlier profile draft that hasn't left the device, so the editor's
+    /// "N changes not published" counts what changed, not every keystroke; no draft when it equals what's published.
     public func setProfile(_ profile: VoiciProfile, avatar: [UInt8]?) async {
+        if let avatar { VoiciImageStore.save(avatar) }
         var images: [VoiciDraftImage]?
-        if let avatar, let sha = profile.avatar {
-            VoiciImageStore.save(avatar)
-            images = [VoiciDraftImage(sha256: sha, data: CanonicalJson.b64Encode(avatar))]
+        if let sha = profile.avatar, sha != base.profile.avatar, let b = avatar ?? VoiciImageStore.load(sha) {
+            images = [VoiciDraftImage(sha256: sha, data: CanonicalJson.b64Encode(b))]
         }
+        ownOps.removeAll { $0.op == "profile" && local.handed[$0.opId] == nil }
+        guard profile != base.profile || laneOps.contains(where: { $0.op == "profile" }) else { save(); return }
         await record(VoiciDraftOp(opId: newId(), op: "profile", at: now(), deviceId: deviceId, profile: profile, images: images))
     }
 
     public func setAcceptsMessages(_ on: Bool) async {
+        ownOps.removeAll { $0.op == "accept-messages" && local.handed[$0.opId] == nil }
+        guard (on ? 1 : 0) != base.acceptsMessages || laneOps.contains(where: { $0.op == "accept-messages" }) else { save(); return }
         await record(VoiciDraftOp(opId: newId(), op: "accept-messages", at: now(), deviceId: deviceId, accepts: on ? 1 : 0))
+    }
+
+    /// The Messages header's name and photo. While the page is public, an admin device publishes just this change at
+    /// once (other drafts stay drafts); otherwise it is a draft like any other. Returns a sentence when refused.
+    public func setQuickProfile(displayName: String, avatar: [UInt8]?, removeAvatar: Bool = false) async -> String? {
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping
+        if let r = VoiciText.checkVoiciText(.displayName, name) {
+            return r == .tooShort ? String(localized: "Add a display name.") : Self.textSentence(r)
+        }
+        if let avatar { VoiciImageStore.save(avatar) }
+        let sha = removeAvatar ? nil : avatar.map { CanonicalJson.sha256Hex($0) } ?? preview.profile.avatar
+        if isPublic && isAdmin {
+            var q = base.profile
+            q.displayName = name
+            q.avatar = sha
+            guard q != base.profile else { return nil }
+            await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: now(), deviceId: deviceId, profile: q)])
+            return publishError
+        }
+        var q = preview.profile
+        q.displayName = name
+        q.avatar = sha
+        guard q != preview.profile else { return nil }
+        await setProfile(q, avatar: avatar)
+        return nil
     }
 
     public func addPost(text: String, links: [VoiciPostLink], images: [String: [UInt8]]) async {
@@ -433,42 +486,73 @@ public final class MessagesStore {
         Keystore.hasAdminRoot ? Keystore.sessionAdminRoot() : Keystore.sessionIRKIfCached()
     }
 
-    /// The editor's Publish button: asks for Face ID when the session holds no key.
-    public func publishNow() async {
-        if let s = silentSigner() { await publish(signer: s); return }
+    /// The sensitive key for one signature: the unlocked session's key when it needs no prompt, else Face ID. The same
+    /// rule for publishing and removing the page, so neither is ever signed with a weaker key or more silently.
+    private func sensitiveSigner(reason: String) async -> Curve25519.Signing.PrivateKey? {
+        if let s = silentSigner() { return s }
         do {
-            let s = try await ServerOrderSaver.sensitiveOrderKey(reason: String(localized: "Publish your page"))
-            await publish(signer: s)
+            return try await ServerOrderSaver.sensitiveOrderKey(reason: reason)
         } catch {
             publishError = Self.sentence(error)
+            return nil
         }
     }
 
-    /// Rotate the inbox key: the next index names `inboxEpoch + 1`; messages sealed to the old key stay readable here.
-    public func rotateInbox() async {
-        guard let idx = index else { return }
-        local.pendingEpoch = idx.inboxEpoch + 1
-        save()
-        await publishNow()
+    /// The editor's Publish bar: every pending change (this device's and the other devices'), Face ID when the session
+    /// holds no key. The caller has already shown the one-time warning when the page is not public.
+    public func publishNow() async {
+        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return }
+        await publish(signer: s)
     }
 
-    func publish(signer: Curve25519.Signing.PrivateKey?) async {
+    /// The Public switch turned on: the page goes up with its name and photo as the header shows them, on top of what
+    /// was published last (a page turned off comes back as it was); every other draft stays a draft.
+    public func goPublic() async {
+        guard isAdmin, !isPublic else { return }
+        var q = base.profile
+        q.displayName = preview.profile.displayName
+        q.avatar = preview.profile.avatar
+        await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: now(), deviceId: deviceId, profile: q)], mayRepublish: true)
+    }
+
+    /// Publishes exactly `ops` (never the other drafts).
+    func publishQuick(_ ops: [VoiciDraftOp], mayRepublish: Bool = false) async {
+        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return }
+        await publish(signer: s, only: ops, mayRepublish: mayRepublish)
+    }
+
+    /// Rotate the inbox key: the next index names `inboxEpoch + 1`; messages sealed to the old key stay readable here.
+    /// Only the key changes: drafts stay drafts.
+    public func rotateInbox() async {
+        guard let idx = index, isPublic else { return }
+        local.pendingEpoch = idx.inboxEpoch + 1
+        save()
+        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return }
+        await publish(signer: s, only: [])
+    }
+
+    /// - Parameters:
+    ///   - only: publish just these ops on top of the published page; nil publishes every pending change.
+    ///   - mayRepublish: only the Public switch (after its warning) may bring back a page another device took down;
+    ///     any other publish that learns of the removal from a 409 stops there.
+    func publish(signer: Curve25519.Signing.PrivateKey?, only: [VoiciDraftOp]? = nil, mayRepublish: Bool = false) async {
         guard let signer, isAdmin, let client, !isPublishing else { return }
         isPublishing = true
         publishError = nil
         defer { isPublishing = false }
         for _ in 0..<3 {
             do {
-                try await publishOnce(client, signer)
+                try await publishOnce(client, signer, only: only)
                 return
             } catch let e as VoiciComError where e.code == "seq-conflict" {
-                // Another admin device published first: take its page, merge again, re-sign seq + 1.
-                if let keys = accountKeys {
-                    local.highestSeq = 0
-                    index = nil
-                    published = nil
-                    try? await loadPage(client, keys)
-                }
+                // Another admin device published (or removed the page) first: take what `.com` holds, merge again,
+                // re-sign the next seq. Bounded: three tries in all.
+                await takeConflict(client, e)
+                if isRemoved && !mayRepublish { return }
+            } catch let e as VoiciComError where e.code == "wrong-page" && index == nil && e.storedPageId.map({ CanonicalJson.isLowerHex($0, bytes: 16) }) == true {
+                // A device that never saw the page (it was removed before) continues it under its own pageId.
+                local.pageId = e.storedPageId!
+                save()
             } catch {
                 publishError = Self.sentence(error)
                 return
@@ -477,42 +561,131 @@ public final class MessagesStore {
         publishError = String(localized: "Couldn't publish. Try again.")
     }
 
-    private func publishOnce(_ client: any VoiciComClient, _ signer: Curve25519.Signing.PrivateKey) async throws {
+    /// A 409's stored index (checked against the account's own key, never older than what this device saw), or, for a
+    /// removed page, the seq the ladder stands at.
+    private func takeConflict(_ client: any VoiciComClient, _ e: VoiciComError) async {
+        if e.storedRemoved {
+            // Taken down (on another device): its stored index is the old public one, its seq the removal's.
+            local.highestSeq = max(local.highestSeq, e.storedSeq ?? 0)
+            if let p = e.storedPageId, index == nil { local.pageId = p }
+            if index != nil { isRemoved = true }
+            save()
+        } else if let raw = e.stored, raw != .null, let keys = accountKeys {
+            try? await adopt(raw, client, keys)
+        } else if let keys = accountKeys {
+            try? await loadPage(client, keys)
+        }
+    }
+
+    /// The seq the next signed record takes: one above anything this device saw (a publish or a removal).
+    private var nextSeq: Int64 { max(index?.seq ?? 0, local.highestSeq) + 1 }
+
+    private func publishOnce(_ client: any VoiciComClient, _ signer: Curve25519.Signing.PrivateKey, only: [VoiciDraftOp]?) async throws {
         let epoch = local.pendingEpoch ?? index?.inboxEpoch ?? 1
         guard let k = keys(epoch: epoch) else { throw VoiciComError(status: 0, code: "locked") }
-        let ops = ownOps + laneOps.filter { op in !ownOps.contains { $0.opId == op.opId } }
+        let ops = only ?? (ownOps + laneOps.filter { op in !ownOps.contains { $0.opId == op.opId } })
         let merged = VoiciPage.mergeVoiciPage(base, ops: ops)
         var images: [String: [UInt8]] = [:]
         for sha in VoiciOwner.imageHashes(merged) { images[sha] = VoiciImageStore.load(sha) }
         guard let pieces = try VoiciOwner.pieces(merged, images: images) else { throw VoiciComError(status: 0, code: "missing-image") }
         let seed = Array(signer.rawRepresentation)
         let signerPub = HexUtil.encode(signer.publicKey.rawRepresentation)
-        let have = Set(index?.pieces.map(\.sha256) ?? [])
+        // After a removal `.com` may have dropped the pieces: send them all again.
+        let have = isRemoved ? [] : Set(index?.pieces.map(\.sha256) ?? [])
         for p in pieces where !have.contains(p.ref.sha256) {
             let up = VoiciPieceUpload(username: username, pageId: k.pageId, sha256: p.ref.sha256, size: p.ref.size, issuedAt: now())
             try await client.uploadPiece(username: username, upload: up, signerPub: signerPub,
                                          signature: try VoiciPage.signVoiciPieceUpload(up, signerSeed: seed), bytes: p.bytes)
         }
-        let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: (index?.seq ?? 0) + 1, issuedAt: now(),
+        let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
                                   acceptsMessages: merged.acceptsMessages, inboxEpoch: epoch, inboxPub: k.inboxPub, ownerSignPub: k.signPub,
                                   pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk")
         let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: seed)
         try await client.publish(username: username, index: idx.json)
-        let laneIds = laneOps.map(\.opId)
-        if !laneIds.isEmpty {
-            let at = now()
-            let sig = try CanonicalJson.ed25519SignHex(VoiciComPaths.canonicalDraftsConsume(username: username, opIds: laneIds, issuedAt: at), seed: seed)
-            try? await client.consumeDrafts(username: username, opIds: laneIds, issuedAt: at, signerPub: signerPub, signature: sig)
+        if only == nil {
+            let laneIds = laneOps.map(\.opId)
+            if !laneIds.isEmpty {
+                let at = now()
+                let sig = try CanonicalJson.ed25519SignHex(VoiciComPaths.canonicalDraftsConsume(username: username, opIds: laneIds, issuedAt: at), seed: seed)
+                try? await client.consumeDrafts(username: username, opIds: laneIds, issuedAt: at, signerPub: signerPub, signature: sig)
+            }
+            ownOps = []
+            laneOps = []
+        } else {
+            ownOps = Self.carry(ownOps, over: merged, issuedAt: idx.issuedAt)
+            laneOps = Self.carry(laneOps, over: merged, issuedAt: idx.issuedAt)
         }
         index = idx
+        isRemoved = false
         published = VoiciPageState(profile: merged.profile, acceptsMessages: merged.acceptsMessages, chunks: merged.chunks, issuedAt: idx.issuedAt)
         local.highestSeq = idx.seq
         local.pageId = idx.pageId
         local.pendingEpoch = nil
-        ownOps = []
-        laneOps = []
+        PageWelcomeCardStore.recordPublished(username: username)
         save()
         updatePhoneInbox()
+    }
+
+    /// The drafts left after a quick publish: profile drafts take the name and photo just published (and vanish when
+    /// nothing else in them differs), and profile and accept-messages drafts stay newer than the published page, so
+    /// the merge (later `at` wins) still applies them.
+    nonisolated static func carry(_ ops: [VoiciDraftOp], over published: VoiciPageState, issuedAt: Int64) -> [VoiciDraftOp] {
+        ops.compactMap { op in
+            var o = op
+            if o.op == "profile", var p = o.profile {
+                p.displayName = published.profile.displayName
+                p.avatar = published.profile.avatar
+                if p == published.profile { return nil }
+                o.profile = p
+                o.images = o.images?.filter { $0.sha256 == p.avatar }
+                if o.images?.isEmpty == true { o.images = nil }
+            }
+            if o.op == "profile" || o.op == "accept-messages" { o.at = max(o.at, issuedAt + 1) }
+            return o
+        }
+    }
+
+    /// "Remove my page": a signed VoiciPageRemove on the publish ladder (seq + 1), with the key and the Face ID rule
+    /// publishing uses. Visitors then see "There's no page here."; posts, profile, drafts and conversations stay here.
+    public func removePage() async {
+        guard isAdmin, isPublic, let client, var current = index, !isPublishing else { return }
+        guard let signer = await sensitiveSigner(reason: String(localized: "Remove your page")) else { return }
+        isPublishing = true
+        publishError = nil
+        defer { isPublishing = false }
+        for attempt in 0..<2 {
+            do {
+                let r = try VoiciPageRemove.sign(username: username, pageId: current.pageId, seq: max(current.seq, local.highestSeq) + 1,
+                                                 issuedAt: now(), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk",
+                                                 signerSeed: Array(signer.rawRepresentation))
+                try await client.removePage(username: username, remove: r.json)
+                local.highestSeq = r.seq
+                isRemoved = true
+                save()
+                updatePhoneInbox()
+                return
+            } catch let e as VoiciComError where e.code == "seq-conflict" && attempt == 0 {
+                // Another admin device published first: refresh and retry once, on the index `.com` now holds.
+                await takeConflict(client, e)
+                guard let i = index, isPublic else { return }
+                current = i
+            } catch let e as VoiciComError where e.code == "not-found" {
+                // Already gone (removed on another device).
+                isRemoved = true
+                save()
+                updatePhoneInbox()
+                return
+            } catch {
+                publishError = Self.removeSentence(error)
+                return
+            }
+        }
+        publishError = String(localized: "Couldn't remove your page. Try again.")
+    }
+
+    static func removeSentence(_ error: Error) -> String {
+        if let e = error as? VoiciComError, e.code == "wrong-signer" { return String(localized: "Only an admin device can remove your page.") }
+        return sentence(error)
     }
 
     // MARK: Messages actions (§7.4, §9, §10.1)
@@ -764,7 +937,6 @@ public final class MessagesStore {
         laneOps.append(op)
         local.handed[op.opId] = "received"
         save()
-        if let s = silentSigner() { await publish(signer: s) }
     }
 
     /// The app locked or went to the background: drop every key from memory.
@@ -823,9 +995,24 @@ public final class MessagesStore {
             "ownOps": .array(ownOps.map(\.json)),
             "laneOps": .array(laneOps.map(\.json)),
             "index": index?.json ?? .null,
+            "removed": .bool(isRemoved),
+            // The published content is public; kept so a page turned off can come back as it was.
+            "published": published?.json ?? .null,
         ]
         guard let text = try? CanonicalJson.canonicalJson(v) else { return }
         try? Data(text.utf8).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    /// VoiciPageState.json read back (this device's own copy; each piece is checked like a published one).
+    nonisolated static func parseState(_ v: JSONValue) -> VoiciPageState? {
+        guard let profile = VoiciPage.parseVoiciProfile(v["profile"]), let accepts = v["acceptsMessages"]?.safeInt,
+              let chunks = v["chunks"]?.array, let issuedAt = v["issuedAt"]?.safeInt else { return nil }
+        var out: [[VoiciPost]] = []
+        for c in chunks {
+            guard let posts = c.array?.compactMap({ VoiciPage.parseVoiciPost($0) }) else { return nil }
+            out.append(posts)
+        }
+        return VoiciPageState(profile: profile, acceptsMessages: accepts, chunks: out, issuedAt: issuedAt)
     }
 
     private func load() {
@@ -845,6 +1032,8 @@ public final class MessagesStore {
         ownOps = (v["ownOps"]?.array ?? []).compactMap { VoiciMessages.parseVoiciDraftOp($0) }
         laneOps = (v["laneOps"]?.array ?? []).compactMap { VoiciMessages.parseVoiciDraftOp($0) }
         if let raw = v["index"], let idx = VoiciPage.parseVoiciPageIndex(raw) { index = idx }
+        isRemoved = v["removed"] == .bool(true)
+        published = v["published"].flatMap(Self.parseState)
     }
 }
 

@@ -3,9 +3,10 @@ import PhotosUI
 import FlagshipAPI
 import FlagshipCore
 
-/// The voi.ci page editor (docs/voici-and-messages.md §11.2). Every change is a draft op: grayed "Not published yet"
-/// until an admin device signs a new index (on a non-admin device: "Waiting for an admin device to publish"). The
-/// warning that the page can be linked to the owner's apps sits above the profile and again before the first publish.
+/// The voi.ci page editor (docs/voici-and-messages.md §11.2). Every change is a draft op, grayed "Not published yet",
+/// until the one bottom bar's Publish on an admin device signs a new index (elsewhere: "Waiting for an admin device to
+/// publish"). The Public switch sits on top, with the warning that the page can be linked to the owner's apps; making
+/// the page public goes through the same one-time warning as the Messages header (PagePublicFlow).
 struct PageEditorScreen: View {
     var onPreview: () -> Void
     private let store = MessagesStore.shared
@@ -22,17 +23,22 @@ struct PageEditorScreen: View {
     @State private var newPost = ""
     @State private var posting = false
     @State private var editing: VoiciPost?
-    @State private var confirmFirstPublish = false
-    @State private var showRules = false
-    @State private var afterRules = false
     @State private var copied = false
+    @State private var flow = PagePublicFlow()
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case name, bio }
 
     var body: some View {
         Form {
             Section {
+                PagePublicToggle(flow: flow)
+                if !store.isAdmin {
+                    Text("Only an admin device can publish your page.").font(.footnote).foregroundStyle(.secondary)
+                }
+            } footer: {
                 Label {
                     Text("Anyone can see this page. It shares your username with your apps and servers, so people can connect them.")
-                        .font(.subheadline)
                 } icon: {
                     Image(systemName: "eye").foregroundStyle(.orange)
                 }
@@ -48,13 +54,6 @@ struct PageEditorScreen: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("page-theme")
-            }
-            Section {
-                Button("Save profile") { Task { await saveProfile() } }
-                    .disabled(!profileChanged)
-                    .accessibilityIdentifier("page-save-profile")
-                if let profileNote { Text(verbatim: profileNote).font(.footnote).foregroundStyle(.red) }
-                if store.profileUnpublished { pendingNote }
             }
             Section {
                 Toggle("Accept messages", isOn: Binding(get: { store.acceptsMessages }, set: { on in Task { await store.setAcceptsMessages(on) } }))
@@ -73,26 +72,65 @@ struct PageEditorScreen: View {
             }
         }
         .onAppear { loadFields() }
+        // Every change is a draft: the fields become one when they lose focus, and on leaving the editor.
+        .onDisappear { Task { await commitProfile() } }
+        .onChange(of: focusedField) { old, _ in if old != nil { Task { await commitProfile() } } }
+        .onChange(of: theme) { _, _ in Task { await commitProfile() } }
+        .onChange(of: links) { _, _ in Task { await commitProfile() } }
+        .onChange(of: avatar) { _, _ in Task { await commitProfile() } }
+        .onChange(of: store.preview.profile) { _, _ in if focusedField == nil, !profileChanged { reloadFields() } }
         .onChange(of: photo) { _, item in Task { await pick(item) } }
+        .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
+        .pagePublicFlow(flow)
         .sheet(isPresented: $addingLink) {
             AddLinkSheet(existing: links) { links.append($0) }
         }
         .sheet(item: $editing) { post in
             EditPostSheet(post: post) { text in Task { await store.editPost(VoiciPost(id: post.id, createdAt: post.createdAt, editedAt: nil, text: text, links: post.links)) } }
         }
-        .sheet(isPresented: $showRules, onDismiss: {
-            if afterRules {
-                afterRules = false
-                confirmFirstPublish = true
+    }
+
+    /// Changes waiting to be published, counted the way the header counts them (a field still being typed in is one).
+    private var unpublished: Int { store.pendingCount + (profileChanged && !store.profileUnpublished ? 1 : 0) }
+
+    /// One bar for the whole editor: "<N> changes not published · Publish" (on another device: waiting for an admin).
+    @ViewBuilder
+    private var publishBar: some View {
+        let n = unpublished
+        if n > 0 || store.isPublishing {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "\(n) changes not published"))
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityIdentifier("page-pending-count")
+                    if !store.isAdmin {
+                        Text("Waiting for an admin device to publish")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("page-waiting-admin")
+                    }
+                }
+                Spacer(minLength: 8)
+                if store.isAdmin {
+                    Button {
+                        Task {
+                            if await commitProfile() { flow.publishAll() }
+                        }
+                    } label: {
+                        if store.isPublishing { ProgressView() } else { Text("Publish").fontWeight(.semibold) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.isPublishing)
+                    .accessibilityIdentifier("page-publish")
+                }
             }
-        }) {
-            VoiciRulesSheet { afterRules = true }
-        }
-        .alert("Publish your page?", isPresented: $confirmFirstPublish) {
-            Button("Cancel", role: .cancel) {}
-            Button("Publish") { Task { await publish() } }
-        } message: {
-            Text("Anyone can see this page. It shares your username with your apps and servers, so people can connect them.")
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("page-publish-bar")
         }
     }
 
@@ -111,13 +149,18 @@ struct PageEditorScreen: View {
                 }
             }
             TextField("Display name", text: $displayName)
+                .focused($focusedField, equals: .name)
+                .submitLabel(.done)
                 .accessibilityIdentifier("page-display-name")
             VStack(alignment: .trailing, spacing: 2) {
                 TextField("Bio", text: $bio, axis: .vertical)
                     .lineLimit(2...5)
+                    .focused($focusedField, equals: .bio)
                     .accessibilityIdentifier("page-bio")
                 Text(verbatim: "\(bio.unicodeScalars.count)/280").font(.caption2).foregroundStyle(bio.unicodeScalars.count > 280 ? .red : .secondary)
             }
+            if let profileNote { Text(verbatim: profileNote).font(.footnote).foregroundStyle(.red).accessibilityIdentifier("page-profile-note") }
+            if store.profileUnpublished || profileChanged { pendingNote }
         }
     }
 
@@ -157,13 +200,18 @@ struct PageEditorScreen: View {
 
     private func loadFields() {
         guard !loaded else { return }
+        reloadFields()
+        loaded = true
+    }
+
+    /// The header (or another device) changed the profile while no field here was being edited.
+    private func reloadFields() {
         let p = store.preview.profile
         displayName = p.displayName
         bio = p.bio
         theme = p.theme
         links = p.links
         avatar = p.avatar
-        loaded = true
     }
 
     private func pick(_ item: PhotosPickerItem?) async {
@@ -177,18 +225,22 @@ struct PageEditorScreen: View {
         profileNote = nil
     }
 
-    private func saveProfile() async {
+    /// Records the fields as one profile draft (it replaces this device's earlier one). False when a field is refused.
+    @discardableResult
+    private func commitProfile() async -> Bool {
+        guard profileChanged else { return true }
         let p = currentProfile
         if let r = VoiciText.checkVoiciText(.displayName, p.displayName) {
             profileNote = r == .tooShort ? String(localized: "Add a display name.") : MessagesStore.textSentence(r)
-            return
+            return false
         }
         if let r = VoiciText.checkVoiciText(.bio, p.bio) {
             profileNote = MessagesStore.textSentence(r)
-            return
+            return false
         }
         profileNote = nil
         await store.setProfile(p, avatar: avatar == store.preview.profile.avatar ? nil : avatarBytes)
+        return true
     }
 
     // MARK: posts
@@ -269,40 +321,23 @@ struct PageEditorScreen: View {
 
     // MARK: publish
 
+    /// Publishing is the bottom bar; this keeps the last refusal, and the link while the page is public.
+    @ViewBuilder
     private var publishSection: some View {
-        Section {
-            if store.isAdmin {
-                Button {
-                    if store.index == nil {
-                        if VoiciRules.accepted { confirmFirstPublish = true } else { showRules = true }
-                    } else {
-                        Task { await publish() }
+        if store.publishError != nil || store.isPublic {
+            Section {
+                if let e = store.publishError { Text(verbatim: e).font(.footnote).foregroundStyle(.red).accessibilityIdentifier("page-publish-error") }
+                if store.isPublic {
+                    Button(copied ? String(localized: "Copied") : String(localized: "Copy link")) {
+                        UIPasteboard.general.string = store.pageURL
+                        copied = true
                     }
-                } label: {
-                    HStack { Text(store.isPublishing ? String(localized: "Publishing…") : String(localized: "Publish")); Spacer() }
+                    ShareLink(item: URL(string: store.pageURL)!) { Text("Share") }
                 }
-                .disabled(store.isPublishing || (store.index != nil && store.pendingCount == 0))
-                .accessibilityIdentifier("page-publish")
-            } else if store.pendingCount > 0 {
-                Text("Waiting for an admin device to publish").foregroundStyle(.secondary)
+            } footer: {
+                if store.isPublic { Text(verbatim: store.pageURL) }
             }
-            if let e = store.publishError { Text(verbatim: e).font(.footnote).foregroundStyle(.red).accessibilityIdentifier("page-publish-error") }
-            if store.index != nil {
-                Button(copied ? String(localized: "Copied") : String(localized: "Copy link")) {
-                    UIPasteboard.general.string = store.pageURL
-                    copied = true
-                }
-                ShareLink(item: URL(string: store.pageURL)!) { Text("Share") }
-            }
-        } footer: {
-            if store.index != nil { Text(verbatim: store.pageURL) }
         }
-    }
-
-    private func publish() async {
-        VoiciRules.accept()
-        if profileChanged { await saveProfile() }
-        await store.publishNow()
     }
 }
 

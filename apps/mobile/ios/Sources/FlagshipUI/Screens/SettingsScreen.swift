@@ -138,6 +138,8 @@ public struct SettingsScreen: View {
     var onOpenPrivacy: () -> Void = {}
     /// Settings → Messages (docs/voici-and-messages.md §11.3).
     var onOpenMessages: (() -> Void)?
+    /// "Your page": points to the page at the top of the Messages tab (nil for a sample account, which has none).
+    var onOpenYourPage: (() -> Void)?
     var onRefresh: () async -> Void = {}
     /// B6a — fired after the user confirms in the Remove sheet. The
     /// container is expected to: revoke this device's push token on
@@ -236,6 +238,7 @@ public struct SettingsScreen: View {
         onOpenAbout: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
         onOpenMessages: (() -> Void)? = nil,
+        onOpenYourPage: (() -> Void)? = nil,
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
         onReplaceDevice: @escaping () async -> Void = {},
@@ -293,6 +296,7 @@ public struct SettingsScreen: View {
         self.onOpenAbout = onOpenAbout
         self.onOpenPrivacy = onOpenPrivacy
         self.onOpenMessages = onOpenMessages
+        self.onOpenYourPage = onOpenYourPage
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
         self.onReplaceDevice = onReplaceDevice
@@ -526,6 +530,10 @@ public struct SettingsScreen: View {
                     nameEditor = NameEditor(kind: .account, title: String(localized: "Edit account name"), initialName: accountDisplayName ?? "")
                 }
             ),
+        ] + (onOpenYourPage.map { open in
+            [FSSettingsRow(icon: "person.crop.circle", title: String(localized: "Your page"), subtitle: "voi.ci/\(username)",
+                           accessibilityId: "settings-your-page", action: open)]
+        } ?? []) + [
             FSSettingsRow(
                 icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
                 iconTint: accountType == "multi" ? c.success : c.accent,

@@ -109,6 +109,9 @@ public struct HomeScreen: View {
     var showPageWelcome: Bool = false
     var onSetUpPage: () -> Void = {}
     var onDismissPageWelcome: () -> Void = {}
+    /// The compact "Your page" row that replaces the welcome card once the page was public or the card dismissed: nil
+    /// hides it, else whether the page is public now. Tapping it opens the page at the top of the Messages tab.
+    var pageRowPublic: Bool? = nil
     /// Name dibs notice: the window's end (ms) while it should show, else nil.
     var dibsNoticeClosesAt: Int64? = nil
     var onClaimDibs: () -> Void = {}
@@ -172,6 +175,7 @@ public struct HomeScreen: View {
         showPageWelcome: Bool = false,
         onSetUpPage: @escaping () -> Void = {},
         onDismissPageWelcome: @escaping () -> Void = {},
+        pageRowPublic: Bool? = nil,
         dibsNoticeClosesAt: Int64? = nil,
         onClaimDibs: @escaping () -> Void = {},
         onDismissDibs: @escaping () -> Void = {},
@@ -214,6 +218,7 @@ public struct HomeScreen: View {
         self.showPageWelcome = showPageWelcome
         self.onSetUpPage = onSetUpPage
         self.onDismissPageWelcome = onDismissPageWelcome
+        self.pageRowPublic = pageRowPublic
         self.dibsNoticeClosesAt = dibsNoticeClosesAt
         self.onClaimDibs = onClaimDibs
         self.onDismissDibs = onDismissDibs
@@ -274,6 +279,9 @@ public struct HomeScreen: View {
                 topAnnouncement(c: c)
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                     .animation(.snappy, value: [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome])
+                if let on = pageRowPublic {
+                    pageRow(c: c, isPublic: on)
+                }
                 if statusPaused && !pods.isEmpty {
                     HStack(spacing: FS.space.s2) {
                         Label("Status paused", systemImage: "pause.circle")
@@ -327,8 +335,52 @@ public struct HomeScreen: View {
 
     /// Everything that adds, removes or moves a block above the server list.
     private var layoutShape: [Bool] {
-        [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome, statusPaused, serverListLocked,
+        [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome, pageRowPublic != nil, statusPaused, serverListLocked,
          pods.isEmpty, canAddServers, canChangeServers]
+    }
+
+    /// "Your page · Public" with a chevron: a pointer to the page at the top of the Messages tab.
+    private func pageRow(c: FSColors, isPublic: Bool) -> some View {
+        Button(action: onSetUpPage) {
+            HStack(spacing: FS.space.s3) {
+                Image(systemName: "person.crop.circle")
+                    .font(FS.font.scaled(20, weight: .semibold))
+                    .foregroundColor(c.accent)
+                    .accessibilityHidden(true)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { pageRowTitle(c); pageRowStatus(c, isPublic) }
+                    VStack(alignment: .leading, spacing: 2) { pageRowTitle(c); pageRowStatus(c, isPublic) }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(FS.font.scaled(13, weight: .semibold))
+                    .foregroundColor(c.textMuted)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, FS.space.s4)
+            .padding(.vertical, FS.space.s3)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(c.surface)
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).strokeBorder(c.border, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home-page-row")
+    }
+
+    private func pageRowTitle(_ c: FSColors) -> some View {
+        Text("Your page").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
+    }
+
+    private func pageRowStatus(_ c: FSColors, _ isPublic: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(isPublic ? c.accent : c.textMuted.opacity(0.5)).frame(width: 7, height: 7).accessibilityHidden(true)
+            Text(isPublic ? String(localized: "Public") : String(localized: "Not public"))
+                .font(FS.font.bodySm())
+                .foregroundColor(c.textMuted)
+        }
     }
 
     /// The single highest-priority announcement card. Folds the three stacked
@@ -368,7 +420,7 @@ public struct HomeScreen: View {
         } else if showPageWelcome {
             FSAnnouncementCard(
                 icon: "person.crop.square",
-                title: String(localized: "Welcome! Make your own page"),
+                title: String(localized: "Your public page"),
                 message: String(localized: "Share a photo, a few words about you, your links and posts at voi.ci/\(username). If you want, visitors can send you messages there."),
                 ctaLabel: String(localized: "Set up your page"),
                 onCta: onSetUpPage,
