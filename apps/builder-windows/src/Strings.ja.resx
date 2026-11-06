@@ -727,4 +727,10 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。</value>
   </data>
+  <data name="copiesOnYourPhoneOrPeersStay" xml:space="preserve">
+    <value>スマートフォンやピアに保存されたコピー（バックアップポリシーによる）は削除されません。</value>
+  </data>
+  <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
+    <value>続く場合は、ベースイメージを再ダウンロードして作り直してください。</value>
+  </data>
 </root>

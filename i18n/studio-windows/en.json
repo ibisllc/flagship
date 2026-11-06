@@ -959,5 +959,13 @@
   "recipeMadeByOlderApp": {
     "en": "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.",
     "ctx": "OlderAppRecipe.cs:16 (prose)"
+  },
+  "copiesOnYourPhoneOrPeersStay": {
+    "en": "copies kept on your phone or with peers (depending on its backup policy) are not.",
+    "ctx": "MainWindow.xaml.cs:336 (prose, continues theServersIdentityStaysWithYour)"
+  },
+  "ifItPersistsRedownloadTheBase": {
+    "en": "if it persists, re-download the base image and remaster again.",
+    "ctx": "VM/VMLifecycle.cs:165 (prose, continues theGuestLikelyFailedToBoot)"
   }
 }

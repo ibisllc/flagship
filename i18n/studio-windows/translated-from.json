@@ -237,5 +237,7 @@
   "softwarePackageNotPublished": "9cf0abc83307",
   "couldntCheckSoftwarePackage": "8c8289bd15fb",
   "windows10NoLongerGetsSecurityUpdates": "3fc1e8c127c7",
-  "recipeMadeByOlderApp": "e7ef2e7d5286"
+  "recipeMadeByOlderApp": "e7ef2e7d5286",
+  "copiesOnYourPhoneOrPeersStay": "1698aab99104",
+  "ifItPersistsRedownloadTheBase": "ea2fdd784563"
 }

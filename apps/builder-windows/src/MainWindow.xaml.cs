@@ -333,7 +333,7 @@ public partial class MainWindow : Window
             this,
             Strings.F("deleteTheVmAndItsEncrypted", fqdn) +
             Strings.T("theServersIdentityStaysWithYour") +
-            "copies kept on your phone or with peers (depending on its backup policy) are not.",
+            Strings.T("copiesOnYourPhoneOrPeersStay"),
             Strings.T("deleteThisServer"),
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);

@@ -237,5 +237,7 @@
   "softwarePackageNotPublished": "このサーバーはまだインストールできません。ソフトウェアパッケージが {0} で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
   "couldntCheckSoftwarePackage": "このサーバーのソフトウェアパッケージが {0} で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
   "windows10NoLongerGetsSecurityUpdates": "このバージョンの Windows にはセキュリティ更新プログラムが提供されなくなりました。Studio はこのまま使え、サーバーをホストできます。Windows 11 にアップデートすると、この PC をより安全に保てます。",
-  "recipeMadeByOlderApp": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"
+  "recipeMadeByOlderApp": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。",
+  "copiesOnYourPhoneOrPeersStay": "スマートフォンやピアに保存されたコピー（バックアップポリシーによる）は削除されません。",
+  "ifItPersistsRedownloadTheBase": "続く場合は、ベースイメージを再ダウンロードして作り直してください。"
 }

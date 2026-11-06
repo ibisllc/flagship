@@ -727,4 +727,10 @@ https://flagshipserver.com</value>
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>此配方由旧版 Flagship 应用创建。请在手机上更新 Flagship 应用，然后重新创建服务器。</value>
   </data>
+  <data name="copiesOnYourPhoneOrPeersStay" xml:space="preserve">
+    <value>保存在你的手机或对等服务器上的副本（取决于其备份策略）不会被删除。</value>
+  </data>
+  <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
+    <value>如果问题仍然存在，请重新下载基础镜像并重新制作。</value>
+  </data>
 </root>

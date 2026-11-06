@@ -727,4 +727,10 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>Cette recette a été créée par une ancienne version de l’app Flagship. Mettez à jour l’app Flagship sur votre téléphone, puis recréez le serveur.</value>
   </data>
+  <data name="copiesOnYourPhoneOrPeersStay" xml:space="preserve">
+    <value>les copies conservées sur votre téléphone ou chez des pairs (selon sa politique de sauvegarde) ne le sont pas.</value>
+  </data>
+  <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
+    <value>si le problème persiste, téléchargez à nouveau l'image de base et refaites-la.</value>
+  </data>
 </root>

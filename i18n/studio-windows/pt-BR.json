@@ -237,5 +237,7 @@
   "softwarePackageNotPublished": "Este servidor ainda não pode ser instalado: o pacote de software dele não está publicado em {0}. Atualize o Flagship Studio e o app Flagship ou tente novamente mais tarde.",
   "couldntCheckSoftwarePackage": "Não foi possível verificar se o pacote de software deste servidor está publicado em {0}. Verifique sua conexão com a internet e tente novamente.",
   "windows10NoLongerGetsSecurityUpdates": "Esta versão do Windows não recebe mais atualizações de segurança. O Studio continua funcionando aqui e pode hospedar seu servidor; atualizar para o Windows 11 deixa este PC mais seguro.",
-  "recipeMadeByOlderApp": "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo."
+  "recipeMadeByOlderApp": "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo.",
+  "copiesOnYourPhoneOrPeersStay": "as cópias guardadas no seu telefone ou com pares (conforme a política de backup) não são.",
+  "ifItPersistsRedownloadTheBase": "se persistir, baixe a imagem base novamente e refaça-a."
 }

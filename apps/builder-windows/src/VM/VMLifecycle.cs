@@ -162,7 +162,7 @@ public sealed class VMLifecycle
         return VMEvent.InstallFailed(
             Strings.F("theInstallerStoppedAfterOnlyS", secs) +
             Strings.T("theGuestLikelyFailedToBoot") +
-            "if it persists, re-download the base image and remaster again.");
+            Strings.T("ifItPersistsRedownloadTheBase"));
     }
 
     public static VMEvent VerdictForCleanProvisioningStop(

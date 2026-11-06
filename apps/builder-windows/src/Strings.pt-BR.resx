@@ -727,4 +727,10 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo.</value>
   </data>
+  <data name="copiesOnYourPhoneOrPeersStay" xml:space="preserve">
+    <value>as cópias guardadas no seu telefone ou com pares (conforme a política de backup) não são.</value>
+  </data>
+  <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
+    <value>se persistir, baixe a imagem base novamente e refaça-a.</value>
+  </data>
 </root>

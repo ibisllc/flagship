@@ -966,4 +966,12 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.</value>
     <comment>OlderAppRecipe.cs:16 (prose)</comment>
   </data>
+  <data name="copiesOnYourPhoneOrPeersStay" xml:space="preserve">
+    <value>copies kept on your phone or with peers (depending on its backup policy) are not.</value>
+    <comment>MainWindow.xaml.cs:336 (prose, continues theServersIdentityStaysWithYour)</comment>
+  </data>
+  <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
+    <value>if it persists, re-download the base image and remaster again.</value>
+    <comment>VM/VMLifecycle.cs:165 (prose, continues theGuestLikelyFailedToBoot)</comment>
+  </data>
 </root>

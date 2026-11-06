@@ -727,4 +727,10 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="recipeMadeByOlderApp" xml:space="preserve">
     <value>Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App auf deinem Telefon und erstelle den Server dann erneut.</value>
   </data>
+  <data name="copiesOnYourPhoneOrPeersStay" xml:space="preserve">
+    <value>Kopien auf deinem Telefon oder bei Peers (je nach Backup-Richtlinie) bleiben erhalten.</value>
+  </data>
+  <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
+    <value>wenn es weiterhin auftritt, lade das Basis-Image erneut herunter und erstelle es neu.</value>
+  </data>
 </root>
