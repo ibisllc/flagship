@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { D1Database } from "@flagship/storage";
 import { D1Storage } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
-import { adminPub, buildPage, caSeed, fakeBucket, hex, irkPub, uploadHeaders, USER, visitor } from "../../../packages/control-plane/tests/support/voiciFixture.js";
-import { sha256Hex, signVoiciAlertsP256 } from "@flagship/protocol";
+import { adminPub, adminSeed, buildPage, caSeed, fakeBucket, hex, irkPub, uploadHeaders, USER, visitor } from "../../../packages/control-plane/tests/support/voiciFixture.js";
+import { sha256Hex, signVoiciAlertsP256, signVoiciPageRemove } from "@flagship/protocol";
 import { route, type RouteEnv } from "../src/route.js";
 import { isVoiciApiPath } from "../src/voiciRoutes.js";
 import { endpointFor } from "../src/rateLimit.js";
@@ -136,6 +136,53 @@ describe("voi.ci routes", () => {
       expect([r.status, r.headers.get("content-type"), r.headers.get("cache-control")]).toEqual([200, "image/jpeg", "public, max-age=31536000, immutable"]);
       expect(new Uint8Array(await r.arrayBuffer())).toEqual(page.pieces.get(avatar.sha256));
       expect((await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces/${"ab".repeat(32)}`)).status).toBe(404);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("remove the page on the owner's signed order: 404 everywhere, no CORS, messages kept, republish works", async () => {
+    const w = await world();
+    try {
+      const now = Date.now();
+      const page = await publishPage(w, now);
+      const v = visitor(now);
+      const env = v.message(now);
+      await w.call("https://flagshipserver.com/api/voici/web/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(env) });
+      const avatar = page.index.pieces.find((p) => p.role === "avatar")!;
+      const removal = signVoiciPageRemove({ username: USER, pageId: page.index.pageId, seq: 2, issuedAt: now, signerKind: "admin-root" }, adminSeed);
+      const pre = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/remove`, {
+        method: "OPTIONS",
+        headers: { origin: "https://voi.ci", "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+      });
+      expect(pre.headers.get("access-control-allow-origin")).toBeNull();
+      const r = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/remove`, { method: "POST", headers: { origin: "https://voi.ci" }, body: JSON.stringify(removal) });
+      expect([r.status, await r.json()]).toEqual([200, { ok: true, pageId: page.index.pageId, seq: 2 }]);
+      expect(r.headers.get("access-control-allow-origin")).toBeNull();
+      expect(w.bucket.objects.size).toBe(0);
+      expect((await w.call(`https://flagshipserver.com/api/voici/pages/${USER}`)).status).toBe(404);
+      expect((await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces/${avatar.sha256}`)).status).toBe(404);
+      const host = await w.call("https://voi.ci/alice");
+      expect(host.status).toBe(404);
+      expect(await w.seed.voici.listInbox(env.audience, 0, 10)).toHaveLength(1);
+      const replay = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/remove`, { method: "POST", body: JSON.stringify(removal) });
+      expect(replay.status).toBe(404);
+      const old = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/publish`, { method: "POST", body: JSON.stringify(page.index) });
+      expect([old.status, ((await old.json()) as { code: string }).code]).toEqual([409, "seq-conflict"]);
+      const p3 = buildPage({ seq: 3, issuedAt: now });
+      for (const bytes of p3.pieces.values()) {
+        const h = uploadHeaders(bytes, now);
+        await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces`, {
+          method: "POST",
+          headers: { "x-flagship-page-id": h.pageId, "x-flagship-issued-at": h.issuedAt, "x-flagship-signature": h.signature },
+          body: bytes,
+        });
+      }
+      const back = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/publish`, { method: "POST", body: JSON.stringify(p3.index) });
+      expect(back.status).toBe(200);
+      expect((await w.call("https://voi.ci/alice")).status).toBe(200);
+      const piece = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces/${avatar.sha256}`);
+      expect(new Uint8Array(await piece.arrayBuffer())).toEqual(page.pieces.get(avatar.sha256));
     } finally {
       w.close();
     }

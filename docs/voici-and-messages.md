@@ -249,6 +249,7 @@ write the sentences.
 | `GET /api/accounts/<u>/voici-drafts` | read token | list draft ops |
 | `POST /api/accounts/<u>/voici-drafts/consume` | sensitive key | delete ops an admin device published |
 | B1: `GET /api/voici/pages/<u>/pieces/<sha256>` | none | a piece the stored index lists (the webapp's read) |
+| `POST /api/voici/pages/<u>/remove` | the removal's own signature (sensitive key) | the owner takes the page off voi.ci (§3.3) |
 
 Publish checks, in order: size; strict JSON shape; account exists, not banned from pages, page not taken down;
 `signerPub` is the account's sensitive key now; signature; `seq = stored + 1` (else 409 `seq-conflict` with the
@@ -269,6 +270,35 @@ webapp's shell CSP reaches only the control and services apexes, so it reads pie
 **`GET /api/voici/pages/<u>/pieces/<sha256>`**, no auth, the same bytes as `files.voi.ci/v1/p/<pageId>/<sha256>`,
 immutable, 404 for a piece the account's stored index doesn't list (B1). (The alternative, `https://files.voi.ci` in
 `shellCsp`'s connect-src, widens the shell's CSP for one read.)
+
+### 3.3 Remove my page (owner, 0.3)
+
+The owner turns the page's **Public** switch off. The admin device signs
+
+    flagship/voici-page-remove/v1|<username lowercase>|<pageId>|<seq>|<issuedAt ms>
+
+with the sensitive key (admin root, else the IRK) and posts the envelope
+`{kind:"VoiciPageRemove", version:1, username, pageId, seq, issuedAt, signerKind, signerPub, signature}` (exact keys;
+`packages/protocol/src/voiciPageRemove.ts`, vectors `test-vectors/voici-page-remove/`). `seq` is the stored seq + 1:
+the removal sits on the publish ladder, so neither it nor an old public index can be replayed. Checks, in order:
+shape (`malformed`), account and a live page (`not-found`, also for a page already removed), `banned`, `taken-down`
+(410: a takedown record can't be escaped by removing), `wrong-signer`, `bad-signature`, `wrong-page` (409, with the
+stored `pageId`), `stale` (the publish skew), `seq-conflict` (409 with the stored index, as publish). Rate-limited as
+publish; not a voi.ci CORS path.
+
+On success (`{ok:true, pageId, seq}`) the D1 row keeps username, pageId and seq (= the removal's) and gets
+`removed_at` (migration 0131); the R2 index and every piece are deleted, their rows too (so a republish uploads them
+again), and files.voi.ci is purged. The mailbox, conversations, visitors' reply alerts, the state blob and drafts
+stay; new visitor messages to the removed page are refused (`not-found`), owner replies still go. voi.ci/<u> is the
+same 404 as an unpublished page, `GET /api/voici/pages/<u>` and its pieces answer `not-found`. A later publish takes
+seq = removal seq + 1 with the same pageId and clears `removed_at`. Every `seq-conflict` (publish and remove) now
+also carries the stored `seq`, `pageId` and `removed`, because after a removal the stored seq is one above the index's
+and a device that saw no page must still find the ladder.
+
+Sample (demo) accounts: `.com` refuses nothing for them on pages, Messages or drafts, and the demo cleanup and account
+deletion remove the page (`deleteVoiciAccount`). But a demo's admin root and IRK are derived by `.com` from
+`DEMO_IRK_KEK`; the browser or phone that opens a demo holds a fresh local key, not those. So nobody but the operator
+can sign a demo account's page; the apps treat a demo device as one that can't publish.
 
 ## 4. The voi.ci site
 

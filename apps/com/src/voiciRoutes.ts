@@ -28,6 +28,7 @@ import {
   handleVoiciInbox,
   handleVoiciPieceUpload,
   handleVoiciPublish,
+  handleVoiciRemove,
   handleVoiciRevoke,
   handleVoiciSend,
   handleVoiciThread,
@@ -89,7 +90,7 @@ export function isVoiciHost(hostname: string, env: VoiciEnv): boolean {
 }
 
 const ACCOUNT_VOICI = /^\/api\/accounts\/([^/]+)\/(voici-drafts|voici-drafts\/consume|messages-state)$/;
-const PAGE_ROUTE = /^\/api\/voici\/pages\/([^/]+)(?:\/(pieces|publish|inbox|block)(?:\/([0-9a-f]{64}))?)?$/;
+const PAGE_ROUTE = /^\/api\/voici\/pages\/([^/]+)(?:\/(pieces|publish|remove|inbox|block)(?:\/([0-9a-f]{64}))?)?$/;
 
 /** The paths this file owns. */
 export function isVoiciApiPath(pathname: string): boolean {
@@ -274,6 +275,8 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       usernames: storage.usernames,
       bucket: env.VOICI ?? noBucket,
       isAccountBanned: (u: string) => isAccountBanned(db, u),
+      // The owner's removal keeps the visitors' reply alerts: their conversations stay.
+      removePageObjects: (u: string, pageId: string) => removeVoiciPageObjects(env, storage, u, pageId, { keepAlerts: true }),
     };
     if (!tail && method === "GET") {
       const wait = await limited(env, "voici-page-read", request, undefined, ctx);
@@ -316,6 +319,12 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       if (wait !== null) return tooMany(wait);
       if (!env.VOICI) return toResponse(voiciRefusal(503, "unavailable"));
       return toResponse(await handleVoiciPublish(pagesDeps, username, await request.text()));
+    }
+    if (tail === "remove" && method === "POST") {
+      const wait = await limited(env, "voici-publish", request, username, ctx);
+      if (wait !== null) return tooMany(wait);
+      if (!env.VOICI) return toResponse(voiciRefusal(503, "unavailable"));
+      return toResponse(await handleVoiciRemove(pagesDeps, username, await request.text()));
     }
     if ((tail === "inbox" && method === "GET") || (tail === "block" && method === "POST")) {
       const wait = await limited(env, "voici-owner", request, undefined, ctx);
@@ -534,15 +543,21 @@ async function purgeFiles(env: VoiciEnv, paths: string[]): Promise<void> {
 }
 
 /**
- * Takes a page off voi.ci now (chunk B2's takedown, and account deletion): the R2 index and every piece of the page
- * are deleted and purged from files.voi.ci; the D1 piece rows are left marked for the cron; its visitors' reply
- * alerts are deleted.
+ * Takes a page off voi.ci now (chunk B2's takedown, account deletion, the owner's removal): the R2 index and every
+ * piece of the page are deleted and purged from files.voi.ci; the D1 piece rows are left marked for the cron (the
+ * owner's removal then deletes them itself); its visitors' reply alerts are deleted unless `keepAlerts`.
  */
-export async function removeVoiciPageObjects(env: VoiciEnv, storage: Pick<D1Storage, "voici">, username: string, pageId: string): Promise<void> {
+export async function removeVoiciPageObjects(
+  env: VoiciEnv,
+  storage: Pick<D1Storage, "voici">,
+  username: string,
+  pageId: string,
+  opts: { keepAlerts?: boolean } = {},
+): Promise<void> {
   const pieces = await storage.voici.listPagePieces(pageId);
   const keys = [voiciIndexKey(username), ...pieces.map((p) => voiciPieceKey(pageId, p.sha256))];
   if (env.VOICI) for (let i = 0; i < keys.length; i += 1000) await env.VOICI.delete(keys.slice(i, i + 1000));
-  await Promise.all([storage.voici.unreferenceAllPieces(pageId, 0), storage.voici.deleteAlertsForPage(pageId)]);
+  await Promise.all([storage.voici.unreferenceAllPieces(pageId, 0), opts.keepAlerts ? null : storage.voici.deleteAlertsForPage(pageId)]);
   await purgeFiles(env, keys);
 }
 

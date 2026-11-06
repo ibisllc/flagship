@@ -215,6 +215,7 @@ export async function resolveVoiciPath(deps: VoiciResolveDeps, pathname: string,
     return current ? at(current.name) : { kind: "not-found" };
   }
   const page = await deps.pages.getPage(row.owner ?? row.name);
-  if (!page) return { kind: "not-found" };
+  // A page its owner removed is the same 404 as one never published.
+  if (!page || page.removedAt != null) return { kind: "not-found" };
   return page.takenDownAt === null ? { kind: "page", username: row.name } : { kind: "page-gone", username: row.name };
 }
