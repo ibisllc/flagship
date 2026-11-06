@@ -178,6 +178,12 @@ public struct CompanionDockScreen: View {
                     Text("Server: \(server.name)")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
+                } else {
+                    // Approve stays off: say why instead of a button that does nothing (W19).
+                    Text("No server on this phone can take a browser yet.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.danger)
+                        .accessibilityIdentifier("companion-dock-no-server")
                 }
                 Text("It gets a keyless, read-only session for four hours. Protected actions still need this phone.")
                     .font(FS.font.caption())

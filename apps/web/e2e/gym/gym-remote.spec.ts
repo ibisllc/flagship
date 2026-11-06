@@ -240,4 +240,25 @@ test.describe("gym webapp remote", () => {
     await expect(page.locator("#dock-restart")).toBeHidden();
     await shot(page, testInfo, "remote-fresh-qr");
   });
+
+  test("gym remote says so when a code a phone is showing runs out", async ({ page }, testInfo) => {
+    // W19: the phone kept showing its code while the page had quietly moved on to
+    // a new QR, so there was nothing to compare against.
+    const rig = await openRemote(page);
+    const link = await approvalLink(page);
+    const sealed = await phoneSeal(link.searchParams.get("k")!, ticketFor(BOX));
+    rig.sockets[0]!.ws.send(JSON.stringify({ kind: "peer-hello", phonePk: sealed.phonePk }));
+    await expect(page.locator("#dock-code")).toHaveText(`${sealed.sas.slice(0, 3)} ${sealed.sas.slice(3)}`, { timeout: 10_000 });
+    rig.sockets[0]!.ws.send(JSON.stringify({ kind: "expired" }));
+    await expect(page.locator("#dock-status")).toHaveText(
+      "This code ran out before it was approved. Start again, then scan the new code with your phone.",
+      { timeout: 10_000 },
+    );
+    await expect(page.locator("#dock-restart")).toBeVisible();
+    await expect(page.locator("#dock-code-step")).toBeHidden();
+    expect(rig.sockets).toHaveLength(1);
+    await page.click("#dock-restart");
+    await expect.poll(() => rig.sockets.length, { timeout: 10_000 }).toBe(2);
+    await shot(page, testInfo, "remote-code-ran-out");
+  });
 });

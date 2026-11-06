@@ -28,8 +28,15 @@ async function startRequest() {
   $("dock-restart")?.classList.add("hidden");
   $("dock-code-step")?.classList.add("hidden");
   setMessage("");
+  let codeShown = false;
   try {
-    const request = await openRemoteRequest({ onCode: (code) => myRun === runNumber && showCode(code) });
+    const request = await openRemoteRequest({
+      onCode: (code) => {
+        if (myRun !== runNumber) return;
+        codeShown = true;
+        showCode(code);
+      },
+    });
     if (myRun !== runNumber) { request.close(); return; }
     activeRequest = request;
     await renderQr(request.approvalUrl);
@@ -42,8 +49,14 @@ async function startRequest() {
     await onDocked?.(persisted);
   } catch (error) {
     if (myRun !== runNumber) return;
-    if (error?.restart) return void startRequest();
-    setMessage(error?.message ?? String(error), true);
+    // A session that ran out before any phone joined just gets a fresh QR. Once a
+    // phone showed its code, a silent swap would leave that phone comparing against
+    // a code this page no longer shows (W19): say so and let the person start again.
+    if (error?.restart && !codeShown) return void startRequest();
+    $("dock-code-step")?.classList.add("hidden");
+    setMessage(error?.restart
+      ? tr("This code ran out before it was approved. Start again, then scan the new code with your phone.")
+      : (error?.message ?? String(error)), true);
     $("dock-restart")?.classList.remove("hidden");
   }
 }

@@ -2037,6 +2037,26 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D3",
     },
   ),
+  webTotal(
+    "web-total-remote-code-ran-out",
+    "Remote: a session that runs out while a phone is showing its code says so and waits for Start again, instead of quietly swapping in a QR the phone can't match (Windows acceptance W19).",
+    "gym remote says so when a code a phone is showing runs out",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the remote page; read the approval link." },
+        { kind: "tap", describe: "A phone says hello: the page shows its code." },
+        { kind: "tap", describe: "Relay sends {kind:\"expired\"}." },
+        { kind: "assert", describe: "The ran-out sentence and Start again; no new relay session until it is pressed.", handle: "#dock-status" },
+      ],
+      assertions: [
+        { describe: "Ran-out sentence", handle: "#dock-status", expect: "text", text: "ran out before it was approved" },
+        { describe: "Start again", handle: "#dock-restart", expect: "present" },
+        { describe: "Code hidden", handle: "#dock-code-step", expect: "absent" },
+      ],
+      screenshots: [shot("remote-code-ran-out", "The ran-out sentence.")],
+      dimension: "D4",
+    },
+  ),
 ];
 
 /** The webapp lane of the gym registry (every-merge subset + total tranche). */
