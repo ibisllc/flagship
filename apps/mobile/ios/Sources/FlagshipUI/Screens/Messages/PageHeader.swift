@@ -322,6 +322,71 @@ struct PageHeaderView: View {
     }
 }
 
+/// A sample account's page, read-only: the example the operator publishes for it. The switch shows whether it is public
+/// but can't be flipped, and there is no way into the editor: this device holds no key that signs the page.
+struct DemoPageHeaderView: View {
+    var onView: () -> Void
+    private let store = MessagesStore.shared
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .title) private var avatarSide: CGFloat = 72
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: 14) {
+            identity
+            Divider()
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle(isOn: .constant(store.isPublic)) { Text("Public") }
+                    .font(.body.weight(.semibold))
+                    .disabled(true)
+                    .accessibilityIdentifier("demo-page-public-switch")
+                Text(store.isPublic ? String(localized: "Public") : String(localized: "Not public"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("messages-page-status")
+            }
+            Text("This is a sample account. Its page is an example, so you can't change it.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("demo-page-note")
+            Button(action: onView) {
+                HStack {
+                    Text("View page").font(.body.weight(.semibold))
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(c.primary)
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("demo-page-view")
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var identity: some View {
+        let profile = store.published?.profile
+        let name = profile.map(\.displayName).flatMap { $0.isEmpty ? nil : $0 } ?? store.username
+        let avatar = PageAvatar(sha: profile?.avatar, side: avatarSide)
+        let fields = VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: name)
+                .font(.title3.weight(.semibold))
+                .lineLimit(2)
+                .accessibilityIdentifier("demo-page-name")
+            PageAddressRow(username: store.username, url: store.pageURL)
+        }
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) { avatar; fields }
+        } else {
+            HStack(alignment: .center, spacing: 14) { avatar; fields }
+        }
+    }
+}
+
 /// The header once the conversation list scrolled it away: the photo, the name and the switch (or the status).
 struct PageHeaderBar: View {
     let flow: PagePublicFlow

@@ -55529,43 +55529,84 @@
         }
       }
     },
-    "Messages need your own Flagship account. Sample accounts can't have a page.": {
+    "This is a sample account. Its page is an example, so you can't change it.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensajes necesita tu propia cuenta de Flagship. Las cuentas de ejemplo no pueden tener una página."
+            "value": "Esta es una cuenta de ejemplo. Su página es un ejemplo, así que no puedes cambiarla."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Messages nécessite votre propre compte Flagship. Les comptes de démonstration ne peuvent pas avoir de page."
+            "value": "Ceci est un compte de démonstration. Sa page est un exemple, vous ne pouvez donc pas la modifier."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nachrichten brauchen ein eigenes Flagship-Konto. Beispielkonten können keine Seite haben."
+            "value": "Dies ist ein Beispielkonto. Seine Seite ist ein Beispiel, deshalb kannst du sie nicht ändern."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensagens precisa da sua própria conta do Flagship. Contas de exemplo não podem ter uma página."
+            "value": "Esta é uma conta de exemplo. A página dela é um exemplo, então você não pode alterá-la."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "メッセージを使うには自分の Flagship アカウントが必要です。サンプルアカウントではページを持てません。"
+            "value": "これはサンプルアカウントです。このページは見本なので、変更できません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "消息需要你自己的 Flagship 账户。示例账户不能拥有页面。"
+            "value": "这是一个示例账户。它的页面只是示例，所以你无法更改。"
+          }
+        }
+      }
+    },
+    "View page": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ver página"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir la page"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seite ansehen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ver página"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ページを見る"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看页面"
           }
         }
       }

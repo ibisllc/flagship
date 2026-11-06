@@ -176,7 +176,8 @@ public struct HomeTab: View {
             published: messages.isPublic,
             everPublished: pageWelcome.everPublished(username: app.currentUser) || messages.index != nil,
             pendingChanges: messages.pendingCount,
-            dismissed: pageWelcome.isDismissed(username: app.currentUser)
+            dismissed: pageWelcome.isDismissed(username: app.currentUser),
+            sampleAccount: messages.isSampleReadOnly
         )
     }
 

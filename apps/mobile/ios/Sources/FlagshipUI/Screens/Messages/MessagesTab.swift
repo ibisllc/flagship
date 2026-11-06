@@ -63,7 +63,8 @@ public struct MessagesTab: View {
             Task { await store.refresh() }
         case .pageEditor?:
             _ = linker.consume()
-            path = [.pageEditor]
+            // A sample account's page is the operator's example: the editor is never opened for it.
+            path = store.isSampleReadOnly ? [] : [.pageEditor]
             Task { await store.refresh() }
         default:
             break
@@ -72,11 +73,22 @@ public struct MessagesTab: View {
 
     @ViewBuilder
     private var content: some View {
-        if !store.hasAccount {
+        if store.isSampleReadOnly {
+            // A sample account's page is the operator's example (docs/sample-users.md): shown, never edited here.
+            List {
+                Section {
+                    DemoPageHeaderView {
+                        if let url = URL(string: store.pageURL) { openURL(url) }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("messages-demo-page")
+                }
+            }
+            .listStyle(.insetGrouped)
+            .refreshable { await store.refresh() }
+        } else if !store.hasAccount {
             ContentUnavailableView {
                 Label("Messages", systemImage: "bubble.left")
-            } description: {
-                Text("Messages need your own Flagship account. Sample accounts can't have a page.")
             }
         } else {
             ScrollViewReader { proxy in
