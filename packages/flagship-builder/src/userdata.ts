@@ -698,6 +698,15 @@ cp "$BLOB_JSON" /boot/install-blob.json
 # the security floor. It resolves nothing from npm, apt, git or any package repository.
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
     [ -L /opt/flagship ] || { echo "[flagship-bootstrap] FATAL: appliance release link missing"; exit 1; }
+    # Appliances generalized before 2026-11-05 wiped /var/flagship, the factory's release record
+    # with it: put it back from the record the installer left beside the release itself.
+    APPLIANCE_RELEASE_DIR="$(dirname "$(readlink -f /opt/flagship)")"
+    if [ ! -s /var/flagship/artifact-current.json ] && [ -f "$APPLIANCE_RELEASE_DIR/INSTALLED.json" ] \\
+        && [ "$(jq -r .commit "$APPLIANCE_RELEASE_DIR/INSTALLED.json" 2>/dev/null)" = "$(basename "$APPLIANCE_RELEASE_DIR")" ]; then
+        mkdir -p /var/flagship
+        install -m 644 "$APPLIANCE_RELEASE_DIR/INSTALLED.json" /var/flagship/artifact-current.json
+        jq -er .sequence "$APPLIANCE_RELEASE_DIR/INSTALLED.json" > /var/flagship/artifact-sequence || rm -f /var/flagship/artifact-sequence
+    fi
     APPLIANCE_COMMIT="$(jq -r .commit /var/flagship/artifact-current.json 2>/dev/null || true)"
     [ "$APPLIANCE_COMMIT" = "$GIT_REF" ] || { echo "[flagship-bootstrap] FATAL: appliance release $APPLIANCE_COMMIT does not match signed recipe commit $GIT_REF"; exit 1; }
     cd /opt/flagship
