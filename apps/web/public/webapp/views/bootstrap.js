@@ -421,6 +421,14 @@ async function recoverRealAccount(resolution) {
         deriveIrkFromSeed,
         deriveIrkVersioned,
         signWithIrkVersioned,
+        // The key `.com` holds now, found among every client's derivation of the
+        // recovered seed (an Android- or iOS-made account doesn't hold the web v1).
+        // No answer: runTakeover keeps the web v1, and `.com` still checks it.
+        resolveRegisteredIrk: async (seed, u) => {
+          const { fetchRegisteredIrkPub, findRegisteredIrk } = await import("../lib/irkLineage.js");
+          const pub = await fetchRegisteredIrkPub(u, { baseUrl: controlApex() }).catch(() => null);
+          return pub ? findRegisteredIrk(seed, pub) : null;
+        },
         addProfile: (profile) => addProfile(profile),
         dispatchInitialView,
         setUsername: (u) => profileSet("username", u),

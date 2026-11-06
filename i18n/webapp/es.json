@@ -3286,5 +3286,12 @@
   "Edit page": "Editar página",
   "Bio, links, posts, look, messages": "Biografía, enlaces, publicaciones, aspecto, mensajes",
   "This is a sample account. Its page is an example, so you can't change it.": "Esta es una cuenta de ejemplo. Su página es un ejemplo, así que no puedes cambiarla.",
-  "View page": "Ver página"
+  "View page": "Ver página",
+  "There is no account named {0}. Check that this is the right key file.": "No existe ninguna cuenta llamada {0}. Comprueba que sea el archivo de clave correcto.",
+  "This key file doesn't open {0} any more. It belongs to another account, or the account's key was replaced after the file was made.": "Este archivo de clave ya no abre {0}. Pertenece a otra cuenta, o la clave de la cuenta se sustituyó después de crear el archivo.",
+  "Couldn't reach Flagship to check this key file. Nothing was changed in this browser. Check your connection and try again.": "No se pudo contactar con Flagship para comprobar este archivo de clave. No se cambió nada en este navegador. Comprueba tu conexión e inténtalo de nuevo.",
+  "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.": "Flagship no aceptó este archivo de clave para {0}. No se cambió nada en este navegador. Inténtalo de nuevo en unos minutos.",
+  "Couldn't restore this key file. Nothing was changed in this browser. Try again.": "No se pudo restaurar este archivo de clave. No se cambió nada en este navegador. Inténtalo de nuevo.",
+  "Couldn't restore this key file": "No se pudo restaurar este archivo de clave",
+  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "Este código caducó antes de que se aprobara. Empieza de nuevo y escanea el código nuevo con tu teléfono."
 }

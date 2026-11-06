@@ -3514,4 +3514,9 @@
     <string name="voici_remove_reason">Remove your page</string>
     <string name="voici_remove_failed">Couldn\'t remove your page. Try again.</string>
     <string name="voici_admin_only_remove">Only an admin device can remove your page.</string>
+    <string name="keyfile_import_no_such_account">There is no account named %1$s. Check that this is the right key file.</string>
+    <string name="keyfile_import_key_mismatch">This key file doesn\'t open %1$s any more. It belongs to another account, or the account\'s key was replaced after the file was made.</string>
+    <string name="keyfile_import_unreachable">Couldn\'t reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.</string>
+    <string name="keyfile_import_refused">Flagship didn\'t accept this key file for %1$s. Nothing was changed on this device. Try again in a few minutes.</string>
+    <string name="no_camera_on_the_other_device_send_link">No camera on the other device? Send it this link and paste it there.</string>
 </resources>

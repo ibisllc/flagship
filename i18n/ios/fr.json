@@ -3226,5 +3226,12 @@
   },
   "Remove your page": "Retirer votre page",
   "Couldn't remove your page. Try again.": "Impossible de retirer votre page. Réessayez.",
-  "Only an admin device can remove your page.": "Seul un appareil administrateur peut retirer votre page."
+  "Only an admin device can remove your page.": "Seul un appareil administrateur peut retirer votre page.",
+  "There is no account named %@. Check that this is the right key file.": "Il n’existe aucun compte nommé %@. Vérifiez qu’il s’agit du bon fichier de clé.",
+  "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.": "Ce fichier de clé n’ouvre plus %@. Il appartient à un autre compte, ou la clé du compte a été remplacée après la création du fichier.",
+  "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.": "Impossible de joindre Flagship pour vérifier ce fichier de clé. Rien n’a été modifié sur cet appareil. Vérifiez votre connexion et réessayez.",
+  "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": "Flagship n’a pas accepté ce fichier de clé pour %@. Rien n’a été modifié sur cet appareil. Réessayez dans quelques minutes.",
+  "No camera on the other device? Send it this link and paste it there.": "L’autre appareil n’a pas de caméra ? Envoyez-lui ce lien et collez-le là-bas.",
+  "Share link": "Lien de partage",
+  "No server on this phone can take a browser yet.": "Aucun serveur de ce téléphone ne peut encore accepter un navigateur."
 }

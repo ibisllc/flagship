@@ -3224,5 +3224,12 @@
   },
   "Remove your page": "ページを削除",
   "Couldn't remove your page. Try again.": "ページを削除できませんでした。もう一度お試しください。",
-  "Only an admin device can remove your page.": "ページを削除できるのは管理デバイスだけです。"
+  "Only an admin device can remove your page.": "ページを削除できるのは管理デバイスだけです。",
+  "There is no account named %@. Check that this is the right key file.": "%@ という名前のアカウントはありません。正しいキーファイルか確認してください。",
+  "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.": "このキーファイルでは %@ を開けなくなっています。別のアカウントのファイルか、ファイルの作成後にアカウントのキーが置き換えられています。",
+  "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.": "このキーファイルを確認するために Flagship に接続できませんでした。このデバイスでは何も変更されていません。接続を確認して、もう一度お試しください。",
+  "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": "Flagship は %@ 用のこのキーファイルを受け付けませんでした。このデバイスでは何も変更されていません。数分後にもう一度お試しください。",
+  "No camera on the other device? Send it this link and paste it there.": "相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。",
+  "Share link": "共有リンク",
+  "No server on this phone can take a browser yet.": "このスマートフォンのサーバーは、まだブラウザーを受け入れられません。"
 }

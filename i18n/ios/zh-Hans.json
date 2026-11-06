@@ -3224,5 +3224,12 @@
   },
   "Remove your page": "移除你的页面",
   "Couldn't remove your page. Try again.": "无法移除你的页面。请重试。",
-  "Only an admin device can remove your page.": "只有管理设备可以移除你的页面。"
+  "Only an admin device can remove your page.": "只有管理设备可以移除你的页面。",
+  "There is no account named %@. Check that this is the right key file.": "不存在名为 %@ 的账户。请确认这是正确的密钥文件。",
+  "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.": "此密钥文件已无法打开 %@。它属于另一个账户，或者该账户的密钥在文件创建后已被更换。",
+  "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.": "无法连接 Flagship 来检查此密钥文件。此设备上没有任何更改。请检查网络连接后重试。",
+  "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": "Flagship 未接受用于 %@ 的此密钥文件。此设备上没有任何更改。请几分钟后重试。",
+  "No camera on the other device? Send it this link and paste it there.": "另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。",
+  "Share link": "共享链接",
+  "No server on this phone can take a browser yet.": "这部手机上还没有服务器可以接受浏览器。"
 }

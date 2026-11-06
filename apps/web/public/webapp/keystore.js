@@ -407,6 +407,22 @@ export async function deriveIrkFromSeed(umkSeed) {
   return irkFromInfoSeed(umkSeed, irkInfo(currentIrkVersion()));
 }
 
+/** An IRK under another client's derivation of the UMK: HKDF-SHA256 with this
+ *  salt and info (lib/irkLineage.js names them). Used only to find and sign
+ *  with the key `.com` holds for an account another client made.
+ *  Returns `{ privateKey: CryptoKey (sign), publicKey: Uint8Array(32) }`. */
+export async function deriveIrkWithHkdf(umkSeed, salt, info) {
+  const baseKey = await crypto.subtle.importKey("raw", umkSeed, "HKDF", false, ["deriveBits"]);
+  const enc = new TextEncoder();
+  const seed = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: enc.encode(salt), info: enc.encode(info) },
+    baseKey,
+    256,
+  ));
+  const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8FromSeed(seed), { name: "Ed25519" }, false, ["sign"]);
+  return { privateKey, publicKey: await jwkPubFromSeed(seed) };
+}
+
 /** Derive the IRK at a specific rotation version. v1 == {@link
  *  deriveIrkFromSeed} (the registered key). A takeover rotates to the
  *  next version so the NEW device key signs the re-pair while the OLD

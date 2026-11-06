@@ -3286,5 +3286,12 @@
   "Edit page": "ページを編集",
   "Bio, links, posts, look, messages": "自己紹介、リンク、投稿、デザイン、メッセージ",
   "This is a sample account. Its page is an example, so you can't change it.": "これはサンプルアカウントです。このページは見本なので、変更できません。",
-  "View page": "ページを見る"
+  "View page": "ページを見る",
+  "There is no account named {0}. Check that this is the right key file.": "{0} という名前のアカウントはありません。正しいキーファイルか確認してください。",
+  "This key file doesn't open {0} any more. It belongs to another account, or the account's key was replaced after the file was made.": "このキーファイルでは {0} を開けなくなっています。別のアカウントのファイルか、ファイルの作成後にアカウントのキーが置き換えられています。",
+  "Couldn't reach Flagship to check this key file. Nothing was changed in this browser. Check your connection and try again.": "このキーファイルを確認するために Flagship に接続できませんでした。このブラウザでは何も変更されていません。接続を確認して、もう一度お試しください。",
+  "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.": "Flagship は {0} 用のこのキーファイルを受け付けませんでした。このブラウザでは何も変更されていません。数分後にもう一度お試しください。",
+  "Couldn't restore this key file. Nothing was changed in this browser. Try again.": "このキーファイルを復元できませんでした。このブラウザでは何も変更されていません。もう一度お試しください。",
+  "Couldn't restore this key file": "このキーファイルを復元できませんでした",
+  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "このコードは承認される前に期限切れになりました。最初からやり直して、新しいコードをスマートフォンでスキャンしてください。"
 }

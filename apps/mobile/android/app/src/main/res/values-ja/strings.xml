@@ -3509,4 +3509,9 @@
     <string name="voici_remove_reason">ページを削除</string>
     <string name="voici_remove_failed">ページを削除できませんでした。もう一度お試しください。</string>
     <string name="voici_admin_only_remove">ページを削除できるのは管理デバイスだけです。</string>
+    <string name="keyfile_import_no_such_account">%1$s という名前のアカウントはありません。正しいキーファイルか確認してください。</string>
+    <string name="keyfile_import_key_mismatch">このキーファイルでは %1$s を開けなくなっています。別のアカウントのファイルか、ファイルの作成後にアカウントのキーが置き換えられています。</string>
+    <string name="keyfile_import_unreachable">このキーファイルを確認するために Flagship に接続できませんでした。このデバイスでは何も変更されていません。接続を確認して、もう一度お試しください。</string>
+    <string name="keyfile_import_refused">Flagship は %1$s 用のこのキーファイルを受け付けませんでした。このデバイスでは何も変更されていません。数分後にもう一度お試しください。</string>
+    <string name="no_camera_on_the_other_device_send_link">相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。</string>
 </resources>

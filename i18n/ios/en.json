@@ -13901,5 +13901,33 @@
   "Only an admin device can remove your page.": {
     "en": "Only an admin device can remove your page.",
     "ctx": "voi.ci page controls: the removal was refused (not the account's admin key)"
+  },
+  "There is no account named %@. Check that this is the right key file.": {
+    "en": "There is no account named %@. Check that this is the right key file.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/KeyfileImportViewModel.swift"
+  },
+  "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.": {
+    "en": "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/KeyfileImportViewModel.swift"
+  },
+  "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.": {
+    "en": "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/KeyfileImportViewModel.swift"
+  },
+  "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": {
+    "en": "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/KeyfileImportViewModel.swift"
+  },
+  "No camera on the other device? Send it this link and paste it there.": {
+    "en": "No camera on the other device? Send it this link and paste it there.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift"
+  },
+  "Share link": {
+    "en": "Share link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift"
+  },
+  "No server on this phone can take a browser yet.": {
+    "en": "No server on this phone can take a browser yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift"
   }
 }

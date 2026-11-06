@@ -322,9 +322,17 @@ export async function runTakeover(resolution, deps) {
   if (typeof deps.setUsername === "function") deps.setUsername(username);
   await deps.unlockSession(seed, username);
 
-  // 3 — OLD IRK = registered (v1); NEW IRK = fresh device key (rotated).
-  const oldIrk = await deps.deriveIrkFromSeed(seed);
-  const newIrk = await deps.deriveIrkVersioned(seed, TAKEOVER_IRK_VERSION);
+  // 3 — OLD IRK = the registered key; NEW IRK = fresh device key (rotated).
+  //     `resolveRegisteredIrk` finds the key `.com` holds among every client's
+  //     derivation of the seed (lib/irkLineage.js): an account made on Android
+  //     or iOS does not hold the web v1. Without it (older hosts, tests) the
+  //     registered key is assumed to be the web v1.
+  const registered = typeof deps.resolveRegisteredIrk === "function"
+    ? await deps.resolveRegisteredIrk(seed, username)
+    : null;
+  const newVersion = registered ? registered.version + 1 : TAKEOVER_IRK_VERSION;
+  const oldIrk = registered ?? await deps.deriveIrkFromSeed(seed);
+  const newIrk = await deps.deriveIrkVersioned(seed, newVersion);
   const oldIrkPubHex = toHex(oldIrk.publicKey);
   const newIrkPubHex = toHex(newIrk.publicKey);
   const issuedAt = now();
@@ -336,7 +344,7 @@ export async function runTakeover(resolution, deps) {
     issuedAt,
   ]);
   // The NEW IRK signs (it proves it holds the recovered+rotated key).
-  const sig = await deps.signWithIrkVersioned(seed, TAKEOVER_IRK_VERSION, message);
+  const sig = await deps.signWithIrkVersioned(seed, newVersion, message);
   // …and the OLD (registered) IRK signs the same bytes when we can
   // derive it from the recovered seed, which is the strongest
   // credential `.com` accepts: it proves we hold the account's current
@@ -344,8 +352,9 @@ export async function runTakeover(resolution, deps) {
   // proof so recovery still works if one of the two is unavailable
   // (e.g. the account's registered key was rotated away from v1, or the
   // deployment has no recovery-proof secret).
-  const oldIrkSignatureHex =
-    typeof deps.signWithIrk === "function"
+  const oldIrkSignatureHex = registered
+    ? toHex(await registered.sign(message))
+    : typeof deps.signWithIrk === "function"
       ? toHex(await deps.signWithIrk(seed, message))
       : undefined;
 
@@ -419,7 +428,7 @@ export async function runTakeover(resolution, deps) {
     await deps.dispatchInitialView();
   }
 
-  return { username, seed, rePair, deviceId };
+  return { username, seed, rePair, deviceId, newIrkVersion: newVersion };
 }
 
 /** Orchestrate the full single/multi login branch off a resolution.

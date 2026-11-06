@@ -13445,5 +13445,33 @@
   "View page": {
     "en": "View page",
     "ctx": "webapp/views/page-header.js:132"
+  },
+  "There is no account named {0}. Check that this is the right key file.": {
+    "en": "There is no account named {0}. Check that this is the right key file.",
+    "ctx": "webapp/lib/keyfileImportTakeover.js"
+  },
+  "This key file doesn't open {0} any more. It belongs to another account, or the account's key was replaced after the file was made.": {
+    "en": "This key file doesn't open {0} any more. It belongs to another account, or the account's key was replaced after the file was made.",
+    "ctx": "webapp/lib/keyfileImportTakeover.js"
+  },
+  "Couldn't reach Flagship to check this key file. Nothing was changed in this browser. Check your connection and try again.": {
+    "en": "Couldn't reach Flagship to check this key file. Nothing was changed in this browser. Check your connection and try again.",
+    "ctx": "webapp/lib/keyfileImportTakeover.js"
+  },
+  "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.": {
+    "en": "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.",
+    "ctx": "webapp/lib/keyfileImportTakeover.js"
+  },
+  "Couldn't restore this key file. Nothing was changed in this browser. Try again.": {
+    "en": "Couldn't restore this key file. Nothing was changed in this browser. Try again.",
+    "ctx": "webapp/lib/keyfileBackup.js"
+  },
+  "Couldn't restore this key file": {
+    "en": "Couldn't restore this key file",
+    "ctx": "webapp/views/recovery.js"
+  },
+  "This code ran out before it was approved. Start again, then scan the new code with your phone.": {
+    "en": "This code ran out before it was approved. Start again, then scan the new code with your phone.",
+    "ctx": "webapp/views/companion-dock-start.js"
   }
 }
