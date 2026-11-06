@@ -210,7 +210,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       to main (fast-forward); canary; store submissions (iOS + watch, Android + Wear), Studios.
 - [ ] F5a (added 2026-11-06; MUST be done inside phase B, in this order) Phase B gates added after phase A:
       1. Re-pin (answer y) so the pin includes at least: 02ee868e3 + c43086141 + c559bb080 (Studio/appliance fixes), 192eeb7b5 (page management), and the branches below once merged.
-      2. BEFORE step 41 (.com redeploy): `bash scripts/release.sh --only 14` (D1 backup) then `--only 18` (applies D1 migration 0131 voici_pages.removed_at, apply-once). The .com deploy without 0131 breaks every page read.
+      2. BEFORE step 41 (.com redeploy): take the D1 backup (`--only 14`). Step 41 now applies pending migrations first (0131 voici_pages.removed_at, apply-once; release.sh from 6fe09e256+); with an older release.sh run `--only 18` by hand first. The .com deploy without 0131 breaks every page read.
       3. Merge fix/keyfile-import-and-remote-code (Windows Failure 4: Android 0.3 key file -> webapp import 403; W18 camera-less join; W19 Remote browser shows no code) to main. Store builds (steps 43, 44) WAIT for it.
       4. Merge feat/demo-example-page (example voi.ci page for sample accounts; owner chose option A 2026-11-06). Store builds WAIT for it.
       5. After step 41 (.com live with both): `node scripts/sample-user.mjs example-page playstore-test-0725` and check https://voi.ci/playstore-test-0725 shows the example page; update the store review notes.

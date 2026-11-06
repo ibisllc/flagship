@@ -2815,6 +2815,8 @@ studio_pipe_switch() {
 
 run_redeployB() {
   studio_pipe_switch || return $?
+  # Phase B may land migrations after step 18 ran (0131 did): apply them before the Worker that reads them.
+  run_migrations || return $?
   com_deploy || return $?
   com_checks
   PROBE_FAILS=0
