@@ -113,7 +113,10 @@ fun InstallProgressScreen(
     FSScreen(
         title = stringResource(R.string.provisioning),
         onBack = { onFinish(resolvedFqdn, isLive) },
-        subtitle = stringResource(R.string.watching_the_new_server_come_online),
+        // A stopped setup is final: "almost done, keep your phone out" above "Setup stopped" told the owner to wait for nothing.
+        subtitle = stringResource(
+            if (phase == "error") R.string.setup_stopped_cancel_or_contact else R.string.watching_the_new_server_come_online,
+        ),
     ) {
         FSCard(padding = PaddingValues(vertical = FS.space.s2)) {
             if (!hadFirstReport) {
