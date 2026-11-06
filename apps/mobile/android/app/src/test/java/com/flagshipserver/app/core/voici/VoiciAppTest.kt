@@ -104,6 +104,8 @@ class VoiciAppTest {
         assertTrue(a.publish("test"))
         assertEquals(1L, published(mock).first.body.seq)
         a.edit("post-add", post = post("First"))
+        assertEquals("an edit is a draft until Publish", 1L, published(mock).first.body.seq)
+        assertTrue(a.publish("test"))
         assertEquals(2L, published(mock).first.body.seq)
         assertEquals(0, a.page.value.pendingCount)
         assertEquals(2L, a.page.value.publishedSeq)
@@ -149,6 +151,9 @@ class VoiciAppTest {
         assertEquals(1L, published(mock).first.body.seq)
 
         a.refresh()
+        assertEquals("the other device's change waits for Publish here", 1L, published(mock).first.body.seq)
+        assertEquals(1, a.page.value.pendingCount)
+        assertTrue(a.publish("test"))
         assertEquals(listOf("From the tablet"), published(mock).second.chunks.flatten().map { it.text })
         assertEquals(1, mock.consumed.size)
         assertTrue(mock.drafts["alice"]!!.isEmpty())
@@ -269,7 +274,8 @@ class VoiciAppTest {
         assertEquals(req, link.request("https://voi.ci"))
         flow.start(link)
         val review = flow.phase.value as VoiciSignInPhase.Review
-        assertEquals("Alice", review.displayName)
+        // A first page carries the account name (the username) until the owner changes it.
+        assertEquals("alice", review.displayName)
         flow.approve("test")
         assertEquals(VoiciSignInPhase.Done, flow.phase.value)
         val checked = VoiciMessages.checkVoiciSignInAnswer(VoiciJs.parseJson(delivered.single().decodeToString()), req, listOf(mock.caPub), System.currentTimeMillis())

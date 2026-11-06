@@ -48,6 +48,25 @@ class PageWelcomeCardStoreTest {
         assertTrue("a new launch remembers it", store().isDismissed("jolly-quince"))
     }
 
+    private fun pointer(checked: Boolean = true, published: Boolean = false, ever: Boolean = false, pending: Int = 0, dismissed: Boolean = false, hasAccount: Boolean = true) =
+        PageWelcomeCardStore.pointer(hasAccount, checked, published, ever, pending, dismissed)
+
+    @Test fun pointer_welcomeUntilFirstPublic() {
+        org.junit.Assert.assertEquals(PagePointer.Welcome, pointer())
+        org.junit.Assert.assertEquals(PagePointer.Row(isPublic = true), pointer(published = true, ever = true))
+    }
+
+    @Test fun pointer_rowStaysAfterTheCardIsDismissedOrThePageTurnedOff() {
+        org.junit.Assert.assertEquals(PagePointer.Row(isPublic = false), pointer(dismissed = true))
+        org.junit.Assert.assertEquals("a page turned off keeps the row", PagePointer.Row(isPublic = false), pointer(ever = true))
+        org.junit.Assert.assertEquals("changes started", PagePointer.Row(isPublic = false), pointer(pending = 2))
+    }
+
+    @Test fun pointer_hiddenForASampleAccountOrBeforeTheRead() {
+        org.junit.Assert.assertEquals(PagePointer.Hidden, pointer(hasAccount = false))
+        org.junit.Assert.assertEquals(PagePointer.Hidden, pointer(checked = false))
+    }
+
     @Test fun noAccountCountsAsDismissed() {
         val s = store()
         assertTrue(s.isDismissed(null))

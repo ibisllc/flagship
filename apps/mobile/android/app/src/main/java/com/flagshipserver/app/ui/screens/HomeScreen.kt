@@ -64,6 +64,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import com.flagshipserver.app.ui.components.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -171,6 +172,9 @@ fun HomeScreen(
     showPageWelcome: Boolean = false,
     onSetUpPage: () -> Unit = {},
     onDismissPageWelcome: () -> Unit = {},
+    /** The compact "Your page" row that replaces the welcome card once the page was public or the card dismissed:
+     *  null hides it, else whether the page is public now. Tapping it opens the page at the top of Messages. */
+    pageRowPublic: Boolean? = null,
     /** Name dibs notice: the window's end (ms) while it should show, else null. */
     dibsNoticeClosesAt: Long? = null,
     onClaimDibs: () -> Unit = {},
@@ -329,6 +333,7 @@ fun HomeScreen(
             onClaimDibs = onClaimDibs,
             onDismissDibs = onDismissDibs,
         )
+        if (pageRowPublic != null) PageHomeRow(pageRowPublic, onSetUpPage)
 
         if (pods.isNotEmpty() && onBuildService != null) {
             // A restricted device without the build scope sees it disabled, with the reason.
@@ -528,7 +533,7 @@ private fun TopAnnouncement(
         showPageWelcome -> {
             FSAnnouncementCard(
                 icon = Icons.Outlined.Public,
-                title = stringResource(R.string.voici_welcome_title),
+                title = stringResource(R.string.voici_home_title),
                 message = fsString(R.string.voici_welcome_message, username),
                 ctaLabel = stringResource(R.string.voici_set_up_your_page),
                 onCta = onSetUpPage,
@@ -979,4 +984,29 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
         iconTint = FS.colors.danger,
         action = if (onRetry != null) ({ FSSecondaryButton(label = stringResource(R.string.try_again), onClick = onRetry) }) else null,
     )
+}
+
+/** "Your page · Public" with a chevron: a pointer to the page at the top of the Messages tab (it replaces the welcome card). */
+@Composable
+internal fun PageHomeRow(isPublic: Boolean, onOpen: () -> Unit) {
+    val status = stringResource(if (isPublic) R.string.voici_public else R.string.voici_not_public)
+    val title = stringResource(R.string.voici_your_page)
+    Surface(
+        onClick = onOpen,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-page-row")
+            .clearAndSetSemantics { contentDescription = "$title, $status" },
+    ) {
+        Row(Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s3), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Public, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(FS.space.s3))
+            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f, fill = false))
+            Spacer(Modifier.width(FS.space.s2))
+            Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (isPublic) FS.colors.accent else MaterialTheme.colorScheme.outline))
+            Spacer(Modifier.width(FS.space.s1))
+            Text(status, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

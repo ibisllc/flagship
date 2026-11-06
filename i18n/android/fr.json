@@ -3487,5 +3487,22 @@
   "voici_welcome_title": "Bienvenue ! Créez votre propre page",
   "voici_welcome_message": "Partagez une photo, quelques mots sur vous, vos liens et vos publications sur voi.ci/%1$s. Si vous le souhaitez, les visiteurs peuvent vous y envoyer des messages.",
   "voici_set_up_your_page": "Configurer votre page",
-  "voici_edit_your_page": "Modifier votre page"
+  "voici_edit_your_page": "Modifier votre page",
+  "voici_home_title": "Votre page publique",
+  "voici_public_warning_title": "Rendre votre page publique ?",
+  "voici_make_it_public": "La rendre publique",
+  "voici_public_warning_body": "Tout ce que vous mettez sur votre page est public. Tout le monde peut le voir, et il affiche votre nom d’utilisateur, que vos apps et vos serveurs utilisent aussi, donc on peut les relier.",
+  "voici_remove_title": "Retirer votre page de voi.ci ?",
+  "voici_remove_body": "Les visiteurs verront « Il n’y a pas de page ici. » Vos publications et votre profil restent sur vos appareils, vous pouvez donc la réactiver.",
+  "voici_public": "Publique",
+  "voici_not_public": "Non publique",
+  "voici_admin_only_publish": "Seul un appareil administrateur peut publier votre page.",
+  "voici_edit_page": "Modifier la page",
+  "voici_changes_pending": {
+    "one": "%1$d modification non publiée",
+    "other": "%1$d modifications non publiées"
+  },
+  "voici_remove_reason": "Retirer votre page",
+  "voici_remove_failed": "Impossible de retirer votre page. Réessayez.",
+  "voici_admin_only_remove": "Seul un appareil administrateur peut retirer votre page."
 }

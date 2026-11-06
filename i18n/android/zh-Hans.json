@@ -3487,5 +3487,22 @@
   "voici_welcome_title": "欢迎！创建你自己的页面",
   "voici_welcome_message": "在 voi.ci/%1$s 分享一张照片、几句自我介绍、你的链接和帖子。如果你愿意，访客还可以在那里给你发消息。",
   "voici_set_up_your_page": "设置你的页面",
-  "voici_edit_your_page": "编辑你的页面"
+  "voici_edit_your_page": "编辑你的页面",
+  "voici_home_title": "你的公开页面",
+  "voici_public_warning_title": "要公开你的页面吗？",
+  "voici_make_it_public": "公开",
+  "voici_public_warning_body": "你放在页面上的所有内容都是公开的。任何人都能看到，而且页面会显示你的用户名，你的应用和服务器也使用这个用户名，因此别人可以把它们联系起来。",
+  "voici_remove_title": "要从 voi.ci 移除你的页面吗？",
+  "voici_remove_body": "访客会看到“这里没有页面。”你的帖子和个人资料会保留在你的设备上，因此你可以再次打开它。",
+  "voici_public": "公开",
+  "voici_not_public": "未公开",
+  "voici_admin_only_publish": "只有管理设备可以发布你的页面。",
+  "voici_edit_page": "编辑页面",
+  "voici_changes_pending": {
+    "one": "%1$d 项更改未发布",
+    "other": "%1$d 项更改未发布"
+  },
+  "voici_remove_reason": "移除你的页面",
+  "voici_remove_failed": "无法移除你的页面。请重试。",
+  "voici_admin_only_remove": "只有管理设备可以移除你的页面。"
 }

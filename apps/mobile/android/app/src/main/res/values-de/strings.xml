@@ -3490,4 +3490,21 @@
     <string name="voici_welcome_message">Teile ein Foto, ein paar Worte über dich, deine Links und Beiträge auf voi.ci/%1$s. Wenn du möchtest, können dir Besucher dort Nachrichten schreiben.</string>
     <string name="voici_set_up_your_page">Deine Seite einrichten</string>
     <string name="voici_edit_your_page">Deine Seite bearbeiten</string>
+    <string name="voici_home_title">Deine öffentliche Seite</string>
+    <string name="voici_public_warning_title">Deine Seite öffentlich machen?</string>
+    <string name="voici_make_it_public">Öffentlich machen</string>
+    <string name="voici_public_warning_body">Alles, was du auf deine Seite stellst, ist öffentlich. Jeder kann es sehen, und es zeigt deinen Benutzernamen, den auch deine Apps und Server verwenden, sodass man sie miteinander verbinden kann.</string>
+    <string name="voici_remove_title">Deine Seite von voi.ci entfernen?</string>
+    <string name="voici_remove_body">Besucher sehen dann „Hier gibt es keine Seite.“ Deine Beiträge und dein Profil bleiben auf deinen Geräten, sodass du sie wieder einschalten kannst.</string>
+    <string name="voici_public">Öffentlich</string>
+    <string name="voici_not_public">Nicht öffentlich</string>
+    <string name="voici_admin_only_publish">Nur ein Admin-Gerät kann deine Seite veröffentlichen.</string>
+    <string name="voici_edit_page">Seite bearbeiten</string>
+    <plurals name="voici_changes_pending">
+        <item quantity="one">%1$d Änderung nicht veröffentlicht</item>
+        <item quantity="other">%1$d Änderungen nicht veröffentlicht</item>
+    </plurals>
+    <string name="voici_remove_reason">Deine Seite entfernen</string>
+    <string name="voici_remove_failed">Deine Seite konnte nicht entfernt werden. Versuch es noch einmal.</string>
+    <string name="voici_admin_only_remove">Nur ein Admin-Gerät kann deine Seite entfernen.</string>
 </resources>

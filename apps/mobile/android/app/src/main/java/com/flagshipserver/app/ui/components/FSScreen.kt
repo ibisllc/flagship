@@ -76,6 +76,8 @@ fun FSScreen(
     maxContentWidth: Dp = FSLayout.readingMaxWidth,
     floatingActionButton: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
+    /** Pinned under the top bar (a collapsed header, e.g. the Messages tab's page bar). */
+    topPinned: (@Composable () -> Unit)? = null,
     /** False when the body scrolls itself (a LazyColumn, a chat). */
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
@@ -122,7 +124,9 @@ fun FSScreen(
                 colors = barColors,
               )
             }
-            if (scrollable && scrollState.value > 0) {
+            if (topPinned != null) {
+                Box(Modifier.widthIn(max = maxContentWidth).fillMaxWidth()) { topPinned() }
+            } else if (scrollable && scrollState.value > 0) {
                 HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }
           }

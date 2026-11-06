@@ -201,6 +201,11 @@ fun SettingsScreen(nav: NavController) {
         Toast.makeText(ctx, FSStrings.get(R.string.set_up_account_recovery_to_use), Toast.LENGTH_LONG).show()
     }
     val sessionGated = signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY
+    // "Your page": points to the page at the top of the Messages tab (a sample account has none).
+    val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
+    val voiciCenter = LocalVoiciCenter.current
+    val noVoiciPage = remember { kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.voici.VoiciPageUi()) }
+    val voiciPage by (voiciCenter?.page ?: noVoiciPage).collectAsState()
 
     FSScreen(
         title = stringResource(R.string.settings),
@@ -239,6 +244,15 @@ fun SettingsScreen(nav: NavController) {
                     onClick = { nav.navigate("account-security") },
                     testTag = "settings-open-account-security",
                 ),
+            ) + (if (voiciPage.username.isNotEmpty()) listOf(
+                FSSettingsRowData(
+                    icon = Icons.Outlined.Public,
+                    title = stringResource(R.string.voici_your_page),
+                    subtitle = "voi.ci/${voiciPage.username}",
+                    onClick = { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.Messages()) },
+                    testTag = "settings-your-page",
+                ),
+            ) else emptyList()) + listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Shield,
                     title = stringResource(R.string.quantum_safe_protection),

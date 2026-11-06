@@ -3487,5 +3487,22 @@
   "voici_welcome_title": "ようこそ！自分のページを作りましょう",
   "voici_welcome_message": "voi.ci/%1$s で、写真、ひとことの自己紹介、リンク、投稿を公開できます。希望すれば、訪問者からメッセージを受け取ることもできます。",
   "voici_set_up_your_page": "ページを設定",
-  "voici_edit_your_page": "ページを編集"
+  "voici_edit_your_page": "ページを編集",
+  "voici_home_title": "あなたの公開ページ",
+  "voici_public_warning_title": "ページを公開しますか？",
+  "voici_make_it_public": "公開する",
+  "voici_public_warning_body": "ページに載せたものはすべて公開されます。誰でも見ることができ、アプリやサーバーでも使っているユーザー名が表示されるため、それらが結び付けられる可能性があります。",
+  "voici_remove_title": "voi.ci からページを削除しますか？",
+  "voici_remove_body": "訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。",
+  "voici_public": "公開",
+  "voici_not_public": "非公開",
+  "voici_admin_only_publish": "ページを公開できるのは管理デバイスだけです。",
+  "voici_edit_page": "ページを編集",
+  "voici_changes_pending": {
+    "one": "未公開の変更 %1$d 件",
+    "other": "未公開の変更 %1$d 件"
+  },
+  "voici_remove_reason": "ページを削除",
+  "voici_remove_failed": "ページを削除できませんでした。もう一度お試しください。",
+  "voici_admin_only_remove": "ページを削除できるのは管理デバイスだけです。"
 }

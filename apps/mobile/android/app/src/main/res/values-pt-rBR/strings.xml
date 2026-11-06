@@ -3490,4 +3490,21 @@
     <string name="voici_welcome_message">Compartilhe uma foto, algumas palavras sobre você, seus links e publicações em voi.ci/%1$s. Se quiser, os visitantes podem enviar mensagens para você lá.</string>
     <string name="voici_set_up_your_page">Configurar sua página</string>
     <string name="voici_edit_your_page">Editar sua página</string>
+    <string name="voici_home_title">Sua página pública</string>
+    <string name="voici_public_warning_title">Tornar sua página pública?</string>
+    <string name="voici_make_it_public">Tornar pública</string>
+    <string name="voici_public_warning_body">Tudo o que você coloca na sua página é público. Qualquer pessoa pode ver, e ela mostra seu nome de usuário, que seus apps e servidores também usam, então as pessoas podem relacioná-los.</string>
+    <string name="voici_remove_title">Remover sua página do voi.ci?</string>
+    <string name="voici_remove_body">Os visitantes verão “Não há nenhuma página aqui.” Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.</string>
+    <string name="voici_public">Pública</string>
+    <string name="voici_not_public">Não pública</string>
+    <string name="voici_admin_only_publish">Só um dispositivo de administrador pode publicar sua página.</string>
+    <string name="voici_edit_page">Editar página</string>
+    <plurals name="voici_changes_pending">
+        <item quantity="one">%1$d alteração não publicada</item>
+        <item quantity="other">%1$d alterações não publicadas</item>
+    </plurals>
+    <string name="voici_remove_reason">Remover sua página</string>
+    <string name="voici_remove_failed">Não foi possível remover sua página. Tente de novo.</string>
+    <string name="voici_admin_only_remove">Só um dispositivo de administrador pode remover sua página.</string>
 </resources>

@@ -3427,5 +3427,19 @@
   "voici_welcome_title": "afb7f94c238e",
   "voici_welcome_message": "138d31c6f3cb",
   "voici_set_up_your_page": "fdbd3674fc7d",
-  "voici_edit_your_page": "8846bd186c88"
+  "voici_edit_your_page": "8846bd186c88",
+  "voici_home_title": "13ad922301ce",
+  "voici_public_warning_title": "cebf779369d4",
+  "voici_make_it_public": "2b3694e689f0",
+  "voici_public_warning_body": "9b8db7f01530",
+  "voici_remove_title": "b201f0d3b001",
+  "voici_remove_body": "4f678a93dc26",
+  "voici_public": "ff2e96a9a685",
+  "voici_not_public": "5d4ddbede065",
+  "voici_admin_only_publish": "ea9a952f8d42",
+  "voici_edit_page": "70b9672b0477",
+  "voici_changes_pending": "1b22751d2a6d",
+  "voici_remove_reason": "485dc23def41",
+  "voici_remove_failed": "fbb585466ed8",
+  "voici_admin_only_remove": "a9089c971f0f"
 }

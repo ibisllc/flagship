@@ -3495,4 +3495,21 @@
     <string name="voici_welcome_message">Share a photo, a few words about you, your links and posts at voi.ci/%1$s. If you want, visitors can send you messages there.</string>
     <string name="voici_set_up_your_page">Set up your page</string>
     <string name="voici_edit_your_page">Edit your page</string>
+    <string name="voici_home_title">Your public page</string>
+    <string name="voici_public_warning_title">Make your page public?</string>
+    <string name="voici_make_it_public">Make it public</string>
+    <string name="voici_public_warning_body">Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.</string>
+    <string name="voici_remove_title">Remove your page from voi.ci?</string>
+    <string name="voici_remove_body">Visitors will see “There\'s no page here.” Your posts and profile stay on your devices, so you can turn it on again.</string>
+    <string name="voici_public">Public</string>
+    <string name="voici_not_public">Not public</string>
+    <string name="voici_admin_only_publish">Only an admin device can publish your page.</string>
+    <string name="voici_edit_page">Edit page</string>
+    <plurals name="voici_changes_pending">
+        <item quantity="one">%1$d change not published</item>
+        <item quantity="other">%1$d changes not published</item>
+    </plurals>
+    <string name="voici_remove_reason">Remove your page</string>
+    <string name="voici_remove_failed">Couldn\'t remove your page. Try again.</string>
+    <string name="voici_admin_only_remove">Only an admin device can remove your page.</string>
 </resources>

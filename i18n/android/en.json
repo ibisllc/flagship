@@ -14404,5 +14404,65 @@
   "voici_edit_your_page": {
     "en": "Edit your page",
     "ctx": "voi.ci / Messages: Messages tab row action once a page exists"
+  },
+  "voici_home_title": {
+    "en": "Your public page",
+    "ctx": "voi.ci / Messages: Home card that points to the page at the top of the Messages tab, title"
+  },
+  "voici_public_warning_title": {
+    "en": "Make your page public?",
+    "ctx": "voi.ci / Messages: one-time warning before the page first goes public, title"
+  },
+  "voici_make_it_public": {
+    "en": "Make it public",
+    "ctx": "voi.ci / Messages: one-time public warning, the button that publishes"
+  },
+  "voici_public_warning_body": {
+    "en": "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.",
+    "ctx": "voi.ci / Messages: one-time public warning, body"
+  },
+  "voici_remove_title": {
+    "en": "Remove your page from voi.ci?",
+    "ctx": "voi.ci / Messages: confirmation when the Public switch is turned off, title"
+  },
+  "voici_remove_body": {
+    "en": "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.",
+    "ctx": "voi.ci / Messages: confirmation when the Public switch is turned off, body (quotes what visitors see)"
+  },
+  "voici_public": {
+    "en": "Public",
+    "ctx": "voi.ci / Messages: the switch that makes the page visible on voi.ci, and the Home row status"
+  },
+  "voici_not_public": {
+    "en": "Not public",
+    "ctx": "voi.ci / Messages: page status when visitors don't see it (header and Home row)"
+  },
+  "voici_admin_only_publish": {
+    "en": "Only an admin device can publish your page.",
+    "ctx": "voi.ci / Messages: why the Public switch is off on a device without the admin key"
+  },
+  "voici_edit_page": {
+    "en": "Edit page",
+    "ctx": "voi.ci / Messages: header link that opens the full page editor"
+  },
+  "voici_changes_pending": {
+    "en": {
+      "one": "%1$d change not published",
+      "other": "%1$d changes not published"
+    },
+    "ctx": "voi.ci / Messages: the editor's publish bar, how many changes wait",
+    "plural": true
+  },
+  "voici_remove_reason": {
+    "en": "Remove your page",
+    "ctx": "voi.ci / Messages: Face ID / biometric prompt reason when the page is removed"
+  },
+  "voici_remove_failed": {
+    "en": "Couldn't remove your page. Try again.",
+    "ctx": "voi.ci / Messages: the removal failed"
+  },
+  "voici_admin_only_remove": {
+    "en": "Only an admin device can remove your page.",
+    "ctx": "voi.ci / Messages: the removal was refused (not the account's admin key)"
   }
 }

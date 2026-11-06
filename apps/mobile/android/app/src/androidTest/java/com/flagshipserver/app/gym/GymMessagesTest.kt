@@ -21,14 +21,15 @@ class GymMessagesTest : GymBase() {
 
     private fun account(): String = GymVoici.client.accounts.keys.first { it != GymVoici.OTHER }
 
+    /** The Public switch at the top of Messages: the rules, then the one-time public warning, then the page. */
     private fun publishFirstPage() {
-        tap("messages-your-page")
-        waitUntilExists("page-warning")
-        type("page-display-name", " Gym")
-        tap("page-save-profile")
-        tap("page-publish")
+        waitUntilExists("page-public-switch")
+        gymShot("messages-header-off")
+        tap("page-public-switch")
         tap("voici-rules-agree")
-        tap("page-publish-confirm")
+        waitUntilExists("page-make-public")
+        gymShot("page-public-warning")
+        tap("page-make-public")
         eventually(15_000, "the page is published") { GymVoici.client.storedIndex(account()) != null }
     }
 
@@ -37,9 +38,13 @@ class GymMessagesTest : GymBase() {
         waitUntilExists("messages-title", 20_000)
         gymShot("messages-empty")
         publishFirstPage()
-        gymShot("page-editor-published")
-        // Accept messages is a publish of its own.
+        gymShot("messages-header-on")
+        // In the editor every change is a draft until the one Publish bar.
+        tap("messages-edit-page")
         tap("page-accept-messages")
+        waitUntilExists("page-publish-bar")
+        gymShot("page-editor-bar")
+        tap("page-publish")
         eventually(15_000, "accepting") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsMessages == 1 }
         tap("nav-back")
 
@@ -66,10 +71,22 @@ class GymMessagesTest : GymBase() {
         eventually(10_000, "blocked at .com") { GymVoici.client.blocks[account()].orEmpty().isNotEmpty() }
     }
 
+    @Test fun turningThePageOffRemovesItAndOnBringsItBack() {
+        launch(tab = "messages", adminRoot = true)
+        waitUntilExists("messages-title", 20_000)
+        publishFirstPage()
+        tap("page-public-switch")
+        tap("page-remove-confirm")
+        eventually(15_000, "removed at .com") { account() in GymVoici.client.removed }
+        tap("page-public-switch")
+        eventually(15_000, "back, with no second warning") { account() !in GymVoici.client.removed && GymVoici.client.storedIndex(account()) != null }
+    }
+
     @Test fun aDeviceWithoutTheAdminRootKeepsItsChangeGrayed() {
         launch(tab = "messages", adminRoot = false)
         waitUntilExists("messages-title", 20_000)
-        tap("messages-your-page")
+        waitUntilExists("page-admin-only")
+        tap("messages-edit-page")
         waitUntilExists("page-warning")
         assertEquals("only an admin device has a Publish button", 0, tagCount("page-publish"))
         tap("page-new-post")

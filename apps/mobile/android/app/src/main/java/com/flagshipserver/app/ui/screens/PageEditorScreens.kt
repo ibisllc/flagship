@@ -1,6 +1,6 @@
-// The voi.ci page editor (docs/voici-and-messages.md §11.2): the linkability warning (O1), photo, name, bio, links,
-// theme, Accept messages, posts, a preview drawn by the page's own rules, Publish on an admin device. A change made
-// here is grayed ("Not published yet") until an admin device signs it; on any other device it waits for one.
+// The voi.ci page editor (docs/voici-and-messages.md §11.2): the Public switch and the linkability warning (O1), photo,
+// name, bio, links, theme, Accept messages, posts, a preview drawn by the page's own rules. Every change is a draft,
+// grayed ("Not published yet"), until the one bottom bar's Publish on an admin device; elsewhere it waits for one.
 
 package com.flagshipserver.app.ui.screens
 
@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -131,8 +132,9 @@ fun PageEditorScreen(nav: NavController) {
     var avatar by remember(working.profile) { mutableStateOf(working.profile.avatar) }
     val links = remember(working.profile) { mutableStateListOf(*working.profile.links.map { LinkDraft(it.url, it.label) }.toTypedArray()) }
     var photoError by remember { mutableStateOf(false) }
-    var askRules by remember { mutableStateOf(false) }
-    var confirmFirst by remember { mutableStateOf(false) }
+    val flow = rememberPagePublicFlow(center)
+    /** Records the fields as one profile draft (it replaces this device's earlier one); assigned below. */
+    var commitProfile: () -> Unit = {}
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -142,7 +144,10 @@ fun PageEditorScreen(nav: NavController) {
                     ?.let(VoiciJpeg::avatar)?.let(center::putImage)
             }
             photoError = sha == null
-            if (sha != null) avatar = sha
+            if (sha != null) {
+                avatar = sha
+                commitProfile()
+            }
         }
     }
 
@@ -160,17 +165,29 @@ fun PageEditorScreen(nav: NavController) {
         }
         return VoiciProfile(n, b, avatar, theme, out)
     }
+    commitProfile = {
+        val p = buildProfile()
+        if (p != null && p != center.page.value.working?.profile) center.scope.launch { center.edit("profile", profile = p) }
+    }
     val draftProfile = buildProfile()
     val profileChanged = draftProfile != null && draftProfile != working.profile
+    val unpublished = page.pendingCount + if (profileChanged && !page.pendingProfile) 1 else 0
+    // Leaving the editor keeps what was typed, as a draft.
+    val latestCommit by androidx.compose.runtime.rememberUpdatedState({ commitProfile() })
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { latestCommit() } }
+    PagePublicDialogs(flow)
 
-    fun doPublish() {
-        scope.launch {
-            if (center.publish(FSStrings.get(R.string.voici_publish_reason))) Unit
-            else center.page.value.error?.let { toasts.error(VoiciCopy.publishError(it)) }
+    FSScreen(
+        title = stringResource(R.string.voici_editor_title), onBack = { nav.popBackStack() }, titleTag = "page-editor-title",
+        bottomBar = { PagePublishBar(page, unpublished) { commitProfile(); flow.publishAll() } },
+    ) {
+        FSCard(Modifier.testTag("page-public-row")) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.voici_public), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+                PagePublicSwitch(page, flow)
+            }
+            if (!page.canPublish) Text(stringResource(R.string.voici_admin_only_publish), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-
-    FSScreen(title = stringResource(R.string.voici_editor_title), onBack = { nav.popBackStack() }, titleTag = "page-editor-title") {
         FSCard(Modifier.testTag("page-warning")) {
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = FS.colors.warning)
@@ -188,7 +205,7 @@ fun PageEditorScreen(nav: NavController) {
                     FSSecondaryButton(stringResource(R.string.voici_choose_photo), {
                         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }, modifier = Modifier.testTag("page-choose-photo"))
-                    if (avatar != null) FSGhostButton(stringResource(R.string.voici_remove_photo), { avatar = null })
+                    if (avatar != null) FSGhostButton(stringResource(R.string.voici_remove_photo), { avatar = null; commitProfile() })
                 }
             }
             if (photoError) Text(stringResource(R.string.voici_photo_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -197,13 +214,13 @@ fun PageEditorScreen(nav: NavController) {
         OutlinedTextField(
             value = name, onValueChange = { if (cps(it) <= 64) name = it },
             label = { Text(stringResource(R.string.voici_display_name)) }, singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag("page-display-name"),
+            modifier = Modifier.fillMaxWidth().testTag("page-display-name").onFocusChanged { if (!it.isFocused) commitProfile() },
         )
         OutlinedTextField(
             value = bio, onValueChange = { if (cps(it) <= 280) bio = it },
             label = { Text(stringResource(R.string.voici_bio)) }, minLines = 3,
             supportingText = { Text(stringResource(R.string.voici_counter, cps(bio), 280)) },
-            modifier = Modifier.fillMaxWidth().testTag("page-bio"),
+            modifier = Modifier.fillMaxWidth().testTag("page-bio").onFocusChanged { if (!it.isFocused) commitProfile() },
         )
 
         FSSectionHeader(stringResource(R.string.voici_links))
@@ -216,17 +233,17 @@ fun PageEditorScreen(nav: NavController) {
                         value = l.url, onValueChange = { if (it.length <= 512) l.url = it },
                         label = { Text(stringResource(R.string.voici_link_url)) }, singleLine = true, isError = bad,
                         supportingText = { Text(if (bad) stringResource(R.string.voici_link_invalid) else listOfNotNull(site, VoiciText.voiciUrlHost(l.url.trim())).joinToString(" · ")) },
-                        modifier = Modifier.fillMaxWidth().testTag("page-link-url-$i"),
+                        modifier = Modifier.fillMaxWidth().testTag("page-link-url-$i").onFocusChanged { if (!it.isFocused) commitProfile() },
                     )
                     OutlinedTextField(
                         value = l.label, onValueChange = { if (cps(it) <= 40) l.label = it },
                         label = { Text(stringResource(R.string.voici_link_label)) }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("page-link-label-$i"),
+                        modifier = Modifier.fillMaxWidth().testTag("page-link-label-$i").onFocusChanged { if (!it.isFocused) commitProfile() },
                     )
                     Row {
-                        if (i > 0) FSGhostButton(stringResource(R.string.voici_move_up), { links.add(i - 1, links.removeAt(i)) })
-                        if (i < links.size - 1) FSGhostButton(stringResource(R.string.voici_move_down), { links.add(i + 1, links.removeAt(i)) })
-                        FSGhostButton(stringResource(R.string.voici_remove), { links.removeAt(i) })
+                        if (i > 0) FSGhostButton(stringResource(R.string.voici_move_up), { links.add(i - 1, links.removeAt(i)); commitProfile() })
+                        if (i < links.size - 1) FSGhostButton(stringResource(R.string.voici_move_down), { links.add(i + 1, links.removeAt(i)); commitProfile() })
+                        FSGhostButton(stringResource(R.string.voici_remove), { links.removeAt(i); commitProfile() })
                     }
                 }
             }
@@ -236,14 +253,9 @@ fun PageEditorScreen(nav: NavController) {
         FSSectionHeader(stringResource(R.string.voici_theme))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             listOf("classic" to R.string.voici_theme_classic, "ink" to R.string.voici_theme_ink, "sea" to R.string.voici_theme_sea).forEach { (id, label) ->
-                FilterChip(selected = theme == id, onClick = { theme = id }, label = { Text(stringResource(label)) }, modifier = Modifier.testTag("page-theme-$id"))
+                FilterChip(selected = theme == id, onClick = { theme = id; commitProfile() }, label = { Text(stringResource(label)) }, modifier = Modifier.testTag("page-theme-$id"))
             }
         }
-        FSPrimaryButton(
-            stringResource(R.string.voici_save_profile),
-            { draftProfile?.let { p -> scope.launch { center.edit("profile", profile = p) } } },
-            enabled = profileChanged, block = true, modifier = Modifier.testTag("page-save-profile"),
-        )
         if (page.pendingProfile) Text(stringResource(R.string.voici_not_published_yet), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("page-profile-pending"))
 
         FSCard {
@@ -277,7 +289,7 @@ fun PageEditorScreen(nav: NavController) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSSecondaryButton(stringResource(R.string.voici_preview), { nav.navigate("page-preview") }, modifier = Modifier.testTag("page-preview"))
-            if (page.publishedSeq > 0) {
+            if (page.isPublic) {
                 FSGhostButton(stringResource(R.string.voici_copy_link), {
                     (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("voi.ci", "https://voi.ci/${page.username}"))
                     toasts.success(FSStrings.get(R.string.voici_link_copied))
@@ -287,35 +299,9 @@ fun PageEditorScreen(nav: NavController) {
                 })
             }
         }
-        if (page.canPublish) {
-            FSPrimaryButton(
-                if (page.publishing) stringResource(R.string.voici_publishing) else stringResource(R.string.voici_publish),
-                {
-                    when {
-                        !page.rulesAccepted -> askRules = true
-                        page.publishedSeq == 0L -> confirmFirst = true
-                        else -> doPublish()
-                    }
-                },
-                enabled = !page.publishing && (page.pendingCount > 0 || page.publishedSeq == 0L), block = true,
-                modifier = Modifier.testTag("page-publish"),
-            )
-        }
         page.error?.let { Text(VoiciCopy.publishError(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("page-error")) }
     }
 
-    if (askRules) VoiciRulesDialog(onAgree = {
-        askRules = false
-        scope.launch { center.acceptRules() }
-        if (page.publishedSeq == 0L) confirmFirst = true else doPublish()
-    }, onDismiss = { askRules = false })
-    if (confirmFirst) AlertDialog(
-        onDismissRequest = { confirmFirst = false },
-        title = { Text(stringResource(R.string.voici_first_publish_title)) },
-        text = { Text(stringResource(R.string.voici_warning)) },
-        confirmButton = { FSGhostButton(stringResource(R.string.voici_publish), { confirmFirst = false; doPublish() }, modifier = Modifier.testTag("page-publish-confirm")) },
-        dismissButton = { FSGhostButton(stringResource(R.string.voici_cancel), { confirmFirst = false }) },
-    )
 }
 
 private class PostLinkDraft(val url: String, val host: String, card: VoiciCard?, var fetched: Boolean) {

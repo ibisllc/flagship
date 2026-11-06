@@ -30,7 +30,7 @@ fun MessagesTab() {
             is DeepLink.Messages -> {
                 deepLinker.consume()
                 nav.popBackStack("messages", inclusive = false)
-                link.conv?.let { nav.navigate("thread/$it") }
+                link.conv?.let { nav.navigate("thread/$it") } ?: run { com.flagshipserver.app.ui.screens.MessagesScroll.toTop.value += 1 }
             }
             DeepLink.PageEditor -> {
                 deepLinker.consume()

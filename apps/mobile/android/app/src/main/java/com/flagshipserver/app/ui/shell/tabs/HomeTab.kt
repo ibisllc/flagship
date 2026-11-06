@@ -323,10 +323,12 @@ fun HomeTab() {
             val noVoiciPage = remember { kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.voici.VoiciPageUi()) }
             val voiciPage by (voiciCenter?.page ?: noVoiciPage).collectAsState()
             val pageWelcomeDismissed by pageWelcomeStore.dismissed.collectAsState()
-            val showPageWelcome = com.flagshipserver.app.core.PageWelcomeCardStore.shouldShow(
+            // Home points to the page at the top of the Messages tab: the welcome card, then a compact row.
+            val pagePointer = com.flagshipserver.app.core.PageWelcomeCardStore.pointer(
                 hasAccount = !isDemoAccount && voiciPage.username.isNotEmpty(),
                 checked = voiciPage.checked,
-                published = voiciPage.publishedSeq > 0,
+                published = voiciPage.isPublic,
+                everPublished = voiciPage.publishedSeq > 0,
                 pendingChanges = voiciPage.pendingCount,
                 dismissed = voiciPage.username.lowercase() in pageWelcomeDismissed,
             )
@@ -380,8 +382,9 @@ fun HomeTab() {
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
                 showRecoveryBackupBanner = showBackupBanner,
                 onDismissRecoveryBackupBanner = { recoveryBannerStore.setDismissed(true) },
-                showPageWelcome = showPageWelcome,
-                onSetUpPage = { deepLinker.enqueue(DeepLink.PageEditor) },
+                showPageWelcome = pagePointer == com.flagshipserver.app.core.PagePointer.Welcome,
+                pageRowPublic = (pagePointer as? com.flagshipserver.app.core.PagePointer.Row)?.isPublic,
+                onSetUpPage = { deepLinker.enqueue(DeepLink.Messages()) },
                 onDismissPageWelcome = { pageWelcomeStore.dismiss(voiciPage.username) },
                 dibsNoticeClosesAt = dibsWindow?.end?.takeIf {
                     !isDemoAccount && com.flagshipserver.app.viewmodels.NameDibsViewModel.shouldShowBanner(dibsWindow, dibsDismissed)

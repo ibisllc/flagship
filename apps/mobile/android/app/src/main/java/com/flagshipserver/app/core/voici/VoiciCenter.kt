@@ -42,6 +42,24 @@ interface VoiciKeyring {
     fun displayName(): String
 }
 
+/**
+ * Turning the page public never skips a step (docs/voici-and-messages.md §3.3): the page and message rules once per
+ * device, then the one-time "Everything you put on your page is public" warning per account, then the signature. A
+ * device that can't sign the page never gets past [Refuse]. Same steps as iOS PagePublicWarning.
+ */
+enum class PagePublicStep {
+    Refuse, Rules, Warning, Publish;
+
+    companion object {
+        fun next(isAdmin: Boolean, rulesAccepted: Boolean, acknowledged: Boolean): PagePublicStep = when {
+            !isAdmin -> Refuse
+            !rulesAccepted -> Rules
+            !acknowledged -> Warning
+            else -> Publish
+        }
+    }
+}
+
 data class VoiciPageUi(
     val username: String = "",
     val loaded: Boolean = false,
@@ -62,6 +80,12 @@ data class VoiciPageUi(
     val inboxEpoch: Long = 1,
     /** `.com` answered for this account's page at least once (published or not), so "no page" is known. */
     val checked: Boolean = false,
+    /** Visitors see the page on voi.ci now (published and not removed). */
+    val isPublic: Boolean = false,
+    /** The owner took the page down; its content stays on the device. */
+    val removed: Boolean = false,
+    /** The one-time public warning was accepted on this device. */
+    val publicWarned: Boolean = false,
 )
 
 data class VoiciMessagesUi(
@@ -140,7 +164,8 @@ class VoiciCenter(
             .distinctBy { it.opId }
 
     private fun publishedState(u: String, local: VoiciLocal): VoiciPageState =
-        VoiciOwner.parsePageState(local.publishedState) ?: VoiciOwner.emptyState(keyring.displayName().ifEmpty { u })
+        // A first page carries the account name (the username) until the owner changes it: never a private label.
+        VoiciOwner.parsePageState(local.publishedState) ?: VoiciOwner.emptyState(u)
 
     private fun publishUi(u: String, local: VoiciLocal) {
         val ops = ops(local)
@@ -164,6 +189,9 @@ class VoiciCenter(
             rulesAccepted = local.rulesAccepted,
             inboxEpoch = local.inboxEpoch,
             checked = pageCheckedFor == u,
+            isPublic = idx != null && !local.removed,
+            removed = local.removed,
+            publicWarned = local.publicWarned,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
         _messages.value = _messages.value.copy(conversations = local.conversations, state = state)
@@ -182,8 +210,8 @@ class VoiciCenter(
         runCatching { syncState() }
         runCatching { refreshInbox() }
         runCatching { checkReplies() }
-        if (autoPublishes()) runCatching { publish(null) }
-        else withLocal { u, _, local -> publishUi(u, local) }
+        // Every change waits for Publish on an admin device (or the Messages header's quick controls).
+        withLocal { u, _, local -> publishUi(u, local) }
     }
 
     private suspend fun refreshAccount(): VoiciAccountKeys? {
@@ -202,12 +230,16 @@ class VoiciCenter(
         val acc = account ?: return
         val json = client.page(u)
         if (json == null) {
+            // No page on `.com`: never made, or removed (here or on another device). Its content stays here.
+            if (withLocal { _, _, l -> l.publishedIndex != null && !l.removed } == true) update { it.copy(removed = true) }
             pageCheckedFor = u
             return
         }
         val local = withLocal { _, _, l -> l } ?: return
         val known = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex)
-        val r = VoiciPage.checkVoiciPageIndex(json, u, acc.sensitiveKind, acc.sensitivePub, known?.body?.seq, known?.body?.pageId)
+        // Never older than the highest seq this device saw (an index or a removal): neither can be replayed.
+        val seen = maxOf(known?.body?.seq ?: 0, local.ladderSeq).takeIf { it > 0 }
+        val r = VoiciPage.checkVoiciPageIndex(json, u, acc.sensitiveKind, acc.sensitivePub, seen, known?.body?.pageId)
         val idx = r.valueOrNull() ?: return
         if (known != null && idx.body.seq == known.body.seq) {
             pageCheckedFor = u
@@ -234,6 +266,8 @@ class VoiciCenter(
                 publishedState = state.toJson(),
                 localOps = l.localOps.filter { lo -> lo.op.let(VoiciMessages::parseVoiciDraftOp)?.let { !(lo.delivered && it.at <= idx.body.issuedAt) } ?: false },
                 takenDown = false,
+                removed = false,
+                ladderSeq = maxOf(l.ladderSeq, idx.body.seq),
             )
         }
         return state
@@ -241,7 +275,11 @@ class VoiciCenter(
 
     // ── editing (any device) ──
 
-    /** Record a change made on this device. An admin device publishes it; another hands it to the admin device. */
+    /**
+     * Record a change made on this device: a draft until Publish on an admin device; another device hands it to the
+     * admin device. A profile or accept-messages change replaces this device's earlier one that hasn't left it (so
+     * "N changes not published" counts what changed), and is dropped when it equals what's published.
+     */
     suspend fun edit(op: String, post: VoiciPost? = null, postId: String? = null, profile: VoiciProfile? = null, accepts: Int? = null) {
         val u = user() ?: return
         val umk = keyring.umk() ?: return
@@ -253,13 +291,19 @@ class VoiciCenter(
         val d = VoiciDraftOp(VoiciOwner.randomHex(16), op, now(), deviceId.take(64), post, postId, profile, accepts, images)
         requireNotNull(VoiciMessages.parseVoiciDraftOp(d.toJson())) { "voici: malformed change" }
         val stored = d.copy(images = null).toJson()
-        update { it.copy(localOps = it.localOps + VoiciLocalOp(stored)) }
-        val acc = account ?: refreshAccount()
-        if (acc != null && keyring.holdsSensitiveKey(acc)) {
-            if (autoPublishes()) runCatching { publish(null) }
-        } else {
-            scope.launch { runCatching { handOver(d) } }
+        val replaces = op == "profile" || op == "accept-messages"
+        var recorded = true
+        update { l ->
+            val kept = if (replaces) l.localOps.filter { it.delivered || VoiciJs.str(it.op["op"]) != op } else l.localOps
+            val base = publishedState(u, l)
+            val same = (op == "profile" && profile == base.profile) || (op == "accept-messages" && accepts == base.acceptsMessages)
+            val laneHasOne = l.laneOps.any { VoiciJs.str(it["op"]) == op }
+            recorded = !(replaces && same && !laneHasOne)
+            l.copy(localOps = if (recorded) kept + VoiciLocalOp(stored) else kept)
         }
+        if (!recorded) return
+        val acc = account ?: refreshAccount()
+        if (acc == null || !keyring.holdsSensitiveKey(acc)) scope.launch { runCatching { handOver(d) } }
     }
 
     /** A non-admin device's change: to the admin phone when it holds its name, else the drafts lane (§5.2). */
@@ -289,16 +333,6 @@ class VoiciCenter(
             VoiciJs.str(g["devicePubHex"])?.lowercase() == phonePub && VoiciJs.str(g["signerRoot"]) == "admin-root" &&
                 VoiciJs.arr(g["scopes"])?.any { VoiciJs.str(it) == "admin" } == true
         }
-    }
-
-    /**
-     * The unlocked-session rule (§5.1): an admin device publishes pending changes without a prompt, but never the
-     * first publish, which waits for the rules and the linkability warning (O1) on the Publish button.
-     */
-    private fun autoPublishes(): Boolean {
-        val p = _page.value
-        val local = withLocal { _, _, l -> l } ?: return false
-        return p.canPublish && p.pendingCount > 0 && local.publishedIndex != null && local.rulesAccepted && !keyring.sensitiveNeedsPrompt()
     }
 
     // ── the drafts lane (admin side) ──
@@ -331,13 +365,19 @@ class VoiciCenter(
 
     // ── publishing (admin device only, §5.1, §5.3) ──
 
-    /** Sign and publish every pending change. [reason] null: never prompt (the unlocked-session rule). */
-    suspend fun publish(reason: String?): Boolean {
+    /**
+     * Sign and publish. [reason] null: never prompt (the unlocked-session rule); otherwise the biometric when the
+     * session needs it. [only]: just these ops on top of the published page (the header's quick controls), every
+     * other draft stays a draft; null publishes every pending change. [mayRepublish]: only the Public switch (after its
+     * warning) brings back a page another device took down; any other publish that learns of it from a 409 stops.
+     */
+    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false): Boolean {
         val u = user() ?: return false
         val umk = keyring.umk() ?: return false
         val acc = account ?: refreshAccount() ?: return fail("not-found")
         if (!keyring.holdsSensitiveKey(acc)) return fail("not-sensitive-key")
         if (reason == null && keyring.sensitiveNeedsPrompt()) return false
+        if (_page.value.publishing) return false
         _page.value = _page.value.copy(publishing = true, error = null)
         try {
             val (seed, kind) = keyring.sensitiveSeed(reason ?: "")
@@ -345,21 +385,24 @@ class VoiciCenter(
                 val local = withLocal { _, _, l -> l } ?: return fail("not-found")
                 val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex)
                 val base = publishedState(u, local)
-                val ops = ops(local)
+                val ops = only ?: ops(local)
                 val working = VoiciPage.mergeVoiciPage(base, ops)
                 val pageId = idx?.body?.pageId ?: local.pageId ?: VoiciOwner.randomHex(16)
                 if (local.pageId == null) update { it.copy(pageId = pageId) }
                 val keys = VoiciOwnerKeys.derive(umk, pageId, local.inboxEpoch)
-                val plan = VoiciOwner.planPieces(working, { vault.image(umk, u, it) }, idx?.body?.pieces.orEmpty())
-                val listed = idx?.body?.pieces?.map { it.sha256 }?.toSet().orEmpty()
+                // After a removal `.com` dropped the pieces: send them all again.
+                val have = if (local.removed) emptyList() else idx?.body?.pieces.orEmpty()
+                val plan = VoiciOwner.planPieces(working, { vault.image(umk, u, it) }, have)
+                val listed = have.map { it.sha256 }.toSet()
                 for (p in plan) {
                     if (p.sha256 in listed || p.bytes == null) continue
                     val at = now()
                     val sig = VoiciPage.signVoiciPieceUpload(VoiciPieceUpload(u, pageId, p.sha256, p.size, at), seed)
                     client.uploadPiece(u, pageId, p.sha256, p.size, at, VoiciJs.hex(VoiciJs.edPub(seed)), sig, p.bytes, p.contentType)
                 }
+                val seq = maxOf(idx?.body?.seq ?: 0, local.ladderSeq) + 1
                 val body = VoiciPageIndexBody(
-                    u, pageId, (idx?.body?.seq ?: 0) + 1, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
+                    u, pageId, seq, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
                     plan.map { it.ref }, kind,
                 )
                 val signed = VoiciPage.signVoiciPageIndex(body, seed)
@@ -368,9 +411,21 @@ class VoiciCenter(
                 } catch (e: VoiciHttpError) {
                     when (e.code) {
                         "seq-conflict" -> {
-                            val stored = VoiciPage.checkVoiciPageIndex(e.body["index"], u, acc.sensitiveKind, acc.sensitivePub).valueOrNull()
-                            if (stored != null) adopt(u, stored)
+                            takeConflict(u, acc, e)
+                            if (!mayRepublish && withLocal { _, _, l -> l.removed } == true) {
+                                _page.value = _page.value.copy(publishing = false)
+                                return false
+                            }
                             return@repeat
+                        }
+                        "wrong-page" -> {
+                            // A device that never saw the page (removed before) continues it under its pageId.
+                            val stored = VoiciJs.str(e.body["pageId"])
+                            if (idx == null && stored != null && WebEnvelopes.isLowerHex(stored, 16)) {
+                                update { it.copy(pageId = stored) }
+                                return@repeat
+                            }
+                            return fail("wrong-page")
                         }
                         "taken-down" -> {
                             update { it.copy(takenDown = true) }
@@ -380,15 +435,20 @@ class VoiciCenter(
                     }
                 }
                 val applied = ops.map { it.opId }.toSet()
-                val laneIds = local.laneOps.mapNotNull { VoiciJs.str(it["opId"]) }.filter { it in applied }
+                val laneIds = if (only != null) emptyList() else local.laneOps.mapNotNull { VoiciJs.str(it["opId"]) }.filter { it in applied }
+                val published = working.copy(issuedAt = signed.body.issuedAt)
                 update { l ->
                     l.copy(
                         pageId = pageId,
                         publishedIndex = signed.toJson(),
-                        publishedState = working.copy(issuedAt = signed.body.issuedAt).toJson(),
-                        localOps = l.localOps.filter { VoiciJs.str(it.op["opId"]) !in applied },
-                        laneOps = l.laneOps.filter { VoiciJs.str(it["opId"]) !in applied },
+                        publishedState = published.toJson(),
+                        localOps = if (only == null) l.localOps.filter { VoiciJs.str(it.op["opId"]) !in applied }
+                        else l.localOps.mapNotNull { lo -> VoiciMessages.parseVoiciDraftOp(lo.op)?.let { carry(it, published) }?.let { lo.copy(op = it.copy(images = null).toJson()) } },
+                        laneOps = if (only == null) l.laneOps.filter { VoiciJs.str(it["opId"]) !in applied }
+                        else l.laneOps.mapNotNull { j -> VoiciMessages.parseVoiciDraftOp(j)?.let { carry(it, published) }?.copy(images = null)?.toJson() },
                         takenDown = false,
+                        removed = false,
+                        ladderSeq = maxOf(l.ladderSeq, seq),
                     )
                 }
                 if (laneIds.isNotEmpty()) runCatching { laneIds.chunked(200).forEach { client.consumeDrafts(u, VoiciOwner.consumeBody(u, it, now(), seed)) } }
@@ -406,6 +466,45 @@ class VoiciCenter(
         }
     }
 
+    /**
+     * A 409's answer: a removed page names the removal's seq (its stored index is the old public one); otherwise the
+     * stored index, checked against the account's own key and never older than what this device saw.
+     */
+    private suspend fun takeConflict(u: String, acc: VoiciAccountKeys, e: VoiciHttpError) {
+        val removedThere = (e.body["removed"] as? JsonPrimitive)?.content == "true"
+        val storedSeq = VoiciJs.time(e.body["seq"]) ?: 0
+        if (removedThere) {
+            val storedPageId = VoiciJs.str(e.body["pageId"])?.takeIf { WebEnvelopes.isLowerHex(it, 16) }
+            update { l ->
+                l.copy(
+                    ladderSeq = maxOf(l.ladderSeq, storedSeq),
+                    removed = l.publishedIndex != null,
+                    pageId = if (l.publishedIndex == null && storedPageId != null) storedPageId else l.pageId,
+                )
+            }
+            return
+        }
+        val local = withLocal { _, _, l -> l } ?: return
+        val stored = VoiciPage.checkVoiciPageIndex(e.body["index"], u, acc.sensitiveKind, acc.sensitivePub, local.ladderSeq.takeIf { it > 0 }).valueOrNull()
+        if (stored != null) adopt(u, stored)
+    }
+
+    /**
+     * A draft left after a quick publish: a profile draft takes the name and photo just published (and goes when
+     * nothing else in it differs); profile and accept-messages drafts stay newer than the page, so the merge (the
+     * later `at` wins) still applies them.
+     */
+    private fun carry(op: VoiciDraftOp, published: VoiciPageState): VoiciDraftOp? {
+        var o = op
+        if (o.op == "profile" && o.profile != null) {
+            val p = o.profile!!.copy(displayName = published.profile.displayName, avatar = published.profile.avatar)
+            if (p == published.profile) return null
+            o = o.copy(profile = p)
+        }
+        if (o.op == "profile" || o.op == "accept-messages") o = o.copy(at = maxOf(o.at, published.issuedAt + 1))
+        return o
+    }
+
     private fun fail(code: String): Boolean {
         _page.value = _page.value.copy(publishing = false, error = code)
         return false
@@ -415,10 +514,113 @@ class VoiciCenter(
         update { it.copy(rulesAccepted = true) }
     }
 
-    /** Settings → Messages → Rotate inbox key: a new inbox epoch, published at once (§10.2). */
+    /** "Make it public" on the one-time warning (remembered for this account on this device). */
+    suspend fun acknowledgePublicWarning() {
+        update { it.copy(publicWarned = true) }
+    }
+
+    /** What the Public switch, or Publish while the page is not public, must show before anything is signed. */
+    fun publicStep(): PagePublicStep {
+        val p = _page.value
+        return PagePublicStep.next(isAdmin = p.canPublish, rulesAccepted = p.rulesAccepted, acknowledged = p.publicWarned)
+    }
+
+    /**
+     * The Public switch turned on: the page goes up with its name and photo as the header shows them, on top of what
+     * was published last (a page turned off comes back as it was); every other draft stays a draft. The caller has
+     * walked [publicStep] to [PagePublicStep.Publish].
+     */
+    suspend fun goPublic(reason: String): Boolean {
+        val u = user() ?: return false
+        val local = withLocal { _, _, l -> l } ?: return false
+        if (_page.value.isPublic) return true
+        val base = publishedState(u, local)
+        val working = VoiciPage.mergeVoiciPage(base, ops(local))
+        val q = base.profile.copy(displayName = working.profile.displayName, avatar = working.profile.avatar)
+        val deviceId = keyring.device()?.deviceId ?: "device"
+        return publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", now(), deviceId.take(64), profile = q)), mayRepublish = true)
+    }
+
+    /**
+     * The Messages header's name and photo. While the page is public an admin device publishes just this change at
+     * once (other drafts stay); otherwise it is a draft like any other. Null on success, else a refusal code.
+     */
+    suspend fun setQuickProfile(displayName: String, avatar: String?, reason: String): String? {
+        val u = user() ?: return "not-found"
+        val name = VoiciText.prepareVoiciText(VoiciTextField.displayName, displayName.trim())
+        val n = name.valueOrNull() ?: return name.code
+        val local = withLocal { _, _, l -> l } ?: return "not-found"
+        val p = _page.value
+        val base = publishedState(u, local)
+        if (p.isPublic && p.canPublish) {
+            val q = base.profile.copy(displayName = n, avatar = avatar)
+            if (q == base.profile) return null
+            val deviceId = keyring.device()?.deviceId ?: "device"
+            val ok = publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", now(), deviceId.take(64), profile = q)))
+            return if (ok) null else _page.value.error
+        }
+        val working = VoiciPage.mergeVoiciPage(base, ops(local))
+        val q = working.profile.copy(displayName = n, avatar = avatar)
+        if (q != working.profile) edit("profile", profile = q)
+        return null
+    }
+
+    /**
+     * "Remove my page": a signed VoiciPageRemove on the publish ladder (seq + 1), with the key and the biometric rule
+     * publishing uses. Visitors then see "There's no page here."; posts, profile, drafts and conversations stay here.
+     */
+    suspend fun removePage(reason: String): Boolean {
+        val u = user() ?: return false
+        val acc = account ?: refreshAccount() ?: return fail("not-found")
+        if (!keyring.holdsSensitiveKey(acc)) return fail("not-sensitive-key")
+        if (!_page.value.isPublic || _page.value.publishing) return false
+        _page.value = _page.value.copy(publishing = true, error = null)
+        try {
+            val (seed, kind) = keyring.sensitiveSeed(reason)
+            repeat(2) { attempt ->
+                val local = withLocal { _, _, l -> l } ?: return fail("not-found")
+                val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex) ?: return fail("not-found")
+                if (local.removed) {
+                    _page.value = _page.value.copy(publishing = false)
+                    return true
+                }
+                val r = VoiciPageRemove.sign(u, idx.body.pageId, maxOf(idx.body.seq, local.ladderSeq) + 1, now(), kind, seed)
+                try {
+                    client.removePage(u, r.toJson())
+                    update { it.copy(removed = true, ladderSeq = maxOf(it.ladderSeq, r.seq)) }
+                    _page.value = _page.value.copy(publishing = false, error = null)
+                    return true
+                } catch (e: VoiciHttpError) {
+                    when {
+                        // Another admin device published first: refresh and retry once, on the index `.com` now holds.
+                        e.code == "seq-conflict" && attempt == 0 -> takeConflict(u, acc, e)
+                        // Already gone (removed on another device).
+                        e.code == "not-found" -> {
+                            update { it.copy(removed = true) }
+                            _page.value = _page.value.copy(publishing = false, error = null)
+                            return true
+                        }
+                        e.code == "wrong-signer" -> return fail("not-sensitive-key")
+                        else -> return fail(e.code ?: "network")
+                    }
+                }
+            }
+            return fail("remove-failed")
+        } catch (e: VoiciHttpError) {
+            return fail(e.code ?: "network")
+        } catch (e: com.flagshipserver.app.keystore.BiometricCancelled) {
+            _page.value = _page.value.copy(publishing = false)
+            return false
+        } catch (e: Exception) {
+            return fail("network")
+        }
+    }
+
+    /** Settings → Messages → Rotate inbox key: a new inbox epoch, published at once (§10.2). Drafts stay drafts. */
     suspend fun rotateInbox(reason: String): Boolean {
+        if (!_page.value.isPublic) return false
         update { it.copy(inboxEpoch = it.inboxEpoch + 1) }
-        return publish(reason)
+        return publish(reason, only = emptyList())
     }
 
     // ── Messages: the inbox (§8.3) ──
@@ -772,7 +974,6 @@ class VoiciCenter(
                 scope.launch {
                     update { l -> l.copy(laneOps = (l.laneOps + op.copy(images = null).toJson()).distinctBy { VoiciJs.str(it["opId"]) }) }
                     runCatching { client.depositDraft(u, device, json) }
-                    if (autoPublishes()) runCatching { publish(null) }
                 }
                 return 200 to JsonObject(mapOf("ack" to ack.toJson())).toString()
             }
