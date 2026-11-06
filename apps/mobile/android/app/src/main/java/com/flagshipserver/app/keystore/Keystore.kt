@@ -50,6 +50,11 @@ object Keystore {
     /** Pending IRK rotation target (C7). Stored during the 24-hour
      *  re-pair grace window; cleared on completion or abort. */
     private const val KEY_IRK_PENDING_VERSION = "irk.pendingVersion"
+    /** Which client's derivation the CURRENT version uses (IrkLineage.Scheme name; absent means
+     *  this app's own). An account made on the webapp or iOS registers their derivation of the UMK,
+     *  so a device that recovers or joins it adopts that key until its first rotation, which always
+     *  lands in this app's scheme. */
+    private const val KEY_IRK_SCHEME = "irk.scheme"
 
     // ---- Multi-profile keying (W3) -------------------------------------
     //
@@ -179,7 +184,21 @@ object Keystore {
      *  session ([sessionClosed]); old builds kept them on disk, which [SeedVault.migrate] removes. */
     private val irkSeeds = ConcurrentHashMap<String, ByteArray>()
 
-    private fun irkCacheKey(version: Int) = "${activeProfileTag()}|$version"
+    private fun irkCacheKey(version: Int) = "${activeProfileTag()}|${irkSchemeFor(version)}|$version"
+
+    /** The derivation [version] uses: the adopted scheme for the current version, else this app's. */
+    private fun irkSchemeFor(version: Int): IrkLineage.Scheme {
+        if (version != currentIrkVersion()) return IrkLineage.OWN
+        val stored = prefs?.getString(pkey(KEY_IRK_SCHEME), null) ?: return IrkLineage.OWN
+        return runCatching { IrkLineage.Scheme.valueOf(stored) }.getOrDefault(IrkLineage.OWN)
+    }
+
+    /** On-disk cache key of the IRK public half at [version] (scheme-qualified when adopted). */
+    private fun irkPubCacheKey(version: Int): String {
+        val scheme = irkSchemeFor(version)
+        val base = "${pkey(KEY_IRK_PUB)}.v$version"
+        return if (scheme == IrkLineage.OWN) base else "$base.${scheme.name.lowercase()}"
+    }
 
     /** Read a seed-class [slot] of the active profile, or null when absent. Throws
      *  [SessionLockedException] while the session is locked and [AccountKeyUnreadableException]
@@ -336,6 +355,7 @@ object Keystore {
         val editor = p.edit()
         // Reset version slots — fresh UMK ⇒ fresh v1 derivation.
         editor.putString(pkey(KEY_IRK_VERSION), "1")
+        editor.remove(pkey(KEY_IRK_SCHEME))
         editor.remove(pkey(KEY_IRK_PENDING_VERSION))
         // Sweep the ACTIVE profile's IRK caches (old builds' on-disk seeds, the public halves);
         // they're derived from the OLD UMK. Other profiles' caches are untouched.
@@ -430,19 +450,15 @@ object Keystore {
     private fun irkSeed(version: Int): ByteArray {
         irkSeeds[irkCacheKey(version)]?.let { return it.copyOf() }
         val umk = loadOrCreateUmkSeed()
-        val derived = hkdf(
-            umk,
-            salt = "flagship/irk/v$version".toByteArray(),
-            info = "ed25519-seed".toByteArray(),
-            length = 32,
-        )
+        val derived = IrkLineage.seed(umk, irkSchemeFor(version), version)
         umk.fill(0)
         irkSeeds[irkCacheKey(version)] = derived.copyOf()
         val pub = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(derived).publicKey)
-        val pubKey = "${pkey(KEY_IRK_PUB)}.v$version"
+        val pubKey = irkPubCacheKey(version)
         if (requirePrefs().getString(pubKey, null) != pub) requirePrefs().edit().putString(pubKey, pub).apply()
         return derived
     }
+
 
     /** Current IRK HKDF version active for sign/verify against
      *  .com. Defaults to 1 if the slot is absent (covers legacy
@@ -455,7 +471,19 @@ object Keystore {
      *  `/api/users/:u/re-pair/complete` or `/api/users/:u/wipe-restart`. */
     fun setCurrentIrkVersion(version: Int) {
         require(version >= 1)
-        requirePrefs().edit().putString(pkey(KEY_IRK_VERSION), version.toString()).apply()
+        // A completed rotation always lands in this app's own derivation.
+        requirePrefs().edit().putString(pkey(KEY_IRK_VERSION), version.toString()).remove(pkey(KEY_IRK_SCHEME)).apply()
+    }
+
+    /** The account holds [key] (found by IrkLineage among this UMK's derivations, any client's,
+     *  any version): make it the current IRK, so every IRK signature (the next rotation's old key
+     *  included) is made by the key `.com` and the boxes know. Called after installUmk when a
+     *  device recovers or joins an account another client made. */
+    fun adoptRegisteredIrk(key: IrkLineage.Key) {
+        val e = requirePrefs().edit().putString(pkey(KEY_IRK_VERSION), key.version.toString())
+        if (key.scheme == IrkLineage.OWN) e.remove(pkey(KEY_IRK_SCHEME)) else e.putString(pkey(KEY_IRK_SCHEME), key.scheme.name)
+        e.commit()
+        dropActiveIrkSeeds()
     }
 
     /** Optional pending-rotation marker. Presence = a re-pair was
@@ -478,7 +506,7 @@ object Keystore {
      *  derived (behind the session) the first time. */
     suspend fun irkPubHex(): String {
         val version = currentIrkVersion()
-        requirePrefs().getString("${pkey(KEY_IRK_PUB)}.v$version", null)?.let { return it }
+        requirePrefs().getString(irkPubCacheKey(version), null)?.let { return it }
         deriveIRK("init", version)
         val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(requireIrkSeedForVersion(version))
         return HexUtil.encode(pair.publicKey)
@@ -964,6 +992,7 @@ object Keystore {
         editor.remove(pkey(KEY_PUSH_X25519_PRIV))
         editor.remove(pkey(KEY_PUSH_TOKEN_ID))
         editor.remove(pkey(KEY_IRK_VERSION))
+        editor.remove(pkey(KEY_IRK_SCHEME))
         editor.remove(pkey(KEY_IRK_PENDING_VERSION))
         editor.remove(watchDelegateSeedKey())
         editor.remove(watchDelegateGrantIdKey())
@@ -1032,7 +1061,7 @@ object Keystore {
         // the ".vN" per-version IRK seed caches. Drop them all.
         val bases = listOf(
             KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
-            KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION,
+            KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION, KEY_IRK_SCHEME,
             KEY_ACME_ACCOUNT_SCALAR, SeedVault.ADMIN_ROOT, KEY_READ_TOKEN, KEY_IRK_PUB, "admin.root.pub", "account.device.seed",
             SeedVault.sealedKey(KEY_UMK_SEED), SeedVault.sealedKey(SeedVault.ADMIN_ROOT),
         )

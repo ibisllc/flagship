@@ -54,6 +54,7 @@ import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
+import com.flagshipserver.app.keystore.IrkLineage
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.Recovery
 import com.flagshipserver.app.keystore.WebAuthnProvider
@@ -427,6 +428,15 @@ class LoginViewModel(
             //    optimization is single-device only (multi already gated on
             //    a second factor) — and keys oldIrkPub on the locally
             //    derived current-version IRK as before.
+            //    The registered key is looked for among EVERY client's
+            //    derivation of the recovered UMK, at any version
+            //    (IrkLineage): an account made on the webapp or iOS, or
+            //    re-paired since, doesn't hold this app's v1. Found, it
+            //    becomes this device's current IRK, so a person who moved
+            //    from another platform gets Phase A, not a needless grace.
+            resolution.registeredIrkPubHex
+                ?.let { IrkLineage.findRegistered(seed, it) }
+                ?.let { Keystore.adoptRegisteredIrk(it) }
             val recoveredVersion = Keystore.currentIrkVersion()
             Keystore.deriveIRK(FSStrings.get(R.string.confirm_takeover), recoveredVersion)
             val recoveredPubHex = pubHexForVersion(recoveredVersion)

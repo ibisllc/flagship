@@ -309,19 +309,13 @@ object CloudRecoveryEnrollment {
         }
     }
 
-    /** Does a key derived from the recovered UMK (any of the first few rotation versions) verify
-     *  the owner's signed record? It was signed by the key in force when it was written. */
+    /** Does a key derived from the recovered UMK verify the owner's signed record? It was signed by
+     *  the key in force when it was written, by whichever client wrote it (IrkLineage: every
+     *  client's derivation, any version). */
     internal fun recoveredKeySigned(umkSeed: ByteArray, signed: SignedRecoveryRecord): Boolean {
-        for (v in 1..4) {
-            val seed = com.google.crypto.tink.subtle.Hkdf.computeHkdf(
-                "HMACSHA256", umkSeed, "flagship/irk/v$v".toByteArray(), "ed25519-seed".toByteArray(), 32,
-            )
-            val pub = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey
-            if (HexUtil.encode(pub) == signed.claim.irkPubHex) {
-                return signed.claim.verify(signed.signatureHex, pub)
-            }
-        }
-        return false
+        val key = IrkLineage.findRegistered(umkSeed, signed.claim.irkPubHex) ?: return false
+        val pub = Ed25519Sign.KeyPair.newKeyPairFromSeed(key.seed).publicKey
+        return signed.claim.verify(signed.signatureHex, pub)
     }
 
     private suspend fun postRecord(

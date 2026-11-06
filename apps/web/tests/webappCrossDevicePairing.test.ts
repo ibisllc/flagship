@@ -22,8 +22,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hkdfSync } from "node:crypto";
 import {
   deriveIRK,
+  ed,
   signDeviceAdmit,
   verifyDeviceAdmit,
   signDeviceCapabilityGrant,
@@ -508,9 +510,9 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
    *  interop), and the deps the join view hands runIncomingJoin. */
   async function fixture(k: any, opts: {
     promote?: boolean; passphrase?: string | undefined; badGrantSigner?: boolean;
-    grantDevicePubHex?: string; admitPubHex?: string; admitSigner?: any;
+    grantDevicePubHex?: string; admitPubHex?: string; admitSigner?: any; accountIrk?: any;
   } = {}) {
-    const harryIrk = deriveIRK({ seed: HARRY_SEED });
+    const harryIrk = opts.accountIrk ?? deriveIRK({ seed: HARRY_SEED });
     const devicePubHex = k.bytesToHex((await k.deriveAdminRootFromSeed(DEVICE_SEED)).publicKey);
     const admit = {
       username: "harry", deviceId: DEVICE_ID, newDevicePubHex: opts.admitPubHex ?? devicePubHex, issuedAt: 100,
@@ -564,6 +566,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
       persistSeedForProfile: k.persistSeedForProfile,
       persistAccountDeviceSeed: k.persistAccountDeviceSeed,
       persistAdminRootSeed: k.persistAdminRootSeed,
+      adoptRegisteredIrk: k.adoptRegisteredIrk,
       unlockSession: () => {},
       registerPush,
       addProfile: (p: any) => addedProfiles.push(p),
@@ -624,6 +627,31 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
 
     expect(out.quarantine.quarantined).toBe(true);
     expect(out.quarantine.remainingMs).toBe(14 * 86_400_000);
+  });
+
+  it("joins an account made on Android or iOS and makes its registered key this browser's IRK", async () => {
+    // Android: salt "flagship/irk/v1", info "ed25519-seed"; iOS: info "flagship/irk/v1" (irk-lineage vectors).
+    for (const [scheme, salt, info] of [["android", "flagship/irk/v1", "ed25519-seed"], ["ios", "", "flagship/irk/v1"]]) {
+      DATABASES.clear();
+      (globalThis as any).localStorage = makeLocalStorage();
+      const k = await loadKeystore();
+      const { runIncomingJoin } = await loadPairing();
+      const privateKey = new Uint8Array(hkdfSync("sha256", HARRY_SEED, Buffer.from(salt), Buffer.from(info), 32));
+      const accountIrk = { privateKey, publicKey: ed.getPublicKey(privateKey) };
+      const f = await fixture(k, { accountIrk });
+      await runIncomingJoin(f.deps);
+      k.setActiveKeystoreProfile("harry");
+      expect(k.currentIrkScheme(), scheme).toBe(scheme);
+      expect(k.bytesToHex((await k.deriveIrkFromSeed(HARRY_SEED)).publicKey), scheme).toBe(k.bytesToHex(accountIrk.publicKey));
+      // What every IRK-signed request from this browser is now signed by.
+      const sig = await k.signWithIrk(HARRY_SEED, new Uint8Array([7]));
+      expect(await k.verifyWithEd25519Pub(accountIrk.publicKey, sig, new Uint8Array([7]))).toBe(true);
+      // Its next rotation is this app's own key, and finishing it clears the adopted scheme.
+      expect(k.bytesToHex((await k.deriveIrkVersioned(HARRY_SEED, 2)).publicKey))
+        .toBe(k.bytesToHex((await k.deriveIrkInScheme(HARRY_SEED, "web", 2)).publicKey));
+      k.setCurrentIrkVersion(2);
+      expect(k.currentIrkScheme()).toBe("web");
+    }
   });
 
   it("REFUSES a bundle whose admit does NOT verify under the account key (nothing sent or persisted)", async () => {

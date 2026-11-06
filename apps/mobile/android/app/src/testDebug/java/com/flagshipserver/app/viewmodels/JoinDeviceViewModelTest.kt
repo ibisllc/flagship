@@ -28,6 +28,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import com.flagshipserver.app.keystore.IrkLineage
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -69,7 +70,7 @@ class JoinDeviceViewModelTest {
      *  to the point where the incoming VM is in VerifySas. The incoming
      *  device's fresh Ed25519 pubkey is captured from the buffered hello
      *  so the test can mint a binding admit. */
-    private suspend fun runUpToVerifySas(): Stage {
+    private suspend fun runUpToVerifySas(creator: IrkLineage.Scheme = IrkLineage.OWN): Stage {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         val relay = MockDevicePairingRelay()
         val app = AppState()
@@ -79,7 +80,9 @@ class JoinDeviceViewModelTest {
         Keystore.setActiveProfile("$account-admin")
         val adminUmk = Keystore.loadOrCreateUmkSeed()
         Keystore.deriveIRK("admin")
-        val adminIrkSeed = Keystore.requireIrkSeedForVersion(Keystore.currentIrkVersion())
+        // The account's registered IRK as the creating client derived it.
+        val adminIrkSeed = if (creator == IrkLineage.OWN) Keystore.requireIrkSeedForVersion(Keystore.currentIrkVersion())
+            else IrkLineage.seed(adminUmk, creator, 1)
         val adminIrkPub = Ed25519Sign.KeyPair.newKeyPairFromSeed(adminIrkSeed).publicKey
         server.claimUsername(
             UsernameClaimRequest(
@@ -172,6 +175,32 @@ class JoinDeviceViewModelTest {
         assertEquals(account, s.server.lastDeviceAdmit!!.first)
         assertEquals(account, s.app.currentUser.first())
         assertTrue("account opened on success", s.app.isPaired.first())
+    }
+
+    /** An account made on the webapp or iOS registers that client's IRK: the joined device adopts
+     *  it, so its IRK signatures verify (Windows acceptance 2026-11-05 follow-up). */
+    @Test fun joinsAnAccountMadeOnAnotherClient_andSignsWithItsRegisteredKey() = runTest {
+        for (creator in listOf(IrkLineage.Scheme.WEB, IrkLineage.Scheme.IOS)) {
+            Keystore.wipeAllProfiles()
+            val s = runUpToVerifySas(creator)
+            val helloPub = s.relay.admin.awaitPeerHello("sid-test")
+            val devicePubHex = HexUtil.encode(helloPub.copyOfRange(32, 64))
+            val deviceId = HexUtil.encode(helloPub.copyOfRange(64, 80))
+            val admit = DeviceAdmit(account, deviceId, devicePubHex.lowercase(), 10_000L)
+            val sealed = s.adminEphemeral.seal(bundleFor(s, admit).toJsonBytes())
+            s.relay.admin.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
+            s.vm.confirmDisplayName("Reviewer Android")
+            s.vm.verifyAndJoin()
+            assertTrue("$creator: ${s.vm.phase.first()}", s.vm.phase.first() is JoinDevicePhase.Joined)
+
+            Keystore.setActiveProfile(account)
+            Keystore.deriveIRK("test")
+            val current = Ed25519Sign.KeyPair.newKeyPairFromSeed(Keystore.requireIrkSeedForVersion(Keystore.currentIrkVersion())).publicKey
+            assertEquals("$creator", IrkLineage.key(s.adminUmk, creator, 1).pubHex, HexUtil.encode(current))
+            // Its next rotation lands in this app's own scheme.
+            val next = Ed25519Sign.KeyPair.newKeyPairFromSeed(Keystore.requireIrkSeedForVersion(2)).publicKey
+            assertEquals("$creator", IrkLineage.key(s.adminUmk, IrkLineage.Scheme.ANDROID, 2).pubHex, HexUtil.encode(next))
+        }
     }
 
     @Test fun serverRejectsAdmit_failsWithoutJoining() = runTest {

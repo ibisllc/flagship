@@ -79,6 +79,8 @@ public final class JoinAccountViewModel {
     /// `wrappedAdminRoot`; sealing it here makes THIS device a bare-master-root
     /// admin. Defaults to `Keystore.importAdminRoot`; tests inject a spy.
     private let importAdminRoot: @MainActor (Data) async throws -> Void
+    /// Seam: make the account's registered key (found by IrkLineage) the current IRK.
+    var adoptIrk: @MainActor (IrkLineage.Key) throws -> Void = { try Keystore.adoptRegisteredIrk($0) }
     private var confirmedDeviceDisplayName: String?
     private var deviceNameContinuation: CheckedContinuation<String, Error>?
 
@@ -302,6 +304,13 @@ public final class JoinAccountViewModel {
         Keystore.setActiveProfile(account)
         do {
             try await installUMK(SymmetricKey(data: umkData), String(localized: "Join \(account) on this device"))
+            // The account's IRK is the one `.com` serves (it verified the admit
+            // above), whichever client made it: an account made on the webapp or
+            // Android doesn't hold this app's v1. Adopt it, so this device's IRK
+            // signatures verify. Not found: keep this app's v1, as before.
+            if let key = IrkLineage.findRegistered(umk: SymmetricKey(data: umkData), registeredPubHex: HexUtil.encode(irkPub)) {
+                try adoptIrk(key)
+            }
             try Keystore.storeAccountDeviceSigningKey(
                 pushSigningKey,
                 accountId: account,

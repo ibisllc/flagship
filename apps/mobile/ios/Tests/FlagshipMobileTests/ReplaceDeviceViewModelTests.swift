@@ -56,6 +56,38 @@ final class ReplaceDeviceViewModelTests: XCTestCase {
         XCTAssertNotEqual(last.body.request.newIrkPub, last.body.request.oldIrkPub)
     }
 
+    /// A device holding an account another client made (adopted at recovery or join, IrkLineage):
+    /// Replace device displaces that key and rotates into this app's scheme; completing it makes
+    /// the rotated key current.
+    func test_initiate_onAnAccountMadeOnAnotherClient_displacesItsKey() async throws {
+        for scheme in [IrkLineage.Scheme.web, .android] {
+            Keystore.wipe()
+            try await makeUMK()
+            let umk = try await Keystore.currentUMK(reason: "test")
+            let registered = try IrkLineage.key(umk: umk, scheme: scheme, version: 1)
+            try Keystore.adoptRegisteredIrk(registered)
+            let server = MockFlagshipServerClient()
+            server.simulatedLatency = 0
+            server.rePairBehavior = .ok
+            server.seedClaimedUsername("alice", irkPubHex: registered.pubHex)
+            let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+
+            await vm.initiate(currentEtag: nil)
+
+            let last = try XCTUnwrap(server.lastRePairInitiate, "\(scheme)")
+            XCTAssertEqual(last.body.request.oldIrkPub, registered.pubHex)
+            XCTAssertEqual(last.body.request.newIrkPub, try IrkLineage.key(umk: umk, scheme: .ios, version: 2).pubHex)
+            let canonical = RePairInitiate.canonicalBytes(
+                username: "alice", newIrkPubHex: last.body.request.newIrkPub,
+                oldIrkPubHex: last.body.request.oldIrkPub, issuedAt: last.body.request.issuedAt
+            )
+            let oldSig = try XCTUnwrap(HexUtil.decode(try XCTUnwrap(last.body.oldIrkSignature)))
+            XCTAssertTrue(registered.privateKey.publicKey.isValidSignature(oldSig, for: canonical))
+            try Keystore.setCurrentIrkVersion(2)
+            XCTAssertEqual(Keystore.currentIrkScheme(), .ios)
+        }
+    }
+
     func test_initiate_412_surfacedAsFailure_andPendingStaysClear() async throws {
         try await makeUMK()
         let server = MockFlagshipServerClient()

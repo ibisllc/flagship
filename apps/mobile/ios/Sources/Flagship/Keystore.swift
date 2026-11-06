@@ -402,7 +402,7 @@ public struct Keystore {
         reason: String
     ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxSwkHex: String) {
         let umk = try await unwrappedUMK(reason: reason)
-        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irkSeed = irkSeedFor(umk: umk, version: currentIrkVersion())
         let irk = try Curve25519.Signing.PrivateKey(
             rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
         )
@@ -422,7 +422,7 @@ public struct Keystore {
         reason: String
     ) async throws -> (irk: Curve25519.Signing.PrivateKey, cgkHex: String) {
         let umk = try await unwrappedUMK(reason: reason)
-        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irkSeed = irkSeedFor(umk: umk, version: currentIrkVersion())
         let irk = try Curve25519.Signing.PrivateKey(
             rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
         )
@@ -492,7 +492,7 @@ public struct Keystore {
         let profile = activeProfileId
         if !hasAdminRoot {
             let umk = try await unwrappedUMK(reason: reason)
-            let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+            let irkSeed = irkSeedFor(umk: umk, version: currentIrkVersion())
             let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
             return (ArchiveKeys.mint(umkSeed: umk.withUnsafeBytes { Data($0) }, count: count), irk)
         }
@@ -590,7 +590,7 @@ public struct Keystore {
     /// Never prompts.
     public static func sessionIRKIfCached() -> Curve25519.Signing.PrivateKey? {
         guard let umk = cachedSessionUmk(activeProfileId) else { return nil }
-        let seed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let seed = irkSeedFor(umk: umk, version: currentIrkVersion())
         return try? Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
@@ -600,7 +600,7 @@ public struct Keystore {
     /// new version (which only happens after the server CAS succeeds).
     public static func deriveIRK(reason: String, version: Int) async throws -> Curve25519.Signing.PrivateKey {
         let umk = try await unwrappedUMK(reason: reason)
-        let seed = derive(umk: umk, info: "flagship/irk/v\(version)")
+        let seed = irkSeedFor(umk: umk, version: version)
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
@@ -617,7 +617,7 @@ public struct Keystore {
     ) async throws -> Curve25519.Signing.PrivateKey {
         let umkSeed = SymmetricKey(size: .bits256)
         try await installUMK(umkSeed, reason: reason)
-        let seed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
+        let seed = irkSeedFor(umk: umkSeed, version: currentIrkVersion())
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
@@ -698,7 +698,7 @@ public struct Keystore {
             try keychainWrite(account: account(KCKey.adminRootEphemeralPub), data: ephemeral.publicKey.x963Representation, sync: .deviceLocal)
             try keychainWrite(account: account(KCKey.adminRootPub), data: adminKey.publicKey.rawRepresentation, sync: .deviceLocal)
 
-            let irkSeed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
+            let irkSeed = irkSeedFor(umk: umkSeed, version: currentIrkVersion())
             let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
             storeSessionUmk(umkSeed, for: activeProfileId)
             return (irk, adminKey, HexUtil.encode(adminKey.publicKey.rawRepresentation))
@@ -803,7 +803,7 @@ public struct Keystore {
     /// the mocks to pin. Nil outside `-smoke-mode`.
     public static func gymIRK() -> Curve25519.Signing.PrivateKey? {
         guard let seed = GymSeams.accountRootSeed else { return nil }
-        let irkSeed = derive(umk: SymmetricKey(data: seed), info: "flagship/irk/v\(currentIrkVersion())")
+        let irkSeed = irkSeedFor(umk: SymmetricKey(data: seed), version: currentIrkVersion())
         return try? Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
     }
     #endif
@@ -879,7 +879,7 @@ public struct Keystore {
         reason: String
     ) async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey) {
         let umk = try await unwrappedUMK(reason: reason)
-        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irkSeed = irkSeedFor(umk: umk, version: currentIrkVersion())
         let bakSeed = derive(umk: umk, info: "flagship/bak/v1|\(serverId)")
         let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
         let bak = try Curve25519.Signing.PrivateKey(rawRepresentation: bakSeed.withUnsafeBytes { Data($0) })
@@ -926,7 +926,7 @@ public struct Keystore {
         } catch {
             throw KeystoreError.unwrapFailed(String(describing: error))
         }
-        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irkSeed = irkSeedFor(umk: umk, version: currentIrkVersion())
         let bakSeed = derive(umk: umk, info: "flagship/bak/v1|\(serverId)")
         let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
         let bak = try Curve25519.Signing.PrivateKey(rawRepresentation: bakSeed.withUnsafeBytes { Data($0) })
@@ -972,6 +972,35 @@ public struct Keystore {
     public static func setCurrentIrkVersion(_ version: Int) throws {
         precondition(version >= 1, "IRK version must be >= 1")
         try keychainWrite(account: account(KCKey.irkVersion), data: Data(String(version).utf8))
+        // A completed rotation (and a fresh UMK) always lands in this app's own derivation.
+        keychainDelete(account: account(KCKey.irkScheme))
+    }
+
+    /// Which client's derivation the CURRENT version uses (`IrkLineage.own` unless an account
+    /// another client made was adopted).
+    public static func currentIrkScheme() -> IrkLineage.Scheme {
+        guard let d = keychainRead(account: account(KCKey.irkScheme)),
+              let s = String(data: d, encoding: .utf8),
+              let scheme = IrkLineage.Scheme(rawValue: s)
+        else { return IrkLineage.own }
+        return scheme
+    }
+
+    /// The account holds `key` (found by IrkLineage among this UMK's derivations, any client's,
+    /// any version): make it the current IRK, so every IRK signature (the next rotation's old key
+    /// included) is made by the key `.com` and the boxes know. Called after installUMK when this
+    /// device recovers or joins an account another client made.
+    public static func adoptRegisteredIrk(_ key: IrkLineage.Key) throws {
+        try setCurrentIrkVersion(key.version)
+        if key.scheme != IrkLineage.own {
+            try keychainWrite(account: account(KCKey.irkScheme), data: Data(key.scheme.rawValue.utf8))
+        }
+    }
+
+    /// The IRK seed at `version`: the adopted scheme for the current version, else this app's own.
+    private static func irkSeedFor(umk: SymmetricKey, version: Int) -> SymmetricKey {
+        let scheme = version == currentIrkVersion() ? currentIrkScheme() : IrkLineage.own
+        return IrkLineage.seed(umk: umk, scheme: scheme, version: version)
     }
 
     // Optional "pending re-pair" marker — lets a future app launch
@@ -1171,6 +1200,7 @@ public struct Keystore {
                         account(KCKey.simWrapPriv, profile: id),
                         account(KCKey.irkVersion, profile: id),
                         account(KCKey.irkPendingVersion, profile: id),
+                        account(KCKey.irkScheme, profile: id),
                         account(KCKey.watchDelegateSeed, profile: id),
                         account(KCKey.watchDelegateGrantId, profile: id),
                         account(KCKey.watchBootSeed, profile: id),
@@ -1211,7 +1241,7 @@ public struct Keystore {
         let known = Set([activeProfileId, defaultProfileId])
         for id in known {
             for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
-                         KCKey.irkVersion, KCKey.irkPendingVersion,
+                         KCKey.irkVersion, KCKey.irkPendingVersion, KCKey.irkScheme,
                          KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId, KCKey.watchBootSeed,
                          KCKey.acmeAccountKeyScalar,
                          KCKey.adminRootWrapped, KCKey.adminRootEphemeralPub,
@@ -1426,6 +1456,7 @@ public struct Keystore {
         /// B7 — pending re-pair target version while a rotation is
         /// in flight. Cleared on completion or abort. */
         static let irkPendingVersion   = "com.flagship.irk.pendingVersion"
+        static let irkScheme           = "com.flagship.irk.scheme"
         /// Watch delegate key — the raw 32-byte Ed25519 seed for the opt-in
         /// "quick approve a boot from the Watch" signing key. Stored
         /// `.deviceLocal` (NOT iCloud-synced, this-device-only) so it never

@@ -52,7 +52,9 @@ import {
   encryptProfile,
   validateProfileDisplayName,
 } from "./accountMetadata.js";
+import { findRegisteredIrk } from "./irkLineage.js";
 import {
+  adoptRegisteredIrk as ksAdoptRegisteredIrk,
   adminRootPubHex as ksAdminRootPubHex,
   persistAccountDeviceSeed as ksPersistAccountDeviceSeed,
   persistAdminRootSeed as ksPersistAdminRootSeed,
@@ -796,6 +798,13 @@ export async function runIncomingJoin(deps) {
   if (deps.deviceSeed instanceof Uint8Array) {
     await (deps.persistAccountDeviceSeed || ksPersistAccountDeviceSeed)(seed, username, admit.deviceId, deps.deviceSeed);
   }
+  // The account's IRK is the one `.com` serves, whichever client made it: an
+  // account made on Android or iOS doesn't hold this app's v1. Find it among
+  // the UMK's derivations and make it this browser's current IRK, so its IRK
+  // signatures verify (lib/irkLineage.js). Not found: the bundle's UMK doesn't
+  // derive the account key, and the browser keeps its own v1 as before.
+  const registeredIrk = await findRegisteredIrk(seed, irkPubHex);
+  if (registeredIrk) (deps.adoptRegisteredIrk || ksAdoptRegisteredIrk)(registeredIrk);
   if (typeof deps.setUsername === "function") deps.setUsername(username);
   // Slice D (D-4): if the admin sealed the admin root into the bundle, store it
   // device-local (under THIS profile — active profile is now `username`) BEFORE

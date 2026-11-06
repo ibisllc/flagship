@@ -198,6 +198,49 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             "Phase A (key matches) must NOT initiate a re-pair — no rotation, no grace")
     }
 
+    /// PHASE A across clients — an account made on the webapp or Android (or re-paired there)
+    /// holds that client's derivation of the UMK. Recovery here finds it (IrkLineage), adopts it
+    /// and pairs at once: no needless grace for a person who changed platform.
+    func test_singleRecovery_accountMadeOnAnotherClient_instantPair_adoptsItsKey() async throws {
+        for (scheme, version) in [(IrkLineage.Scheme.web, 1), (.android, 1), (.android, 3)] {
+            Keystore.wipe()
+            defer { Keystore.wipe() }
+            try await Keystore.generateUMK(reason: "test")
+            let umk = try await Keystore.currentUMK(reason: "test")
+            let registered = try IrkLineage.key(umk: umk, scheme: scheme, version: version)
+
+            let server = makeServer()
+            try await server.claimUsername(.init(
+                request: .init(username: "harry", irkPub: registered.pubHex, issuedAt: 1),
+                signature: "s"
+            ))
+            let enrol = RecoveryViewModel(client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" })
+            await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+            guard case .registered = enrol.phase else { return XCTFail("enrol failed: \(enrol.phase)") }
+
+            Keystore.wipe()
+            let vm = makeVM(
+                resolution: resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay),
+                server: server, installSpy: InstallSpy()
+            )
+            vm.passphraseInput = "correct horse battery staple"
+            await vm.startTakeover()
+
+            guard case .finalized = vm.phase else {
+                return XCTFail("\(scheme) v\(version): expected .finalized, got \(vm.phase)")
+            }
+            XCTAssertNil(server.lastRePairInitiate, "\(scheme) v\(version): no re-pair")
+            XCTAssertEqual(Keystore.currentIrkVersion(), version)
+            XCTAssertEqual(Keystore.currentIrkScheme(), scheme)
+            let current = try await Keystore.deriveIRK(reason: "test")
+            XCTAssertEqual(HexUtil.encode(current.publicKey.rawRepresentation), registered.pubHex)
+            // The next rotation lands in this app's own scheme.
+            let next = try await Keystore.deriveIRK(reason: "test", version: version + 1)
+            XCTAssertEqual(HexUtil.encode(next.publicKey.rawRepresentation),
+                           try IrkLineage.key(umk: umk, scheme: .ios, version: version + 1).pubHex)
+        }
+    }
+
     /// PHASE B — the registered IRK rotated since the recovery envelope was
     /// written (another device ran Replace / Wipe). The recovered key is
     /// stale, so the VM must run a REAL re-pair against the live key behind

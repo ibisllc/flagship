@@ -32,7 +32,7 @@
 // mismatched local + server keys (this matches the iOS conservative
 // install pattern: keystore swap happens AFTER server-success only).
 
-import { bytesToHex, deriveIrkFromSeed, hkdf32 } from "../keystore.js";
+import { OWN_IRK_SCHEME, bytesToHex, deriveIrkFromSeed, deriveIrkInScheme, hkdf32 } from "../keystore.js";
 import { requireOwnerProfile } from "./companionGuard.js";
 import { controlApex } from "./apex.js";
 
@@ -156,7 +156,9 @@ export async function runWipeRestartCeremony(args, deps = {}) {
   // keystore would compute the first time a user opens a fresh account.
   // Pinned to the iOS mirror (WipeRestartViewModel: `flagship/irk/v1`
   // info string + HKDF<SHA-256>).
-  const newIrkKp = await deriveIrkFromSeed(newUmk);
+  // Always this app's own v1, whichever key (another client's, or a later
+  // version) the OLD UMK's current IRK is.
+  const newIrkKp = await deriveIrkInScheme(newUmk, OWN_IRK_SCHEME, 1);
   const oldIrkPubHex = bytesToHex(oldIrk.publicKey);
   const newIrkPubHex = bytesToHex(newIrkKp.publicKey);
 

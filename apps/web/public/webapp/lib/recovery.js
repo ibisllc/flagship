@@ -36,7 +36,6 @@ import {
   hexToBytes,
   signWithIrk,
   deriveIrkFromSeed,
-  deriveIrkVersioned,
   verifyWithEd25519Pub,
   loadAdminRootSeed,
   persistAdminRootSeed,
@@ -154,14 +153,12 @@ export function recoveredRecordWasLegacy() {
 }
 
 async function recoveredKeySignedRecord(seed, { claim, signatureHex }) {
-  // The record was signed by the account key in force when it was written; the same UMK derives
-  // every rotation version, so accept any of the first few that matches the claim's signer.
-  for (let v = 1; v <= 4; v++) {
-    const irk = await deriveIrkVersioned(seed, v);
-    if (bytesToHex(irk.publicKey) !== claim.irkPubHex) continue;
-    return verifySignedRecord(claim, signatureHex, irk.publicKey, verifyWithEd25519Pub);
-  }
-  return false;
+  // The record was signed by the account key in force when it was written, by whichever client
+  // wrote it; the same UMK derives every client's key at every version (lib/irkLineage.js).
+  const { findRegisteredIrk } = await import("./irkLineage.js");
+  const irk = await findRegisteredIrk(seed, claim.irkPubHex);
+  if (!irk) return false;
+  return verifySignedRecord(claim, signatureHex, irk.publicKey, verifyWithEd25519Pub);
 }
 
 /**
@@ -494,12 +491,10 @@ export async function applyRecoveryUpdate(seed, username, update) {
   if (!r.ok) throw new Error(`account lookup failed: ${r.status}`);
   const acct = await r.json();
   const registered = String(acct.irkPub ?? acct.irkPubHex ?? "").toLowerCase();
-  let version = 0;
-  for (let v = 1; v <= 4 && !version; v++) {
-    if (bytesToHex((await deriveIrkVersioned(seed, v)).publicKey) === registered) version = v;
-  }
-  if (!version) throw new Error("the account key moved since this recovery was written");
-  const irk = await deriveIrkVersioned(seed, version);
+  // Whichever client's derivation and version the account holds (lib/irkLineage.js).
+  const { findRegisteredIrk } = await import("./irkLineage.js");
+  const irk = await findRegisteredIrk(seed, registered);
+  if (!irk) throw new Error("the account key moved since this recovery was written");
   return uploadRecord({
     session: { umk: seed },
     username,
@@ -510,7 +505,7 @@ export async function applyRecoveryUpdate(seed, username, update) {
     prfSaltHashHex,
     passkeyAttestationObject,
     authority: { irkPubHex: registered, adminRootPubHex: typeof acct.adminRootPub === "string" ? acct.adminRootPub.toLowerCase() : "none" },
-    sign: async (bytes) => new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, bytes)),
+    sign: (bytes) => irk.sign(bytes),
   });
 }
 

@@ -280,6 +280,50 @@ final class Phase3bPairingTests: XCTestCase {
         }
     }
 
+    /// An account made on the webapp or Android registers that client's IRK. The joined iPhone
+    /// adopts it (IrkLineage), so its IRK signatures verify; its next rotation is its own scheme.
+    @MainActor
+    func test_join_accountMadeOnAnotherClient_adoptsItsRegisteredKey() async throws {
+        for scheme in [IrkLineage.Scheme.web, .android] {
+            Keystore.setActiveProfile("acme")
+            Keystore.wipe()
+            let acmeUmk = SymmetricKey(size: .bits256)
+            let accountKey = try IrkLineage.key(umk: acmeUmk, scheme: scheme, version: 1)
+            let relay = MockPairingRelayClient()
+            let server = MockFlagshipServerClient()
+            let adminVm = AddDeviceViewModel(
+                account: "acme", relay: relay,
+                deriveIRK: { _ in accountKey.privateKey },
+                currentUMKHex: { _ in HexUtil.encode(acmeUmk.withUnsafeBytes { Data($0) }) }
+            )
+            let incomingVm = JoinAccountViewModel(relay: relay, server: server)
+            try incomingVm.confirmDeviceDisplayName("Reviewer iPhone")
+            let adminStart = Task { await adminVm.start() }
+            try await Task.sleep(nanoseconds: 50_000_000)
+            guard case .waitingForDevice(let joinUrl) = adminVm.phase else {
+                adminStart.cancel()
+                return XCTFail("admin not waiting; phase=\(adminVm.phase)")
+            }
+            let incomingTask = Task {
+                await incomingVm.connect(joinUrl: joinUrl, provideRawPubkeyToRelay: { raw in relay.provideRawIncomingPubkey(raw) })
+            }
+            await adminStart.value
+            adminVm._forceGateExpiredForTests()
+            await adminVm.confirmMatch()
+            await incomingTask.value
+            guard case .joined = incomingVm.phase else { return XCTFail("\(scheme): not joined; \(incomingVm.phase)") }
+
+            Keystore.setActiveProfile("acme")
+            XCTAssertEqual(Keystore.currentIrkScheme(), scheme)
+            let current = try await Keystore.deriveIRK(reason: "test")
+            XCTAssertEqual(HexUtil.encode(current.publicKey.rawRepresentation), accountKey.pubHex)
+            let next = try await Keystore.deriveIRK(reason: "test", version: 2)
+            XCTAssertEqual(HexUtil.encode(next.publicKey.rawRepresentation),
+                           try IrkLineage.key(umk: acmeUmk, scheme: .ios, version: 2).pubHex)
+            Keystore.wipe()
+        }
+    }
+
     @MainActor
     func test_incoming_rejectsAdmitForADifferentDevice() async throws {
         // A captured admit aimed at a DIFFERENT device pubkey must be

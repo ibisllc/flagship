@@ -110,6 +110,8 @@ public final class RealAccountLoginViewModel {
     /// `Keystore.installUMK`, retiring the old `completeRecoveryPair`
     /// stub that left the seed on the floor.
     private let installUMK: @MainActor (SymmetricKey, String) async throws -> Void
+    /// Seam: make a found registered key the current IRK (the real Keystore by default).
+    var adoptIrk: @MainActor (IrkLineage.Key) throws -> Void = { try Keystore.adoptRegisteredIrk($0) }
 
     public init(
         resolution: AccountResolution,
@@ -228,6 +230,7 @@ public final class RealAccountLoginViewModel {
             phase = .failed(String(localized: "Couldn't install your recovered account key: \(UserErrorText.of(error))"))
             return
         }
+        adoptRegisteredIrk(seed: seed, registeredPubHex: recoveryVM.registeredIrkPubHex)
         // A record `.com` released on the passphrase alone: Home offers once to update it, with the
         // passphrase just typed (kept in memory only).
         if recoveryVM.recoveredRecordNeedsPasskeyUpdate {
@@ -404,6 +407,7 @@ public final class RealAccountLoginViewModel {
             phase = .failed(String(localized: "Couldn't install your recovered account key: \(UserErrorText.of(error))"))
             return
         }
+        adoptRegisteredIrk(seed: seed, registeredPubHex: recoveryVM.registeredIrkPubHex)
         // A record `.com` released on the passphrase alone: Home offers once to update it, with the
         // passphrase just typed (kept in memory only).
         if recoveryVM.recoveredRecordNeedsPasskeyUpdate {
@@ -423,6 +427,18 @@ public final class RealAccountLoginViewModel {
         } catch {
             phase = .failed(String(localized: "Couldn't restore access: \(UserErrorText.of(error))"))
         }
+    }
+
+    /// The registered IRK, looked for among EVERY client's derivation of the recovered UMK at any
+    /// version (IrkLineage): an account made on the webapp or Android, or re-paired since, doesn't
+    /// hold this app's v1. Found, it becomes this device's current IRK (installUMK reset it to v1),
+    /// so a person who moved from another platform gets Phase A, and a re-pair displaces the right
+    /// key. Not found (no registered value, or a key past this UMK's lineage): unchanged.
+    private func adoptRegisteredIrk(seed: SymmetricKey, registeredPubHex: String?) {
+        guard let registeredPubHex,
+              let key = IrkLineage.findRegistered(umk: seed, registeredPubHex: registeredPubHex)
+        else { return }
+        try? adoptIrk(key)
     }
 
     /// Phase 4 — finalize the takeover once its grace has elapsed. The
