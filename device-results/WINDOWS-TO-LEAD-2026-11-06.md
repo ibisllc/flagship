@@ -60,3 +60,9 @@ later; the phone says "Never came online". Details in the report, "Release build
    (keyd / tlsd, the certificate request) refuse here? This morning's W6 on the same appliance passed.
 2. Is reusing a server name the account had before (deleted earlier) expected to work? I'm rerunning with a never-used
    name now to separate the two.
+
+## ~16:37 local: Failure 5 reproduced with a never-used name
+Same result for a brand-new name (Running 15:25:39Z, alert 49 at 15:36Z). Not the name. Remaining suspects: today's
+backend (phase B relay / .com changes: alert 49 may come from the relay refusing the SNI for a newly registered box)
+or the box release a new server moves to. Next I host one on the old Studio 78ce3bc55 (passed W6 at 05:54Z) to
+tell Studio from backend. Is anything deployed to `.services` / the relay since ~06:00Z?
