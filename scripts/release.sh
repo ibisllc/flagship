@@ -2667,8 +2667,13 @@ run_reap() {
 }
 
 run_retire() {
-  require_done scrub reap || return 10
   ensure_wt
+  # Already retired (4949356d8 deleted the tool on main and the branch is gone): nothing to land.
+  if ! compgen -G "$WT/scripts/wipe-all-users*" >/dev/null && ! git -C "$WT" ls-remote --exit-code -q origin chore/delete-wipe-tooling >/dev/null 2>&1; then
+    ok "the wipe tooling is already gone from main and its branch is deleted: nothing to land"
+    return 0
+  fi
+  require_done scrub reap || return 10
   X git -C "$WT" fetch -q origin chore/delete-wipe-tooling
   local branch=retire-wipe-tooling
   wt_git branch -D "$branch" >/dev/null 2>&1 || true
