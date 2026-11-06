@@ -23,6 +23,14 @@ object VoiciCopy {
         },
     )
 
+    /** "Remove my page" refused or failed (§3.3). */
+    fun removeError(code: String?): String = when (code) {
+        "not-sensitive-key", "wrong-signer", "bad-signature" -> FSStrings.get(R.string.voici_admin_only_remove)
+        "taken-down", "rate-limited", "banned" -> publishError(code)
+        "remove-failed", "seq-conflict", "wrong-page", "stale" -> FSStrings.get(R.string.voici_remove_failed)
+        else -> FSStrings.get(R.string.voici_err_network)
+    }
+
     fun sendError(code: String?): String = FSStrings.get(
         when (code) {
             in TEXT_CODES -> R.string.voici_err_text

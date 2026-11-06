@@ -51,6 +51,13 @@ data class VoiciLocal(
     val replyLatest: Map<String, Long> = emptyMap(),
     val replySeen: Map<String, Long> = emptyMap(),
     val replyCursor: Map<String, String> = emptyMap(),
+    /** The owner took the page down (here or on another device): `.com` answers "no page"; [publishedIndex] and
+     *  [publishedState] stay, so its conversations still open and turning it on again brings it back as it was. */
+    val removed: Boolean = false,
+    /** The highest seq on the publish ladder this device saw: an index or a removal (§3.3). */
+    val ladderSeq: Long = 0,
+    /** "Everything you put on your page is public" was answered with Make it public on this device. */
+    val publicWarned: Boolean = false,
 )
 
 /** Where the sealed files live. */

@@ -3490,4 +3490,21 @@
     <string name="voici_welcome_message">voi.ci/%1$s で、写真、ひとことの自己紹介、リンク、投稿を公開できます。希望すれば、訪問者からメッセージを受け取ることもできます。</string>
     <string name="voici_set_up_your_page">ページを設定</string>
     <string name="voici_edit_your_page">ページを編集</string>
+    <string name="voici_home_title">あなたの公開ページ</string>
+    <string name="voici_public_warning_title">ページを公開しますか？</string>
+    <string name="voici_make_it_public">公開する</string>
+    <string name="voici_public_warning_body">ページに載せたものはすべて公開されます。誰でも見ることができ、アプリやサーバーでも使っているユーザー名が表示されるため、それらが結び付けられる可能性があります。</string>
+    <string name="voici_remove_title">voi.ci からページを削除しますか？</string>
+    <string name="voici_remove_body">訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。</string>
+    <string name="voici_public">公開</string>
+    <string name="voici_not_public">非公開</string>
+    <string name="voici_admin_only_publish">ページを公開できるのは管理デバイスだけです。</string>
+    <string name="voici_edit_page">ページを編集</string>
+    <plurals name="voici_changes_pending">
+        <item quantity="one">未公開の変更 %1$d 件</item>
+        <item quantity="other">未公開の変更 %1$d 件</item>
+    </plurals>
+    <string name="voici_remove_reason">ページを削除</string>
+    <string name="voici_remove_failed">ページを削除できませんでした。もう一度お試しください。</string>
+    <string name="voici_admin_only_remove">ページを削除できるのは管理デバイスだけです。</string>
 </resources>

@@ -67,6 +67,8 @@ interface VoiciClient {
     suspend fun uploadPiece(username: String, pageId: String, sha256: String, size: Long, issuedAt: Long, signerPub: String, signature: String, bytes: ByteArray, contentType: String)
     /** The stored index, or [VoiciHttpError] (409 `seq-conflict` carries the stored `index`). */
     suspend fun publish(username: String, index: JsonObject): JsonObject
+    /** `POST /api/voici/pages/<u>/remove` with a signed VoiciPageRemove: the page then reads as "no page". */
+    suspend fun removePage(username: String, remove: JsonObject)
     suspend fun depositDraft(username: String, device: VoiciDeviceSigner, envelope: JsonObject)
     suspend fun drafts(username: String): List<VoiciDraftItem>
     suspend fun consumeDrafts(username: String, body: JsonObject)
@@ -162,6 +164,10 @@ class LiveVoiciClient(
 
     override suspend fun publish(username: String, index: JsonObject): JsonObject =
         postJson("${base()}/api/voici/pages/${enc(username)}/publish", JsonObject(mapOf("index" to index)))?.get("index") as? JsonObject ?: index
+
+    override suspend fun removePage(username: String, remove: JsonObject) {
+        postJson("${base()}/api/voici/pages/${enc(username)}/remove", remove)
+    }
 
     override suspend fun depositDraft(username: String, device: VoiciDeviceSigner, envelope: JsonObject) {
         val path = "/api/accounts/${enc(username)}/voici-drafts"

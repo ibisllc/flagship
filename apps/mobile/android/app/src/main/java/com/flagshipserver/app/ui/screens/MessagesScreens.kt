@@ -90,6 +90,11 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
+/** Bumped when something points to the page (Home, Settings): the Messages tab scrolls back to its header. */
+object MessagesScroll {
+    val toTop = kotlinx.coroutines.flow.MutableStateFlow(0)
+}
+
 /** The app's VoiciCenter (MainActivity provides it; null before an account is open). */
 val LocalVoiciCenter = staticCompositionLocalOf<VoiciCenter?> { null }
 
@@ -117,14 +122,32 @@ fun MessagesScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     var showRequests by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(center) { center.start() }
+    val flow = rememberPagePublicFlow(center)
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // Like a large title: once the header has scrolled away, a slim bar carries the photo, the name and the switch.
+    val collapsed by remember { androidx.compose.runtime.derivedStateOf { scroll.value > with(density) { 180.dp.roundToPx() } } }
+    val toTop by MessagesScroll.toTop.collectAsState()
+    LaunchedEffect(toTop) { if (toTop > 0) scroll.animateScrollTo(0) }
+    PagePublicDialogs(flow)
 
     FSScreen(
         title = stringResource(R.string.voici_tab),
         titleTag = "messages-title",
+        scrollState = scroll,
+        topPinned = {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = collapsed,
+                enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+            ) { PageHeaderBar(center, page, flow) { scope.launch { scroll.animateScrollTo(0) } } }
+        },
         onRefresh = { scope.launch { center.refresh() } },
         refreshing = ui.loading,
         actions = { FSBarAction(Icons.Outlined.Settings, stringResource(R.string.voici_settings_title), { nav.navigate("messages-settings") }, Modifier.testTag("messages-settings")) },
     ) {
+        // The page is managed here, at the top (Home and Settings only point to it).
+        PageHeaderCard(center, page, flow) { nav.navigate("page-editor") }
         val replies by center.replyNotices.collectAsState()
         if (replies.isNotEmpty()) {
             val context = LocalContext.current
@@ -146,23 +169,6 @@ fun MessagesScreen(nav: NavController) {
                     )
                 }
             }
-        }
-        FSGroup {
-            FSRow(
-                title = stringResource(R.string.voici_your_page),
-                subtitle = "voi.ci/${page.username} · ${voiciPageStatus(page)}",
-                icon = Icons.Outlined.Public,
-                onClick = { nav.navigate("page-editor") },
-                modifier = Modifier.testTag("messages-your-page"),
-                trailing = {
-                    Text(
-                        stringResource(if (page.publishedSeq == 0L && page.pendingCount == 0) R.string.voici_set_up_your_page else R.string.voici_edit_your_page),
-                        color = FS.colors.accentText,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.testTag("messages-edit-page"),
-                    )
-                },
-            )
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             SegmentedButton(

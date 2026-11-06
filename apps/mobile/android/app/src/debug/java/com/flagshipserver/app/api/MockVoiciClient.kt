@@ -10,6 +10,7 @@ import com.flagshipserver.app.core.voici.VoiciJs
 import com.flagshipserver.app.core.voici.VoiciMessages
 import com.flagshipserver.app.core.voici.VoiciOwner
 import com.flagshipserver.app.core.voici.VoiciPage
+import com.flagshipserver.app.core.voici.VoiciPageRemove
 import com.flagshipserver.app.core.voici.VoiciPieceUpload
 import com.flagshipserver.app.core.voici.VoiciPlaintext
 import com.flagshipserver.app.core.voici.VoiciThreadStatement
@@ -51,12 +52,15 @@ class MockVoiciClient(
     /** A refusal the next attest answers with (e.g. "first-contact-limit"). */
     var attestRefusal: String? = null
     var takenDown = HashSet<String>()
+    /** Pages their owner took down: the removal's seq and pageId (the ladder continues from them). */
+    val removed = HashMap<String, Pair<Long, String>>()
+    val removals = ArrayList<JsonObject>()
 
     @Synchronized fun storedIndex(username: String): JsonObject? = pages[username]
 
     override suspend fun accountKeys(username: String) = accounts[username]
 
-    override suspend fun page(username: String): JsonObject? = synchronized(this) { pages[username] }
+    override suspend fun page(username: String): JsonObject? = synchronized(this) { if (username in removed) null else pages[username] }
 
     override suspend fun piece(username: String, pageId: String, sha256: String): ByteArray? = synchronized(this) { pieces["$pageId/$sha256"] }
 
@@ -75,15 +79,51 @@ class MockVoiciClient(
         val acc = accounts[username] ?: refuse(404, "not-found")
         if (username in takenDown) refuse(403, "taken-down")
         val stored = pages[username]?.let(VoiciPage::parseVoiciPageIndex)
-        val r = VoiciPage.checkVoiciPublish(index, username, acc.sensitiveKind, acc.sensitivePub, stored?.body?.seq ?: 0, stored?.body?.pageId, now())
-        val idx = r.valueOrNull() ?: if (r.code == "seq-conflict") refuse(409, "seq-conflict", mapOf("index" to pages[username]!!)) else refuse(400, r.code)
+        val gone = removed[username]
+        val storedSeq = maxOf(stored?.body?.seq ?: 0, gone?.first ?: 0)
+        val storedPageId = stored?.body?.pageId ?: gone?.second
+        val r = VoiciPage.checkVoiciPublish(index, username, acc.sensitiveKind, acc.sensitivePub, storedSeq, storedPageId, now())
+        // As `.com`: a seq-conflict names the stored index, seq, pageId and whether the page was removed.
+        val idx = r.valueOrNull() ?: when (r.code) {
+            "seq-conflict" -> refuse(409, "seq-conflict", conflictBody(username))
+            "wrong-page" -> refuse(409, "wrong-page", mapOf("pageId" to JsonPrimitive(storedPageId)))
+            else -> refuse(400, r.code)
+        }
         for (p in idx.body.pieces) {
             val b = pieces["${idx.body.pageId}/${p.sha256}"] ?: refuse(400, "missing-piece")
             if (b.size.toLong() != p.size) refuse(400, "bad-piece")
         }
+        removed.remove(username)
         pages[username] = index
         publishCount++
         index
+    }
+
+    private fun conflictBody(username: String): Map<String, JsonElement> {
+        val stored = pages[username]?.let(VoiciPage::parseVoiciPageIndex)
+        val gone = removed[username]
+        return mapOf(
+            "index" to (pages[username] ?: kotlinx.serialization.json.JsonNull),
+            "seq" to JsonPrimitive(maxOf(stored?.body?.seq ?: 0, gone?.first ?: 0)),
+            "pageId" to JsonPrimitive(stored?.body?.pageId ?: gone?.second),
+            "removed" to JsonPrimitive(gone != null),
+        )
+    }
+
+    /** `.com`'s removal check (checkVoiciPageRemove) against the stored page; already removed answers not-found. */
+    override suspend fun removePage(username: String, remove: JsonObject): Unit = synchronized(this) {
+        val acc = accounts[username] ?: refuse(404, "not-found")
+        if (username in removed) refuse(404, "not-found")
+        val stored = pages[username]?.let(VoiciPage::parseVoiciPageIndex) ?: refuse(404, "not-found")
+        val r = VoiciPageRemove.check(remove, username, acc.sensitiveKind, acc.sensitivePub, stored.body.seq, stored.body.pageId, now())
+        val ok = r.valueOrNull() ?: when (r.code) {
+            "seq-conflict" -> refuse(409, "seq-conflict", conflictBody(username))
+            "wrong-page" -> refuse(409, "wrong-page", mapOf("pageId" to JsonPrimitive(stored.body.pageId)))
+            "malformed" -> refuse(400, "malformed")
+            else -> refuse(403, r.code)
+        }
+        removed[username] = ok.seq to ok.pageId
+        removals += remove
     }
 
     override suspend fun depositDraft(username: String, device: VoiciDeviceSigner, envelope: JsonObject) {

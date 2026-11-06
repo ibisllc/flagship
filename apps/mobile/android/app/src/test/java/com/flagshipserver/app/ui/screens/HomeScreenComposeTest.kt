@@ -147,7 +147,7 @@ class HomeScreenComposeTest {
     )
 
     private fun setOrdered(issuedAt: Long = 0, acks: Map<String, Long> = emptyMap(), showRecoveryNudge: Boolean = false,
-                           showPageWelcome: Boolean = false, onSetUpPage: () -> Unit = {}) {
+                           showPageWelcome: Boolean = false, onSetUpPage: () -> Unit = {}, pageRowPublic: Boolean? = null) {
         composeRule.setContent {
             FlagshipTheme {
                 HomeScreen(
@@ -163,6 +163,7 @@ class HomeScreenComposeTest {
                     showRecoveryNudge = showRecoveryNudge,
                     showPageWelcome = showPageWelcome,
                     onSetUpPage = onSetUpPage,
+                    pageRowPublic = pageRowPublic,
                 )
             }
         }
@@ -201,10 +202,29 @@ class HomeScreenComposeTest {
     @Test fun thePageWelcome_introducesThePageAndOpensTheEditor() {
         var opened = false
         setOrdered(showPageWelcome = true, onSetUpPage = { opened = true })
-        composeRule.onNodeWithText("Welcome! Make your own page").assertIsDisplayed()
+        composeRule.onNodeWithText("Your public page").assertIsDisplayed()
         composeRule.onNodeWithText("Share a photo, a few words about you, your links and posts at voi.ci/harry. If you want, visitors can send you messages there.").assertIsDisplayed()
         composeRule.onNodeWithText("Set up your page").performClick()
         assertTrue(opened)
+    }
+
+    @Test fun theWelcomeCard_givesWayToACompactRowThatOpensThePage() {
+        var opened = false
+        setOrdered(pageRowPublic = true, onSetUpPage = { opened = true })
+        composeRule.onNodeWithTag("page-welcome-card").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Your page, Public").assertIsDisplayed().performClick()
+        assertTrue(opened)
+    }
+
+    @Test fun theCompactRow_saysWhenThePageIsNotPublic() {
+        setOrdered(pageRowPublic = false)
+        composeRule.onNodeWithContentDescription("Your page, Not public").assertIsDisplayed()
+    }
+
+    @Test fun noPointer_whenHomeHasNothingToSay() {
+        setOrdered()
+        composeRule.onNodeWithTag("page-welcome-card").assertDoesNotExist()
+        composeRule.onNodeWithTag("home-page-row").assertDoesNotExist()
     }
 
     @Test fun theRecoveryNudge_winsOverThePageWelcome() {
