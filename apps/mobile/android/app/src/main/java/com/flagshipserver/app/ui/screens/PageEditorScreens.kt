@@ -200,7 +200,7 @@ fun PageEditorScreen(nav: NavController) {
         FSSectionHeader(stringResource(R.string.voici_photo))
         FSCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
-                VoiciAvatar(center.image(avatar), 72.dp, name)
+                PageAvatar(center.image(avatar), 72.dp)
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     FSSecondaryButton(stringResource(R.string.voici_choose_photo), {
                         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))

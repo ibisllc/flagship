@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -313,7 +312,7 @@ fun PageHeaderCard(center: VoiciCenter, page: VoiciPageUi, flow: PagePublicFlow,
             val photoLabel = stringResource(R.string.voici_choose_photo)
             val avatar: @Composable () -> Unit = {
                 Box(
-                    Modifier.clip(CircleShape)
+                    Modifier
                         .clickable(onClickLabel = photoLabel) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                         .semantics { contentDescription = photoLabel }
                         .testTag("page-header-photo"),
@@ -390,7 +389,7 @@ fun PagePublishBar(page: VoiciPageUi, unpublished: Int, onPublish: () -> Unit) {
         Column {
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             Row(
-                Modifier.navigationBarsPadding().padding(horizontal = FS.space.s4, vertical = FS.space.s3),
+                Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s3),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
             ) {
