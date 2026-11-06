@@ -221,6 +221,18 @@ final class PageControlsTests: XCTestCase {
         XCTAssertEqual(VoiciPageRemove.parse(try XCTUnwrap(mock.removals.last))?.seq, 3)
     }
 
+    func test_aWipeForgetsTheRemovedPagesCopy() async throws {
+        let s = await store()
+        await s.goPublic()
+        await s.removePage()
+        XCTAssertNotNil(s.published)
+        MessagesStore.forgetLocal(username: user, allProfiles: false)
+        let again = await store()
+        XCTAssertNil(again.published, "Nothing of the removed page stays on the device.")
+        XCTAssertFalse(again.isRemoved)
+        XCTAssertEqual(again.pendingCount, 0)
+    }
+
     func test_aDeviceWithoutTheAdminRootCanNeitherPublishNorRemove() async throws {
         GymSeams.adminRootSeed = nil
         let s = await store()

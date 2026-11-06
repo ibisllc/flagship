@@ -83,6 +83,7 @@ public final class MessagesStore {
         self.client = client
         self.isDemo = isDemo
         self.deviceId = deviceId.flatMap { $0.isEmpty ? nil : $0 } ?? "device"
+        Self.currentUsername = u
         guard changed else { return }
         self.username = u
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
@@ -90,6 +91,17 @@ public final class MessagesStore {
         local = Local()
         guard !u.isEmpty else { return }
         load()
+    }
+
+    /// After a wipe: nothing of the account stays in memory, and nothing is written back.
+    func forgetInMemory() {
+        stopPolling()
+        phoneInbox.set(nil)
+        username = ""
+        Self.currentUsername = nil
+        index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
+        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false
+        local = Local()
     }
 
     public var isAdmin: Bool { Keystore.hasAdminRoot }
@@ -392,13 +404,13 @@ public final class MessagesStore {
         }
         ownOps.removeAll { $0.op == "profile" && local.handed[$0.opId] == nil }
         guard profile != base.profile || laneOps.contains(where: { $0.op == "profile" }) else { save(); return }
-        await record(VoiciDraftOp(opId: newId(), op: "profile", at: now(), deviceId: deviceId, profile: profile, images: images))
+        await record(VoiciDraftOp(opId: newId(), op: "profile", at: max(now(), base.issuedAt + 1), deviceId: deviceId, profile: profile, images: images))
     }
 
     public func setAcceptsMessages(_ on: Bool) async {
         ownOps.removeAll { $0.op == "accept-messages" && local.handed[$0.opId] == nil }
         guard (on ? 1 : 0) != base.acceptsMessages || laneOps.contains(where: { $0.op == "accept-messages" }) else { save(); return }
-        await record(VoiciDraftOp(opId: newId(), op: "accept-messages", at: now(), deviceId: deviceId, accepts: on ? 1 : 0))
+        await record(VoiciDraftOp(opId: newId(), op: "accept-messages", at: max(now(), base.issuedAt + 1), deviceId: deviceId, accepts: on ? 1 : 0))
     }
 
     /// The Messages header's name and photo. While the page is public, an admin device publishes just this change at
@@ -415,7 +427,7 @@ public final class MessagesStore {
             q.displayName = name
             q.avatar = sha
             guard q != base.profile else { return nil }
-            await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: now(), deviceId: deviceId, profile: q)])
+            await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: max(now(), base.issuedAt + 1), deviceId: deviceId, profile: q)])
             return publishError
         }
         var q = preview.profile
@@ -512,7 +524,7 @@ public final class MessagesStore {
         var q = base.profile
         q.displayName = preview.profile.displayName
         q.avatar = preview.profile.avatar
-        await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: now(), deviceId: deviceId, profile: q)], mayRepublish: true)
+        await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: max(now(), base.issuedAt + 1), deviceId: deviceId, profile: q)], mayRepublish: true)
     }
 
     /// Publishes exactly `ops` (never the other drafts).
@@ -1002,6 +1014,31 @@ public final class MessagesStore {
         guard let text = try? CanonicalJson.canonicalJson(v) else { return }
         try? Data(text.utf8).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
+
+    /// The account leaves this device (`Keystore.wipe`): its copy (the page, a removed page's content, drafts,
+    /// conversations) goes with it; a full reset also drops every account's copy and the page images.
+    nonisolated static func forgetLocal(username: String?, allProfiles: Bool) {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = support.appendingPathComponent("flagship-messages", isDirectory: true)
+        if allProfiles {
+            try? FileManager.default.removeItem(at: dir)
+            try? FileManager.default.removeItem(at: support.appendingPathComponent("flagship-voici-images", isDirectory: true))
+        } else if let u = username?.lowercased(), !u.isEmpty {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(u).json"))
+        }
+    }
+
+    /// Wires `Keystore.onWipe` (once, at launch).
+    public static func installWipeHook() {
+        Keystore.onWipe = { all in
+            let u = currentUsername
+            forgetLocal(username: u, allProfiles: all)
+            Task { @MainActor in shared.forgetInMemory() }
+        }
+    }
+
+    /// The configured account, readable from `Keystore.onWipe` (which may run off the main actor).
+    nonisolated(unsafe) static var currentUsername: String?
 
     /// VoiciPageState.json read back (this device's own copy; each piece is checked like a published one).
     nonisolated static func parseState(_ v: JSONValue) -> VoiciPageState? {

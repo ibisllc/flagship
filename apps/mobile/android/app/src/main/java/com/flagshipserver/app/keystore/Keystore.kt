@@ -28,6 +28,9 @@ import java.util.concurrent.ConcurrentHashMap
  * under Keystore-held keys rather than Keystore keys themselves.
  */
 object Keystore {
+    /** Called first on [wipe]: drops what the app keeps for the account outside the keystore (the voi.ci page copy). */
+    @Volatile var onWipe: (() -> Unit)? = null
+
 
     private const val FILE_NAME = "flagship-keystore"
     private const val KEY_UMK_SEED = "umk.seed"
@@ -953,6 +956,7 @@ object Keystore {
      *     UMK + new IRK + new recovery passkey.
      */
     fun wipe() {
+        runCatching { onWipe?.invoke() }
         val p = requirePrefs()
         val editor = p.edit()
         SeedVault.remove(editor, pkey(KEY_UMK_SEED))
