@@ -125,6 +125,17 @@ public struct AddDeviceScreen: View {
                         Text("Waiting for the other device to scan…")
                             .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     }
+                    // A computer without a camera (W18): send it the same link to paste
+                    // in its "Code or link" field. The codes are still compared below.
+                    if let url = URL(string: qrUrl) {
+                        Text("No camera on the other device? Send it this link and paste it there.")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                            .multilineTextAlignment(.center)
+                        ShareLink(item: url) {
+                            Label("Share link", systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityIdentifier("add-device-share-link")
+                    }
                 } else {
                     Text("Scanned — now compare the codes.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)

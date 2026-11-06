@@ -206,6 +206,27 @@ private fun QrPanel(joinUrl: String) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            // A computer without a camera (W18): send it the same link to paste in its
+            // "Code or link" field. The codes are still compared on both screens.
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val chooserTitle = stringResource(R.string.share_link)
+            Text(
+                stringResource(R.string.no_camera_on_the_other_device_send_link),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+            FSSecondaryButton(
+                label = chooserTitle,
+                onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                        .setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, joinUrl)
+                    context.startActivity(android.content.Intent.createChooser(send, chooserTitle))
+                },
+                block = true,
+                modifier = Modifier.testTag("add-device-share-link"),
+            )
         }
     }
 }
