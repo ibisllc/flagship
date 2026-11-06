@@ -104,6 +104,49 @@ function headerHtml() {
     </section>`;
 }
 
+/** The sample account's version: the operator's example page, shown read-only (docs/sample-users.md). */
+export const SAMPLE_PAGE_NOTE = () => tr("This is a sample account. Its page is an example, so you can't change it.");
+
+function sampleHeaderHtml() {
+  const p = world.page?.profile;
+  const on = Boolean(world.page);
+  return `
+    <section class="ph${on ? " is-public" : ""}" id="messages-page-header" data-testid="messages-demo-page" tabindex="-1" aria-label="${escapeHtml(tr("Your page"))}">
+      <div class="ph-top">
+        <span class="ph-avatar${on ? " is-public" : ""}">${avatarInner(p?.avatar ?? null, 72)}</span>
+        <div class="ph-main">
+          <p class="ph-name ph-name-static" data-ph-name></p>
+          <div class="ph-url">
+            <span class="ph-url-text mono" data-testid="ph-url"></span>
+            <button type="button" class="ph-copy" id="ph-copy" aria-label="${escapeHtml(tr("Copy link"))}"><span class="icon" data-ph-copy-icon>${copyIcon}</span></button>
+            <span class="ph-copied" id="ph-copied" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="ph-public">
+          <span class="ph-public-label" id="ph-public-label" data-testid="demo-page-status">${escapeHtml(on ? tr("Public") : tr("Not public"))}</span>
+          <button type="button" role="switch" class="fs-switch" id="ph-switch" data-testid="demo-page-public-switch" aria-checked="${on}" aria-labelledby="ph-public-label" disabled><span class="fs-switch-thumb" aria-hidden="true"></span></button>
+        </div>
+      </div>
+      <p class="note ph-note" data-testid="demo-page-note">${escapeHtml(SAMPLE_PAGE_NOTE())}</p>
+      <button type="button" class="ph-edit" id="ph-view" data-testid="demo-page-view">
+        <span class="ph-edit-text">${escapeHtml(tr("View page"))}</span>
+        <span class="icon ph-edit-chevron" aria-hidden="true">${chevronRightIcon}</span>
+      </button>
+    </section>`;
+}
+
+function renderSampleHeader(root) {
+  const p = world.page?.profile;
+  root.innerHTML = sampleHeaderHtml();
+  root.querySelector("[data-ph-name]").textContent = p?.displayName || pageUsername();
+  root.querySelector("[data-testid=ph-url]").textContent = displayUrl();
+  root.querySelectorAll("[data-ph-avatar-img]").forEach((img) => (img.src = avatarUrl(p?.avatar)));
+  root.querySelector("#ph-copy").addEventListener("click", () => void copyPageLink(root));
+  root.querySelector("#ph-view").addEventListener("click", () => window.open(voiciPageUrl(pageUsername()), "_blank", "noopener,noreferrer"));
+  const bar = document.getElementById("messages-page-bar");
+  if (bar) bar.replaceChildren();
+}
+
 /** The folded bar's inside; the bar itself (`#messages-page-bar`) is a direct child of the tab, so it can stick. */
 function barHtml(p, on) {
   return `<div class="ph-bar-in">
@@ -119,6 +162,7 @@ let collapseObserver = null;
 /** Draws the header into `root` (`#messages-page-row`) and its folded bar into `#messages-page-bar`. */
 export function renderPageHeader(root) {
   if (!root) return;
+  if (world.sample) return renderSampleHeader(root);
   const m = editorModel();
   const p = m.merged.profile;
   root.innerHTML = headerHtml();

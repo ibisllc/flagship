@@ -3284,5 +3284,7 @@
   "Changes": "変更",
   "Change photo": "写真を変更",
   "Edit page": "ページを編集",
-  "Bio, links, posts, look, messages": "自己紹介、リンク、投稿、デザイン、メッセージ"
+  "Bio, links, posts, look, messages": "自己紹介、リンク、投稿、デザイン、メッセージ",
+  "This is a sample account. Its page is an example, so you can't change it.": "これはサンプルアカウントです。このページは見本なので、変更できません。",
+  "View page": "ページを見る"
 }

@@ -16,6 +16,8 @@ import {
   updateMessagesState,
 } from "./voiciOwner.js";
 import { getSession, onSessionLock } from "./state.js";
+import { getActiveProfile } from "./profiles.js";
+import { isDemoProfile } from "./demoAccount.js";
 import { tr } from "./i18n.js";
 import { clearRemovedSnapshot, loadRemovedSnapshot } from "./voiciPagePublic.js";
 
@@ -33,6 +35,8 @@ function fresh() {
     stateLoaded: false,
     conversations: [],
     inboxError: null,
+    /** A sample account: its page is the operator's example, read and shown, never changed (no drafts, no inbox). */
+    sample: false,
   };
 }
 
@@ -57,8 +61,14 @@ export function emitWorld() {
   }
 }
 
-/** Reads the page, the pending drafts, the state and (when the page exists) the inbox. Each part fails alone. */
+/**
+ * Reads the page, the pending drafts, the state and (when the page exists) the inbox. Each part fails alone. A sample
+ * account reads only its public page (the operator's example, docs/sample-users.md): this device holds none of its
+ * keys, so nothing else is read and nothing is ever signed.
+ */
 export async function refreshWorld(deps = {}) {
+  if (deps.sample ?? isDemoProfile(getActiveProfile())) return refreshSamplePage(deps);
+  world.sample = false;
   if (!(getSession()?.umk instanceof Uint8Array)) return world;
   const [page, drafts, st] = await Promise.allSettled([
     (deps.loadPublishedPage ?? loadPublishedPage)(String(getSession().username ?? "").toLowerCase(), deps),
@@ -89,6 +99,22 @@ export async function refreshWorld(deps = {}) {
       world.inboxError = e;
     }
   }
+  emitWorld();
+  return world;
+}
+
+/** A sample account's read: the public page, checked against the account's own key like any other page. */
+async function refreshSamplePage(deps) {
+  const u = String(getSession()?.username ?? "").toLowerCase();
+  world.sample = true;
+  if (!u) return world;
+  try {
+    world.page = await (deps.loadPublishedPage ?? loadPublishedPage)(u, deps);
+    world.pageError = null;
+  } catch (e) {
+    world.pageError = e;
+  }
+  world.pageLoaded = true;
   emitWorld();
   return world;
 }

@@ -480,7 +480,10 @@
 //       switch that publishes after a one-time warning and removes the page when turned off; folds into a slim bar
 //       on scroll). Home and Settings point there; the editor keeps every edit as a draft behind one Publish bar;
 //       the Messages tab's glyph sits in a teal disc.
-const SHELL_VERSION = "v202";
+//  v203: a sample account's Messages tab shows its example page (published by the operator) read-only: photo, name,
+//       voi.ci/<u> with copy, a disabled Public switch, "This is a sample account..." and View page; Home shows its
+//       "Your page" row.
+const SHELL_VERSION = "v203";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

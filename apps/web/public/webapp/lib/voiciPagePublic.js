@@ -101,10 +101,11 @@ export function clearRemovedSnapshot(username, s) {
 
 /**
  * Home's pointer to the page (§11.1): "card" (the short welcome, until the page is first published or the card is
- * dismissed), "row" (the compact "Your page" row after that), or null (no account, `.com` hasn't answered, or a
- * sample account, which can't publish).
+ * dismissed), "row" (the compact "Your page" row after that), or null (no account, or `.com` hasn't answered). A
+ * sample account's page is the operator's example (docs/sample-users.md): always the row, never the welcome card.
  */
-export function pageHomeState({ hasAccount, checked, published, removed, pendingChanges, dismissed } = {}) {
+export function pageHomeState({ hasAccount, checked, published, removed, pendingChanges, dismissed, sample = false } = {}) {
+  if (sample) return checked ? "row" : null;
   if (!hasAccount || !checked) return null;
   if (published || removed || pendingChanges || dismissed === "true" || dismissed === true) return "row";
   return "card";

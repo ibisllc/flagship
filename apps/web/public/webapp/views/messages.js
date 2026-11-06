@@ -63,6 +63,10 @@ function listHtml() {
 
 export function renderMessages() {
   renderPageHeader($("messages-page-row"));
+  // A sample account has only its example page: no conversations to list (it can't accept messages).
+  for (const id of ["messages-segments", "messages-list", "messages-reply-alerts"]) $(id)?.classList.toggle("hidden", world.sample);
+  document.querySelector("#view-messages > h2")?.classList.toggle("hidden", world.sample);
+  if (world.sample) return;
   const requests = conversationsIn("requests").length;
   const count = $("messages-requests-count");
   if (count) count.textContent = requests ? `(${requests})` : "";

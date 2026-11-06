@@ -13437,5 +13437,13 @@
   "Bio, links, posts, look, messages": {
     "en": "Bio, links, posts, look, messages",
     "ctx": "webapp/views/page-header.js:107"
+  },
+  "This is a sample account. Its page is an example, so you can't change it.": {
+    "en": "This is a sample account. Its page is an example, so you can't change it.",
+    "ctx": "webapp/views/page-header.js:108"
+  },
+  "View page": {
+    "en": "View page",
+    "ctx": "webapp/views/page-header.js:132"
   }
 }
