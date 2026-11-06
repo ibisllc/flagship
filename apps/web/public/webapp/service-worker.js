@@ -632,6 +632,7 @@ const OPTIONAL_SHELL = [
   "/lib/companionRequestsClient.js",
   "/lib/companionWriteRelay.js",
   "/lib/crossDevicePairing.js",
+  "/lib/irkLineage.js",
   "/lib/dateFormat.js",
   "/lib/deepLink.js",
   "/lib/deleteServer.js",
