@@ -1666,7 +1666,16 @@ run_uxchecks() {
     say "  Read i18n/REVIEW.md: recovery, pairing, unlock and backup wording first, by a native reader per language."
     [ "$(ask_word "Type  reviewed  when every listed line is reviewed (or  later  to stop here)")" = reviewed ] || return 10
   fi
-  if has store-assets:release-check; then WX npm run store-assets:release-check; else warn "no store-assets:release-check on this commit"; fi
+  if has store-assets:release-check; then
+    # The native captures (and the rendered store/out) are git-ignored: they live in the checkout that made them, so
+    # bring that checkout's copies into the release worktree before checking them against the pinned code.
+    local sd
+    for sd in captures out; do
+      if [ -d "$REPO/store/$sd" ]; then rm -rf "$WT/store/$sd"; mkdir -p "$WT/store"; cp -R "$REPO/store/$sd" "$WT/store/$sd"; fi
+    done
+    [ -f "$WT/store/out/manifest.json" ] || WX npm run store-assets:render
+    WX npm run store-assets:release-check
+  else warn "no store-assets:release-check on this commit"; fi
   if grep -q 'VOICI_CANONICAL' "$WT/apps/com/wrangler.toml" 2>/dev/null; then
     say "  voi.ci canonical links: set VOICI_CANONICAL = \"1\" in apps/com/wrangler.toml once the gym's named-links group is green; the .com redeploy step ships it."
   fi
