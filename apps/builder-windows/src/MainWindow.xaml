@@ -119,6 +119,9 @@
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
+                            <TextBlock x:Name="PairingHomeRecipeError" Text="{Binding RecipeError}" Foreground="{DynamicResource FB.Danger}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="440" Margin="0,10,0,0"
+                                       AutomationProperties.LiveSetting="Assertive"
+                                       Visibility="{Binding RecipeError, Converter={StaticResource NotNullToVisible}}"/>
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowPairingConfirm, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="▣" FontSize="40" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
