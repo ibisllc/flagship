@@ -34,6 +34,20 @@ Build: studio-release run 42167330385 (dispatched by the owner, `publish=false`)
 
 **Server-dependent rows without Studio (UpCloud).** To reach the rows that need a running server while Studio was broken: the phone's `<server-A>` recipe file → `flagship-build prepare` (CLI, MSYS2 xorriso) → one UpCloud server (2xCPU-4GB, de-fra1, label `flagship-env=device-test`). The Debian installer ran ~3.5 min and powered off; booted from disk; the phone approved the unlock and then "Authorize this server to serve"; HTTP 200 with a Let's Encrypt (YE1) certificate at 05:15Z (flapped for ~30 s, then stable). The phone shows it Online, Leader, version 52c67f88, "Software 0.0.0" (known).
 
+## Release build 42233345531 (0.3.0+36d8106d9), 2026-11-06 from ~14:20Z
+
+Zip SHA-256 `00DBC64F…866313`, 76,423,739 bytes, NotSigned, `tools\xorriso.exe` present; no FLAGSHIP_* variables set.
+
+| Row | Result | Notes |
+|---|---|---|
+| W6 | **FAIL (Failure 5)** | Old `<server-D>` deleted first (Delete dialog Yes). New order `<server-E>` (the phone's default name, which this account used once before for `<server-0>`) paired by typed code (939 984 matched), Host on this PC 14:39:45Z: prebuilt path (`verified appliance … sha256=ecd620cb…`, "created the server's disk on the prebuilt image"), Specializing 14:42:06, Sealing 14:44:10, Removing the factory key 14:46:39, "Starting. When your phone asks…" 14:46:55 (~7 min). First approval ("Unlock device…", code 923 716) 14:47:31Z; second ("Authorize device…") shown in Server approvals at 14:48:56Z, no prompt; Studio **Running** 14:51:11Z with Health "Healthy · 2979 MB free · up 4m". But the server never serves: see Failure 5. Phone Home: "Coming online…", then "Never came online". |
+
+### Failure 5 (R, blocks W6 on the release build): a new Windows-hosted server answers every TLS handshake with `access_denied`
+- From this PC, 14:51Z → 15:10Z and later: `openssl s_client -servername <server-E>.<account>.flagship.services` (IPv4 and IPv6, relay address) reads 7 bytes: `tlsv1 alert access denied` (alert 49), no certificate. curl/schannel: `SEC_E_LOGON_DENIED`. The account's UpCloud server through the same relay answers 200 with a Let's Encrypt YE1 certificate at the same time.
+- The phone's server page: "Connecting to your server… Your server is online. We're fetching its details", Apps "Can't reach the server", Health "No report"; logcat `SSLHandshakeException … TLSV1_ALERT_ACCESS_DENIED` on every call.
+- Studio: Running, Health filled, then "The server software restarted 3x since it started (last exit code 0)". Log has no error; after the sealed reboot it logs "No server running: this PC may sleep again" and never logs "Keeping this PC awake" again while the server runs (possible sleep-inhibit regression, unverified: `powercfg` needs the owner).
+- Difference from this morning's W6 pass on 78ce3bc55 (same published appliance `ecd620cb`): the Studio build, the reused server name, and whatever box release a new server moves to on first boot today. I can't see inside the box (no debug access). Next here: delete it and rerun with a never-used name to rule the name in or out.
+
 ## Contract check (DEPLOYED-FINAL-2026-11-05), 2026-11-05 ~22:20Z
 All true: .com /api/health ok; flagship.services /api/health ok; webapp. and remote. SHELL_VERSION v200; /api/notices 204;
 box artifact flagship-box-52c67f8848ee-amd64.manifest.json 200 (release/box-release.json commit 52c67f88, seq 2, arch-v2);

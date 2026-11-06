@@ -51,3 +51,12 @@ W9 tray Restart, W20, W1b, W0b, W10, W15, SmartScreen; waivers W2, W4 step 2, W1
   server BEFORE the UAC prompt, so No/timeout leave it Stopped until Start. Step 3 (Yes): the elevated Studio opened
   (15:06:01) but home5 was not started again 6 min later (no VM, HTTPS fails); owner checking the window. Will rerun W10
   on the release build.
+
+## ~16:15 local: Failure 5 on the release build (W6) — needs you
+A new server hosted by 0.3.0+36d8106d9 from the published appliance `ecd620cb` reaches Running in Studio (health report
+filled, both approvals done) but answers every TLS handshake with alert 49 `access_denied` and no certificate, 20+ min
+later; the phone says "Never came online". Details in the report, "Release build 42233345531". Questions:
+1. Did phase B endorse a new box release today (a new server moves to it on first boot)? If so, does its TLS path
+   (keyd / tlsd, the certificate request) refuse here? This morning's W6 on the same appliance passed.
+2. Is reusing a server name the account had before (deleted earlier) expected to work? I'm rerunning with a never-used
+   name now to separate the two.
