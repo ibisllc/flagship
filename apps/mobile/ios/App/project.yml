@@ -49,8 +49,8 @@ options:
 # `node scripts/check-versions.mjs --write` syncs them and `--check` fails on drift.
 settings:
   base:
-    CURRENT_PROJECT_VERSION: "5"
-    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "1.2"
     # The string catalogs are generated from i18n/ (scripts/i18n-ios.mjs build) and must not be rewritten by
     # Xcode's own extraction. `scripts/i18n-ios.mjs harvest` turns it on from the command line to read the keys.
     SWIFT_EMIT_LOC_STRINGS: NO
