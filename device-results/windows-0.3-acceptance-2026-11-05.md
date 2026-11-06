@@ -73,3 +73,22 @@ random name under flagship.services resolves to 149.248.216.86 / 2a09:8280:1::11
 ### Accessibility (I): Studio exposes .NET type names to screen readers
 - The hosted-server sidebar rows' UI Automation name is `Flagship.Builder.VM.HostedServer` (no `AutomationProperties.Name` on the `ServerList` items, `apps/builder-windows/src/MainWindow.xaml:844`, and no `ToString`), and every log drawer line reads `LogLine { Stream = Stdout, Text = ... }` (record ToString). Visible text is fine; Narrator would read the class names.
 - The Delete confirmation's Yes / No are exposed as `Pane`, not `Button` (no Invoke pattern), so UI Automation clients and some screen readers can't press them.
+
+## Status and TODO (2026-11-06 ~05:00Z)
+
+**To release (fixes, then a short rerun).** Each failure needs a product fix; the device-test agent only tests.
+1. Failure 1: keep `artifact-current.json` through generalize (`appliance.ts:321`), rebuild and republish both appliances.
+2. Failure 2: `/cygdrive/c/...` for the bundled xorriso (or ship its `etc/fstab`) and clear ReadOnly before editing the extracted cfg (`NativeIsoRemaster.cs`), then rebuild Studio.
+3. Failure 3: show `RecipeError` on the start screen (same Studio rebuild).
+4. Failure 4: make an Android 0.3 key file sign in to the webapp (re-pair 403 `oldIrkPub does not match`).
+5. Then rerun on Windows: W5, W6, W8, W16, W18 and the rows they unblock (W9, W10, W11, W13, W14, W17, W25).
+
+**In progress here.** A production server built without Studio, to run the server-dependent rows now: the phone's `home2` recipe, `flagship-build prepare` (MSYS2 xorriso) on Debian 13.6.0, one UpCloud server (2xCPU-4GB, de-fra1, labelled `flagship-env=device-test`). The installer ran ~3.5 min and powered off; the server is booting from disk (05:00Z). Next: approve the unlock on the emulator, then the webapp, Remote and backup rows. The recipe expires 08:53Z.
+
+**Needs the owner at this PC.** W20 (display language needs a sign-out), W1b, W0b, W10, W15 (USB stick) and the SmartScreen check; waivers for W2, W4 step 2 and W13; W23 after phase B.
+
+**End-of-round cleanup (not done yet).**
+- Delete the UpCloud server and its ISO storage (`upcloud-box.mjs destroy <server> <iso>`).
+- Cancel the pending orders `home` and `home2` (or delete their servers) and the throwaway account's test servers.
+- Delete the key file in the phone's Downloads.
+- Restore the moved-aside `%LOCALAPPDATA%\FlagshipBuilder.aside-20261105-235448` and `flagship-builder.aside-20261105-235448`; remove any `FLAGSHIP_CONTROL_HOST`; delete `%TEMP%\flagship-remaster-*`.
