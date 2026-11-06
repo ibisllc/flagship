@@ -66,3 +66,11 @@ Same result for a brand-new name (Running 15:25:39Z, alert 49 at 15:36Z). Not th
 backend (phase B relay / .com changes: alert 49 may come from the relay refusing the SNI for a newly registered box)
 or the box release a new server moves to. Next I host one on the old Studio 78ce3bc55 (passed W6 at 05:54Z) to
 tell Studio from backend. Is anything deployed to `.services` / the relay since ~06:00Z?
+
+## ~16:57 local: URGENT — Failure 5 is production, not Studio
+The OLD Studio 78ce3bc55 (W6 pass at 05:54Z) now fails identically: a new server (Running 15:46:49Z, both approvals
+done) gets TLS alert 49 `access_denied` at 15:55:45Z. A server registered last night still serves 200. So every new
+server registered since sometime between 05:54Z and 14:51Z can't be reached: likely the relay or `.com` from today's
+phase B steps (or the newest endorsed box release a new box moves to on first boot). This blocks W6/W8 and any new
+user's first server; please check before the release continues. I'm holding new hosting runs until you answer; the
+`<server-G>` VM stays running here for you to test against.
