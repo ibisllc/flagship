@@ -845,6 +845,11 @@ public sealed class VMManager
                                 if (changed) Log($"VM {name}: installer checkpoint — {observation.Summary}");
                                 if (!observation.IsStale(_clock())) _installStallLogged.Remove(name);
                                 server.RefreshTimeDerivedState();
+                                // The guest reports "error" only as it exits (the specializer's ERR trap, the bootstrap's
+                                // exit report): it is final, so show the failure and free the VM's memory now instead of
+                                // waiting for a stall the owner has to notice and stop by hand.
+                                if (changed && observation.Phase == "error" && server.StateKind == VMStateKind.Installing)
+                                    _ = ApplyAsync(VMEvent.InstallFailed(observation.Summary), name);
                             });
                         }
                     }
