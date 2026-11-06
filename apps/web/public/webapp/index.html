@@ -147,6 +147,10 @@
         <p class="note" id="home-welcome"></p>
         <p class="note hidden" id="home-status-paused" role="status">Server status is paused. Unlock to refresh it.</p>
         <div id="servers-list"></div>
+        <!-- Home's pointer to the voi.ci page (views/home.js renderPageWelcome). Below the servers on purpose: it
+             arrives after .com answers, and arriving above Add / Restore a server would move the button under a
+             tap (that button then ignores taps for a moment, see lib/settleGuard.js). -->
+        <div id="home-page-welcome" class="home-page-slot"></div>
         <div id="shared-with-me"></div>
 
         <h2 class="mt-5">Session</h2>

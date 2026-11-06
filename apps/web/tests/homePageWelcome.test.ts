@@ -59,6 +59,12 @@ describe("home page-welcome wiring", () => {
     expect(MESSAGES_JS).toMatch(/export async function enterPageHeader\(\)/);
   });
 
+  it("fills a fixed slot below the servers, so its late arrival never moves Add / Restore a server under a tap", () => {
+    expect(INDEX).toMatch(/<div id="servers-list"><\/div>\s*<!--[^]*?-->\s*<div id="home-page-welcome" class="home-page-slot"><\/div>/);
+    const fn = HOME_JS.slice(HOME_JS.indexOf("async function renderPageWelcome"), HOME_JS.indexOf("E7 — peer"));
+    expect(fn).not.toMatch(/insertBefore|createElement|\.remove\(\)/);
+  });
+
   it("Settings has a Your page entry that opens the same place", () => {
     expect(INDEX).toMatch(/id="settings-tab-page"[^]*?Your page/);
     expect(APP_JS).toContain('wire("settings-tab-page", enterPageHeader)');

@@ -853,9 +853,22 @@ function goToPage() {
   void import("./messages.js").then((m) => m.enterPageHeader());
 }
 
-/** Below the backup nudge: while that shows, the card waits (its dismiss renders this one); the row doesn't. */
+/**
+ * While the backup nudge shows, the card waits (its dismiss renders this one); the row doesn't.
+ *
+ * It fills a slot that is always in the page, below the servers (index.html): it arrives once `.com` answered,
+ * after Home painted, and inserted above Add / Restore a server it moved that button under a tap (the button then
+ * ignored taps for a moment, lib/settleGuard.js, so the first tap after opening Home did nothing).
+ */
 async function renderPageWelcome() {
-  const hide = () => document.getElementById(PAGE_WELCOME_ID)?.remove();
+  const slot = () => document.getElementById(PAGE_WELCOME_ID);
+  const hide = () => {
+    const host = slot();
+    if (!host) return;
+    host.replaceChildren();
+    host.removeAttribute("data-state");
+    host.removeAttribute("data-testid");
+  };
   const session = getSession();
   const hasAccount = Boolean(session?.username) && session?.umk instanceof Uint8Array && !isDemoProfile(getActiveProfile());
   let dismissed = null;
@@ -879,14 +892,8 @@ async function renderPageWelcome() {
     dismissed,
   });
   if (!state || (state === "card" && document.getElementById(RECOVERY_BANNER_ID))) return hide();
-  const list = document.getElementById("servers-list");
-  if (!list?.parentNode) return;
-  let host = document.getElementById(PAGE_WELCOME_ID);
-  if (!host) {
-    host = document.createElement("div");
-    host.id = PAGE_WELCOME_ID;
-    list.parentNode.insertBefore(host, list);
-  }
+  const host = slot();
+  if (!host) return;
   host.setAttribute("data-state", state);
   if (state === "card") {
     host.setAttribute("data-testid", "page-welcome-card");
