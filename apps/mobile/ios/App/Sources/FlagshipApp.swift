@@ -612,7 +612,6 @@ struct FlagshipApp: App {
     private let mockServerTransfer = MockServerTransferClient()
     // Name-dibs client — hits `.com`; live/mock split as transfer.
     private let mockNameDibs = MockNameDibsClient()
-    private let liveNameDibs: any NameDibsClient = LiveNameDibsClient()
     // Custom voi.ci name client — mock half; the live half is built with the read token.
     private let mockVoiciName = MockVoiciNameClient()
     // voi.ci pages and Messages: the in-memory `.com` the GymMessages scenarios seed.
@@ -657,6 +656,7 @@ struct FlagshipApp: App {
     #else
     private var accessFixtureKeys: ServiceAccessKeys? { nil }
     #endif
+    private let liveNameDibs: any NameDibsClient = LiveNameDibsClient()
     /// What the shell injects: the live clients, or the mock gym's in a Debug
     /// build launched with `-smoke-mode` / `-smoke-onboarding`.
     private var activeClient: any ScreensClient {
