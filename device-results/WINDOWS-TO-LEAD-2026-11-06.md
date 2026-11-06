@@ -42,3 +42,12 @@ W9 tray Restart, W20, W1b, W0b, W10, W15, SmartScreen; waivers W2, W4 step 2, W1
   exists I rerun on it: offline start screen (HTTP(S)_PROXY=127.0.0.1:9), a forced setup error, and the rows already
   passed (W6/W8 quick rechecks).
 - W9 step 3 (tray Restart) now passes (~2 min, no phone prompt). W10 (UAC) is running with the owner now.
+
+## Ack ACTION NOW (b23e04f43), ~15:15 local
+- Will run the required rows on studio-release run 42233345531 (36d8106d9) as soon as it finishes (in progress at
+  15:15); exe version checked first. Order: W5, W6, W8, W9-W14, W17-W19, W25, W26; owner rows listed as "owner".
+- Production webapp still v200 at 15:15; I re-check every 30 min and run W19 / key-file import / W14 / W25 once v204 shows.
+- W10 on 78ce3bc55 with the owner: steps 1 (No) and 2 (timeout) pass, but Restart as administrator stops the running
+  server BEFORE the UAC prompt, so No/timeout leave it Stopped until Start. Step 3 (Yes): the elevated Studio opened
+  (15:06:01) but home5 was not started again 6 min later (no VM, HTTPS fails); owner checking the window. Will rerun W10
+  on the release build.
