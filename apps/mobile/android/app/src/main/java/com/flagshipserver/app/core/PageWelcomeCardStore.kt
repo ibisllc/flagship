@@ -58,10 +58,20 @@ class PageWelcomeCardStore(private val prefs: SharedPreferences) {
         /**
          * Home points to the page at the top of the Messages tab: the welcome card until the page was first public
          * ([everPublished]: this device kept a published index, also after a removal), changes were started, or the card
-         * was dismissed; then the compact row, which stays. Same rule as iOS PageWelcomeCardStore.pointer.
+         * was dismissed; then the compact row, which stays. A [sampleAccount] can't set a page up (its page is the
+         * operator's example), so it gets the row at once and never the card. Same rule as iOS PageWelcomeCardStore.pointer.
          */
-        fun pointer(hasAccount: Boolean, checked: Boolean, published: Boolean, everPublished: Boolean, pendingChanges: Int, dismissed: Boolean): PagePointer = when {
+        fun pointer(
+            hasAccount: Boolean,
+            checked: Boolean,
+            published: Boolean,
+            everPublished: Boolean,
+            pendingChanges: Int,
+            dismissed: Boolean,
+            sampleAccount: Boolean = false,
+        ): PagePointer = when {
             !hasAccount || !checked -> PagePointer.Hidden
+            sampleAccount -> PagePointer.Row(isPublic = published)
             shouldShow(hasAccount, checked, published || everPublished, pendingChanges, dismissed) -> PagePointer.Welcome
             else -> PagePointer.Row(isPublic = published)
         }

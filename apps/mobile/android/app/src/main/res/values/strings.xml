@@ -3503,6 +3503,8 @@
     <string name="voici_remove_body">Visitors will see “There\'s no page here.” Your posts and profile stay on your devices, so you can turn it on again.</string>
     <string name="voici_public">Public</string>
     <string name="voici_not_public">Not public</string>
+    <string name="voici_demo_page_note">This is a sample account. Its page is an example, so you can\'t change it.</string>
+    <string name="voici_view_page">View page</string>
     <string name="voici_admin_only_publish">Only an admin device can publish your page.</string>
     <string name="voici_edit_page">Edit page</string>
     <plurals name="voici_changes_pending">

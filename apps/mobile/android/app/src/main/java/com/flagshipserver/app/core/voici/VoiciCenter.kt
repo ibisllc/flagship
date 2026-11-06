@@ -127,6 +127,17 @@ class VoiciCenter(
     private val _messages = MutableStateFlow(VoiciMessagesUi())
     val messages: StateFlow<VoiciMessagesUi> = _messages.asStateFlow()
 
+    private val _demoPage = MutableStateFlow<VoiciDemoPageUi?>(null)
+    /** A sample account's example page, read only (VoiciDemoPage); null until read, and for real accounts. */
+    val demoPage: StateFlow<VoiciDemoPageUi?> = _demoPage.asStateFlow()
+
+    /** Reads a sample account's page as a visitor would; a failed read keeps what was shown. */
+    suspend fun refreshDemoPage(username: String) {
+        val u = username.lowercase().takeIf { it.isNotEmpty() } ?: return
+        if (_demoPage.value?.username != u) _demoPage.value = null
+        VoiciDemoPage.load(client, u)?.let { _demoPage.value = it }
+    }
+
     @Volatile private var account: VoiciAccountKeys? = null
     @Volatile private var caCache: List<String> = emptyList()
     @Volatile private var grantsCache: List<JsonObject> = emptyList()
@@ -202,6 +213,7 @@ class VoiciCenter(
      * page's content, drafts, conversations, images) goes with it.
      */
     fun forgetLocal() {
+        _demoPage.value = null
         val u = user() ?: return
         vault.forget(u)
         pageCheckedFor = null

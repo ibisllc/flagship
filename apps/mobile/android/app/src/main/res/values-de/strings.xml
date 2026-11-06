@@ -3498,6 +3498,8 @@
     <string name="voici_remove_body">Besucher sehen dann „Hier gibt es keine Seite.“ Deine Beiträge und dein Profil bleiben auf deinen Geräten, sodass du sie wieder einschalten kannst.</string>
     <string name="voici_public">Öffentlich</string>
     <string name="voici_not_public">Nicht öffentlich</string>
+    <string name="voici_demo_page_note">Dies ist ein Beispielkonto. Seine Seite ist ein Beispiel, deshalb kannst du sie nicht ändern.</string>
+    <string name="voici_view_page">Seite ansehen</string>
     <string name="voici_admin_only_publish">Nur ein Admin-Gerät kann deine Seite veröffentlichen.</string>
     <string name="voici_edit_page">Seite bearbeiten</string>
     <plurals name="voici_changes_pending">

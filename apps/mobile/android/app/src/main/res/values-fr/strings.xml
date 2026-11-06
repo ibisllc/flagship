@@ -3498,6 +3498,8 @@
     <string name="voici_remove_body">Les visiteurs verront « Il n’y a pas de page ici. » Vos publications et votre profil restent sur vos appareils, vous pouvez donc la réactiver.</string>
     <string name="voici_public">Publique</string>
     <string name="voici_not_public">Non publique</string>
+    <string name="voici_demo_page_note">Ceci est un compte de démonstration. Sa page est un exemple, vous ne pouvez donc pas la modifier.</string>
+    <string name="voici_view_page">Voir la page</string>
     <string name="voici_admin_only_publish">Seul un appareil administrateur peut publier votre page.</string>
     <string name="voici_edit_page">Modifier la page</string>
     <plurals name="voici_changes_pending">

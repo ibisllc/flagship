@@ -323,15 +323,34 @@ fun HomeTab() {
             val noVoiciPage = remember { kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.voici.VoiciPageUi()) }
             val voiciPage by (voiciCenter?.page ?: noVoiciPage).collectAsState()
             val pageWelcomeDismissed by pageWelcomeStore.dismissed.collectAsState()
+            // A sample account's page is the operator's example, read like a visitor reads it.
+            val homeUsername = app.currentUser.collectAsState().value.orEmpty()
+            val noDemoPage = remember { kotlinx.coroutines.flow.MutableStateFlow<com.flagshipserver.app.core.voici.VoiciDemoPageUi?>(null) }
+            val demoPage by (voiciCenter?.demoPage ?: noDemoPage).collectAsState()
+            LaunchedEffect(isDemoAccount, homeUsername, voiciCenter) {
+                if (isDemoAccount && homeUsername.isNotEmpty()) voiciCenter?.refreshDemoPage(homeUsername)
+            }
             // Home points to the page at the top of the Messages tab: the welcome card, then a compact row.
-            val pagePointer = com.flagshipserver.app.core.PageWelcomeCardStore.pointer(
-                hasAccount = !isDemoAccount && voiciPage.username.isNotEmpty(),
-                checked = voiciPage.checked,
-                published = voiciPage.isPublic,
-                everPublished = voiciPage.publishedSeq > 0,
-                pendingChanges = voiciPage.pendingCount,
-                dismissed = voiciPage.username.lowercase() in pageWelcomeDismissed,
-            )
+            val pagePointer = if (isDemoAccount) {
+                com.flagshipserver.app.core.PageWelcomeCardStore.pointer(
+                    hasAccount = homeUsername.isNotEmpty(),
+                    checked = demoPage?.checked == true && demoPage?.username == homeUsername.lowercase(),
+                    published = demoPage?.isPublic == true,
+                    everPublished = false,
+                    pendingChanges = 0,
+                    dismissed = false,
+                    sampleAccount = true,
+                )
+            } else {
+                com.flagshipserver.app.core.PageWelcomeCardStore.pointer(
+                    hasAccount = voiciPage.username.isNotEmpty(),
+                    checked = voiciPage.checked,
+                    published = voiciPage.isPublic,
+                    everPublished = voiciPage.publishedSeq > 0,
+                    pendingChanges = voiciPage.pendingCount,
+                    dismissed = voiciPage.username.lowercase() in pageWelcomeDismissed,
+                )
+            }
             val awaitingBackup by app.podsAwaitingBackup.collectAsState()
             val updateRequired by app.podsUpdateRequired.collectAsState()
             HomeScreen(

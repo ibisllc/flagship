@@ -83,6 +83,7 @@ import com.flagshipserver.app.core.voici.VoiciPageUi
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.Switch
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.CoroutineScope
@@ -440,6 +441,71 @@ fun PageHeaderBar(center: VoiciCenter, page: VoiciPageUi, flow: PagePublicFlow, 
                 else Text(stringResource(if (page.isPublic) R.string.voici_public else R.string.voici_not_public), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
+}
+
+/**
+ * A sample account's page header, read only: the photo, the name, voi.ci/<username> with copy, the Public switch
+ * (disabled), why it can't be changed, and View page (opens voi.ci in the browser).
+ */
+@Composable
+fun DemoPageHeaderCard(demo: com.flagshipserver.app.core.voici.VoiciDemoPageUi) {
+    val context = LocalContext.current
+    FSCard(Modifier.testTag("messages-demo-page")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
+                PageAvatar(demo.avatar, 72.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        demo.displayName,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("demo-page-name"),
+                    )
+                    PageAddressRow(demo.username)
+                }
+            }
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.voici_public), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                    Text(
+                        stringResource(if (demo.isPublic) R.string.voici_public else R.string.voici_not_public),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("messages-page-status"),
+                    )
+                }
+                val label = stringResource(R.string.voici_public)
+                Switch(
+                    checked = demo.isPublic,
+                    onCheckedChange = null,
+                    enabled = false,
+                    modifier = Modifier.testTag("demo-page-public-switch").semantics { contentDescription = label },
+                )
+            }
+            Text(
+                stringResource(R.string.voici_demo_page_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("demo-page-note"),
+            )
+            FSSecondaryButton(
+                stringResource(R.string.voici_view_page),
+                {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("${com.flagshipserver.app.core.Endpoints.voiciOrigin}/${demo.username}"),
+                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().testTag("demo-page-view"),
+            )
         }
     }
 }

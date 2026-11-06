@@ -3498,6 +3498,8 @@
     <string name="voici_remove_body">Os visitantes verão “Não há nenhuma página aqui.” Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.</string>
     <string name="voici_public">Pública</string>
     <string name="voici_not_public">Não pública</string>
+    <string name="voici_demo_page_note">Esta é uma conta de exemplo. A página dela é um exemplo, então você não pode alterá-la.</string>
+    <string name="voici_view_page">Ver página</string>
     <string name="voici_admin_only_publish">Só um dispositivo de administrador pode publicar sua página.</string>
     <string name="voici_edit_page">Editar página</string>
     <plurals name="voici_changes_pending">

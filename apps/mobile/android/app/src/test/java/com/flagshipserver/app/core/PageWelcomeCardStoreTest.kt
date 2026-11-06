@@ -67,6 +67,14 @@ class PageWelcomeCardStoreTest {
         org.junit.Assert.assertEquals(PagePointer.Hidden, pointer(checked = false))
     }
 
+    @Test fun pointer_aSampleAccountGetsTheRowNeverTheCard() {
+        fun sample(checked: Boolean = true, published: Boolean = true) =
+            PageWelcomeCardStore.pointer(hasAccount = true, checked = checked, published = published, everPublished = false, pendingChanges = 0, dismissed = false, sampleAccount = true)
+        org.junit.Assert.assertEquals(PagePointer.Row(isPublic = true), sample())
+        org.junit.Assert.assertEquals("its example page is down", PagePointer.Row(isPublic = false), sample(published = false))
+        org.junit.Assert.assertEquals("before the read", PagePointer.Hidden, sample(checked = false))
+    }
+
     @Test fun noAccountCountsAsDismissed() {
         val s = store()
         assertTrue(s.isDismissed(null))
