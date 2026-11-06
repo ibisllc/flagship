@@ -312,7 +312,7 @@ export async function handleVoiciSend(deps: VoiciMailboxDeps, bodyText: string):
   const outer = parseVoiciMessageOuter(body.envelope, envBytes);
   if (!outer.ok) return voiciRefusal(SEND_STATUS[outer.code] ?? 400, outer.code);
   const page = await deps.voici.getPageById(outer.envelope.audience);
-  if (!page || page.takenDownAt !== null) return voiciRefusal(404, "not-found");
+  if (!page || page.takenDownAt !== null || page.removedAt != null) return voiciRefusal(404, "not-found");
   // The network's budget first, for every attempt (a replay included), and a replay of a stored envelope is answered
   // before any signature is checked again (security review, voi.ci Low b).
   const [ip, existing] = await Promise.all([deps.limitSend?.() ?? null, deps.voici.getMessage(page.pageId, outer.envelope.conv, outer.envelope.msgId)]);

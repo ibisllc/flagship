@@ -17,6 +17,9 @@ export interface VoiciPageRecord {
   publishedAt: number;
   takenDownAt: number | null;
   takedownReason: string | null;
+  /** The owner removed the page (flagship/voici-page-remove/v1, migration 0131): `seq` is the removal's; a publish
+   *  at seq + 1 brings it back and clears this. */
+  removedAt: number | null;
 }
 
 export interface VoiciPieceRecord {
@@ -113,7 +116,13 @@ export interface VoiciStorage {
   getPageById(pageId: string): Promise<VoiciPageRecord | null>;
   /** Compare-and-set on `seq`: inserts when `expectedSeq` is 0 and no row exists, else updates the row at that seq.
    *  The takedown fields are never changed here. */
-  publishPage(rec: Omit<VoiciPageRecord, "takenDownAt" | "takedownReason">, expectedSeq: number): Promise<boolean>;
+  publishPage(rec: Omit<VoiciPageRecord, "takenDownAt" | "takedownReason" | "removedAt">, expectedSeq: number): Promise<boolean>;
+  /** The owner's removal: compare-and-set on `seq` (and the pageId), sets `seq` and `removedAt`; the index JSON stays
+   *  as the merge base for the next publish. */
+  removePage(username: string, pageId: string, seq: number, expectedSeq: number, at: number): Promise<boolean>;
+  /** Deletes every piece row of the page and returns how many (a removal: the R2 objects go with them, so a
+   *  re-upload after it stores the bytes again). */
+  deletePagePieces(pageId: string): Promise<number>;
   /** `at` null restores. False when the account has no page. */
   setTakedown(username: string, at: number | null, reason: string | null): Promise<boolean>;
 
@@ -217,6 +226,7 @@ interface PageRow {
   published_at: number;
   taken_down_at: number | null;
   takedown_reason: string | null;
+  removed_at?: number | null;
 }
 
 interface PieceRow {
@@ -260,6 +270,7 @@ const pageFromRow = (r: PageRow): VoiciPageRecord => ({
   publishedAt: r.published_at,
   takenDownAt: r.taken_down_at ?? null,
   takedownReason: r.takedown_reason ?? null,
+  removedAt: r.removed_at ?? null,
 });
 
 const pieceFromRow = (r: PieceRow): VoiciPieceRecord => ({
@@ -302,7 +313,7 @@ const placeholders = (n: number, from = 2) => Array.from({ length: n }, (_, i) =
 const isConflict = (e: unknown) => /UNIQUE|PRIMARY KEY|constraint/i.test(String((e as Error)?.message ?? e));
 
 const PAGE_COLS =
-  "username, page_id, seq, issued_at, accepts_messages, inbox_epoch, owner_sign_pub, index_json, published_at, taken_down_at, takedown_reason";
+  "username, page_id, seq, issued_at, accepts_messages, inbox_epoch, owner_sign_pub, index_json, published_at, taken_down_at, takedown_reason, removed_at";
 const PIECE_COLS = "page_id, sha256, username, size, jpeg, uploaded_at, unreferenced_at, role, image_refs";
 const MSG_COLS = "id, page_id, conv, msg_id, kind, from_pub, delegate_pub, sent_at, envelope, size, direct, pushed, stored_at, fetched_at";
 
@@ -319,7 +330,7 @@ export class D1VoiciStorage implements VoiciStorage {
     return r ? pageFromRow(r) : null;
   }
 
-  async publishPage(rec: Omit<VoiciPageRecord, "takenDownAt" | "takedownReason">, expectedSeq: number) {
+  async publishPage(rec: Omit<VoiciPageRecord, "takenDownAt" | "takedownReason" | "removedAt">, expectedSeq: number) {
     const vals = [rec.username, rec.pageId, rec.seq, rec.issuedAt, rec.acceptsMessages, rec.inboxEpoch, rec.ownerSignPub, rec.indexJson, rec.publishedAt];
     if (expectedSeq === 0) {
       try {
@@ -339,11 +350,24 @@ export class D1VoiciStorage implements VoiciStorage {
     const res = await this.db
       .prepare(
         "UPDATE voici_pages SET seq = ?3, issued_at = ?4, accepts_messages = ?5, inbox_epoch = ?6, owner_sign_pub = ?7, " +
-          "index_json = ?8, published_at = ?9 WHERE username = ?1 AND page_id = ?2 AND seq = ?10",
+          "index_json = ?8, published_at = ?9, removed_at = NULL WHERE username = ?1 AND page_id = ?2 AND seq = ?10",
       )
       .bind(...vals, expectedSeq)
       .run();
     return (res.meta.changes ?? 0) === 1;
+  }
+
+  async removePage(username: string, pageId: string, seq: number, expectedSeq: number, at: number) {
+    const res = await this.db
+      .prepare("UPDATE voici_pages SET seq = ?3, removed_at = ?5 WHERE username = ?1 AND page_id = ?2 AND seq = ?4")
+      .bind(username, pageId, seq, expectedSeq, at)
+      .run();
+    return (res.meta.changes ?? 0) === 1;
+  }
+
+  async deletePagePieces(pageId: string) {
+    const res = await this.db.prepare("DELETE FROM voici_pieces WHERE page_id = ?1").bind(pageId).run();
+    return res.meta.changes ?? 0;
   }
 
   async setTakedown(username: string, at: number | null, reason: string | null) {
@@ -823,16 +847,30 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return p ? { ...p } : null;
   }
 
-  async publishPage(rec: Omit<VoiciPageRecord, "takenDownAt" | "takedownReason">, expectedSeq: number) {
+  async publishPage(rec: Omit<VoiciPageRecord, "takenDownAt" | "takedownReason" | "removedAt">, expectedSeq: number) {
     const cur = this.pages.get(rec.username);
     if (expectedSeq === 0) {
       if (cur || [...this.pages.values()].some((p) => p.pageId === rec.pageId)) return false;
-      this.pages.set(rec.username, { ...rec, takenDownAt: null, takedownReason: null });
+      this.pages.set(rec.username, { ...rec, takenDownAt: null, takedownReason: null, removedAt: null });
       return true;
     }
     if (!cur || cur.seq !== expectedSeq || cur.pageId !== rec.pageId) return false;
-    this.pages.set(rec.username, { ...rec, takenDownAt: cur.takenDownAt, takedownReason: cur.takedownReason });
+    this.pages.set(rec.username, { ...rec, takenDownAt: cur.takenDownAt, takedownReason: cur.takedownReason, removedAt: null });
     return true;
+  }
+
+  async removePage(username: string, pageId: string, seq: number, expectedSeq: number, at: number) {
+    const cur = this.pages.get(username);
+    if (!cur || cur.seq !== expectedSeq || cur.pageId !== pageId) return false;
+    cur.seq = seq;
+    cur.removedAt = at;
+    return true;
+  }
+
+  async deletePagePieces(pageId: string) {
+    let n = 0;
+    for (const [k, p] of this.pieces) if (p.pageId === pageId && this.pieces.delete(k)) n++;
+    return n;
   }
 
   async setTakedown(username: string, at: number | null, reason: string | null) {

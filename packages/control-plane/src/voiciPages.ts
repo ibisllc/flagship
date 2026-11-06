@@ -3,6 +3,7 @@
  *
  *   POST /api/voici/pages/<u>/pieces             sensitive-key signed headers, body = one piece
  *   POST /api/voici/pages/<u>/publish            the index's own signature
+ *   POST /api/voici/pages/<u>/remove             the owner's flagship/voici-page-remove/v1 (sensitive key)
  *   GET  /api/voici/pages/<u>                    public
  *   POST /api/accounts/<u>/voici-drafts          device headers + a device-signed voici-draft envelope
  *   GET  /api/accounts/<u>/voici-drafts          read token
@@ -15,11 +16,13 @@ import {
   canonicalVoiciPageIndex,
   checkVoiciDraft,
   edVerifyFast,
+  checkVoiciPageRemove,
   checkVoiciPublish,
   isLowerHex,
   isVoiciJpeg,
   parseVoiciChunkPiece,
   parseVoiciPageIndex,
+  parseVoiciPageRemove,
   parseVoiciProfilePiece,
   sha256Hex,
   verifyDeviceCapabilityGrant,
@@ -71,8 +74,14 @@ export interface VoiciPagesDeps {
   bucket: VoiciBucket;
   /** Chunk B2: an account banned from pages and Messages (§9.3). */
   isAccountBanned?: (username: string) => Promise<boolean>;
+  /** Takes a removed page's objects off voi.ci: the R2 index and pieces, and the files.voi.ci cache. Without it the
+   *  handler deletes them from `bucket` itself (no purge). */
+  removePageObjects?: (username: string, pageId: string) => Promise<void>;
   now?: () => number;
 }
+
+/** A page the owner removed is, to every reader, no page at all. */
+const isRemoved = (p: Pick<VoiciPageRecord, "removedAt"> | null | undefined) => p?.removedAt != null;
 
 const nowOf = (d: { now?: () => number }) => (d.now ?? Date.now)();
 const NO_STORE = { "cache-control": "private, no-store" };
@@ -208,7 +217,8 @@ export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string,
   });
   if (!verdict.ok) {
     if (verdict.code === "seq-conflict") return seqConflict(stored);
-    const status = verdict.code === "wrong-page" ? 409 : verdict.code === "malformed" || verdict.code === "wrong-username" ? 400 : 403;
+    if (verdict.code === "wrong-page") return voiciRefusal(409, "wrong-page", { pageId: stored?.pageId ?? null });
+    const status = verdict.code === "malformed" || verdict.code === "wrong-username" ? 400 : 403;
     return voiciRefusal(status, verdict.code === "wrong-username" ? "malformed" : verdict.code);
   }
   const index = verdict.index;
@@ -251,8 +261,64 @@ export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string,
   return okNoStore({ ok: true, pageId: index.pageId, seq: index.seq });
 }
 
+/** The stored index (the merge base), and the stored seq and pageId: after a removal the seq is the removal's, one
+ *  above the index's, so a device that saw no page still learns where the ladder is. */
 function seqConflict(stored: VoiciPageRecord | null | undefined): HandlerResponseWithHeaders {
-  return voiciRefusal(409, "seq-conflict", { index: stored ? JSON.parse(stored.indexJson) : null });
+  return voiciRefusal(409, "seq-conflict", {
+    index: stored ? JSON.parse(stored.indexJson) : null,
+    seq: stored?.seq ?? 0,
+    pageId: stored?.pageId ?? null,
+    removed: isRemoved(stored),
+  });
+}
+
+// ── remove (§3.3) ───────────────────────────────────────────────────────────
+
+/**
+ * The owner takes the page off voi.ci. The row keeps username, pageId and seq (= the removal's), and gets removedAt;
+ * the R2 index and pieces go (and their rows, so a republish uploads them again), files.voi.ci is purged. The
+ * mailbox, conversations and drafts stay. A removed page reads as no page; a publish at seq + 1 with the same pageId
+ * brings it back. An already removed page answers not-found, as for no page.
+ */
+export async function handleVoiciRemove(deps: VoiciPagesDeps, username: string, bodyText: string): Promise<HandlerResponseWithHeaders> {
+  const now = nowOf(deps);
+  const u = username.toLowerCase();
+  if (bodyText.length > 4096) return voiciRefusal(413, "too-large");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(bodyText);
+  } catch {
+    return voiciRefusal(400, "malformed");
+  }
+  const parsed = parseVoiciPageRemove(raw);
+  if (!parsed || parsed.username !== u) return voiciRefusal(400, "malformed");
+  const [user, stored, banned] = await Promise.all([deps.usernames.get(u), deps.voici.getPage(u), deps.isAccountBanned?.(u) ?? false]);
+  if (!user || !stored || isRemoved(stored)) return voiciRefusal(404, "not-found");
+  if (banned) return voiciRefusal(403, "banned");
+  if (stored.takenDownAt != null) return voiciRefusal(410, "taken-down");
+  const key = voiciSensitiveKey(user);
+  const verdict = checkVoiciPageRemove(parsed, {
+    username: u,
+    sensitiveKind: key.kind,
+    sensitivePub: key.pub,
+    storedSeq: stored.seq,
+    storedPageId: stored.pageId,
+    now,
+  });
+  if (!verdict.ok) {
+    if (verdict.code === "seq-conflict") return seqConflict(stored);
+    if (verdict.code === "wrong-page") return voiciRefusal(409, "wrong-page", { pageId: stored.pageId });
+    return voiciRefusal(verdict.code === "malformed" ? 400 : 403, verdict.code);
+  }
+  const r = verdict.remove;
+  if (!(await deps.voici.removePage(u, r.pageId, r.seq, stored.seq, now))) return seqConflict(await deps.voici.getPage(u));
+  if (deps.removePageObjects) await deps.removePageObjects(u, r.pageId);
+  else {
+    const pieces = await deps.voici.listPagePieces(r.pageId);
+    await deps.bucket.delete([voiciIndexKey(u), ...pieces.map((p) => voiciPieceKey(r.pageId, p.sha256))]);
+  }
+  await deps.voici.deletePagePieces(r.pageId);
+  return okNoStore({ ok: true, pageId: r.pageId, seq: r.seq });
 }
 
 /** `GET /api/voici/pages/<u>/pieces/<sha256>` (the webapp's read; its CSP cannot reach files.voi.ci): a piece the stored
@@ -260,7 +326,7 @@ function seqConflict(stored: VoiciPageRecord | null | undefined): HandlerRespons
 export async function voiciListedPiece(deps: Pick<VoiciPagesDeps, "voici" | "bucket">, username: string, sha256: string) {
   if (!isLowerHex(sha256, 32)) return null;
   const page = await deps.voici.getPage(username.toLowerCase());
-  if (!page || page.takenDownAt !== null) return null;
+  if (!page || page.takenDownAt !== null || isRemoved(page)) return null;
   const ref = parseVoiciPageIndex(page.indexJson)?.pieces.find((p) => p.sha256 === sha256);
   if (!ref) return null;
   const obj = await deps.bucket.get(voiciPieceKey(page.pageId, sha256));
@@ -271,7 +337,7 @@ export async function voiciListedPiece(deps: Pick<VoiciPagesDeps, "voici" | "buc
 
 export async function handleVoiciGetPage(deps: Pick<VoiciPagesDeps, "voici">, username: string): Promise<HandlerResponseWithHeaders> {
   const page = await deps.voici.getPage(username.toLowerCase());
-  if (!page) return voiciRefusal(404, "not-found");
+  if (!page || isRemoved(page)) return voiciRefusal(404, "not-found");
   if (page.takenDownAt !== null) return voiciRefusal(410, "taken-down");
   return { status: 200, body: { index: JSON.parse(page.indexJson) }, headers: { "cache-control": "no-cache" } };
 }

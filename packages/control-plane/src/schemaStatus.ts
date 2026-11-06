@@ -123,6 +123,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0129",
   // Abuse reports for links and apps, notices to an account, suspensions (docs/abuse-handling.md).
   "0130",
+  // voi.ci: the owner removed their page (removed_at; the row keeps its seq for anti-replay).
+  "0131",
 ];
 
 export interface SchemaStatusDeps {

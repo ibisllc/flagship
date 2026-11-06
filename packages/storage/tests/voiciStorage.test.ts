@@ -41,6 +41,27 @@ const msg = (conv: string, msgId: string, over: Partial<{ kind: "voici-message" 
 });
 
 describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
+  it("removes a page with compare-and-set on seq, and a publish at seq + 1 clears the mark (migration 0131)", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      await s.voici.publishPage(page(1), 0);
+      await s.voici.putPiece({ pageId: PAGE, sha256: H(1), username: "alice", size: 3, jpeg: false, uploadedAt: 1, unreferencedAt: null });
+      expect((await s.voici.getPage("alice"))?.removedAt).toBeNull();
+      expect(await s.voici.removePage("alice", PAGE, 2, 2, 50)).toBe(false);
+      expect(await s.voici.removePage("alice", "11".repeat(16), 2, 1, 50)).toBe(false);
+      expect(await s.voici.removePage("alice", PAGE, 2, 1, 50)).toBe(true);
+      const p = await s.voici.getPage("alice");
+      expect([p?.seq, p?.removedAt, p?.indexJson]).toEqual([2, 50, `{"seq":1}`]);
+      expect(await s.voici.deletePagePieces(PAGE)).toBe(1);
+      expect(await s.voici.listPagePieces(PAGE)).toEqual([]);
+      expect(await s.voici.publishPage(page(2), 1)).toBe(false);
+      expect(await s.voici.publishPage(page(3), 2)).toBe(true);
+      expect((await s.voici.getPage("alice"))?.removedAt).toBeNull();
+    } finally {
+      done();
+    }
+  });
+
   it("publishes with compare-and-set on seq and never changes the page id", async () => {
     const { s, done } = fresh(adapter);
     try {
