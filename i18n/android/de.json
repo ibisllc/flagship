@@ -3496,6 +3496,8 @@
   "voici_remove_body": "Besucher sehen dann „Hier gibt es keine Seite.“ Deine Beiträge und dein Profil bleiben auf deinen Geräten, sodass du sie wieder einschalten kannst.",
   "voici_public": "Öffentlich",
   "voici_not_public": "Nicht öffentlich",
+  "voici_demo_page_note": "Dies ist ein Beispielkonto. Seine Seite ist ein Beispiel, deshalb kannst du sie nicht ändern.",
+  "voici_view_page": "Seite ansehen",
   "voici_admin_only_publish": "Nur ein Admin-Gerät kann deine Seite veröffentlichen.",
   "voici_edit_page": "Seite bearbeiten",
   "voici_changes_pending": {

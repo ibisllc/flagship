@@ -3496,6 +3496,8 @@
   "voici_remove_body": "訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。",
   "voici_public": "公開",
   "voici_not_public": "非公開",
+  "voici_demo_page_note": "これはサンプルアカウントです。このページは見本なので、変更できません。",
+  "voici_view_page": "ページを見る",
   "voici_admin_only_publish": "ページを公開できるのは管理デバイスだけです。",
   "voici_edit_page": "ページを編集",
   "voici_changes_pending": {

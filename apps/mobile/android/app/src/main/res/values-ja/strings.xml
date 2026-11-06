@@ -3498,6 +3498,8 @@
     <string name="voici_remove_body">訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。</string>
     <string name="voici_public">公開</string>
     <string name="voici_not_public">非公開</string>
+    <string name="voici_demo_page_note">これはサンプルアカウントです。このページは見本なので、変更できません。</string>
+    <string name="voici_view_page">ページを見る</string>
     <string name="voici_admin_only_publish">ページを公開できるのは管理デバイスだけです。</string>
     <string name="voici_edit_page">ページを編集</string>
     <plurals name="voici_changes_pending">

@@ -3498,6 +3498,8 @@
     <string name="voici_remove_body">访客会看到“这里没有页面。”你的帖子和个人资料会保留在你的设备上，因此你可以再次打开它。</string>
     <string name="voici_public">公开</string>
     <string name="voici_not_public">未公开</string>
+    <string name="voici_demo_page_note">这是一个示例账户。它的页面只是示例，所以你无法更改。</string>
+    <string name="voici_view_page">查看页面</string>
     <string name="voici_admin_only_publish">只有管理设备可以发布你的页面。</string>
     <string name="voici_edit_page">编辑页面</string>
     <plurals name="voici_changes_pending">

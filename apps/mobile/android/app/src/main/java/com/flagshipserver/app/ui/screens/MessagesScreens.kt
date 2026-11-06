@@ -117,6 +117,13 @@ fun MessagesScreen(nav: NavController) {
     val center = LocalVoiciCenter.current ?: return FSScreen(title = stringResource(R.string.voici_tab)) {
         FSNote(stringResource(R.string.voici_messages_paused))
     }
+    val app = com.flagshipserver.app.core.LocalAppState.current
+    val profiles by app.profiles.collectAsState()
+    val activeCloud by app.activeCloudName.collectAsState()
+    val pods by app.pods.collectAsState()
+    if (com.flagshipserver.app.core.AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods)) {
+        return DemoMessagesScreen(center, app.currentUser.collectAsState().value.orEmpty())
+    }
     val page by center.page.collectAsState()
     val ui by center.messages.collectAsState()
     val scope = rememberCoroutineScope()
@@ -199,6 +206,32 @@ fun MessagesScreen(nav: NavController) {
                 }
             }
         }
+    }
+}
+
+/**
+ * A sample account's Messages tab: its page is the operator's example, shown read only (VoiciDemoPage). No editor,
+ * no conversations: the device holds none of the account's keys.
+ */
+@Composable
+private fun DemoMessagesScreen(center: VoiciCenter, username: String) {
+    val demo by center.demoPage.collectAsState()
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(username) { if (username.isNotEmpty()) center.refreshDemoPage(username) }
+    FSScreen(
+        title = stringResource(R.string.voici_tab),
+        titleTag = "messages-title",
+        onRefresh = {
+            scope.launch {
+                refreshing = true
+                center.refreshDemoPage(username)
+                refreshing = false
+            }
+        },
+        refreshing = refreshing,
+    ) {
+        DemoPageHeaderCard(demo?.takeIf { it.username == username.lowercase() } ?: com.flagshipserver.app.core.voici.VoiciDemoPageUi(username.lowercase()))
     }
 }
 

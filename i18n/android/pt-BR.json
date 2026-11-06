@@ -3496,6 +3496,8 @@
   "voici_remove_body": "Os visitantes verão “Não há nenhuma página aqui.” Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.",
   "voici_public": "Pública",
   "voici_not_public": "Não pública",
+  "voici_demo_page_note": "Esta é uma conta de exemplo. A página dela é um exemplo, então você não pode alterá-la.",
+  "voici_view_page": "Ver página",
   "voici_admin_only_publish": "Só um dispositivo de administrador pode publicar sua página.",
   "voici_edit_page": "Editar página",
   "voici_changes_pending": {

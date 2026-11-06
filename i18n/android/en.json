@@ -14437,6 +14437,14 @@
     "en": "Not public",
     "ctx": "voi.ci / Messages: page status when visitors don't see it (header and Home row)"
   },
+  "voici_demo_page_note": {
+    "en": "This is a sample account. Its page is an example, so you can't change it.",
+    "ctx": "voi.ci / Messages: under the read-only page header of a sample (demo) account"
+  },
+  "voici_view_page": {
+    "en": "View page",
+    "ctx": "voi.ci / Messages: button that opens the page on voi.ci in the browser"
+  },
   "voici_admin_only_publish": {
     "en": "Only an admin device can publish your page.",
     "ctx": "voi.ci / Messages: why the Public switch is off on a device without the admin key"
