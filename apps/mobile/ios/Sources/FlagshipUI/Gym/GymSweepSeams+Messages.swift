@@ -33,7 +33,8 @@ extension GymSweepSeams {
         UserDefaults.standard.removeObject(forKey: VoiciSignInBook.delegationsKey)
         UserDefaults.standard.removeObject(forKey: VoiciSignInBook.usernamesKey)
         for k in UserDefaults.standard.dictionaryRepresentation().keys
-        where k.hasPrefix("flagship.messages.attestation.") || k.hasPrefix("flagship.voici.reply") {
+        where k.hasPrefix("flagship.messages.attestation.") || k.hasPrefix("flagship.voici.reply")
+            || k.hasPrefix("flagship.voici.welcome.") || k.hasPrefix("flagship.voici.publicWarning.") {
             UserDefaults.standard.removeObject(forKey: k)
         }
         let user = (app.currentUser ?? "smoketest").lowercased()

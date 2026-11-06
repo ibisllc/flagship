@@ -3207,5 +3207,21 @@
   "Welcome! Make your own page": "ようこそ！自分のページを作りましょう",
   "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": "voi.ci/%@ で、写真、ひとことの自己紹介、リンク、投稿を公開できます。希望すれば、訪問者からメッセージを受け取ることもできます。",
   "Set up your page": "ページを設定",
-  "Edit your page": "ページを編集"
+  "Edit your page": "ページを編集",
+  "Your public page": "あなたの公開ページ",
+  "Make your page public?": "ページを公開しますか？",
+  "Make it public": "公開する",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "ページに載せたものはすべて公開されます。誰でも見ることができ、アプリやサーバーでも使っているユーザー名が表示されるため、それらが結び付けられる可能性があります。",
+  "Remove your page from voi.ci?": "voi.ci からページを削除しますか？",
+  "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.": "訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。",
+  "Public": "公開",
+  "Not public": "非公開",
+  "Only an admin device can publish your page.": "ページを公開できるのは管理デバイスだけです。",
+  "Edit page": "ページを編集",
+  "%lld changes not published": {
+    "other": "未公開の変更 %lld 件"
+  },
+  "Remove your page": "ページを削除",
+  "Couldn't remove your page. Try again.": "ページを削除できませんでした。もう一度お試しください。",
+  "Only an admin device can remove your page.": "ページを削除できるのは管理デバイスだけです。"
 }

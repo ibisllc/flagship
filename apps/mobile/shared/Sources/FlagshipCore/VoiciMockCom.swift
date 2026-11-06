@@ -17,6 +17,9 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
     public var mailbox: [String: [VoiciInboxItem]] = [:]
     public var blocks: [String: [String]] = [:]
     public var states: [String: JSONValue] = [:]
+    /// Pages taken down by their owner: the seq and pageId the ladder continues from.
+    public var removed: [String: (seq: Int64, pageId: String)] = [:]
+    public private(set) var removals: [JSONValue] = []
     public private(set) var sent: [JSONValue] = []
     public private(set) var reports: [JSONValue] = []
     public private(set) var revokes: [JSONValue] = []
@@ -41,7 +44,7 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
         return k
     }
 
-    public func page(username: String) async throws -> JSONValue? { w { pages[username.lowercased()] } }
+    public func page(username: String) async throws -> JSONValue? { w { removed[username.lowercased()] == nil ? pages[username.lowercased()] : nil } }
 
     public func piece(pageId: String, sha256: String) async throws -> [UInt8] {
         guard let b = w({ pieces[pageId]?[sha256] }) else { throw VoiciComError(status: 404, code: "not-found") }
@@ -62,18 +65,51 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
         let u = username.lowercased()
         guard let k = w({ keys[u] }) else { throw VoiciComError(status: 404, code: "not-found") }
         let stored = w { pages[u] }.flatMap { VoiciPage.parseVoiciPageIndex($0) }
+        let gone = w { removed[u] }
         let r = VoiciPage.checkVoiciPublish(index, username: u, sensitiveKind: k.sensitive.kind, sensitivePub: k.sensitive.pub,
-                                            storedSeq: stored?.seq ?? 0, storedPageId: stored?.pageId, now: now())
+                                            storedSeq: max(stored?.seq ?? 0, gone?.seq ?? 0), storedPageId: stored?.pageId ?? gone?.pageId, now: now())
         switch r {
         case .refused(let code):
-            throw VoiciComError(status: code == .seqConflict ? 409 : 400, code: code.rawValue, stored: code == .seqConflict ? w { pages[u] } : nil)
+            // As `.com`: a seq-conflict names the stored index, seq, pageId and removed; wrong-page the stored pageId.
+            var e = VoiciComError(status: code == .seqConflict || code == .wrongPage ? 409 : 400, code: code.rawValue,
+                                  stored: code == .seqConflict ? w { pages[u] } : nil)
+            if code == .seqConflict {
+                e.storedSeq = max(stored?.seq ?? 0, gone?.seq ?? 0)
+                e.storedRemoved = gone != nil
+            }
+            if code == .seqConflict || code == .wrongPage { e.storedPageId = stored?.pageId ?? gone?.pageId }
+            throw e
         case .ok(let idx):
             for p in idx.pieces where w({ pieces[idx.pageId]?[p.sha256] })?.count != Int(p.size) {
                 throw VoiciComError(status: 400, code: "missing-piece")
             }
             w {
+                removed[u] = nil
                 pages[u] = index
                 publishes += 1
+            }
+        }
+    }
+
+    /// `.com`'s removal check (checkVoiciPageRemove) against the stored page; the ladder continues from the removal.
+    public func removePage(username: String, remove: JSONValue) async throws {
+        try down()
+        let u = username.lowercased()
+        guard let k = w({ keys[u] }) else { throw VoiciComError(status: 404, code: "not-found") }
+        guard w({ removed[u] }) == nil, let stored = w({ pages[u] }).flatMap({ VoiciPage.parseVoiciPageIndex($0) }) else {
+            throw VoiciComError(status: 404, code: "not-found")
+        }
+        switch VoiciPageRemove.check(remove, username: u, sensitiveKind: k.sensitive.kind, sensitivePub: k.sensitive.pub,
+                                     storedSeq: stored.seq, storedPageId: stored.pageId, now: now()) {
+        case .refused(let code):
+            let status = code == .seqConflict ? 409 : code == .wrongSigner || code == .badSignature ? 403 : 400
+            var e = VoiciComError(status: status, code: code.rawValue, stored: code == .seqConflict ? w { pages[u] } : nil)
+            if code == .seqConflict { e.storedSeq = stored.seq; e.storedPageId = stored.pageId }
+            throw e
+        case .ok(let r):
+            w {
+                removed[u] = (r.seq, r.pageId)
+                removals.append(remove)
             }
         }
     }

@@ -3205,5 +3205,19 @@
   "Welcome! Make your own page": "afb7f94c238e",
   "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": "9d00a8e4147e",
   "Set up your page": "fdbd3674fc7d",
-  "Edit your page": "8846bd186c88"
+  "Edit your page": "8846bd186c88",
+  "Your public page": "13ad922301ce",
+  "Make your page public?": "cebf779369d4",
+  "Make it public": "2b3694e689f0",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "9b8db7f01530",
+  "Remove your page from voi.ci?": "b201f0d3b001",
+  "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.": "4f678a93dc26",
+  "Public": "ff2e96a9a685",
+  "Not public": "5d4ddbede065",
+  "Only an admin device can publish your page.": "ea9a952f8d42",
+  "Edit page": "70b9672b0477",
+  "%lld changes not published": "1b12ab659dfd",
+  "Remove your page": "485dc23def41",
+  "Couldn't remove your page. Try again.": "fbb585466ed8",
+  "Only an admin device can remove your page.": "a9089c971f0f"
 }

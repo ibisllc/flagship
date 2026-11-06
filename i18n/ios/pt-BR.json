@@ -3208,5 +3208,22 @@
   "Welcome! Make your own page": "Boas-vindas! Crie sua própria página",
   "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": "Compartilhe uma foto, algumas palavras sobre você, seus links e publicações em voi.ci/%@. Se quiser, os visitantes podem enviar mensagens para você lá.",
   "Set up your page": "Configurar sua página",
-  "Edit your page": "Editar sua página"
+  "Edit your page": "Editar sua página",
+  "Your public page": "Sua página pública",
+  "Make your page public?": "Tornar sua página pública?",
+  "Make it public": "Tornar pública",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "Tudo o que você coloca na sua página é público. Qualquer pessoa pode ver, e ela mostra seu nome de usuário, que seus apps e servidores também usam, então as pessoas podem relacioná-los.",
+  "Remove your page from voi.ci?": "Remover sua página do voi.ci?",
+  "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.": "Os visitantes verão “Não há nenhuma página aqui.” Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.",
+  "Public": "Pública",
+  "Not public": "Não pública",
+  "Only an admin device can publish your page.": "Só um dispositivo de administrador pode publicar sua página.",
+  "Edit page": "Editar página",
+  "%lld changes not published": {
+    "one": "%lld alteração não publicada",
+    "other": "%lld alterações não publicadas"
+  },
+  "Remove your page": "Remover sua página",
+  "Couldn't remove your page. Try again.": "Não foi possível remover sua página. Tente de novo.",
+  "Only an admin device can remove your page.": "Só um dispositivo de administrador pode remover sua página."
 }

@@ -434,7 +434,14 @@ private struct iPhoneShell: View {
                     // here too while locked, or VoiceOver reaches it behind the lock screen.
                     .accessibilityHidden(!app.isUnlocked)
                     .tabItem {
-                        Label(dest.title, systemImage: dest.systemImage)
+                        if dest == .messages {
+                            let c = FSColors.scheme(scheme)
+                            Label { Text(dest.title) } icon: {
+                                Image(uiImage: MessagesTabIcon.image(fill: UIColor(c.primaryFill), ink: UIColor(c.onPrimary)))
+                            }
+                        } else {
+                            Label(dest.title, systemImage: dest.systemImage)
+                        }
                     }
                     .badge(dest == .messages ? MessagesStore.shared.unreadCount : 0)
                     .tag(dest)
@@ -548,9 +555,15 @@ private struct SidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: FS.space.s3) {
-                Image(systemName: dest.systemImage)
-                    .foregroundColor(isSelected ? c.accent : c.textMuted)
-                    .frame(width: 22)
+                Group {
+                    if dest == .messages {
+                        MessagesDisc(c: c)
+                    } else {
+                        Image(systemName: dest.systemImage)
+                            .foregroundColor(isSelected ? c.accent : c.textMuted)
+                    }
+                }
+                .frame(minWidth: 22)
                 Text(dest.title)
                     .font(FS.font.scaled(15, weight: isSelected ? .semibold : .regular))
                     .foregroundColor(isSelected ? c.text : c.textMuted)

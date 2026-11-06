@@ -13836,5 +13836,66 @@
   "Edit your page": {
     "en": "Edit your page",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:152"
+  },
+  "Your public page": {
+    "en": "Your public page",
+    "ctx": "voi.ci page controls: Home card that points to the page at the top of the Messages tab, title"
+  },
+  "Make your page public?": {
+    "en": "Make your page public?",
+    "ctx": "voi.ci page controls: one-time warning before the page first goes public, title"
+  },
+  "Make it public": {
+    "en": "Make it public",
+    "ctx": "voi.ci page controls: one-time public warning, the button that publishes"
+  },
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": {
+    "en": "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.",
+    "ctx": "voi.ci page controls: one-time public warning, body"
+  },
+  "Remove your page from voi.ci?": {
+    "en": "Remove your page from voi.ci?",
+    "ctx": "voi.ci page controls: confirmation when the Public switch is turned off, title"
+  },
+  "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.": {
+    "en": "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.",
+    "ctx": "voi.ci page controls: confirmation when the Public switch is turned off, body (quotes what visitors see)"
+  },
+  "Public": {
+    "en": "Public",
+    "ctx": "voi.ci page controls: the switch that makes the page visible on voi.ci, and the Home row status"
+  },
+  "Not public": {
+    "en": "Not public",
+    "ctx": "voi.ci page controls: page status when visitors don't see it (header and Home row)"
+  },
+  "Only an admin device can publish your page.": {
+    "en": "Only an admin device can publish your page.",
+    "ctx": "voi.ci page controls: why the Public switch is off on a device without the admin key"
+  },
+  "Edit page": {
+    "en": "Edit page",
+    "ctx": "voi.ci page controls: header link that opens the full page editor"
+  },
+  "%lld changes not published": {
+    "en": {
+      "one": "%lld change not published",
+      "other": "%lld changes not published"
+    },
+    "ctx": "voi.ci page controls: the editor's publish bar, how many changes wait",
+    "plural": true,
+    "manual": true
+  },
+  "Remove your page": {
+    "en": "Remove your page",
+    "ctx": "voi.ci page controls: Face ID / biometric prompt reason when the page is removed"
+  },
+  "Couldn't remove your page. Try again.": {
+    "en": "Couldn't remove your page. Try again.",
+    "ctx": "voi.ci page controls: the removal failed"
+  },
+  "Only an admin device can remove your page.": {
+    "en": "Only an admin device can remove your page.",
+    "ctx": "voi.ci page controls: the removal was refused (not the account's admin key)"
   }
 }

@@ -166,13 +166,15 @@ public struct HomeTab: View {
         }
     }
 
-    /// The account has no voi.ci page yet, `.com` said so, and the person hasn't dismissed the welcome card.
-    private var showPageWelcome: Bool {
+    /// Home points to the page at the top of the Messages tab: the welcome card until the page was first public (or
+    /// changes were started, or the card dismissed), then the compact row.
+    private var pagePointer: PageWelcomeCardStore.Pointer {
         let messages = MessagesStore.shared
-        return PageWelcomeCardStore.shouldShow(
+        return PageWelcomeCardStore.pointer(
             hasAccount: messages.hasAccount,
             checked: messages.phase == .ready,
-            published: messages.index != nil,
+            published: messages.isPublic,
+            everPublished: pageWelcome.everPublished(username: app.currentUser) || messages.index != nil,
             pendingChanges: messages.pendingCount,
             dismissed: pageWelcome.isDismissed(username: app.currentUser)
         )
@@ -267,9 +269,10 @@ public struct HomeTab: View {
                     onDismissRecoveryBackupBanner: {
                         recoveryBannerStore.dismissed = true
                     },
-                    showPageWelcome: showPageWelcome,
-                    onSetUpPage: { linker.pending = .pageEditor },
+                    showPageWelcome: pagePointer == .welcome,
+                    onSetUpPage: { linker.pending = .messages },
                     onDismissPageWelcome: { pageWelcome.dismiss(username: app.currentUser) },
+                    pageRowPublic: { if case .row(let on) = pagePointer { return on } else { return nil } }(),
                     dibsNoticeClosesAt: (!app.isDemoAccount && NameDibsViewModel.shouldShowBanner(window: dibsWindow, dismissed: dibsDismissed))
                         ? dibsWindow?.end : nil,
                     onClaimDibs: { path.append(.nameDibs) },

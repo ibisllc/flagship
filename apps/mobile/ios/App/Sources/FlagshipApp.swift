@@ -858,7 +858,7 @@ struct FlagshipApp: App {
                 }
                 .task { startNotices() }
                 // Messages (docs/voici-and-messages.md): the store follows the account, so the admin phone takes
-                // direct deliveries and publishes waiting edits even before the tab is opened.
+                // direct deliveries (and Home knows about the page) even before the tab is opened.
                 .task(id: "\(appState.currentUser ?? "")|\(appState.isUnlocked)") {
                     MessagesStore.shared.configure(client: activeVoiciCom, username: appState.currentUser,
                                                    deviceId: appState.activeProfile?.deviceId, isDemo: appState.isDemoAccount)

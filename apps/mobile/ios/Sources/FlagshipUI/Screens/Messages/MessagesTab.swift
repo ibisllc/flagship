@@ -18,6 +18,11 @@ public struct MessagesTab: View {
     @Environment(\.openURL) private var openURL
     @State private var path: [MessagesRoute] = []
     @State private var segment = 0
+    @State private var flow = PagePublicFlow()
+    /// The page header scrolled out of view: its slim bar shows instead.
+    @State private var collapsed = false
+    @State private var scrollToTop = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let store = MessagesStore.shared
 
     public init() {}
@@ -54,6 +59,7 @@ public struct MessagesTab: View {
         case .messages?:
             _ = linker.consume()
             path = []
+            scrollToTop += 1
             Task { await store.refresh() }
         case .pageEditor?:
             _ = linker.consume()
@@ -73,100 +79,95 @@ public struct MessagesTab: View {
                 Text("Messages need your own Flagship account. Sample accounts can't have a page.")
             }
         } else {
-            List {
-                if !store.replyNotices.isEmpty {
+            ScrollViewReader { proxy in
+                List {
+                    // The page is managed here, at the top (Home and Settings only point to it).
                     Section {
-                        ForEach(store.replyNotices) { n in
-                            Button {
-                                store.openedReply(n)
-                                openURL(n.url)
-                            } label: {
-                                Label {
-                                    Text(verbatim: String(localized: "You have a reply on voi.ci/\(n.username)"))
-                                        .foregroundStyle(.primary)
-                                } icon: {
-                                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        PageHeaderView(flow: flow, onEdit: { path.append(.pageEditor) })
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("messages-your-page")
+                    }
+                    .id(Self.headerId)
+                    if !store.replyNotices.isEmpty {
+                        Section {
+                            ForEach(store.replyNotices) { n in
+                                Button {
+                                    store.openedReply(n)
+                                    openURL(n.url)
+                                } label: {
+                                    Label {
+                                        Text(verbatim: String(localized: "You have a reply on voi.ci/\(n.username)"))
+                                            .foregroundStyle(.primary)
+                                    } icon: {
+                                        Image(systemName: "arrowshape.turn.up.left.fill")
+                                    }
                                 }
+                                .accessibilityIdentifier("messages-reply-notice")
                             }
-                            .accessibilityIdentifier("messages-reply-notice")
-                        }
-                    } footer: {
-                        Text("Your conversations with other pages are on voi.ci.")
-                    }
-                }
-                Section {
-                    Button { path.append(.pageEditor) } label: { pageRow }
-                        .accessibilityIdentifier("messages-your-page")
-                }
-                Section {
-                    Picker("Show", selection: $segment) {
-                        Text("Messages").tag(0)
-                        Text(store.requests.isEmpty ? String(localized: "Requests") : String(localized: "Requests (\(store.requests.count))")).tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                    .accessibilityIdentifier("messages-segment")
-                }
-                let rows = segment == 0 ? store.accepted : store.requests
-                if rows.isEmpty {
-                    Section {
-                        Text(emptyText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("messages-empty")
-                    }
-                } else {
-                    Section {
-                        ForEach(rows) { c in
-                            NavigationLink(value: MessagesRoute.thread(conv: c.conv)) { ConversationRow(c: c, store: store) }
-                                .accessibilityIdentifier("messages-row-\(store.name(c))")
+                        } footer: {
+                            Text("Your conversations with other pages are on voi.ci.")
                         }
                     }
+                    Section {
+                        Picker("Show", selection: $segment) {
+                            Text("Messages").tag(0)
+                            Text(store.requests.isEmpty ? String(localized: "Requests") : String(localized: "Requests (\(store.requests.count))")).tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .accessibilityIdentifier("messages-segment")
+                    }
+                    let rows = segment == 0 ? store.accepted : store.requests
+                    if rows.isEmpty {
+                        Section {
+                            Text(emptyText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("messages-empty")
+                        }
+                    } else {
+                        Section {
+                            ForEach(rows) { c in
+                                NavigationLink(value: MessagesRoute.thread(conv: c.conv)) { ConversationRow(c: c, store: store) }
+                                    .accessibilityIdentifier("messages-row-\(store.name(c))")
+                            }
+                        }
+                    }
+                    if let err = store.lastError {
+                        Section { Text(verbatim: err).font(.footnote).foregroundStyle(.secondary) }
+                    }
                 }
-                if let err = store.lastError {
-                    Section { Text(verbatim: err).font(.footnote).foregroundStyle(.secondary) }
+                .listStyle(.insetGrouped)
+                .refreshable { await store.refresh() }
+                // Like a large title: once the header has scrolled under the navigation bar, a slim bar carries the
+                // photo, the name and the switch.
+                .onScrollGeometryChange(for: Bool.self) { g in
+                    g.contentOffset.y + g.contentInsets.top > Self.collapseAfter
+                } action: { _, now in
+                    if reduceMotion { collapsed = now } else { withAnimation(.snappy(duration: 0.22)) { collapsed = now } }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if collapsed {
+                        PageHeaderBar(flow: flow) {
+                            if reduceMotion { proxy.scrollTo(Self.headerId, anchor: .top) } else { withAnimation { proxy.scrollTo(Self.headerId, anchor: .top) } }
+                        }
+                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .onChange(of: scrollToTop) { _, _ in proxy.scrollTo(Self.headerId, anchor: .top) }
             }
-            .listStyle(.insetGrouped)
-            .refreshable { await store.refresh() }
+            .pagePublicFlow(flow)
         }
     }
+
+    static let headerId = "messages-page-header"
+    /// Points of scroll after which the header counts as gone (about its height, less the name row).
+    static let collapseAfter: CGFloat = 150
 
     private var emptyText: String {
         if segment == 1 { return String(localized: "No requests. New conversations wait here until you reply or accept them.") }
         return String(localized: "No messages yet. Turn on Accept messages on your page to get them.")
-    }
-
-    private var pageRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "person.crop.square")
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Your page").font(.headline).foregroundStyle(.primary)
-                Text(verbatim: "voi.ci/\(app.currentUser ?? "")").font(.subheadline).foregroundStyle(.secondary)
-                Text(pageStatus).font(.footnote).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("messages-page-status")
-                Text(store.index == nil && store.pendingCount == 0 ? String(localized: "Set up your page") : String(localized: "Edit your page"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .padding(.top, 2)
-                    .accessibilityIdentifier("messages-edit-page")
-            }
-            Spacer()
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
-        }
-        .contentShape(Rectangle())
-    }
-
-    private var pageStatus: String {
-        let n = store.pendingCount
-        if store.index == nil { return n > 0 ? String(localized: "Not published yet") : String(localized: "No page yet") }
-        if n == 1 { return String(localized: "Published · 1 change not published") }
-        if n > 1 { return String(localized: "Published · \(n) changes not published") }
-        return String(localized: "Published")
     }
 }
 
