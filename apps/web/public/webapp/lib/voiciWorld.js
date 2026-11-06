@@ -17,10 +17,13 @@ import {
 } from "./voiciOwner.js";
 import { getSession, onSessionLock } from "./state.js";
 import { tr } from "./i18n.js";
+import { clearRemovedSnapshot, loadRemovedSnapshot } from "./voiciPagePublic.js";
 
 function fresh() {
   return {
     page: null,
+    /** The page the owner removed, as this device kept it (voiciPagePublic.js), while it isn't public. */
+    removed: null,
     pageLoaded: false,
     pageError: null,
     drafts: [],
@@ -65,6 +68,11 @@ export async function refreshWorld(deps = {}) {
   if (page.status === "fulfilled") {
     world.page = page.value;
     world.pageError = null;
+    const u = String(getSession().username ?? "").toLowerCase();
+    if (world.page) {
+      clearRemovedSnapshot(u);
+      world.removed = null;
+    } else world.removed = loadRemovedSnapshot(u);
   } else world.pageError = page.reason;
   world.pageLoaded = true;
   if (drafts.status === "fulfilled") world.drafts = drafts.value;

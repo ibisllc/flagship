@@ -13369,5 +13369,73 @@
   "Edit your page": {
     "en": "Edit your page",
     "ctx": "webapp/views/messages.js:45"
+  },
+  "Make your page public?": {
+    "en": "Make your page public?",
+    "ctx": "webapp/lib/voiciCopy.js:21"
+  },
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": {
+    "en": "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.",
+    "ctx": "webapp/lib/voiciCopy.js:23"
+  },
+  "Remove your page from voi.ci?": {
+    "en": "Remove your page from voi.ci?",
+    "ctx": "webapp/lib/voiciCopy.js:24"
+  },
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": {
+    "en": "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.",
+    "ctx": "webapp/lib/voiciCopy.js:26"
+  },
+  "This device can't sign your page. Use an admin device of your account.": {
+    "en": "This device can't sign your page. Use an admin device of your account.",
+    "ctx": "webapp/lib/voiciCopy.js:45"
+  },
+  "Make it public": {
+    "en": "Make it public",
+    "ctx": "webapp/lib/voiciPageControl.js:138"
+  },
+  "Your page is public.": {
+    "en": "Your page is public.",
+    "ctx": "webapp/lib/voiciPageControl.js:166"
+  },
+  "Your page is off voi.ci.": {
+    "en": "Your page is off voi.ci.",
+    "ctx": "webapp/lib/voiciPageControl.js:191"
+  },
+  "Your public page": {
+    "en": "Your public page",
+    "ctx": "webapp/views/home.js:895"
+  },
+  "Public": {
+    "en": "Public",
+    "ctx": "webapp/views/home.js:917"
+  },
+  "Not public": {
+    "en": "Not public",
+    "ctx": "webapp/views/home.js:917"
+  },
+  "Anyone with the link can see your page.": {
+    "en": "Anyone with the link can see your page.",
+    "ctx": "webapp/views/page-editor.js:104"
+  },
+  "Your page is not on voi.ci. Turn on Public to publish it.": {
+    "en": "Your page is not on voi.ci. Turn on Public to publish it.",
+    "ctx": "webapp/views/page-editor.js:104"
+  },
+  "Changes": {
+    "en": "Changes",
+    "ctx": "webapp/views/page-editor.js:173"
+  },
+  "Change photo": {
+    "en": "Change photo",
+    "ctx": "webapp/views/page-header.js:86"
+  },
+  "Edit page": {
+    "en": "Edit page",
+    "ctx": "webapp/views/page-header.js:106"
+  },
+  "Bio, links, posts, look, messages": {
+    "en": "Bio, links, posts, look, messages",
+    "ctx": "webapp/views/page-header.js:107"
   }
 }

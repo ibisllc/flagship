@@ -476,7 +476,11 @@
 //       (lib/abuseNotices.js, lib/abuseNoticeUi.js).
 //  v201: Home welcomes an account with no voi.ci page with "Welcome! Make your own page" (Set up your page opens the
 //       editor; dismissed per account), and the Messages tab's page row says "Set up your page" / "Edit your page".
-const SHELL_VERSION = "v201";
+//  v202: the voi.ci page is managed at the top of the Messages tab (photo, name, voi.ci/<u> with copy, a Public
+//       switch that publishes after a one-time warning and removes the page when turned off; folds into a slim bar
+//       on scroll). Home and Settings point there; the editor keeps every edit as a draft behind one Publish bar;
+//       the Messages tab's glyph sits in a teal disc.
+const SHELL_VERSION = "v202";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -650,12 +654,15 @@ const OPTIONAL_SHELL = [
   "/lib/voiciOwner.js",
   "/lib/voiciWorld.js",
   "/lib/voiciCopy.js",
+  "/lib/voiciPagePublic.js",
+  "/lib/voiciPageControl.js",
   "/lib/voiciImage.js",
   "/lib/voiciSignIn.js",
   "/lib/voiciReplies.js",
   "/views/messages.js",
   "/views/thread.js",
   "/views/page-editor.js",
+  "/views/page-header.js",
   "/views/voici-sign-in.js",
   "/lib/linkField.js",
   "/lib/nameRules.js",

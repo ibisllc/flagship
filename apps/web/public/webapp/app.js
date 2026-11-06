@@ -144,7 +144,7 @@ import { initLocalAiView } from "./views/local-ai.js";
 import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
 import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
-import { initMessagesView, enterMessages, enterMessagesSettings } from "./views/messages.js";
+import { initMessagesView, enterMessages, enterMessagesSettings, enterPageHeader } from "./views/messages.js";
 import { initThreadView } from "./views/thread.js";
 import { initPageEditorView } from "./views/page-editor.js";
 import { initVoiciSignInView } from "./views/voici-sign-in.js";
@@ -246,6 +246,7 @@ const SETTINGS_ROW_ICONS = {
   dock: monitorIcon,
   requests: usersIcon,
   profiles: userIcon,
+  page: userIcon,
   messages: messageCircleIcon,
   dibs: flagIcon,
   appearance: monitorIcon,
@@ -354,6 +355,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-companion-dock", enterCompanionDock);
   wire("settings-tab-companion-requests", enterCompanionRequests);
   wire("settings-tab-profiles", enterProfiles);
+  wire("settings-tab-page", enterPageHeader);
   wire("settings-tab-messages", enterMessagesSettings);
   // App group — static informational sub-screens.
   wire("settings-tab-appearance", () => show("view-appearance"));

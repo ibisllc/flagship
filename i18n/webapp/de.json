@@ -3267,5 +3267,22 @@
   "Welcome! Make your own page": "Willkommen! Erstelle deine eigene Seite",
   "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "Teile ein Foto, ein paar Worte über dich, deine Links und Beiträge auf voi.ci/{0}. Wenn du möchtest, können dir Besucher dort Nachrichten schreiben.",
   "Set up your page": "Deine Seite einrichten",
-  "Edit your page": "Deine Seite bearbeiten"
+  "Edit your page": "Deine Seite bearbeiten",
+  "Make your page public?": "Deine Seite öffentlich machen?",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "Alles, was du auf deine Seite stellst, ist öffentlich. Jeder kann es sehen, und es zeigt deinen Benutzernamen, den auch deine Apps und Server verwenden. So können andere sie miteinander verbinden.",
+  "Remove your page from voi.ci?": "Deine Seite von voi.ci entfernen?",
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": "Besucher sehen dann „Hier gibt es keine Seite.“ Deine Beiträge und dein Profil bleiben auf deinen Geräten, du kannst die Seite also wieder einschalten.",
+  "This device can't sign your page. Use an admin device of your account.": "Dieses Gerät kann deine Seite nicht signieren. Verwende ein Admin-Gerät deines Kontos.",
+  "Make it public": "Öffentlich machen",
+  "Your page is public.": "Deine Seite ist öffentlich.",
+  "Your page is off voi.ci.": "Deine Seite ist nicht mehr auf voi.ci.",
+  "Your public page": "Deine öffentliche Seite",
+  "Public": "Öffentlich",
+  "Not public": "Nicht öffentlich",
+  "Anyone with the link can see your page.": "Jeder mit dem Link kann deine Seite sehen.",
+  "Your page is not on voi.ci. Turn on Public to publish it.": "Deine Seite ist nicht auf voi.ci. Schalte „Öffentlich“ ein, um sie zu veröffentlichen.",
+  "Changes": "Änderungen",
+  "Change photo": "Foto ändern",
+  "Edit page": "Seite bearbeiten",
+  "Bio, links, posts, look, messages": "Bio, Links, Beiträge, Aussehen, Nachrichten"
 }

@@ -3267,5 +3267,22 @@
   "Welcome! Make your own page": "欢迎！创建你自己的页面",
   "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "在 voi.ci/{0} 分享一张照片、几句自我介绍、你的链接和帖子。如果你愿意，访客还可以在那里给你发消息。",
   "Set up your page": "设置你的页面",
-  "Edit your page": "编辑你的页面"
+  "Edit your page": "编辑你的页面",
+  "Make your page public?": "要公开你的页面吗？",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "你放在页面上的所有内容都是公开的。任何人都能看到，而且页面会显示你的用户名，你的应用和服务器也使用这个用户名，因此别人可以把它们联系起来。",
+  "Remove your page from voi.ci?": "要从 voi.ci 移除你的页面吗？",
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": "访客会看到“这里没有页面。”你的帖子和个人资料会保留在你的设备上，所以你可以再次开启。",
+  "This device can't sign your page. Use an admin device of your account.": "此设备无法为你的页面签名。请使用你账户的管理设备。",
+  "Make it public": "设为公开",
+  "Your page is public.": "你的页面已公开。",
+  "Your page is off voi.ci.": "你的页面已从 voi.ci 移除。",
+  "Your public page": "你的公开页面",
+  "Public": "公开",
+  "Not public": "未公开",
+  "Anyone with the link can see your page.": "任何拥有链接的人都能看到你的页面。",
+  "Your page is not on voi.ci. Turn on Public to publish it.": "你的页面不在 voi.ci 上。打开“公开”即可发布。",
+  "Changes": "更改",
+  "Change photo": "更换照片",
+  "Edit page": "编辑页面",
+  "Bio, links, posts, look, messages": "简介、链接、帖子、外观、消息"
 }

@@ -2,6 +2,26 @@
   "about": "Derived-check findings that are intentional. Each entry names its check id and finding key exactly as scripts/parity-check.mjs prints them, and says why. An entry that no longer matches anything is reported as stale: delete it.",
   "entries": [
     {
+      "check": "signed-tags",
+      "key": "ios:flagship/voici-page-remove/v1",
+      "reason": "The page removal's iOS port is built in parallel on the native branch against the same contract (test-vectors/voici-page-remove). Delete this entry when that branch merges."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/voici-page-remove/v1",
+      "reason": "The page removal's Android port is built in parallel on the native branch against the same contract (test-vectors/voici-page-remove). Delete this entry when that branch merges."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:voici-page-remove",
+      "reason": "The Swift test of test-vectors/voici-page-remove lands with the native branch. Delete this entry when that branch merges."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:voici-page-remove",
+      "reason": "The Kotlin test of test-vectors/voici-page-remove lands with the native branch. Delete this entry when that branch merges."
+    },
+    {
       "check": "test-vectors",
       "key": "kotlin:language-negotiation",
       "reason": "Android never picks a language itself: the OS chooses among the app's values-<lang> resources (per-app language in system settings). The vectors are the rule for the webapp, the box pages and the website."
