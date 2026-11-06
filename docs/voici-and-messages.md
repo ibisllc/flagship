@@ -300,6 +300,22 @@ deletion remove the page (`deleteVoiciAccount`). But a demo's admin root and IRK
 `DEMO_IRK_KEK`; the browser or phone that opens a demo holds a fresh local key, not those. So nobody but the operator
 can sign a demo account's page; the apps treat a demo device as one that can't publish.
 
+### 3.4 A sample account's example page (0.3)
+
+So that store reviewers (the review login `playstore-test-0725` is a sample account) see a real public page, the
+operator publishes an **example page** for a sample account: `POST /api/dev/sample-user/<u>/voici-example-page`
+(`node scripts/sample-user.mjs example-page <u> [--remove]`, docs/sample-users.md "Example voi.ci page"). `.com`
+signs fixed content from `packages/control-plane/src/demoVoiciPage.ts` with the account's derived sensitive key and
+sends it through the same handlers as a device's publish (piece upload with its signature, `handleVoiciPublish`'s
+checks and seq ladder, R2); `remove: true` signs a `flagship/voici-page-remove/v1` removal through
+`handleVoiciRemove`. Nothing else in the request reaches the page; it accepts no messages.
+
+The apps read it like any public page (`GET /api/voici/pages/<u>`, checked against the account's key from
+`/api/username/<u>`) and show it read-only at the top of Messages: the photo, the name, voi.ci/<u> with copy, the
+Public switch disabled (on while the page is public), "This is a sample account. Its page is an example, so you
+can't change it." and **View page** (opens voi.ci/<u>). The editor is not reachable, no conversations are listed,
+nothing is signed. Home shows the compact "Your page" row (never the welcome card).
+
 ## 4. The voi.ci site
 
 ### 4.1 Routing on `voi.ci`

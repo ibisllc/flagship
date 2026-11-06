@@ -14,6 +14,7 @@
  *   cleanup <username> [--idempotency-key <key>] [--force]
  *   list
  *   status <username>
+ *   example-page <username> [--remove]
  *   help
  *
  * Env:
@@ -40,6 +41,7 @@ const SUBCOMMANDS = new Set([
   "cleanup",
   "list",
   "status",
+  "example-page",
   "help",
 ]);
 
@@ -65,6 +67,17 @@ export function parseArgs(argv) {
     }
     if (argv.length > 2) throw new Error(`${command} takes only <username>`);
     return { command, username: u, flags: {} };
+  }
+  if (command === "example-page") {
+    const u = argv[1];
+    if (!u || u.startsWith("--")) {
+      throw new Error("example-page requires a <username>");
+    }
+    for (const tok of argv.slice(2)) {
+      if (tok !== "--remove") throw new Error(`unknown argument: ${tok}`);
+      flags.remove = true;
+    }
+    return { command, username: u, flags };
   }
   if (command === "cleanup") {
     const u = argv[1];
@@ -247,6 +260,30 @@ export async function runCleanup(deps, username, flags = {}) {
   return 0;
 }
 
+/* ─────────────────────── subcommand: example-page ───────────────────── */
+
+/**
+ * Publishes (or with --remove takes down) the sample account's example voi.ci page. The Worker signs fixed content
+ * with the account's derived key; nothing but `remove` is sent (docs/sample-users.md "Example voi.ci page").
+ */
+export async function runExamplePage(deps, username, flags = {}) {
+  const { fetchFn, env, stderr, stdout } = deps;
+  const verb = flags.remove ? "removing" : "publishing";
+  stderr.write(`[example-page] ${verb} the example page of ${username}…\n`);
+  const r = await adminFetch(
+    fetchFn,
+    adminUrl(env.baseUrl, `/api/dev/sample-user/${encodeURIComponent(username)}/voici-example-page`),
+    { method: "POST", body: JSON.stringify(flags.remove ? { remove: true } : {}) },
+    env.adminSecret,
+  );
+  if (r.status !== 200) {
+    stderr.write(`[example-page] failed: HTTP ${r.status} ${JSON.stringify(r.json ?? {})}\n`);
+    return exitCodeForHttp(r.status);
+  }
+  stdout.write(JSON.stringify(r.json ?? {}) + "\n");
+  return 0;
+}
+
 /* ─────────────────────── subcommand: create ─────────────────────────── */
 
 /** One idempotent creation request followed by read-only status polling. */
@@ -358,6 +395,7 @@ export const USAGE = [
   "  node scripts/sample-user.mjs cleanup <username> [--idempotency-key <key>] [--force]",
   "  node scripts/sample-user.mjs list",
   "  node scripts/sample-user.mjs status <username>",
+  "  node scripts/sample-user.mjs example-page <username> [--remove]",
   "",
   "ENV:",
   "  FLAGSHIP_ADMIN_SECRET   required for all subcommands (admin bearer)",
@@ -407,6 +445,8 @@ export async function main(argv, deps) {
       return runCleanup(subDeps, parsed.username, parsed.flags);
     case "create":
       return runCreate(subDeps, parsed.username, parsed.flags);
+    case "example-page":
+      return runExamplePage(subDeps, parsed.username, parsed.flags);
     default:
       stderr.write(`error: unhandled subcommand ${parsed.command}\n`);
       return 1;

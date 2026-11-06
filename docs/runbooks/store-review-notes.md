@@ -10,9 +10,14 @@ for. `final-deploy.md` step 11 points here. Draft written for 0.3 (voi.ci pages 
    `VOICI_ENABLED` is `"off"` (`apps/com/wrangler.toml`), so a reviewer opening the Messages tab would see only
    errors. Either switch it on before submitting (the routes are safe with old store builds: they never call them),
    or hold the submission until it is on.
-2. **The review login can't show Messages.** `playstore-test-0725` is a demo account, and demo accounts can't have a
-   page ("Messages need your own Flagship account. Sample accounts can't have a page."). A real account lives in the
-   keys of the phone that made it, so a reviewer can't sign in to one of ours; they create their own in a minute.
+2. **The review login shows an example page, not Messages.** `playstore-test-0725` is a sample (demo) account. Its
+   page is an example the operator publishes: run `node scripts/sample-user.mjs example-page playstore-test-0725`
+   (needs only `FLAGSHIP_ADMIN_SECRET`) before submitting and check https://voi.ci/playstore-test-0725 shows it. In
+   the app the Messages tab shows that page read-only: the Public switch is disabled and the app says "This is a
+   sample account. Its page is an example, so you can't change it."; View page opens it on voi.ci. Its conversations
+   can't be reviewed from it (it accepts no messages, and nobody but the operator can sign its page). A real account
+   lives in the keys of the phone that made it, so a reviewer can't sign in to one of ours; they create their own in
+   a minute.
    Publish a review page from a real account on a spare phone (a photo, one post, Accept messages on), so the
    reviewer can message it from their new account, and answer what arrives during the review (Apple tests Report
    and Block on a real conversation). Put its username in the notes below. Never delete it while a review is open.
@@ -34,8 +39,9 @@ playstore-test-0725. It shows a server and its apps.
 User-generated content (Guideline 1.2): Flagship 0.3 adds voi.ci pages and Messages.
 - A user can publish a public profile page (photo, name, bio, links, posts) at voi.ci/<username>, and receive
   end-to-end encrypted messages from other Flagship users through it.
-- Demo accounts can't have a page. To review Messages, create a new account in the app (first screen > Create your
-  account; it takes a minute), then:
+- The demo account's page is an example we publish: the Messages tab shows it read-only (the Public switch is
+  disabled on sample accounts) and View page opens it at https://voi.ci/playstore-test-0725. To review your own
+  page and Messages, create a new account in the app (first screen > Create your account; it takes a minute), then:
   - your own page: Messages tab > Your page > edit > Publish;
   - a conversation: open https://voi.ci/[REVIEW PAGE USERNAME] in Safari, tap "Send me a message", approve the
     sign-in in the app, and write. We answer during the review. The conversation then shows Report and Block on

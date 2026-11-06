@@ -225,6 +225,7 @@ import {
   handleGetDemoUser,
   handleListDemoUsers,
   handleOrderDemoUpdate,
+  handleDemoVoiciExamplePage,
   handlePairDemoUser,
   demoShareKeyAttestationRequest,
   handleGymProvision,
@@ -256,7 +257,7 @@ import {
 } from "@flagship/boot-core";
 import { InProcessDirectoryClient, InProcessNotifyPipe } from "./bootInProcess.js";
 import { buildPushUserDevices } from "./pushUserDevices.js";
-import { deleteVoiciAccount } from "./voiciRoutes.js";
+import { deleteVoiciAccount, voiciEnabled, voiciPagesDeps, type VoiciEnv } from "./voiciRoutes.js";
 import {
   workerCaTrustChain,
   caEnforceFromEnv,
@@ -860,6 +861,7 @@ const ROUTE_RE = {
   DEMO_USER_PAIR: /^\/api\/dev\/sample-user\/([^/]+)\/pair$/,
   DEMO_USER_SHARE_KEY_ATTESTATION: /^\/api\/dev\/sample-user\/([^/]+)\/share-key-attestation$/,
   DEMO_USER_ORDER_UPDATE: /^\/api\/dev\/sample-user\/([^/]+)\/order-update$/,
+  DEMO_USER_VOICI_EXAMPLE_PAGE: /^\/api\/dev\/sample-user\/([^/]+)\/voici-example-page$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
   // Phase 1 of the gym recipe→Hetzner pipeline. GYM-ONLY: provisions a box
@@ -3792,6 +3794,26 @@ export async function tryControlPlane(
         storage: storage.demoUsers,
         servers: storage.servers,
         secretMailbox: storage.secretMailbox,
+        demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
+      }, decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    // The example voi.ci page of a sample account (docs/sample-users.md "Example voi.ci page"): operator only, fixed
+    // content signed here with the account's derived key; the body may only say `remove: true`.
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_VOICI_EXAMPLE_PAGE))) {
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
+      }
+      const voiciEnv = env as unknown as VoiciEnv;
+      if (!env.DEMO_IRK_KEK || !voiciEnabled(voiciEnv) || !voiciEnv.VOICI) {
+        return jsonResponse({ error: "demo example pages need DEMO_IRK_KEK, VOICI_ENABLED=on and the VOICI bucket" }, 503);
+      }
+      return finishPlain(await handleDemoVoiciExamplePage({
+        ...voiciPagesDeps(voiciEnv, storage, requestDb),
+        demos: storage.demoUsers,
         demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
       }, decodeURIComponent(m[1]!), await readJson(request)));
     }
