@@ -339,7 +339,7 @@ VOICI_FILES_ZONE_ID = "40579a73601f73c2a3cfeaac6d00366c"
 # 0.2 Studios send no `&studio=` level on the pairing relay: "2" refuses them with "This version of Flagship Studio
 # is out of date..." (builderRelay.ts). Turn on in the commit that publishes the 0.3 Studio downloads (release.sh
 # step studiowl), never before: until then a 0.2 Studio is the only one people can download.
-# STUDIO_PIPE_MIN = "2"
+STUDIO_PIPE_MIN = "2"
 # voi.ci links go to the canonical address (<label>.<user>.flagship.services) once "1".
 # Turn on only after the gym group named-links proves it reaches a running instance.
 # VOICI_CANONICAL = "1"
