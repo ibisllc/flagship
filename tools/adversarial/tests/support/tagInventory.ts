@@ -184,6 +184,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/voici-thread-key/v1": "vectors voiciVectors.test.ts + test-vectors/messages (thread key swapped, other page)",
   "flagship/voici-ack/v1": "vectors voiciVectors.test.ts + test-vectors/messages (other message, phone key swapped, other signer)",
   "flagship/voici-block/v1": "vectors voiciVectors.test.ts + test-vectors/messages (block/unblock swap)",
+  "flagship/voici-page-remove/v1": "vectors packages/protocol/test-vectors/voici-page-remove (valid + malformed, wrong-signer, bad-signature, wrong-page, stale, seq-conflict) in packages/protocol/tests/voiciPageRemove.test.ts, Swift VoiciPageRemoveVectorTests and Kotlin VoiciPageRemoveVectorsTest; replay of the removal and of an old index, takedown/ban refusals in packages/control-plane/tests/voiciPageRemove.test.ts",
   "flagship/voici-drafts-consume/v1": "bespoke packages/protocol/tests/voiciDraftsConsume.test.ts (pinned bytes, op-id refusals); wrong-signer refusal in packages/control-plane/tests/voiciPages.test.ts",
   "flagship/voici-thread-fetch/v1": "vectors voiciVectors.test.ts + test-vectors/messages (P-256 by the browser key; other cursor)",
   "flagship/voici-alerts/v1": "vectors voiciAlerts.test.ts (control-plane: P-256 by the browser key; other conv, other endpoint, on/off swap, flagship-web bytes)",

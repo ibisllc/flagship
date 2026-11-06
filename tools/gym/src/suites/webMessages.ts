@@ -49,6 +49,25 @@ export const WEB_MESSAGES: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-messages-page-public-switch",
+    "The Messages header's Public switch: turning it on the first time shows the one-time public warning, then publishes; turning it off asks to confirm and removes the page with a signed flagship/voici-page-remove/v1 (voi.ci answers no page); turning it on again republishes at the next seq without the warning; the copy button writes only the link.",
+    "gym messages the Public switch removes the page and turns it back on",
+    {
+      steps: [
+        { kind: "launch", describe: "Messages tab with no page published." },
+        { kind: "tap", describe: "Public switch on → Make it public.", handle: "#ph-switch" },
+        { kind: "tap", describe: "Public switch off → Remove.", handle: "#ph-switch" },
+        { kind: "tap", describe: "Public switch on again.", handle: "#ph-switch" },
+      ],
+      assertions: [
+        { describe: "Warning shown once", handle: ".modal-title", expect: "text", text: "Make your page public?" },
+        { describe: "Public again", handle: "#ph-switch", expect: "present" },
+      ],
+      screenshots: [shot("page-public-on", "The header with the page public."), shot("page-public-off", "The header after Remove.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
     "web-messages-page-draft",
     "On a device without the admin root the editor has no Publish button and says why; a new post is sealed under the drafts key, signed by this device's account key with its admin-signed grant, deposited in the drafts lane, and shown grayed Waiting for an admin device to publish; nothing is published.",
     "gym messages a device without the admin root sends a draft and shows it grayed",
