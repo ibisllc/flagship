@@ -8,6 +8,7 @@
 package com.flagshipserver.app.ui.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.ChatBubble
@@ -267,7 +268,9 @@ private fun TabIcon(dest: RootDestination) {
 @Composable
 private fun MessagesDisc(label: String) {
     Box(
-        Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(com.flagshipserver.app.ui.theme.FS.colors.fill),
+        Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(com.flagshipserver.app.ui.theme.FS.colors.fill)
+            // A ring in the bar's colour keeps the disc visible on the selected item's teal indicator.
+            .border(2.dp, MaterialTheme.colorScheme.surfaceContainer, androidx.compose.foundation.shape.CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(androidx.compose.material.icons.Icons.Filled.ChatBubble, contentDescription = label, tint = com.flagshipserver.app.ui.theme.FS.colors.onAccent, modifier = Modifier.size(16.dp))
