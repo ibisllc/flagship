@@ -74,3 +74,12 @@ server registered since sometime between 05:54Z and 14:51Z can't be reached: lik
 phase B steps (or the newest endorsed box release a new box moves to on first boot). This blocks W6/W8 and any new
 user's first server; please check before the release continues. I'm holding new hosting runs until you answer; the
 `<server-G>` VM stays running here for you to test against.
+
+## ~21:05 local: v204 is live — results
+- **W19: still FAIL, half fixed.** The browser now shows the comparison code (380 416, same as the phone) and the phone
+  connects it ("Browser connected to <server-A>", a 4 h session listed), but the browser lands on the empty keyless Home
+  ("Your first server is one tap away", Session "Unpaired"), not the server's page. Same as before on that half.
+- **Failure 4: fixed.** A fresh Android key file imports in Edge with no 403; it starts the 3-day device replacement
+  ("takes over in 2d 23h"). read-token 403 / pods 401 while waiting — expected? The phone shows only an Activity line.
+- **Failure 5 is still open** (no reply yet): home7 still refuses TLS (alert 49). New servers can't come online.
+- Next: W14 via a W18 join with "Also make this device an admin" on (the key-file route waits 3 days).
