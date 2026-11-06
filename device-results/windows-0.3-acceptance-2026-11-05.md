@@ -1,11 +1,29 @@
 # Windows Studio 0.3 acceptance, 2026-11-05
-Verdict: (in progress; Failures 1, 2, 3 and 4 block a PASS)
+Verdict: (in progress; rerun on 78ce3bc55: Failures 1, 2 and 3 fixed; Failure 4 and W19 block a PASS)
 Build: studio-release run 42124941884, commit cd95fc57b (= deployed pin 1e1840f2c + release.sh/yubikey-sign.mjs/journal only), zip SHA-256 D7C82B24C60B0E760FD76D8B1C21B345E1D62E238B1B882472CE5FA2F378183E (76,423,759 bytes); exe 0.3.0+cd95fc57b, NotSigned
 Backend: PRODUCTION per DEPLOYED-FINAL-2026-11-05 (0.3 is live; the runbook's gym target predates phase A)
 Windows: Windows 11 Home 25H2 (build 26200), en-US (fr-FR installed); Smart App Control: off (0)
 Windows 10 (W0b): pending (owner has a 22H2 PC)
 Hardware: Intel i5-14400F, 15.7 GiB; QEMU (C:\Program Files\qemu) + WHPX; phone: Android 15 emulator, debug APK of 1e1840f2c (plain launch = production)
 Waivers (owner): pending (W2 n/a on production; W13 no newer endorsed release on production)
+
+## Rerun on the fix build, 2026-11-06 (answers LEAD-REPLY-2026-11-06)
+
+Build: studio-release run 42167330385 (dispatched by the owner, `publish=false`), commit `78ce3bc55`, zip SHA-256 `E3142493B0904D5AD9C81E2A5D116384C430258C1CC24E839C20FA43FC6E21D1` (76,423,275 bytes); exe 0.3.0+78ce3bc55, NotSigned. Same PC, production, same phone (debug APK of 1e1840f2c), no environment overrides except where named.
+
+| Row / item | Result | Notes |
+|---|---|---|
+| Failure 3 | **fixed** | Junk on the clipboard → Paste from clipboard: the sentence shows under the buttons. (I) The sentence is the raw .NET parser text, English only: "Not a valid recipe: '…' is an invalid JSON literal. Expected the literal 'true'. LineNumber: 0 \| BytePositionInLine: 1." Suggest a translated "This isn't a Flagship recipe" with the detail in the log. |
+| A11y: row names | **fixed** | The sidebar row reads "home3.nimble-poppy, Installing…" / "…, Running". The Delete dialog's Yes/No are still `Pane` (open, as the lead says). |
+| W6 (Failure 1) | **pass** | New order `home3` paired by typed code (SAS matched), Host on this PC, prebuilt appliance `ecd620cb` from cache. Past the old FATAL: Checking the server recipe → own disk key → Specializing → Registering → Sealing → Removing the factory disk key → "Starting. When your phone asks, approve…" (05:27:42Z, ~4 min after start). Two phone approvals (see below), then Running, "Serving at https://…", HTTP 200 with a Let's Encrypt (YE2) certificate at 05:54Z. Stop: VM gone in 6 s, Last connected kept. (I) Server health: "The server software restarted 5× since it started (last exit code 0)", likely while it waited for the second approval. |
+| W26 memory half | pass (again) | The first Host click was refused with "Not enough free memory: this server needs 4 GiB…" (Edge was open). (I) The refusal still created the server's disk and seed, and the sidebar kept a "home3, Install failed" row until Retry install; a refusal before start should leave nothing. Retry with ~5 GiB free started at once. |
+| W8 (Failure 2) | **remaster fixed; install running** | Studio relaunched with `FLAGSHIP_VM_FORCE_ISO=1` (process only; no `FLAGSHIP_XORRISO`, so the bundled `tools\xorriso.exe`). Order `home4`: cached Debian 13.6.0 ISO, remastered, VM started at once with no click needed (last round: "no Debian boot config found"). Outcome below when the install finishes. |
+| W19 | **FAIL** | With a running server (`home2`, below): the browser now shows the comparison code (272 778, matched the phone), the phone picks home2 and approves with the device PIN, and lists "Browser connected to home2" / a session. But the browser lands on "KEYLESS REMOTE" Home showing "Your first server is one tap away / CREATE A SERVER" and Session "Unpaired", not home2's page. Pass needs the server's page. Screenshots kept locally. |
+| W16 | n/a | Per the lead: no Save installer in the Windows UI by design. |
+
+**Phone approvals on 0.3 (I, both servers).** A new box needs two approvals: "Unlock device…" and then "Authorize device to join your cloud" ("Confirmed by Studio"). The second arrived with no prompt on the phone; it was found only by refreshing Activity → Server approvals ~10 min later, while Studio said "Starting…" and then "Taking longer than expected". Also: tapping the Home row "Waiting for approval" for a fresh order opens the order's install screen (no Approve button) rather than the approval.
+
+**Server-dependent rows without Studio (UpCloud).** To reach the rows that need a running server while Studio was broken: the phone's `home2` recipe file → `flagship-build prepare` (CLI, MSYS2 xorriso) → one UpCloud server (2xCPU-4GB, de-fra1, label `flagship-env=device-test`). The Debian installer ran ~3.5 min and powered off; booted from disk; the phone approved the unlock and then "Authorize this server to serve"; HTTP 200 with a Let's Encrypt (YE1) certificate at 05:15Z (flapped for ~30 s, then stable). The phone shows it Online, Leader, version 52c67f88, "Software 0.0.0" (known).
 
 ## Contract check (DEPLOYED-FINAL-2026-11-05), 2026-11-05 ~22:20Z
 All true: .com /api/health ok; flagship.services /api/health ok; webapp. and remote. SHELL_VERSION v200; /api/notices 204;
