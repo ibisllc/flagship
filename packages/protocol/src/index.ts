@@ -111,6 +111,7 @@ export * from "./voiciText.js";
 export * from "./voiciPseudonymName.js";
 export * from "./messagesAttestation.js";
 export * from "./voiciPage.js";
+export * from "./voiciPageRemove.js";
 export * from "./voiciMessages.js";
 export * from "./voiciDraftsConsume.js";
 export * from "./abuseNotice.js";
