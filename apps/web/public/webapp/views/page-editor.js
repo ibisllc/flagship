@@ -369,7 +369,7 @@ async function commitProfile() {
   if (r.error) return showProfileError(r.error);
   showProfileError(null);
   if (JSON.stringify(r.profile) === JSON.stringify(editorModel().merged.profile)) return;
-  const images = r.profile.avatar && !isAdmin() && imageBytes(r.profile.avatar) && !world.page?.pieces?.has(r.profile.avatar) ? [imageBytes(r.profile.avatar)] : [];
+  const images = r.profile.avatar && imageBytes(r.profile.avatar) && !world.page?.pieces?.has(r.profile.avatar) ? [imageBytes(r.profile.avatar)] : [];
   await addPageOp(makeDraftOp("profile", { profile: r.profile }, { deviceId: deviceId(), images }));
   renderChrome();
 }

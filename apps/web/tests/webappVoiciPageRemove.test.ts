@@ -18,6 +18,9 @@ import {
   saveRemovedSnapshot,
 } from "../public/webapp/lib/voiciPagePublic.js";
 
+import * as PS from "../public/webapp/lib/profilesStore.js";
+import { signOut } from "../public/webapp/lib/sessionTiers.js";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const V: any = JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "..", "packages", "protocol", "test-vectors", "voici-page-remove", "vectors.json"), "utf8"));
 
@@ -183,6 +186,35 @@ describe("what this device remembers", () => {
     expect(loadRemovedSnapshot(U, store)).toBeNull();
   });
 
+  it("the removed page's copy goes when the account leaves this browser, and only that account's", async () => {
+    const com = fakeCom();
+    const page = await publishedPage(com);
+    const fresh = () => {
+      const store = new MemStorage();
+      PS.ensureProfile("alice", store);
+      PS.ensureProfile("bob", store);
+      PS.setActiveCloudName("alice", store);
+      PS.set("username", "alice", { storage: store });
+      saveRemovedSnapshot("alice", page, 2, store);
+      saveRemovedSnapshot("bob", page, 2, store);
+      return store;
+    };
+    // Sign out (sessionTiers.signOut clears the session slots, `username` among them).
+    let store = fresh();
+    await signOut({ hasCloudRecovery: true, resetDevice: async () => {}, lockSession: () => {}, show: () => {}, profileRemove: (slot: string) => PS.remove(slot, { storage: store }) });
+    expect(loadRemovedSnapshot("alice", store)).toBeNull();
+    expect(loadRemovedSnapshot("bob", store)).not.toBeNull();
+    // Remove this device, account deletion, a demo's removal: each clears `username` the same way.
+    store = fresh();
+    PS.remove("username", { storage: store });
+    expect(loadRemovedSnapshot("alice", store)).toBeNull();
+    // The account-gone screen and profile removal drop the whole record.
+    store = fresh();
+    PS.removeProfileRecord("alice", store);
+    expect(loadRemovedSnapshot("alice", store)).toBeNull();
+    expect(loadRemovedSnapshot("bob", store)).not.toBeNull();
+  });
+
   it("keeps the words when the photos don't fit", async () => {
     const com = fakeCom();
     const page = await publishedPage(com);
@@ -195,6 +227,29 @@ describe("what this device remembers", () => {
     expect(saveRemovedSnapshot(U, page, 2, tight)).toBe(true);
     const snap = loadRemovedSnapshot(U, tight)!;
     expect([snap.profile.avatar, snap.pieces.size, snap.profile.displayName]).toEqual([null, 0, "Alice"]);
+  });
+});
+
+describe("an admin device's drafts outlive a reload", () => {
+  it("go into the account's drafts lane; one published on the way is consumed; a refused one stays here", async () => {
+    const { keepDraft } = await import("../public/webapp/lib/voiciPageControl.js");
+    const { world } = await import("../public/webapp/lib/voiciWorld.js");
+    const op = makeDraftOp("post-add", { post: { id: "cd".repeat(16), createdAt: NOW, editedAt: null, text: "Draft", links: [] } }, { now: NOW });
+    world.localOps = [op];
+    world.drafts = [];
+    const consumed: string[][] = [];
+    const deps = { sendDraftOp: async () => ({ envelope: { msgId: op.opId } }), consumeDraftOps: async (ids: string[]) => void consumed.push(ids) };
+    expect(await keepDraft(op, deps)).toBe(true);
+    expect([world.localOps.length, world.drafts.map((d: { op: { opId: string } }) => d.op.opId)]).toEqual([0, [op.opId]]);
+    expect(consumed).toEqual([]);
+    // Published while it was on the way: it must not come back as waiting.
+    world.drafts = [];
+    expect(await keepDraft(op, deps)).toBe(true);
+    expect([world.drafts.length, consumed]).toEqual([0, [[op.opId]]]);
+    // `.com` refused it: it stays in this session, as before.
+    world.localOps = [op];
+    expect(await keepDraft(op, { sendDraftOp: async () => Promise.reject(new Error("no-device-grant")) })).toBe(false);
+    expect(world.localOps).toEqual([op]);
   });
 });
 

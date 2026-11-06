@@ -189,6 +189,21 @@ async function visitorMessage(page: Page, com: Com, text: string, visitorSeed = 
   );
 }
 
+/** This device's grant, signed by the admin root, as `.com` lists it (a draft's `cred`). */
+async function deviceGrant(page: Page) {
+  return page.evaluate(async (adminSeedHex) => {
+    const ks = await import("/keystore.js");
+    const { getSession } = await import("/lib/state.js");
+    const P = await import("/lib/voiciProtocol.js");
+    const { deviceGrantCanonicalBytes } = await import("/lib/crossDevicePairing.js");
+    const { getActiveProfile } = await import("/lib/profiles.js");
+    const prof = getActiveProfile();
+    const seed = await ks.deriveAccountDeviceSeedFromSeed(getSession().umk, prof.accountId, prof.deviceId);
+    const grant = { grantId: "g1", username: "smoketest", deviceId: prof.deviceId, devicePubHex: P.hex(P.ed25519PublicKey(seed)), scopes: ["browse", "view-directory"], issuedAt: Date.now() - 1000, expiresAt: Date.now() + 86_400_000 };
+    return { grant, grantSignature: P.ed25519SignHex(deviceGrantCanonicalBytes(grant), P.hexToBytes(adminSeedHex)) };
+  }, ADMIN_SEED_HEX);
+}
+
 async function openMessagesTab(page: Page): Promise<void> {
   await page.click('[data-tab-target="messages"]');
   await expect(page.locator("#view-messages")).toBeVisible();
@@ -248,7 +263,8 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
   });
 
   test("gym messages page editor publishes after the warning", async ({ page }, testInfo) => {
-    const { com, keys } = await messagesWorld(page);
+    const { m, com, keys } = await messagesWorld(page);
+    m.get(path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
     await openMessagesTab(page);
     await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
     await expect(page.locator("#ph-name")).toHaveValue("smoketest");
@@ -281,6 +297,17 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     await expect(page.locator("[data-testid=preview-send]")).toHaveText("Send me a message");
     // One bar counts every change: the profile (one change however many fields), Accept messages, the post.
     await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
+    // The drafts are in the account's lane (one profile change, the older ones consumed), not only in memory: a
+    // session that forgot them (a reload, a lock) reads them back.
+    await expect.poll(() => com.drafts.length).toBe(3);
+    await page.evaluate(async () => {
+      const W = await import("/lib/voiciWorld.js");
+      Object.assign(W.world, { localOps: [], drafts: [], pageLoaded: false });
+    });
+    await page.click("#page-editor-back");
+    await page.click("[data-testid=messages-edit-page]");
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
+    await expect(page.locator("[data-testid=preview-name]")).toHaveText("Smoke Test");
     expect(com.index).toBeNull();
     await shot(page, testInfo, "page-editor-pending");
 
@@ -301,6 +328,8 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     expect(com.index.seq).toBe(1);
     expect(com.index.signerPub).toBe(keys.adminPubHex);
     expect(com.index.acceptsMessages).toBe(1);
+    // Publishing consumed every draft it included.
+    await expect.poll(() => com.drafts.length).toBe(0);
     const avatar = com.index.pieces.find((p: any) => p.role === "avatar");
     const jpeg = com.pieces.get(avatar.sha256)!;
     expect(jpeg.length).toBeLessThanOrEqual(150 * 1024);
@@ -317,19 +346,7 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
 
   test("gym messages a device without the admin root sends a draft and shows it grayed", async ({ page }, testInfo) => {
     const { m, com, keys } = await messagesWorld(page, "non-admin");
-    // This device's grant, signed by the admin root, as `.com` lists it.
-    const grant = await page.evaluate(async (adminSeedHex) => {
-      const ks = await import("/keystore.js");
-      const { getSession } = await import("/lib/state.js");
-      const P = await import("/lib/voiciProtocol.js");
-      const { deviceGrantCanonicalBytes } = await import("/lib/crossDevicePairing.js");
-      const { getActiveProfile } = await import("/lib/profiles.js");
-      const prof = getActiveProfile();
-      const seed = await ks.deriveAccountDeviceSeedFromSeed(getSession().umk, prof.accountId, prof.deviceId);
-      const grant = { grantId: "g1", username: "smoketest", deviceId: prof.deviceId, devicePubHex: P.hex(P.ed25519PublicKey(seed)), scopes: ["browse", "view-directory"], issuedAt: Date.now() - 1000, expiresAt: Date.now() + 86_400_000 };
-      return { grant, grantSignature: P.ed25519SignHex(deviceGrantCanonicalBytes(grant), P.hexToBytes(adminSeedHex)) };
-    }, ADMIN_SEED_HEX);
-    m.first("GET", path("/api/users/smoketest/device-grants"), { grants: [grant] });
+    m.first("GET", path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
     await openMessagesTab(page);
     await expect(page.locator("[data-testid=ph-admin-only]")).toHaveText("Only an admin device can publish your page.");
     await expect(page.locator("#ph-switch")).toBeDisabled();
