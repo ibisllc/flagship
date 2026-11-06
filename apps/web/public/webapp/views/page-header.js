@@ -170,7 +170,8 @@ function wire(root) {
     if (!f) return;
     try {
       const { sha, bytes } = await pickAvatar(f);
-      const images = canPublishPage() ? [] : [bytes];
+      // The photo rides in the draft, so it survives a reload and reaches the other devices.
+      const images = [bytes];
       await addPageOp(profileOp({ avatar: sha }, images), { publishNow: true });
     } catch (e) {
       toast(avatarProblemText(e), "err");

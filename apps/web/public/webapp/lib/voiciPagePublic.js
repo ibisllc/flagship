@@ -8,9 +8,11 @@
 //   * what Home shows: the full welcome card, the compact row, or nothing.
 
 import { b64Decode, b64Encode } from "./voiciProtocol.js";
+import { ACCOUNT_COPY_PREFIXES } from "./profilesStore.js";
 
 const WARNED = "flagship.voici.publicWarned.v1:";
-const REMOVED = "flagship.voici.removedPage.v1:";
+// Cleared with the account (profilesStore.forgetAccountCopies: Sign out, Remove this device, account gone, deletion).
+const REMOVED = ACCOUNT_COPY_PREFIXES[0];
 
 const store = (s) => s ?? globalThis.localStorage;
 const key = (prefix, username) => prefix + String(username ?? "").toLowerCase();

@@ -70,16 +70,28 @@ export function pageImageBytes(sha) {
 
 /**
  * Records one change. An admin device keeps it as a draft (published by the Publish bar), or publishes at once with
- * `publishNow` when the page is public; any other device hands it to the admin device. A new profile change from
- * this device replaces its earlier unsent one, so the bar counts one profile change.
+ * `publishNow` when the page is public; any other device hands it to the admin device. Every draft goes into the
+ * account's drafts lane on `.com` (sealed, device-signed), so it survives a reload or a lock and shows on the
+ * account's other devices; until the lane has it, it waits here. A new profile change replaces the earlier ones
+ * (an admin device consumes them from the lane), so the bar counts one profile change.
  */
 export async function addPageOp(op, { publishNow = false } = {}) {
   if (busy) return;
-  if (op.op === "profile") world.localOps = world.localOps.filter((o) => o.op !== "profile");
+  if (op.op === "profile") {
+    world.localOps = world.localOps.filter((o) => o.op !== "profile");
+    if (canPublishPage()) {
+      const older = world.drafts.filter((d) => d.op.op === "profile").map((d) => d.op.opId);
+      if (older.length) {
+        world.drafts = world.drafts.filter((d) => !older.includes(d.op.opId));
+        void consumeDraftOps(older).catch(() => undefined);
+      }
+    }
+  }
   world.localOps.push(op);
   emitWorld();
   if (canPublishPage()) {
     if (publishNow && world.page) await publishPending();
+    else void keepDraft(op);
     return;
   }
   busy = true;
@@ -94,6 +106,26 @@ export async function addPageOp(op, { publishNow = false } = {}) {
   } finally {
     busy = false;
     emitWorld();
+  }
+}
+
+/**
+ * An admin device's draft into the lane, in the background. If it was published while on the way, it is consumed at
+ * once (so it never reappears as waiting); if `.com` can't take it, it stays in this session's memory as before.
+ */
+export async function keepDraft(op, deps = {}) {
+  try {
+    const { envelope } = await (deps.sendDraftOp ?? sendDraftOp)(op);
+    if (world.localOps.some((o) => o.opId === op.opId)) {
+      world.localOps = world.localOps.filter((o) => o.opId !== op.opId);
+      world.drafts = [...world.drafts, { op, envelope }];
+      emitWorld();
+    } else {
+      await (deps.consumeDraftOps ?? consumeDraftOps)([op.opId]).catch(() => undefined);
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 

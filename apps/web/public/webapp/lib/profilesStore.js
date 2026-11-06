@@ -213,11 +213,33 @@ export function ensureProfile(cloudName, storage = defaultStorage()) {
   return state;
 }
 
+/** Per-account copies kept under their own key (too big for the slot record),
+ *  followed by the lowercase account name. They go with the account: when its
+ *  record is dropped, or its `username` slot is cleared (Sign out, Remove this
+ *  device, account deletion, a demo's removal, the account-gone screen all do). */
+export const ACCOUNT_COPY_PREFIXES = Object.freeze([
+  // The voi.ci page the owner removed, kept to publish again (lib/voiciPagePublic.js).
+  "flagship.voici.removedPage.v1:",
+]);
+
+/** Deletes every per-account copy of `cloudName` on this browser. */
+export function forgetAccountCopies(cloudName, storage = defaultStorage()) {
+  if (!isStorage(storage) || typeof cloudName !== "string" || !cloudName) return;
+  for (const prefix of ACCOUNT_COPY_PREFIXES) {
+    try {
+      storage.removeItem(prefix + cloudName.toLowerCase());
+    } catch {
+      /* storage can be blocked */
+    }
+  }
+}
+
 /** Drop a profile's whole record (every slot) and, when it was the active
  *  one, hand the active pointer to another profile or to none. For an account
  *  that no longer exists (docs/account-gone.md). */
 export function removeProfileRecord(cloudName, storage = defaultStorage()) {
   if (!isStorage(storage) || typeof cloudName !== "string" || !cloudName) return null;
+  forgetAccountCopies(cloudName, storage);
   const state = readState(storage);
   delete state.profiles[cloudName];
   if (state.activeCloudName === cloudName) {
@@ -305,6 +327,13 @@ export function set(slot, value, opts = {}) {
   // omitted                  → defer to the slot's device-wide flag.
   const shouldMirror =
     opts.mirror === true || (opts.mirror !== false && isDeviceWide);
+  // Clearing the account name is how every "remove this account from this
+  // browser" path ends: its per-account copies go with it.
+  if (slot === "username" && value == null) {
+    for (const name of new Set([cloudName, get("username", { storage, cloudName })])) {
+      if (name) forgetAccountCopies(name, storage);
+    }
+  }
 
   if (!cloudName) {
     // No active profile. Non-device-wide writes silently drop here — by
