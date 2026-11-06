@@ -197,6 +197,18 @@ class VoiciCenter(
         _messages.value = _messages.value.copy(conversations = local.conversations, state = state)
     }
 
+    /**
+     * The account leaves this device (sign out, remove this device, account gone): its sealed copy (the page, a removed
+     * page's content, drafts, conversations, images) goes with it.
+     */
+    fun forgetLocal() {
+        val u = user() ?: return
+        vault.forget(u)
+        pageCheckedFor = null
+        _page.value = VoiciPageUi()
+        _messages.value = VoiciMessagesUi()
+    }
+
     /** Load what this device holds, then refresh from `.com`. */
     fun start() {
         withLocal { u, _, local -> publishUi(u, local) }
@@ -288,7 +300,11 @@ class VoiciCenter(
             post?.links?.forEach { l -> l.card?.image?.let { sha -> vault.image(umk, u, sha)?.let { add(VoiciDraftImage(sha, WebEnvelopes.b64Encode(it))) } } }
             profile?.avatar?.let { sha -> vault.image(umk, u, sha)?.let { add(VoiciDraftImage(sha, WebEnvelopes.b64Encode(it))) } }
         }.takeIf { it.isNotEmpty() }
-        val d = VoiciDraftOp(VoiciOwner.randomHex(16), op, now(), deviceId.take(64), post, postId, profile, accepts, images)
+        // A profile or accept-messages change is newer than the published page even when the page was signed by a
+        // device whose clock runs ahead (the merge keeps the later `at`).
+        val publishedAt = withLocal { _, _, l -> publishedState(u, l).issuedAt } ?: 0
+        val at = if (op == "profile" || op == "accept-messages") maxOf(now(), publishedAt + 1) else now()
+        val d = VoiciDraftOp(VoiciOwner.randomHex(16), op, at, deviceId.take(64), post, postId, profile, accepts, images)
         requireNotNull(VoiciMessages.parseVoiciDraftOp(d.toJson())) { "voici: malformed change" }
         val stored = d.copy(images = null).toJson()
         val replaces = op == "profile" || op == "accept-messages"
@@ -538,7 +554,7 @@ class VoiciCenter(
         val working = VoiciPage.mergeVoiciPage(base, ops(local))
         val q = base.profile.copy(displayName = working.profile.displayName, avatar = working.profile.avatar)
         val deviceId = keyring.device()?.deviceId ?: "device"
-        return publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", now(), deviceId.take(64), profile = q)), mayRepublish = true)
+        return publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", maxOf(now(), base.issuedAt + 1), deviceId.take(64), profile = q)), mayRepublish = true)
     }
 
     /**
@@ -556,7 +572,7 @@ class VoiciCenter(
             val q = base.profile.copy(displayName = n, avatar = avatar)
             if (q == base.profile) return null
             val deviceId = keyring.device()?.deviceId ?: "device"
-            val ok = publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", now(), deviceId.take(64), profile = q)))
+            val ok = publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", maxOf(now(), base.issuedAt + 1), deviceId.take(64), profile = q)))
             return if (ok) null else _page.value.error
         }
         val working = VoiciPage.mergeVoiciPage(base, ops(local))

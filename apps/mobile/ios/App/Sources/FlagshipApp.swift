@@ -860,6 +860,7 @@ struct FlagshipApp: App {
                 // Messages (docs/voici-and-messages.md): the store follows the account, so the admin phone takes
                 // direct deliveries (and Home knows about the page) even before the tab is opened.
                 .task(id: "\(appState.currentUser ?? "")|\(appState.isUnlocked)") {
+                    MessagesStore.installWipeHook()
                     MessagesStore.shared.configure(client: activeVoiciCom, username: appState.currentUser,
                                                    deviceId: appState.activeProfile?.deviceId, isDemo: appState.isDemoAccount)
                     if appState.isUnlocked { await MessagesStore.shared.refresh() }

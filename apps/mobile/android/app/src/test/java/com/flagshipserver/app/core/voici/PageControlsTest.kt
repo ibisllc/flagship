@@ -175,6 +175,18 @@ class PageControlsTest {
         assertEquals(3L, VoiciPageRemove.parse(mock.removals.single())!!.seq)
     }
 
+    @Test fun aWipeForgetsTheRemovedPagesCopy() = runBlocking {
+        val c = center()
+        ready(c)
+        assertTrue(c.goPublic("test"))
+        assertTrue(c.removePage("test"))
+        c.forgetLocal()
+        val again = center()
+        again.refresh()
+        assertNull("nothing of the removed page stays on the device", again.page.value.published)
+        assertFalse(again.page.value.removed)
+    }
+
     @Test fun aDeviceWithoutTheAdminKeyCanNeitherPublishNorRemove() = runBlocking {
         val c = center(admin = false)
         c.refresh()

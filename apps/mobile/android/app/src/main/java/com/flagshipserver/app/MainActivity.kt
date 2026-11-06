@@ -358,6 +358,7 @@ class MainActivity : FragmentActivity() {
             http = if (mocks != null) null else okHttp,
         )
         com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
+        com.flagshipserver.app.keystore.Keystore.onWipe = { voiciCenter.forgetLocal() }
         val voiciSignInFlows = com.flagshipserver.app.ui.screens.VoiciSignInFlows {
             com.flagshipserver.app.core.voici.VoiciSignInFlow(
                 voiciCenter,

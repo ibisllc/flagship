@@ -20,6 +20,10 @@ import FlagshipAPI
 ///      `flagship/<purpose>/v1[|<scope>]` — same canonical tag prefix
 ///      used everywhere else in the codebase.
 public struct Keystore {
+    /// Called first by `wipe()` (`true` from `wipeAllProfiles()`): drops what the app keeps for the account outside
+    /// the keychain (the voi.ci page copy, MessagesStore).
+    public nonisolated(unsafe) static var onWipe: ((_ allProfiles: Bool) -> Void)?
+
 
     public enum KeystoreError: Error, LocalizedError {
         case keyNotFound
@@ -1160,6 +1164,7 @@ public struct Keystore {
     /// Secure-Enclave wrapping key; device-global push keys + the active-
     /// profile pointer survive. Use `wipeAllProfiles()` for a full reset.
     public static func wipe() {
+        onWipe?(false)
         let id = activeProfileId
         var accounts = [account(KCKey.wrappedUmk, profile: id),
                         account(KCKey.ephemeralPub, profile: id),
@@ -1200,6 +1205,7 @@ public struct Keystore {
     /// Provided so a deliberate "reset this device entirely" path has a
     /// named home distinct from the per-profile `wipe()`.
     public static func wipeAllProfiles() {
+        onWipe?(true)
         // Clear the active profile's slot, the legacy/default slot, and
         // the device-global push channel + active pointer.
         let known = Set([activeProfileId, defaultProfileId])
