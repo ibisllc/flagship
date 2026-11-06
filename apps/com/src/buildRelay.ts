@@ -361,6 +361,7 @@ export class BuildRelaySession implements DurableObject {
       }
       this.send(browser, { kind: "peer-hello", phonePk: msg.phonePk });
       this.send(phoneWs, { kind: "ack" });
+      await this.restartClockOnce();
       return;
     }
 
@@ -463,6 +464,23 @@ export class BuildRelaySession implements DurableObject {
     // Fire-and-forget: clear persisted state so the DO can be fully
     // evicted. The alarm is wiped by deleteAll() per Workerd contract.
     void this.state.storage.deleteAll().catch(() => { /* idempotent */ });
+  }
+
+  /**
+   * The TTL runs from the browser's QR, so a link copied by hand and typed
+   * into a phone could reach it seconds before the session ended: the phone
+   * showed a code to compare while the browser had already moved on to a
+   * new QR (Windows acceptance W19). Once the two peers have met, the
+   * window starts again, once, so the person has the full TTL to compare
+   * the codes and approve. Stored, so a woken DO doesn't grant it twice.
+   */
+  private async restartClockOnce(): Promise<void> {
+    if (await this.state.storage.get<boolean>("peersMet")) return;
+    const now = Date.now();
+    this.session.createdAt = now;
+    await this.state.storage.put("peersMet", true);
+    await this.state.storage.put("createdAt", now);
+    await this.state.storage.setAlarm(now + SESSION_TTL_MS);
   }
 
   private isExpired(): boolean {

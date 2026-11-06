@@ -370,6 +370,24 @@ describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => 
     expect(alarm!).toBeLessThanOrEqual(Date.now() + _internal.SESSION_TTL_MS + 1_000);
   });
 
+  it("restarts the TTL once when the phone meets the browser, so the codes can still be compared", async () => {
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    state.storage._state.kv.set("createdAt", Date.now() - _internal.SESSION_TTL_MS + 5_000);
+    const phone = await upgrade(obj, "phone");
+    const before = Date.now();
+    phone.push(JSON.stringify({ kind: "hello", phonePk: "QUJD" }));
+    await phone.waitFor((m) => m.kind === "ack");
+    await vi.waitFor(() => expect(state.storage._state.kv.get("peersMet")).toBe(true));
+    expect(state.storage._state.kv.get("createdAt")).toBeGreaterThanOrEqual(before);
+    expect(state.storage._state.alarm!).toBeGreaterThanOrEqual(before + _internal.SESSION_TTL_MS);
+    // Only once: a second hello does not move it again.
+    state.storage._state.kv.set("createdAt", 1);
+    await (obj as any).restartClockOnce();
+    expect(state.storage._state.kv.get("createdAt")).toBe(1);
+  });
+
   it("persists createdAt so a hibernated/reconstructed DO honours the same TTL", async () => {
     const { state, obj: obj1 } = makeBound();
     // Force initial setup.

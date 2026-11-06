@@ -53,6 +53,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -211,6 +212,15 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                             )
                         }
                         Text(stringResource(R.string.server_2), style = MaterialTheme.typography.titleSmall)
+                        if (vm.servers.isEmpty()) {
+                            // Approve stays off: say why instead of a button that does nothing (W19).
+                            Text(
+                                stringResource(R.string.no_server_on_this_phone_can),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.testTag("companion-dock-no-server"),
+                            )
+                        }
                         Column(Modifier.selectableGroup()) {
                             vm.servers.forEach { server ->
                                 val picked = server.pod.podId == selectedPodId
