@@ -33,3 +33,12 @@ Studio under test: run 42167330385 (`78ce3bc55`). Phone: emulator, local **debug
 ## What I need from the owner (asked in chat too)
 
 W9 tray Restart, W20, W1b, W0b, W10, W15, SmartScreen; waivers W2, W4 step 2, W13.
+
+## Update ~14:55 (after lead reply 4 edits 1a54eb5ea / d3bafed67)
+
+- Read: Delete dialog = native MessageBox (will check with Narrator, not UIA); setup-error, offline start screen and
+  translation fixes on main (4f9e3d664, 5fc9da749, bc4c740f5, 502b78ce0 all confirmed on origin/main).
+- **Needs the owner:** a new `studio-release.yml` run from main at or after 4f9e3d664 (I may not dispatch CI). Once it
+  exists I rerun on it: offline start screen (HTTP(S)_PROXY=127.0.0.1:9), a forced setup error, and the rows already
+  passed (W6/W8 quick rechecks).
+- W9 step 3 (tray Restart) now passes (~2 min, no phone prompt). W10 (UAC) is running with the owner now.
