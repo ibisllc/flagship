@@ -318,18 +318,12 @@ public final class RecoveryViewModel {
     /// (`passkeyLegacy`): the app offers once to update it.
     public private(set) var recoveredRecordNeedsPasskeyUpdate = false
 
-    /// Does a key derived from the recovered UMK (any of the first few rotation versions) verify the
-    /// owner's signed record? The record was signed by the key in force when it was written.
+    /// Does a key derived from the recovered UMK verify the owner's signed record? The record was
+    /// signed by the key in force when it was written, by whichever client wrote it (IrkLineage:
+    /// every client's derivation, any version).
     static func recoveredKeySigned(seed: SymmetricKey, signed: SignedRecoveryRecord) -> Bool {
-        for v in 1...4 {
-            let raw = HKDF<SHA256>.deriveKey(inputKeyMaterial: seed, info: Data("flagship/irk/v\(v)".utf8), outputByteCount: 32)
-                .withUnsafeBytes { Data($0) }
-            guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw) else { continue }
-            if HexUtil.encode(key.publicKey.rawRepresentation) == signed.claim.irkPubHex {
-                return signed.claim.verify(signatureHex: signed.signatureHex, publicKey: key.publicKey)
-            }
-        }
-        return false
+        guard let key = IrkLineage.findRegistered(umk: seed, registeredPubHex: signed.claim.irkPubHex) else { return false }
+        return signed.claim.verify(signatureHex: signed.signatureHex, publicKey: key.privateKey.publicKey)
     }
 
     /// Recovery Phase B — decide the post-recovery path. Given the IRK pubkey

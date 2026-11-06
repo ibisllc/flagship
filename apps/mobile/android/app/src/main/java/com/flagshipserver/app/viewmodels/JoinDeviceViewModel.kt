@@ -211,6 +211,12 @@ class JoinDeviceViewModel(
             val cloudName = bundle.admit.username
             Keystore.setActiveProfile(cloudName)
             Keystore.installUmk(umkSeed)
+            // The account's IRK is the one `.com` serves (it verified the admit
+            // above), whichever client made it: an account made on the webapp
+            // or iOS doesn't hold this app's v1. Adopt it, so this device's IRK
+            // signatures verify. Not found: keep this app's v1, as before.
+            com.flagshipserver.app.keystore.IrkLineage.findRegistered(umkSeed, HexUtil.encode(irkPub))
+                ?.let { Keystore.adoptRegisteredIrk(it) }
             Keystore.storeAccountDeviceSeed(deviceId, deviceKeyPair.privateKey)
 
             // 3b. Slice D (D-4) — if the admin PROMOTED this device (sealed the

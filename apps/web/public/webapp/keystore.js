@@ -376,6 +376,8 @@ export function setCurrentIrkVersion(version, profileId = activeProfileId()) {
   if (!Number.isInteger(version) || version < 1) {
     throw new Error("irk version must be a positive integer");
   }
+  // A completed rotation always lands in this app's own derivation.
+  try { globalThis.localStorage?.removeItem(irkSchemeKey(profileId)); } catch { /* best-effort */ }
   const ls = globalThis.localStorage;
   if (!ls) return; // best-effort
   if (profileId !== DEFAULT_PROFILE_ID) {
@@ -404,7 +406,54 @@ export function setCurrentIrkVersion(version, profileId = activeProfileId()) {
 }
 
 export async function deriveIrkFromSeed(umkSeed) {
-  return irkFromInfoSeed(umkSeed, irkInfo(currentIrkVersion()));
+  return deriveIrkVersioned(umkSeed, currentIrkVersion());
+}
+
+/** The three clients' IRK derivations of the UMK (HKDF-SHA256 salt / info,
+ *  `{n}` = version): this app's and @flagship/protocol's ("web"), iOS's and
+ *  Android's. An account holds whichever one its creating client, or its last
+ *  re-pair, used. Vectors: packages/protocol/test-vectors/irk-lineage. */
+export const IRK_SCHEMES = Object.freeze({
+  web: { salt: "", info: "flagship.irk.v{n}" },
+  ios: { salt: "", info: "flagship/irk/v{n}" },
+  android: { salt: "flagship/irk/v{n}", info: "ed25519-seed" },
+});
+export const OWN_IRK_SCHEME = "web";
+
+/** The IRK at `version` under one client's derivation. */
+export async function deriveIrkInScheme(umkSeed, scheme, version) {
+  const s = IRK_SCHEMES[scheme];
+  if (!s) throw new Error(`unknown IRK scheme ${scheme}`);
+  if (!Number.isInteger(version) || version < 1) throw new Error("irk version must be a positive integer");
+  const fill = (t) => t.split("{n}").join(String(version));
+  return deriveIrkWithHkdf(umkSeed, fill(s.salt), fill(s.info));
+}
+
+function irkSchemeKey(profileId) {
+  return profileId === DEFAULT_PROFILE_ID ? "flagship.irk.scheme" : `flagship.irk.scheme.${profileId}`;
+}
+
+/** Which client's derivation the CURRENT version uses ("web" unless an
+ *  account another client made was adopted). */
+export function currentIrkScheme(profileId = activeProfileId()) {
+  try {
+    const v = globalThis.localStorage?.getItem(irkSchemeKey(profileId));
+    return v && Object.hasOwn(IRK_SCHEMES, v) ? v : OWN_IRK_SCHEME;
+  } catch {
+    return OWN_IRK_SCHEME;
+  }
+}
+
+/** The account holds `key` (`{ scheme, version }`, found by lib/irkLineage.js
+ *  among this UMK's derivations): make it the current IRK, so every IRK
+ *  signature, the next rotation's old key included, is made by the key `.com`
+ *  and the boxes know. Called when this browser recovers or joins an account
+ *  another client made. The next rotation lands in this app's own scheme. */
+export function adoptRegisteredIrk(key, profileId = activeProfileId()) {
+  setCurrentIrkVersion(key.version, profileId);
+  try {
+    if (key.scheme !== OWN_IRK_SCHEME) globalThis.localStorage?.setItem(irkSchemeKey(profileId), key.scheme);
+  } catch { /* best-effort, like the version */ }
 }
 
 /** An IRK under another client's derivation of the UMK: HKDF-SHA256 with this
@@ -431,6 +480,10 @@ export async function deriveIrkVersioned(umkSeed, version) {
   if (!Number.isInteger(version) || version < 1) {
     throw new Error("irk version must be a positive integer");
   }
+  // The current version may be an adopted key of another client; every other
+  // version (a rotation's new key) is this app's own.
+  const scheme = version === currentIrkVersion() ? currentIrkScheme() : OWN_IRK_SCHEME;
+  if (scheme !== OWN_IRK_SCHEME) return deriveIrkInScheme(umkSeed, scheme, version);
   return irkFromInfoSeed(umkSeed, irkInfo(version));
 }
 

@@ -436,6 +436,54 @@ class LoginFlowTest {
         assertNull("no rotation staged on the instant path", Keystore.pendingIrkRotationVersion())
     }
 
+    /** PHASE A across clients — an account made (or last re-paired) on the webapp or iOS holds
+     *  their derivation of the UMK. Cloud recovery on this phone finds it (IrkLineage), adopts
+     *  it and opens at once: no needless grace for a person who changed platform. */
+    @Test fun single_accountMadeOnAnotherClient_instantPair_adoptsItsKey() = runTest {
+        val cases = listOf(
+            com.flagshipserver.app.keystore.IrkLineage.Scheme.WEB to 1,
+            com.flagshipserver.app.keystore.IrkLineage.Scheme.IOS to 1,
+            com.flagshipserver.app.keystore.IrkLineage.Scheme.IOS to 3,
+            com.flagshipserver.app.keystore.IrkLineage.Scheme.ANDROID to 2,
+        )
+        for ((scheme, version) in cases) {
+            Keystore.wipe()
+            val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+            seedRecoveryEnvelope(server)
+            val app = AppState()
+            val registered = com.flagshipserver.app.keystore.IrkLineage.key(recoveredSeed, scheme, version).pubHex
+            val m = vm(resolution("harry", "single", recoveryPresent = true, registeredIrkPubHex = registered), server, app)
+            m.begin()
+            m.confirmTakeover()
+            assertEquals("$scheme v$version", LoginPhase.Opened, m.phase.first())
+            assertNull("$scheme v$version: no re-pair", server.lastRePairInitiate)
+            Keystore.setActiveProfile("harry")
+            assertEquals(version, Keystore.currentIrkVersion())
+            assertEquals("$scheme v$version", registered, Keystore.irkPubHex())
+        }
+    }
+
+    /** MULTI across clients — the re-pair displaces the key the account really holds and rotates
+     *  to this app's scheme one version past it. */
+    @Test fun multi_accountMadeOnTheWebapp_rePairsAgainstItsKey() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        val app = AppState()
+        val webV1 = com.flagshipserver.app.keystore.IrkLineage.key(recoveredSeed, com.flagshipserver.app.keystore.IrkLineage.Scheme.WEB, 1).pubHex
+        val m = vm(resolution("harry", "multi", recoveryPresent = true, totpEnrolled = true, registeredIrkPubHex = webV1), server, app)
+        m.begin()
+        m.submitSecondFactor("123456", isRecoveryCode = false)
+        m.confirmTakeover()
+        assertTrue(m.phase.first() is LoginPhase.Grace)
+        val body = server.lastRePairInitiate!!.second
+        assertEquals(webV1, body.request.oldIrkPub)
+        assertEquals(
+            com.flagshipserver.app.keystore.IrkLineage.key(recoveredSeed, com.flagshipserver.app.keystore.IrkLineage.Scheme.ANDROID, 2).pubHex,
+            body.request.newIrkPub,
+        )
+        assertTrue(verifyRePair(body))
+    }
+
     /** PHASE A — a pre-Phase-B Worker that surfaces NO registered IRK
      *  (null) also stays on the instant path rather than forcing a
      *  needless re-pair. */

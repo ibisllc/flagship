@@ -9,20 +9,13 @@
 // keeps the one whose public key is the IRK `.com` serves for the account, and
 // rotates to the web scheme at that version + 1. `.com` still checks both
 // signatures; the lookup only picks which key we sign with. The key material
-// itself stays in keystore.js (deriveIrkWithHkdf).
+// itself stays in keystore.js (deriveIrkInScheme, adoptRegisteredIrk).
 // Vectors: packages/protocol/test-vectors/irk-lineage (tools/irk-lineage-vectors.mjs).
 
-import { deriveIrkWithHkdf } from "../keystore.js";
+import { IRK_SCHEMES, OWN_IRK_SCHEME, deriveIrkInScheme } from "../keystore.js";
 
-export const IRK_SCHEMES = Object.freeze({
-  web: { salt: "", info: "flagship.irk.v{n}" },
-  ios: { salt: "", info: "flagship/irk/v{n}" },
-  android: { salt: "flagship/irk/v{n}", info: "ed25519-seed" },
-});
-export const OWN_IRK_SCHEME = "web";
+export { IRK_SCHEMES, OWN_IRK_SCHEME };
 export const MAX_IRK_VERSION = 16;
-
-const fill = (s, n) => s.split("{n}").join(String(n));
 
 function toHex(b) {
   return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -31,10 +24,7 @@ function toHex(b) {
 /** `{ scheme, version, publicKey, pubHex, sign(bytes) }` for the IRK at
  *  `version` under `scheme`. */
 export async function irkKeyFor(umk, scheme, version) {
-  const s = IRK_SCHEMES[scheme];
-  if (!s) throw new Error(`unknown IRK scheme ${scheme}`);
-  if (!Number.isInteger(version) || version < 1) throw new Error("irk version must be a positive integer");
-  const { privateKey, publicKey } = await deriveIrkWithHkdf(umk, fill(s.salt, version), fill(s.info, version));
+  const { privateKey, publicKey } = await deriveIrkInScheme(umk, scheme, version);
   return {
     scheme,
     version,
