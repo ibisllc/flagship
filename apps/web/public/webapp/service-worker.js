@@ -474,7 +474,9 @@
 //       with its deadline, "I've done this" (signed flagship/abuse-notice-done/v1) and Appeal; a suspended account
 //       shows "This account was suspended" on every device; content-free `abuse-notice` push
 //       (lib/abuseNotices.js, lib/abuseNoticeUi.js).
-const SHELL_VERSION = "v200";
+//  v201: Home welcomes an account with no voi.ci page with "Welcome! Make your own page" (Set up your page opens the
+//       editor; dismissed per account), and the Messages tab's page row says "Set up your page" / "Edit your page".
+const SHELL_VERSION = "v201";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

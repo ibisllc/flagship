@@ -60,6 +60,8 @@ data class VoiciPageUi(
     val takenDown: Boolean = false,
     val rulesAccepted: Boolean = false,
     val inboxEpoch: Long = 1,
+    /** `.com` answered for this account's page at least once (published or not), so "no page" is known. */
+    val checked: Boolean = false,
 )
 
 data class VoiciMessagesUi(
@@ -104,6 +106,7 @@ class VoiciCenter(
     @Volatile private var account: VoiciAccountKeys? = null
     @Volatile private var caCache: List<String> = emptyList()
     @Volatile private var grantsCache: List<JsonObject> = emptyList()
+    @Volatile private var pageCheckedFor: String? = null
     private val seenDirect = ConcurrentHashMap<String, Long>()
 
     // ── local state ──
@@ -160,6 +163,7 @@ class VoiciCenter(
             takenDown = local.takenDown,
             rulesAccepted = local.rulesAccepted,
             inboxEpoch = local.inboxEpoch,
+            checked = pageCheckedFor == u,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
         _messages.value = _messages.value.copy(conversations = local.conversations, state = state)
@@ -196,13 +200,20 @@ class VoiciCenter(
     private suspend fun refreshPage() {
         val u = user() ?: return
         val acc = account ?: return
-        val json = client.page(u) ?: return
+        val json = client.page(u)
+        if (json == null) {
+            pageCheckedFor = u
+            return
+        }
         val local = withLocal { _, _, l -> l } ?: return
         val known = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex)
         val r = VoiciPage.checkVoiciPageIndex(json, u, acc.sensitiveKind, acc.sensitivePub, known?.body?.seq, known?.body?.pageId)
         val idx = r.valueOrNull() ?: return
-        if (known != null && idx.body.seq == known.body.seq) return
-        adopt(u, idx)
+        if (known != null && idx.body.seq == known.body.seq) {
+            pageCheckedFor = u
+            return
+        }
+        if (adopt(u, idx) != null) pageCheckedFor = u
     }
 
     private suspend fun adopt(u: String, idx: VoiciPageIndex): VoiciPageState? {

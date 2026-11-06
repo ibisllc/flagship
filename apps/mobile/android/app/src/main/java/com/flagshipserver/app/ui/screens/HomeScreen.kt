@@ -63,6 +63,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.AlertDialog
 import com.flagshipserver.app.ui.components.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -166,6 +167,10 @@ fun HomeScreen(
      *  account creation and stays hidden across launches once dismissed. */
     showRecoveryBackupBanner: Boolean = false,
     onDismissRecoveryBackupBanner: () -> Unit = {},
+    /** The welcome card that introduces the voi.ci page (PageWelcomeCardStore.shouldShow); below the recovery cards. */
+    showPageWelcome: Boolean = false,
+    onSetUpPage: () -> Unit = {},
+    onDismissPageWelcome: () -> Unit = {},
     /** Name dibs notice: the window's end (ms) while it should show, else null. */
     dibsNoticeClosesAt: Long? = null,
     onClaimDibs: () -> Unit = {},
@@ -271,7 +276,7 @@ fun HomeScreen(
         // list first fills in (the empty-state button becomes the list's). A tap
         // aimed at where it was landed on whatever moved there (device report
         // 2026-10-18), so it waits for the layout to settle after each change.
-        val hasAnnouncement = accountWasReset || showRecoveryBackupBanner || showRecoveryNudge
+        val hasAnnouncement = accountWasReset || showRecoveryBackupBanner || showRecoveryNudge || showPageWelcome
         var addSettled by remember { mutableStateOf(false) }
         LaunchedEffect(hasAnnouncement, pods.isEmpty(), listLocked) {
             addSettled = false
@@ -316,6 +321,10 @@ fun HomeScreen(
             onSetUpRecovery = onSetUpRecovery,
             onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner,
             onDismissRecoveryNudge = onDismissRecoveryNudge,
+            showPageWelcome = showPageWelcome,
+            username = username,
+            onSetUpPage = onSetUpPage,
+            onDismissPageWelcome = onDismissPageWelcome,
             dibsNoticeClosesAt = dibsNoticeClosesAt,
             onClaimDibs = onClaimDibs,
             onDismissDibs = onDismissDibs,
@@ -461,8 +470,8 @@ private fun AddOrImportSheet(
     }
 }
 
-/// The single highest-priority announcement card. Folds the three stacked
-/// banners (account-reset / backup / recovery-nudge) into one
+/// The single highest-priority announcement card. Folds the stacked
+/// banners (account-reset / backup / recovery-nudge / page welcome / dibs) into one
 /// FSAnnouncementCard, danger-tinted for the account-reset case. Each path
 /// keeps its own CTA + dismiss callbacks verbatim.
 @Composable
@@ -474,6 +483,10 @@ private fun TopAnnouncement(
     onSetUpRecovery: () -> Unit,
     onDismissRecoveryBackupBanner: () -> Unit,
     onDismissRecoveryNudge: () -> Unit,
+    showPageWelcome: Boolean = false,
+    username: String = "",
+    onSetUpPage: () -> Unit = {},
+    onDismissPageWelcome: () -> Unit = {},
     dibsNoticeClosesAt: Long? = null,
     onClaimDibs: () -> Unit = {},
     onDismissDibs: () -> Unit = {},
@@ -510,6 +523,17 @@ private fun TopAnnouncement(
                 onCta = onSetUpRecovery,
                 onDismiss = onDismissRecoveryNudge,
                 modifier = Modifier.testTag("recovery-nudge-card"),
+            )
+        }
+        showPageWelcome -> {
+            FSAnnouncementCard(
+                icon = Icons.Outlined.Public,
+                title = stringResource(R.string.voici_welcome_title),
+                message = fsString(R.string.voici_welcome_message, username),
+                ctaLabel = stringResource(R.string.voici_set_up_your_page),
+                onCta = onSetUpPage,
+                onDismiss = onDismissPageWelcome,
+                modifier = Modifier.testTag("page-welcome-card"),
             )
         }
         dibsNoticeClosesAt != null -> {

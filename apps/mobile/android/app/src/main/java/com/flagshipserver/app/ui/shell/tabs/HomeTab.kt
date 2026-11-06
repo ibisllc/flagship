@@ -194,6 +194,7 @@ fun HomeTab() {
     // StateFlow is collected below so toggling `setDismissed(true)`
     // from "Not now" recomposes Home and the banner disappears.
     val recoveryBannerStore = remember { RecoveryBannerStore.fromContext(ctx) }
+    val pageWelcomeStore = remember { com.flagshipserver.app.core.PageWelcomeCardStore.fromContext(ctx) }
     // Name dibs notice — shown while the window is open, until dismissed on
     // this device (a UI preference, so plain SharedPreferences).
     val nameDibsClient = com.flagshipserver.app.core.LocalNameDibsClient.current
@@ -317,6 +318,18 @@ fun HomeTab() {
                 hasCloudRecovery = hasRecovery,
                 dismissed = bannerDismissed,
             )
+            // The voi.ci page welcome: only once `.com` said this account has no page (null center = no account open).
+            val voiciCenter = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
+            val noVoiciPage = remember { kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.voici.VoiciPageUi()) }
+            val voiciPage by (voiciCenter?.page ?: noVoiciPage).collectAsState()
+            val pageWelcomeDismissed by pageWelcomeStore.dismissed.collectAsState()
+            val showPageWelcome = com.flagshipserver.app.core.PageWelcomeCardStore.shouldShow(
+                hasAccount = !isDemoAccount && voiciPage.username.isNotEmpty(),
+                checked = voiciPage.checked,
+                published = voiciPage.publishedSeq > 0,
+                pendingChanges = voiciPage.pendingCount,
+                dismissed = voiciPage.username.lowercase() in pageWelcomeDismissed,
+            )
             val awaitingBackup by app.podsAwaitingBackup.collectAsState()
             val updateRequired by app.podsUpdateRequired.collectAsState()
             HomeScreen(
@@ -367,6 +380,9 @@ fun HomeTab() {
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
                 showRecoveryBackupBanner = showBackupBanner,
                 onDismissRecoveryBackupBanner = { recoveryBannerStore.setDismissed(true) },
+                showPageWelcome = showPageWelcome,
+                onSetUpPage = { deepLinker.enqueue(DeepLink.PageEditor) },
+                onDismissPageWelcome = { pageWelcomeStore.dismiss(voiciPage.username) },
                 dibsNoticeClosesAt = dibsWindow?.end?.takeIf {
                     !isDemoAccount && com.flagshipserver.app.viewmodels.NameDibsViewModel.shouldShowBanner(dibsWindow, dibsDismissed)
                 },

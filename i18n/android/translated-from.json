@@ -3423,5 +3423,9 @@
   "abuse_details": "ebc7bf40f12e",
   "abuse_push_body": "c5d42f7664cd",
   "abuse_channel_name": "d1b11c3a24e8",
-  "abuse_channel_desc": "49bb8fb18795"
+  "abuse_channel_desc": "49bb8fb18795",
+  "voici_welcome_title": "afb7f94c238e",
+  "voici_welcome_message": "138d31c6f3cb",
+  "voici_set_up_your_page": "fdbd3674fc7d",
+  "voici_edit_your_page": "8846bd186c88"
 }

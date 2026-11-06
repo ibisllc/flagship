@@ -121,9 +121,9 @@ describe("web abuse notices", () => {
     expect(refused).toEqual({ ok: false, message: "Only an admin device can do this." });
   });
 
-  it("the service worker shows the content-free abuse-notice push, on shell v200", () => {
+  it("the service worker shows the content-free abuse-notice push, on shell v201", () => {
     expect(sw).toContain('data.category === "abuse-notice"');
     expect(sw).toContain('"/lib/abuseNoticeUi.js"');
-    expect(sw).toContain('SHELL_VERSION = "v200"');
+    expect(sw).toContain('SHELL_VERSION = "v201"');
   });
 });

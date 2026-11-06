@@ -2,7 +2,8 @@ import { pinnedStk, podStk } from "../lib/serverPins.js";
 import { sendPendingWildcardGrants } from "../lib/firstContact.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
-import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon } from "../lib/icons.js";
+import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon, userIcon } from "../lib/icons.js";
+import { pendingOps, refreshWorld, world } from "../lib/voiciWorld.js";
 import { renderSharedWithMe } from "./shared-server.js";
 import {
   chipRow,
@@ -831,7 +832,68 @@ function renderRecoveryBanner() {
         recoveryStoreSet("recoveryBannerDismissed", "true");
       } catch { /* swallow */ }
       document.getElementById(RECOVERY_BANNER_ID)?.remove();
+      void renderPageWelcome();
     });
+}
+
+const PAGE_WELCOME_ID = "home-page-welcome";
+
+/**
+ * Home's welcome card for the voi.ci page (docs/voici-and-messages.md §11): only once `.com` said the account has
+ * no page, nothing waits to be published, and this account hasn't dismissed it on this browser. Same rule as iOS
+ * PageWelcomeCardStore.shouldShow and Android's.
+ */
+export function shouldShowPageWelcome({ hasAccount, checked, published, pendingChanges, dismissed } = {}) {
+  return Boolean(hasAccount && checked && !published && !pendingChanges && dismissed !== "true");
+}
+
+/** Below the backup nudge: while that shows, this waits (its dismiss renders this one). */
+async function renderPageWelcome() {
+  const hide = () => document.getElementById(PAGE_WELCOME_ID)?.remove();
+  const session = getSession();
+  const hasAccount = Boolean(session?.username) && session?.umk instanceof Uint8Array && !isDemoProfile(getActiveProfile());
+  let dismissed = null;
+  try {
+    dismissed = recoveryStoreGet("voiciWelcomeDismissed");
+  } catch { /* localStorage disabled — treat as not dismissed */ }
+  if (!hasAccount || dismissed === "true" || document.getElementById(RECOVERY_BANNER_ID)) return hide();
+  if (!world.pageLoaded) {
+    try {
+      await refreshWorld();
+    } catch {
+      return hide();
+    }
+  }
+  const show = shouldShowPageWelcome({
+    hasAccount,
+    checked: world.pageLoaded && !world.pageError,
+    published: Boolean(world.page),
+    pendingChanges: pendingOps().length,
+    dismissed,
+  });
+  if (!show || document.getElementById(RECOVERY_BANNER_ID)) return hide();
+  if (document.getElementById(PAGE_WELCOME_ID)) return;
+  const host = document.createElement("div");
+  host.id = PAGE_WELCOME_ID;
+  host.setAttribute("data-testid", "page-welcome-card");
+  host.innerHTML = announcementCard({
+    icon: userIcon,
+    title: tr("Welcome! Make your own page"),
+    message: tr("Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.", String(session.username).toLowerCase()),
+    ctaLabel: tr("Set up your page"),
+    dismissible: true,
+    tone: "teal",
+  });
+  const list = document.getElementById("servers-list");
+  if (!list?.parentNode) return;
+  list.parentNode.insertBefore(host, list);
+  host.querySelector("[data-ann-cta]")?.addEventListener("click", () => void import("./page-editor.js").then((m) => m.enterPageEditor()));
+  host.querySelector("[data-ann-dismiss]")?.addEventListener("click", () => {
+    try {
+      recoveryStoreSet("voiciWelcomeDismissed", "true");
+    } catch { /* swallow */ }
+    hide();
+  });
 }
 
 /**
@@ -1490,6 +1552,7 @@ export async function renderHome() {
   // as skipped (not enrolled) and the user hasn't dismissed it on this
   // device. Local-only signal; no API call.
   renderRecoveryBanner();
+  void renderPageWelcome();
 
   // An operator's abuse notice (admin devices) or the account's suspension (docs/abuse-handling.md).
   renderAbuseNoticeBanners();

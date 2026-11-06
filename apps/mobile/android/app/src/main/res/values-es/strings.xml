@@ -3486,4 +3486,8 @@
     <string name="abuse_push_body">Hay un aviso sobre tu cuenta de Flagship. Abre Flagship para leerlo.</string>
     <string name="abuse_channel_name">Avisos de la cuenta</string>
     <string name="abuse_channel_desc">Una denuncia sobre una de tus apps o páginas, con qué hacer y para cuándo.</string>
+    <string name="voici_welcome_title">¡Te damos la bienvenida! Crea tu propia página</string>
+    <string name="voici_welcome_message">Comparte una foto, unas palabras sobre ti, tus enlaces y publicaciones en voi.ci/%1$s. Si quieres, los visitantes pueden enviarte mensajes allí.</string>
+    <string name="voici_set_up_your_page">Configurar tu página</string>
+    <string name="voici_edit_your_page">Editar tu página</string>
 </resources>

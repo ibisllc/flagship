@@ -42,6 +42,7 @@ function pageRowHtml() {
         <span class="fs-row-title">${escapeHtml(tr("Your page"))}</span>
         <span class="fs-row-subtitle mono">${escapeHtml(voiciPageUrl(u).replace(/^https:\/\//, ""))}</span>
         <span class="fs-row-subtitle" data-testid="messages-page-status">${escapeHtml(status)}</span>
+        <span class="fs-row-action" data-testid="messages-edit-page">${escapeHtml(!world.page && !pending ? tr("Set up your page") : tr("Edit your page"))}</span>
       </span>
       <span class="fs-row-chevron icon">${chevronRightIcon}</span>
     </button>`;

@@ -3203,5 +3203,9 @@
   "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。",
   "New message": "新しいメッセージ",
   "A device on your account has changes waiting to be published on your page.": "アカウントのデバイスに、ページへの公開を待っている変更があります。",
-  "There is a notice about your Flagship account. Open Flagship to read it.": "Flagship アカウントに関するお知らせがあります。Flagship を開いて確認してください。"
+  "There is a notice about your Flagship account. Open Flagship to read it.": "Flagship アカウントに関するお知らせがあります。Flagship を開いて確認してください。",
+  "Welcome! Make your own page": "ようこそ！自分のページを作りましょう",
+  "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": "voi.ci/%@ で、写真、ひとことの自己紹介、リンク、投稿を公開できます。希望すれば、訪問者からメッセージを受け取ることもできます。",
+  "Set up your page": "ページを設定",
+  "Edit your page": "ページを編集"
 }

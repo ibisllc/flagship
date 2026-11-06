@@ -3203,5 +3203,9 @@
   "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。",
   "New message": "新消息",
   "A device on your account has changes waiting to be published on your page.": "你账户中的一台设备有等待发布到你页面上的更改。",
-  "There is a notice about your Flagship account. Open Flagship to read it.": "你的 Flagship 账户有一条通知。打开 Flagship 查看。"
+  "There is a notice about your Flagship account. Open Flagship to read it.": "你的 Flagship 账户有一条通知。打开 Flagship 查看。",
+  "Welcome! Make your own page": "欢迎！创建你自己的页面",
+  "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": "在 voi.ci/%@ 分享一张照片、几句自我介绍、你的链接和帖子。如果你愿意，访客还可以在那里给你发消息。",
+  "Set up your page": "设置你的页面",
+  "Edit your page": "编辑你的页面"
 }

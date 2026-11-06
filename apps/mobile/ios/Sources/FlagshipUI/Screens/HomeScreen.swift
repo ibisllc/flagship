@@ -105,6 +105,10 @@ public struct HomeScreen: View {
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
     var onDismissRecoveryBackupBanner: () -> Void = {}
+    /// The welcome card that introduces the voi.ci page (PageWelcomeCardStore.shouldShow); below the recovery cards.
+    var showPageWelcome: Bool = false
+    var onSetUpPage: () -> Void = {}
+    var onDismissPageWelcome: () -> Void = {}
     /// Name dibs notice: the window's end (ms) while it should show, else nil.
     var dibsNoticeClosesAt: Int64? = nil
     var onClaimDibs: () -> Void = {}
@@ -165,6 +169,9 @@ public struct HomeScreen: View {
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
         onDismissRecoveryBackupBanner: @escaping () -> Void = {},
+        showPageWelcome: Bool = false,
+        onSetUpPage: @escaping () -> Void = {},
+        onDismissPageWelcome: @escaping () -> Void = {},
         dibsNoticeClosesAt: Int64? = nil,
         onClaimDibs: @escaping () -> Void = {},
         onDismissDibs: @escaping () -> Void = {},
@@ -204,6 +211,9 @@ public struct HomeScreen: View {
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
         self.onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner
+        self.showPageWelcome = showPageWelcome
+        self.onSetUpPage = onSetUpPage
+        self.onDismissPageWelcome = onDismissPageWelcome
         self.dibsNoticeClosesAt = dibsNoticeClosesAt
         self.onClaimDibs = onClaimDibs
         self.onDismissDibs = onDismissDibs
@@ -260,10 +270,10 @@ public struct HomeScreen: View {
                 AbuseNoticeHomeSection()
                 // One announcement at a time, highest priority first: an
                 // account-reset (danger) suppresses everything; otherwise the
-                // backup banner, then the recovery nudge.
+                // backup banner, then the recovery nudge, then the page welcome.
                 topAnnouncement(c: c)
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
-                    .animation(.snappy, value: [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge])
+                    .animation(.snappy, value: [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome])
                 if statusPaused && !pods.isEmpty {
                     HStack(spacing: FS.space.s2) {
                         Label("Status paused", systemImage: "pause.circle")
@@ -317,7 +327,7 @@ public struct HomeScreen: View {
 
     /// Everything that adds, removes or moves a block above the server list.
     private var layoutShape: [Bool] {
-        [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, statusPaused, serverListLocked,
+        [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome, statusPaused, serverListLocked,
          pods.isEmpty, canAddServers, canChangeServers]
     }
 
@@ -355,6 +365,16 @@ public struct HomeScreen: View {
                 onDismiss: onDismissRecoveryNudge
             )
             .accessibilityIdentifier("recovery-nudge-card")
+        } else if showPageWelcome {
+            FSAnnouncementCard(
+                icon: "person.crop.square",
+                title: String(localized: "Welcome! Make your own page"),
+                message: String(localized: "Share a photo, a few words about you, your links and posts at voi.ci/\(username). If you want, visitors can send you messages there."),
+                ctaLabel: String(localized: "Set up your page"),
+                onCta: onSetUpPage,
+                onDismiss: onDismissPageWelcome
+            )
+            .accessibilityIdentifier("page-welcome-card")
         } else if let closesAt = dibsNoticeClosesAt {
             FSAnnouncementCard(
                 icon: "flag.fill",

@@ -18,6 +18,7 @@ import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.ui.theme.FlagshipTheme
 import com.flagshipserver.app.viewmodels.LoadingState
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -145,7 +146,8 @@ class HomeScreenComposeTest {
             status = PodInfo.Status.ONLINE, registeredAt = 2, identityPubKeyHex = stk(2)),
     )
 
-    private fun setOrdered(issuedAt: Long = 0, acks: Map<String, Long> = emptyMap(), showRecoveryNudge: Boolean = false) {
+    private fun setOrdered(issuedAt: Long = 0, acks: Map<String, Long> = emptyMap(), showRecoveryNudge: Boolean = false,
+                           showPageWelcome: Boolean = false, onSetUpPage: () -> Unit = {}) {
         composeRule.setContent {
             FlagshipTheme {
                 HomeScreen(
@@ -159,6 +161,8 @@ class HomeScreenComposeTest {
                     onMakeLeader = {},
                     onRefresh = {},
                     showRecoveryNudge = showRecoveryNudge,
+                    showPageWelcome = showPageWelcome,
+                    onSetUpPage = onSetUpPage,
                 )
             }
         }
@@ -192,5 +196,20 @@ class HomeScreenComposeTest {
         setOrdered(showRecoveryNudge = true)
         composeRule.onNodeWithText("Set up recovery").assertIsDisplayed()
         composeRule.onNodeWithText("Save a passkey so you can recover your account if you get a new device.").assertIsDisplayed()
+    }
+
+    @Test fun thePageWelcome_introducesThePageAndOpensTheEditor() {
+        var opened = false
+        setOrdered(showPageWelcome = true, onSetUpPage = { opened = true })
+        composeRule.onNodeWithText("Welcome! Make your own page").assertIsDisplayed()
+        composeRule.onNodeWithText("Share a photo, a few words about you, your links and posts at voi.ci/harry. If you want, visitors can send you messages there.").assertIsDisplayed()
+        composeRule.onNodeWithText("Set up your page").performClick()
+        assertTrue(opened)
+    }
+
+    @Test fun theRecoveryNudge_winsOverThePageWelcome() {
+        setOrdered(showRecoveryNudge = true, showPageWelcome = true)
+        composeRule.onNodeWithText("Set up recovery").assertIsDisplayed()
+        composeRule.onNodeWithTag("page-welcome-card").assertDoesNotExist()
     }
 }

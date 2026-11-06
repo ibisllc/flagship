@@ -13820,5 +13820,21 @@
     "en": "There is a notice about your Flagship account. Open Flagship to read it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Welcome! Make your own page": {
+    "en": "Welcome! Make your own page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:371"
+  },
+  "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": {
+    "en": "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:372"
+  },
+  "Set up your page": {
+    "en": "Set up your page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:373"
+  },
+  "Edit your page": {
+    "en": "Edit your page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:152"
   }
 }

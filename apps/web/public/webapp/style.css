@@ -2254,6 +2254,7 @@ section h2.fs-hero-title::before { content: none; }
 .fs-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .fs-row-title { font-size: 15px; font-weight: 400; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-row-subtitle { font-size: var(--caption-size); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-row-action { font-size: var(--caption-size); font-weight: 600; color: var(--ink); margin-top: 2px; }
 .fs-row-value { font-size: var(--body-sm-size); color: var(--ink-muted); flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-row-badge {
   flex: 0 0 auto;

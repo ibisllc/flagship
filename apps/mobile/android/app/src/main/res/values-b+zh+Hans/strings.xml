@@ -3486,4 +3486,8 @@
     <string name="abuse_push_body">有一条关于你的 Flagship 账户的通知。打开 Flagship 查看。</string>
     <string name="abuse_channel_name">账户通知</string>
     <string name="abuse_channel_desc">关于你的某个应用或页面的举报，以及需要做什么和截止时间。</string>
+    <string name="voici_welcome_title">欢迎！创建你自己的页面</string>
+    <string name="voici_welcome_message">在 voi.ci/%1$s 分享一张照片、几句自我介绍、你的链接和帖子。如果你愿意，访客还可以在那里给你发消息。</string>
+    <string name="voici_set_up_your_page">设置你的页面</string>
+    <string name="voici_edit_your_page">编辑你的页面</string>
 </resources>

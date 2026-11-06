@@ -3263,5 +3263,9 @@
   "Child sexual abuse material": "Contenu pédocriminel",
   "Impersonation": "Usurpation d'identité",
   "Copyright infringement": "Atteinte au droit d'auteur",
-  "Other": "Autre"
+  "Other": "Autre",
+  "Welcome! Make your own page": "Bienvenue ! Créez votre propre page",
+  "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "Partagez une photo, quelques mots sur vous, vos liens et vos publications sur voi.ci/{0}. Si vous le souhaitez, les visiteurs peuvent vous y envoyer des messages.",
+  "Set up your page": "Configurer votre page",
+  "Edit your page": "Modifier votre page"
 }

@@ -14388,5 +14388,21 @@
   "abuse_channel_desc": {
     "en": "A report about one of your apps or pages, with what to do and by when.",
     "ctx": "abuse notices / suspension (docs/abuse-handling.md)"
+  },
+  "voici_welcome_title": {
+    "en": "Welcome! Make your own page",
+    "ctx": "voi.ci / Messages: Home welcome card that introduces the page, title"
+  },
+  "voici_welcome_message": {
+    "en": "Share a photo, a few words about you, your links and posts at voi.ci/%1$s. If you want, visitors can send you messages there.",
+    "ctx": "voi.ci / Messages: Home welcome card body; %1$s is the account username"
+  },
+  "voici_set_up_your_page": {
+    "en": "Set up your page",
+    "ctx": "voi.ci / Messages: Home welcome card button and Messages tab row action when there is no page yet"
+  },
+  "voici_edit_your_page": {
+    "en": "Edit your page",
+    "ctx": "voi.ci / Messages: Messages tab row action once a page exists"
   }
 }

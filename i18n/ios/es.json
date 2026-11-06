@@ -3204,5 +3204,9 @@
   "A server shared with you is asking you to unlock it.": "Un servidor compartido contigo te pide que lo desbloquees.",
   "New message": "Mensaje nuevo",
   "A device on your account has changes waiting to be published on your page.": "Un dispositivo de tu cuenta tiene cambios pendientes de publicar en tu página.",
-  "There is a notice about your Flagship account. Open Flagship to read it.": "Hay un aviso sobre tu cuenta de Flagship. Abre Flagship para leerlo."
+  "There is a notice about your Flagship account. Open Flagship to read it.": "Hay un aviso sobre tu cuenta de Flagship. Abre Flagship para leerlo.",
+  "Welcome! Make your own page": "¡Te damos la bienvenida! Crea tu propia página",
+  "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": "Comparte una foto, unas palabras sobre ti, tus enlaces y publicaciones en voi.ci/%@. Si quieres, los visitantes pueden enviarte mensajes allí.",
+  "Set up your page": "Configurar tu página",
+  "Edit your page": "Editar tu página"
 }

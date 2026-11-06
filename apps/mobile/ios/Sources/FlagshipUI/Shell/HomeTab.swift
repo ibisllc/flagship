@@ -35,6 +35,8 @@ public struct HomeTab: View {
     /// store is observed so toggling `dismissed` from "Not now"
     /// re-renders Home and the banner disappears immediately.
     @State private var recoveryBannerStore = RecoveryBannerStore()
+    /// The voi.ci page welcome card's dismissal, per account on this device.
+    @State private var pageWelcome = PageWelcomeCardStore()
     @Environment(\.nameDibsClient) private var nameDibs
     @State private var dibsWindow: DibsWindow?
     @State private var dibsDismissed = UserDefaults.standard.bool(forKey: NameDibsViewModel.bannerDismissKey)
@@ -164,6 +166,18 @@ public struct HomeTab: View {
         }
     }
 
+    /// The account has no voi.ci page yet, `.com` said so, and the person hasn't dismissed the welcome card.
+    private var showPageWelcome: Bool {
+        let messages = MessagesStore.shared
+        return PageWelcomeCardStore.shouldShow(
+            hasAccount: messages.hasAccount,
+            checked: messages.phase == .ready,
+            published: messages.index != nil,
+            pendingChanges: messages.pendingCount,
+            dismissed: pageWelcome.isDismissed(username: app.currentUser)
+        )
+    }
+
     @ViewBuilder
     private var content: some View {
         ZStack {
@@ -253,6 +267,9 @@ public struct HomeTab: View {
                     onDismissRecoveryBackupBanner: {
                         recoveryBannerStore.dismissed = true
                     },
+                    showPageWelcome: showPageWelcome,
+                    onSetUpPage: { linker.pending = .pageEditor },
+                    onDismissPageWelcome: { pageWelcome.dismiss(username: app.currentUser) },
                     dibsNoticeClosesAt: (!app.isDemoAccount && NameDibsViewModel.shouldShowBanner(window: dibsWindow, dismissed: dibsDismissed))
                         ? dibsWindow?.end : nil,
                     onClaimDibs: { path.append(.nameDibs) },

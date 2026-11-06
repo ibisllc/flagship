@@ -154,6 +154,14 @@ fun MessagesScreen(nav: NavController) {
                 icon = Icons.Outlined.Public,
                 onClick = { nav.navigate("page-editor") },
                 modifier = Modifier.testTag("messages-your-page"),
+                trailing = {
+                    Text(
+                        stringResource(if (page.publishedSeq == 0L && page.pendingCount == 0) R.string.voici_set_up_your_page else R.string.voici_edit_your_page),
+                        color = FS.colors.accentText,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.testTag("messages-edit-page"),
+                    )
+                },
             )
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

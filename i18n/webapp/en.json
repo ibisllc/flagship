@@ -13353,5 +13353,21 @@
   "Other": {
     "en": "Other",
     "ctx": "webapp/lib/abuseNotices.js:59"
+  },
+  "Welcome! Make your own page": {
+    "en": "Welcome! Make your own page",
+    "ctx": "webapp/views/home.js:881"
+  },
+  "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": {
+    "en": "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.",
+    "ctx": "webapp/views/home.js:882"
+  },
+  "Set up your page": {
+    "en": "Set up your page",
+    "ctx": "webapp/views/home.js:883"
+  },
+  "Edit your page": {
+    "en": "Edit your page",
+    "ctx": "webapp/views/messages.js:45"
   }
 }

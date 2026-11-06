@@ -131419,6 +131419,170 @@
           }
         }
       }
+    },
+    "Welcome! Make your own page": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¡Te damos la bienvenida! Crea tu propia página"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bienvenue ! Créez votre propre page"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Willkommen! Erstelle deine eigene Seite"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boas-vindas! Crie sua própria página"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ようこそ！自分のページを作りましょう"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "欢迎！创建你自己的页面"
+          }
+        }
+      }
+    },
+    "Share a photo, a few words about you, your links and posts at voi.ci/%@. If you want, visitors can send you messages there.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comparte una foto, unas palabras sobre ti, tus enlaces y publicaciones en voi.ci/%@. Si quieres, los visitantes pueden enviarte mensajes allí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagez une photo, quelques mots sur vous, vos liens et vos publications sur voi.ci/%@. Si vous le souhaitez, les visiteurs peuvent vous y envoyer des messages."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teile ein Foto, ein paar Worte über dich, deine Links und Beiträge auf voi.ci/%@. Wenn du möchtest, können dir Besucher dort Nachrichten schreiben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartilhe uma foto, algumas palavras sobre você, seus links e publicações em voi.ci/%@. Se quiser, os visitantes podem enviar mensagens para você lá."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ で、写真、ひとことの自己紹介、リンク、投稿を公開できます。希望すれば、訪問者からメッセージを受け取ることもできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 voi.ci/%@ 分享一张照片、几句自我介绍、你的链接和帖子。如果你愿意，访客还可以在那里给你发消息。"
+          }
+        }
+      }
+    },
+    "Set up your page": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar tu página"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurer votre page"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Seite einrichten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar sua página"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ページを設定"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置你的页面"
+          }
+        }
+      }
+    },
+    "Edit your page": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editar tu página"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier votre page"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Seite bearbeiten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editar sua página"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ページを編集"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑你的页面"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

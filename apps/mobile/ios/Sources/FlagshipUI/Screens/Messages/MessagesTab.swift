@@ -149,6 +149,11 @@ public struct MessagesTab: View {
                 Text(verbatim: "voi.ci/\(app.currentUser ?? "")").font(.subheadline).foregroundStyle(.secondary)
                 Text(pageStatus).font(.footnote).foregroundStyle(.secondary)
                     .accessibilityIdentifier("messages-page-status")
+                Text(store.index == nil && store.pendingCount == 0 ? String(localized: "Set up your page") : String(localized: "Edit your page"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("messages-edit-page")
             }
             Spacer()
             Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)

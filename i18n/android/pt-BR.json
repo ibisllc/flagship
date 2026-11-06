@@ -3483,5 +3483,9 @@
   "abuse_details": "Detalhes",
   "abuse_push_body": "Há um aviso sobre sua conta Flagship. Abra o Flagship para ler.",
   "abuse_channel_name": "Avisos da conta",
-  "abuse_channel_desc": "Uma denúncia sobre um de seus apps ou páginas, com o que fazer e até quando."
+  "abuse_channel_desc": "Uma denúncia sobre um de seus apps ou páginas, com o que fazer e até quando.",
+  "voici_welcome_title": "Boas-vindas! Crie sua própria página",
+  "voici_welcome_message": "Compartilhe uma foto, algumas palavras sobre você, seus links e publicações em voi.ci/%1$s. Se quiser, os visitantes podem enviar mensagens para você lá.",
+  "voici_set_up_your_page": "Configurar sua página",
+  "voici_edit_your_page": "Editar sua página"
 }
