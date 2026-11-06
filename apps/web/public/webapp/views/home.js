@@ -870,7 +870,9 @@ async function renderPageWelcome() {
     host.removeAttribute("data-testid");
   };
   const session = getSession();
-  const hasAccount = Boolean(session?.username) && session?.umk instanceof Uint8Array && !isDemoProfile(getActiveProfile());
+  // A sample account's page is the operator's example: Home shows its row (never the welcome card).
+  const sample = Boolean(session?.username) && isDemoProfile(getActiveProfile());
+  const hasAccount = sample || (Boolean(session?.username) && session?.umk instanceof Uint8Array);
   let dismissed = null;
   try {
     dismissed = recoveryStoreGet("voiciWelcomeDismissed");
@@ -890,6 +892,7 @@ async function renderPageWelcome() {
     removed: Boolean(world.removed),
     pendingChanges: pendingOps().length,
     dismissed,
+    sample,
   });
   if (!state || (state === "card" && document.getElementById(RECOVERY_BANNER_ID))) return hide();
   const host = slot();

@@ -3137,6 +3137,7 @@ button.ph-avatar:focus-visible { outline: 2px solid var(--accent-graphic); outli
   box-shadow: none;
 }
 .ph-name:hover { border-bottom-color: var(--border); }
+.ph-name-static, .ph-name-static:hover { border-bottom-color: transparent; overflow-wrap: anywhere; }
 .ph-name:focus, .ph-name:focus-visible {
   outline: none;
   border-bottom-color: var(--focus-inner);

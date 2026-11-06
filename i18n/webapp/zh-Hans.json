@@ -3284,5 +3284,7 @@
   "Changes": "更改",
   "Change photo": "更换照片",
   "Edit page": "编辑页面",
-  "Bio, links, posts, look, messages": "简介、链接、帖子、外观、消息"
+  "Bio, links, posts, look, messages": "简介、链接、帖子、外观、消息",
+  "This is a sample account. Its page is an example, so you can't change it.": "这是一个示例账户。它的页面只是示例，所以你无法更改。",
+  "View page": "查看页面"
 }
