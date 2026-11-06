@@ -63,6 +63,8 @@ public sealed class HostedServer : INotifyPropertyChanged
     /// <summary>"home.harry" — the short server.username identity, matching
     /// the Mac sidebar.</summary>
     public string DisplayName => $"{_record.Config.ServerName}.{_record.Config.Username}";
+    // The sidebar row's UI Automation name (it has no AutomationProperties.Name of its own).
+    public override string ToString() => $"{DisplayName}, {StateLabel}";
     public string Fqdn => _record.Config.ServerDomain;
     public string BadgeLabel => _record.Tier.BadgeLabel();
     public string StateLabel => _record.StateLabel;
