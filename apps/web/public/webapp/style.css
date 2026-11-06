@@ -3309,3 +3309,4 @@ button.fs-switch:disabled { opacity: 0.4; }
   .tab-bar-btn[data-tab-target="messages"] .icon svg { width: 17px; height: 17px; }
   .tab-bar-btn[data-tab-target="messages"] .tab-bar-badge { top: 2px; left: auto; right: 18%; }
 }
+.home-page-slot:empty { display: none; }
