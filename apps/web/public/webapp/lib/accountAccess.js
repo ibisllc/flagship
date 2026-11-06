@@ -49,7 +49,9 @@ export function accessOptions(resolution) {
     },
     {
       id: "scan",
-      label: tr("Scan a pairing code"),
+      // Scanned or pasted: the field below takes the link, so a computer with no
+      // camera joins too (W18).
+      label: tr("Join with a pairing code"),
       sublabel: tr("From a device that's already signed in — its Settings → Add device."),
       enabled: true,
       disabledReason: null,
