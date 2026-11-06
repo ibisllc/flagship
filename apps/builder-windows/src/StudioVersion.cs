@@ -14,7 +14,7 @@ internal static class StudioVersion
     /// <summary>Whether this platform still carries the "Experimental" tag: STUDIO_EXPERIMENTAL.windows in
     /// apps/web/public/app-stores.js, the website's switch (scripts/check-versions.mjs --write keeps it in step).
     /// It goes false only after docs/runbooks/0.3-windows-studio-acceptance.md passes.</summary>
-    public const bool Experimental = true;
+    public const bool Experimental = false;
 
     /// <summary>The brand name, not translated.</summary>
     public const string ProductName = "Flagship Studio";

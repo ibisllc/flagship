@@ -12,7 +12,7 @@
   "use strict";
   const STUDIO_EXPERIMENTAL = {
     mac: false,
-    windows: true,
+    windows: false,
     linux: true,
   };
   document.querySelectorAll("[data-studio-experimental]").forEach((el) => {

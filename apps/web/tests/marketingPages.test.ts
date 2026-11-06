@@ -393,7 +393,7 @@ describe("Studio platforms that have not passed a hardware run say so", () => {
     const stores = readFileSync(join(pub, "app-stores.js"), "utf8");
     const sw = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(stores)?.[1] ?? "";
     expect(sw).toMatch(/\bmac: false,/);
-    expect(sw).toMatch(/\bwindows: true,/);
+    expect(sw).toMatch(/\bwindows: false,/);
     expect(sw).toMatch(/\blinux: true,/);
     // The localised pages keep the marker on the translated tag.
     for (const lang of ["es", "fr", "de", "pt-br", "ja", "zh-hans"]) {
