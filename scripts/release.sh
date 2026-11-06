@@ -2819,6 +2819,7 @@ studio_pipe_switch() {
 }
 
 run_redeployB() {
+  ensure_wt   # the pipe switch below edits the worktree's wrangler.toml; a --from 41 run has none yet
   studio_pipe_switch || return $?
   # Phase B may land migrations after step 18 ran (0131 did): apply them before the Worker that reads them.
   run_migrations || return $?
