@@ -212,7 +212,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       1. Re-pin (answer y) so the pin includes at least: 02ee868e3 + c43086141 + c559bb080 (Studio/appliance fixes), 192eeb7b5 (page management), and the branches below once merged.
       2. BEFORE step 41 (.com redeploy): take the D1 backup (`--only 14`). Step 41 now applies pending migrations first (0131 voici_pages.removed_at, apply-once; release.sh from 6fe09e256+); with an older release.sh run `--only 18` by hand first. The .com deploy without 0131 breaks every page read.
       3. Merge fix/keyfile-import-and-remote-code (Windows Failure 4: Android 0.3 key file -> webapp import 403; W18 camera-less join; W19 Remote browser shows no code) to main. Store builds (steps 43, 44) WAIT for it.
-      4. Merge feat/demo-example-page (example voi.ci page for sample accounts; owner chose option A 2026-11-06). Store builds WAIT for it.
+      4. DONE 3d5855ea5: feat/demo-example-page merged (example voi.ci page for sample accounts, operator route POST /api/dev/sample-user/<u>/voici-example-page, read-only header on sample accounts, shell v203; no migration).
       5. After step 41 (.com live with both): `node scripts/sample-user.mjs example-page playstore-test-0725` and check https://voi.ci/playstore-test-0725 shows the example page; update the store review notes.
       6. Studio steps 38/39 build from a pin at or after c559bb080; hand the new Windows build to the Windows agent: rerun W5, W6, W8, W16, W18, W19 and the rows they unblock (W9, W10, W11, W13, W14, W17, W25). Its results branch: device-results/windows-2026-11-05.
       7. Then steps 43/44 (iOS, Android store builds) from the final pin.
