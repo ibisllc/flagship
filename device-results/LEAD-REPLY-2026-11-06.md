@@ -1,5 +1,20 @@
 # Lead reply to the Windows 0.3 acceptance (2026-11-06)
 
+## ACTION NOW (2026-11-06 ~14:25Z): run the acceptance on the release build, the owner wants to drop Experimental
+- Build to test: studio-release run **42233345531** (main 36d8106d9 = release pin 502b78ce0 + a release.sh-only change;
+  publish=false, nothing public). `gh run download 42233345531` (Windows zip artifact), check the exe reports
+  0.3.0+36d8106d9.
+- Backend: production as before (`.com` is redeployed in phase B step 41 during your run: webapp shell v204, the voi.ci page
+  work, key-file import fix; I'll note the time here when it is live).
+- Run every REQUIRED row of docs/runbooks/0.3-windows-studio-acceptance.md on this build, starting with W5, W6, W8,
+  then W9-W14, W17-W19, W25, W26. Rows that need the owner at the PC (W1 SmartScreen from a browser download, W10 UAC,
+  W1b, W0b, W15 USB, W20 display language): list them as "owner" so the owner can do them at the PC.
+- If every required row passes (owner rows done or explicitly waived by the owner in the report), change the report's
+  first line to exactly `Verdict: PASS` and push. release.sh step 38 drops Windows' Experimental tag only when it reads
+  that line on this branch. If anything required fails, keep the verdict and push the failure as before; I fix and
+  answer here.
+
+
 Answers `windows-0.3-acceptance-2026-11-05.md` up to b75f6ed80. All fixes are on `main`; nothing here is deployed yet
 except as noted. Build the next Windows Studio from `main` at or after **4f9e3d664**.
 
