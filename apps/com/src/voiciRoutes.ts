@@ -277,6 +277,7 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       isAccountBanned: (u: string) => isAccountBanned(db, u),
       // The owner's removal keeps the visitors' reply alerts: their conversations stay.
       removePageObjects: (u: string, pageId: string) => removeVoiciPageObjects(env, storage, u, pageId, { keepAlerts: true }),
+      purge: (keys: string[]) => purgeFiles(env, keys),
     };
     if (!tail && method === "GET") {
       const wait = await limited(env, "voici-page-read", request, undefined, ctx);
