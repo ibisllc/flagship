@@ -12,7 +12,7 @@
   "flagship-web/pipeCrypto.js": "8ee6c0ae0029ecadc1d63657b01b606809cab4872b7cfe8d0bb527a55b943f83",
   "flagship-web/proto/lib/voiciCore.js": "80d0b17280dc8bf79d886e387ebde89dc8cc8f4004c437fa202706a8615f1206",
   "flagship-web/proto/lib/voiciMessages.js": "d83297c52a30c86baffa27eab7efc0bcde9e454a66935f0d0eaaaf8877fb9a4e",
-  "flagship-web/proto/lib/voiciPage.js": "da873a9a1c695bfb65a731810ad6ecdf260dd06c786ce3135d8d5050a84672c7",
+  "flagship-web/proto/lib/voiciPage.js": "5e325c773da169ef0c6014aa90a263b49befabb46e8ea9a33dc90c489982025d",
   "flagship-web/proto/lib/voiciProtocol.js": "2548209d58d570b240ba88bd1ecbf8b5ca0718bf5d861cb410b4abe93b9d9e6d",
   "flagship-web/proto/lib/voiciText.js": "726c60b64c7e32df130772f37841db26d96ab7ed13c4d46084b602f5a21f1fde",
   "flagship-web/proto/vendor/noble-post-quantum/pq-seal.js": "35bf767792ced7459c9ade5cca7f44bd5eb49b96de8f40b6b4819f10084a4481",
