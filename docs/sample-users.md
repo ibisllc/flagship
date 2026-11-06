@@ -746,6 +746,26 @@ All under `/api/dev/sample-user`. Admin endpoints reuse the existing
 `FLAGSHIP_ADMIN_SECRET` bearer pattern (same as
 `POST /api/admin/dns-route-gc`).
 
+### Example voi.ci page
+
+A sample account's voi.ci page is an **example** the operator publishes, so store reviewers (who sign in with the
+sample account `playstore-test-0725`) see a real public page. A device that opens a sample account holds none of its
+keys, and anyone may hold the shared review login, so no device can publish or change it.
+
+    node scripts/sample-user.mjs example-page <username>            # publish (again: same content, next seq)
+    node scripts/sample-user.mjs example-page <username> --remove   # take it off voi.ci
+
+`POST /api/dev/sample-user/<u>/voici-example-page`, body `{}` or `{"remove": true}` (anything else is refused).
+Admin secret (`x-admin-secret`) like the other operator routes; metered per source (10 a minute) and per account
+(10 an hour). It answers 404 for an account without a demo row, 403 `not-demo` for one not marked demo, 409
+`demo-keys-mismatch` if the account's pinned key is not the one `.com` derives from `DEMO_IRK_KEK`, and 503 while
+`VOICI_ENABLED` is off. `.com` signs the fixed content in `packages/control-plane/src/demoVoiciPage.ts` with the
+derived admin root (the IRK if none is pinned) and goes through the normal publish handlers; `remove` signs a
+`flagship/voici-page-remove/v1`. The content: display name = the username; bio "This is an example page. It belongs
+to a sample account, so you can see what a voi.ci page looks like."; links Flagship (https://flagshipserver.com/)
+and Flagship Studio (https://flagshipserver.com/studio); a generated silhouette avatar; two short posts; messages
+off. The demo cleanup deletes it with the account's other voi.ci data.
+
 ### 10.1 Endpoint table
 
 | Method | Path | Auth | Idempotency | Rate-limit |
@@ -757,6 +777,7 @@ All under `/api/dev/sample-user`. Admin endpoints reuse the existing
 | `POST` | `/api/dev/sample-user/{u}/heartbeat` | none | trivially idempotent | 30/min/IP |
 | `GET` | `/api/dev/sample-user/{u}` | admin secret | n/a | none (admin) |
 | `GET` | `/api/dev/sample-user` | admin secret | n/a | none (admin) |
+| `POST` | `/api/dev/sample-user/{u}/voici-example-page` | admin secret | republishes the same content at the next seq; `remove` twice is a no-op | 10/min/IP, 10/h/u |
 
 ### 10.2 `POST /api/dev/sample-user/create`
 

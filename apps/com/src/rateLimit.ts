@@ -223,7 +223,11 @@ export type RateLimitEndpoint =
   | "voici-piece"
   | "voici-thread"
   | "voici-owner"
-  | "voici-page-read";
+  | "voici-page-read"
+  // The operator's example voi.ci page of a sample account (POST /api/dev/sample-user/<u>/voici-example-page): admin
+  // secret only, and each run signs and writes a whole page. Per source and per account (the path names it), so a
+  // leaked secret or a loop can't churn a page or R2.
+  | "demo-example-page";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -444,6 +448,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "usernameHash", limit: 30, windowSec: 3600 },
   ],
   "signed-time": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  "demo-example-page": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "usernameHash", limit: 10, windowSec: 3600 },
+  ],
   "update-receipt": [
     { axis: "ip", limit: 6, windowSec: 3600 },
     { axis: "ip", limit: 24, windowSec: 86_400 },
@@ -701,6 +709,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/certificates/orders") return "issuance-order";
   if (m === "GET" && /^\/api\/certificates\/orders\/[0-9a-f]{32}$/.test(pathname)) return "issuance-poll";
   if (m === "POST" && pathname === "/api/time") return "signed-time";
+  if (m === "POST" && /^\/api\/dev\/sample-user\/[^/]+\/voici-example-page$/.test(pathname)) return "demo-example-page";
   if (m === "POST" && pathname === "/api/update-receipts") return "update-receipt";
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
   if (m === "POST" && pathname === "/api/accounts") return "username-claim";
@@ -956,6 +965,7 @@ export function extractUsernameHash(pathname: string): string | undefined {
     pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/) ??
     pathname.match(/^\/api\/accounts\/([^/]+)\/read-token$/) ??
     pathname.match(/^\/api\/users\/([^/]+)\/share-key-attestation$/) ??
+    pathname.match(/^\/api\/dev\/sample-user\/([^/]+)\/voici-example-page$/) ??
     pathname.match(/^\/api\/users\/([^/]+)\/apps\/[^/]+\/voici-name$/) ??
     pathname.match(/^\/api\/accounts\/([^/]+)\/messages-attestation$/);
   if (!m) return undefined;

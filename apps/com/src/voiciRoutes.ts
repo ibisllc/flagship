@@ -192,6 +192,19 @@ function directoryAuth(request: Request, accountId: string, path: string) {
 }
 
 
+/** The pages handlers' deps; also the operator's example page of a sample account (controlPlaneRoutes.ts). */
+export function voiciPagesDeps(env: VoiciEnv, storage: D1Storage, db: D1Database) {
+  return {
+    voici: storage.voici,
+    usernames: storage.usernames,
+    bucket: env.VOICI ?? noBucket,
+    isAccountBanned: (u: string) => isAccountBanned(db, u),
+    // The owner's removal keeps the visitors' reply alerts: their conversations stay.
+    removePageObjects: (u: string, pageId: string) => removeVoiciPageObjects(env, storage, u, pageId, { keepAlerts: true }),
+    purge: (keys: string[]) => purgeFiles(env, keys),
+  };
+}
+
 /** Every `/api/voici/*`, `/api/admin/voici/*` and the account voi.ci lanes. */
 export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: WaitUntilLike): Promise<Response> {
   if (!voiciEnabled(env) || !env.DB) return notFound();
@@ -270,15 +283,7 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
     const username = decodeURIComponent(m[1]!).toLowerCase();
     const tail = m[2];
     const piece = m[3];
-    const pagesDeps = {
-      voici: storage.voici,
-      usernames: storage.usernames,
-      bucket: env.VOICI ?? noBucket,
-      isAccountBanned: (u: string) => isAccountBanned(db, u),
-      // The owner's removal keeps the visitors' reply alerts: their conversations stay.
-      removePageObjects: (u: string, pageId: string) => removeVoiciPageObjects(env, storage, u, pageId, { keepAlerts: true }),
-      purge: (keys: string[]) => purgeFiles(env, keys),
-    };
+    const pagesDeps = voiciPagesDeps(env, storage, db);
     if (!tail && method === "GET") {
       const wait = await limited(env, "voici-page-read", request, undefined, ctx);
       if (wait !== null) return tooMany(wait);
