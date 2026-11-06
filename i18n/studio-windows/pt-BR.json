@@ -239,5 +239,6 @@
   "windows10NoLongerGetsSecurityUpdates": "Esta versão do Windows não recebe mais atualizações de segurança. O Studio continua funcionando aqui e pode hospedar seu servidor; atualizar para o Windows 11 deixa este PC mais seguro.",
   "recipeMadeByOlderApp": "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo.",
   "copiesOnYourPhoneOrPeersStay": "as cópias guardadas no seu telefone ou com pares (conforme a política de backup) não são.",
-  "ifItPersistsRedownloadTheBase": "se persistir, baixe a imagem base novamente e refaça-a."
+  "ifItPersistsRedownloadTheBase": "se persistir, baixe a imagem base novamente e refaça-a.",
+  "cantReachFlagshipTryingAgain": "Não foi possível acessar o Flagship. Verifique a conexão com a internet deste PC; o Studio continua tentando."
 }

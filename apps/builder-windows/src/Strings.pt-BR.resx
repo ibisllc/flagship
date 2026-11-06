@@ -733,4 +733,7 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
     <value>se persistir, baixe a imagem base novamente e refaça-a.</value>
   </data>
+  <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
+    <value>Não foi possível acessar o Flagship. Verifique a conexão com a internet deste PC; o Studio continua tentando.</value>
+  </data>
 </root>

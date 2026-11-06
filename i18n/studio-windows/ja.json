@@ -239,5 +239,6 @@
   "windows10NoLongerGetsSecurityUpdates": "このバージョンの Windows にはセキュリティ更新プログラムが提供されなくなりました。Studio はこのまま使え、サーバーをホストできます。Windows 11 にアップデートすると、この PC をより安全に保てます。",
   "recipeMadeByOlderApp": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。",
   "copiesOnYourPhoneOrPeersStay": "スマートフォンやピアに保存されたコピー（バックアップポリシーによる）は削除されません。",
-  "ifItPersistsRedownloadTheBase": "続く場合は、ベースイメージを再ダウンロードして作り直してください。"
+  "ifItPersistsRedownloadTheBase": "続く場合は、ベースイメージを再ダウンロードして作り直してください。",
+  "cantReachFlagshipTryingAgain": "Flagship に接続できません。この PC のインターネット接続を確認してください。Studio は再試行を続けます。"
 }

@@ -974,4 +974,8 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>if it persists, re-download the base image and remaster again.</value>
     <comment>VM/VMLifecycle.cs:165 (prose, continues theGuestLikelyFailedToBoot)</comment>
   </data>
+  <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
+    <value>Can't reach Flagship. Check this PC's internet connection; Studio keeps trying.</value>
+    <comment>Wizard.cs EndPairing (start screen, pairing failed)</comment>
+  </data>
 </root>

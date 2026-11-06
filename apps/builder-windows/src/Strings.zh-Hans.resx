@@ -733,4 +733,7 @@ https://flagshipserver.com</value>
   <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
     <value>如果问题仍然存在，请重新下载基础镜像并重新制作。</value>
   </data>
+  <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
+    <value>无法连接 Flagship。请检查这台电脑的网络连接；Studio 会继续重试。</value>
+  </data>
 </root>

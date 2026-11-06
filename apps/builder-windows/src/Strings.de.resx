@@ -733,4 +733,7 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
     <value>wenn es weiterhin auftritt, lade das Basis-Image erneut herunter und erstelle es neu.</value>
   </data>
+  <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
+    <value>Flagship ist nicht erreichbar. Prüfe die Internetverbindung dieses PCs; Studio versucht es weiter.</value>
+  </data>
 </root>

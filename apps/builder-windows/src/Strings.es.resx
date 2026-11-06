@@ -733,4 +733,7 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
     <value>si persiste, vuelve a descargar la imagen base y vuelve a prepararla.</value>
   </data>
+  <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
+    <value>No se puede conectar con Flagship. Revisa la conexión a internet de este PC; Studio lo sigue intentando.</value>
+  </data>
 </root>

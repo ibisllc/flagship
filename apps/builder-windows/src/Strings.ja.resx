@@ -733,4 +733,7 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="ifItPersistsRedownloadTheBase" xml:space="preserve">
     <value>続く場合は、ベースイメージを再ダウンロードして作り直してください。</value>
   </data>
+  <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
+    <value>Flagship に接続できません。この PC のインターネット接続を確認してください。Studio は再試行を続けます。</value>
+  </data>
 </root>

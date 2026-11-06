@@ -239,5 +239,6 @@
   "windows10NoLongerGetsSecurityUpdates": "此版本的 Windows 已不再获得安全更新。Studio 仍可在此运行并托管你的服务器；升级到 Windows 11 能让这台电脑更安全。",
   "recipeMadeByOlderApp": "此配方由旧版 Flagship 应用创建。请在手机上更新 Flagship 应用，然后重新创建服务器。",
   "copiesOnYourPhoneOrPeersStay": "保存在你的手机或对等服务器上的副本（取决于其备份策略）不会被删除。",
-  "ifItPersistsRedownloadTheBase": "如果问题仍然存在，请重新下载基础镜像并重新制作。"
+  "ifItPersistsRedownloadTheBase": "如果问题仍然存在，请重新下载基础镜像并重新制作。",
+  "cantReachFlagshipTryingAgain": "无法连接 Flagship。请检查这台电脑的网络连接；Studio 会继续重试。"
 }

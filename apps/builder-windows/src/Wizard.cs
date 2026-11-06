@@ -148,6 +148,9 @@ public sealed class Wizard : INotifyPropertyChanged
     }
 
     /// <summary>The 8-char human code to type if the QR can't be scanned.</summary>
+    /// <summary>What the start screen says while it has no code to show (starting, offline, can't reach Flagship).</summary>
+    public string? PairWaitingNote => PairQr == null ? PairStatus : null;
+
     public string? PairCode
     {
         get => _pairCode;
@@ -242,6 +245,13 @@ public sealed class Wizard : INotifyPropertyChanged
         if (status != null) PairStatus = status;
         PairQr = null;
         PairSas = null;
+        if (failed)
+        {
+            // The code on screen belonged to the session that just failed: take it down and say why, so a PC that
+            // can't reach Flagship doesn't show a code nobody can pair with. The watch puts a new one up on retry.
+            PairCode = null;
+            PairStatus = Strings.T("cantReachFlagshipTryingAgain");
+        }
         FireBag();
         if (failed) _pairingWatch.OnFailed();
     }
@@ -1249,7 +1259,7 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(HandoffCountdown),
         nameof(ShowServerDetail), nameof(ShowDestinationChooser),
         nameof(ShowHostHerePane), nameof(ShowWizardPanes), nameof(ShowDestinationBackLink),
-        nameof(IsPairing), nameof(ShowPairingCover), nameof(PairQr), nameof(PairCode),
+        nameof(IsPairing), nameof(ShowPairingCover), nameof(PairQr), nameof(PairCode), nameof(PairWaitingNote),
         nameof(PairSas), nameof(PairStatus), nameof(PairDebug), nameof(HasPairSas),
         nameof(PairingStage), nameof(ManualRecipeMode), nameof(ShowPairingQr),
         nameof(ShowPairingConfirm), nameof(ShowAwaitingAuthorization), nameof(AdvancedAllowed),
