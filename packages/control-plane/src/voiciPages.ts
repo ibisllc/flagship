@@ -77,6 +77,8 @@ export interface VoiciPagesDeps {
   /** Takes a removed page's objects off voi.ci: the R2 index and pieces, and the files.voi.ci cache. Without it the
    *  handler deletes them from `bucket` itself (no purge). */
   removePageObjects?: (username: string, pageId: string) => Promise<void>;
+  /** Purges these R2 keys from files.voi.ci (the Worker's purgeFiles). */
+  purge?: (keys: string[]) => Promise<void>;
   now?: () => number;
 }
 
@@ -258,7 +260,22 @@ export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string,
       .filter(({ c }) => c.ok && c.parsed)
       .map(({ p, c }) => deps.voici.setPieceParse(index.pageId, p.sha256, p.role, (c as { refs: string[] }).refs)),
   ]);
+  await settleIndexObject(deps, u, index.seq);
   return okNoStore({ ok: true, pageId: index.pageId, seq: index.seq });
+}
+
+/**
+ * After a publish wrote its index to R2: a removal (or a newer publish) may have landed in D1 between this publish's
+ * compare-and-set and its R2 write, and the later write would then win in R2. Re-read the row and make R2 follow it:
+ * a removed page has no index object, a newer seq's index is written back; either way files.voi.ci is purged.
+ */
+async function settleIndexObject(deps: VoiciPagesDeps, u: string, seq: number): Promise<void> {
+  const now = await deps.voici.getPage(u);
+  if (!now || (now.removedAt == null && now.seq === seq)) return;
+  const key = voiciIndexKey(u);
+  if (now.removedAt != null || now.takenDownAt != null) await deps.bucket.delete(key);
+  else await deps.bucket.put(key, now.indexJson, { httpMetadata: { contentType: "application/json", cacheControl: VOICI_INDEX_CACHE } });
+  await deps.purge?.([key]);
 }
 
 /** The stored index (the merge base), and the stored seq and pageId: after a removal the seq is the removal's, one

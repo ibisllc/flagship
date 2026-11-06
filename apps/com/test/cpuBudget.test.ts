@@ -72,8 +72,9 @@ const BUDGETS: Record<string, Budget> = {
   // binding (security review: one attestation, one page), the insert. A first message carries four signatures (three
   // Ed25519, one P-256, checked natively) and a 10 KiB sealed body.
   "voici-send": { d1: 7, ratio: 0.6 },
-  // user + page, the pieces, the CAS, then the marks and the new chunk's parse
-  "voici-publish": { d1: 4, ratio: DEFAULT_RATIO },
+  // user + page, the pieces, the CAS, then the marks and the new chunk's parse, and the re-read after the R2 write
+  // (a removal or a newer publish that landed meanwhile must win on files.voi.ci)
+  "voici-publish": { d1: 5, ratio: DEFAULT_RATIO },
 };
 
 describe("Workers CPU budget (Free plan)", () => {

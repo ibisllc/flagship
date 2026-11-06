@@ -144,6 +144,50 @@ describe("voi.ci page removal", () => {
     expect(code(await w.remove(w.removal(2)))).toBe("banned");
   });
 
+  it("a removal that lands between a publish's commit and its R2 write leaves no index on R2", async () => {
+    const w = await world();
+    const purged: string[][] = [];
+    const deps = { ...w.deps, purge: async (keys: string[]) => void purged.push(keys) };
+    await published(w);
+    const p2 = buildPage({ seq: 2, issuedAt: T0, posts: [[post(1, true), post(2)]] });
+    await w.upload(p2);
+    // The publish has committed seq 2 in D1; before its index reaches R2, the owner's removal (seq 3) runs to the end.
+    const put = w.bucket.put.bind(w.bucket);
+    let armed = true;
+    w.bucket.put = async (key: string, value: Uint8Array | string, opts?: Parameters<typeof put>[2]) => {
+      if (armed && key === voiciIndexKey(USER)) {
+        armed = false;
+        expect((await handleVoiciRemove(deps, USER, JSON.stringify(w.removal(3)))).status).toBe(200);
+      }
+      return put(key, value, opts);
+    };
+    expect((await handleVoiciPublish(deps, USER, JSON.stringify(p2.index))).status).toBe(200);
+    expect(w.bucket.objects.has(voiciIndexKey(USER))).toBe(false);
+    expect(purged).toContainEqual([voiciIndexKey(USER)]);
+    expect((await handleVoiciGetPage(deps, USER)).status).toBe(404);
+  });
+
+  it("a newer publish that lands between a publish's commit and its R2 write keeps the newer index on R2", async () => {
+    const w = await world();
+    const deps = { ...w.deps, purge: async () => undefined };
+    await published(w);
+    const p2 = buildPage({ seq: 2, issuedAt: T0, posts: [[post(1, true)]] });
+    const p3 = buildPage({ seq: 3, issuedAt: T0, posts: [[post(1, true), post(2)]] });
+    await w.upload(p2);
+    await w.upload(p3);
+    const put = w.bucket.put.bind(w.bucket);
+    let armed = true;
+    w.bucket.put = async (key: string, value: Uint8Array | string, opts?: Parameters<typeof put>[2]) => {
+      if (armed && key === voiciIndexKey(USER)) {
+        armed = false;
+        expect((await handleVoiciPublish(deps, USER, JSON.stringify(p3.index))).status).toBe(200);
+      }
+      return put(key, value, opts);
+    };
+    expect((await handleVoiciPublish(deps, USER, JSON.stringify(p2.index))).status).toBe(200);
+    expect(JSON.parse(new TextDecoder().decode(w.bucket.objects.get(voiciIndexKey(USER))!.bytes))).toEqual(p3.index);
+  });
+
   it("refuses an account with no page", async () => {
     const w = await world();
     const r = await w.remove(w.removal(1));
