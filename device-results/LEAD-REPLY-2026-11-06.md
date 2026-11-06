@@ -9,9 +9,9 @@ except as noted. Build the next Windows Studio from `main` at or after **78ce3bc
 | Failure 2a: bundled xorriso can't read `/c/...` | FIXED | c43086141 | `/cygdrive/c/...` unless the tool sits in an MSYS2 tree with `etc/fstab`. Not yet proven on a real remaster: please verify. |
 | Failure 2b: extracted cfg is read-only | FIXED | c43086141 | Attributes cleared before the edit. |
 | Failure 3: a recipe refusal says nothing on the start screen | FIXED | c559bb080 | `RecipeError` shows under Load from file / Paste from clipboard, announced (LiveSetting assertive). Covers W5's older-app sentence. XAML compiled only in CI/Studio build (no WPF on the Mac). |
-| Failure 4: Android 0.3 key file → webapp import 403 | IN PROGRESS | branch `fix/keyfile-import-and-remote-code` | Root cause being diagnosed across webapp/Android/iOS; a refused import will also roll back the half-signed-in browser and show a sentence. Store builds wait for it. |
-| W18: camera-less computer can't join | IN PROGRESS | same branch | A typed code / link on Add a device, or a design if larger. |
-| W19: Remote browser never shows the comparison code; Approve with no server says nothing | IN PROGRESS | same branch | |
+| Failure 4: Android 0.3 key file → webapp import 403 | FIXED (not deployed) | 1df9d9663, 22d94d0e0 | Root cause: the three clients derive the IRK from the account key three different ways, so key-file import, cloud recovery and joining failed across clients. Each client now finds the registered key among the file's own derivations and rotates from there; nothing is installed before .com accepts; refusals are sentences. Live after the .com redeploy (webapp shell v204) and new store builds. |
+| W18: camera-less computer can't join | FIXED (not deployed) | 1dedf3426 | The phones' Add a device offers a link to send; paste it on the webapp's join screen ("Join with a pairing code"); codes still compared. Needs the new phone builds. |
+| W19: Remote browser never shows the comparison code; Approve with no server says nothing | FIXED (likely cause; not reproduced) | a9452a0d2 | Not reproduced on production (the code showed at once). Likely a session expiring just as the phone joined: the relay now restarts the 5-minute clock once when the phone joins, and the page says when a code ran out. Phones say why Approve is disabled with no server. Needs the .com redeploy. |
 | A11y: sidebar rows and log lines read as .NET type names | FIXED | 78ce3bc55 | `ToString` = "<server>.<user>, <state>" and the log text. |
 | A11y: Delete confirmation Yes/No exposed as Pane | OPEN | | Not fixed in this round. |
 | Info: "Setup failed" still reads "Installing…" and keeps the VM running; phone header still says "almost done" | OPEN | | Not fixed in this round (not a release blocker). |
@@ -21,8 +21,8 @@ except as noted. Build the next Windows Studio from `main` at or after **78ce3bc
 
 ## Please rerun with the new build
 W5, W6 (prebuilt host on production; expect it to come online), W8 (installer-ISO host with `FLAGSHIP_VM_FORCE_ISO=1`),
-the rows they unblock (W9, W10 needs the owner, W11, W13, W14, W17), and W26's QEMU-kill half. W18, W19, W25 after
-`fix/keyfile-import-and-remote-code` lands on main and `.com` is redeployed (I'll note it here).
+the rows they unblock (W9, W10 needs the owner, W11, W13, W14, W17), and W26's QEMU-kill half. W18, W19, W25 after the
+phase B `.com` redeploy (main 0bfd3bf67 or later; webapp shell v204) — key-file import with an Android 0.3 key file should now sign in.
 
 ## Also new in this build (for your awareness, test if convenient)
 - The voi.ci page is now managed at the top of the Messages tab (webapp shell v202 after the next `.com` deploy):
