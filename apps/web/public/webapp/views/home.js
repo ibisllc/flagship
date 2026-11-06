@@ -2,8 +2,9 @@ import { pinnedStk, podStk } from "../lib/serverPins.js";
 import { sendPendingWildcardGrants } from "../lib/firstContact.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
-import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon, userIcon } from "../lib/icons.js";
+import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon, userIcon, chevronRightIcon } from "../lib/icons.js";
 import { pendingOps, refreshWorld, world } from "../lib/voiciWorld.js";
+import { pageHomeState } from "../lib/voiciPagePublic.js";
 import { renderSharedWithMe } from "./shared-server.js";
 import {
   chipRow,
@@ -839,15 +840,20 @@ function renderRecoveryBanner() {
 const PAGE_WELCOME_ID = "home-page-welcome";
 
 /**
- * Home's welcome card for the voi.ci page (docs/voici-and-messages.md §11): only once `.com` said the account has
- * no page, nothing waits to be published, and this account hasn't dismissed it on this browser. Same rule as iOS
- * PageWelcomeCardStore.shouldShow and Android's.
+ * Home's pointer to the voi.ci page (docs/voici-and-messages.md §11.1), which is managed at the top of the Messages
+ * tab: the short welcome card until the page is first published or the card is dismissed, then a compact "Your page"
+ * row (pageHomeState). Nothing until `.com` answered for the page; nothing for a sample account (its device can't
+ * sign the page). Same states as iOS PageWelcomeCardStore and Android's.
  */
-export function shouldShowPageWelcome({ hasAccount, checked, published, pendingChanges, dismissed } = {}) {
-  return Boolean(hasAccount && checked && !published && !pendingChanges && dismissed !== "true");
+export function shouldShowPageWelcome(o = {}) {
+  return pageHomeState(o) === "card";
 }
 
-/** Below the backup nudge: while that shows, this waits (its dismiss renders this one). */
+function goToPage() {
+  void import("./messages.js").then((m) => m.enterPageHeader());
+}
+
+/** Below the backup nudge: while that shows, the card waits (its dismiss renders this one); the row doesn't. */
 async function renderPageWelcome() {
   const hide = () => document.getElementById(PAGE_WELCOME_ID)?.remove();
   const session = getSession();
@@ -856,7 +862,7 @@ async function renderPageWelcome() {
   try {
     dismissed = recoveryStoreGet("voiciWelcomeDismissed");
   } catch { /* localStorage disabled — treat as not dismissed */ }
-  if (!hasAccount || dismissed === "true" || document.getElementById(RECOVERY_BANNER_ID)) return hide();
+  if (!hasAccount) return hide();
   if (!world.pageLoaded) {
     try {
       await refreshWorld();
@@ -864,36 +870,55 @@ async function renderPageWelcome() {
       return hide();
     }
   }
-  const show = shouldShowPageWelcome({
+  const state = pageHomeState({
     hasAccount,
     checked: world.pageLoaded && !world.pageError,
     published: Boolean(world.page),
+    removed: Boolean(world.removed),
     pendingChanges: pendingOps().length,
     dismissed,
   });
-  if (!show || document.getElementById(RECOVERY_BANNER_ID)) return hide();
-  if (document.getElementById(PAGE_WELCOME_ID)) return;
-  const host = document.createElement("div");
-  host.id = PAGE_WELCOME_ID;
-  host.setAttribute("data-testid", "page-welcome-card");
-  host.innerHTML = announcementCard({
-    icon: userIcon,
-    title: tr("Welcome! Make your own page"),
-    message: tr("Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.", String(session.username).toLowerCase()),
-    ctaLabel: tr("Set up your page"),
-    dismissible: true,
-    tone: "teal",
-  });
+  if (!state || (state === "card" && document.getElementById(RECOVERY_BANNER_ID))) return hide();
   const list = document.getElementById("servers-list");
   if (!list?.parentNode) return;
-  list.parentNode.insertBefore(host, list);
-  host.querySelector("[data-ann-cta]")?.addEventListener("click", () => void import("./page-editor.js").then((m) => m.enterPageEditor()));
-  host.querySelector("[data-ann-dismiss]")?.addEventListener("click", () => {
-    try {
-      recoveryStoreSet("voiciWelcomeDismissed", "true");
-    } catch { /* swallow */ }
-    hide();
-  });
+  let host = document.getElementById(PAGE_WELCOME_ID);
+  if (!host) {
+    host = document.createElement("div");
+    host.id = PAGE_WELCOME_ID;
+    list.parentNode.insertBefore(host, list);
+  }
+  host.setAttribute("data-state", state);
+  if (state === "card") {
+    host.setAttribute("data-testid", "page-welcome-card");
+    host.innerHTML = announcementCard({
+      icon: userIcon,
+      title: tr("Your public page"),
+      message: tr("Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.", String(session.username).toLowerCase()),
+      ctaLabel: tr("Set up your page"),
+      dismissible: true,
+      tone: "teal",
+    });
+    host.querySelector("[data-ann-cta]")?.addEventListener("click", goToPage);
+    host.querySelector("[data-ann-dismiss]")?.addEventListener("click", () => {
+      try {
+        recoveryStoreSet("voiciWelcomeDismissed", "true");
+      } catch { /* swallow */ }
+      void renderPageWelcome();
+    });
+    return;
+  }
+  host.setAttribute("data-testid", "page-home-row");
+  const on = Boolean(world.page);
+  host.innerHTML = `
+    <div class="fs-group home-page-row">
+      <button type="button" class="fs-row" data-home-page-row>
+        <span class="fs-row-icon icon" aria-hidden="true">${userIcon}</span>
+        <span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Your page"))}</span></span>
+        <span class="home-page-status${on ? " is-public" : ""}" data-testid="page-home-status">${escapeHtml(on ? tr("Public") : tr("Not public"))}</span>
+        <span class="fs-row-chevron icon" aria-hidden="true">${chevronRightIcon}</span>
+      </button>
+    </div>`;
+  host.querySelector("[data-home-page-row]")?.addEventListener("click", goToPage);
 }
 
 /**

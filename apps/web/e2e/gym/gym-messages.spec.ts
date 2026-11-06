@@ -17,6 +17,10 @@ const ONE_PX_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA
 
 interface Com {
   index: any;
+  /** The stored seq (a removal's after one) and whether the owner removed the page (docs/voici-and-messages.md §3.3). */
+  seq: number;
+  removed: boolean;
+  removals: any[];
   pieces: Map<string, Buffer>;
   inbox: any[];
   state: any;
@@ -35,14 +39,34 @@ const sha256 = async (b: Buffer) => Buffer.from(await webcrypto.subtle.digest("S
 async function messagesWorld(page: Page, kind: "admin" | "non-admin" = "admin"): Promise<{ m: Mock; com: Com; keys: Keys; caPub: string }> {
   const keys = await reachHome(page, { kind, servers: [HOME] });
   const m = await mock(page);
-  const com: Com = { index: null, pieces: new Map(), inbox: [], state: null, sent: [], drafts: [], blocks: [], reports: [], consumed: [], other: {} };
+  const com: Com = { index: null, seq: 0, removed: false, removals: [], pieces: new Map(), inbox: [], state: null, sent: [], drafts: [], blocks: [], reports: [], consumed: [], other: {} };
   m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
   m.get(path("/api/username/smoketest"), { adminRootPub: keys.adminPubHex, irkPub: keys.irkPubHex });
   m.get(path(/^\/api\/username\/([a-z0-9-]+)$/), (c: Call) => {
     const o = com.other[c.url.pathname.split("/").pop()!];
     return o ? { json: o.keys } : { status: 404, json: { code: "not-found" } };
   });
-  m.get(path("/api/voici/pages/smoketest"), () => (com.index ? { json: { index: com.index } } : { status: 404, json: { code: "not-found" } }));
+  m.get(path("/api/voici/pages/smoketest"), () => (com.index && !com.removed ? { json: { index: com.index } } : { status: 404, json: { code: "not-found" } }));
+  m.post(path("/api/voici/pages/smoketest/remove"), async (c: Call) => {
+    if (!com.index || com.removed) return { status: 404, json: { code: "not-found" } };
+    const ok = await page.evaluate(
+      async ({ env, pub }) => {
+        const P = await import("/lib/voiciProtocol.js");
+        const keys = ["kind", "version", "username", "pageId", "seq", "issuedAt", "signerKind", "signerPub", "signature"];
+        if (JSON.stringify(Object.keys(env)) !== JSON.stringify(keys) || env.signerPub !== pub || env.signerKind !== "admin-root") return "wrong-signer";
+        return P.ed25519VerifyHex(env.signature, P.canonicalVoiciPageRemove(env), pub) ? "ok" : "bad-signature";
+      },
+      { env: c.body, pub: keys.adminPubHex },
+    );
+    if (ok !== "ok") return { status: 403, json: { code: ok } };
+    if (c.body.pageId !== com.index.pageId) return { status: 409, json: { code: "wrong-page", pageId: com.index.pageId } };
+    if (c.body.seq !== com.seq + 1) return { status: 409, json: { code: "seq-conflict", index: com.index, seq: com.seq, pageId: com.index.pageId, removed: false } };
+    com.removals.push(c.body);
+    com.seq = c.body.seq;
+    com.removed = true;
+    com.pieces.clear();
+    return { json: { ok: true, pageId: c.body.pageId, seq: c.body.seq } };
+  });
   m.get(path(/^\/api\/voici\/pages\/[a-z0-9-]+$/), (c: Call) => {
     const o = com.other[c.url.pathname.split("/").pop()!];
     return o ? { json: { index: o.index } } : { status: 404, json: { code: "not-found" } };
@@ -74,11 +98,13 @@ async function messagesWorld(page: Page, kind: "admin" | "non-admin" = "admin"):
         const P = await import("/lib/voiciProtocol.js");
         return P.checkVoiciPublish(idx, { username: "smoketest", sensitiveKind: "admin-root", sensitivePub: pub, storedSeq: stored?.seq ?? 0, storedPageId: stored?.pageId ?? null, now: Date.now() });
       },
-      { idx: c.body.index, pub: keys.adminPubHex, stored: com.index },
+      { idx: c.body.index, pub: keys.adminPubHex, stored: com.index ? { seq: com.seq, pageId: com.index.pageId } : null },
     );
-    if (!verdict.ok) return { status: verdict.code === "seq-conflict" ? 409 : 400, json: { code: verdict.code, index: com.index } };
+    if (!verdict.ok) return { status: verdict.code === "seq-conflict" ? 409 : 400, json: { code: verdict.code, index: com.index, seq: com.seq, pageId: com.index?.pageId ?? null, removed: com.removed } };
     for (const p of c.body.index.pieces) if (!com.pieces.has(p.sha256)) return { status: 400, json: { code: "missing-piece" } };
     com.index = c.body.index;
+    com.seq = c.body.index.seq;
+    com.removed = false;
     return { json: { ok: true } };
   });
   m.get(path("/api/voici/pages/smoketest/inbox"), () => ({ json: { items: com.inbox, blocks: com.blocks.length && com.blocks[com.blocks.length - 1].op === "block" ? [com.blocks[com.blocks.length - 1].pseudonymPub] : [], revoked: [], cursor: "" } }));
@@ -176,7 +202,7 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     // A forged copy (another body under the same signature) never shows.
     com.inbox.push({ envelope: v.envelope, storedAt: Date.now() }, { envelope: { ...v.envelope, msgId: "ee".repeat(16) }, storedAt: Date.now() });
     await openMessagesTab(page);
-    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Published");
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
     // A first message is a request until the owner replies or accepts.
     await expect(page.locator("#messages-list [data-conv]")).toHaveCount(0);
     await page.click('[data-messages-tab="requests"]');
@@ -224,9 +250,11 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
   test("gym messages page editor publishes after the warning", async ({ page }, testInfo) => {
     const { com, keys } = await messagesWorld(page);
     await openMessagesTab(page);
-    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Not published");
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#ph-name")).toHaveValue("smoketest");
+    await expect(page.locator("[data-testid=ph-url]")).toHaveText("voi.ci/smoketest");
     await expect(page.locator("[data-testid=messages-empty]")).toHaveText("No messages yet. Turn on Accept messages on your page to get them.");
-    await page.click("[data-testid=messages-your-page]");
+    await page.click("[data-testid=messages-edit-page]");
     await expect(page.locator("#view-page-editor")).toBeVisible();
     await expect(page.locator("[data-testid=voici-warning]")).toHaveText(
       "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
@@ -239,7 +267,10 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     await page.fill('[data-link-url="0"]', "https://github.com/smoketest");
     await expect(page.locator('[data-link-site="0"]')).toHaveText("GitHub");
     await page.fill('[data-link-label="0"]', "Code");
-    await page.click("#pe-save-profile");
+    // A field becomes a draft when it is left; there is no Save button any more, and leaving it keeps the focus moving.
+    await page.locator('[data-link-label="0"]').press("Tab");
+    await expect(page.locator('[data-link-remove="0"]')).toBeFocused();
+    await expect(page.locator("#pe-save-profile")).toHaveCount(0);
     // Nothing is published yet: the change is grayed, the first publish waits for Publish.
     await expect(page.locator("[data-testid=profile-pending]")).toHaveText("Not published yet");
     await page.check("#pe-accepts");
@@ -248,16 +279,22 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     await expect(page.locator("#pe-posts [data-post] [data-post-pending]")).toHaveText("Not published yet");
     await expect(page.locator("[data-testid=preview-name]")).toHaveText("Smoke Test");
     await expect(page.locator("[data-testid=preview-send]")).toHaveText("Send me a message");
+    // One bar counts every change: the profile (one change however many fields), Accept messages, the post.
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
     expect(com.index).toBeNull();
     await shot(page, testInfo, "page-editor-pending");
 
     await page.click("#pe-publish");
     await expect(page.locator(".modal-title")).toHaveText("Page and message rules");
     await page.click("[data-modal-ok]");
-    await expect(page.locator(".modal-title")).toHaveText("Publish your page?");
-    await expect(page.locator(".modal-message")).toHaveText("Anyone can see this page. It shares your username with your apps and servers, so people can connect them.");
+    await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
+    await expect(page.locator(".modal-message")).toHaveText(
+      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.",
+    );
     await page.click("[data-modal-ok]");
-    await expect(page.locator("[data-testid=page-status]")).toHaveText("Published at voi.ci/smoketest");
+    await expect(page.locator("#pe-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=page-status]")).toHaveText("Anyone with the link can see your page.");
+    await expect(page.locator("[data-testid=pe-publish-bar]")).toHaveCount(0);
     await expect(page.locator("#pe-posts .is-pending")).toHaveCount(0);
 
     // Signed by the admin root at seq 1; the photo is a clean JPEG within the cap.
@@ -294,15 +331,18 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     }, ADMIN_SEED_HEX);
     m.first("GET", path("/api/users/smoketest/device-grants"), { grants: [grant] });
     await openMessagesTab(page);
-    await page.click("[data-testid=messages-your-page]");
-    await expect(page.locator("[data-testid=page-admin-only]")).toHaveText("Only an admin device can publish your page. Changes you make here wait for it.");
+    await expect(page.locator("[data-testid=ph-admin-only]")).toHaveText("Only an admin device can publish your page.");
+    await expect(page.locator("#ph-switch")).toBeDisabled();
+    await page.click("[data-testid=messages-edit-page]");
+    await expect(page.locator("[data-testid=page-admin-only]")).toHaveText("Only an admin device can publish your page.");
+    await expect(page.locator("#pe-switch")).toBeDisabled();
     await expect(page.locator("#pe-publish")).toHaveCount(0);
     const mark = await toastMark(page);
     await page.fill("#pe-post-text", "Written on a member device.");
     await page.click("#pe-post-add");
     await sawToast(page, "Sent to your admin device to publish.", 15_000, mark);
     await expect(page.locator("#pe-posts [data-post] [data-post-pending]")).toHaveText("Waiting for an admin device to publish");
-    await expect(page.locator("[data-testid=page-status]")).toHaveText("Waiting for an admin device to publish");
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("Waiting for an admin device to publish");
     expect(com.index).toBeNull();
     expect(com.drafts).toHaveLength(1);
     // The draft is sealed (no text on the wire) and opens under the account's drafts key after the grant check.
@@ -315,6 +355,61 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     expect(opened).toEqual(["Written on a member device."]);
     expect(keys.kind).toBe("non-admin");
     await shot(page, testInfo, "page-editor-draft");
+  });
+
+  test("gym messages the Public switch removes the page and turns it back on", async ({ page, context }, testInfo) => {
+    const { com, keys } = await messagesWorld(page);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await publishOwnerPage(page);
+    const pageId = com.index.pageId;
+    await openMessagesTab(page);
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#ph-name")).toHaveValue("Smoke Test");
+
+    // The copy button writes the address and says so.
+    await page.click("#ph-copy");
+    await expect(page.locator("#ph-copied")).toHaveText("Copied");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/smoketest$/);
+
+    // On a public page the header's name is published at once.
+    await page.fill("#ph-name", "Smoke T.");
+    await page.locator("#ph-name").press("Enter");
+    await expect.poll(() => com.seq).toBe(2);
+    const prof = JSON.parse(com.pieces.get(com.index.pieces.find((p: any) => p.role === "profile").sha256)!.toString("utf8"));
+    expect(prof.displayName).toBe("Smoke T.");
+
+    // Off: a confirm, then a removal signed one step up the ladder.
+    await page.click("#ph-switch");
+    await expect(page.locator(".modal-title")).toHaveText("Remove your page from voi.ci?");
+    await expect(page.locator(".modal-message")).toHaveText(
+      "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.",
+    );
+    await shot(page, testInfo, "page-remove-confirm");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
+    expect(com.removals).toHaveLength(1);
+    expect(com.removals[0]).toMatchObject({ kind: "VoiciPageRemove", version: 1, username: "smoketest", pageId, seq: 3, signerKind: "admin-root", signerPub: keys.adminPubHex });
+    // The profile stays on this device.
+    await expect(page.locator("#ph-name")).toHaveValue("Smoke T.");
+
+    // On again: the rules and the one-time warning, then the same page one step up, every piece uploaded again.
+    await page.click("#ph-switch");
+    await expect(page.locator(".modal-title")).toHaveText("Page and message rules");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
+    expect([com.seq, com.index.pageId, com.removed]).toEqual([4, pageId, false]);
+    for (const p of com.index.pieces) expect(com.pieces.has(p.sha256)).toBe(true);
+
+    // Off and on once more: the warning isn't asked a second time.
+    await page.click("#ph-switch");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
+    await page.click("#ph-switch");
+    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
+    expect(com.seq).toBe(6);
+    await shot(page, testInfo, "page-header-public");
   });
 
   test("gym messages rename block and report a visitor", async ({ page }, testInfo) => {

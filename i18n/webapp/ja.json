@@ -3267,5 +3267,22 @@
   "Welcome! Make your own page": "ようこそ！自分のページを作りましょう",
   "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "voi.ci/{0} で、写真、ひとことの自己紹介、リンク、投稿を公開できます。希望すれば、訪問者からメッセージを受け取ることもできます。",
   "Set up your page": "ページを設定",
-  "Edit your page": "ページを編集"
+  "Edit your page": "ページを編集",
+  "Make your page public?": "ページを公開しますか？",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "ページに載せた内容はすべて公開されます。誰でも見ることができ、ユーザー名も表示されます。このユーザー名はアプリやサーバーでも使われているため、それらを結び付けられる可能性があります。",
+  "Remove your page from voi.ci?": "voi.ci からページを削除しますか？",
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": "訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。",
+  "This device can't sign your page. Use an admin device of your account.": "このデバイスではページに署名できません。アカウントの管理用デバイスを使ってください。",
+  "Make it public": "公開する",
+  "Your page is public.": "ページを公開しました。",
+  "Your page is off voi.ci.": "ページを voi.ci から削除しました。",
+  "Your public page": "あなたの公開ページ",
+  "Public": "公開",
+  "Not public": "非公開",
+  "Anyone with the link can see your page.": "リンクを知っている人は誰でもページを見られます。",
+  "Your page is not on voi.ci. Turn on Public to publish it.": "ページは voi.ci にありません。公開するには「公開」をオンにしてください。",
+  "Changes": "変更",
+  "Change photo": "写真を変更",
+  "Edit page": "ページを編集",
+  "Bio, links, posts, look, messages": "自己紹介、リンク、投稿、デザイン、メッセージ"
 }

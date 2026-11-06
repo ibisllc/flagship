@@ -3267,5 +3267,22 @@
   "Welcome! Make your own page": "¡Te damos la bienvenida! Crea tu propia página",
   "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "Comparte una foto, unas palabras sobre ti, tus enlaces y publicaciones en voi.ci/{0}. Si quieres, los visitantes pueden enviarte mensajes allí.",
   "Set up your page": "Configurar tu página",
-  "Edit your page": "Editar tu página"
+  "Edit your page": "Editar tu página",
+  "Make your page public?": "¿Hacer pública tu página?",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "Todo lo que pongas en tu página es público. Cualquiera puede verlo y muestra tu nombre de usuario, que también usan tus apps y servidores, así que otras personas pueden relacionarlos.",
+  "Remove your page from voi.ci?": "¿Quitar tu página de voi.ci?",
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": "Los visitantes verán «Aquí no hay ninguna página». Tus publicaciones y tu perfil se quedan en tus dispositivos, así que puedes volver a activarla.",
+  "This device can't sign your page. Use an admin device of your account.": "Este dispositivo no puede firmar tu página. Usa un dispositivo de administración de tu cuenta.",
+  "Make it public": "Hacerla pública",
+  "Your page is public.": "Tu página es pública.",
+  "Your page is off voi.ci.": "Tu página ya no está en voi.ci.",
+  "Your public page": "Tu página pública",
+  "Public": "Pública",
+  "Not public": "No pública",
+  "Anyone with the link can see your page.": "Cualquiera con el enlace puede ver tu página.",
+  "Your page is not on voi.ci. Turn on Public to publish it.": "Tu página no está en voi.ci. Activa «Pública» para publicarla.",
+  "Changes": "Cambios",
+  "Change photo": "Cambiar foto",
+  "Edit page": "Editar página",
+  "Bio, links, posts, look, messages": "Biografía, enlaces, publicaciones, aspecto, mensajes"
 }

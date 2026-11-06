@@ -3267,5 +3267,22 @@
   "Welcome! Make your own page": "Boas-vindas! Crie sua própria página",
   "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "Compartilhe uma foto, algumas palavras sobre você, seus links e publicações em voi.ci/{0}. Se quiser, os visitantes podem enviar mensagens para você lá.",
   "Set up your page": "Configurar sua página",
-  "Edit your page": "Editar sua página"
+  "Edit your page": "Editar sua página",
+  "Make your page public?": "Tornar sua página pública?",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "Tudo o que você coloca na sua página é público. Qualquer pessoa pode ver, e ela mostra seu nome de usuário, que seus apps e servidores também usam, então as pessoas podem ligar uma coisa à outra.",
+  "Remove your page from voi.ci?": "Remover sua página do voi.ci?",
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": "Os visitantes vão ver \"Não há nenhuma página aqui.\" Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.",
+  "This device can't sign your page. Use an admin device of your account.": "Este dispositivo não pode assinar sua página. Use um dispositivo de administração da sua conta.",
+  "Make it public": "Tornar pública",
+  "Your page is public.": "Sua página está pública.",
+  "Your page is off voi.ci.": "Sua página saiu do voi.ci.",
+  "Your public page": "Sua página pública",
+  "Public": "Pública",
+  "Not public": "Não pública",
+  "Anyone with the link can see your page.": "Qualquer pessoa com o link pode ver sua página.",
+  "Your page is not on voi.ci. Turn on Public to publish it.": "Sua página não está no voi.ci. Ative \"Pública\" para publicá-la.",
+  "Changes": "Alterações",
+  "Change photo": "Trocar foto",
+  "Edit page": "Editar página",
+  "Bio, links, posts, look, messages": "Bio, links, publicações, aparência, mensagens"
 }

@@ -8,15 +8,15 @@ import { formatWhen } from "../lib/dateFormat.js";
 import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
 import { canSignAdminOrders } from "../lib/addServerGate.js";
 import { getSession } from "../lib/state.js";
-import { isUnread, publishVoiciPage, voiciPageUrl } from "../lib/voiciOwner.js";
-import { changeState, conversationsIn, emitWorld, onWorldChange, pendingOps, refreshWorld, unreadCount, visitorName, world } from "../lib/voiciWorld.js";
+import { isUnread, publishVoiciPage } from "../lib/voiciOwner.js";
+import { changeState, conversationsIn, emitWorld, onWorldChange, refreshWorld, unreadCount, visitorName, world } from "../lib/voiciWorld.js";
 import { revokeSignedInSite, parseVoiciSignInLink } from "../lib/voiciSignIn.js";
 import { voiciErrorText, VOICI_RULES_TEXT, VOICI_RULES_TITLE } from "../lib/voiciCopy.js";
-import { chevronRightIcon } from "../lib/icons.js";
+import { keepPageHeaderFresh, renderPageHeader } from "./page-header.js";
 import { checkReplies, markReplySeen } from "../lib/voiciReplies.js";
 import { voiciWebOrigin } from "../lib/voiciOwner.js";
 
-import { tr, trn } from "../lib/i18n.js";
+import { tr } from "../lib/i18n.js";
 
 registerView("view-messages", { tab: "messages" });
 registerView("view-messages-settings", { tab: "settings" });
@@ -27,26 +27,6 @@ let replyAlerts = [];
 
 const username = () => String(getSession()?.username ?? "").toLowerCase();
 
-/** "voi.ci/<u>", published or not, and how many changes wait. */
-function pageRowHtml() {
-  const u = username();
-  const pending = pendingOps().length;
-  let status;
-  if (world.pageError && !world.page) status = tr("Couldn't check your page.");
-  else if (!world.page) status = tr("Not published");
-  else if (pending) status = trn(pending, "{0} change not published", "{0} changes not published");
-  else status = tr("Published");
-  return `
-    <button type="button" class="fs-row voici-page-row" id="messages-your-page" data-testid="messages-your-page">
-      <span class="fs-row-body">
-        <span class="fs-row-title">${escapeHtml(tr("Your page"))}</span>
-        <span class="fs-row-subtitle mono">${escapeHtml(voiciPageUrl(u).replace(/^https:\/\//, ""))}</span>
-        <span class="fs-row-subtitle" data-testid="messages-page-status">${escapeHtml(status)}</span>
-        <span class="fs-row-action" data-testid="messages-edit-page">${escapeHtml(!world.page && !pending ? tr("Set up your page") : tr("Edit your page"))}</span>
-      </span>
-      <span class="fs-row-chevron icon">${chevronRightIcon}</span>
-    </button>`;
-}
 
 function lastLine(cv) {
   const m = cv.messages[cv.messages.length - 1];
@@ -82,11 +62,7 @@ function listHtml() {
 }
 
 export function renderMessages() {
-  const row = $("messages-page-row");
-  if (row) {
-    row.innerHTML = pageRowHtml();
-    $("messages-your-page")?.addEventListener("click", () => void import("./page-editor.js").then((m) => m.enterPageEditor()));
-  }
+  renderPageHeader($("messages-page-row"));
   const requests = conversationsIn("requests").length;
   const count = $("messages-requests-count");
   if (count) count.textContent = requests ? `(${requests})` : "";
@@ -150,21 +126,13 @@ export async function enterMessages() {
   void refreshReplyAlerts();
   await refreshWorld();
   renderMessages();
-  void autoPublishDrafts();
 }
 
-/**
- * An admin device with drafts waiting publishes them at once while the app is open and unlocked (§5.1), but
- * only once the page exists: a first publish waits for the owner's Publish and its warning (O1).
- */
-export async function autoPublishDrafts() {
-  if (!canSignAdminOrders() || !world.page || !world.drafts.length) return;
-  try {
-    const { publishAndConsume } = await import("./page-editor.js");
-    await publishAndConsume();
-  } catch {
-    /* the editor shows the waiting changes and a Publish button */
-  }
+/** Home's and Settings' way to the page: the Messages tab, scrolled to its header (§11.1). */
+export async function enterPageHeader() {
+  await enterMessages();
+  window.scrollTo({ top: 0 });
+  $("messages-page-header")?.focus({ preventScroll: true });
 }
 
 function updateBadge() {
@@ -268,6 +236,7 @@ export function initMessagesView() {
   onWorldChange(() => {
     updateBadge();
   });
+  keepPageHeaderFresh(() => $("messages-page-row"));
   // Once per open of the app, after the unlock: the reply check, so the tab's badge shows it.
   let checkedOnOpen = false;
   document.addEventListener("flagship:view-shown", (ev) => {

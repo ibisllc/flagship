@@ -286,6 +286,31 @@ export function canonicalVoiciPieceUpload(u) {
   return enc([TAG_VOICI_PIECE_UPLOAD, u.username, u.pageId, u.sha256, String(u.size), String(u.issuedAt)].join("|"));
 }
 
+// ── the owner's removal (§3.3) ─────────────────────────────────────────────
+
+export const TAG_VOICI_PAGE_REMOVE = "flagship/voici-page-remove/v1";
+
+/** flagship/voici-page-remove/v1|<username>|<pageId>|<seq>|<issuedAt> (packages/protocol/src/voiciPageRemove.ts). */
+export function canonicalVoiciPageRemove(f) {
+  if (typeof f.username !== "string" || !USERNAME.test(f.username)) throw new Error(`${TAG_VOICI_PAGE_REMOVE}: bad username`);
+  if (typeof f.pageId !== "string" || !PAGE_ID.test(f.pageId)) throw new Error(`${TAG_VOICI_PAGE_REMOVE}: bad pageId`);
+  if (!isTime(f.seq) || f.seq < 1 || !isTime(f.issuedAt)) throw new Error(`${TAG_VOICI_PAGE_REMOVE}: bad seq/issuedAt`);
+  return enc([TAG_VOICI_PAGE_REMOVE, f.username, f.pageId, String(f.seq), String(f.issuedAt)].join("|"));
+}
+
+/** The envelope `.com` takes at POST /api/voici/pages/<u>/remove, signed with the sensitive key's seed. */
+export function signVoiciPageRemove(f, signerSeed) {
+  const body = { username: f.username, pageId: f.pageId, seq: f.seq, issuedAt: f.issuedAt };
+  return {
+    kind: "VoiciPageRemove",
+    version: 1,
+    ...body,
+    signerKind: f.signerKind,
+    signerPub: hex(ed25519PublicKey(signerSeed)),
+    signature: ed25519SignHex(canonicalVoiciPageRemove(body), signerSeed),
+  };
+}
+
 export function signVoiciPieceUpload(u, signerSeed) {
   return ed25519SignHex(canonicalVoiciPieceUpload(u), signerSeed);
 }

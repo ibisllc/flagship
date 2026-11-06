@@ -3267,5 +3267,22 @@
   "Welcome! Make your own page": "Bienvenue ! Créez votre propre page",
   "Share a photo, a few words about you, your links and posts at voi.ci/{0}. If you want, visitors can send you messages there.": "Partagez une photo, quelques mots sur vous, vos liens et vos publications sur voi.ci/{0}. Si vous le souhaitez, les visiteurs peuvent vous y envoyer des messages.",
   "Set up your page": "Configurer votre page",
-  "Edit your page": "Modifier votre page"
+  "Edit your page": "Modifier votre page",
+  "Make your page public?": "Rendre votre page publique ?",
+  "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.": "Tout ce que vous mettez sur votre page est public. Tout le monde peut le voir, et elle affiche votre nom d'utilisateur, que vos apps et vos serveurs utilisent aussi : on peut donc faire le lien entre eux.",
+  "Remove your page from voi.ci?": "Retirer votre page de voi.ci ?",
+  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": "Les visiteurs verront « Il n’y a pas de page ici. » Vos publications et votre profil restent sur vos appareils, vous pouvez donc la réactiver.",
+  "This device can't sign your page. Use an admin device of your account.": "Cet appareil ne peut pas signer votre page. Utilisez un appareil administrateur de votre compte.",
+  "Make it public": "La rendre publique",
+  "Your page is public.": "Votre page est publique.",
+  "Your page is off voi.ci.": "Votre page n'est plus sur voi.ci.",
+  "Your public page": "Votre page publique",
+  "Public": "Publique",
+  "Not public": "Non publique",
+  "Anyone with the link can see your page.": "Toute personne ayant le lien peut voir votre page.",
+  "Your page is not on voi.ci. Turn on Public to publish it.": "Votre page n'est pas sur voi.ci. Activez « Publique » pour la publier.",
+  "Changes": "Modifications",
+  "Change photo": "Changer de photo",
+  "Edit page": "Modifier la page",
+  "Bio, links, posts, look, messages": "Bio, liens, publications, apparence, messages"
 }

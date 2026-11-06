@@ -249,8 +249,9 @@
            (views/messages.js), a thread (views/thread.js), the page editor (views/page-editor.js), Settings →
            Messages and the voi.ci sign-in approval (views/voici-sign-in.js). Rendered by JS; text only. -->
       <section id="view-messages" class="hidden" data-tab="messages">
-        <h2>Messages</h2>
+        <div class="ph-bar" id="messages-page-bar" data-ph-bar aria-hidden="true"></div>
         <div id="messages-page-row"></div>
+        <h2>Messages</h2>
         <div id="messages-reply-alerts"></div>
         <div class="fs-segmented mt-3" id="messages-segments" role="radiogroup" aria-label="Messages">
           <button type="button" role="radio" aria-checked="true" data-messages-tab="messages">Messages</button>
@@ -314,6 +315,7 @@
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-page"><span class="fs-row-icon icon" data-row-icon="page"></span><span class="fs-row-body"><span class="fs-row-title">Your page</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-messages"><span class="fs-row-icon icon" data-row-icon="messages"></span><span class="fs-row-body"><span class="fs-row-title">Messages</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>

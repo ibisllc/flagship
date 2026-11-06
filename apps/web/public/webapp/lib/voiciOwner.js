@@ -49,6 +49,7 @@ import {
   ed25519VerifyHex,
   ed25519PublicKey,
   ed25519SignHex,
+  canonicalVoiciPageRemove,
 } from "./voiciProtocol.js";
 import { controlApex, controlHost, dataApex } from "./apex.js";
 import { accountReadFetch } from "./accountRead.js";
@@ -315,6 +316,9 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
   const signer = deps.signer ?? (await ownPageSigner(deps));
   if (!signer) throw new VoiciError("not-admin");
   let published = deps.published !== undefined ? deps.published : await loadPublishedPage(username, deps);
+  // A page the owner removed: its content lives on this device (removedSnapshotBase) and the pieces are gone from
+  // `.com`, so every piece is uploaded again under the same pageId, one step up the seq ladder.
+  if (!published && deps.removed) published = deps.removed;
   for (let attempt = 0; attempt < 3; attempt++) {
     const base = published ?? { profile: defaultVoiciProfile(username), acceptsMessages: 0, chunks: [], issuedAt: 0 };
     const merged = mergeVoiciPage(base, ops);
@@ -333,7 +337,58 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     }
     const err = await readError(r);
     if (err.code !== "seq-conflict") throw err;
-    published = err.body?.index ? await verifyPublishedIndex(username, err.body.index, deps) : await loadPublishedPage(username, deps);
+    if (err.body?.removed === true) published = removedLadderBase(err.body, base);
+    else published = err.body?.index ? await verifyPublishedIndex(username, err.body.index, deps) : await loadPublishedPage(username, deps);
+  }
+  throw new VoiciError("publish-conflict");
+}
+
+/**
+ * A publish base for a removed page: `content` (this device's copy, else the default profile) under the ladder `.com`
+ * answered with (its stored pageId and seq, the stored index's inbox epoch) and no listed pieces, so all are uploaded.
+ */
+export function removedLadderBase(body, content) {
+  const epoch = Number.isSafeInteger(body?.index?.inboxEpoch) ? body.index.inboxEpoch : content?.index?.inboxEpoch ?? 1;
+  return {
+    profile: content.profile,
+    acceptsMessages: content.acceptsMessages,
+    chunks: content.chunks,
+    issuedAt: content.issuedAt ?? 0,
+    pieces: content.pieces ?? new Map(),
+    index: { pageId: body.pageId, seq: body.seq, inboxEpoch: epoch, pieces: [] },
+  };
+}
+
+/**
+ * The owner takes the page off voi.ci (§3.3): a removal one step up the seq ladder, signed by the sensitive key. A
+ * seq conflict (another admin device published meanwhile) retries on the stored seq; a page that is already gone
+ * answers `{removed: true}` without a new removal. Returns `{pageId, seq}` of the page as `.com` now holds it.
+ */
+export async function removeVoiciPage({ published }, deps = {}) {
+  const c = ctx(deps);
+  const username = usernameOf(c);
+  const signer = deps.signer ?? (await ownPageSigner(deps));
+  if (!signer) throw new VoiciError("not-admin");
+  if (!published?.index) throw new VoiciError("not-found");
+  const pageId = published.index.pageId;
+  let seq = published.index.seq;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const body = { username, pageId, seq: seq + 1, issuedAt: c.now() };
+    const signature = await signer.sign(canonicalVoiciPageRemove(body));
+    const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/remove`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "VoiciPageRemove", version: 1, ...body, signerKind: signer.kind, signerPub: signer.pub, signature }),
+    });
+    if (r.ok) {
+      const ok = await r.json();
+      return { pageId: ok.pageId ?? pageId, seq: ok.seq ?? body.seq };
+    }
+    const err = await readError(r);
+    if (err.code === "not-found") return { pageId, seq: null, already: true };
+    if (err.code !== "seq-conflict" || !Number.isSafeInteger(err.body?.seq)) throw err;
+    if (err.body.removed === true) return { pageId, seq: err.body.seq, already: true };
+    seq = err.body.seq;
   }
   throw new VoiciError("publish-conflict");
 }
