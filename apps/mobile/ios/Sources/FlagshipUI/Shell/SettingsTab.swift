@@ -202,8 +202,8 @@ public struct SettingsTab: View {
                     pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
                     onOpenPrivacy: { path.append(.privacy) },
-                    onOpenMessages: isDemoSession && !MessagesStore.shared.hasAccount ? nil : { path.append(.messages) },
-                    onOpenYourPage: MessagesStore.shared.hasAccount ? { linker.pending = .messages } : nil,
+                    onOpenMessages: isDemoSession && !MessagesStore.shared.hasAccount && !MessagesStore.shared.isSampleReadOnly ? nil : { path.append(.messages) },
+                    onOpenYourPage: MessagesStore.shared.hasAccount || MessagesStore.shared.isSampleReadOnly ? { linker.pending = .messages } : nil,
                     onRefresh: { await vm.load() },
                     onRemoveFromAccount: {
                         // Recovery gate (mirrors onSignOut): removing this

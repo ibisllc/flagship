@@ -90,7 +90,8 @@ public final class MessagesStore {
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false
         local = Local()
         guard !u.isEmpty else { return }
-        load()
+        // A sample account's example page is read from `.com` each time; no copy of it is kept on the device.
+        if !isSampleReadOnly { load() }
     }
 
     /// After a wipe: nothing of the account stays in memory, and nothing is written back.
@@ -112,6 +113,15 @@ public final class MessagesStore {
         if sampleAccountsHavePages { return !username.isEmpty }
         #endif
         return !username.isEmpty && !isDemo
+    }
+
+    /// A sample account: its page is the example the operator publishes (docs/sample-users.md), read from `.com` and shown
+    /// read-only. Nothing is signed here and the UMK is never needed: the device holds no key that signs this page.
+    public var isSampleReadOnly: Bool {
+        #if DEBUG
+        if sampleAccountsHavePages { return false }
+        #endif
+        return !username.isEmpty && isDemo
     }
 
     #if DEBUG
@@ -230,6 +240,10 @@ public final class MessagesStore {
 
     /// Reads the page, the state blob, the drafts lane and the mailbox; an admin device then publishes what waits.
     public func refresh() async {
+        if isSampleReadOnly {
+            await refreshSample()
+            return
+        }
         guard hasAccount, let client, !refreshing else { return }
         refreshing = true
         defer { refreshing = false }
@@ -249,6 +263,45 @@ public final class MessagesStore {
         } catch {
             lastError = Self.sentence(error)
             phase = conversations.isEmpty && index == nil ? .failed(lastError ?? "") : .ready
+        }
+    }
+
+    /// A sample account's example page: the public index checked against the account's own key, its pieces and photos.
+    /// No state blob, drafts lane, mailbox or publish; nothing is written to this device's page copy.
+    private func refreshSample() async {
+        guard let client, !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
+        if phase != .ready { phase = .loading }
+        do {
+            let keys = try await client.accountKeys(username: username)
+            accountKeys = keys
+            guard let raw = try await client.page(username: username) else {
+                index = nil
+                published = nil
+                phase = .ready
+                lastError = nil
+                return
+            }
+            let s = keys.sensitive
+            guard case .ok(let idx) = VoiciPage.checkVoiciPageIndex(raw, username: username, sensitiveKind: s.kind, sensitivePub: s.pub),
+                  let content = try await VoiciOwner.content(idx, fetch: { try await client.piece(pageId: idx.pageId, sha256: $0.sha256) }) else {
+                // Not the account's own page: nothing of it is shown.
+                index = nil
+                published = nil
+                throw VoiciComError(status: 200, code: "page-unchecked")
+            }
+            for sha in VoiciOwner.imageHashes(content) where VoiciImageStore.load(sha) == nil {
+                if let b = try? await client.piece(pageId: idx.pageId, sha256: sha), CanonicalJson.sha256Hex(b) == sha { VoiciImageStore.save(b) }
+            }
+            index = idx
+            published = content
+            isRemoved = false
+            phase = .ready
+            lastError = nil
+        } catch {
+            lastError = Self.sentence(error)
+            phase = index == nil ? .failed(lastError ?? "") : .ready
         }
     }
 

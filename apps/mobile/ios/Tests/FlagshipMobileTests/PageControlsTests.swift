@@ -41,6 +41,16 @@ final class PageControlsTests: XCTestCase {
         XCTAssertEqual(pointer(checked: false), .hidden)
     }
 
+    func test_pointer_sampleAccountGetsTheRowNeverTheWelcome() {
+        let sample = { (checked: Bool, published: Bool) in
+            PageWelcomeCardStore.pointer(hasAccount: false, checked: checked, published: published, everPublished: false,
+                                         pendingChanges: 0, dismissed: false, sampleAccount: true)
+        }
+        XCTAssertEqual(sample(true, true), .row(isPublic: true))
+        XCTAssertEqual(sample(true, false), .row(isPublic: false), "No example page yet: the row reads Not public.")
+        XCTAssertEqual(sample(false, true), .hidden, "Nothing until `.com` answered.")
+    }
+
     func test_everPublishedIsPerAccountAndPersists() {
         let d = freshDefaults()
         let a = PageWelcomeCardStore(defaults: d)
@@ -100,6 +110,58 @@ final class PageControlsTests: XCTestCase {
     }
 
     private func publishedIndex() -> VoiciPageIndex? { mock.pages[user].flatMap { VoiciPage.parseVoiciPageIndex($0) } }
+
+    // MARK: a sample account's example page
+
+    func test_sampleAccountReadsTheExamplePageReadOnlyWithoutTheUMK() async throws {
+        // The operator's example page, published under the account's key (here by an admin store).
+        let owner = await store()
+        _ = await owner.setQuickProfile(displayName: user, avatar: nil)
+        await owner.addPost(text: "An example post.", links: [], images: [:])
+        await owner.goPublic()
+        await owner.publishNow()
+        let published = mock.publishes
+        XCTAssertEqual(publishedIndex()?.seq, 2)
+
+        // The sample device holds neither the UMK nor the admin root.
+        GymSeams.adminRootSeed = nil
+        GymSeams.accountRootSeed = nil
+        let s = MessagesStore()
+        s.directDelivery = false
+        s.configure(client: mock, username: user, deviceId: "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1", isDemo: true)
+        XCTAssertTrue(s.isSampleReadOnly)
+        XCTAssertFalse(s.hasAccount, "No editor, drafts or Messages for a sample account.")
+        await s.refresh()
+        XCTAssertEqual(s.phase, .ready)
+        XCTAssertNil(s.lastError)
+        XCTAssertTrue(s.isPublic)
+        XCTAssertEqual(s.index?.seq, 2)
+        XCTAssertEqual(s.published?.profile.displayName, user)
+        XCTAssertEqual(s.published?.chunks.flatMap { $0 }.map(\.text), ["An example post."])
+        XCTAssertEqual(s.pendingCount, 0)
+        XCTAssertTrue(s.conversations.isEmpty)
+        XCTAssertEqual(mock.publishes, published, "Reading the example page signs and publishes nothing.")
+
+        // The operator takes it down: the header reads Not public.
+        let idx = try XCTUnwrap(publishedIndex())
+        mock.removed[user] = (idx.seq + 1, idx.pageId)
+        await s.refresh()
+        XCTAssertFalse(s.isPublic)
+        XCTAssertNil(s.published)
+    }
+
+    func test_sampleAccountRefusesAPageNotSignedByTheAccountKey() async throws {
+        let owner = await store()
+        await owner.goPublic()
+        mock.keys[user] = VoiciAccountKeys(irkPub: String(repeating: "11", count: 32), adminRootPub: String(repeating: "22", count: 32))
+        GymSeams.accountRootSeed = nil
+        let s = MessagesStore()
+        s.configure(client: mock, username: user, deviceId: "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1", isDemo: true)
+        await s.refresh()
+        XCTAssertFalse(s.isPublic)
+        XCTAssertNil(s.published)
+        XCTAssertNotNil(s.lastError)
+    }
 
     func test_switchOnPublishesTheNameAndLeavesOtherDraftsAsDrafts() async throws {
         let s = await store()

@@ -5507,9 +5507,13 @@
     "en": "Too many tries. Try again later.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:785"
   },
-  "Messages need your own Flagship account. Sample accounts can't have a page.": {
-    "en": "Messages need your own Flagship account. Sample accounts can't have a page.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:73"
+  "This is a sample account. Its page is an example, so you can't change it.": {
+    "en": "This is a sample account. Its page is an example, so you can't change it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift"
+  },
+  "View page": {
+    "en": "View page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift"
   },
   "You have a reply on voi.ci/%@": {
     "en": "You have a reply on voi.ci/%@",

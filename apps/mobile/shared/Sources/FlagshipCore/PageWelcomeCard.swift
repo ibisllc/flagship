@@ -66,7 +66,11 @@ public final class PageWelcomeCardStore {
     }
 
     /// The welcome card until the page was first public, changes were started, or the card was dismissed; the row after.
-    public nonisolated static func pointer(hasAccount: Bool, checked: Bool, published: Bool, everPublished: Bool, pendingChanges: Int, dismissed: Bool) -> Pointer {
+    /// A sample account (`sampleAccount`) always gets the row once its page was read: its page is the operator's example,
+    /// so there is nothing to set up and no welcome card.
+    public nonisolated static func pointer(hasAccount: Bool, checked: Bool, published: Bool, everPublished: Bool, pendingChanges: Int, dismissed: Bool,
+                                           sampleAccount: Bool = false) -> Pointer {
+        if sampleAccount { return checked ? .row(isPublic: published) : .hidden }
         guard hasAccount, checked else { return .hidden }
         if shouldShow(hasAccount: hasAccount, checked: checked, published: published || everPublished, pendingChanges: pendingChanges, dismissed: dismissed) {
             return .welcome
