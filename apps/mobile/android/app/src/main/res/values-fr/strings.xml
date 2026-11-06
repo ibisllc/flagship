@@ -3509,4 +3509,9 @@
     <string name="voici_remove_reason">Retirer votre page</string>
     <string name="voici_remove_failed">Impossible de retirer votre page. Réessayez.</string>
     <string name="voici_admin_only_remove">Seul un appareil administrateur peut retirer votre page.</string>
+    <string name="keyfile_import_no_such_account">Il n’existe aucun compte nommé %1$s. Vérifiez qu’il s’agit du bon fichier de clé.</string>
+    <string name="keyfile_import_key_mismatch">Ce fichier de clé n’ouvre plus %1$s. Il appartient à un autre compte, ou la clé du compte a été remplacée après la création du fichier.</string>
+    <string name="keyfile_import_unreachable">Impossible de joindre Flagship pour vérifier ce fichier de clé. Rien n’a été modifié sur cet appareil. Vérifiez votre connexion et réessayez.</string>
+    <string name="keyfile_import_refused">Flagship n’a pas accepté ce fichier de clé pour %1$s. Rien n’a été modifié sur cet appareil. Réessayez dans quelques minutes.</string>
+    <string name="no_camera_on_the_other_device_send_link">L’autre appareil n’a pas de caméra ? Envoyez-lui ce lien et collez-le là-bas.</string>
 </resources>

@@ -556,6 +556,12 @@ class MockFlagshipServerClient(
         //   - `recoveryProof`: single accounts with cloud recovery.
         // Nothing presented and nothing enrolled ⇒ 409 no-credential.
         val u = username.lowercase()
+        // Worker (rePair.ts): the body's oldIrkPub must be the registered key.
+        _claimedUsernames[u]?.takeIf { it.length == 64 }?.let { registered ->
+            if (!registered.equals(body.request.oldIrkPub, ignoreCase = true)) {
+                throw HttpException(403, """{"error":"oldIrkPub does not match the current registered IRK"}""")
+            }
+        }
         val isMulti = accountTypeByUser[u] == "multi"
         val registeredKeyProven = !body.oldIrkSignature.isNullOrEmpty()
         val codeEnrolled =

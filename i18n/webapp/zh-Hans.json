@@ -3286,5 +3286,12 @@
   "Edit page": "编辑页面",
   "Bio, links, posts, look, messages": "简介、链接、帖子、外观、消息",
   "This is a sample account. Its page is an example, so you can't change it.": "这是一个示例账户。它的页面只是示例，所以你无法更改。",
-  "View page": "查看页面"
+  "View page": "查看页面",
+  "There is no account named {0}. Check that this is the right key file.": "不存在名为 {0} 的账户。请确认这是正确的密钥文件。",
+  "This key file doesn't open {0} any more. It belongs to another account, or the account's key was replaced after the file was made.": "此密钥文件已无法打开 {0}。它属于另一个账户，或者该账户的密钥在文件创建后已被更换。",
+  "Couldn't reach Flagship to check this key file. Nothing was changed in this browser. Check your connection and try again.": "无法连接 Flagship 来检查此密钥文件。此浏览器上没有任何更改。请检查网络连接后重试。",
+  "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.": "Flagship 未接受用于 {0} 的此密钥文件。此浏览器上没有任何更改。请几分钟后重试。",
+  "Couldn't restore this key file. Nothing was changed in this browser. Try again.": "无法恢复此密钥文件。此浏览器上没有任何更改。请重试。",
+  "Couldn't restore this key file": "无法恢复此密钥文件",
+  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "此代码在获得批准前已过期。请重新开始，然后用手机扫描新代码。"
 }

@@ -94,31 +94,55 @@ public final class KeyfileImportViewModel {
 
         let username = meta.username
 
-        // 2 — Install the recovered UMK into THIS account's slot, so a
-        // second imported cloud lands in its own slot and never clobbers
-        // an already-present profile. installUMK resets the IRK lineage
-        // to v1 under the imported UMK.
-        Keystore.setActiveProfile(username)
+        // 2 — Which key does the account hold now? An account made on the
+        // webapp or Android (or re-paired anywhere) does not hold this app's
+        // v1, so `.com` would refuse "oldIrkPub does not match the current
+        // registered IRK". Only keys derived from the file's own seed are
+        // tried; no match means the file isn't this account's current key,
+        // and nothing is sent or installed.
+        let registered: IrkLineage.Key
         do {
-            try await installUMK(seed, String(localized: "Bring this device into your Flagship account"))
+            if let pub = try await server.registeredIrkPub(username: username), pub.count == 64 {
+                guard let k = IrkLineage.findRegistered(umk: seed, registeredPubHex: pub) else {
+                    phase = .failed(String(localized: "This key file doesn't open \(username) any more. It belongs to another account, or the account's key was replaced after the file was made."))
+                    return
+                }
+                registered = k
+            } else {
+                // This client can't tell (a test harness): the lineage installUMK starts.
+                registered = try IrkLineage.key(umk: seed, scheme: IrkLineage.own, version: 1)
+            }
+        } catch ScreensClientError.http(let status, _) where status == 404 {
+            phase = .failed(String(localized: "There is no account named \(username). Check that this is the right key file."))
+            return
         } catch {
-            phase = .failed(String(localized: "Couldn't install your account key. \(HumanError.humanize(error))"))
+            phase = .failed(String(localized: "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again."))
             return
         }
-        // A v2 file also carries the admin key and the servers (docs/data-sovereignty.md 4.11):
-        // put them back so this device can reach and save its servers even with `.com` gone.
-        await restoreAccount(account)
 
-        // 3 — Initiate the takeover re-pair. A fresh device DOES hold the
-        // recovered seed (we just installed it), so it can ROTATE the IRK:
-        // OLD = the currently-registered (v1) key under the recovered UMK,
-        // NEW = a fresh rotated device key (v+1). The re-pair MUST rotate —
-        // the .com handler (control-plane/rePair.ts) rejects new==current
-        // with 400 "newIrkPub equals current IRK", which used to make this
-        // path DEAD (it sent old==new). Mirrors Android's KeyfileImport +
-        // the webapp fix + iOS ReplaceDevice/loginTakeover.
+        // 3 — Initiate the takeover re-pair on the seed in memory: NEW = this
+        // app's scheme one version past the registered key (the .com handler
+        // rejects new == current), OLD = the registered key, which signs the
+        // same bytes as the credential. The key is installed only once `.com`
+        // accepted, so a refusal leaves this device as it was.
+        let newVersion = IrkLineage.nextVersion(after: registered)
         do {
-            let resp = try await initiateTakeoverRePair(username: username)
+            let resp = try await initiateTakeoverRePair(username: username, seed: seed, registered: registered, newVersion: newVersion)
+            // 4 — Accepted: install the recovered UMK into THIS account's slot
+            // (a second imported cloud never clobbers another profile; this
+            // resets the lineage to v1) and stage the rotation the completion
+            // finalizes.
+            Keystore.setActiveProfile(username)
+            do {
+                try await installUMK(seed, String(localized: "Bring this device into your Flagship account"))
+            } catch {
+                phase = .failed(String(localized: "Couldn't install your account key. \(HumanError.humanize(error))"))
+                return
+            }
+            try? Keystore.setPendingIrkRotationVersion(newVersion)
+            // A v2 file also carries the admin key and the servers (docs/data-sovereignty.md 4.11):
+            // put them back so this device can reach and save its servers even with `.com` gone.
+            await restoreAccount(account)
             phase = .completed(username: username, completesAt: resp.completesAt)
         } catch ScreensClientError.http(let status, let message) where status == 401 && message.contains("totpProof") {
             // #52 — the account has a second factor enrolled, which the
@@ -127,6 +151,8 @@ public final class KeyfileImportViewModel {
             // (yet); route the user to the sign-in flow, which prompts
             // for it.
             phase = .failed(String(localized: "This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code."))
+        } catch ScreensClientError.http(let status, _) where status != 429 {
+            phase = .failed(String(localized: "Flagship didn't accept this key file for \(username). Nothing was changed on this device. Try again in a few minutes."))
         } catch {
             phase = .failed(String(localized: "Couldn't start bringing this device in. \(HumanError.humanize(error))"))
         }
@@ -192,16 +218,15 @@ public final class KeyfileImportViewModel {
         try? Keystore.setPendingIrkRotationVersion(nil)
     }
 
-    private func initiateTakeoverRePair(username: String) async throws -> RePairInitiateResponse {
-        // ROTATE the IRK: OLD = the currently-registered version (v1 after
-        // installUMK), NEW = the next version. Both derive from the recovered
-        // UMK this device just installed. We do NOT persist the new version
-        // yet — that happens only after a successful server complete
-        // (completeTakeover), exactly like ReplaceDeviceViewModel.
-        let oldVersion = Keystore.currentIrkVersion()
-        let newVersion = oldVersion + 1
-        let oldKey = try await Keystore.deriveIRK(reason: String(localized: "Confirm import"), version: oldVersion)
-        let newKey = try await Keystore.deriveIRK(reason: String(localized: "Authorize this device"), version: newVersion)
+    private func initiateTakeoverRePair(
+        username: String, seed: SymmetricKey, registered: IrkLineage.Key, newVersion: Int
+    ) async throws -> RePairInitiateResponse {
+        // ROTATE the IRK: OLD = the registered key, NEW = this app's scheme at
+        // the next version, both from the file's seed in memory. The new
+        // version is persisted only after a successful complete, exactly like
+        // ReplaceDeviceViewModel.
+        let oldKey = registered.privateKey
+        let newKey = try IrkLineage.key(umk: seed, scheme: IrkLineage.own, version: newVersion).privateKey
         let oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -221,7 +246,7 @@ public final class KeyfileImportViewModel {
         // us the seed, so we can derive the registered key and prove it
         // outright — without this the initiate is refused.
         let oldSignature = try oldKey.signature(for: canonical)
-        let resp = try await server.initiateRePair(
+        return try await server.initiateRePair(
             username: username,
             body: RePairInitiateRequest(
                 request: .init(
@@ -236,10 +261,6 @@ public final class KeyfileImportViewModel {
             ),
             ifMatch: nil
         )
-        // Remember the staged rotation so completeTakeover finalizes the new
-        // version locally once the swap lands server-side.
-        try? Keystore.setPendingIrkRotationVersion(newVersion)
-        return resp
     }
 
     public func reset() {

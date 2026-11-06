@@ -104,6 +104,15 @@ export const WEB_MISC: readonly Scenario[] = [
     "D4",
   ),
   row(
+    "web-total-misc-backup-file-refused",
+    "A backup file that doesn't hold the account's current key (another account's, or older than a key change): refused in a dialog with a sentence before any re-pair is sent, and this browser keeps the account key it had (Windows acceptance Failure 4).",
+    "gym misc a backup file that doesn't hold the account's key is refused with a sentence and changes nothing",
+    "#recovery-keyfile-input",
+    [{ describe: "Refusal sentence", handle: ".modal-message", expect: "text", text: "doesn't open smoketest any more" }],
+    [["keyfile-refused", "The refusal dialog."]],
+    "D4",
+  ),
+  row(
     "web-total-misc-backup-file-takeover-finish",
     "A backup file's takeover after its grace: Finish now posts re-pair/complete naming the rotated key the initiate installed, signed by that key; the sheet closes and the browser signs with the rotated key from then on.",
     "gym misc a backup file's takeover finishes once its grace has passed",

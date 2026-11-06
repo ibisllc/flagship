@@ -3509,4 +3509,9 @@
     <string name="voici_remove_reason">移除你的页面</string>
     <string name="voici_remove_failed">无法移除你的页面。请重试。</string>
     <string name="voici_admin_only_remove">只有管理设备可以移除你的页面。</string>
+    <string name="keyfile_import_no_such_account">不存在名为 %1$s 的账户。请确认这是正确的密钥文件。</string>
+    <string name="keyfile_import_key_mismatch">此密钥文件已无法打开 %1$s。它属于另一个账户，或者该账户的密钥在文件创建后已被更换。</string>
+    <string name="keyfile_import_unreachable">无法连接 Flagship 来检查此密钥文件。此设备上没有任何更改。请检查网络连接后重试。</string>
+    <string name="keyfile_import_refused">Flagship 未接受用于 %1$s 的此密钥文件。此设备上没有任何更改。请几分钟后重试。</string>
+    <string name="no_camera_on_the_other_device_send_link">另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。</string>
 </resources>

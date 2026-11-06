@@ -3220,5 +3220,12 @@
   "%lld changes not published": "1b12ab659dfd",
   "Remove your page": "485dc23def41",
   "Couldn't remove your page. Try again.": "fbb585466ed8",
-  "Only an admin device can remove your page.": "a9089c971f0f"
+  "Only an admin device can remove your page.": "a9089c971f0f",
+  "There is no account named %@. Check that this is the right key file.": "88609705b852",
+  "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.": "72aff1fb0ccd",
+  "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.": "cee41e7ab13d",
+  "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": "d0f9dd5f92dc",
+  "No camera on the other device? Send it this link and paste it there.": "fb69635d1b27",
+  "Share link": "100bc113427a",
+  "No server on this phone can take a browser yet.": "e9a6220e249c"
 }

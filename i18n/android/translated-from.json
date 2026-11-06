@@ -3443,5 +3443,10 @@
   "voici_changes_pending": "1b22751d2a6d",
   "voici_remove_reason": "485dc23def41",
   "voici_remove_failed": "fbb585466ed8",
-  "voici_admin_only_remove": "a9089c971f0f"
+  "voici_admin_only_remove": "a9089c971f0f",
+  "keyfile_import_no_such_account": "1cfbbcd8eb36",
+  "keyfile_import_key_mismatch": "1f632b753cbc",
+  "keyfile_import_unreachable": "cee41e7ab13d",
+  "keyfile_import_refused": "c958c7baf23f",
+  "no_camera_on_the_other_device_send_link": "fb69635d1b27"
 }

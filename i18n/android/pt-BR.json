@@ -3506,5 +3506,10 @@
   },
   "voici_remove_reason": "Remover sua página",
   "voici_remove_failed": "Não foi possível remover sua página. Tente de novo.",
-  "voici_admin_only_remove": "Só um dispositivo de administrador pode remover sua página."
+  "voici_admin_only_remove": "Só um dispositivo de administrador pode remover sua página.",
+  "keyfile_import_no_such_account": "Não existe nenhuma conta chamada %1$s. Verifique se este é o arquivo de chave certo.",
+  "keyfile_import_key_mismatch": "Este arquivo de chave não abre mais %1$s. Ele pertence a outra conta, ou a chave da conta foi substituída depois que o arquivo foi criado.",
+  "keyfile_import_unreachable": "Não foi possível contatar o Flagship para verificar este arquivo de chave. Nada foi alterado neste dispositivo. Verifique sua conexão e tente novamente.",
+  "keyfile_import_refused": "O Flagship não aceitou este arquivo de chave para %1$s. Nada foi alterado neste dispositivo. Tente novamente em alguns minutos.",
+  "no_camera_on_the_other_device_send_link": "O outro dispositivo não tem câmera? Envie este link para ele e cole-o lá."
 }

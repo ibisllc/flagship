@@ -76,6 +76,10 @@ public protocol FlagshipServerClient: Sendable {
     /// The admin root `.com` pins for the account, lowercase hex (nil = none). The record is
     /// written under it and `.com` checks it matches.
     func pinnedAdminRoot(username: String) async throws -> String?
+    /// The IRK `.com` holds for the account now (`GET /api/username/<u>` irkPub), lowercase hex;
+    /// nil when this client can't tell. A key-file import signs its credential with the key this
+    /// names, found among the file's own derivations (IrkLineage).
+    func registeredIrkPub(username: String) async throws -> String?
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
     /// Task #74 — the passphrase-gated wrapped-UMK fetch. POSTs
     /// `{ fetchToken: <hex>, issuedAt: <ms> }` to
@@ -333,6 +337,7 @@ public extension FlagshipServerClient {
 public extension FlagshipServerClient {
     func recoveryRecordState(username: String) async throws -> RecoveryRecordState? { nil }
     func pinnedAdminRoot(username: String) async throws -> String? { nil }
+    func registeredIrkPub(username: String) async throws -> String? { nil }
     func fetchWrappedUmk(username: String, fetchTokenHex: String, passkey: RecoveryPasskeyAssertion?) async throws -> RecoveryFetchResponse {
         try await fetchWrappedUmk(username: username, fetchTokenHex: fetchTokenHex)
     }
@@ -2788,6 +2793,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         pinnedAdminRoots[username.lowercased()]
     }
 
+    public func registeredIrkPub(username: String) async throws -> String? {
+        try await tick()
+        // nil when the account wasn't claimed in this harness: the client keeps its own lineage.
+        return claimedUsernames[username.lowercased()]?.lowercased()
+    }
+
     /// Test hook — the admin root `.com` would report as pinned for an account.
     public var pinnedAdminRoots: [String: String] = [:]
 
@@ -3139,6 +3150,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         //     accounts with a recovery credential.
         // Nothing presented and nothing enrolled ⇒ 409 no-credential.
         let u = username.lowercased()
+        // Worker (rePair.ts): the body's oldIrkPub must be the registered key.
+        if let registered = claimedUsernames[u], registered.count == 64,
+           registered.lowercased() != body.request.oldIrkPub.lowercased() {
+            throw ScreensClientError.http(status: 403, message: #"{"error":"oldIrkPub does not match the current registered IRK"}"#)
+        }
         let isMulti = accountTypeByUser[u] == "multi"
         let registeredKeyProven = !(body.oldIrkSignature?.isEmpty ?? true)
         let codeEnrolled = totpEnrolledAtByUser[u] != nil
@@ -4162,6 +4178,17 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         guard status == 200 else { throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "") }
         struct Body: Decodable { let adminRootPub: String? }
         return try JSONDecoder().decode(Body.self, from: data).adminRootPub?.lowercased()
+    }
+
+    public func registeredIrkPub(username: String) async throws -> String? {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/username/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "") }
+        struct Body: Decodable { let irkPub: String }
+        return try JSONDecoder().decode(Body.self, from: data).irkPub.lowercased()
     }
 
     public func initiateRePair(

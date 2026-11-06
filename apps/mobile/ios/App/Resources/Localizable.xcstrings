@@ -132294,6 +132294,293 @@
           }
         }
       }
+    },
+    "There is no account named %@. Check that this is the right key file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No existe ninguna cuenta llamada %@. Comprueba que sea el archivo de clave correcto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il n’existe aucun compte nommé %@. Vérifiez qu’il s’agit du bon fichier de clé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es gibt kein Konto namens %@. Prüfe, ob das die richtige Schlüsseldatei ist."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não existe nenhuma conta chamada %@. Verifique se este é o arquivo de chave certo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ という名前のアカウントはありません。正しいキーファイルか確認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不存在名为 %@ 的账户。请确认这是正确的密钥文件。"
+          }
+        }
+      }
+    },
+    "This key file doesn't open %@ any more. It belongs to another account, or the account's key was replaced after the file was made.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo de clave ya no abre %@. Pertenece a otra cuenta, o la clave de la cuenta se sustituyó después de crear el archivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier de clé n’ouvre plus %@. Il appartient à un autre compte, ou la clé du compte a été remplacée après la création du fichier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Schlüsseldatei öffnet %@ nicht mehr. Sie gehört zu einem anderen Konto, oder der Schlüssel des Kontos wurde ersetzt, nachdem die Datei erstellt wurde."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este arquivo de chave não abre mais %@. Ele pertence a outra conta, ou a chave da conta foi substituída depois que o arquivo foi criado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このキーファイルでは %@ を開けなくなっています。別のアカウントのファイルか、ファイルの作成後にアカウントのキーが置き換えられています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此密钥文件已无法打开 %@。它属于另一个账户，或者该账户的密钥在文件创建后已被更换。"
+          }
+        }
+      }
+    },
+    "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo contactar con Flagship para comprobar este archivo de clave. No se cambió nada en este dispositivo. Comprueba tu conexión e inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre Flagship pour vérifier ce fichier de clé. Rien n’a été modifié sur cet appareil. Vérifiez votre connexion et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship war nicht erreichbar, um diese Schlüsseldatei zu prüfen. Auf diesem Gerät wurde nichts geändert. Prüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível contatar o Flagship para verificar este arquivo de chave. Nada foi alterado neste dispositivo. Verifique sua conexão e tente novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このキーファイルを確認するために Flagship に接続できませんでした。このデバイスでは何も変更されていません。接続を確認して、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接 Flagship 来检查此密钥文件。此设备上没有任何更改。请检查网络连接后重试。"
+          }
+        }
+      }
+    },
+    "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship no aceptó este archivo de clave para %@. No se cambió nada en este dispositivo. Inténtalo de nuevo en unos minutos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship n’a pas accepté ce fichier de clé pour %@. Rien n’a été modifié sur cet appareil. Réessayez dans quelques minutes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship hat diese Schlüsseldatei für %@ nicht angenommen. Auf diesem Gerät wurde nichts geändert. Versuche es in ein paar Minuten erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship não aceitou este arquivo de chave para %@. Nada foi alterado neste dispositivo. Tente novamente em alguns minutos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は %@ 用のこのキーファイルを受け付けませんでした。このデバイスでは何も変更されていません。数分後にもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 未接受用于 %@ 的此密钥文件。此设备上没有任何更改。请几分钟后重试。"
+          }
+        }
+      }
+    },
+    "No camera on the other device? Send it this link and paste it there.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿El otro dispositivo no tiene cámara? Envíale este enlace y pégalo allí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’autre appareil n’a pas de caméra ? Envoyez-lui ce lien et collez-le là-bas."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Kamera am anderen Gerät? Schicke ihm diesen Link und füge ihn dort ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O outro dispositivo não tem câmera? Envie este link para ele e cole-o lá."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。"
+          }
+        }
+      }
+    },
+    "Share link": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enlace para compartir"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien de partage"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabelink"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link de compartilhamento"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共有リンク"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共享链接"
+          }
+        }
+      }
+    },
+    "No server on this phone can take a browser yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ningún servidor de este teléfono puede aceptar todavía un navegador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun serveur de ce téléphone ne peut encore accepter un navigateur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Server auf diesem Telefon kann bisher einen Browser aufnehmen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum servidor deste celular pode aceitar um navegador ainda."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このスマートフォンのサーバーは、まだブラウザーを受け入れられません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机上还没有服务器可以接受浏览器。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

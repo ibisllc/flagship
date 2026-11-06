@@ -398,6 +398,8 @@ test.describe("gym webapp misc", () => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     basePods(m);
+    // The key .com holds for the account: the import signs its credential with it.
+    m.get("/api/username/smoketest", { username: "smoketest", irkPub: keys.irkPubHex, claimedAt: 1, accountType: "single" });
     m.post("/api/users/smoketest/re-pair", (call) => ({
       json: { ok: true, accountType: "single", completesAt: Date.now() + 3 * 86_400_000, initiatedAt: Date.now(), oldIrkPub: call.body.request.oldIrkPub },
     }));
@@ -438,10 +440,49 @@ test.describe("gym webapp misc", () => {
     await shot(page, testInfo, "keyfile-grace");
   });
 
-  test("gym misc a backup file's takeover finishes once its grace has passed", async ({ page }, testInfo) => {
-    await reachHome(page, { kind: "admin", servers: [HOME] });
+  test("gym misc a backup file that doesn't hold the account's key is refused with a sentence and changes nothing", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     basePods(m);
+    m.get("/api/username/smoketest", { username: "smoketest", irkPub: keys.irkPubHex, claimedAt: 1, accountType: "single" });
+    m.post("/api/users/smoketest/re-pair", { ok: true, accountType: "single", completesAt: Date.now() + 1500, initiatedAt: Date.now() });
+    // A key file naming this account but holding another seed.
+    const { fileText, umkBefore } = await page.evaluate(async () => {
+      const kf = await import("/lib/keyfile.js");
+      const { bytesToHex } = await import("/keystore.js");
+      const { getSession } = await import("/lib/state.js");
+      const other = crypto.getRandomValues(new Uint8Array(32));
+      return {
+        fileText: await kf.wrapUmkToKeyfile(other, "backup-file-pass-123", { username: "smoketest" }, { m: 1024, t: 1, p: 1 }),
+        umkBefore: bytesToHex(getSession().umk),
+      };
+    });
+    await openSettings(page);
+    await page.click("#settings-tab-recovery");
+    await page.setInputFiles("#recovery-keyfile-input", { name: "other.flagshipkey", mimeType: "application/json", buffer: Buffer.from(fileText) });
+    await page.fill(".modal-input", "backup-file-pass-123");
+    await page.click("[data-modal-ok]");
+    await page.fill(".modal-input", "new-device-passphrase");
+    await page.click("[data-modal-ok]");
+
+    await expect(page.locator(".modal-title")).toHaveText("Couldn't restore this key file", { timeout: 30_000 });
+    await expect(page.locator(".modal-message")).toHaveText(
+      "This key file doesn't open smoketest any more. It belongs to another account, or the account's key was replaced after the file was made.",
+    );
+    await shot(page, testInfo, "keyfile-refused");
+    expect(m.last("/api/users/smoketest/re-pair")).toBeFalsy();
+    const umkAfter = await page.evaluate(async () => {
+      const { bytesToHex } = await import("/keystore.js");
+      return bytesToHex((await import("/lib/state.js")).getSession().umk);
+    });
+    expect(umkAfter).toBe(umkBefore);
+  });
+
+  test("gym misc a backup file's takeover finishes once its grace has passed", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    basePods(m);
+    m.get("/api/username/smoketest", { username: "smoketest", irkPub: keys.irkPubHex, claimedAt: 1, accountType: "single" });
     m.post("/api/users/smoketest/re-pair", { ok: true, accountType: "single", completesAt: Date.now() + 1500, initiatedAt: Date.now() });
     m.post("/api/users/smoketest/re-pair/complete", { ok: true, outcome: "completed" });
     const fileText: string = await page.evaluate(async () => {

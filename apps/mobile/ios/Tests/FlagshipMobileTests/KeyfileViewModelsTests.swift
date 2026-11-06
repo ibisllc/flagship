@@ -204,6 +204,54 @@ final class KeyfileViewModelsTests: XCTestCase {
         XCTAssertNil(Keystore.pendingIrkRotationVersion())
     }
 
+    /// Windows acceptance 2026-11-05, Failure 4: an account made on Android registers Android's
+    /// derivation of the UMK, not this app's v1. The import signs with the registered key it
+    /// finds among the file's derivations and rotates to this app's scheme past its version.
+    func test_import_accountMadeOnAndroid_signsWithItsRegisteredKey() async throws {
+        let server = makeServer()
+        let umk = SymmetricKey(size: .bits256)
+        let androidV1 = try IrkLineage.key(umk: umk, scheme: .android, version: 1)
+        server.seedClaimedUsername("harry", irkPubHex: androidV1.pubHex)
+        let file = try makeKeyfile(username: "harry", passphrase: "the-right-pass", umk: umk)
+        let vm = KeyfileImportViewModel(server: server, installUMK: { seed, reason in
+            try await Keystore.installUMK(seed, reason: reason)
+        })
+        vm.passphrase = "the-right-pass"
+
+        await vm.importBackup(fileText: file)
+
+        guard case .completed = vm.phase else { return XCTFail("expected .completed, got \(vm.phase)") }
+        let last = try XCTUnwrap(server.lastRePairInitiate)
+        let req = last.body.request
+        XCTAssertEqual(req.oldIrkPub, androidV1.pubHex)
+        XCTAssertEqual(req.newIrkPub, try IrkLineage.key(umk: umk, scheme: .ios, version: 2).pubHex)
+        let canonical = RePairInitiate.canonicalBytes(
+            username: req.username, newIrkPubHex: req.newIrkPub, oldIrkPubHex: req.oldIrkPub, issuedAt: req.issuedAt
+        )
+        let oldSig = try XCTUnwrap(HexUtil.decode(try XCTUnwrap(last.body.oldIrkSignature)))
+        XCTAssertTrue(androidV1.privateKey.publicKey.isValidSignature(oldSig, for: canonical),
+                      "the credential is signed by the key .com stores")
+        XCTAssertEqual(Keystore.pendingIrkRotationVersion(), 2)
+    }
+
+    func test_import_anotherAccountsKeyFile_refusedWithASentence_installsNothing() async throws {
+        let server = makeServer()
+        let other = try IrkLineage.key(umk: SymmetricKey(size: .bits256), scheme: .android, version: 1)
+        server.seedClaimedUsername("harry", irkPubHex: other.pubHex)
+        let file = try makeKeyfile(username: "harry", passphrase: "the-right-pass", umk: SymmetricKey(size: .bits256))
+        let spy = InstallSpy()
+        let vm = KeyfileImportViewModel(server: server, installUMK: { seed, _ in spy.record(seed) })
+        vm.passphrase = "the-right-pass"
+
+        await vm.importBackup(fileText: file)
+
+        guard case .failed(let msg) = vm.phase else { return XCTFail("expected .failed, got \(vm.phase)") }
+        XCTAssertTrue(msg.contains("harry"))
+        XCTAssertFalse(msg.contains("IRK"))
+        XCTAssertEqual(spy.callCount, 0, "nothing is installed")
+        XCTAssertNil(server.lastRePairInitiate, "nothing is sent")
+    }
+
     func test_import_wrongPassphrase_failsBeforeInstall() async throws {
         let server = makeServer()
         let umk = SymmetricKey(size: .bits256)

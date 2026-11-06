@@ -3509,4 +3509,9 @@
     <string name="voici_remove_reason">Deine Seite entfernen</string>
     <string name="voici_remove_failed">Deine Seite konnte nicht entfernt werden. Versuch es noch einmal.</string>
     <string name="voici_admin_only_remove">Nur ein Admin-Gerät kann deine Seite entfernen.</string>
+    <string name="keyfile_import_no_such_account">Es gibt kein Konto namens %1$s. Prüfe, ob das die richtige Schlüsseldatei ist.</string>
+    <string name="keyfile_import_key_mismatch">Diese Schlüsseldatei öffnet %1$s nicht mehr. Sie gehört zu einem anderen Konto, oder der Schlüssel des Kontos wurde ersetzt, nachdem die Datei erstellt wurde.</string>
+    <string name="keyfile_import_unreachable">Flagship war nicht erreichbar, um diese Schlüsseldatei zu prüfen. Auf diesem Gerät wurde nichts geändert. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="keyfile_import_refused">Flagship hat diese Schlüsseldatei für %1$s nicht angenommen. Auf diesem Gerät wurde nichts geändert. Versuche es in ein paar Minuten erneut.</string>
+    <string name="no_camera_on_the_other_device_send_link">Keine Kamera am anderen Gerät? Schicke ihm diesen Link und füge ihn dort ein.</string>
 </resources>

@@ -135,6 +135,17 @@ export async function restoreFromBackupFile({
   unlockSession,
 }) {
   const { seed, meta } = await unwrapUmkFromKeyfile(fileText, passphrase);
+  return installRestoredKey({ seed, meta, localPassphrase, keystore, unlockSession });
+}
+
+/** Open a `.flagshipkey` without installing anything (the import checks the
+ *  account and starts the takeover first). Throws KeyfileError. */
+export async function openBackupFile(fileText, passphrase) {
+  return unwrapUmkFromKeyfile(fileText, passphrase);
+}
+
+/** Install an opened key file's seed into the keystore + session. */
+export async function installRestoredKey({ seed, meta, localPassphrase, keystore, unlockSession }) {
   // Installing on a device that already holds an identity would throw from
   // bootstrapFromExistingSeed; clear first so import is a clean restore.
   if (await keystore.hasWrappedUmk()) {
@@ -168,5 +179,8 @@ export function importErrorMessage(err) {
     if (err.code === "bad-passphrase") return KEYFILE_COPY.importBadPassphrase;
     return KEYFILE_COPY.importBadFile; // malformed / version
   }
-  return err?.message ? String(err.message) : tr("Import failed.");
+  // Refusals and rate limits carry their own translated sentence; anything else
+  // is an internal message, never shown raw.
+  if (err?.name === "KeyfileImportRefusedError" || err?.rateLimited) return String(err.message);
+  return tr("Couldn't restore this key file. Nothing was changed in this browser. Try again.");
 }

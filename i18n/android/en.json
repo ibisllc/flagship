@@ -14472,5 +14472,28 @@
   "voici_admin_only_remove": {
     "en": "Only an admin device can remove your page.",
     "ctx": "voi.ci / Messages: the removal was refused (not the account's admin key)"
+  },
+  "keyfile_import_no_such_account": {
+    "en": "There is no account named %1$s. Check that this is the right key file.",
+    "ctx": "viewmodels/KeyfileImportViewModel.kt (prose)",
+    "args": 1
+  },
+  "keyfile_import_key_mismatch": {
+    "en": "This key file doesn't open %1$s any more. It belongs to another account, or the account's key was replaced after the file was made.",
+    "ctx": "viewmodels/KeyfileImportViewModel.kt (prose)",
+    "args": 1
+  },
+  "keyfile_import_unreachable": {
+    "en": "Couldn't reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.",
+    "ctx": "viewmodels/KeyfileImportViewModel.kt (prose)"
+  },
+  "keyfile_import_refused": {
+    "en": "Flagship didn't accept this key file for %1$s. Nothing was changed on this device. Try again in a few minutes.",
+    "ctx": "viewmodels/KeyfileImportViewModel.kt (prose)",
+    "args": 1
+  },
+  "no_camera_on_the_other_device_send_link": {
+    "en": "No camera on the other device? Send it this link and paste it there.",
+    "ctx": "ui/screens/AddDeviceScreen.kt"
   }
 }

@@ -5,10 +5,12 @@
 //
 //   1. The host hands us the picked file's text + the user's passphrase.
 //   2. Keyfile.unwrap decrypts the UMK seed (argon2id + AES-256-GCM).
-//   3. Point the Keystore at this account's per-profile slot + installUmk.
-//   4. Initiate the takeover re-pair (new IRK derives from the installed
-//      UMK), then complete it once the grace elapses. On Completed the
-//      host flips AppState to paired (mirrors LoginViewModel).
+//   3. Find the key the account holds now (IrkLineage: any client's
+//      derivation, any version) and initiate the takeover re-pair on the
+//      seed in memory.
+//   4. Once `.com` accepted, point the Keystore at this account's slot +
+//      installUmk; complete the re-pair once the grace elapses. On
+//      Completed the host flips AppState to paired (mirrors LoginViewModel).
 //
 // Errors map to the approved copy: wrong passphrase → "That passphrase
 // didn't open the file."; not a keyfile → "This isn't a Flagship key
@@ -29,6 +31,7 @@ import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
+import com.flagshipserver.app.keystore.IrkLineage
 import com.flagshipserver.app.keystore.Keyfile
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -90,25 +93,48 @@ class KeyfileImportViewModel(
             return
         }
 
+        // 2 — Which key does the account hold now? An account made on the
+        //     webapp or iOS (or re-paired anywhere) does not hold this app's
+        //     v1, so `.com` would refuse "oldIrkPub does not match the
+        //     current registered IRK". Only keys derived from the file's own
+        //     seed are tried; no match means the file isn't this account's
+        //     current key, and nothing is sent or installed.
+        // The unlock prompt first, as before: the key is sealed under the
+        // session it opens when it is installed below.
         try {
-            // 2 — Point the Keystore at the recovered cloud's per-profile
-            //     device-key slot BEFORE installing, so an imported second
-            //     cloud lands in its own slot and never clobbers an
-            //     already-present profile. installUmk resets the IRK
-            //     lineage to v1 under the imported UMK.
-            Keystore.setActiveProfile(username)
-            Keystore.installUmk(seed)
+            Keystore.ensureUnlocked(FSStrings.get(R.string.bring_this_device_into_your_flagship))
+        } catch (t: Throwable) {
+            _phase.value = KeyfileImportPhase.Failed(FSStrings.get(R.string.couldnt_start_bringing_this_device_in, UserErrorText.of(t)))
+            return
+        }
+        val registered: IrkLineage.Key
+        try {
+            val pub = server.getUsernameRecord(username).irkPub
+            registered = IrkLineage.findRegistered(seed, pub) ?: run {
+                _phase.value = KeyfileImportPhase.Failed(FSStrings.get(R.string.keyfile_import_key_mismatch, username))
+                return
+            }
+        } catch (t: Throwable) {
+            _phase.value = KeyfileImportPhase.Failed(
+                if (t is HttpException && t.status == 404) FSStrings.get(R.string.keyfile_import_no_such_account, username)
+                else RateLimitedException.messageOf(t) ?: FSStrings.get(R.string.keyfile_import_unreachable),
+            )
+            return
+        }
 
-            // 3 — Initiate the takeover re-pair. Derive OLD (v1) + NEW (v2)
-            //     IRK from the just-installed UMK and sign with the NEW IRK,
-            //     mirroring the LoginViewModel credentialed takeover. A
-            //     keyfile import is single-device proof, so no totpProof.
-            val oldVersion = Keystore.currentIrkVersion()
-            val newVersion = oldVersion + 1
-            val newSign = Keystore.deriveIRK(FSStrings.get(R.string.bring_this_device_into_your_flagship), newVersion)
-            val oldSign = Keystore.deriveIRK(FSStrings.get(R.string.confirm_import), oldVersion)
-            val oldPubHex = pubHexForVersion(oldVersion)
-            val newPubHex = pubHexForVersion(newVersion)
+        try {
+            // 3 — Initiate the takeover re-pair on the seed in memory: the
+            //     NEW key is this app's scheme one version past the
+            //     registered one, the OLD (registered) key signs the same
+            //     bytes as the credential. The key is installed only once
+            //     `.com` accepted, so a refusal leaves this device as it was.
+            //     A keyfile import is single-device proof, so no totpProof.
+            val newVersion = IrkLineage.nextVersion(registered)
+            val newKey = IrkLineage.key(seed, IrkLineage.OWN, newVersion)
+            val newSign = newKey.signer()
+            val oldSign = registered.signer()
+            val oldPubHex = registered.pubHex
+            val newPubHex = newKey.pubHex
 
             val issuedAt = now()
             val canonical = RePairInitiateClaim.canonicalBytes(
@@ -141,6 +167,11 @@ class KeyfileImportViewModel(
                 ),
                 ifMatch = null,
             )
+            // 4 — Accepted: install into the recovered cloud's per-profile
+            //     slot (an imported second cloud never clobbers another
+            //     profile) and stage the rotation the completion finalizes.
+            Keystore.setActiveProfile(username)
+            Keystore.installUmk(seed)
             Keystore.setPendingIrkRotationVersion(newVersion)
             _phase.value = KeyfileImportPhase.Grace(username = username, completesAt = resp.completesAt)
         } catch (t: Throwable) {
@@ -151,6 +182,8 @@ class KeyfileImportViewModel(
                     // device accounts. The keyfile sheet has no second-
                     // factor field (yet); route via the sign-in flow.
                     FSStrings.get(R.string.this_account_has_a_second_factor)
+                else if (t is HttpException)
+                    FSStrings.get(R.string.keyfile_import_refused, username)
                 else
                     FSStrings.get(R.string.couldnt_start_bringing_this_device_in, UserErrorText.of(t)),
             )

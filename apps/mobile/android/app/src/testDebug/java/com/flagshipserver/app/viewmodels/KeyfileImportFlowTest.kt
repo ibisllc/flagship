@@ -16,6 +16,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.api.UsernameClaimRequest
+import com.flagshipserver.app.keystore.IrkLineage
 import com.flagshipserver.app.keystore.Keyfile
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.flow.first
@@ -61,9 +63,23 @@ class KeyfileImportFlowTest {
     private fun vm(server: MockFlagshipServerClient, app: AppState) =
         KeyfileImportViewModel(server = server, app = app, now = { 1_000L })
 
+    /** `.com` holds [username] under the IRK its creating client registered. */
+    private suspend fun registered(
+        server: MockFlagshipServerClient,
+        username: String,
+        scheme: IrkLineage.Scheme = IrkLineage.Scheme.ANDROID,
+        version: Int = 1,
+        umk: ByteArray = seed,
+    ): String {
+        val pub = IrkLineage.key(umk, scheme, version).pubHex
+        server.claimUsername(UsernameClaimRequest(UsernameClaimRequest.Inner(username, pub, 1L), signature = ""))
+        return pub
+    }
+
     @Test
     fun import_installsRecoveredUmk_andInitiatesRePair() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        registered(server, "harry")
         val app = AppState()
         val m = vm(server, app)
         m.setPassphrase(passphrase)
@@ -91,6 +107,7 @@ class KeyfileImportFlowTest {
     @Test
     fun completeImport_pairsAccount_andLabelsAdmin() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        registered(server, "harry")
         val app = AppState()
         val m = vm(server, app)
         m.setPassphrase(passphrase)
@@ -164,6 +181,7 @@ class KeyfileImportFlowTest {
         // Wipe to simulate a fresh device, then import.
         Keystore.wipeAllProfiles()
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        registered(server, "origin")
         val app = AppState()
         val importVm = vm(server, app)
         importVm.setPassphrase("StrongPass123!")
@@ -171,5 +189,80 @@ class KeyfileImportFlowTest {
 
         Keystore.setActiveProfile("origin")
         assertArrayEquals(seed, Keystore.currentUmkSeed())
+    }
+
+    // ── Failure 4 (Windows acceptance 2026-11-05): the key file of an account another client made ──
+
+    @Test
+    fun import_accountMadeOnTheWebapp_signsWithItsRegisteredKey_andRotatesToAndroid() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val webPub = registered(server, "harry", IrkLineage.Scheme.WEB, 1)
+        val m = vm(server, AppState())
+        m.setPassphrase(passphrase)
+
+        m.importBackup(keyfileFor("harry"))
+
+        assertTrue("expected Grace, got ${m.phase.first()}", m.phase.first() is KeyfileImportPhase.Grace)
+        val req = server.lastRePairInitiate!!.second
+        assertEquals(webPub, req.request.oldIrkPub)
+        assertEquals(IrkLineage.key(seed, IrkLineage.Scheme.ANDROID, 2).pubHex, req.request.newIrkPub)
+        val canonical = com.flagshipserver.app.core.RePairInitiateClaim.canonicalBytes(
+            username = "harry", newIrkPubHex = req.request.newIrkPub, oldIrkPubHex = req.request.oldIrkPub, issuedAt = 1_000L,
+        )
+        com.google.crypto.tink.subtle.Ed25519Verify(HexUtil.decode(webPub)!!).verify(HexUtil.decode(req.oldIrkSignature!!)!!, canonical)
+        Keystore.setActiveProfile("harry")
+        assertEquals(2, Keystore.pendingIrkRotationVersion())
+    }
+
+    @Test
+    fun import_aRotatedAccount_rotatesPastItsVersion() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val iosPub = registered(server, "harry", IrkLineage.Scheme.IOS, 3)
+        val m = vm(server, AppState())
+        m.setPassphrase(passphrase)
+        m.importBackup(keyfileFor("harry"))
+        val req = server.lastRePairInitiate!!.second
+        assertEquals(iosPub, req.request.oldIrkPub)
+        assertEquals(IrkLineage.key(seed, IrkLineage.Scheme.ANDROID, 4).pubHex, req.request.newIrkPub)
+    }
+
+    @Test
+    fun import_anotherAccountsKeyFile_isRefusedWithASentence_andChangesNothing() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        registered(server, "harry", umk = ByteArray(32) { 0x55 })
+        val m = vm(server, AppState())
+        m.setPassphrase(passphrase)
+
+        m.importBackup(keyfileFor("harry"))
+
+        val phase = m.phase.first() as KeyfileImportPhase.Failed
+        assertTrue(phase.message, phase.message.contains("harry") && !phase.message.contains("IRK"))
+        assertNull("nothing is sent for a key that isn't the account's", server.lastRePairInitiate)
+        Keystore.setActiveProfile("harry")
+        assertFalse("nothing is installed", Keystore.hasUmkSeed())
+    }
+
+    @Test
+    fun keystoreRegistersTheAndroidScheme() = runTest {
+        // What OpenAccountViewModel registers at creation is Keystore's v1: the lineage's android key.
+        Keystore.setActiveProfile("creator")
+        Keystore.installUmk(seed)
+        Keystore.deriveIRK("test", 1)
+        for (v in 1..3) {
+            val pub = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair
+                .newKeyPairFromSeed(Keystore.requireIrkSeedForVersion(v)).publicKey
+            assertEquals(IrkLineage.key(seed, IrkLineage.Scheme.ANDROID, v).pubHex, HexUtil.encode(pub))
+        }
+    }
+
+    @Test
+    fun import_unknownAccount_isRefusedWithASentence() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val m = vm(server, AppState())
+        m.setPassphrase(passphrase)
+        m.importBackup(keyfileFor("nobody"))
+        val phase = m.phase.first() as KeyfileImportPhase.Failed
+        assertTrue(phase.message, phase.message.contains("nobody"))
+        assertNull(server.lastRePairInitiate)
     }
 }

@@ -28,7 +28,8 @@ import {
   KEYFILE_COPY,
   createBackupFile,
   passphraseStrengthError,
-  restoreFromBackupFile,
+  openBackupFile,
+  installRestoredKey,
   importErrorMessage,
 } from "../lib/keyfileBackup.js";
 import { escapeHtml } from "../lib/util.js";
@@ -389,73 +390,83 @@ async function runKeyfileImport(file) {
     validate: (v) => (v && v.length >= 8 ? null : tr("Use at least 8 characters")),
   });
   if (!localPassphrase) return;
+  const keystore = await import("../keystore.js");
+  let opened;
+  let installed = false;
   try {
-    const keystore = await import("../keystore.js");
-    const { username } = await restoreFromBackupFile({
-      fileText,
-      passphrase,
-      localPassphrase,
-      keystore,
-      unlockSession,
-    });
+    opened = await openBackupFile(fileText, passphrase);
+    const username = opened.meta.username;
+    if (!username) throw new Error("key file names no account");
 
-    // H6 — bringing this device in via the backup file is a TAKEOVER, not a
-    // silent local-identity swap. INITIATE the re-pair so the account's OTHER
-    // devices are alerted during the grace window (no veto) — exactly the
-    // security flow iOS/Android run. The seed is now in the unlocked session.
-    const session = getSession();
-    if (!(session.umk instanceof Uint8Array)) {
-      // Defense-in-depth: restore is supposed to have unlocked the session.
-      // Without the seed we can't sign the re-pair — fail rather than silently
-      // skip the takeover (the bug this fix closes).
-      throw new Error("account key wasn't available after restore");
-    }
-    const {
-      deriveIrkFromSeed,
-      deriveIrkVersioned,
-      signWithIrkVersioned,
-      signWithIrk,
-      bytesToHex,
-    } = keystore;
+    // H6 — bringing this device in via the backup file is a TAKEOVER: INITIATE
+    // the re-pair so the account's OTHER devices are alerted during the grace
+    // window. It runs on the seed in memory; the key is installed in this
+    // browser only once `.com` accepted it, so a refusal leaves nothing behind.
     const { runKeyfileImportTakeover, SecondFactorRequiredError } = await import(
       "../lib/keyfileImportTakeover.js"
     );
-    const { addProfile } = await import("../lib/profiles.js");
     let takeover;
     try {
-      // ROTATE the IRK on import: old = the registered (v1) key, new = a fresh
-      // rotated device key. The re-pair handler rejects old==new, so inject the
-      // versioned derivers (mirrors Android + loginTakeover).
       takeover = await runKeyfileImportTakeover({
         username,
-        seed: session.umk,
-        deriveIrkFromSeed,
-        deriveIrkVersioned,
-        signWithIrkVersioned,
-        // The v1 (registered-key) signer: the import's ownership proof
-        // to `.com`. Without it the initiate is refused — holding the
-        // seed is the credential, and this is how we show it.
-        signWithIrk,
-        bytesToHex,
-        addProfile: (profile) => addProfile(profile),
+        seed: opened.seed,
+        bytesToHex: keystore.bytesToHex,
       });
     } catch (e) {
       if (e instanceof SecondFactorRequiredError) {
         // The account has a second factor enrolled (#52). The import sheet
         // can't collect it; route the user to the sign-in flow which can —
         // same guidance iOS/Android show.
-        toast(e.message, "warn");
+        await showImportRefusal(e.message);
         return;
       }
       throw e;
     }
 
+    installed = true;
+    await installRestoredKey({
+      seed: opened.seed,
+      meta: opened.meta,
+      localPassphrase,
+      keystore,
+      unlockSession,
+    });
+    const { addProfile } = await import("../lib/profiles.js");
+    addProfile(takeover.profile);
+    installed = false;
+
     toast(tr("Bringing this device into {0}", username), "ok");
     // Finish now signs the completion with the rotated key, derived from the
     // restored account key.
-    await runImportGraceCountdown({ ...takeover, seed: session.umk }, keystore);
+    await runImportGraceCountdown({ ...takeover, seed: opened.seed }, keystore);
   } catch (e) {
-    toast(importErrorMessage(e), "err");
+    if (installed) await rollBackImportedKey(keystore, opened?.meta?.username);
+    await showImportRefusal(importErrorMessage(e));
+  }
+}
+
+/** A refused import is a sentence in a dialog, not a toast that is gone in a second. */
+async function showImportRefusal(message) {
+  try {
+    const { inlineAlert } = await import("../lib/modal.js");
+    await inlineAlert({ title: tr("Couldn't restore this key file"), message });
+  } catch {
+    toast(message, "err");
+  }
+}
+
+/** Undo a half-finished install: no key, no unlocked session, no profile. */
+async function rollBackImportedKey(keystore, username) {
+  try { await keystore.resetDevice(); } catch { /* nothing stored */ }
+  try {
+    const { lockSession } = await import("../lib/state.js");
+    lockSession();
+  } catch { /* already locked */ }
+  if (username) {
+    try {
+      const { removeProfile } = await import("../lib/profiles.js");
+      removeProfile(username);
+    } catch { /* never recorded */ }
   }
 }
 
