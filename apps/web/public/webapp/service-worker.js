@@ -483,7 +483,10 @@
 //  v203: a sample account's Messages tab shows its example page (published by the operator) read-only: photo, name,
 //       voi.ci/<u> with copy, a disabled Public switch, "This is a sample account..." and View page; Home shows its
 //       "Your page" row.
-const SHELL_VERSION = "v203";
+//  v204: a key-file import finds the key the account holds (an Android- or iOS-made account doesn't hold the web
+//       v1) and installs nothing until .com accepts; refusals are a sentence in a dialog. The remote page says so when
+//       a code a phone is showing runs out instead of quietly showing a new QR.
+const SHELL_VERSION = "v204";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
