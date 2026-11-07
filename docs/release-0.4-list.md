@@ -122,3 +122,14 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   `docs/voici-service-names-todo.md` (found untracked in the main checkout on 2026-11-07; reconcile with the naming
   and monetization docs when it lands).
 
+## Repo housekeeping (2026-11-07)
+
+- **Rebase every feature branch and `gym` onto the tip of `main`** with `bash scripts/rebase-features.sh --apply`
+  (backup ref, scratch worktree, `npm ci`, `tsc`, push with --force-with-lease; its list was fixed on 2026-11-07).
+  Predicted on 2026-11-07: `feat/browser-extension` clean; conflicts in `gym` 9 files, `feat/other-os-installers` 18,
+  `alpine` 31, `feat/retail` 34, `feat/marketplace` 62 (its webapp shell v181 must move above main's v204), then
+  `feat/custom-names`, `feat/custom-domains`, `feat/outbound-proxy` follow marketplace (they need its payment rail,
+  per AGENTS.md). Conflicting branches are a hand job, one branch per session, smallest first (gym).
+- Old gym copies are kept as tags `archive/gym-rebase-2026-10-25`, `archive/gym-pre-0.3-rebase2-2026-10-25`,
+  `archive/gym-pq-2026-10-26` (1-3 commits each not found on `gym`); `gym` is the only gym branch.
+
