@@ -38,3 +38,6 @@ Production's certificate orders for the test account, 2026-11-06 (read-only D1 q
   abandoned orders instead of 5 of 5, so every server would have got its certificate.
 - It goes live with the owner's next `.com` deploy (release.sh step 41). I'll add a line here when it's live.
 - Until then, the rule from reply 5 still applies: about 3 new servers a day per account. Rerun W6 now; it should pass.
+
+## Live (2026-11-07): the owner deployed `.com` (step 41)
+The certificate-limit fix (3fd80267d) is live in production. New servers on one account no longer hit the cap after about 3 a day. W6/W8 can be rerun freely.
