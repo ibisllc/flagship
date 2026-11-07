@@ -34,28 +34,7 @@ struct ThreadScreen: View {
     private func thread(_ c: VoiciConversation) -> some View {
         let blocked = store.state.blocks.contains(c.pseudonymPub)
         return VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        if c.hasGap {
-                            Text("Some messages haven't arrived yet")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .padding(.vertical, 4)
-                        }
-                        ForEach(c.messages) { m in
-                            bubble(m, last: m.id == c.messages.last(where: \.fromOwner)?.id)
-                                .id(m.id)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                }
-                .onAppear { if let last = c.messages.last { proxy.scrollTo(last.id, anchor: .bottom) } }
-                .onChange(of: c.messages.count) { _, _ in
-                    if let last = c.messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
-                }
-            }
+            messageList(c)
             if let note {
                 Text(verbatim: note).font(.footnote).foregroundStyle(.secondary).padding(.horizontal).padding(.top, 4)
                     .accessibilityIdentifier("thread-note")
@@ -145,6 +124,32 @@ struct ThreadScreen: View {
             Image(systemName: "ellipsis.circle").accessibilityLabel(Text("More"))
         }
         .accessibilityIdentifier("thread-menu")
+    }
+
+    /// Split out of `thread(_:)`: as one expression it timed out the CI type checker.
+    private func messageList(_ c: VoiciConversation) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    if c.hasGap {
+                        Text("Some messages haven't arrived yet")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    }
+                    ForEach(c.messages) { m in
+                        bubble(m, last: m.id == c.messages.last(where: \.fromOwner)?.id)
+                            .id(m.id)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .onAppear { if let last = c.messages.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+            .onChange(of: c.messages.count) { _, _ in
+                if let last = c.messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+            }
+        }
     }
 
     private func bubble(_ m: VoiciThreadMessage, last: Bool) -> some View {

@@ -320,6 +320,11 @@ public struct SettingsScreen: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        // Split in three: as one expression it took ~4 s to type-check and timed out CI.
+        return laterDialogs(earlyDialogs(settingsList(c)))
+    }
+
+    private func settingsList(_ c: FSColors) -> some View {
         List {
             // A compact, non-interactive cloud identifier. Account
             // Security remains available in the Account group below.
@@ -367,6 +372,10 @@ public struct SettingsScreen: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .refreshable { await onRefresh() }
+    }
+
+    private func earlyDialogs(_ content: some View) -> some View {
+        content
         .confirmationDialog(
             disconnectTarget.map { String(localized: "Revoke \($0.displayName)?") } ?? String(localized: "Revoke device?"),
             isPresented: Binding(
@@ -421,6 +430,10 @@ public struct SettingsScreen: View {
                 set: { if !$0 { nameEditMessage = nil } }
             )
         ) { Button("OK") { nameEditMessage = nil } } message: { Text(nameEditMessage ?? "") }
+    }
+
+    private func laterDialogs(_ content: some View) -> some View {
+        content
         .confirmationDialog(
             revokeSessionTarget.map { String(localized: "Revoke session \($0.tokenPrefix)?") } ?? String(localized: "Revoke this session?"),
             isPresented: Binding(
