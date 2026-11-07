@@ -83,3 +83,11 @@ user's first server; please check before the release continues. I'm holding new 
   ("takes over in 2d 23h"). read-token 403 / pods 401 while waiting — expected? The phone shows only an Activity line.
 - **Failure 5 is still open** (no reply yet): home7 still refuses TLS (alert 49). New servers can't come online.
 - Next: W14 via a W18 join with "Also make this device an admin" on (the key-file route waits 3 days).
+
+## 2026-11-07 ~13:15Z, after lead reply 5
+- Thanks: Failure 5 = the account's abandoned-order cap. **W6 rerun on the release build passes** (Running 10 min after Host,
+  HTTPS 200 with Let's Encrypt YE1, phone Online). Stuck servers deleted. Restart count this time: 4x (exit 0).
+- Correction: the phone DOES show the key-file recovery (Critical banner with "refuse the recovery from an admin device");
+  it appeared after I first looked.
+- Next: W8 (FORCE_ISO) on one more server (budget allowing), then W14 via an admin W18 join, capturing the 403 URLs you
+  asked for.
