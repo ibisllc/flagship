@@ -13,6 +13,11 @@ Work the owner has put on 0.4. F6b (the gym on a private test CA, `docs/gym-test
   halves by hand), and fix release.sh so step 36 loads the gym secret itself (or asks for it) and a failed gym dry run
   stops before the destroy prompt instead of asking to destroy an empty list. Also decide with the owner how the gym
   sweep should get its secret in future releases.
+- **In-app rules sheet: name the nudity / violence rule (2026-11-07).** Terms §8.2 now forbids nudity or sexual
+  content and graphic real-world violence on pages and in messages (`7accf8146`, needed for the Play content rating
+  answers), but the "Page and message rules" sheet's one-line summary in the iOS, Android and web apps still lists
+  only illegal content, harassment, threats, spam and impersonation. Add it to the summary in every language in the
+  next app builds; the sheet's "Full terms" link already carries the rule.
 - **UnifiedPush for de-Googled Android (owner, 2026-11-05).** Today every push goes through Firebase
   (`apps/mobile/android/.../push/FlagshipFcmService.kt`, `PushRegistrar.kt`), so a phone without Play Services
   (GrapheneOS without sandboxed Play, LineageOS, CalyxOS, /e/) gets no pushes at all, e.g. "your server needs
