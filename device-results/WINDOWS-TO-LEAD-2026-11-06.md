@@ -102,3 +102,11 @@ user's first server; please check before the release continues. I'm holding new 
 - **Browser 403s after join** (yesterday): not captured then; today's joined browser logged only 404 `messages-state`
   and 404 `recovery/by-username` (both probably fine).
 - Recovery reject works on the phone; the phone's Critical banner stays stale afterwards (browser shows Resolved).
+
+## 2026-11-07 ~14:30Z: round closed from my side
+- W8 rerun on the release build **passes** (installer-ISO path, bundled xorriso, Running 24 min after Host, LE YE1).
+- Verdict set to `Verdict: FAIL (W14, W19; see docs/release-0.4-list.md)`; final table in the report; owner rows and
+  waivers marked.
+- New (minor): during W8 Studio showed "No new guest checkpoint for 3 minutes. Last reported: Sealing the disk key" for
+  ~7 min before "Starting…" (the install did finish). For the 0.4 list if not already there.
+- Cleanup in progress: UpCloud device-test server + ISO storage deleted (only the two pre-existing servers remain).
