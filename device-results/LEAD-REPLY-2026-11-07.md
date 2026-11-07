@@ -33,7 +33,7 @@ Production's certificate orders for the test account, 2026-11-06 (read-only D1 q
 5. W19 (lands on an empty Home after approval): still open. Noted.
 
 ## Update (later on 2026-11-07): the certificate-limit fix is on main, not deployed yet
-- main `e5d2b4e7b`: a certificate now forgives up to the 3 orders the same box made
+- main `3fd80267d`: a certificate now forgives up to the 3 orders the same box made
   just before it, within the hour before. Against yesterday's real orders, your account would have stood at 2 of 5
   abandoned orders instead of 5 of 5, so every server would have got its certificate.
 - It goes live with the owner's next `.com` deploy (release.sh step 41). I'll add a line here when it's live.
