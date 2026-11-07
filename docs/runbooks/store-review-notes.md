@@ -36,7 +36,7 @@ Sign-in: Flagship has no passwords. On the first screen tap "Connect to an exist
 
 User-generated content (Guideline 1.2): Flagship 0.3 adds voi.ci pages and Messages. A user can publish a public profile page (photo, name, bio, links, posts) at voi.ci/<username> and receive end-to-end encrypted messages from other Flagship users through it. The demo account's page is a read-only example: https://voi.ci/playstore-test-0725.
 
-- Rules: before a user first publishes a page or approves a sign-in to message someone, the app shows the "Page and message rules" sheet (no illegal content, harassment, threats, spam or impersonation) and the user must tap "I agree". Full terms: https://flagshipserver.com/terms#messages
+- Rules: before a user first publishes a page or approves a sign-in to message someone, the app shows the "Page and message rules" sheet (no illegal content, harassment, threats, spam or impersonation) and the user must tap "I agree". Full terms: https://flagshipserver.com/terms#messages (they also forbid nudity, sexual content and graphic violence on pages and in messages)
 - Report: every message has Report, with reasons Spam, Harassment, Pretending to be someone, Illegal content, Something else. Every public page has "Report this page" at the bottom.
 - Block: every conversation has Block (the ••• menu). A blocked sender isn't told; their messages stop arriving.
 - Moderation: a person at Flagship reviews every report within 24 hours. We remove pages that break the rules and ban accounts from Messages (a ban also covers the device, using DeviceCheck / App Attest). Banned users can appeal.
