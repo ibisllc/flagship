@@ -33,7 +33,7 @@ data class AccountMetadataCiphertext(val nonceHex: String, val ciphertextHex: St
 
 object AccountMetadata {
     private const val SALT = "flagship/account-metadata/v1"
-    private val deviceIdPattern = Regex("^[0-9a-f]{32}$")
+    val deviceIdPattern = Regex("^[0-9a-f]{32}$")
     private val graphemePattern = Regex("\\X")
     private val bidiControls = setOf(
         0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e,

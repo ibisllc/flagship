@@ -556,7 +556,7 @@ public final class AppState {
             cloudName: username,
             cloudRootPubHex: "",
             accountId: username,
-            deviceId: deviceCapability?.deviceId ?? existing?.deviceId ?? generatedDeviceId,
+            deviceId: deviceCapability?.deviceId ?? existing?.deviceId ?? loadDeviceId?(username) ?? generatedDeviceId,
             accountDisplayName: existing?.accountDisplayName ?? presentationNames?.get(username)?.account,
             deviceDisplayName: existing?.deviceDisplayName ?? presentationNames?.get(username)?.device,
             deviceCapability: deviceCapability,
@@ -587,9 +587,34 @@ public final class AppState {
     /// same `cloudName`) and set it active.
     public func addProfile(_ profile: Profile, setActive: Bool = true) {
         upsertProfile(profile)
+        rememberDeviceId(profile)
         if setActive {
             setActiveProfile(profile.cloudName)
         }
+    }
+
+    /// Where the ID `.com` registered for this device on each account survives a restart (the
+    /// Keychain, wired by the iOS shell). Profiles are rebuilt on every cold start, so without it
+    /// `completeOnboarding` invented a new ID and every device-signed request was refused.
+    public var loadDeviceId: ((String) -> String?)?
+    public var saveDeviceId: ((String, String) -> Void)?
+
+    /// Saves [profile]'s device ID; callers only pass an ID `.com` admitted.
+    public func rememberDeviceId(_ profile: Profile) {
+        guard AccountMetadata.isDeviceId(profile.deviceId) else { return }
+        saveDeviceId?(profile.cloudName, profile.deviceId)
+    }
+
+    /// The active profile's ID was lost and [deviceId] is the one `.com` accepted: use and save it.
+    public func adoptRegisteredDeviceId(_ deviceId: String) {
+        guard let a = activeProfile else { return }
+        let updated = Profile(
+            cloudName: a.cloudName, cloudRootPubHex: a.cloudRootPubHex, accountId: a.accountId,
+            deviceId: deviceId, accountDisplayName: a.accountDisplayName, deviceDisplayName: a.deviceDisplayName,
+            deviceCapability: a.deviceCapability, demoServer: a.demoServer, createdAt: a.createdAt
+        )
+        upsertProfile(updated)
+        rememberDeviceId(updated)
     }
 
     /// W3 — switch the active profile. Mirrors the chosen profile's

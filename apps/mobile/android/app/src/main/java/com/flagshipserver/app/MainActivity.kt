@@ -163,6 +163,7 @@ class MainActivity : FragmentActivity() {
             requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
         )
         appState.presentationNames = com.flagshipserver.app.core.PresentationNameStore.from(applicationContext)
+        appState.deviceIdStore = KeystoreDeviceIdStore
         // GYM: each smoke launch starts with no remembered names, as with the AI keys below.
         if (savedInstanceState == null && com.flagshipserver.app.core.Variant.isGymLaunch(intent)) appState.presentationNames?.clear()
         // Restore a previously paired session: if the Keystore still holds
@@ -410,6 +411,7 @@ class MainActivity : FragmentActivity() {
             com.flagshipserver.app.keystore.ServingRenewal.sessionUnlocked()
             com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             com.flagshipserver.app.keystore.QuantumSafetyService.activate(appState.currentUser.value, appState.activeProfile?.deviceId)
+            if (mocks == null) lifecycleScope.launch { repairDeviceId(liveFlagshipServer) }
         }
 
         // Push-token registration is inherently a real-backend operation
@@ -990,6 +992,53 @@ class MainActivity : FragmentActivity() {
     private fun buildOkHttp(): OkHttpClient =
         com.flagshipserver.app.core.HttpClientFactory.build()
 
+    /** Builds before the device ID was saved invented one per cold start: find the registered one
+     *  again (once per account; saved IDs skip this). Runs after an unlock, never prompts. */
+    private suspend fun repairDeviceId(server: com.flagshipserver.app.api.FlagshipServerClient) {
+        val user = appState.currentUser.value ?: return
+        val profile = appState.activeProfile ?: return
+        if (appState.isDemoAccountNow() || profile.deviceCapability != null) return
+        if (runCatching { Keystore.accountDeviceId() }.getOrNull() != null) return
+        val umk = Keystore.umkSeedIfOpen() ?: return
+        try {
+            val pq = com.flagshipserver.app.keystore.QuantumSafetyService.pqKeys?.entries("device").orEmpty()
+            val bound = com.flagshipserver.app.keystore.PqKeyStore.BindingState.BOUND
+            val candidates = com.flagshipserver.app.core.DeviceIdRepair.candidates(
+                current = profile.deviceId,
+                boundPq = pq.filter { it.bindingState == bound }.map { it.subjectId },
+                otherPq = pq.filter { it.bindingState != bound }.map { it.subjectId },
+                kept = Keystore.keptAccountDeviceIds(),
+            )
+            val found = com.flagshipserver.app.core.DeviceIdRepair.find(candidates) { id ->
+                try {
+                    val signer = Keystore.accountDeviceSigner(umk, user, id)
+                    val pub = HexUtil.encode(Keystore.accountDevicePublicKey(umk, user, id))
+                    val requestId = com.flagshipserver.app.core.AccountMetadata.generateDeviceId()
+                    val issuedAt = System.currentTimeMillis()
+                    val canonical = com.flagshipserver.app.core.AccountMetadata.canonicalDirectoryRequest(
+                        user, id, pub, "GET", "/api/accounts/${user.lowercase()}/directory", requestId, issuedAt,
+                    )
+                    server.accountDirectory(user, com.flagshipserver.app.api.AccountDirectoryAuthorization(
+                        deviceId = id, signerPubHex = pub, requestId = requestId, issuedAt = issuedAt,
+                        signatureHex = HexUtil.encode(signer.sign(canonical)),
+                    ))
+                    com.flagshipserver.app.core.DeviceIdRepair.Verdict.ACCEPTED
+                } catch (e: com.flagshipserver.app.core.HttpException) {
+                    if (e.status == 401 || e.status == 403) com.flagshipserver.app.core.DeviceIdRepair.Verdict.REFUSED
+                    else com.flagshipserver.app.core.DeviceIdRepair.Verdict.UNREACHABLE
+                } catch (e: Exception) {
+                    com.flagshipserver.app.core.DeviceIdRepair.Verdict.UNREACHABLE
+                }
+            } ?: return
+            if (appState.currentUser.value != user) return
+            appState.adoptRegisteredDeviceId(found)
+            runCatching { Keystore.sessionAccountDeviceKey(user, found) }
+            com.flagshipserver.app.keystore.QuantumSafetyService.activate(user, found)
+        } finally {
+            umk.fill(0)
+        }
+    }
+
     private fun mapWidth(w: MaterialWindowWidthSizeClass): WindowWidthSizeClass = when (w) {
         MaterialWindowWidthSizeClass.Expanded -> WindowWidthSizeClass.EXPANDED
         MaterialWindowWidthSizeClass.Medium -> WindowWidthSizeClass.MEDIUM
@@ -1206,5 +1255,15 @@ private fun AppRoot(
             )
         }
         Toaster(queue = toastQueue, onDismiss = { toasts.dismiss(it) })
+    }
+}
+
+/** The Keystore keeps each account's registered device ID under that account's profile. */
+private object KeystoreDeviceIdStore : AppState.DeviceIdStore {
+    private fun isActive(cloudName: String) = Keystore.activeProfile()?.lowercase() == cloudName.lowercase()
+    override fun load(cloudName: String): String? =
+        runCatching { if (isActive(cloudName)) Keystore.accountDeviceId() else null }.getOrNull()
+    override fun save(cloudName: String, deviceId: String) {
+        runCatching { if (isActive(cloudName)) Keystore.storeAccountDeviceId(deviceId) }
     }
 }

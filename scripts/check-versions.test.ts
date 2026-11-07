@@ -39,8 +39,8 @@ describe("release/version.json", () => {
     expect(v.product).toBe("0.3");
     expect(v.label).toBe("Beta");
     expect(v.iosVersion).toBe("1.2");
-    expect(v.iosBuild).toBe(7);
-    expect(v.androidVersionCode).toBe(10);
+    expect(v.iosBuild).toBe(8);
+    expect(v.androidVersionCode).toBe(11);
     expect(v.studio).toBe("0.3.0");
   });
 
@@ -94,7 +94,7 @@ describe("drift is caught", () => {
   });
 
   it("a stale iOS build number or store version", () => {
-    expect(drift("apps/mobile/ios/App/project.yml", 'CURRENT_PROJECT_VERSION: "7"', 'CURRENT_PROJECT_VERSION: "4"').findings[0].key).toBe("ios:project.yml:build");
+    expect(drift("apps/mobile/ios/App/project.yml", 'CURRENT_PROJECT_VERSION: "8"', 'CURRENT_PROJECT_VERSION: "4"').findings[0].key).toBe("ios:project.yml:build");
     expect(drift("apps/mobile/ios/App/FlagshipApp.xcodeproj/project.pbxproj", /MARKETING_VERSION = 1\.2;/g, "MARKETING_VERSION = 1.0;").findings.length).toBe(2);
   });
 

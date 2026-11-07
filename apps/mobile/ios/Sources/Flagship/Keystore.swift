@@ -293,6 +293,18 @@ public struct Keystore {
         )
     }
 
+    /// The ID `.com` registered for this device on `accountId`'s account (device-local).
+    public static func storeAccountDeviceId(_ deviceId: String, accountId: String) {
+        guard AccountMetadata.isDeviceId(deviceId) else { return }
+        try? keychainWrite(account: account(KCKey.accountDeviceId, profile: accountId), data: Data(deviceId.utf8), sync: .deviceLocal)
+    }
+
+    public static func accountDeviceId(accountId: String) -> String? {
+        guard let raw = keychainRead(account: account(KCKey.accountDeviceId, profile: accountId)),
+              let id = String(data: raw, encoding: .utf8), AccountMetadata.isDeviceId(id) else { return nil }
+        return id
+    }
+
     /// This device's account device key when it is stored on the device
     /// (joined devices), readable without a prompt; nil when it is derived
     /// from the UMK instead.
@@ -1207,7 +1219,8 @@ public struct Keystore {
                         account(KCKey.acmeAccountKeyScalar, profile: id),
                         account(KCKey.adminRootWrapped, profile: id),
                         account(KCKey.adminRootEphemeralPub, profile: id),
-                        account(KCKey.adminRootPub, profile: id)]
+                        account(KCKey.adminRootPub, profile: id),
+                        account(KCKey.accountDeviceId, profile: id)]
         if id == defaultProfileId {
             // Legacy parity: the default install owned the device push channel.
             accounts.append(KCKey.pushX25519Priv)
@@ -1245,7 +1258,7 @@ public struct Keystore {
                          KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId, KCKey.watchBootSeed,
                          KCKey.acmeAccountKeyScalar,
                          KCKey.adminRootWrapped, KCKey.adminRootEphemeralPub,
-                         KCKey.adminRootPub] {
+                         KCKey.adminRootPub, KCKey.accountDeviceId] {
                 keychainDelete(account: account(base, profile: id))
             }
             WrappingKeypair.deleteSEKeyIfExists(profile: id)
@@ -1382,6 +1395,16 @@ public struct Keystore {
     /// the Secure Enclave ML-DSA keys' records. Called by `wipe()` (sign out, Remove this device,
     /// Wipe & restart), so no PQ half outlives the account keys it was bound to.
     static func pqRecordsDeleteAll(profile: String) {
+        for acct in pqRecordAccounts(profile: profile) { keychainDelete(account: acct) }
+    }
+
+    /// Every PQ identity record of the active profile whose slot starts with `prefix`
+    /// (`com.flagship.pq-identity.<role>.`).
+    static func pqRecords(prefix: String) -> [Data] {
+        pqRecordAccounts(profile: activeProfileId).filter { $0.hasPrefix(prefix) }.compactMap { keychainRead(account: $0) }
+    }
+
+    private static func pqRecordAccounts(profile: String) -> [String] {
         let prefix = "com.flagship.pq-identity."
         let normalized = normalizeProfileId(profile)
         let mine: (String) -> Bool = { acct in
@@ -1402,7 +1425,7 @@ public struct Keystore {
         if SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let rows = result as? [[String: Any]] {
             found += rows.compactMap { $0[kSecAttrAccount as String] as? String }
         }
-        for acct in Set(found) where mine(acct) { keychainDelete(account: acct) }
+        return Set(found).filter(mine).sorted()
     }
 
     private static func unwrapUMK(
@@ -1446,6 +1469,7 @@ public struct Keystore {
 
     fileprivate enum KCKey {
         static let wrappedUmk          = "com.flagship.umk.wrapped"
+        static let accountDeviceId     = "com.flagship.account-device-id"
         static let ephemeralPub        = "com.flagship.umk.ephemeralpub"
         static let simWrapPriv         = "com.flagship.umk.simwrap"
         static let seKeyTag            = "com.flagship.umk.se"

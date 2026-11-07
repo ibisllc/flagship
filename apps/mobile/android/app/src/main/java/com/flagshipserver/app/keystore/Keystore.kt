@@ -391,6 +391,22 @@ object Keystore {
             .apply()
     }
 
+    /** The ID `.com` registered for this device on the active profile's account. */
+    fun storeAccountDeviceId(deviceId: String) {
+        require(deviceId.matches(Regex("^[0-9a-f]{32}$")))
+        requirePrefs().edit().putString(pkey(KEY_ACCOUNT_DEVICE_ID), deviceId).apply()
+    }
+
+    fun accountDeviceId(): String? =
+        requirePrefs().getString(pkey(KEY_ACCOUNT_DEVICE_ID), null)?.takeIf { it.matches(Regex("^[0-9a-f]{32}$")) }
+
+    /** Device IDs the active profile holds a kept account device key for: candidates when the
+     *  registered ID was lost (builds before the ID was saved invented one on each cold start). */
+    fun keptAccountDeviceIds(): List<String> {
+        val re = Regex("^account\\.device\\.seed\\.([0-9a-f]{32})" + (activeProfileId?.let { Regex.escape(".$it") } ?: "") + "$")
+        return requirePrefs().all.keys.mapNotNull { re.matchEntire(it)?.groupValues?.get(1) }
+    }
+
     fun accountDeviceSigner(umk: ByteArray, accountId: String, deviceId: String): Ed25519Sign {
         val stored = requirePrefs().getString(pkey("account.device.seed.$deviceId"), null)
             ?.let(HexUtil::decode)
@@ -941,6 +957,7 @@ object Keystore {
     // only reads the account's server list, so a poll can use it silently.
 
     private const val KEY_READ_TOKEN = "account.read.token"
+    private const val KEY_ACCOUNT_DEVICE_ID = "account.device.id"
 
     private fun readTokenKey(username: String) = "${pkey(KEY_READ_TOKEN)}.u.${username.lowercase()}"
 
@@ -1005,6 +1022,7 @@ object Keystore {
         // device-local + revoked with the device).
         SeedVault.remove(editor, adminRootSeedKey())
         editor.remove(adminRootPubKey())
+        editor.remove(pkey(KEY_ACCOUNT_DEVICE_ID))
         val readTokenPrefix = "${pkey(KEY_READ_TOKEN)}.u."
         // This profile's kept account device key ("account.device.seed.<id>[.<profile>]").
         val deviceSeed = Regex("^account\\.device\\.seed\\.[0-9a-f]{32}" + (activeProfileId?.let { Regex.escape(".$it") } ?: "") + "$")
@@ -1062,7 +1080,7 @@ object Keystore {
         val bases = listOf(
             KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
             KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION, KEY_IRK_SCHEME,
-            KEY_ACME_ACCOUNT_SCALAR, SeedVault.ADMIN_ROOT, KEY_READ_TOKEN, KEY_IRK_PUB, "admin.root.pub", "account.device.seed",
+            KEY_ACME_ACCOUNT_SCALAR, SeedVault.ADMIN_ROOT, KEY_READ_TOKEN, KEY_IRK_PUB, "admin.root.pub", "account.device.seed", KEY_ACCOUNT_DEVICE_ID,
             SeedVault.sealedKey(KEY_UMK_SEED), SeedVault.sealedKey(SeedVault.ADMIN_ROOT),
         )
         for (key in p.all.keys) {

@@ -423,7 +423,8 @@ class AppState(
                 cloudName = username,
                 cloudRootPubHex = "",
                 accountId = username,
-                deviceId = _deviceCapability.value?.deviceId ?: existing?.deviceId ?: AccountMetadata.generateDeviceId(),
+                deviceId = _deviceCapability.value?.deviceId ?: existing?.deviceId
+                    ?: deviceIdStore?.load(username) ?: AccountMetadata.generateDeviceId(),
                 accountDisplayName = existing?.accountDisplayName ?: presentationNames?.get(username)?.account,
                 deviceDisplayName = existing?.deviceDisplayName ?: presentationNames?.get(username)?.device,
                 deviceCapability = _deviceCapability.value,
@@ -451,6 +452,29 @@ class AppState(
     fun addProfile(profile: Profile, setActive: Boolean = true) {
         upsertProfile(profile)
         if (setActive) setActiveProfile(profile.cloudName)
+        if (setActive) rememberDeviceId(profile)
+    }
+
+    /** The ID `.com` registered for this device on [profile]'s account, saved so a cold start
+     *  restores it instead of inventing one (callers only pass an admitted ID). */
+    fun rememberDeviceId(profile: Profile) {
+        if (AccountMetadata.deviceIdPattern.matches(profile.deviceId)) deviceIdStore?.save(profile.cloudName, profile.deviceId)
+    }
+
+    /** Where a device's registered ID per account survives process death (the Keystore in the app). */
+    interface DeviceIdStore {
+        fun load(cloudName: String): String?
+        fun save(cloudName: String, deviceId: String)
+    }
+
+    var deviceIdStore: DeviceIdStore? = null
+
+    /** The active profile's ID was lost and [deviceId] is the one `.com` accepted: use and save it. */
+    fun adoptRegisteredDeviceId(deviceId: String) {
+        val active = activeProfile ?: return
+        val updated = active.copy(deviceId = deviceId)
+        upsertProfile(updated)
+        rememberDeviceId(updated)
     }
 
     /** W3 — switch the active profile. Mirrors the chosen profile's

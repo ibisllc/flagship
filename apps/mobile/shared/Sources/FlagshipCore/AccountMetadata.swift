@@ -72,6 +72,10 @@ public enum AccountMetadata {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
+    public static func isDeviceId(_ value: String) -> Bool {
+        deviceIdPattern.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
+    }
+
     public static func generateDeviceId() throws -> String {
         HexUtil.encode(try randomData(count: 16))
     }

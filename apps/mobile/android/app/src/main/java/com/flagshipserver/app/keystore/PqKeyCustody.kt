@@ -141,6 +141,12 @@ class PqKeyStore(
 
     private fun key(role: String, subjectId: String) = "pq.mldsa.v1.${profile() ?: "-"}.$role.$subjectId"
 
+    /** This profile's entries for [role], e.g. every `device` key the phone made. */
+    fun entries(role: String): List<Entry> {
+        val prefix = "pq.mldsa.v1.${profile() ?: "-"}.$role."
+        return persistence.keys().filter { it.startsWith(prefix) }.mapNotNull { entry(role, it.removePrefix(prefix)) }
+    }
+
     fun entry(role: String, subjectId: String): Entry? =
         persistence.load(key(role, subjectId))?.let { runCatching { json.decodeFromString(Entry.serializer(), it) }.getOrNull() }
 

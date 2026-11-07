@@ -182,10 +182,11 @@ struct FlagshipApp: App {
         // property is initialized.
         let trustCenter = TrustCenter()
         _trust = State(initialValue: trustCenter)
-        self.liveServerClient = LiveFlagshipServerClient(
+        let serverClient = LiveFlagshipServerClient(
             trustGate: { @Sendable in await MainActor.run { trustCenter.isServerTrusted } },
             readTokens: readTokens
         )
+        self.liveServerClient = serverClient
         Self.wireInstallProgressBridge(app: state)
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
@@ -195,6 +196,8 @@ struct FlagshipApp: App {
         appState.onActiveProfileChanged = { cloudName in
             Keystore.setActiveProfile(cloudName)
         }
+        appState.loadDeviceId = { cloudName in Keystore.accountDeviceId(accountId: cloudName) }
+        appState.saveDeviceId = { cloudName, deviceId in Keystore.storeAccountDeviceId(deviceId, accountId: cloudName) }
         appState.onSignedOut = {
             Task {
                 await store.setDemoSession(nil)
@@ -207,7 +210,10 @@ struct FlagshipApp: App {
         Keystore.setSessionUmkObserver { umk in
             Task { @MainActor in
                 guard !state.isDemoAccount, let user = state.currentUser,
-                      let deviceId = state.activeProfile?.deviceId else { return }
+                      var deviceId = state.activeProfile?.deviceId else { return }
+                if let found = await Self.repairDeviceId(state: state, umk: umk, server: serverClient), state.currentUser == user {
+                    deviceId = found
+                }
                 AccountReadCredentials.keystore.keepDeviceKey(umk: umk, username: user, deviceId: deviceId)
                 // Architecture v2: bind this session's identities' ML-DSA keys on `.com`
                 // (accounts made before PQ keys upgrade here), never prompting.
@@ -220,6 +226,49 @@ struct FlagshipApp: App {
             guard let user = await MainActor.run(body: { state.currentUser }) else { return }
             await readTokens.retryNow(for: user)
         }
+    }
+
+    /// Builds before the device ID was saved invented one per cold start: find the registered one
+    /// again (once per account; a saved ID skips this). Runs at an unlock, never prompts.
+    @MainActor
+    private static func repairDeviceId(state: AppState, umk: Data, server: any FlagshipServerClient) async -> String? {
+        #if DEBUG
+        if GymLaunch.usesMocks { return nil }
+        #endif
+        guard let user = state.currentUser, let profile = state.activeProfile,
+              profile.deviceCapability == nil,
+              Keystore.accountDeviceId(accountId: user) == nil else { return nil }
+        let pq = PqKeyStore.shared.deviceSubjects()
+        let candidates = DeviceIdRepair.candidates(
+            current: profile.deviceId,
+            boundPq: pq.filter { $0.bound }.map { $0.id },
+            otherPq: pq.filter { !$0.bound }.map { $0.id },
+            kept: []
+        )
+        let found = await DeviceIdRepair.find(candidates) { id in
+            do {
+                let key = try Keystore.accountDeviceSigningKey(umk: umk, accountId: user, deviceId: id)
+                let pub = HexUtil.encode(key.publicKey.rawRepresentation)
+                let requestId = try AccountMetadata.generateDeviceId()
+                let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+                let canonical = AccountMetadata.canonicalDirectoryRequest(
+                    accountId: user, deviceId: id, signerPubHex: pub, method: "GET",
+                    path: "/api/accounts/\(user.lowercased())/directory", requestId: requestId, issuedAt: issuedAt
+                )
+                _ = try await server.accountDirectory(accountId: user, authorization: AccountDirectoryAuthorization(
+                    deviceId: id, signerPubHex: pub, requestId: requestId, issuedAt: issuedAt,
+                    signatureHex: HexUtil.encode(try key.signature(for: canonical))
+                ))
+                return .accepted
+            } catch ScreensClientError.http(let status, _) where status == 401 || status == 403 {
+                return .refused
+            } catch {
+                return .unreachable
+            }
+        }
+        guard let found, state.currentUser == user else { return nil }
+        state.adoptRegisteredDeviceId(found)
+        return found
     }
 
     /// The notice center: the real poller against `flagshipserver.com`. The

@@ -58,6 +58,14 @@ public final class PqKeyStore: PqIdentityKeyStore, @unchecked Sendable {
         if let data = try? JSONEncoder().encode(r) { try? Keystore.pqRecordWrite(slot(id), data) }
     }
 
+    /// The device IDs this profile made `device` keys for, with whether `.com` bound each one.
+    public func deviceSubjects() -> [(id: String, bound: Bool)] {
+        Keystore.pqRecords(prefix: "com.flagship.pq-identity.\(PqBindingRole.device.rawValue).")
+            .compactMap { try? JSONDecoder().decode(Record.self, from: $0) }
+            .filter { $0.role == PqBindingRole.device.rawValue }
+            .map { ($0.subjectId, $0.status == .bound) }
+    }
+
     /// The custody of this identity's key, when one exists.
     public func custody(for id: PqIdentity) -> PqCustody? { load(id)?.custody }
 
