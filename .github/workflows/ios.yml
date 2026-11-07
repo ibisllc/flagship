@@ -27,10 +27,18 @@ permissions:
 
 jobs:
   test-and-release-clean:
-    runs-on: macos-15
+    # Releases are built with the newest Xcode (27.x, iOS 26 APIs such as the Secure Enclave
+    # ML-DSA keys); macos-15's Xcode refused code the release toolchain accepts, so CI was red.
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+
+      - name: Use the newest Xcode on the runner
+        run: |
+          x=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x/Contents/Developer"
+          xcodebuild -version
 
       - uses: actions/setup-node@v5
         with:

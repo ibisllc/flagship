@@ -39,7 +39,8 @@ final class PolishRulesTests: XCTestCase {
     }
 
     func test_noFixedPointSizesOutsideTheTypeScale() throws {
-        let allowed = ["Theme.swift", "GymProbeView.swift", "ComponentsList.swift", "WelcomeScreen.swift"]
+        // MessagesTabIcon: its glyph size is a share of a @ScaledMetric side, so it follows Dynamic Type.
+        let allowed = ["Theme.swift", "GymProbeView.swift", "ComponentsList.swift", "WelcomeScreen.swift", "MessagesTabIcon.swift"]
         for (path, text) in try uiSources() where !allowed.contains(where: path.hasSuffix) {
             XCTAssertFalse(text.contains(".system(size:"),
                            "\(path) uses a fixed point size; use FS.font.scaled(...) or a text style so it follows Dynamic Type")

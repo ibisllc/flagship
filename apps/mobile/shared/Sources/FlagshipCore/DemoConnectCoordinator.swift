@@ -67,13 +67,13 @@ public final class DemoConnectCoordinator {
             // (rate-limited) from a generic 5xx.
             switch err {
             case .http(let status, let message):
-                state = .failed(reason: String(localized: "connect failed (HTTP \(status)): \(message)"))
+                state = .failed(reason: String(localized: "connect failed (HTTP \(status)): \(String(describing: message))"))
             default:
-                state = .failed(reason: String(localized: "connect failed: \(err)"))
+                state = .failed(reason: String(localized: "connect failed: \(String(describing: err))"))
             }
             return
         } catch {
-            state = .failed(reason: String(localized: "connect failed: \(error)"))
+            state = .failed(reason: String(localized: "connect failed: \(String(describing: error))"))
             return
         }
         state = .polling(lastStatus: "provisioning")
@@ -91,7 +91,7 @@ public final class DemoConnectCoordinator {
         } catch DemoConnectError.demoServerWentAway {
             state = .failed(reason: String(localized: "This demo was removed. Sign out and try a different username."))
         } catch {
-            state = .failed(reason: String(localized: "poll failed: \(error)"))
+            state = .failed(reason: String(localized: "poll failed: \(String(describing: error))"))
         }
     }
 
@@ -159,7 +159,7 @@ public final class DemoConnectCoordinator {
         do {
             try await demoConnect.cancel(username: username)
         } catch {
-            state = .failed(reason: String(localized: "cancel failed: \(error)"))
+            state = .failed(reason: String(localized: "cancel failed: \(String(describing: error))"))
             return false
         }
         // Remove the demo pod(s) — matched on the synthetic podId prefix

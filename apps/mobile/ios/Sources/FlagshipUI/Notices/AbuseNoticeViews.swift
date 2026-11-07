@@ -118,7 +118,7 @@ struct AbuseNoticeDoneSheet: View {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 TextField(AbuseCopy.doneNotePlaceholder, text: $note, axis: .vertical)
                     .lineLimit(3...8)
-                    .textFieldStyle(.roundedBorder)
+                    .fsInputBox()
                     .accessibilityIdentifier("abuse-notice-done-note")
                 if let failure {
                     Text(failure).font(FS.font.scaled(14)).foregroundColor(c.danger)
