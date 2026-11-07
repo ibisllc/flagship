@@ -2299,6 +2299,54 @@
       "help.html"
     ]
   },
+  "se2194549fc": {
+    "en": "How do I delete my Flagship account?",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s371638428a": {
+    "en": "You delete your account yourself, in the Flagship app on iPhone, iPad or Android, or in the web app. It can't be undone.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s7d691bcebe": {
+    "en": "Open Flagship on a device that is signed in to the account and go to <1>Settings</1>, then tap <2>Delete account</2>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s0f52882057": {
+    "en": "If other devices are still signed in, remove them first in <1>Settings</1>, <2>Trusted devices</2>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sf1bdf778c8": {
+    "en": "Type your username to confirm, choose whether to also ask your servers to delete their content, and tap <1>Delete my account forever</1>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s9c4d209a8d": {
+    "en": "What is deleted: your username and public keys within 30 days (a key's fingerprint may stay on revocation lists), your voi.ci page at once, and the messages waiting for you with the account. Your servers stop being reachable and you can no longer manage them; to keep one, transfer it to another account first. Copies on your own devices stay until you delete them. You can also mail <1>privacy@flagship.services</1> to have us delete your account and data; we do it within 30 days.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
   "sdd9d88ff28": {
     "en": "I want to talk to a human.",
     "kind": "text",
