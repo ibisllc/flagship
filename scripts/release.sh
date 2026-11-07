@@ -254,14 +254,12 @@ EOF
 meta_hof() {
   TITLE="Publish the hall of fame entry (after 0.3 is live)"
   RUNBOOK="11b. Publish the hall of fame entry"
-  WHAT="The security page credits the reviewers whose reports 0.3 fixes, only once the fixes are deployed. Merges the local branch hof-jay into main (it changes only the security page), pushes, and redeploys .com."
+  WHAT="The hall of fame credits the reviewers whose reports 0.3 fixes, only once the fixes are deployed. The entry is already on main (cherry-picked with its translations); this checks it is at the pin and redeploys .com."
   read -r -d '' CMDS <<'EOF' || true
-git log --oneline main..hof-jay ; git diff --stat main...hof-jay
-git merge --no-ff hof-jay -m "Hall of fame: credit the 0.3 reviewers"
-git push origin HEAD:main
+grep -q "credit: Jay" apps/web/public/security/hall-of-fame.html
 (cd apps/com && npm run deploy)
 EOF
-  GATE="https://flagshipserver.com/security/ shows the new entry."
+  GATE="https://flagshipserver.com/security/hall-of-fame shows the new entry in every language."
   ROLLBACK="Revert the merge on main and redeploy .com."
 }
 meta_preflight() {
@@ -1682,16 +1680,11 @@ run_uxchecks() {
 }
 
 run_hof() {
-  git -C "$MAIN_CHECKOUT" rev-parse --verify -q hof-jay >/dev/null || { warn "no local branch hof-jay in $MAIN_CHECKOUT: nothing to publish"; return 0; }
   ensure_wt
-  XA "$MAIN_CHECKOUT" git log --oneline "$PIN..hof-jay"
-  XA "$MAIN_CHECKOUT" git diff --stat "$PIN...hof-jay"
-  confirm "0.3 is live. Merge hof-jay into main and redeploy .com now?" || return 10
-  X git -C "$WT" fetch -q "$MAIN_CHECKOUT" hof-jay
-  X git -C "$WT" merge --no-ff FETCH_HEAD -m "Hall of fame: credit the 0.3 reviewers"
-  land_commits || return $?
+  grep -q "credit: Jay" "$WT/apps/web/public/security/hall-of-fame.html" || fail "the hall of fame entry is not on main at the pin: cherry-pick it (with its six translations, node scripts/i18n-web.mjs build) onto main first"
+  confirm "0.3 is live. Redeploy .com now so the hall of fame entry is published?" || return 10
   com_deploy || return $?
-  probe_code "security page" "$COM_URL/security/" 200
+  probe_code "hall of fame" "$COM_URL/security/hall-of-fame" 200
   probe_end
 }
 
