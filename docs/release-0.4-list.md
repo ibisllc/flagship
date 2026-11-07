@@ -48,3 +48,56 @@ Work the owner has put on 0.4. F6b (the gym on a private test CA, `docs/gym-test
 - **A hybrid release catalog (owner, 2026-11-05).** The catalog root and timestamp keys are Ed25519 only
   (`tools/release-catalog/catalog.ts`). A forged catalog can only delay or withhold releases, since every release it
   names also needs the hybrid endorsement and a hybrid-signed artifact, but it belongs with the quantum-safe item.
+
+## From the Windows Studio 0.3 acceptance (2026-11-05 to 11-07)
+
+Source: branch `device-results/windows-2026-11-05` (`windows-0.3-acceptance-2026-11-05.md`, `WINDOWS-TO-LEAD-2026-11-06.md`,
+lead replies). Fixed during the round and not repeated here: Failures 1-5, W18, the a11y row names, the offline start
+screen, setup-error handling, the certificate-order cap (3fd80267d). W6, W8, W9, W11, W18, W26 pass on the release build.
+
+- **FIRST, before Play goes live: Android "Trusted devices" answers 403 on the founding admin phone.** The signed
+  `GET /api/accounts/<account>/directory` (`TrustedDevicesViewModel.load()`) gets `not authorized`; the screen says
+  "This device isn't allowed to do that." Seen on a phone upgraded from a debug build of `1e1840f2c` to one of
+  `0bfd3bf67` (account kept), on `.com` v204. Suspect: the account device key after the cross-client IRK change
+  (22d94d0e0) differs from the one `.com` registered, so every device-signed read from an upgraded phone fails.
+  Check on the Play build 10 (fresh install AND an upgrade from the 0.2 store build 9) before releasing it; if it
+  reproduces, it is a 0.3 hotfix, not 0.4.
+- **W14: a just-joined admin device can't unlock a server, and says nothing.** A browser joined with "Also make this
+  device an admin" still lands "under review for 13d 23h". Its Activity lists the boot approval and "Yes, this is my
+  server" works, but Unlock does nothing for 6 minutes (no request, no error); the phone's Approve unlocks in 74 s.
+  Decide: let a device under review unlock boots (it's the owner's own new device), or disable Unlock with a sentence.
+  Also say on the phone, when the admin switch is on, that the device becomes an admin only after the review.
+- **The second boot approval arrives silently.** A new box needs "Unlock device" then "Authorize device to join your
+  cloud" (~80 s later); the second never prompts or notifies, so Studio sits on "Starting…" / "Taking longer than
+  expected" until the owner finds it in Activity → Server approvals. Notify for it, or keep the approval screen open
+  for the second step. Also: tapping a fresh order's "Waiting for approval" Home row opens the install screen, not the
+  approval.
+- **A new box restarts its daemon 3-5 times on first boot (exit 0)** and each restart starts a new certificate order,
+  replacing the one in flight (the root of Failure 5). The box should resume its pending order after a restart, and
+  the first-boot restarts themselves need a look (Studio Health shows "restarted 4x").
+- **Remote (W19): approving a browser lands on an empty Home.** The browser now shows the comparison code and the phone
+  connects it ("Browser connected to <server>", a 4 h session), but the browser shows the keyless "Your first server
+  is one tap away" Home with Session "Unpaired" instead of the server's page.
+- **Android: the recovery banner stays after a rejected recovery.** After Reject recovery (Activity: "Recovery
+  rejected by an admin") the phone's Critical banner still says "Someone is recovering this account… 2 days left" on
+  every screen; the browser shows Resolved.
+- **Android: the account's own backup is refused as "made on another account" after the app locked** (2 of 4 opens):
+  the open goes through the app unlock, then a second "Open the backup" prompt, and falls back to "Enter its passcode".
+  Retry the account slot after the prompt; never say "another account" unless the account slot is really absent.
+- **Studio for Windows:**
+  - W10: "Restart as administrator" stops the running server before the UAC prompt, so No or a timeout leaves it
+    Stopped; after Yes the elevated Studio did not start it again. Stop only after elevation succeeds, and restart
+    what was running.
+  - W26: a start refused for lack of memory still creates the server's disk and seed and leaves an "Install failed"
+    row; a refusal before start should leave nothing.
+  - A recipe that doesn't parse shows the raw .NET JSON error ("'…' is an invalid JSON literal…", English only): show
+    a translated "This isn't a Flagship recipe" and put the detail in the log.
+  - "Unlocking…" lingers ~50 s after the server already answers HTTPS.
+  - Failed remasters leave `%TEMP%\flagship-remaster-*` folders behind.
+  - Closing the window once left the process running (1 of 4; File → Exit works). Note the steps if seen again.
+  - After a sealed reboot the log says "No server running: this PC may sleep again" while the server runs (W11's
+    `powercfg` check passed later; confirm the keep-awake really holds across that reboot).
+  - The Delete confirmation's Yes/No read as `Pane` in UI Automation (native MessageBox): confirm with Narrator itself.
+- **Phone create-server flow (W3):** Continue does nothing until a backup choice is made, with no hint why.
+- **Still owner-only rows:** W1 SmartScreen (browser download), W1b (0.2 Studio upgrade), W0b (Windows 10 PC), W15 (USB
+  stick + spare PC), W20 (display language); waivers W2, W4 step 2, W13 (no newer endorsed release on production).
