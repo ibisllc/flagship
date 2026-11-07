@@ -81,6 +81,27 @@ build, then:
    Studio window's own error text, and `powercfg /requests` output for the
    sleep check.
 
+### Windows PC: lessons from the 0.3 round (2026-11-07)
+
+- **Pacing against production:** create at most ~3 new servers a day per
+  throwaway account. Past ~5 abandoned certificate orders in a day `.com`
+  refuses new orders for 24 h, and a new server then reaches Running but
+  answers TLS alert 49 (`access_denied`) with no certificate. Suspect this
+  before suspecting production.
+- **Android debug build on this PC:** `JAVA_HOME` = the extracted JDK 17 under
+  the user's home (`jdk17-test`, not `jdk17`, which only holds the zip). Build
+  with `./gradlew --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx3g
+  -XX:MaxMetaspaceSize=768m" -Pkotlin.compiler.execution.strategy=in-process
+  :app:assembleDebug` (a 1.5 GB heap thrashes; background builds get killed for
+  memory, so stop leftover Gradle/Kotlin daemons first). The debug signer
+  matches the emulator's installed app, so `adb install -r` keeps the account.
+- **Studio automation:** collapse the "Log N" drawer before clicking Delete (it
+  covers the button); the Delete confirmation is a native MessageBox, not UIA
+  buttons (Yes/No read as `Pane`), so it needs a real click.
+- **Cleanup:** `git worktree remove` fails with "Filename too long" on a
+  `node_modules` tree; use `cmd /c rd /s /q "\\?\<path>"`, then
+  `git worktree prune`.
+
 ### Windows PC: architecture v2 drills (branch `feat/architecture`, milestones 6 and 7)
 
 The owner's Windows test machine has a TPM 2.0 and an NVIDIA GPU. Both drills below run on the

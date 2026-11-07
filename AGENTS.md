@@ -230,6 +230,12 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > anything below. Keep this section short: it loads into every agent session.
 > Last updated **2026-10-23**.
 
+### Release 0.4: "let's start 0.4"
+
+When the owner says "let's start 0.4", follow the playbook at the top of `docs/release-0.4-list.md`: close out 0.3
+after the store reviews, gather every advisor's open findings (Windows device-test agent, security reviewers, store
+agents) into that list, then build it.
+
 ### Release 0.3 (in progress, 2026-10-25)
 
 Branch `release/0.3` (not on `main` yet; only `main` is deployed). The plan, the Log and the open items are in

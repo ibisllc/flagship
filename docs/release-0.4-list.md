@@ -3,6 +3,49 @@
 Work the owner has put on 0.4. F6b (the gym on a private test CA, `docs/gym-test-acme.md`) comes first, after the
 0.3 release and before anything here.
 
+## "Let's start 0.4": the playbook (owner, 2026-11-07)
+
+When the owner says "let's start 0.4" (or similar), work through these phases in order. Keep a journal for 0.4 the
+way `RELEASE-0.3-JOURNAL.md` worked (create `RELEASE-0.4-JOURNAL.md` on first start, log every step and decision,
+keep a resume point). Ask the owner only for what is theirs (signatures, YubiKey, store consoles, money, decisions).
+
+**Phase 1: close out 0.3 after the store reviews.** Read the end of `RELEASE-0.3-JOURNAL.md` (its last "Resume point")
+and its open plan items, then:
+1. Check the verdicts: Apple review of iOS 1.2 (8) and Google review of Android 11 / Wear 1,000,011. A rejection comes
+   first: fix, rebuild, resubmit (version numbers climb). Keep `playstore-test-0725` untouched while any review is open.
+2. After both stores approve: the owner signs the 0.2 "you have to upgrade" notice (journal F9); the pending `.com`
+   deploy (terms username-format fix, dibs window 2026-11-05 to 2027-05-05, USB seed); anything else the journal
+   holds back "until store approval".
+3. Release step 36 that 0.3 skipped (first bullet below), and fix release.sh as it says.
+4. F6b: the gym on the private test CA (`docs/gym-test-acme.md`).
+5. F6: hall of fame entries still held, the translation review request, hardware receipts, the weekly rate-limit check.
+6. Fold what is still true of 0.3 into `AGENTS.md` "Current status", then retire `RELEASE-0.3-JOURNAL.md` to
+   `docs/archive/` (its own header says to).
+
+**Phase 2: gather every advisor's 0.4 work into this file.** Several advisors left findings that are not yet copied
+here. Before building, sweep each source, check each item against the current code (many were fixed later), and add
+what is still open to a section below, naming its source:
+- **Windows device-test agent:** branch `device-results/windows-2026-11-05` (already folded in, section "From the
+  Windows Studio 0.3 acceptance"); check for anything pushed there after 2026-11-07 (`git log` the branch past
+  `8669e1970`). Any later device-results branch the same way.
+- **B2 reviewers (2026-10-25):** journal Log entry "B2 OPEN, not fixed" (health route signature, gpud replay and
+  unsigned claim fields, arch-v2 verdict file, keyd master freshness, TPM/PCR trial boot, premount disk binding,
+  installer disk choice, model-install digest, update-receipts, rate limits, recovery record under strict, mDNS,
+  5-minute replay window; NOT REVIEWED: WASI worker, flagship-runtime, flagship-crypto, typed.rs).
+- **Independent security review (2026-11-02):** journal entry "SECURITY REVIEW (since 10-25, read-only)" (M1-M6 and the
+  Lows) and the fix-agent entries after it.
+- **voi.ci + Messages review (2026-11-03):** journal entry "B2 voi.ci+Messages review" (items 1-6, the owner question on
+  one-off code targets).
+- **Release-manager DEFERRED list (2026-11-02)** and the follow-ups named in journal entries (e.g. self-heal devices
+  holding a wrong current IRK, from F5a item 3; offline USB burn "burn anyway" question; G9 repro fix).
+- **Android and iOS store agents:** journal entries of 2026-11-06/07 (Play and App Store notes, CI).
+- **`SECURITY-0.3-PROGRESS.md`, `docs/architecture-v2/REGISTER.md`:** items marked open or after-0.3.
+Group the result by priority (security first, then the Windows/device failures W14 and W19, then the rest) and show
+the owner the list before starting the build.
+
+**Phase 3: build 0.4.** Work the list top to bottom, one item per commit, tests with each fix, and follow AGENTS.md's
+rules (main only deploys, feature branches for unlaunched features, i18n for every user string, explicit `git add`).
+
 - **BEFORE ANY 0.4 WORK: finish what 0.3's release step 36 skipped (owner, 2026-11-06).** The owner skipped step 36
   (reap orphaned DNS records and demo servers, then zone-health) in the 0.3 phase B run because the gym sweep half
   answered 401: release.sh runs `tools/live-e2e/sweep-cli.ts` without `GYM_ADMIN_SECRET` (it reads
