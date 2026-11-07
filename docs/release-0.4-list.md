@@ -114,3 +114,11 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
 - **iOS CI** moved to macos-26 + newest Xcode on 2026-11-07 (9c5703154, ec7858824, 5a4d276a3: compiler gap and three
   type-checker timeouts fixed). If it is still red, read the newest run; new slow SwiftUI expressions show locally with
   `OTHER_SWIFT_FLAGS='-Xfrontend -warn-long-expression-type-checking=150'`.
+
+## Product plans carried over
+
+- **Human `voi.ci` service names** (owner discussion 2026-10-21): one free, user-chosen `voi.ci/<name>` per public
+  service, a 302 to its `flagship.services` address, following the service between boxes. Plan:
+  `docs/voici-service-names-todo.md` (found untracked in the main checkout on 2026-11-07; reconcile with the naming
+  and monetization docs when it lands).
+
