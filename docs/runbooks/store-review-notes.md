@@ -18,11 +18,8 @@ for. `final-deploy.md` step 11 points here. Draft written for 0.3 (voi.ci pages 
    can't be reviewed from it (it accepts no messages, and nobody but the operator can sign its page). A real account
    lives in the keys of the phone that made it, so a reviewer can't sign in to one of ours; they create their own in
    a minute.
-   The notes' main path needs nothing from us: the reviewer makes two accounts on two devices (iPhone + iPad), one
-   publishes a page, the other messages it, and the first sees Report and Block (owner, 2026-11-07). A second Messages
-   account on a device that already used Messages this month goes on the slow tier instead of being refused
-   (429ea977b), so shared review devices work. We don't run a review page or answer reviewers' messages (owner,
-   2026-11-07): the two-device test is the only Messages path in the notes.
+   The notes give no Messages test steps (owner, 2026-11-07: Google's review form forbids reviewers creating
+   accounts, and we run no review page and answer no reviewers). They only describe the Guideline 1.2 safeguards.
 3. The `abuse@flagship.services` mailbox must be read daily, and `npm run ops -- voici` checked for reports older
    than 24 hours (Apple expects action on reports within 24 hours).
 4. The DMCA designated agent must be filled in `apps/web/public/terms.html` §9 (`npm run release-manifest` fails
@@ -37,12 +34,7 @@ Flagship lets you run your own server at home and manage it from this app. We pr
 
 Sign-in: Flagship has no passwords. On the first screen tap "Connect to an existing account", type playstore-test-0725 and tap Continue. You land on Home with the demo server online. Tap it for live status and its certificate; the Services, Activity and Settings tabs are live.
 
-User-generated content (Guideline 1.2): Flagship 0.3 adds voi.ci pages and Messages. A user can publish a public profile page (photo, name, bio, links, posts) at voi.ci/<username> and receive end-to-end encrypted messages from other Flagship users through it. The demo account's page is a read-only example (https://voi.ci/playstore-test-0725); it can't send or receive messages.
-
-To test pages and Messages, use two new accounts on two devices (for example the iPhone and the iPad). Each account takes about a minute.
-1. Device 1: first screen > "Create your account". Then Messages tab > "Set up your page": add a name or a post, turn on "Accept messages", then turn on "Public" ("Make it public"), which publishes the page. The page's address, voi.ci/<username>, is shown there ("View page" opens it).
-2. Device 2: create a second account the same way. Open Safari at https://voi.ci/<username from step 1>, tap "Send me a message", approve "Sign in to voi.ci" in the Flagship app when it opens, go back to Safari and write a message.
-3. Device 1: the message arrives in the Messages tab. Open it: reply, and use the ••• menu for Report and Block (long-press a message to report that message).
+User-generated content (Guideline 1.2): Flagship 0.3 adds voi.ci pages and Messages. A user can publish a public profile page (photo, name, bio, links, posts) at voi.ci/<username> and receive end-to-end encrypted messages from other Flagship users through it. The demo account's page is a read-only example: https://voi.ci/playstore-test-0725.
 
 - Rules: before a user first publishes a page or approves a sign-in to message someone, the app shows the "Page and message rules" sheet (no illegal content, harassment, threats, spam or impersonation) and the user must tap "I agree". Full terms: https://flagshipserver.com/terms#messages
 - Report: every message has Report, with reasons Spam, Harassment, Pretending to be someone, Illegal content, Something else. Every public page has "Report this page" at the bottom.
@@ -64,8 +56,7 @@ Account deletion: Settings > Delete account permanently deletes an account creat
   (the rules sheet), in-app reporting (Report on messages, Report this page on pages), blocking (Block), and
   moderation; paste the "User-generated content" paragraph above into the review notes of the release
   (Publishing overview > the release > notes for review), or into App content > App access with the login.
-- **App access:** "All or some functionality is restricted": give the demo login, plus the two-device Messages test
-  (point 2 above), with the same steps.
+- **App access:** "All or some functionality is restricted": give the demo login only (no Messages test; point 2 above).
 - **Data safety (draft, the owner confirms):** messages are end-to-end encrypted and Flagship can't read them, so
   their content is not "collected". Declare: User IDs (username, already declared); Photos and Other user-generated
   content (the public page: collected, shared publicly by the user's choice, not optional for a page, used for app
