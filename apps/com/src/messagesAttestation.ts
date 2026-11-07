@@ -72,7 +72,8 @@ const dayOf = (now: number) => new Date(now).toISOString().slice(0, 10);
 const untilNextDaySec = (now: number) => Math.max(1, Math.ceil((Math.floor(now / DAY_MS + 1) * DAY_MS - now) / 1000));
 
 /** The account's daily allowance of new recipients, or the refusal for an unattested account that is too new. */
-export function newRecipientLimit(accountAgeMs: number, attested: boolean): number | "unattested-too-new" {
+export function newRecipientLimit(accountAgeMs: number, attested: boolean, slowTier = false): number | "unattested-too-new" {
+  if (attested && slowTier) return NEW_RECIPIENTS_PER_DAY.unattested;
   if (!attested) return accountAgeMs >= UNATTESTED_MIN_AGE_MS ? NEW_RECIPIENTS_PER_DAY.unattested : "unattested-too-new";
   if (accountAgeMs < 7 * DAY_MS) return NEW_RECIPIENTS_PER_DAY.under7Days;
   if (accountAgeMs < 30 * DAY_MS) return NEW_RECIPIENTS_PER_DAY.under30Days;
@@ -191,16 +192,21 @@ export async function handleMessagesAttestation(
   const key = currentAbuseKey(deps.abuseKeys, now);
   if (!key) return json({ error: "Messages is not available right now.", code: "no-abuse-key" }, 503);
 
-  const enrolled = await db.prepare("SELECT platform FROM messages_enrollments WHERE username = ?1").bind(account).first<{ platform: string }>();
-  if (!enrolled && verdict.attested && verdict.enrolledThisMonth) {
-    return json({ error: "This device already started Messages for an account this month.", code: "device-limit" }, 403);
-  }
+  const enrolled = await db
+    .prepare("SELECT platform, slow_tier FROM messages_enrollments WHERE username = ?1")
+    .bind(account)
+    .first<{ platform: string; slow_tier: number }>();
+  // A device that already started Messages for another account this month: not refused (shared review phones, a
+  // family's phone), but slow, and charged per address like the unattested tier. The checked device waives the age.
+  const deviceOver = !enrolled && verdict.attested && verdict.enrolledThisMonth;
+  const slowTier = deviceOver || enrolled?.slow_tier === 1;
 
   if (!renewal) {
-    const limit = newRecipientLimit(now - user.claimedAt, verdict.attested);
+    const limit = newRecipientLimit(now - user.claimedAt, verdict.attested, slowTier);
     if (limit === "unattested-too-new") return json({ error: "too new for the web tier", code: "unattested-too-new" }, 403);
-    if (!enrolled && !verdict.attested) {
-      const rl = await checkRateLimit(env, { endpoint: "messages-enroll-unattested", ip: clientIp(request) }, deps.waitUntil ? { waitUntil: deps.waitUntil } : undefined);
+    if (!enrolled && (!verdict.attested || deviceOver)) {
+      const endpoint = deviceOver ? "messages-enroll-device-over" : "messages-enroll-unattested";
+      const rl = await checkRateLimit(env, { endpoint, ip: clientIp(request) }, deps.waitUntil ? { waitUntil: deps.waitUntil } : undefined);
       if (rl.limited) return json({ error: "rate limited", code: "rate-limited", retryAfterSec: rl.retryAfterSec }, 429, { "retry-after": String(rl.retryAfterSec) });
     }
     if (!(await takeNewRecipient(db, account, now, limit))) {
@@ -225,9 +231,9 @@ export async function handleMessagesAttestation(
   if (!enrolled) {
     await db
       .prepare(
-        "INSERT OR IGNORE INTO messages_enrollments (username, platform, enrolled_at, attest_key_hmac, device_token, device_token_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT OR IGNORE INTO messages_enrollments (username, platform, enrolled_at, attest_key_hmac, device_token, device_token_at, slow_tier) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
       )
-      .bind(account, platform, now, verdict.attested ? verdict.attestKeyHmac : null, token, token ? now : null)
+      .bind(account, platform, now, verdict.attested ? verdict.attestKeyHmac : null, token, token ? now : null, deviceOver ? 1 : 0)
       .run();
     if (verdict.attested) later(deps.integrity.setBits(verdict.platform, verdict.deviceToken, { enrolled: true }, now));
   } else if (token) {

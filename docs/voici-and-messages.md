@@ -874,8 +874,12 @@ At Messages enrollment (an account's first attestation request) and on each late
 Per device, with the bits kept by Apple (DeviceCheck: 2 bits + Apple's last-update month) and Google (Play Integrity
 device recall: 3 bits):
 
-- bit 0: "enrolled a Messages account this month". A second account on the same device in the same month is refused
-  (`device-limit`). Cap: 1 new Messages account per device per calendar month (D5).
+- bit 0: "enrolled a Messages account this month". Cap: 1 new Messages account per device per calendar month at the
+  normal tier (D5). A second account on the same device in the same month is not refused (owner, 2026-11-07: shared
+  App Store review phones, a family's phone): it enrolls on the slow tier (1 new recipient a day) for good
+  (`messages_enrollments.slow_tier`, migration 0132), without the slow tier's 7-day age (the device passed its check),
+  at most 3 such enrollments per address per day (`messages-enroll-device-over`). Its device token is kept, so a ban
+  still marks the device. `device-limit` is no longer returned.
 - bit 1: "banned". Set when a banned account's device next contacts `.com`, or at once with the newest stored token if
   Apple/Google still accept it. Every later enrollment from that device is refused.
 

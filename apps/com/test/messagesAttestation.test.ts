@@ -184,14 +184,42 @@ describe("messages key attestation", () => {
     expect((await w.attest("erin", { ref: "none", ip: "198.51.100.2" })).status).toBe(200);
   });
 
-  it("allows one new Messages account per device per month, not counting the same account again", async () => {
+  it("puts a second Messages account on the same device this month on the slow tier, not refused, and keeps it there", async () => {
     const w = await world();
-    expect((await w.attest("alice", { integrity: { platform: "android", token: "shared-phone" } })).status).toBe(200);
+    const phone = { integrity: { platform: "android", token: "shared-phone" } };
+    expect((await w.attest("alice", phone)).status).toBe(200);
     await Promise.resolve();
-    expect((await w.attest("bob", { integrity: { platform: "android", token: "shared-phone" } })).body.code).toBe("device-limit");
-    expect((await w.attest("alice", { integrity: { platform: "android", token: "shared-phone" } })).status).toBe(200);
-    w.advance(30 * DAY);
-    expect((await w.attest("bob", { integrity: { platform: "android", token: "shared-phone" } })).status).toBe(200);
+    // carol is 2 days old: the checked device waives the web tier's 7 days, but she gets its 1 new recipient a day.
+    expect((await w.attest("carol", phone)).status).toBe(200);
+    expect((await w.attest("carol", phone)).body.code).toBe("first-contact-limit");
+    const enr = await w.db.prepare("SELECT platform, slow_tier, device_token FROM messages_enrollments WHERE username = 'carol'").first<{ platform: string; slow_tier: number; device_token: string }>();
+    expect(enr).toEqual({ platform: "android", slow_tier: 1, device_token: "shared-phone" });
+    w.advance(DAY);
+    expect((await w.attest("carol", phone)).status).toBe(200);
+    expect((await w.attest("carol", phone)).body.code).toBe("first-contact-limit");
+    // The first account on the device keeps its normal allowance.
+    expect((await w.attest("alice", phone)).status).toBe(200);
+    expect((await w.attest("alice", phone)).status).toBe(200);
+  });
+
+  it("charges slow-tier device enrollments per address, apart from the web tier", async () => {
+    const w = await world({ rateLimits: true });
+    const phone = { integrity: { platform: "android", token: "shared-phone" }, ip: "198.51.100.7" };
+    expect((await w.attest("alice", phone)).status).toBe(200);
+    await Promise.resolve();
+    for (const who of ["bob", "carol", "dave"]) expect((await w.attest(who, phone)).status).toBe(200);
+    const fourth = await w.attest("erin", phone);
+    expect(fourth.status).toBe(429);
+    expect(fourth.body.code).toBe("rate-limited");
+    expect((await w.attest("erin", { ref: "none", ip: "198.51.100.7" })).status).toBe(200);
+  });
+
+  it("still refuses a banned device on a second account", async () => {
+    const w = await world();
+    const phone = { integrity: { platform: "android", token: "shared-phone" } };
+    expect((await w.attest("alice", phone)).status).toBe(200);
+    await w.integrity.setBits("android", "shared-phone", { banned: true }, w.now());
+    expect((await w.attest("bob", phone)).body.code).toBe("banned");
   });
 
   it("renews the same P without counting it, and refuses a renewal that doesn't check out", async () => {

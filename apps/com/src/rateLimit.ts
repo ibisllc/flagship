@@ -207,6 +207,7 @@ export type RateLimitEndpoint =
   // per address (charged by the handler), and reports (anonymous; the address is counted here, never stored).
   | "messages-attest"
   | "messages-enroll-unattested"
+  | "messages-enroll-device-over"
   | "voici-report"
   // Abuse reports of links and apps (abuseCases.ts, docs/abuse-handling.md): anonymous, the address counted here and
   // never stored; an account's notices read; an admin's signed "done".
@@ -471,6 +472,9 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "usernameHash", limit: 60, windowSec: 3600 },
   ],
   "messages-enroll-unattested": [{ axis: "ip", limit: 1, windowSec: 86_400 }],
+  // A second account on a device that already started Messages this month (§9.5): its own count, so a store
+  // review network's shared phones don't use up the web tier's one a day.
+  "messages-enroll-device-over": [{ axis: "ip", limit: 3, windowSec: 86_400 }],
   "voici-report": [{ axis: "ip", limit: 10, windowSec: 3600 }],
   "voici-send": [{ axis: "ip", limit: 60, windowSec: 3600 }],
   "voici-new-conversation": [{ axis: "subject", limit: 200, windowSec: 86_400 }],
