@@ -122,3 +122,19 @@ user's first server; please check before the release continues. I'm holding new 
 - Local: Edge test profiles, the pulled key file, the prepared ISO and the Android build worktree deleted.
 - Left on purpose: the throwaway account itself and the browser devices that joined it (Trusted devices can't list them
   on this phone: the 403). The Android main debug build stays installed on the emulator.
+
+## 2026-11-07: please fold into `docs/runbooks/device-test-agent.md` (I can't push to main)
+The 0.4 list already has the cause of Failure 5 (first-boot restarts replace the certificate order). These are notes for
+the next device-test agent; I saved them in my local memory, and the owner wants them in the repo:
+- **Pacing against production:** create at most ~3 new servers a day per throwaway account. Past ~5 abandoned
+  certificate orders in a day `.com` refuses new orders for 24 h, and a new server then reaches Running but answers TLS
+  alert 49 with no certificate. Suspect this before suspecting production.
+- **Android debug build on the Windows PC:** JAVA_HOME = the extracted JDK 17 under the user's home (`jdk17-test`, not
+  `jdk17`, which only holds the zip). `./gradlew --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx3g
+  -XX:MaxMetaspaceSize=768m" -Pkotlin.compiler.execution.strategy=in-process :app:assembleDebug` (1.5 GB heap thrashes;
+  background builds get killed for memory, stop leftover Gradle/Kotlin daemons). The debug signer matches the emulator's
+  installed app, so `adb install -r` keeps the account.
+- **Studio automation:** collapse the "Log N" drawer before clicking Delete (it covers the button); the Delete confirm is
+  a native MessageBox, not UIA buttons.
+- **Windows cleanup:** `git worktree remove` fails with "Filename too long" on a node_modules tree; use
+  `cmd /c rd /s /q "\?\<path>"`, then `git worktree prune`.
