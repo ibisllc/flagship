@@ -388,7 +388,7 @@ of the last check here: **not yet checked**.
   copy at the boot service, the watch path checks the box-signed request and seals only to the server key the
   phone pinned on first use, behind one `pinnedStk(domain)`; Android also enforces wrist + unlock on Wear).
   Webapp shell **v171**. Dibs window
-  2026-10-25 to 2027-04-25 (`apps/com/wrangler.toml`). Verified here: `tsc -b`, the core vitest suites, the web
+  2026-11-05 (release day) to 2027-05-05 (`apps/com/wrangler.toml`). Verified here: `tsc -b`, the core vitest suites, the web
   tests, `npm run i18n`, Android compile + unit tests (debug, release, Wear, gym tests compile), the iOS app
   builds with Xcode 27.1 RC (the old `ContentView.swift:149` failure does not reproduce). The voi.ci upkeep cron
   moved to its own hourly group (the small cron groups now run hourly, not every 40 minutes).

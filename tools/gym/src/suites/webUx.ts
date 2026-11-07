@@ -229,7 +229,7 @@ export const WEB_UX: readonly Scenario[] = [
     "gym ux dibs Home shows Claim your .com name while the window is open and the claim screen opens",
     {
       steps: [
-        { kind: "launch", describe: "Reach Home; name-dibs/window answers open until 2027-04-25." },
+        { kind: "launch", describe: "Reach Home; name-dibs/window answers open until 2027-05-05." },
         { kind: "tap", describe: "Claim your .com name.", handle: "#home-dibs-banner [data-ann-cta]" },
       ],
       assertions: [

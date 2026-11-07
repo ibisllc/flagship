@@ -329,8 +329,8 @@ new_sqlite_classes = ["ServingFeed"]
 FLAGSHIP_INFERENCE_ENDPOINT = '{"baseUrl":"https://inference.flagshipserver.com","model":"flagship-free"}'
 # Name dibs window (docs/naming-recovery-and-name-change.md §7, docs/named-links.md): six months
 # from the 0.3 release (owner, 2026-10-23). Removing both turns dibs off and opens every free name.
-DIBS_WINDOW_START = "2026-10-25T00:00:00Z"
-DIBS_WINDOW_END = "2027-04-25T00:00:00Z"
+DIBS_WINDOW_START = "2026-11-05T00:00:00Z"
+DIBS_WINDOW_END = "2027-05-05T00:00:00Z"
 # voi.ci pages and Messages (docs/voici-and-messages.md, "Interfaces the chunks share"): "on" only after migration
 # 0123 and the store builds that speak it; off, every voi.ci page and Messages route answers 404.
 VOICI_ENABLED = "on"
