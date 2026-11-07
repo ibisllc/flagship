@@ -53,7 +53,7 @@ Work the owner has put on 0.4. F6b (the gym on a private test CA, `docs/gym-test
 
 Source: branch `device-results/windows-2026-11-05` (`windows-0.3-acceptance-2026-11-05.md`, `WINDOWS-TO-LEAD-2026-11-06.md`,
 lead replies). Fixed during the round and not repeated here: Failures 1-5, W18, the a11y row names, the offline start
-screen, setup-error handling, the certificate-order cap (3fd80267d). W6, W8, W9, W11, W18, W26 pass on the release build.
+screen, setup-error handling, the certificate-order cap (3fd80267d). W6 and W8 pass on the release build (W9, W26 on 78ce3bc55); the report's verdict is FAIL (W14, W19).
 
 - **FIRST, before Play goes live: Android "Trusted devices" answers 403 on the founding admin phone.** The signed
   `GET /api/accounts/<account>/directory` (`TrustedDevicesViewModel.load()`) gets `not authorized`; the screen says
@@ -93,6 +93,9 @@ screen, setup-error handling, the certificate-order cap (3fd80267d). W6, W8, W9,
   - A recipe that doesn't parse shows the raw .NET JSON error ("'…' is an invalid JSON literal…", English only): show
     a translated "This isn't a Flagship recipe" and put the detail in the log.
   - "Unlocking…" lingers ~50 s after the server already answers HTTPS.
+  - On the installer-ISO path (W8) Studio shows "No new guest checkpoint for 3 minutes. Last reported: Sealing the
+    disk key" for ~7 min before "Starting…", although the install is fine: the guest should report a checkpoint while
+    it seals (or the stall warning should wait longer at that step).
   - Failed remasters leave `%TEMP%\flagship-remaster-*` folders behind.
   - Closing the window once left the process running (1 of 4; File → Exit works). Note the steps if seen again.
   - After a sealed reboot the log says "No server running: this PC may sleep again" while the server runs (W11's
