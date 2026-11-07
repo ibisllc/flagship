@@ -91,3 +91,14 @@ user's first server; please check before the release continues. I'm holding new 
   it appeared after I first looked.
 - Next: W8 (FORCE_ISO) on one more server (budget allowing), then W14 via an admin W18 join, capturing the 403 URLs you
   asked for.
+
+## 2026-11-07 ~13:40Z
+- **W14 FAIL**: an admin-switched W18 join still lands as "non-admin for the first 14 days"; that browser's Activity shows
+  the server's boot approval, "Yes, this is my server" works, but **UNLOCK does nothing and says nothing** (6 min, request
+  stays listed, no HTTP error); the phone's Approve on the same request unlocks in 74 s. Either let a reviewed-pending
+  device unlock, or disable Unlock with a sentence. Report row has the exact sentences.
+- **Trusted devices 403 on Android** = the signed `GET /api/accounts/<account>/directory` (TrustedDevicesViewModel.load()),
+  still "This device isn't allowed to do that." on v204 with the main debug build (founding admin phone).
+- **Browser 403s after join** (yesterday): not captured then; today's joined browser logged only 404 `messages-state`
+  and 404 `recovery/by-username` (both probably fine).
+- Recovery reject works on the phone; the phone's Critical banner stays stale afterwards (browser shows Resolved).
