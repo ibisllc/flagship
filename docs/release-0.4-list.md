@@ -102,3 +102,15 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
 - **Phone create-server flow (W3):** Continue does nothing until a backup choice is made, with no hint why.
 - **Still owner-only rows:** W1 SmartScreen (browser download), W1b (0.2 Studio upgrade), W0b (Windows 10 PC), W15 (USB
   stick + spare PC), W20 (display language); waivers W2, W4 step 2, W13 (no newer endorsed release on production).
+
+## CI (2026-11-07)
+
+- **Android CI red since ~2026-10-21: the emulator UI smoke (GymEveryMergeTest, all 6) fails "component is not
+  displayed" at the first landmark (`home-title` etc.) on the CI emulator (API 34, x86_64, pixel_6). Unit tests pass.**
+  The same test passes locally on the `flagship_gym` AVD (API 35): so it's the CI environment or API 34, not a broken
+  shell. Next: run it on an API 34 AVD, pull the gym screenshots from the CI artifacts (`gymShot("cold-launch")`), and
+  look for an overlay that covers Home on first launch there (notification-permission prompt, app lock, the new
+  welcome card or Messages tab).
+- **iOS CI** moved to macos-26 + newest Xcode on 2026-11-07 (9c5703154, ec7858824, 5a4d276a3: compiler gap and three
+  type-checker timeouts fixed). If it is still red, read the newest run; new slow SwiftUI expressions show locally with
+  `OTHER_SWIFT_FLAGS='-Xfrontend -warn-long-expression-type-checking=150'`.
