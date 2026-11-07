@@ -101,10 +101,16 @@ const CHALLENGE_QUIET_MS = 90_000;
 /** A pending order no poll has touched for this long is not in flight (its device polls every few seconds). */
 const ABANDONED_ORDER_MS = 120_000;
 /** The order right after `f` from the same device and class was issued (only that one order is forgiven). */
+// A failed order is forgiven when the same device and class got a certificate within an hour after it, with fewer than
+// FORGIVEN_BEFORE_ISSUED other orders in between: a new box's daemon restarts during first boot and replaces its
+// order each time (2026-11-06: 3 to 5 restarts; 3 boxes filled the abandoned cap). Bounded, so one certificate can't
+// wash away a run of abandoned orders (B2 review: the shared Let's Encrypt order budget).
+const FORGIVEN_BEFORE_ISSUED = 3;
 const LATER_ISSUED =
   "EXISTS (SELECT 1 FROM certificate_orders i WHERE i.device_pub = f.device_pub AND i.class = f.class AND i.status = 'issued' AND i.created_at > f.created_at " +
-  "AND NOT EXISTS (SELECT 1 FROM certificate_orders m WHERE m.device_pub = f.device_pub AND m.class = f.class AND m.order_id <> f.order_id AND m.order_id <> i.order_id " +
-  "AND m.created_at >= f.created_at AND m.created_at <= i.created_at))";
+  "AND i.created_at <= f.created_at + 3600000 " +
+  "AND (SELECT COUNT(*) FROM certificate_orders m WHERE m.device_pub = f.device_pub AND m.class = f.class AND m.order_id <> f.order_id AND m.order_id <> i.order_id " +
+  `AND m.created_at >= f.created_at AND m.created_at <= i.created_at) < ${FORGIVEN_BEFORE_ISSUED - 1})`;
 const LOCK_MS = 30_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;

@@ -125,6 +125,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0130",
   // voi.ci: the owner removed their page (removed_at; the row keeps its seq for anti-replay).
   "0131",
+  // Messages: a second account on a device this month enrolls on the slow tier for good (slow_tier).
+  "0132",
 ];
 
 export interface SchemaStatusDeps {

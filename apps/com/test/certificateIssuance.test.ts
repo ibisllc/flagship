@@ -663,6 +663,50 @@ describe("a superseded first order followed by a certificate is not abandoned", 
   });
 });
 
+describe("a new box that replaced its order three times during first boot is not held against the account", () => {
+  async function rows(w: World, boxes: number, gapMs: number) {
+    let id = 0;
+    for (let b = 0; b < boxes; b++) {
+      const device = hex(ed.getPublicKey(seed(200 + b)));
+      for (let k = 0; k < 4; k++) {
+        const status = k < 3 ? "failed" : "issued";
+        const at = w.clock.t - 5 * 3_600_000 + b * 600_000 + k * gapMs;
+        id++;
+        await w.db
+          .prepare(
+            "INSERT INTO certificate_orders (order_id, request_id, device_pub, username, server_domain, class, reg_gen, names, zone, csr_b64, csr_spki_sha256, order_json, signature, status, step, acme_ordered_at, error_code, created_at, updated_at) VALUES (?, ?, ?, 'alice', ?, 'control', 1, ?, ?, 'x', 'x', '{}', 'x', ?, 'done', ?, ?, ?, ?)",
+          )
+          .bind(String(id).padStart(32, "0"), `r${id}`, device, `b${b}.alice.${APEX}`, `b${b}.alice.${APEX}`, `alice.${APEX}`, status, at, status === "failed" ? "issuance-superseded" : null, at, at)
+          .run();
+      }
+    }
+  }
+
+  it("lets a fourth box order after three boxes each replaced three orders (the 2026-11-06 Windows run)", async () => {
+    const w = await setup();
+    try {
+      await rows(w, 3, 60_000);
+      const r = await ask(w, { cls: "control", names: [SERVER] });
+      expect(r.res.status, JSON.stringify(r.json)).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("does not forgive orders more than an hour before the certificate", async () => {
+    const w = await setup();
+    try {
+      // 40 minutes apart: only the last replaced order of each box is within the hour, so 2 a box still count.
+      await rows(w, 3, 40 * 60_000);
+      const r = await ask(w, { cls: "control", names: [SERVER] });
+      expect(r.res.status).toBe(429);
+      expect(r.json.code).toBe("issuance-rate-limited");
+    } finally {
+      w.close();
+    }
+  });
+});
+
 describe("the issuance sweep runs on its own (cron), not only inside other people's orders", () => {
   it("revokes a box's certificates once the box is removed, with no other order arriving", async () => {
     const w = await setup();
@@ -802,7 +846,7 @@ describe("the renewal window holds across a name-set change the grant did not ma
   });
 });
 
-describe("an issued certificate forgives only the order right before it", () => {
+describe("an issued certificate forgives at most the 3 orders right before it", () => {
   it("still counts a device's earlier failed orders against the account", async () => {
     const w = await setup();
     try {
@@ -814,7 +858,8 @@ describe("an issued certificate forgives only the order right before it", () => 
           )
           .bind(String(id).padStart(32, "0"), `r${id}`, device, `x.alice.${APEX}`, `x.alice.${APEX}`, `alice.${APEX}`, status, at, status === "failed" ? "issuance-superseded" : null, at, at)
           .run();
-      const n = ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay + 1;
+      // 3 of these are forgiven by the certificate; the cap's worth before them still count.
+      const n = ISSUANCE_LIMITS.perAccountAbandonedOrdersPerDay + 3;
       for (let i = 0; i < n; i++) await row(i + 1, "failed", w.clock.t - 60_000 + i);
       await row(n + 1, "issued", w.clock.t - 30_000);
       const r = await ask(w, { cls: "phone", names: [`alice.${APEX}`] });
