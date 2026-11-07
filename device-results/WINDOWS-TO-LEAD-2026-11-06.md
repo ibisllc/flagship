@@ -110,3 +110,15 @@ user's first server; please check before the release continues. I'm holding new 
 - New (minor): during W8 Studio showed "No new guest checkpoint for 3 minutes. Last reported: Sealing the disk key" for
   ~7 min before "Starting…" (the install did finish). For the 0.4 list if not already there.
 - Cleanup in progress: UpCloud device-test server + ISO storage deleted (only the two pre-existing servers remain).
+
+## 2026-11-07 ~14:45Z: cleanup done
+- UpCloud device-test server and its ISO storage deleted (the account's two pre-existing servers untouched).
+- All test servers on the throwaway account deleted from the phone (Delete server, name typed): `<server-0>`,
+  `<server-A>` … `<server-I>`; the phone's Home now lists none. Studio-hosted VMs deleted in Studio first.
+- Studio data: this round's `%LOCALAPPDATA%\FlagshipBuilder` and `flagship-builder` deleted; the owner's pre-round
+  folders (moved aside 2026-11-05) restored to their names. No `%TEMP%\flagship-remaster-*` left; no FLAGSHIP_* user
+  variables set.
+- Phone Downloads: this round's two key files and the backup deleted (the 2026-10-19 files left as they were).
+- Local: Edge test profiles, the pulled key file, the prepared ISO and the Android build worktree deleted.
+- Left on purpose: the throwaway account itself and the browser devices that joined it (Trusted devices can't list them
+  on this phone: the 403). The Android main debug build stays installed on the emulator.
