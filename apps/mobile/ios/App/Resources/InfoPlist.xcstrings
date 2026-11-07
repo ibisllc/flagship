@@ -4,6 +4,12 @@
     "NSCameraUsageDescription": {
       "extractionState": "manual",
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship uses the camera to scan a pairing QR shown by your server."
+          }
+        },
         "es": {
           "stringUnit": {
             "state": "translated",
@@ -45,6 +51,12 @@
     "NSFaceIDUsageDescription": {
       "extractionState": "manual",
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server."
+          }
+        },
         "es": {
           "stringUnit": {
             "state": "translated",
@@ -86,6 +98,12 @@
     "NSLocalNetworkUsageDescription": {
       "extractionState": "manual",
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached."
+          }
+        },
         "es": {
           "stringUnit": {
             "state": "translated",

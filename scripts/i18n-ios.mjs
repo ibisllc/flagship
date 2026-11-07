@@ -420,6 +420,8 @@ function emitCatalog(surface, withDrafts) {
       return { variations: { plural: Object.fromEntries(Object.entries(f).map(([c, val]) => [c, { stringUnit: { state: code === "en" ? "new" : "translated", value: val } }])) } };
     };
     if (v.plural && typeof v.en === "object") localizations.en = pluralOf(v.en, "en");
+    // A key that isn't its own English text (Info.plist keys) needs an en entry, or iOS shows the key itself.
+    else if (typeof v.en === "string" && v.en !== k) localizations.en = { stringUnit: { state: "translated", value: v.en } };
     for (const l of langs) {
       const t = trs[l.code][k];
       if (t == null) continue;

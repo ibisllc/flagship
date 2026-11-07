@@ -2,7 +2,7 @@
   "product": "0.3",
   "label": "Beta",
   "iosVersion": "1.2",
-  "iosBuild": 6,
+  "iosBuild": 7,
   "androidVersionCode": 10,
   "studio": "0.3.0"
 }

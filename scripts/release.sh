@@ -2878,6 +2878,14 @@ run_ios() {
 PLIST
   XA "$WT" env "DEVELOPER_DIR=$dev" xcodebuild archive -project apps/mobile/ios/App/FlagshipApp.xcodeproj -scheme FlagshipApp -destination 'generic/platform=iOS' -archivePath "$tmp/FlagshipApp.xcarchive" -derivedDataPath "$tmp/dd" -allowProvisioningUpdates
   rm -rf "$tmp/dd"
+  local lp bad=""
+  for lp in "$tmp"/FlagshipApp.xcarchive/Products/Applications/*.app/*.lproj/InfoPlist.strings; do
+    [ -f "$lp" ] || continue
+    bad+=$(plutil -convert json -o - "$lp" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));for(const[k,v]of Object.entries(j))if(k===v||!v)console.log("  "+process.argv[1]+": "+k)' "$lp")
+  done
+  [ -z "$bad" ] || fail "permission prompts with no text (App Store Connect rejects them, ITMS-90738):
+$bad"
+  ok "every permission prompt has its text in every language"
   if confirm "UPLOAD $iv ($ib) to App Store Connect now (xcodebuild -exportArchive with destination upload)?"; then
     XA "$WT" env "DEVELOPER_DIR=$dev" xcodebuild -exportArchive -archivePath "$tmp/FlagshipApp.xcarchive" -exportOptionsPlist "$tmp/ExportOptions.plist" -allowProvisioningUpdates
     st_w set iosUploaded "$iv ($ib)"
