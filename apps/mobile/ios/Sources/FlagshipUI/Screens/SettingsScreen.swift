@@ -519,7 +519,8 @@ public struct SettingsScreen: View {
     /// account-type state (single-device vs multi-device + 2FA) in its
     /// subtitle and drills into AccountSecurityScreen.
     private func accountGroup(c: FSColors) -> some View {
-        FSSettingsListSection(String(localized: "Account"), rows: [
+        // Built step by step: one long `[...] + [...]` expression timed out the CI type checker.
+        var rows: [FSSettingsRow] = [
             FSSettingsRow(
                 icon: "person.text.rectangle",
                 title: String(localized: "Display name"),
@@ -530,40 +531,43 @@ public struct SettingsScreen: View {
                     nameEditor = NameEditor(kind: .account, title: String(localized: "Edit account name"), initialName: accountDisplayName ?? "")
                 }
             ),
-        ] + (onOpenYourPage.map { open in
-            [FSSettingsRow(icon: "person.crop.circle", title: String(localized: "Your page"), subtitle: "voi.ci/\(username)",
-                           accessibilityId: "settings-your-page", action: open)]
-        } ?? []) + [
-            FSSettingsRow(
-                icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
-                iconTint: accountType == "multi" ? c.success : c.accent,
-                title: String(localized: "Account security"),
-                subtitle: accountType == "multi"
-                    ? String(localized: "Code protection on — recovery needs a code.")
-                    : String(localized: "Single-device — recovery is a 3-day wait."),
-                accessibilityId: "settings-open-account-security",
-                action: onOpenAccountSecurity
-            ),
-            FSSettingsRow(icon: "atom", title: String(localized: "Quantum-safe protection"), subtitle: String(localized: "Strict protection per server"),
-                          accessibilityId: "settings-open-quantum-safety", action: onOpenQuantumSafety),
-            FSSettingsRow(icon: "sparkles", title: String(localized: "AI API keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys),
-            // Always present: it works when Flagship can't be reached (docs/data-sovereignty.md).
-            FSSettingsRow(icon: "wifi", title: String(localized: "Offline control"), subtitle: String(localized: "Your servers on this Wi-Fi, without Flagship"),
-                          accessibilityId: "settings-open-offline-control", action: onOpenOfflineControl),
-        ] + (isDemoAccount ? [] : [
-            FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery),
-        ] + (recoveryNeedsUpdate ? [
-            FSSettingsRow(icon: "person.badge.key", title: RecoveryUpdatePrompt.settingsRow,
-                          subtitle: String(localized: "Have your passkey checked too"),
-                          accessibilityId: "settings-update-recovery", action: onUpdateRecovery),
-        ] : []) + [
-            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: String(localized: "Back up account key"), subtitle: String(localized: "Save an encrypted key file"), action: onOpenKeyfileBackup),
-        ]) + (nameDibsOpen && !isDemoAccount ? [
-            FSSettingsRow(icon: "flag.fill", title: String(localized: "Claim your .com name"), subtitle: String(localized: "Own the .com? The matching name is held for you"),
-                          accessibilityId: "settings-open-name-dibs", action: onOpenNameDibs),
-        ] : []) + [
-            FSSettingsRow(icon: "person.2.circle.fill", title: String(localized: "Profiles"), subtitle: String(localized: "Switch between your clouds"), action: onOpenProfiles),
-        ])
+        ]
+        if let open = onOpenYourPage {
+            rows.append(FSSettingsRow(icon: "person.crop.circle", title: String(localized: "Your page"), subtitle: "voi.ci/\(username)",
+                                      accessibilityId: "settings-your-page", action: open))
+        }
+        let multi = accountType == "multi"
+        rows.append(FSSettingsRow(
+            icon: multi ? "checkmark.shield.fill" : "shield.lefthalf.filled",
+            iconTint: multi ? c.success : c.accent,
+            title: String(localized: "Account security"),
+            subtitle: multi
+                ? String(localized: "Code protection on — recovery needs a code.")
+                : String(localized: "Single-device — recovery is a 3-day wait."),
+            accessibilityId: "settings-open-account-security",
+            action: onOpenAccountSecurity
+        ))
+        rows.append(FSSettingsRow(icon: "atom", title: String(localized: "Quantum-safe protection"), subtitle: String(localized: "Strict protection per server"),
+                                  accessibilityId: "settings-open-quantum-safety", action: onOpenQuantumSafety))
+        rows.append(FSSettingsRow(icon: "sparkles", title: String(localized: "AI API keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys))
+        // Always present: it works when Flagship can't be reached (docs/data-sovereignty.md).
+        rows.append(FSSettingsRow(icon: "wifi", title: String(localized: "Offline control"), subtitle: String(localized: "Your servers on this Wi-Fi, without Flagship"),
+                                  accessibilityId: "settings-open-offline-control", action: onOpenOfflineControl))
+        if !isDemoAccount {
+            rows.append(FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery))
+            if recoveryNeedsUpdate {
+                rows.append(FSSettingsRow(icon: "person.badge.key", title: RecoveryUpdatePrompt.settingsRow,
+                                          subtitle: String(localized: "Have your passkey checked too"),
+                                          accessibilityId: "settings-update-recovery", action: onUpdateRecovery))
+            }
+            rows.append(FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: String(localized: "Back up account key"), subtitle: String(localized: "Save an encrypted key file"), action: onOpenKeyfileBackup))
+            if nameDibsOpen {
+                rows.append(FSSettingsRow(icon: "flag.fill", title: String(localized: "Claim your .com name"), subtitle: String(localized: "Own the .com? The matching name is held for you"),
+                                          accessibilityId: "settings-open-name-dibs", action: onOpenNameDibs))
+            }
+        }
+        rows.append(FSSettingsRow(icon: "person.2.circle.fill", title: String(localized: "Profiles"), subtitle: String(localized: "Switch between your clouds"), action: onOpenProfiles))
+        return FSSettingsListSection(String(localized: "Account"), rows: rows)
     }
 
     private func trustedDevicesSection(c: FSColors) -> some View {
