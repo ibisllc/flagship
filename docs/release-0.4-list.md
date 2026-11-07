@@ -55,13 +55,23 @@ Source: branch `device-results/windows-2026-11-05` (`windows-0.3-acceptance-2026
 lead replies). Fixed during the round and not repeated here: Failures 1-5, W18, the a11y row names, the offline start
 screen, setup-error handling, the certificate-order cap (3fd80267d). W6 and W8 pass on the release build (W9, W26 on 78ce3bc55); the report's verdict is FAIL (W14, W19).
 
-- **FIRST, before Play goes live: Android "Trusted devices" answers 403 on the founding admin phone.** The signed
-  `GET /api/accounts/<account>/directory` (`TrustedDevicesViewModel.load()`) gets `not authorized`; the screen says
-  "This device isn't allowed to do that." Seen on a phone upgraded from a debug build of `1e1840f2c` to one of
-  `0bfd3bf67` (account kept), on `.com` v204. Suspect: the account device key after the cross-client IRK change
-  (22d94d0e0) differs from the one `.com` registered, so every device-signed read from an upgraded phone fails.
-  Check on the Play build 10 (fresh install AND an upgrade from the 0.2 store build 9) before releasing it; if it
-  reproduces, it is a 0.3 hotfix, not 0.4.
+- **Phones forget their device ID on every cold start (Android confirmed 2026-11-07; iOS has the same code). Fix in
+  the next store builds, before 0.4 if possible.** `MainActivity` → `AppState.restorePersistedSession` →
+  `completeOnboarding` rebuilds the account profile in memory; profiles aren't saved and the device capability is empty
+  at that point, so `deviceId = capability ?: existing ?: AccountMetadata.generateDeviceId()` (`AppState.kt:426`) makes
+  a NEW random ID. Every request signed with the account device key then names a device `.com` doesn't know: 403
+  "not authorized" (Trusted devices shows "This device isn't allowed to do that."; also device names, the account
+  profile, and anything else device-signed). IRK- and admin-root-signed actions (add a device, reject a recovery,
+  delete the account) still work. Reproduced on an emulator against production: a fresh install works until the first
+  restart; build 10's code shows it right after the restart. In the code since `5069474b9` (2026-07-20), so Play 0.2
+  (build 9) and iOS 1.1 have it too: not a 0.3 regression. iOS: `shared/Sources/FlagshipCore/AppState.swift:554`, same
+  fallback; confirm in the Simulator.
+  Fix: save the device ID per account in the keystore when the device is admitted (create, join, recover), read it in
+  the restore path, and never generate one there. Existing installs whose profile already holds a random ID: the
+  registered ID is the one whose derived account device key `.com` holds; recover it by trying the IDs the device
+  has keys for (the stored `account.device.seed.<id>` entries and the PQ `device.<id>` keys) against the signed
+  directory read until one is accepted, then save it. Add a test that restarts the app (new AppState) and signs a
+  directory read.
 - **W14: a just-joined admin device can't unlock a server, and says nothing.** A browser joined with "Also make this
   device an admin" still lands "under review for 13d 23h". Its Activity lists the boot approval and "Yes, this is my
   server" works, but Unlock does nothing for 6 minutes (no request, no error); the phone's Approve unlocks in 74 s.
