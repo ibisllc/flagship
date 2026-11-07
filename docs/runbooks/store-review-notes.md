@@ -21,10 +21,8 @@ for. `final-deploy.md` step 11 points here. Draft written for 0.3 (voi.ci pages 
    The notes' main path needs nothing from us: the reviewer makes two accounts on two devices (iPhone + iPad), one
    publishes a page, the other messages it, and the first sees Report and Block (owner, 2026-11-07). A second Messages
    account on a device that already used Messages this month goes on the slow tier instead of being refused
-   (429ea977b), so shared review devices work. As the one-device fallback,
-   publish a review page from a real account on a spare phone (a photo, one post, Accept messages on), so the
-   reviewer can message it from their new account, and answer what arrives during the review (Apple tests Report
-   and Block on a real conversation). Put its username in the notes below. Never delete it while a review is open.
+   (429ea977b), so shared review devices work. We don't run a review page or answer reviewers' messages (owner,
+   2026-11-07): the two-device test is the only Messages path in the notes.
 3. The `abuse@flagship.services` mailbox must be read daily, and `npm run ops -- voici` checked for reports older
    than 24 hours (Apple expects action on reports within 24 hours).
 4. The DMCA designated agent must be filled in `apps/web/public/terms.html` §9 (`npm run release-manifest` fails
@@ -32,7 +30,7 @@ for. `final-deploy.md` step 11 points here. Draft written for 0.3 (voi.ci pages 
 
 ## App Store Connect: App Review Information, Notes
 
-Paste, with [REVIEW PAGE USERNAME] filled in (the one-device fallback):
+Paste as is:
 
 ```
 Flagship lets you run your own server at home and manage it from this app. We provide a live demo server for review.
@@ -45,7 +43,6 @@ To test pages and Messages, use two new accounts on two devices (for example the
 1. Device 1: first screen > "Create your account". Then Messages tab > "Set up your page": add a name or a post, turn on "Accept messages", tap "Publish your page", and turn on "Public" ("Make it public"). The page's address, voi.ci/<username>, is shown there ("View page" opens it).
 2. Device 2: create a second account the same way. Open Safari at https://voi.ci/<username from step 1>, tap "Send me a message", approve "Sign in to voi.ci" in the Flagship app when it opens, go back to Safari and write a message.
 3. Device 1: the message arrives in the Messages tab. Open it: reply, and use the ••• menu for Report and Block (long-press a message to report that message).
-If you only have one device, send the message in step 2 to https://voi.ci/[REVIEW PAGE USERNAME] instead; we answer during the review.
 
 - Rules: before a user first publishes a page or approves a sign-in to message someone, the app shows the "Page and message rules" sheet (no illegal content, harassment, threats, spam or impersonation) and the user must tap "I agree". Full terms: https://flagshipserver.com/terms#messages
 - Report: every message has Report, with reasons Spam, Harassment, Pretending to be someone, Illegal content, Something else. Every public page has "Report this page" at the bottom.
@@ -67,8 +64,8 @@ Account deletion: Settings > Delete account permanently deletes an account creat
   (the rules sheet), in-app reporting (Report on messages, Report this page on pages), blocking (Block), and
   moderation; paste the "User-generated content" paragraph above into the review notes of the release
   (Publishing overview > the release > notes for review), or into App content > App access with the login.
-- **App access:** "All or some functionality is restricted": give the demo login, plus the real review account for
-  Messages (point 2 above), with the same steps.
+- **App access:** "All or some functionality is restricted": give the demo login, plus the two-device Messages test
+  (point 2 above), with the same steps.
 - **Data safety (draft, the owner confirms):** messages are end-to-end encrypted and Flagship can't read them, so
   their content is not "collected". Declare: User IDs (username, already declared); Photos and Other user-generated
   content (the public page: collected, shared publicly by the user's choice, not optional for a page, used for app
