@@ -409,7 +409,7 @@ FLAGSHIP_ISO_MANIFEST_ARM64 = '{"version":"debian-13.6.0","url":"https://cdimage
 # GitHub release url + `sizeBytes` before deploy; until set, android manifest
 # requests get `{ download: null }`. Re-pin the seed sha with the stock base on
 # a Debian point release (build-seed.sh reproduces it).
-# FLAGSHIP_ISO_SEED = '{"version":"flagship-seed-debian-13.6.0","url":"https://github.com/ibisllc/flagship/releases/download/<tag>/flagship-seed-debian-13.6.0-amd64.iso","sha256":"892cf430928897afa5327a38c107271ed8ced064b5091680509ab6da256295e4","sizeBytes":0,"attestation":"https://github.com/ibisllc/flagship/blob/main/docs/iso-seed-and-on-device-burn.md"}'
+FLAGSHIP_ISO_SEED = '{"version":"flagship-seed-debian-13.6.0","url":"https://github.com/ibisllc/flagship/releases/download/iso-seed-debian-13.6.0/flagship-seed-debian-13.6.0-amd64.iso","sha256":"892cf430928897afa5327a38c107271ed8ced064b5091680509ab6da256295e4","sizeBytes":807796736,"attestation":"https://github.com/ibisllc/flagship/blob/main/docs/iso-seed-and-on-device-burn.md"}'
 # FLAGSHIP_ISO_SEED_ARM64 = '{...same shape, arm64 seed...}'
 
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.

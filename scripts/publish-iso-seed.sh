@@ -15,8 +15,8 @@ workflow="${WORKFLOW:-$repo/.github/workflows/iso-seed.yml}"
 toml="${WRANGLER_TOML:-$repo/apps/com/wrangler.toml}"
 command -v gh >/dev/null || { echo "gh isn't on PATH" >&2; exit 1; }
 
-pin=$(sed -n 's/^ *SEED_SHA256: *\([0-9a-f]\{64\}\) *$/\1/p' "$workflow")
-base=$(sed -n 's#^ *BASE_URL: .*/archive/\([0-9.]*\)/amd64/.*#\1#p' "$workflow")
+pin=$(sed -n 's/^ *SEED_SHA256: *\([0-9a-f]\{64\}\) *$/\1/p' "$workflow" | head -1)
+base=$(sed -n 's#^ *BASE_URL: .*/archive/\([0-9.]*\)/amd64/.*#\1#p' "$workflow" | head -1)
 [ -n "$pin" ] && [ -n "$base" ] || { echo "can't read the seed pin from $workflow" >&2; exit 1; }
 tag="${2:-iso-seed-debian-$base}"
 asset="flagship-seed-debian-$base-amd64.iso"
