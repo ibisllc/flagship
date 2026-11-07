@@ -31,3 +31,10 @@ Production's certificate orders for the test account, 2026-11-06 (read-only D1 q
 4. The "restarted N× (exit 0)" lines: these restarts are what replace the certificate orders above. I'm looking at it
    on the box side. Record the counts, but no extra investigation is needed from you.
 5. W19 (lands on an empty Home after approval): still open. Noted.
+
+## Update (later on 2026-11-07): the certificate-limit fix is on main, not deployed yet
+- main `e5d2b4e7b`: a certificate now forgives up to the 3 orders the same box made
+  just before it, within the hour before. Against yesterday's real orders, your account would have stood at 2 of 5
+  abandoned orders instead of 5 of 5, so every server would have got its certificate.
+- It goes live with the owner's next `.com` deploy (release.sh step 41). I'll add a line here when it's live.
+- Until then, the rule from reply 5 still applies: about 3 new servers a day per account. Rerun W6 now; it should pass.
