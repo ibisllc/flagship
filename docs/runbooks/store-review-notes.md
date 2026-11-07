@@ -40,7 +40,7 @@ Sign-in: Flagship has no passwords. On the first screen tap "Connect to an exist
 User-generated content (Guideline 1.2): Flagship 0.3 adds voi.ci pages and Messages. A user can publish a public profile page (photo, name, bio, links, posts) at voi.ci/<username> and receive end-to-end encrypted messages from other Flagship users through it. The demo account's page is a read-only example (https://voi.ci/playstore-test-0725); it can't send or receive messages.
 
 To test pages and Messages, use two new accounts on two devices (for example the iPhone and the iPad). Each account takes about a minute.
-1. Device 1: first screen > "Create your account". Then Messages tab > "Set up your page": add a name or a post, turn on "Accept messages", tap "Publish your page", and turn on "Public" ("Make it public"). The page's address, voi.ci/<username>, is shown there ("View page" opens it).
+1. Device 1: first screen > "Create your account". Then Messages tab > "Set up your page": add a name or a post, turn on "Accept messages", then turn on "Public" ("Make it public"), which publishes the page. The page's address, voi.ci/<username>, is shown there ("View page" opens it).
 2. Device 2: create a second account the same way. Open Safari at https://voi.ci/<username from step 1>, tap "Send me a message", approve "Sign in to voi.ci" in the Flagship app when it opens, go back to Safari and write a message.
 3. Device 1: the message arrives in the Messages tab. Open it: reply, and use the ••• menu for Report and Block (long-press a message to report that message).
 
