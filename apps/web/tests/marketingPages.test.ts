@@ -360,7 +360,17 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("aren't responsible for how it behaves");
     expect(priv).toContain("We may change provider at any time");
     expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
-    expect(priv).toContain("Last updated: 2026-11-02");
+    expect(priv).toContain("Last updated: 2026-11-08");
+  });
+
+  it("the abuse page and privacy policy never suggest that a report lets Flagship read a message", async () => {
+    const app = buildServer();
+    const abuse = (await app.inject({ method: "GET", url: "/abuse.html" })).body;
+    const priv = (await app.inject({ method: "GET", url: "/privacy.html" })).body;
+    expect(abuse).toContain("we can't read them, even when one is reported");
+    expect(abuse).toContain("The tag tells us only which account sent the message, never what it said");
+    expect(abuse).not.toMatch(/unless someone who received one reports it/);
+    expect(priv).toContain("The tag holds no message text");
   });
 
   it("privacy + terms include real contact addresses", async () => {
