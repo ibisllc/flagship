@@ -236,6 +236,13 @@ When the owner says "let's start 0.4", follow the playbook at the top of `docs/r
 after the store reviews, gather every advisor's open findings (Windows device-test agent, security reviewers, store
 agents) into that list, then build it.
 
+**0.4 work order also on branch `claude/sleepy-archimedes-pme2jy` (owner, 2026-11-08; not merged to `main`).** Before
+building 0.4, read that branch's `docs/release-0.4-list.md` section "voi.ci (owner, 2026-11-08)" and fold it in:
+voi.ci calls (plan `docs/voici-calls.md`, spike `docs/voici-calls-spike.md`, harness `tools/spikes/voici-calls/`), one
+report entry in the voi.ci footer, a floating "Send me a message" button, and the iPhone page-photo refusal (iOS
+encoder, iPhone formats, a crop step in every app). The same branch also holds the abuse-page and privacy wording fix
+("a report never lets us read a message"); bring that commit (`66e490b`) to `main` too.
+
 ### Release 0.3 (in progress, 2026-10-25)
 
 Branch `release/0.3` (not on `main` yet; only `main` is deployed). The plan, the Log and the open items are in
