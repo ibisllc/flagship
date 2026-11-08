@@ -1,0 +1,138 @@
+{
+  "good": {
+    "link": {
+      "delayMs": 40,
+      "jitterMs": 5,
+      "loss": 0
+    },
+    "seconds": 45,
+    "B": {
+      "callerToPhone": {
+        "sent": 2251,
+        "droppedAtSender": 0,
+        "received": 2251,
+        "bad": 0,
+        "delay": {
+          "n": 2251,
+          "p50": 40.8,
+          "p95": 45.3,
+          "p99": 46.2,
+          "max": 78.6
+        },
+        "playout": {
+          "concealedPct": 0.14,
+          "concealEvents": 3,
+          "longestGapMs": 20,
+          "bufferMeanMs": 56.5,
+          "bufferP95Ms": 61.7
+        }
+      },
+      "phoneToCaller": {
+        "sent": 2311,
+        "droppedAtSender": 0,
+        "received": 2307,
+        "bad": 0,
+        "delay": {
+          "n": 2307,
+          "p50": 41.2,
+          "p95": 45.6,
+          "p99": 46.5,
+          "max": 70.8
+        },
+        "playout": {
+          "concealedPct": 0.27,
+          "concealEvents": 3,
+          "longestGapMs": 80,
+          "bufferMeanMs": 56.6,
+          "bufferP95Ms": 58.5
+        }
+      }
+    },
+    "A": {
+      "connected": [
+        true,
+        true
+      ],
+      "ranForMs": 45402,
+      "sdpCbr": true,
+      "sdpHasAudioLevel": false,
+      "callerTransport": {
+        "dtlsCipher": "TLS_AES_128_GCM_SHA256",
+        "srtpCipher": "SRTP_AES128_CM_HMAC_SHA1_80",
+        "tlsVersion": "FEFC",
+        "dtlsRole": "server",
+        "selectedCandidatePairId": "CPiT/irrRT_ZtpHOWd8",
+        "local": {
+          "candidateType": "relay",
+          "relayProtocol": "tls",
+          "protocol": "udp"
+        },
+        "rttMs": 88
+      },
+      "callerToPhone": {
+        "sent": 2255,
+        "received": 2257,
+        "bad": 16,
+        "encodedFrameBytes": {
+          "min": 60,
+          "max": 60
+        },
+        "delay": {
+          "n": 2257,
+          "p50": 41.4,
+          "p95": 45.8,
+          "p99": 46.9,
+          "max": 72.9
+        },
+        "playout": {
+          "concealedPct": 0.09,
+          "concealEvents": 2,
+          "longestGapMs": 20,
+          "bufferMeanMs": 57.3,
+          "bufferP95Ms": 64.8
+        },
+        "neteq": {
+          "packetsReceived": 2268,
+          "packetsLost": 0,
+          "concealedPct": 0.01,
+          "concealmentEvents": 1,
+          "jitterBufferMeanMs": 33,
+          "jitterBufferTargetMeanMs": 38.2,
+          "stretchedPct": 0.04
+        }
+      },
+      "phoneToCaller": {
+        "sent": 2261,
+        "received": 2254,
+        "bad": 16,
+        "encodedFrameBytes": {
+          "min": 60,
+          "max": 60
+        },
+        "delay": {
+          "n": 2254,
+          "p50": 41.7,
+          "p95": 46.1,
+          "p99": 54,
+          "max": 79
+        },
+        "playout": {
+          "concealedPct": 0.5,
+          "concealEvents": 5,
+          "longestGapMs": 140,
+          "bufferMeanMs": 58.7,
+          "bufferP95Ms": 66.2
+        },
+        "neteq": {
+          "packetsReceived": 2270,
+          "packetsLost": 0,
+          "concealedPct": 0.03,
+          "concealmentEvents": 2,
+          "jitterBufferMeanMs": 37.3,
+          "jitterBufferTargetMeanMs": 40.3,
+          "stretchedPct": 0.06
+        }
+      }
+    }
+  }
+}
