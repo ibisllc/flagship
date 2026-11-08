@@ -21,12 +21,14 @@
  *      from the owner webapp.
  *  10a. www.flagshipserver.com — 308 to the bare apex, path+query kept.
  *  11. Anything else — static assets.
+ *  12. fshp.tech / fshp.app — mirror domains (see mirrorDomains.ts).
  */
 
 import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
 import { localisedAssetPath, pickWebLocale } from "./localeRedirect.js";
 import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
+import { applyMirror, matchMirror, mirrorRedirect } from "./mirrorDomains.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse, buildOptionalPushForwarder } from "./controlPlaneRoutes.js";
 import { handleAbuseRoute, isAbusePath, suspensionGuard } from "./abuseCases.js";
 import { mayCommitRevocation, pokeServingFeed, type ServingFeedNamespace } from "./servingAuthority.js";
@@ -532,6 +534,20 @@ export async function route(
   ctx?: WaitUntilLike,
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
+
+  // ---- fshp.tech / fshp.app mirror domains ----
+  // The bare mirror apex is served exactly as the control apex, then
+  // re-skinned to name the mirror; every other mirror host redirects.
+  const mirror = matchMirror(requestUrl.hostname);
+  if (mirror) {
+    const servicesApex = env.SERVICES_APEX ?? "flagship.services";
+    const redirect = mirrorRedirect(mirror, requestUrl, apexHost(env), servicesApex);
+    if (redirect) return redirect;
+    const apexUrl = new URL(requestUrl);
+    apexUrl.hostname = apexHost(env);
+    const res = await route(new Request(apexUrl, request), env, ctx);
+    return applyMirror(res, mirror.apex, apexHost(env), servicesApex);
+  }
 
   // Workerd (wrangler dev) replaces the Host header with the route's
   // configured zone, so `request.url` always reports the apex hostname

@@ -243,6 +243,15 @@ report entry in the voi.ci footer, a floating "Send me a message" button, and th
 encoder, iPhone formats, a crop step in every app). The same branch also holds the abuse-page and privacy wording fix
 ("a report never lets us read a message"); bring that commit (`66e490b`) to `main` too.
 
+### fshp.tech + fshp.app mirror domains (2026-11-08)
+
+`apps/com/src/mirrorDomains.ts`: the bare `fshp.tech` / `fshp.app` serve the apex site with visible
+`flagshipserver.com` / `flagship.services` mentions in HTML rewritten to the mirror (scripts, styles, JS, API bodies
+and email addresses untouched); `www.` → bare mirror; `webapp./remote./recovery./boot.` → their `flagshipserver.com`
+twin; any other name → the same name under `flagship.services`. Zone routes in `apps/com/wrangler.toml`; proxied
+`AAAA 100::` records at `@`, `*`, `www` in both zones. Limit: the Cloudflare edge cert covers one level only, so a
+deep name (`home.alice.fshp.tech`) fails TLS before its redirect (`.app` is HSTS-preloaded: no http fallback).
+
 ### Release 0.3 (in progress, 2026-10-25)
 
 Branch `release/0.3` (not on `main` yet; only `main` is deployed). The plan, the Log and the open items are in

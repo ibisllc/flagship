@@ -84,6 +84,16 @@ routes = [
   # WebAuthn-origin assumption here has to account for two live origins
   # forever, for a host nobody is meant to actually use.
   { pattern = "www.flagshipserver.com",        custom_domain = true },
+  # fshp.tech + fshp.app — mirror domains (see src/mirrorDomains.ts). The
+  # bare apex serves the site naming the mirror; every subdomain redirects
+  # (www → bare apex, webapp./remote./… → flagshipserver.com, the rest →
+  # flagship.services). Zone routes, not custom domains, because the wildcard
+  # can't be a custom domain. Each zone needs PROXIED DNS records for `@`
+  # and `*` (e.g. AAAA 100::) or these routes never fire.
+  { pattern = "fshp.tech/*",                   zone_name = "fshp.tech" },
+  { pattern = "*.fshp.tech/*",                 zone_name = "fshp.tech" },
+  { pattern = "fshp.app/*",                    zone_name = "fshp.app" },
+  { pattern = "*.fshp.app/*",                  zone_name = "fshp.app" },
 ]
 
 # Static assets — the marketing pages, /docs, /status, /security, /downloads,
