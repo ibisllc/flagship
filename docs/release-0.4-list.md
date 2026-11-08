@@ -209,7 +209,7 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
     (API 28+, below the API 29 floor): it applies the orientation, decodes HEIC and AVIF, and a target size avoids
     loading a 48 MP photo whole. Same separate sentences.
   - **Webapp.** `createImageBitmap` can't decode HEIC in Chrome or Firefox (only Safari can; iPhone Safari's file
-    picker already hands over a JPEG). Say "This browser can't open HEIC photos. Save it as a JPEG, or use the
+    picker usually converts to JPEG on the way). Say "This browser can't open HEIC photos. Save it as a JPEG, or use the
     Flagship app" instead of the generic line.
   - **A crop step in every app (iOS, Android, webapp).** After picking, a crop screen: a square frame with the round
     preview the page shows, drag to move and pinch (or a zoom slider, plus arrow keys on the web) to zoom, rotate
