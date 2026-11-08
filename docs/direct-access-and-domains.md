@@ -1,8 +1,8 @@
 # Direct access, short names and what each domain is for
 
-Status: DESIGN DISCUSSION (owner + Claude, 2026-11-08). Nothing here is built. It is
-planned for 0.4 (`docs/release-0.4-list.md`, item "Direct access"). Decisions the owner
-has made are marked **Decided**; the rest are proposals with the open questions listed.
+Status: LOCKED IN for 0.4 (owner, 2026-11-08). Nothing here is built. Planned for 0.4
+(`docs/release-0.4-list.md`, item "Direct access"). Every choice below is decided; the
+owner may reopen any of them, and the price is set at launch.
 
 ## 1. The idea
 
@@ -54,8 +54,8 @@ Two layers, built in this order:
 | `voi.ci` | shortener + public pages | the user's voi.ci page (profile + Messages), short links | yes (Worker) |
 | `fshp.tech` | website mirror | the competition mirror of the site; every subdomain redirects | yes (Worker) |
 
-**Proposal: why a separate direct domain (rather than direct records in
-`flagship.services`):**
+**Decided: a separate direct domain (rather than direct records in
+`flagship.services`), because:**
 - `flagship.services` keeps the property `wildcard-dns.md` fought for: one wildcard,
   no per-box records, no record churn, no NXDOMAIN windows mid-write. A record at
   `<box>.<user>` would hide every name below it from the wildcard.
@@ -76,8 +76,8 @@ Two layers, built in this order:
   conflicts with DNS-only direct names. Today's mirror code lives in
   `apps/com/src/mirrorDomains.ts` and `apps/web/public/theme.js`; remove `fshp.app`
   from both, and delete its proxied `@`, `*`, `www` records once direct names exist.
-  Decide what the bare `fshp.app` shows (a page explaining direct names, or a
-  redirect to the site).
+  The bare `fshp.app` shows one short page explaining direct names (no catch-all,
+  no mirror).
 - Names the user doesn't register on `fshp.app` should answer nothing (NXDOMAIN),
   not redirect.
 - Control traffic never uses direct names: the phone talks to its box by the
@@ -91,7 +91,7 @@ Two layers, built in this order:
 
 ## 3. Names and pricing
 
-**Proposal (owner to decide):**
+**Decided:**
 - **Free, derived name** for every opted-in app, following the existing
   `<slug>--<creator>` convention (`docs/service-addressing-double-dash.md`):
   `game--john-doe.fshp.app`. Not scarce, so nothing to squat, and every owner gets
@@ -140,8 +140,8 @@ would meet the same answer. Plan for life without it:
   strip `Domain=` from apps' `Set-Cookie` on direct names.
 - **PSL requirements when the time comes:** a `_psl` TXT record, and the domain
   registered at least two years ahead. Renew `fshp.app` well ahead of any
-  submission. Removal from the PSL is slow, so decide the suffix layout before
-  submitting.
+  submission. Removal from the PSL is slow; the suffix layout is fixed now: flat
+  names directly under `fshp.app`, one entry `fshp.app`.
 - **Issuance.** The box needs its own certificate for each direct name (derived and
   vanity). Either DNS-01 in the `fshp.app` zone through the issuance service
   (`apps/com/src/certificateIssuance.ts`), or TLS-ALPN-01 straight to the box now
@@ -165,10 +165,11 @@ would meet the same answer. Plan for life without it:
   "reachable" / "not reachable from outside", so a home user isn't left guessing.
   It never changes records.
 - **Records the owner may set:** AAAA and A, one or several (a company may list
-  several addresses). Open questions: allow CNAME? Allow private addresses
-  (RFC 1918 / ULA) for internal-only names? Public DNS pointing at private
-  addresses is a DNS-rebinding vector against visitors' networks, so the default
-  should refuse them unless a corporate use case needs it.
+  several addresses). No CNAME in 0.4 (it would let a name follow a third party's
+  DNS that we can't see; reconsider with corporate users). Private, loopback,
+  link-local and other non-public addresses (RFC 1918, ULA, CGNAT, …) are refused:
+  public DNS pointing at them is a DNS-rebinding vector against visitors' own
+  networks. A corporate internal-only exception can be designed later.
 - **Address changes:** the owner's choice of how to keep records current. By
   default, the box may update its own record with STK-signed updates inside the
   owner's grant (e.g. the approved /56 prefix), as a convenience for home users; a
@@ -183,10 +184,11 @@ would meet the same answer. Plan for life without it:
 - **Names pointing at a non-Flagship host.** With owner-set A/AAAA records, a name
   can lead to any server, and that server can get its own Let's Encrypt
   certificate for the name (HTTP-01 / TLS-ALPN-01), so "TLS ends on a Flagship box"
-  stops being guaranteed for that name. That's consistent with trusting the owner,
-  but decide whether to offer a per-name CAA record bound to the box's ACME
-  account (`accounturi`), so an owner who wants the guarantee can make only their
-  box able to get a certificate. It also matters for abuse (below).
+  stops being guaranteed for that name. Decided: every direct name gets a CAA
+  record bound to the box's ACME account (`accounturi`) **by default**, so only the
+  owner's box can get a certificate for it. An owner pointing a name at another
+  host turns that CAA off in the same biometric order (their choice, consistent
+  with trusting them). It also limits abuse (below).
 
 **Privacy and exposure**
 - **The home IP becomes public, and stays public.** Passive-DNS services record
@@ -215,8 +217,9 @@ would meet the same answer. Plan for life without it:
 - One abusive name can get the whole `fshp.app` flagged by Safe Browsing. That's
   another reason to keep the mirror off it, and to react quickly to reports.
 - Owner-set A/AAAA records let a name front any server, including a phishing host
-  that never ran Flagship. Suspending the record still works; the per-name CAA
-  option in "Reachability" would also stop such a host getting a certificate.
+  that never ran Flagship. Suspending the record still works, and the default
+  per-name CAA (see "Reachability") stops such a host getting a certificate unless
+  the owner turned it off.
 
 **Operations**
 - DNS record limits and cost: Cloudflare caps records per zone on lower plans, and

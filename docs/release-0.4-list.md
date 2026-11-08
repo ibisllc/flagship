@@ -165,13 +165,13 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   `docs/voici-service-names-todo.md` (found untracked in the main checkout on 2026-11-07; reconcile with the naming
   and monetization docs when it lands).
 
-- **Direct access: skip the relay, and what each domain is for (owner + Claude, 2026-11-08).** Full discussion,
+- **Direct access: skip the relay, and what each domain is for (LOCKED IN, owner 2026-11-08).** Full design,
   decisions and edge cases in `docs/direct-access-and-domains.md`. In short: when a box can be reached from the
   internet, the owner (biometric, admin-root-signed order) gives an app a **direct name on `fshp.app`** whose DNS
   record points at the box; visitors connect straight to it, TLS still ends on the box, and the traffic is free of
   relay quota. Not a redirect (rejected). First the app-side path (LAN-direct extended to public addresses, no DNS),
   then the direct names. `flagship.services` stays a pure wildcard to the relay (the per-box records live only in
-  `fshp.app`); the website mirror moves to `fshp.tech` only. Proposed pricing: a free derived name
+  `fshp.app`); the website mirror moves to `fshp.tech` only. Pricing: a free derived name
   (`game--john-doe.fshp.app`) for everyone who opts in, and paid yearly vanity names (`johngame.fshp.app`, $5–12)
   under the existing custom-names surface. Big open points: the PSL is not available yet (the `flagship.services`
   submission is on hold until 2,000–3,000 users), so new `fshp.app` certificates share Let's Encrypt's 50/week and
