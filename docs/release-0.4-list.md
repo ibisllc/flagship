@@ -55,7 +55,10 @@ rules (main only deploys, feature branches for unlaunched features, i18n for eve
   Before starting 0.4: run `release.sh --only 36` with `GYM_ADMIN_SECRET` set from `.gym-secrets.env` (or the two
   halves by hand), and fix release.sh so step 36 loads the gym secret itself (or asks for it) and a failed gym dry run
   stops before the destroy prompt instead of asking to destroy an empty list. Also decide with the owner how the gym
-  sweep should get its secret in future releases.
+  sweep should get its secret in future releases. **release.sh fixed 2026-11-08 (`c3f3cbb71`):** the step reads
+  `GYM_ADMIN_SECRET` from the environment, else `.gym-secrets.env` in the main checkout, else asks silently, and
+  sweeps with only that secret; `sweep-cli` exits 1 on a refused call, so no destroy prompt follows. Still to do:
+  the run itself (needs both admin secrets: the Mac, or this machine with the secrets file).
 - **In-app rules sheet: name the nudity / violence rule (2026-11-07).** Terms §8.2 now forbids nudity or sexual
   content and graphic real-world violence on pages and in messages (`7accf8146`, needed for the Play content rating
   answers), but the "Page and message rules" sheet's one-line summary in the iOS, Android and web apps still lists
