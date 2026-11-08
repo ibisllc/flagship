@@ -165,55 +165,18 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   `docs/voici-service-names-todo.md` (found untracked in the main checkout on 2026-11-07; reconcile with the naming
   and monetization docs when it lands).
 
-- **Direct IPv6: skip the relay when the box has a public IPv6 address (owner, 2026-11-08).** Today only
-  LAN-direct (`docs/lan-direct.md`) bypasses the relay: the box's STK-signed `lan-hint/v1` lists LAN addresses only,
-  and one public address voids the whole hint. Extend the same path to the internet. The owner turns on "Direct IPv6
-  access" for a server in the app, **behind biometrics, as an admin-root-signed order** (the `authorizeSensitiveOrder`
-  path, like the other sensitive orders). The box then binds `:443` on its global IPv6 address (same one-listener,
-  two-framings forwarder into the loopback TLS server) and advertises it in a **new hint version** that may carry
-  global IPv6 endpoints. A hint without the owner's order must still be LAN-only, so a compromised daemon config can't
-  open the box to the internet by itself. Clients reuse LAN-direct unchanged: verify the hint under the locally
-  derived STK, probe with a pinned TLS handshake on the box name, prefer it once proven, and fall back to the relay at
-  the first failure. Phones on any IPv6 network (mobile data included) then reach their box directly; box-to-box app
-  copies can use it too. Turning it off (also biometric) stops the listener and voids outstanding hints. Decide:
-  - **DNS too, so browsers and visitors go direct (owner, 2026-11-08: override the "no per-box records" rule;
-    debate where).** `docs/wildcard-dns.md` §6 refused per-box records because a record at `<box>.<user>` stops the
-    root wildcard from answering below it (so the box also needs `*.<box>.<user>`, and the account needs `*.<user>`
-    for its leader names). That is the 4-12-records-per-box layout retired on 2026-10-18 for record churn and its
-    NXDOMAIN windows mid-write. The app-side hint above stays either way (it works with no DNS at all). Options:
-    - **(A) Same names, both paths.** On `flagship.services`, an opted-in box gets AAAA → box (+ `*.<box>`), A stays →
-      relay; Happy Eyeballs picks. One URL per service, IPv4 visitors still relayed. Costs: brings back per-box and
-      per-account records in the relay zone (the churn and write-order windows the root wildcard removed),
-      `.com` re-points records on every leadership change if leader names go direct, and a broken direct path that
-      still accepts TCP gives no fallback.
-    - **(B) A separate direct zone (recommended).** `flagship.services` stays a pure wildcard to the relay, zero
-      records. A second zone (DNS only) holds only opted-in boxes: `<box>.<user>` and `*.<box>.<user>` AAAA → box, and
-      optionally A → relay so a direct link never dead-ends on IPv4. The box's cert adds the two direct names (DNS-01
-      in that zone through the issuance service). Clear meaning ("direct link" vs "relay link"), the home address
-      appears only under names the owner opted into, and turning it off deletes two records. Costs: two URLs per
-      service (the share UI must choose: direct when the visitor will have IPv6, relay otherwise), a second zone to
-      run, and its own Public Suffix List entry + Let's Encrypt rate-limit exemption. Candidate domain: `fshp.app`
-      under a label tree (e.g. `<box>.<user>.d.fshp.app`), which keeps the mirror's `*.fshp.app` → relay redirect for
-      everything else; or a dedicated domain.
-    - **(C) Relay on a separate zone instead.** Move the relay to a new wildcard zone and let `flagship.services` hold
-      direct records. Rejected: every installed box, cert, signed domain and share link names `flagship.services`.
-    - Leader names (`<svc>.<user>`) stay relay-only in the first version under any option: their target moves
-      between boxes by gossip.
-  - **Exposure.** Today the box accepts no inbound connection from the internet; this setting changes that. It
-    reveals the home address to anyone who gets a hint (only the owner's devices and target boxes), and makes it
-    reachable from the internet on :443 (TLS-only, the same caps as LAN-direct: 256 connections, 5 s first bytes,
-    5 min idle). Most home routers drop unsolicited inbound IPv6: the app needs a "can't be reached from outside"
-    status (a probe from the relay or `.com` that never learns more than "reachable or not"), not a silent failure.
-    Privacy-extension (temporary) addresses rotate: bind the stable address, rescan every 60 s as today, and void hints
-    on change.
-  - **Pro only? (debate, owner to decide.)** For: it's a power-user feature with real support cost (router
-    firewalls, ISPs that rotate prefixes), and paying makes the "my server is now reachable from the internet" step
-    deliberate. Against: every byte that goes direct is relay egress we stop paying for, and it saves the user relay
-    quota, so charging for the cheaper path is backwards. It also adds a paid surface beyond the agreed few
-    (`docs/monetization-free-tier-first.md`). Recommendation: **free, under Advanced** (like debug access), and pitch
-    the Pro version as public direct access with its own names, bundled with custom domains. If it does become Pro,
-    the gate code lives on a branch off `feat/marketplace` (it needs the payment rail, like `feat/custom-domains`);
-    the free mechanism can ship on `main`.
+- **Direct access: skip the relay, and what each domain is for (owner + Claude, 2026-11-08).** Full discussion,
+  decisions and edge cases in `docs/direct-access-and-domains.md`. In short: when a box can be reached from the
+  internet, the owner (biometric, admin-root-signed order) gives an app a **direct name on `fshp.app`** whose DNS
+  record points at the box; visitors connect straight to it, TLS still ends on the box, and the traffic is free of
+  relay quota. Not a redirect (rejected). First the app-side path (LAN-direct extended to public addresses, no DNS),
+  then the direct names. `flagship.services` stays a pure wildcard to the relay (the per-box records live only in
+  `fshp.app`); the website mirror moves to `fshp.tech` only. Proposed pricing: a free derived name
+  (`game--john-doe.fshp.app`) for everyone who opts in, and paid yearly vanity names (`johngame.fshp.app`, $5–12)
+  under the existing custom-names surface. Big open points: the PSL is not available yet (the `flagship.services`
+  submission is on hold until 2,000–3,000 users), so new `fshp.app` certificates share Let's Encrypt's 50/week and
+  names share cookies; IPv4 visitors need an A record to the box or a relay fallback; the home IP becomes
+  permanently public.
 
 ## Repo housekeeping (2026-11-07)
 
