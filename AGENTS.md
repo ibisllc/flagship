@@ -373,11 +373,11 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
-- **voi.ci calls (2026-11-08, spike only; `docs/voici-calls-spike.md`, harness `tools/spikes/voici-calls/`).**
+- **voi.ci calls (2026-11-08; planned for 0.4: `docs/voici-calls.md`; spike `docs/voici-calls-spike.md`, harness `tools/spikes/voici-calls/`).**
   Owner: audio only, over the phone's bare name (`.com` only arranges), every admin phone rings. Chrome 153 measured
   equal security for WebRTC-over-TURNS-to-the-phone (A) and own frames over WebSocket (B): constant 60-byte Opus
   frames, our X-Wing frame layer, SNI routes `turns:`; A's DTLS 1.3 chose X25519MLKEM768. Quality: both pay TCP's
-  delay; A's NetEq conceals less and only WebRTC audio gets Chrome's echo cancelling, so A is recommended. Open:
+  delay; A's NetEq conceals less and only WebRTC audio gets Chrome's echo cancelling: owner chose A (2026-11-08). Open:
   Safari, Firefox, the phones' libwebrtc, an acoustic echo test, a call over two relays (calls use mesh forwarding).
 
 - **`feat/UX`, the UX release on top of 0.3 (2026-10-23; branch `feat/UX` = `release/0.3` + three folded

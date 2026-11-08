@@ -158,6 +158,69 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   type-checker timeouts fixed). If it is still red, read the newest run; new slow SwiftUI expressions show locally with
   `OTHER_SWIFT_FLAGS='-Xfrontend -warn-long-expression-type-checking=150'`.
 
+## voi.ci (owner, 2026-11-08)
+
+- **Calls: a visitor calls the page owner's phone, audio only.** Plan: `docs/voici-calls.md`; measurements:
+  `docs/voici-calls-spike.md`. WebRTC over TURNS to the phone's bare name (the phone answers TURN itself, TLS ends
+  there), every frame sealed again under an X-Wing key from the signed set-up, constant-bitrate Opus; `.com` only
+  arranges and rings every admin device; first answer wins and takes the bare name. About 53 days, after the rest of
+  the spike (Safari, Firefox, the phones' libwebrtc, an acoustic echo test, a call over two relays). Branch
+  `feat/voici-calls`. Open decisions D1-D4 in the plan.
+
+- **One report entry in the page footer.** Today a page's footer has both "Report this page" (a button that opens the
+  in-page report sheet, `apps/voici-site/src/report.js`) and "Report abuse" (a link to `/abuse#voici`), side by side
+  (`apps/voici-site/src/page.js` `footer`). Fix: on a page, keep only "Report this page", and put one line at the
+  bottom of its sheet, "How we handle reports, and other ways to report" → `/abuse#voici`, so the email route and the
+  rules are one tap further, not gone. Where there is no page to report (not found, out of date, the About view),
+  keep the "Report abuse" link, since the sheet can't open there. Update `tests/render.test.ts`; one new sheet string
+  in `i18n/voici-site`.
+
+- **"Send me a message" as a floating button.** Today it sits in the page flow after the links (`messageButton` in
+  `page.js`), so a long post list buries it. Fix: a fixed button at the bottom right (inside `env(safe-area-inset-*)`,
+  16 px from the edges): the message icon alone under 600 px wide (with an `aria-label` and a tooltip), icon and
+  "Send me a message" from 600 px. Keep it early in the DOM (right after the links) so keyboard and screen-reader
+  users reach it first; give the page bottom padding so it never covers the footer or the last post; hide it while a
+  sheet is open. The note under today's button ("Private messages, with your Flagship app.") moves into the sign-in
+  sheet. Shown only while `acceptsMessages = 1`, as today. When calls ship it becomes Message and Call.
+  **Pulsing, with one push-back:** a button that pulses forever fails WCAG 2.2.2 (anything that moves on its own for
+  more than 5 seconds needs a way to stop it) and tends to read as an ad. Proposed: three slow pulses (a ring that
+  grows and fades, about 4 s in all) when the page has loaded, and three again the first time the visitor scrolls to
+  the end of the posts; no pulsing under `prefers-reduced-motion` (the site's reduced-motion rule already cuts
+  animations to one short run; this one should not run at all). If the owner still wants a constant pulse, it needs a
+  visible way to stop it.
+
+- **Page photo from an iPhone: "That photo couldn't be made small enough" every time.** Found in the code (not yet
+  confirmed on a device; this Linux machine can't run ImageIO):
+  - **iOS, the likely cause.** `VoiciImageEncoder` (`apps/mobile/ios/Sources/FlagshipUI/Services/VoiciMedia.swift`)
+    writes the 512 × 512 JPEG with ImageIO and then refuses it when `VoiciPage.voiciJpegHasMetadata` finds an APP1 or
+    APP2 segment. It passes `kCGImagePropertyOrientation` to the destination, which makes ImageIO write an EXIF (APP1)
+    block, and ImageIO also embeds the image's sRGB ICC profile (APP2). Either one fails every photo, and the refusal
+    is reported as "couldn't be made small enough". The webapp met the same thing (its comment: a browser's encoder
+    may add an sRGB ICC profile as APP2) and strips segments before the check (`stripJpegMetadata`); Android strips
+    too (`VoiciMedia.kt` `stripMetadata`); iOS has no strip step.
+    Fix: drop the orientation property (the bitmap is already upright), add the same APP1-APP15/COM strip in Swift,
+    keep the check after it, and give each failure its own sentence ("Couldn't open this photo" for a load or decode
+    failure, the size message only when it really is too big).
+  - **Every iPhone format.** `PhotosPicker` gives the original file: HEIC/HEIF (8- and 10-bit HDR), JPEG, ProRAW (DNG),
+    the still of a Live Photo, PNG screenshots, panoramas over 16,000 px wide, wide-gamut Display P3. ImageIO's
+    thumbnail path decodes all of them and converts to sRGB in the draw; an item only in iCloud may fail to load
+    (`loadTransferable` throws): say "This photo is still downloading from iCloud. Try again in a moment" there.
+  - **Android.** `BitmapFactory` ignores EXIF orientation, so camera photos can come out sideways. Use `ImageDecoder`
+    (API 28+, below the API 29 floor): it applies the orientation, decodes HEIC and AVIF, and a target size avoids
+    loading a 48 MP photo whole. Same separate sentences.
+  - **Webapp.** `createImageBitmap` can't decode HEIC in Chrome or Firefox (only Safari can; iPhone Safari's file
+    picker already hands over a JPEG). Say "This browser can't open HEIC photos. Save it as a JPEG, or use the
+    Flagship app" instead of the generic line.
+  - **A crop step in every app (iOS, Android, webapp).** After picking, a crop screen: a square frame with the round
+    preview the page shows, drag to move and pinch (or a zoom slider, plus arrow keys on the web) to zoom, rotate
+    90°, then "Use photo". The encoders take the chosen square instead of today's centre crop, then resize to 512 ×
+    512 as now. Strings for the screen in each surface's `i18n/`.
+  - **Tests.** One shared set of sample photos (`packages/protocol/test-vectors/voici-images/`: an iPhone HEIC, a 10-bit
+    HDR HEIC, a ProRAW DNG, an EXIF-rotated JPEG, a Display P3 JPEG with its profile, a PNG with transparency, a
+    16,000 px panorama). Each encoder must turn every one into a JPEG of at most 150 KiB with no APP1/APP2 segment and
+    the right way up (a marked corner pixel). iOS runs them in the simulator tests, Android in Robolectric or on the
+    emulator, the webapp in the browser tests (HEIC expected to refuse with the new sentence outside Safari).
+
 ## Product plans carried over
 
 - **Human `voi.ci` service names** (owner discussion 2026-10-21): one free, user-chosen `voi.ci/<name>` per public
