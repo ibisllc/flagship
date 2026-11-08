@@ -2598,6 +2598,24 @@ EOF
 GYM_LOCK="${FLAGSHIP_GYM_LOCK:-/private/tmp/claude-501/flagship-locks/gym.lock}"
 gym_lock_held() { [ -e "$GYM_LOCK" ]; }
 
+# The gym sweep authenticates to the GYM Worker with the gym's own admin secret, never prod's
+# (0.3's step 36 ran with neither and got 401). Taken from the environment, else the main
+# checkout's .gym-secrets.env, else typed silently; never put in argv or the log.
+GYM_SECRETS_FILE="${FLAGSHIP_GYM_SECRETS_FILE:-$MAIN_CHECKOUT/.gym-secrets.env}"
+GYM_SECRET="${GYM_ADMIN_SECRET:-}"
+need_gym_secret() {
+  [ -n "$GYM_SECRET" ] && return 0
+  if [ -f "$GYM_SECRETS_FILE" ]; then
+    GYM_SECRET=$(grep -m1 '^GYM_ADMIN_SECRET=' "$GYM_SECRETS_FILE" | cut -d= -f2- || true)
+    [ -n "$GYM_SECRET" ] && return 0
+  fi
+  printf '%sGYM_ADMIN_SECRET%s (not in %s; typed silently, kept in memory; empty = stop): ' "$C_Y" "$C_0" "$GYM_SECRETS_FILE" >&2
+  read -rs GYM_SECRET || GYM_SECRET=""
+  echo >&2
+  [ -n "$GYM_SECRET" ]
+}
+with_gym_secret() { ( unset FLAGSHIP_ADMIN_SECRET; GYM_ADMIN_SECRET="$GYM_SECRET"; export GYM_ADMIN_SECRET; "$@" ); }
+
 # What no tool can see: each needs the owner's own login. The ids are the state keys.
 OWNER_CHECK_IDS="upcloud hetzner cfcom r2 fly"
 owner_check_text() { # owner_check_text id
@@ -2641,9 +2659,11 @@ run_reap() {
       if gym_lock_held; then
         fail "a live gym run holds $GYM_LOCK: wait for it to finish (or remove the lock only if you know it is stale), then rerun this step"
       fi
-      XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts
+      need_gym_secret || fail "the gym sweep needs GYM_ADMIN_SECRET: put it in $GYM_SECRETS_FILE (or type skip-gym), then rerun this step"
+      # A refused dry run fails here (sweep-cli exits 1), so the destroy prompt never offers an unseen list.
+      with_gym_secret XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts
       confirm "Destroy those gym leftovers (sweep-cli --destroy)? If it reports dnsFailed, wait 30 s and run it again." || return 10
-      XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts --destroy
+      with_gym_secret XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts --destroy
       st_w set reapGymSweep swept ;;
     skip-gym) warn "gym sweep skipped by you: shared-zone gym records and gym servers may remain"; st_w set reapGymSweep skipped ;;
     *) fail "answer sweep or skip-gym (got '$g'); rerun the step" ;;

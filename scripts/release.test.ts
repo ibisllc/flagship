@@ -386,11 +386,14 @@ require_done() { :; }; ensure_wt() { :; }; need_admin_secret() { ADMIN_SECRET=x;
 confirm() { echo "confirm: $1" >> ${log}; case "$1" in *"Treat the step"*) return 1 ;; esac; return 0; }
 XA() { shift; echo "XA $*" >> ${log}; }
 with_secret() { echo "with_secret $*" >> ${log}; }
+eval "\${XA_OVERRIDE:-:}"
 run_reap`;
+    const secrets = join(env.dir, "gym-secrets.env");
+    writeFileSync(secrets, "GYM_DEMO_IRK_KEK=k\nGYM_ADMIN_SECRET=gym-s3cret\n");
     const r = spawnSync("bash", ["-c", script], {
       encoding: "utf8",
       input: answers.join("\n") + "\n",
-      env: { PATH: `${join(env.dir, "bin")}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: env.home, FLAGSHIP_RELEASE_HOME: join(env.home, ".flagship-release"), NO_COLOR: "1", FLAGSHIP_GYM_LOCK: join(env.dir, "no-gym.lock"), ...extra },
+      env: { PATH: `${join(env.dir, "bin")}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: env.home, FLAGSHIP_RELEASE_HOME: join(env.home, ".flagship-release"), NO_COLOR: "1", FLAGSHIP_GYM_LOCK: join(env.dir, "no-gym.lock"), FLAGSHIP_GYM_SECRETS_FILE: secrets, ...extra },
     });
     return { code: r.status, out: r.stdout, err: r.stderr, log: readFileSync(log, "utf8"), state: () => JSON.parse(readFileSync(join(env.home, ".flagship-release", "state.json"), "utf8")) };
   }
@@ -432,6 +435,28 @@ run_reap`;
     expect(r.err).toContain("holds " + lock);
     expect(r.log).not.toContain("sweep-cli");
     expect(r.log).not.toContain("--apply");
+  });
+
+  it("sweeps with the gym secret from .gym-secrets.env, never prod's, and never in the log", () => {
+    const env = sandbox();
+    const xa = `XA() { shift; echo "XA $* gym=\${GYM_ADMIN_SECRET:-none} prod=\${FLAGSHIP_ADMIN_SECRET:-none}" >> ${join(env.dir, "stubs.log")}; }`;
+    const r = reapRun(env, ["sweep", "reviewed", ...CHECKS], goodPlan, { FLAGSHIP_ADMIN_SECRET: "prod-s3cret", XA_OVERRIDE: xa });
+    expect(r.code, r.err).toBe(0);
+    expect(r.log).toMatch(/sweep-cli\.ts gym=gym-s3cret prod=none/);
+    expect(r.out + r.err).not.toContain("gym-s3cret");
+  });
+
+  it("stops before the destroy prompt when the gym secret is missing or the dry run is refused", () => {
+    const env = sandbox();
+    const none = reapRun(env, ["sweep", ""], goodPlan, { FLAGSHIP_GYM_SECRETS_FILE: join(env.dir, "absent.env") });
+    expect(none.code).not.toBe(0);
+    expect(none.err).toContain("needs GYM_ADMIN_SECRET");
+    expect(none.log).not.toContain("sweep-cli");
+    const refusing = `XA() { shift; echo "XA $*" >> ${join(env.dir, "stubs.log")}; case "$*" in *sweep-cli*) fail "command failed (1)" ;; esac; }`;
+    const refused = reapRun(sandbox(), ["sweep", "y"], goodPlan, { XA_OVERRIDE: refusing });
+    expect(refused.code).not.toBe(0);
+    expect(refused.log).not.toContain("confirm: Destroy");
+    expect(refused.log).not.toContain("--destroy");
   });
 
   it("lets the owner skip the gym sweep only by typing skip-gym, and records it", () => {
