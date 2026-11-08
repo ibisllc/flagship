@@ -1,0 +1,125 @@
+{
+  "caps": {
+    "AudioEncoder": true,
+    "AudioDecoder": true,
+    "RTCRtpScriptTransform": true,
+    "createEncodedStreams": true,
+    "WebTransport": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+    "opus_constant": true,
+    "opus_variable": true,
+    "supportedConstraints": {
+      "echoCancellation": true
+    },
+    "echoCancellationCapabilities": [
+      true,
+      false,
+      "remote-only"
+    ],
+    "echoCancellationDefaultSetting": true,
+    "echoCancellationAll": "refused: echoCancellation"
+  },
+  "frameSizesB": {
+    "constant": {
+      "all": {
+        "n": 1001,
+        "min": 60,
+        "p50": 60,
+        "p95": 60,
+        "p99": 60,
+        "max": 60,
+        "mean": 60,
+        "stdev": 0,
+        "distinct": 1
+      },
+      "talk": {
+        "n": 682,
+        "min": 60,
+        "p50": 60,
+        "p95": 60,
+        "p99": 60,
+        "max": 60,
+        "mean": 60,
+        "stdev": 0,
+        "distinct": 1
+      },
+      "pause": {
+        "n": 319,
+        "min": 60,
+        "p50": 60,
+        "p95": 60,
+        "p99": 60,
+        "max": 60,
+        "mean": 60,
+        "stdev": 0,
+        "distinct": 1
+      }
+    },
+    "variable": {
+      "all": {
+        "n": 1001,
+        "min": 3,
+        "p50": 61,
+        "p95": 78,
+        "p99": 89,
+        "max": 121,
+        "mean": 59.32,
+        "stdev": 11.48,
+        "distinct": 69
+      },
+      "talk": {
+        "n": 682,
+        "min": 3,
+        "p50": 61,
+        "p95": 81,
+        "p99": 92,
+        "max": 121,
+        "mean": 59.35,
+        "stdev": 13.31,
+        "distinct": 69
+      },
+      "pause": {
+        "n": 319,
+        "min": 29,
+        "p50": 61,
+        "p95": 61,
+        "p99": 71,
+        "max": 82,
+        "mean": 59.25,
+        "stdev": 5.89,
+        "distinct": 29
+      }
+    },
+    "decodedSamples": 96960
+  },
+  "frameSizesA_default": {
+    "cbr": false,
+    "sizes": {
+      "n": 574,
+      "min": 3,
+      "p50": 81,
+      "p95": 115,
+      "p99": 128,
+      "max": 161,
+      "mean": 64.56,
+      "stdev": 35.01,
+      "distinct": 87
+    },
+    "audioLevelExtNegotiated": false
+  },
+  "frameSizesA_cbr": {
+    "cbr": true,
+    "sizes": {
+      "n": 574,
+      "min": 60,
+      "p50": 60,
+      "p95": 60,
+      "p99": 60,
+      "max": 60,
+      "mean": 60,
+      "stdev": 0,
+      "distinct": 1
+    },
+    "audioLevelExtNegotiated": false
+  }
+}
