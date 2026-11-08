@@ -2,3 +2,4 @@ results/certs/
 results/.chrome-*
 results/*.log
 results/*-phone-received.json
+results/call-quality.json
