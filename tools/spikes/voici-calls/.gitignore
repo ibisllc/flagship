@@ -1,0 +1,4 @@
+results/certs/
+results/.chrome-*
+results/*.log
+results/*-phone-received.json
