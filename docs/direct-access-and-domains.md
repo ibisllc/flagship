@@ -25,6 +25,15 @@ traffic, so it is free of relay quota.
   those records out of `flagship.services` (see §2).
 - Turning direct access on is a sensitive setting: biometric, admin-root-signed
   order (the `authorizeSensitiveOrder` path).
+- **The direct path is the owner's infrastructure, not ours (owner, 2026-11-08).**
+  We publish exactly the records the owner signs and nothing else. No relay
+  fallback for IPv4 visitors, no repointing to the relay when the box is down, no
+  automatic health checks that change records. Someone who picks a direct name may
+  want the guarantee that its traffic goes only through their own infrastructure,
+  and we trust them to run it. Owners may set AAAA **and A** records, so a company
+  can point names at its own addresses (this is aimed at corporate users building
+  their infrastructure on Flagship). If a direct name doesn't answer, that is the
+  owner's to fix; the relay names keep working regardless.
 
 Two layers, built in this order:
 1. **App-side direct path (no DNS).** Extend LAN-direct (`docs/lan-direct.md`) to
@@ -41,7 +50,7 @@ Two layers, built in this order:
 |---|---|---|---|
 | `flagshipserver.com` | control plane | identity, `.com` API, website, webapp (`webapp.`/`remote.`), recovery, boot | yes (Worker) |
 | `flagship.services` | **relay path** | every canonical name (`<box>.<user>`, `<svc>.<box>.<user>`, `<svc>.<user>`); a pure wildcard to the relay, zero per-box records | no (DNS only) |
-| `fshp.app` | **direct path** | only direct names of opted-in apps, each a DNS record to a device | no (DNS only) |
+| `fshp.app` | **direct path** | only direct names of opted-in apps, each with the A/AAAA records its owner signed (normally the box) | no (DNS only) |
 | `voi.ci` | shortener + public pages | the user's voi.ci page (profile + Messages), short links | yes (Worker) |
 | `fshp.tech` | website mirror | the competition mirror of the site; every subdomain redirects | yes (Worker) |
 
@@ -89,8 +98,8 @@ Two layers, built in this order:
   a quota-free path.
 - **Paid, yearly vanity name**: `johngame.fshp.app`. Charging is justified because
   short names are scarce (a price stops hoarding; yearly renewal frees abandoned
-  ones) and each name has a real running cost (DNS records, health checks,
-  certificates, abuse handling). It fits an existing paid surface (reserved/custom
+  ones) and each name has a real running cost (DNS records, certificates, abuse
+  handling). It fits an existing paid surface (reserved/custom
   names, `docs/monetization-free-tier-first.md`; branch `feat/custom-names`), so it
   is not a fifth paid item. Price $5–12/year, not $1: card fees take about a third of
   $1, and an in-app purchase on iOS costs another 15–30%. Sell on the web or bundle
@@ -137,7 +146,7 @@ would meet the same answer. Plan for life without it:
   vanity). Either DNS-01 in the `fshp.app` zone through the issuance service
   (`apps/com/src/certificateIssuance.ts`), or TLS-ALPN-01 straight to the box now
   that it is reachable (Let's Encrypt validates over IPv6 when an AAAA record
-  exists). DNS-01 also works for boxes reachable only through the relay fallback.
+  exists). DNS-01 also works before the box is reachable from outside.
   If DNS-01, the 0.4 item "take the zone-wide DNS token off `.com`" applies to this
   zone too: the token that writes `fshp.app` should allow only these records.
 - **CT monitoring.** Extend the existing certificate-transparency scan to
@@ -146,33 +155,38 @@ would meet the same answer. Plan for life without it:
 
 ## 5. Edge cases
 
-**Reachability**
-- **IPv4 visitors.** An IPv6-only name fails for a large share of visitors. Per
-  name, pick one: an A record to the box (only if port 443 is forwarded; often
-  impossible behind CGNAT), or an A record to the relay as a fallback, where only
-  that slice of traffic counts against quota. The honest promise is "direct
-  traffic is free of quota", not "all traffic". The relay fallback needs the hub to
-  route `fshp.app` names (today it accepts claims only under the user's
-  `flagship.services` area) and the box to claim them.
-- **Router firewall.** Most home routers drop unsolicited inbound IPv6. Before
-  publishing, `.com` (or the relay) probes the address from outside with SNI = the
-  name and an STK-signed challenge, so the owner sees "not reachable from outside"
-  instead of a silent failure, and nobody can point a name at someone else's host.
-- **A path that accepts TCP but then fails** gets no Happy Eyeballs fallback. The
-  outside probe repeats on a schedule and withdraws the record after N failures.
-- **Box offline.** `.com` sees the heartbeat stop and repoints the name to the
-  relay (which then holds or drops, as for any offline box) instead of leaving it
-  dead. Hysteresis so a flapping box doesn't flip DNS every minute.
-- **Address changes.** Dynamic IPv4, rotating IPv6 prefixes, privacy (temporary)
-  addresses: the box binds and advertises its stable address, and updates the
-  record with STK-signed updates inside the owner's grant (e.g. the approved /56
-  prefix); a change outside the grant needs the phone again. TTL 60 s; some
-  resolvers ignore TTLs, so expect stragglers on the old address for a while.
-- **App moves to another box** (migration, replacement, failover): the record
-  follows the app. Leader names (`<svc>.<user>`) stay relay-only in the first
-  version; their target moves by gossip.
+**Reachability: the owner's job (see §1)**
+- **Out of scope for us:** IPv4 for IPv6-only homes, CGNAT, port forwarding,
+  router firewalls, a box that is down, a path that accepts TCP and then fails.
+  None of these makes us change a record or route through the relay. All traffic
+  on a direct name is off the relay, so it is all free of relay quota.
+- **What we still give the owner:** a diagnostic, not a gate. The app can run an
+  outside probe (from `.com` or the relay, with SNI = the name) and show
+  "reachable" / "not reachable from outside", so a home user isn't left guessing.
+  It never changes records.
+- **Records the owner may set:** AAAA and A, one or several (a company may list
+  several addresses). Open questions: allow CNAME? Allow private addresses
+  (RFC 1918 / ULA) for internal-only names? Public DNS pointing at private
+  addresses is a DNS-rebinding vector against visitors' networks, so the default
+  should refuse them unless a corporate use case needs it.
+- **Address changes:** the owner's choice of how to keep records current. By
+  default, the box may update its own record with STK-signed updates inside the
+  owner's grant (e.g. the approved /56 prefix), as a convenience for home users; a
+  change outside the grant, or any record pointing somewhere other than the box,
+  needs a new biometric order. TTL 60 s; some resolvers ignore TTLs, so expect
+  stragglers on an old address.
+- **App moves to another box:** the owner re-points the name (the app can offer
+  it as part of the move); nothing re-points it automatically. Leader names
+  (`<svc>.<user>`) stay relay-only.
 - **Several apps on one box:** each name points at the box address; the box routes
-  by SNI to the app, and holds a certificate per name.
+  by SNI to the app and holds a certificate per name.
+- **Names pointing at a non-Flagship host.** With owner-set A/AAAA records, a name
+  can lead to any server, and that server can get its own Let's Encrypt
+  certificate for the name (HTTP-01 / TLS-ALPN-01), so "TLS ends on a Flagship box"
+  stops being guaranteed for that name. That's consistent with trusting the owner,
+  but decide whether to offer a per-name CAA record bound to the box's ACME
+  account (`accounturi`), so an owner who wants the guarantee can make only their
+  box able to get a certificate. It also matters for abuse (below).
 
 **Privacy and exposure**
 - **The home IP becomes public, and stays public.** Passive-DNS services record
@@ -200,13 +214,16 @@ would meet the same answer. Plan for life without it:
   abuse process gains a lever: suspend the record. Update `abuse.html` to say so.
 - One abusive name can get the whole `fshp.app` flagged by Safe Browsing. That's
   another reason to keep the mirror off it, and to react quickly to reports.
+- Owner-set A/AAAA records let a name front any server, including a phishing host
+  that never ran Flagship. Suspending the record still works; the per-name CAA
+  option in "Reachability" would also stop such a host getting a certificate.
 
 **Operations**
 - DNS record limits and cost: Cloudflare caps records per zone on lower plans, and
   its API is rate-limited, so at scale the zone needs a paid plan or another DNS
   provider. Batch updates.
 - Quota accounting: the relay counts only relay traffic, so direct traffic falls
-  out naturally; the fallback slice still counts.
+  out naturally.
 - Payment: web checkout or Pro bundle (see §3); in-app sales on iOS lose 15–30%.
 
 ## 6. Work breakdown (sketch)
@@ -216,13 +233,14 @@ would meet the same answer. Plan for life without it:
 2. Protocol: the direct-access order canonical, the box's signed address update,
    golden vectors (TS/Swift/Kotlin).
 3. `.com`: direct-name registry (derived + vanity), the outside reachability prober,
-   record publish/withdraw/repoint in the `fshp.app` zone, certificate issuance for
+   record publish/withdraw of the owner-signed records in the `fshp.app` zone, the
+   optional outside-probe diagnostic, optional per-name CAA, certificate issuance for
    the names, CT watch, renewal and lapse.
-4. Relay: route `fshp.app` names claimed by a box (the IPv4 fallback).
+4. (No relay work: the direct path never touches the relay.)
 5. Clients: the opt-in screen (address, reachability, privacy warning, biometric
    confirm), name management, and the share UI choosing the direct or the relay
    link.
 6. Remove `fshp.app` from the website mirror and delete its proxied records.
 7. Tests: forged or unsigned orders refused; wrong-box address fails the probe;
-   repoint on offline; withdrawal on decommission, transfer and deletion; rename
-   moves names; the Happy Eyeballs fallback in the gym.
+   only owner-signed records are ever published; private addresses refused by
+   default; withdrawal on decommission, transfer and deletion; rename moves names.

@@ -175,8 +175,9 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   (`game--john-doe.fshp.app`) for everyone who opts in, and paid yearly vanity names (`johngame.fshp.app`, $5–12)
   under the existing custom-names surface. Big open points: the PSL is not available yet (the `flagship.services`
   submission is on hold until 2,000–3,000 users), so new `fshp.app` certificates share Let's Encrypt's 50/week and
-  names share cookies; IPv4 visitors need an A record to the box or a relay fallback; the home IP becomes
-  permanently public.
+  names share cookies; the home IP becomes permanently public. **Owner rule:** the direct path is the owner's
+  infrastructure: we publish only the records they sign (AAAA and A, for corporate users too) and never add an
+  IPv4 relay fallback or re-point a name when the box is down.
 
 ## Repo housekeeping (2026-11-07)
 
