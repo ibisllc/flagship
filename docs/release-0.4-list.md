@@ -182,6 +182,16 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   infrastructure: we publish only the records they sign (AAAA and A, for corporate users too) and never add an
   IPv4 relay fallback or re-point a name when the box is down.
 
+## Costs (owner, 2026-11-09)
+
+- **Recreate the `playstore-test-0725` demo server on a 20 GB disk.** The owner resized its UpCloud plan to
+  `STARTER-1xCPU-2GB` and asked for 20 GB, but UpCloud never shrinks a disk, so it keeps the 30 GB it was created with
+  (`.com` sets `UPCLOUD_STORAGE_GB = "30"` in `apps/com/wrangler.toml`). Only when no store review is open and the box
+  has taken its 0.3 update: set `UPCLOUD_STORAGE_GB` to 20 (and `UPCLOUD_PLAN` to `STARTER-1xCPU-2GB` if the owner
+  wants new demos that small), deploy `.com`, then recreate the demo with `node scripts/sample-user.mjs` (cleanup,
+  then create) and check the review sign-in works. Keep 2 GB of memory: a box update rebuilds its daemon (~1 GB), so
+  1 GB risks an interrupted update.
+
 ## Repo housekeeping (2026-11-07)
 
 - **Rebase every feature branch and `gym` onto the tip of `main`** with `bash scripts/rebase-features.sh --apply`
