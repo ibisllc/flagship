@@ -57,6 +57,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       loads `GYM_ADMIN_SECRET` itself, `c3f3cbb71`; needs `FLAGSHIP_ADMIN_SECRET` too).
 - [ ] P3 F6b: the gym on a private test CA (`docs/gym-test-acme.md`, Pebble by default plus one real-LE lane per
       release candidate). Code on `release/0.4`; the gym Worker and gym branch follow `gym-refresh.sh`.
+      2026-11-13: code built on `0.4/gym-test-ca` (items 1-5, 8, release guard) and the box seam (item 7) on
+      `0.4/gym-test-ca-gym-seam` (off `gym`); not merged, nothing deployed. Doc "As built" has the deviations.
 - [ ] P4 F6: translation review request; hardware receipts from `0.3-hardware-acceptance.md` into
       `docs/runbooks/receipts/`; OWNER runs `npm run rate-limits` (never checked yet) and records the date in AGENTS.md.
 - [ ] P5 Fold the 0.3 journal's still-true state into `AGENTS.md` "Current status" and archive
