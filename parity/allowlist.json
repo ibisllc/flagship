@@ -273,6 +273,11 @@
     },
     {
       "check": "signed-tags",
+      "key": "web:flagship/extension-pair/v1",
+      "reason": "Only a phone approves the Firefox extension's pairing and seals the flagship/extension-pair/v1 payload (the phone is the trust root and holds the pinned server key); the webapp never pairs the extension, and the extension, which opens the payload, is its own surface (docs/browser-extension.md \"Pairing\")."
+    },
+    {
+      "check": "signed-tags",
       "key": "web:flagship/strict-reentry/v1",
       "reason": "The webapp holds no post-quantum key (keyless-web rule), so it cannot sign a change back to strict; strict re-entry evidence is produced only by an admin phone or tablet (strictReentry.ts, engine-and-rust-path.md)."
     },
