@@ -84,16 +84,20 @@ routes = [
   # WebAuthn-origin assumption here has to account for two live origins
   # forever, for a host nobody is meant to actually use.
   { pattern = "www.flagshipserver.com",        custom_domain = true },
-  # fshp.tech + fshp.app — mirror domains (see src/mirrorDomains.ts). The
-  # bare apex serves the site naming the mirror; every subdomain redirects
-  # (www → bare apex, webapp./remote./… → flagshipserver.com, the rest →
-  # flagship.services). Zone routes, not custom domains, because the wildcard
-  # can't be a custom domain. Each zone needs PROXIED DNS records for `@`
-  # and `*` (e.g. AAAA 100::) or these routes never fire.
+  # fshp.tech — the mirror domain (see src/mirrorDomains.ts). The bare apex
+  # serves the site naming the mirror; every subdomain redirects (www → bare
+  # apex, webapp./remote./… → flagshipserver.com, the rest → flagship.services).
+  # Zone routes, not custom domains, because the wildcard can't be a custom
+  # domain. The zone needs PROXIED DNS records for `@` and `*` (e.g. AAAA 100::)
+  # or these routes never fire.
   { pattern = "fshp.tech/*",                   zone_name = "fshp.tech" },
   { pattern = "*.fshp.tech/*",                 zone_name = "fshp.tech" },
+  # fshp.app is the DIRECT domain (docs/direct-access-and-domains.md §2): its
+  # names are DNS-only records .com publishes for owners' boxes and never reach
+  # this Worker. Only the bare apex comes here, and redirects to the site; its
+  # proxied `@` stays, the old mirror's proxied `*` and `www` records go once
+  # direct names exist.
   { pattern = "fshp.app/*",                    zone_name = "fshp.app" },
-  { pattern = "*.fshp.app/*",                  zone_name = "fshp.app" },
 ]
 
 # Static assets — the marketing pages, /docs, /status, /security, /downloads,
@@ -532,6 +536,13 @@ UPCLOUD_STORAGE_GB = "30"
 # Without it the revocation routes answer 503 and the feed pushes nothing.
 # The same key signs the relay mesh's log and heads (relay-mesh.md §4); relays in mesh mode read it as
 # FLAGSHIP_RELAY_LOG_PUB.
+#
+# Direct names on fshp.app (apps/com/src/directNames.ts, docs/direct-access-and-domains.md §6): a token
+# with Zone:DNS:Edit on the fshp.app zone ONLY (never the flagship.services token), and that zone's id:
+#   wrangler secret put CLOUDFLARE_DIRECT_DNS_API_TOKEN
+#   wrangler secret put CLOUDFLARE_DIRECT_ZONE_ID
+# Without them no direct name is published and no direct certificate is issued (names stay pending).
+# The names' CAA pins the issuance service's ACME account (DIRECT_CAA_ACCOUNT_URI overrides it).
 #
 # Relay mesh (apps/com/src/relayFeed.ts): the mesh-key seed. Every epoch key the published feed is
 # encrypted under is derived from it; relays only ever receive epoch keys sealed to their own relay key.
