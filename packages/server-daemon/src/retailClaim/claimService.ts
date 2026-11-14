@@ -49,7 +49,7 @@ export interface ClaimIdentity {
   sign(purpose: string, payload: Uint8Array): Uint8Array | Promise<Uint8Array>;
 }
 
-export type ClaimEvent = "reset-window-opened" | "reset-window-closed" | "claimed" | "radio-closed" | "locked";
+export type ClaimEvent = "reset-window-opened" | "reset-window-closed" | "claimed" | "radio-closed" | "locked" | "released";
 
 export interface ClaimServiceDeps {
   now: () => number;
@@ -156,6 +156,34 @@ export class RetailClaimService {
       await Promise.all([...this.sessions.values()].map((s) => s.queue));
       await new Promise((r) => setImmediate(r));
     }
+  }
+
+  /**
+   * "Release this box" (releaseOrder.ts verified the admin root's order): the same wipe a reset
+   * claim does, marker first, then back to unclaimed. A failed wipe leaves the marker: locked.
+   */
+  release(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.enqueue(async () => {
+        try {
+          if (this.machine.lifecycle !== "claimed") throw new Error("not-claimed");
+          await this.d.store.writeResetMarker({ v: 1, startedAt: this.d.now(), step: "wipe-start" });
+          this.machine.locked();
+          this.d.notify?.("locked");
+          for (const s of [...this.sessions.values()]) s.link.close();
+          this.claimedSession = null;
+          await this.d.wipe();
+          await this.d.codes.ratchet("wipe");
+          await this.d.store.markUnclaimed();
+          await this.d.store.clearResetMarker();
+          this.machine.released(this.d.now());
+          this.d.notify?.("released");
+          resolve();
+        } catch (e) {
+          reject(e as Error);
+        }
+      });
+    });
   }
 
   private enqueue(fn: () => Promise<void>): void {

@@ -74,6 +74,7 @@ pub const SETUP_STEPS: &[&str] = &[
     "engine-rollback",
     "boot-chain",
     "keyd-ca-keys",
+    "retail-wipe",
 ];
 
 fn forbidden(m: impl Into<String>) -> PrivdError {

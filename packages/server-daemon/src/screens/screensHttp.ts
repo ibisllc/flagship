@@ -47,6 +47,7 @@ import { SERVING_PATH, buildServingHttp } from "../servingHttp.js";
 import type { ServingStore } from "../servingStore.js";
 import type { ServerOrderHolder } from "../serverOrderHolder.js";
 import { DEBUG_PATH, DEBUG_REVOKE_PATH, buildDebugAccessHttp, type DebugAccessController } from "../debugAccessGate.js";
+import { BOX_RELEASE_PATH, buildBoxReleaseHttp, type BoxReleaseConsumer } from "../retailClaim/releaseOrder.js";
 import { DIRECT_ACCESS_PATH, DIRECT_ADDRESS_PATH, LAN_HINT_V2_PATH, buildDirectAccessHttp, type buildSignedLanHintV2, type DirectAccessController } from "../directAccess.js";
 import {
   summarizeAttachment,
@@ -261,6 +262,8 @@ export interface ScreensHttpDeps {
    * admin-signed SSH key let in until it ends. Its state rides server-detail.
    */
   debugAccess?: Pick<DebugAccessController, "view" | "grant" | "revoke"> | null;
+  /** "Release this box" on a claimed retail box (`/api/screens/box-release`, retailClaim/releaseOrder.ts). */
+  boxRelease?: Pick<BoxReleaseConsumer, "take"> | null;
   /**
    * Direct access (`/api/screens/direct-access`, `/lan-hint/v2`; directAccess.ts): the owner's signed order for
    * reaching the box at its public addresses. Its state rides server-detail.
@@ -716,6 +719,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.debugAccess && (path === DEBUG_PATH || path === DEBUG_REVOKE_PATH)) {
       const r = await buildDebugAccessHttp({
         controller: deps.debugAccess,
+        denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
+      })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.boxRelease && path === BOX_RELEASE_PATH) {
+      const r = await buildBoxReleaseHttp({
+        consumer: deps.boxRelease,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
       if (r) return r;

@@ -25,6 +25,8 @@ import {
   signAuthCodeAdmin,
   signBoxClaimKey,
   signBoxClaimReceipt,
+  signBoxRelease,
+  type BoxReleaseOrder,
   signInstallBlob,
   signServerRegister,
   verifyBoxClaimReceipt,
@@ -54,6 +56,9 @@ import { FakePowerKeySource } from "../../src/retailClaim/powerKey.js";
 import { SetupCodeStore } from "../../src/retailClaim/setupCode.js";
 import { InMemoryBleRadio, MailboxLink, type ClaimLink, type MailboxClient } from "../../src/retailClaim/transport.js";
 import { PhoneDriver } from "./phoneDriver.js";
+import { BoxReleaseConsumer } from "../../src/retailClaim/releaseOrder.js";
+import { verifyClaimRecipe } from "../../src/retailClaim/recipe.js";
+import { RESET_WINDOW_OPENED, retailNotices } from "../../src/retailClaim/notices.js";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const kp = (byte: number): Keypair => {
@@ -592,5 +597,94 @@ describe("the sharing method: a setup code on a monitor and a remote claim", () 
     expect(box.radio.scan()).toEqual([]);
     await box.press(5);
     expect(existsSync(join(box.dir, "setup-code.json"))).toBe(false);
+  });
+});
+
+describe("Release this box (an admin-root order) and the owner's notices", () => {
+  async function claimedBox(opts: { wipeFails?: boolean } = {}) {
+    const com = await makeCom(T0);
+    const r = await com.recipe("home");
+    const dir = mkdtempSync(join(tmpdir(), "retail-box-"));
+    const box = await makeBox(com, { t0: T0, dir, ...(opts.wipeFails ? { wipeFails: true } : {}) });
+    box.clock.advance(15_000);
+    const c = await bluetoothClaim(box, r.text, { serverDomain: r.code.serverDomain, serial: r.code.serial });
+    const stkPubHex = c.stkPubHex.slice(0, 64);
+    let restarted = 0;
+    const consumer = new BoxReleaseConsumer({
+      serverDomain: r.code.serverDomain,
+      stkPubHex: () => stkPubHex,
+      adminRootPub: () => admin.publicKey,
+      statePath: join(dir, "box-release.json"),
+      now: box.clock.now,
+      release: () => box.svc.release(),
+      afterRelease: () => void restarted++,
+    });
+    const order = (o: Partial<BoxReleaseOrder> = {}): BoxReleaseOrder => ({ serverDomain: r.code.serverDomain, stkPubHex, issuedAt: box.clock.now(), nonceHex: "ab".repeat(16), ...o });
+    const signed = (o: BoxReleaseOrder, key: Keypair = admin) => ({ order: o, signatureHex: hex(signBoxRelease(o, key)) });
+    return { box, consumer, order, signed, restarted: () => restarted, dir, r };
+  }
+
+  it("wipes back to unclaimed under the admin root, and the box advertises again", async () => {
+    const t = await claimedBox();
+    const res = await t.consumer.take(t.signed(t.order()));
+    expect(res).toEqual({ ok: true });
+    expect(t.box.wipes).toHaveLength(1);
+    expect(t.box.svc.lifecycle).toBe("unclaimed");
+    expect(t.box.events).toEqual(expect.arrayContaining(["locked", "released"]));
+    expect(existsSync(join(t.dir, "reset-marker.json"))).toBe(false);
+    expect((await t.box.store.load()).lifecycle).toBe("unclaimed");
+    await t.box.settle();
+    expect(t.box.radio.scan()[0]?.state).toBe("unclaimed");
+    expect(await t.consumer.take(t.signed(t.order({ issuedAt: t.box.clock.now() + 1 })))).toMatchObject({ ok: false, code: "release-not-claimed" });
+  });
+
+  it("refuses the IRK, another box, a replay, a far clock and junk", async () => {
+    const t = await claimedBox();
+    expect(await t.consumer.take(t.signed(t.order(), irk))).toMatchObject({ ok: false, status: 403, code: "release-not-admin" });
+    expect(await t.consumer.take(t.signed(t.order({ stkPubHex: "00".repeat(32) })))).toMatchObject({ ok: false, code: "release-other-server" });
+    expect(await t.consumer.take(t.signed(t.order({ serverDomain: "cabin.harry.flagship.services" })))).toMatchObject({ ok: false, code: "release-other-server" });
+    expect(await t.consumer.take(t.signed(t.order({ issuedAt: t.box.clock.now() - 11 * 60_000 })))).toMatchObject({ ok: false, code: "release-clock" });
+    expect(await t.consumer.take({ order: { nope: 1 }, signatureHex: "00" })).toMatchObject({ ok: false, code: "release-unreadable" });
+    expect(t.box.wipes).toEqual([]);
+    const o = t.order();
+    t.box.wipes.length = 0;
+    const noRoot = new BoxReleaseConsumer({ serverDomain: t.r.code.serverDomain, stkPubHex: () => o.stkPubHex, adminRootPub: () => null, statePath: join(t.dir, "x.json"), release: async () => {} });
+    expect(await noRoot.take(t.signed(o))).toMatchObject({ ok: false, code: "release-no-admin-root" });
+    const tampered = t.signed(o);
+    tampered.order = { ...o, nonceHex: "cd".repeat(16) };
+    expect(await t.consumer.take(tampered)).toMatchObject({ ok: false, code: "release-not-admin" });
+    expect(t.box.svc.lifecycle).toBe("claimed");
+  });
+
+  it("an order is taken once", async () => {
+    const t = await claimedBox({ wipeFails: true });
+    const o = t.signed(t.order());
+    expect(await t.consumer.take(o)).toMatchObject({ ok: false, code: "release-failed" });
+    expect(t.box.svc.lifecycle).toBe("locked");
+    expect(existsSync(join(t.dir, "reset-marker.json"))).toBe(true);
+    expect(await t.consumer.take(o)).toMatchObject({ ok: false, code: "release-replayed" });
+  });
+
+  it("the reset window becomes an Activity entry, a phone alert and one content-free wake", async () => {
+    const notes: Array<{ kind: string; ok?: boolean }> = [];
+    const alerts: unknown[] = [];
+    let wakes = 0;
+    const notify = retailNotices({ note: (kind, _d, o) => void notes.push({ kind, ...o }), alert: (a) => void alerts.push(a), wake: async () => void wakes++, now: () => 1000 });
+    notify("reset-window-opened");
+    notify("reset-window-closed");
+    notify("claimed");
+    expect(notes.map((n) => n.kind)).toEqual([RESET_WINDOW_OPENED, "server.retail.reset-window-closed"]);
+    expect(notes[0]!.ok).toBe(false);
+    expect(alerts).toEqual([{ kind: "reset-window-opened", serviceId: "", at: 1000, until: 1000 + BOX_CLAIM_RESET_WINDOW_MS }]);
+    expect(wakes).toBe(1);
+  });
+
+  it("the box's recipe check takes a signed recipe and refuses a changed or expired one", async () => {
+    const com = await makeCom(T0);
+    const r = await com.recipe("home");
+    expect(verifyClaimRecipe(r.text, T0)).toEqual({ ok: true, serverDomain: r.code.serverDomain, serial: r.code.serial });
+    expect(verifyClaimRecipe(r.text, T0 + 7 * 3600_000)).toEqual({ ok: false, reason: "recipe-expired" });
+    expect(verifyClaimRecipe(r.text.replace('"home"', '"cabin"'), T0)).toEqual({ ok: false, reason: "recipe-invalid" });
+    expect(verifyClaimRecipe("{", T0)).toEqual({ ok: false, reason: "recipe-invalid" });
   });
 });
