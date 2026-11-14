@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -102,5 +103,55 @@ describe("box health reporter", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe("strict servers: the timer asks keyd for a hybrid signature", () => {
+    // Runs the generated script with stand-ins for node (keyd's sign-health), openssl and curl.
+    async function run(nodeOut: string | null): Promise<Record<string, unknown> | null> {
+      const dir = mkdtempSync("/tmp/hr-");
+      const sock = join(dir, "k.sock");
+      const server = createServer();
+      await new Promise<void>((r) => server.listen(sock, r));
+      try {
+        const stub = (name: string, body: string) => {
+          writeFileSync(join(dir, name), `#!/bin/bash\n${body}\n`);
+          chmodSync(join(dir, name), 0o755);
+        };
+        stub("node", nodeOut === null ? "exit 1" : `[ "$2" = sign-health ] && [ -f "$3" ] && printf '%s' '${nodeOut}'`);
+        stub("openssl", "head -c 64 /dev/zero");
+        stub("systemctl", "echo 0");
+        stub("ss", "true");
+        stub("curl", `while [ $# -gt 0 ]; do [ "$1" = --data ] && printf '%s' "$2" > ${join(dir, "body")}; shift; done`);
+        writeFileSync(join(dir, "main.js"), "");
+        writeFileSync(join(dir, "r.sh"), buildHealthReportScript({
+          ...ARGS, keyPath: "/boot/identity.pem", nodePath: join(dir, "node"), keydEntry: join(dir, "main.js"), keydSocket: sock,
+        }));
+        execFileSync("bash", [join(dir, "r.sh")], { env: { PATH: `${dir}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin` }, stdio: "ignore" });
+        return existsSync(join(dir, "body")) ? (JSON.parse(readFileSync(join(dir, "body"), "utf8")) as Record<string, unknown>) : null;
+      } finally {
+        server.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it("sends keyd's STK signature and its hybrid pqSignature", async () => {
+      const sig = "ab".repeat(64);
+      const hybrid = "cd".repeat(3373);
+      const body = await run(JSON.stringify({ signature: sig, hybrid }));
+      expect(body).toMatchObject({ signature: sig, pqSignature: { suite: "hybrid-ed25519-mldsa65/v1", signature: hybrid } });
+    });
+
+    it("falls back to the boot key, classical only, when keyd cannot sign or answers junk", async () => {
+      for (const out of [null, JSON.stringify({ signature: "zz" }), JSON.stringify({ signature: "ab".repeat(64), hybrid: "cd" })]) {
+        const body = await run(out);
+        expect(body).not.toBeNull();
+        if (out?.includes('"hybrid":"cd"')) {
+          // A short hybrid is dropped; keyd's classical signature still goes.
+          expect(body).toEqual({ report: expect.any(String), signature: "ab".repeat(64) });
+        } else {
+          expect(body).toEqual({ report: expect.any(String), signature: "00".repeat(64) });
+        }
+      }
+    });
   });
 });

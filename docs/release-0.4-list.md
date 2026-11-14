@@ -118,10 +118,11 @@ list; SP = `SECURITY-0.3-PROGRESS.md`; REG = `docs/architecture-v2/REGISTER.md`.
 - **Medium (review gap). Four Rust parts were never reviewed:** the WASI worker (`rust/crates/flagship-wasi`, the
   sandbox for WebAssembly apps), `flagship-runtime`, `flagship-crypto` (the hybrid PQ code every strict check uses) and
   the v2 `typed.rs` capability path in the broker. No later review entry covers them. Source: B2 "NOT REVIEWED".
-- **Medium. Strict servers refuse their own health reports.** The health timer signs Ed25519 only (an openssl shell
-  line), and `.com` refuses a classical report on a strict installation, so strict mode loses health. Blocks the
-  quantum-safe default (F5). Where: `packages/server-daemon/src/healthReporter.ts`,
-  `packages/control-plane/src/serverHealth.ts` (`strict-requires-hybrid`). Source: B2 #2 residual (3174b2e06 notes).
+- **Medium. Strict servers refuse their own health reports. FIXED on `0.4/security-fixes`:** the timer asks keyd
+  (`flagship-keyd sign-health`, `packages/keyd/src/healthSign.ts`) for the STK signature plus the hybrid
+  `pqSignature`, which `.com`'s gate already takes under the stored STK binding; `flagship/box-health/v1` is on both
+  keyds' purpose lists; with keyd down it falls back to the boot key, classical only (fine while not strict). Needs
+  an endorsed box release. Source: B2 #2 residual (3174b2e06 notes).
 - **Medium. gpud approval residuals.** A withdrawal the daemon withholds when it is made is never enforced; an
   approval has no maximum age (used at every start); the strict PQ half is not required; maintenance orders are the
   daemon's word. Where: `rust/crates/flagship-gpu/src/owner_approval.rs`, `docs/architecture-v2/gpu.md` (Owner

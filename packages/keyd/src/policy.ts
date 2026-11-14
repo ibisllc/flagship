@@ -14,6 +14,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/secret-request/v1",
   "flagship/tunnel-hello/v2",
   "flagship/daemon-status/v1",
+  // The health timer's report (server-daemon healthReporter.ts), hybrid on a strict installation.
+  "flagship/box-health/v1",
   "flagship/service-invite-list/v1",
   "flagship/service-invite-create-fetch/v1",
   "flagship/service-invite-co-manager/v1",

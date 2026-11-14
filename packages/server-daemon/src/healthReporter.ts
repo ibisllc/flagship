@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { TAG_BOX_HEALTH } from "@flagship/protocol";
+import { HYBRID_SIG_LEN, TAG_BOX_HEALTH } from "@flagship/protocol";
 
 /**
  * The box health reporter: a systemd timer, separate from the daemon, that
@@ -14,6 +14,11 @@ import { TAG_BOX_HEALTH } from "@flagship/protocol";
  *
  * It signs `flagship/box-health/v1|<report>` (protocol boxHealth.ts), never the bare JSON: once a server has sent a
  * tagged report (or a heartbeat at boxLevel >= 3), `.com` refuses its untagged ones.
+ *
+ * It asks keyd first (`flagship-keyd sign-health`, keyd healthSign.ts): the STK signs, and keyd's ML-DSA half adds
+ * a hybrid `pqSignature`, which a strict installation requires (`.com` refuses a classical-only report there). keyd
+ * is its own unit, so a failing daemon does not stop it; when keyd cannot answer (not installed, down, or the
+ * checkout's node_modules broken) the timer falls back to the boot key (or the STK PEM), classical only.
  */
 export const HEALTH_SCRIPT_PATH = "/usr/local/sbin/flagship-health-report.sh";
 export const HEALTH_SERVICE_PATH = "/etc/systemd/system/flagship-health.service";
@@ -33,17 +38,28 @@ export function healthKeyPath(exists: (p: string) => boolean = existsSync): stri
   return exists(BOOT_KEY_PEM_PATH) ? BOOT_KEY_PEM_PATH : "/boot/identity.pem";
 }
 
+/** The keyd client the timer runs (the keyd unit's own node and checkout, keydInstall.ts). */
+export const HEALTH_NODE_PATH = "/usr/local/bin/node";
+export const HEALTH_KEYD_ENTRY = "/opt/flagship/packages/keyd/dist/main.js";
+export const HEALTH_KEYD_SOCKET = "/run/flagship-keyd/keyd.sock";
+
 export function buildHealthReportScript(args: {
   controlPlaneBaseUrl: string;
   serverDomain: string;
   keyPath?: string;
+  nodePath?: string;
+  keydEntry?: string;
+  keydSocket?: string;
 }): string {
   const base = args.controlPlaneBaseUrl.replace(/\/+$/, "");
   const domain = args.serverDomain.toLowerCase();
   if (!SAFE_URL.test(base)) throw new Error("unsafe control-plane URL");
   if (!SAFE_DOMAIN.test(domain)) throw new Error("unsafe server domain");
   const key = args.keyPath ?? healthKeyPath();
-  if (!/^\/[A-Za-z0-9._\/-]+$/.test(key)) throw new Error("unsafe key path");
+  const node = args.nodePath ?? HEALTH_NODE_PATH;
+  const entry = args.keydEntry ?? HEALTH_KEYD_ENTRY;
+  const socket = args.keydSocket ?? HEALTH_KEYD_SOCKET;
+  for (const p of [key, node, entry, socket]) if (!/^\/[A-Za-z0-9._\/-]+$/.test(p)) throw new Error("unsafe key path");
   return `#!/bin/bash
 # Flagship box health report (installed by the daemon; see healthReporter.ts).
 set -u
@@ -65,9 +81,26 @@ report="{\\"v\\":1,\\"domain\\":\\"${domain}\\",\\"at\\":$at,\\"uptimeS\\":$upti
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 printf '%s|%s' '${TAG_BOX_HEALTH}' "$report" > "$tmp"
-sig=$(openssl pkeyutl -sign -inkey ${key} -rawin -in "$tmp" | xxd -p | tr -d '\\n')
+sig=""
+pq=""
+if [ -S ${socket} ] && [ -x ${node} ] && [ -f ${entry} ]; then
+  signed=$(timeout 20 ${node} ${entry} sign-health "$tmp" 2>/dev/null) || signed=""
+  sig=$(printf '%s' "$signed" | jq -r '.signature // empty' 2>/dev/null) || sig=""
+  pq=$(printf '%s' "$signed" | jq -r '.hybrid // empty' 2>/dev/null) || pq=""
+  case "$sig" in *[!0-9a-f]*) sig="" ;; esac
+  case "$pq" in *[!0-9a-f]*) pq="" ;; esac
+  [ \${#pq} -eq ${HYBRID_SIG_LEN * 2} ] || pq=""
+fi
+if [ \${#sig} -ne 128 ]; then
+  pq=""
+  sig=$(openssl pkeyutl -sign -inkey ${key} -rawin -in "$tmp" | xxd -p | tr -d '\\n')
+fi
 [ \${#sig} -eq 128 ] || exit 0
-body=$(jq -cn --arg r "$report" --arg s "$sig" '{report:$r, signature:$s}')
+if [ -n "$pq" ]; then
+  body=$(jq -cn --arg r "$report" --arg s "$sig" --arg p "$pq" '{report:$r, signature:$s, pqSignature:{suite:"hybrid-ed25519-mldsa65/v1", signature:$p}}')
+else
+  body=$(jq -cn --arg r "$report" --arg s "$sig" '{report:$r, signature:$s}')
+fi
 curl -fsS --connect-timeout 5 --max-time 15 -X POST -H 'content-type: application/json' \\
   --data "$body" "${base}/api/server/${domain}/health" >/dev/null 2>&1 || true
 `;
