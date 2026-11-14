@@ -1916,10 +1916,13 @@
    "to": "eff.owner-update",
    "type": "authorizes",
    "evidence": [
-    "packages/server-daemon/src/updateConsumer.ts:438"
+    "packages/server-daemon/src/updateConsumer.ts:438",
+    "packages/server-daemon/src/adminAuthorityLocal.ts:79",
+    "packages/server-daemon/src/pqAuthority.ts:52"
    ],
-   "notes": "IRK when no admin root is pinned.",
-   "group": "owner"
+   "notes": "Under strict the box takes an IRK-signed order only with the IRK's hybrid signature under its account-irk binding (pqAuthority.ts gateSigner); the IRK's ML-DSA seed is fresh per device, never derived from the UMK or escrowed (pq-suites.md §11.2), so a classical break of the IRK does not reach this.",
+   "group": "owner",
+   "profile": "compatibility"
   },
   {
    "from": "eff.owner-update",
@@ -1987,8 +1990,12 @@
    "to": "eff.app-access",
    "type": "authorizes",
    "evidence": [
-    "packages/protocol/src/serverShare.ts:27"
-   ]
+    "packages/protocol/src/serverShare.ts:27",
+    "packages/server-daemon/src/serviceAccess.ts:1621-1631",
+    "packages/server-daemon/src/adminAuthorityLocal.ts:79"
+   ],
+   "profile": "compatibility",
+   "notes": "Under strict the box takes an IRK-signed order only with the IRK's hybrid signature under its account-irk binding (pqAuthority.ts gateSigner); the IRK's ML-DSA seed is fresh per device, never derived from the UMK or escrowed (pq-suites.md §11.2), so a classical break of the IRK does not reach this."
   },
   {
    "from": "key.admin-root",
@@ -2274,8 +2281,11 @@
    "to": "eff.stack-switch",
    "type": "authorizes",
    "evidence": [
-    "packages/server-daemon/src/archV2Switch.ts:151"
-   ]
+    "packages/server-daemon/src/archV2Switch.ts:151",
+    "packages/server-daemon/src/archV2Switch.ts:628-636"
+   ],
+   "profile": "compatibility",
+   "notes": "Under strict the box takes an IRK-signed order only with the IRK's hybrid signature under its account-irk binding (pqAuthority.ts gateSigner); the IRK's ML-DSA seed is fresh per device, never derived from the UMK or escrowed (pq-suites.md §11.2), so a classical break of the IRK does not reach this."
   },
   {
    "from": "eff.stack-switch",
@@ -2298,8 +2308,11 @@
    "to": "eff.gpu-allocation",
    "type": "authorizes",
    "evidence": [
-    "rust/crates/flagship-gpu/src/owner_approval.rs:116"
-   ]
+    "rust/crates/flagship-gpu/src/owner_approval.rs:116",
+    "rust/crates/flagship-gpu/src/owner_approval.rs:40-47"
+   ],
+   "profile": "compatibility",
+   "notes": "Under strict the box takes an IRK-signed order only with the IRK's hybrid signature under its account-irk binding (pqAuthority.ts gateSigner); the IRK's ML-DSA seed is fresh per device, never derived from the UMK or escrowed (pq-suites.md §11.2), so a classical break of the IRK does not reach this."
   },
   {
    "from": "key.admin-root",
@@ -2314,9 +2327,11 @@
    "to": "eff.rescue-session",
    "type": "authorizes",
    "evidence": [
-    "packages/server-daemon/src/rescue/authority.ts:46"
+    "packages/server-daemon/src/rescue/authority.ts:46",
+    "packages/server-daemon/src/rescue/authority.ts:34-44"
    ],
-   "notes": "only on a box that pins no admin root"
+   "notes": "Under strict the box takes an IRK-signed order only with the IRK's hybrid signature under its account-irk binding (pqAuthority.ts gateSigner); the IRK's ML-DSA seed is fresh per device, never derived from the UMK or escrowed (pq-suites.md §11.2), so a classical break of the IRK does not reach this.",
+   "profile": "compatibility"
   },
   {
    "from": "key.admin-root",
@@ -2331,9 +2346,11 @@
    "to": "eff.offline-control",
    "type": "authorizes",
    "evidence": [
-    "packages/server-daemon/src/rescue/authority.ts:46"
+    "packages/server-daemon/src/rescue/authority.ts:46",
+    "packages/server-daemon/src/rescue/authority.ts:34-44"
    ],
-   "notes": "only on a box that pins no admin root"
+   "notes": "Under strict the box takes an IRK-signed order only with the IRK's hybrid signature under its account-irk binding (pqAuthority.ts gateSigner); the IRK's ML-DSA seed is fresh per device, never derived from the UMK or escrowed (pq-suites.md §11.2), so a classical break of the IRK does not reach this.",
+   "profile": "compatibility"
   }
  ],
  "targets": [
