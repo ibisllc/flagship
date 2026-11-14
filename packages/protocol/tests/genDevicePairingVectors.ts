@@ -53,7 +53,7 @@ export function buildDevicePairingVectors(): unknown {
 
   return {
     about:
-      "Adding a device over the pairing relay (owner rule 2026-10-16: admin devices only; a device without the admin root shows the line in `adminOnlyLine` and never opens a code). The admin device vouches with a flagship/device-admit/v2 admit signed by the account key (IRK), and signs a device grant for the new device's key: a MEMBER grant (memberScopes, signerRoot 'membership', signed by the IRK) or, when it promotes the device to admin, an admin grant (every scope, signerRoot 'admin-root', signed by the admin root, whose seed also rides in `wrappedAdminRoot`). The sealed relay bundle is JSON with exactly the keys in `bundleKeys`; the joining device checks the admit and the grant, signs its encrypted name (flagship/device-profile-self/v1) with its own key, and POSTs /api/users/<u>/devices/admit with exactly the keys in `postKeys`; .com answers 400 'missing device bootstrap' without grant, grantSignature and profile. Grants last 90 days. Scopes sort by their index in DEVICE_SCOPES (scopeOrder), not alphabetically. Seeds are raw Ed25519 seeds.",
+      "Adding a device over the pairing relay (owner rule 2026-10-16: admin devices only; a device without the admin root shows the line in `adminOnlyLine` and never opens a code). The admin device vouches with a flagship/device-admit/v2 admit signed by the account key (IRK), and signs a device grant for the new device's key: a MEMBER grant (memberScopes, signerRoot 'membership', signed by the IRK) or, when it promotes the device to admin, an admin grant (every scope, signerRoot 'admin-root', signed by the admin root, whose seed also rides in `wrappedAdminRoot`). The sealed relay bundle is JSON with exactly the keys in `bundleKeys`; the joining device checks the admit and the grant, signs its encrypted name (flagship/device-profile-self/v1) with its own key, and POSTs /api/users/<u>/devices/admit with exactly the keys in `postKeys` (a trailing ? marks a key sent only when present; `grantPqSignature` is the grant's hybrid companion, pq-suites.md §20, passed on unchanged); .com answers 400 'missing device bootstrap' without grant, grantSignature and profile. Grants last 90 days. Scopes sort by their index in DEVICE_SCOPES (scopeOrder), not alphabetically. Seeds are raw Ed25519 seeds.",
     adminOnlyLine: "Only an admin device of this account can add devices.",
     keys: {
       irkSeedHex: bytesToHex(fill(0x11)), irkPubHex: bytesToHex(irk.publicKey),
@@ -63,8 +63,8 @@ export function buildDevicePairingVectors(): unknown {
     scopeOrder: [...DEVICE_SCOPES],
     memberScopes: [...MEMBER_DEVICE_SCOPES],
     grantTtlMs: DEVICE_GRANT_TTL_MS,
-    bundleKeys: ["umkSeedHex", "admit", "admitSig", "irkPubHex", "grant", "grantSignature", "wrappedAdminRoot?"],
-    postKeys: ["admit", "admitSig", "grant", "grantSignature", "profile", "request", "signature"],
+    bundleKeys: ["umkSeedHex", "admit", "admitSig", "irkPubHex", "grant", "grantSignature", "wrappedAdminRoot?", "grantPqSignature?"],
+    postKeys: ["admit", "admitSig", "grant", "grantSignature", "grantPqSignature?", "profile", "request", "signature"],
     admit: {
       fields: admit,
       canonical: ["flagship/device-admit/v2", username, deviceId, admit.newDevicePubHex, issuedAt].join("|"),

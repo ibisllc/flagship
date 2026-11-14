@@ -492,7 +492,8 @@
 //  v206: the paid name change (account rename, name-change and dibs-claim vouchers), folded from feat/custom-names.
 //  v207: custom domains as a Pro feature (attach, confirm and the short-link swap on the service page), folded from feat/custom-domains.
 //  v208: the outbound proxy (create flow and server page, part of Pro), folded from feat/outbound-proxy.
-const SHELL_VERSION = "v208";
+//  v209: a joining browser passes the bundle's grantPqSignature on to /devices/admit.
+const SHELL_VERSION = "v209";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

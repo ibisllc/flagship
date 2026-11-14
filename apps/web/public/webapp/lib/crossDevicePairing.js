@@ -367,6 +367,7 @@ export async function fetchAccountIrkPubHex({ username, fetch: f = fetch, baseUr
  *    username: string,
  *    admit: object,
  *    admitSigHex: string,
+ *    grantPqSignature?: { suite: string, signature: string },   the grant's hybrid companion from the bundle, passed on as is
  *    request: object,        the PushTokenRegister fields (username, platform, providerToken, pushX25519Pub, label, issuedAt)
  *    signatureHex: string,   carried for storage; the server does NOT verify it (the admit is the IRK consent)
  *    fetch?: typeof fetch,
@@ -387,6 +388,7 @@ export async function postDeviceAdmit(args) {
         admitSig: args.admitSigHex,
         grant: args.grant,
         grantSignature: args.grantSignatureHex,
+        ...(args.grantPqSignature ? { grantPqSignature: args.grantPqSignature } : {}),
         profile: args.profile,
         request: args.request,
         signature: args.signatureHex,
@@ -612,6 +614,15 @@ export function parseSealedBundle(plaintext, opts = {}) {
       typeof grant.expiresAt !== "number" || typeof grant.signerRoot !== "string") {
     throw new Error(BUNDLE_OUT_OF_DATE);
   }
+  let grantPqSignature = null;
+  if (parsed.grantPqSignature != null) {
+    const pq = parsed.grantPqSignature;
+    if (typeof pq !== "object" || typeof pq.suite !== "string" || typeof pq.signature !== "string" ||
+        !/^[0-9a-f]+$/i.test(pq.signature)) {
+      throw new Error("sealed bundle grantPqSignature malformed");
+    }
+    grantPqSignature = { suite: pq.suite, signature: pq.signature.toLowerCase() };
+  }
   return {
     seed,
     admit: parsed.admit,
@@ -619,6 +630,7 @@ export function parseSealedBundle(plaintext, opts = {}) {
     adminRootSeed,
     grant,
     grantSignatureHex: parsed.grantSignature.toLowerCase(),
+    grantPqSignature,
     irkPubHex: typeof parsed.irkPubHex === "string" ? parsed.irkPubHex.toLowerCase() : null,
   };
 }
@@ -692,7 +704,7 @@ export async function runIncomingJoin(deps) {
 
   // 1 — parse the sealed bundle (carries the OPTIONAL sealed admin root when
   // the admin promoted this device, Slice D D-4).
-  const { seed, admit, admitSigHex, adminRootSeed, grant, grantSignatureHex } =
+  const { seed, admit, admitSigHex, adminRootSeed, grant, grantSignatureHex, grantPqSignature } =
     parseSealedBundle(deps.bundlePlaintext, { hexToBytes });
   const username = admit?.username;
   if (!username) throw new Error("admit missing username");
@@ -781,6 +793,7 @@ export async function runIncomingJoin(deps) {
     admitSigHex,
     grant,
     grantSignatureHex,
+    grantPqSignature,
     profile,
     request,
     signatureHex,
