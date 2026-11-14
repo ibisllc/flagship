@@ -6,6 +6,10 @@
  *   GET  /api/certificates/account         the service's ACME account URL (the apex CAA pins it)
  *   POST /api/certificates/admin/revoke    (x-admin-secret) revoke a certificate another account issued for our names
  *
+ * The `direct` class is one name on the direct domain (`fshp.app`, docs/direct-access-and-domains.md §4): the request
+ * says which of the box's names (`directName`), the registry decides whether the box holds it (the owner's signed
+ * name order names this box and is on), and the DNS-01 records go into the direct zone. One certificate per name.
+ *
  * `.com` owns the ACME account and the DNS-01 records. A device never names what it gets: the names come from the
  * class and `.com`'s own records, the CSR must ask for exactly those, and authorization is checked again before the
  * challenges are answered, before finalizing and once the chain is back. Each poll does a bounded number of CA calls
@@ -42,6 +46,8 @@ import {
 import {
   boxNameList,
   canonicalCertificateOrder,
+  DIRECT_APEX,
+  directLabelOf,
   nameListSha256,
   emptyRevocationState,
   serverWildcardGrantInDate,
@@ -65,6 +71,11 @@ export interface IssuanceEnv {
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
   SERVICES_APEX?: string;
   FLAGSHIP_ADMIN_SECRET?: string;
+  /** The direct domain's zone (docs/direct-access-and-domains.md): its own token, allowed only that zone's records. */
+  CLOUDFLARE_DIRECT_DNS_API_TOKEN?: string;
+  CLOUDFLARE_DIRECT_ZONE_ID?: string;
+  /** Default `fshp.app`. */
+  DIRECT_APEX?: string;
 }
 
 export interface IssuanceDns {
@@ -77,6 +88,8 @@ export interface IssuanceDeps {
   grants: Pick<DeviceCapabilityGrantStorage, "listForUser">;
   /** Default: Cloudflare with the Worker's DNS token. */
   dns?: IssuanceDns;
+  /** The direct zone's records (the `direct` class). Default: Cloudflare with the direct zone's token. */
+  directDns?: IssuanceDns;
   fetchImpl?: typeof fetch;
   now?: () => number;
   /** Wait between publishing the TXT records and answering the challenges (Let's Encrypt caches NXDOMAIN). */
@@ -140,6 +153,7 @@ const SENTENCES: Record<IssuanceRefusal, string> = {
   "issuance-revoked-during-order": "This device lost its permission while the certificate was being made.",
   "issuance-chain-mismatch": "The certificate that came back was not the one requested.",
   "issuance-superseded": "A newer request from this device replaced this one.",
+  "issuance-direct-name": "This server doesn't hold that direct name. Its owner turns the name on for this server first.",
 };
 
 const STATUS: Partial<Record<IssuanceRefusal, number>> = {
@@ -195,6 +209,8 @@ interface AcmeState {
   grant?: { issuedAt: number; signature: string } | null;
   /** A due renewal of a certificate the device holds: it may use the part of the service budget kept for renewals. */
   renewal?: boolean;
+  /** The `direct` class: the label of the name on the direct domain. */
+  direct?: string | null;
 }
 
 // ── authorization (checked at the request, before answering, before finalizing and after issuance) ──
@@ -216,7 +232,7 @@ async function authorize(
   deps: IssuanceDeps,
   apex: string,
   now: number,
-  r: { class: CertificateOrder["class"]; device: string; regGen: number; account: string; server: string | null; grant: AcmeState["grant"] },
+  r: { class: CertificateOrder["class"]; device: string; regGen: number; account: string; server: string | null; grant: AcmeState["grant"]; direct?: { label: string; apex: string } | null },
   /** The grant's age limit applies to ordering; the sweep re-checks an issued certificate without it (its own
    *  lifetime bounds it). */
   opts: { grantAge: boolean } = { grantAge: true },
@@ -236,6 +252,7 @@ async function authorize(
   if (row.revoked_at != null) return { ok: false, code: "issuance-revoked" };
   if (row.reg_gen !== r.regGen) return { ok: false, code: "issuance-reg-gen" };
   if (r.class === "control") return { ok: true, value: { names: issuanceNames({ class: "control", account: r.account, apex, server: label }) } };
+  if (r.class === "direct") return authorizeDirect(db, r);
 
   let accountWildcard = false;
   if (r.grant) {
@@ -313,6 +330,36 @@ async function authorizePhone(
   return { ok: true, value: { names: issuanceNames({ class: "phone", account: r.account, apex }) } };
 }
 
+/** Registry reasons that mean the owner's authority over the name no longer checks out (directAccess.ts). */
+const DIRECT_AUTHORITY_LOST = new Set(["order-unverified", "server-gone", "account-gone", "suspended"]);
+
+/**
+ * A box may have a certificate for a direct name while the owner's newest name order names this box and is on, and
+ * the registry's last check found the order still verifying. Reachability doesn't matter (DNS-01 works before the
+ * box is reachable from outside).
+ */
+async function authorizeDirect(
+  db: D1Database,
+  r: { account: string; server: string | null; direct?: { label: string; apex: string } | null },
+): Promise<AuthResult> {
+  if (!r.direct || !r.server) return { ok: false, code: "issuance-malformed" };
+  const row = await db
+    .prepare("SELECT username, server_domain, enabled, suspended_at, publish_reason FROM direct_names WHERE name = ?")
+    .bind(r.direct.label)
+    .first<{ username: string; server_domain: string; enabled: number; suspended_at: number | null; publish_reason: string | null }>();
+  if (
+    !row ||
+    row.username !== r.account ||
+    row.server_domain !== r.server.toLowerCase() ||
+    row.enabled !== 1 ||
+    row.suspended_at != null ||
+    (row.publish_reason != null && DIRECT_AUTHORITY_LOST.has(row.publish_reason))
+  ) {
+    return { ok: false, code: "issuance-direct-name" };
+  }
+  return { ok: true, value: { names: [`${r.direct.label}.${r.direct.apex}`] } };
+}
+
 function hexBytes(h: string): Uint8Array {
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
@@ -324,6 +371,8 @@ function hexBytes(h: string): Uint8Array {
 interface Service {
   db: D1Database;
   dns: IssuanceDns;
+  directDns: IssuanceDns | null;
+  directApex: string;
   key: AcmeAccountKey;
   directory: string;
   contact: string | null;
@@ -343,6 +392,11 @@ function service(env: IssuanceEnv, deps: IssuanceDeps, now: number): Promise<Ser
       ? new CloudflareDnsClient({ apiToken: env.CLOUDFLARE_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID })
       : null);
   if (!db || !pem || !dns) return null;
+  const directDns =
+    deps.directDns ??
+    (env.CLOUDFLARE_DIRECT_DNS_API_TOKEN && env.CLOUDFLARE_DIRECT_ZONE_ID
+      ? new CloudflareDnsClient({ apiToken: env.CLOUDFLARE_DIRECT_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_DIRECT_ZONE_ID })
+      : null);
   let key = accountKeys.get(pem);
   if (!key) {
     key = importAccountKey(pem);
@@ -352,6 +406,8 @@ function service(env: IssuanceEnv, deps: IssuanceDeps, now: number): Promise<Ser
   return key.then((k) => ({
     db,
     dns,
+    directDns,
+    directApex: (env.DIRECT_APEX ?? DIRECT_APEX).toLowerCase(),
     key: k,
     directory: env.ISSUANCE_ACME_DIRECTORY || LETS_ENCRYPT_PRODUCTION,
     contact: env.ISSUANCE_ACME_CONTACT || null,
@@ -491,6 +547,16 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
   const g = body.serverWildcardGrant as { issuedAt?: unknown; signature?: unknown } | undefined | null;
   if (!order || !account || server === undefined || !signature || !csrText || csrText.length > (MAX_CSR_BYTES * 4) / 3 + 4) return refuse("issuance-malformed");
   if (g != null && (typeof g !== "object" || order.class !== "apps")) return refuse("issuance-malformed");
+  const directRaw = body.directName;
+  if ((directRaw !== undefined && directRaw !== null) !== (order.class === "direct")) return refuse("issuance-malformed");
+  let direct: { label: string; apex: string } | null = null;
+  if (order.class === "direct") {
+    const raw = typeof directRaw === "string" ? directRaw.toLowerCase() : "";
+    const label = directLabelOf(raw, s.directApex) ?? raw;
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) return refuse("issuance-malformed");
+    if (!s.directDns) return refuse("issuance-not-configured");
+    direct = { label, apex: s.directApex };
+  }
   const grant = g ? { issuedAt: g.issuedAt as number, signature: String(g.signature ?? "") } : null;
   if (Math.abs(s.now - order.issuedAt) > CLOCK_SKEW_MS) return refuse("issuance-clock");
   if (!verifyServingRecord("certificate-order", order, signature, order.device)) return refuse("issuance-signature");
@@ -505,7 +571,7 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
     return json(view(existing), existing.status === "pending" ? 202 : 200);
   }
 
-  const auth = await authorize(s.db, s.deps, s.apex, s.now, { class: order.class, device: order.device, regGen: order.regGen, account, server, grant });
+  const auth = await authorize(s.db, s.deps, s.apex, s.now, { class: order.class, device: order.device, regGen: order.regGen, account, server, grant, direct });
   if (!auth.ok) return refuse(auth.code, auth.extra);
   const names = auth.value.names;
 
@@ -520,11 +586,13 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
   if (!csr.ok) return refuse(csr.code);
 
   const key = namesKey(names);
-  const zone = `${account}.${s.apex}`;
+  // Let's Encrypt counts certificates per registered domain: `<user>.<apex>` (the services apex is a public suffix),
+  // but the whole direct domain until it is on the Public Suffix List.
+  const zone = direct ? s.directApex : `${account}.${s.apex}`;
   const limited = await limits(s, { device: order.device, cls: order.class, key, zone, account, spki: csr.spkiSha256, server, grant });
   if (limited instanceof Response) return limited;
 
-  await supersedePending(s, order.device, order.class);
+  await supersedePending(s, order.device, order.class, key);
   const orderId = toHex(crypto.getRandomValues(new Uint8Array(16)));
   await s.db
     .prepare(
@@ -545,7 +613,7 @@ async function postOrder(s: Service, request: Request): Promise<Response> {
       csr.spkiSha256,
       orderJson,
       signature,
-      JSON.stringify({ finalize: "", authz: [], grant, renewal: limited.renewal } satisfies AcmeState),
+      JSON.stringify({ finalize: "", authz: [], grant, renewal: limited.renewal, ...(direct ? { direct: direct.label } : {}) } satisfies AcmeState),
       s.now,
       s.now,
     )
@@ -565,17 +633,18 @@ async function limits(
   const prev = await s.db
     .prepare(
       "SELECT names, server_domain, acme_json, csr_spki_sha256, not_before, not_after FROM certificate_orders o WHERE device_pub = ? AND class = ? AND status = 'issued' AND not_after > ? " +
+        "AND (class <> 'direct' OR names = ?) " +
         "AND NOT EXISTS (SELECT 1 FROM certificate_revocations r WHERE r.order_id = o.order_id) ORDER BY not_after DESC LIMIT 1",
     )
-    .bind(o.device, o.cls, s.now)
+    .bind(o.device, o.cls, s.now, o.key)
     .first<{ names: string; server_domain: string | null; acme_json: string | null; csr_spki_sha256: string; not_before: number; not_after: number }>();
   const renewal = !!prev && s.now >= renewalDueAt({ notBefore: prev.not_before, notAfter: prev.not_after });
   if (prev && !nameSetMayChange(prev, o, s.now)) {
     const dueAt = renewalDueAt({ notBefore: prev.not_before, notAfter: prev.not_after });
     if (s.now < dueAt) {
       const rekeyed = await s.db
-        .prepare("SELECT COUNT(*) AS n FROM certificate_orders WHERE device_pub = ? AND class = ? AND status = 'issued' AND created_at > ?")
-        .bind(o.device, o.cls, s.now - ISSUANCE_LIMITS.rekeyWindowMs)
+        .prepare("SELECT COUNT(*) AS n FROM certificate_orders WHERE device_pub = ? AND class = ? AND (class <> 'direct' OR names = ?) AND status = 'issued' AND created_at > ?")
+        .bind(o.device, o.cls, o.key, s.now - ISSUANCE_LIMITS.rekeyWindowMs)
         .first<{ n: number }>();
       if (prev.csr_spki_sha256 === o.spki || (rekeyed?.n ?? 0) > 1) return refuse("issuance-not-due", { dueAt });
     }
@@ -654,10 +723,11 @@ async function count(s: Service, sql: string, ...args: unknown[]): Promise<numbe
   return (await s.db.prepare(sql).bind(...args).first<{ n: number }>())?.n ?? 0;
 }
 
-async function supersedePending(s: Service, device: string, cls: string): Promise<void> {
+/** A device's newer order of a class replaces its pending one; a direct order replaces only one for the same name. */
+async function supersedePending(s: Service, device: string, cls: string, names: string): Promise<void> {
   const r = await s.db
-    .prepare("SELECT * FROM certificate_orders WHERE device_pub = ? AND class = ? AND status = 'pending'")
-    .bind(device, cls)
+    .prepare("SELECT * FROM certificate_orders WHERE device_pub = ? AND class = ? AND (class <> 'direct' OR names = ?) AND status = 'pending'")
+    .bind(device, cls, names)
     .all<OrderRow>();
   for (const row of r.results ?? []) await fail(s, row, "issuance-superseded", null);
 }
@@ -742,9 +812,21 @@ async function reauthorize(s: Service, row: OrderRow, st: AcmeState): Promise<Is
     account: row.username,
     server: row.server_domain,
     grant: st.grant ?? null,
+    direct: directOf(s, row, st),
   });
   if (!a.ok) return a.code === "issuance-no-serving" ? "issuance-no-serving" : "issuance-revoked-during-order";
   return namesKey(a.value.names) === row.names ? null : "issuance-revoked-during-order";
+}
+
+function directOf(s: Service, row: Pick<OrderRow, "class">, st: AcmeState): { label: string; apex: string } | null {
+  return row.class === "direct" && st.direct ? { label: st.direct, apex: s.directApex } : null;
+}
+
+/** The zone an order's challenge records go into. */
+function dnsFor(s: Service, st: AcmeState): IssuanceDns {
+  if (!st.direct) return s.dns;
+  if (!s.directDns) throw new AcmeError(400, "direct-zone-not-configured", "the direct zone has no DNS client");
+  return s.directDns;
 }
 
 async function advance(s: Service, row: OrderRow): Promise<void> {
@@ -799,7 +881,7 @@ async function stepNew(s: Service, row: OrderRow, st: AcmeState, client: AcmeCli
   if (serviceFull(total, fresh, st.renewal === true)) return fail(s, row, "issuance-rate-limited", "the service's order budget is spent", st);
   const order = await client.newOrder(names);
   await save(s, row, { acme_order_url: order.url, acme_ordered_at: s.now }, true);
-  const next: AcmeState = { finalize: order.finalize, authz: [], grant: st.grant ?? null, ...(st.renewal ? { renewal: true } : {}) };
+  const next: AcmeState = { finalize: order.finalize, authz: [], grant: st.grant ?? null, ...(st.renewal ? { renewal: true } : {}), ...(st.direct ? { direct: st.direct } : {}) };
   try {
     for (const url of order.authorizations) {
       const a = await client.get<{ identifier: { value: string }; status: string; wildcard?: boolean; challenges: Array<{ type: string; url: string; token: string }> }>(url);
@@ -813,7 +895,7 @@ async function stepNew(s: Service, row: OrderRow, st: AcmeState, client: AcmeCli
       const ch = a.challenges.find((c) => c.type === "dns-01");
       if (!ch) throw new AcmeError(400, "no-dns01", `no DNS-01 challenge for ${identifier}`);
       const value = await dns01Value(ch.token, s.key.thumbprint);
-      const record = await s.dns.createTxt({ name: `_acme-challenge.${a.identifier.value.replace(/^\*\./, "")}`, value, ttl: 60 });
+      const record = await dnsFor(s, next).createTxt({ name: `_acme-challenge.${a.identifier.value.replace(/^\*\./, "")}`, value, ttl: 60 });
       next.authz.push({ url, identifier, status: a.status, challengeUrl: ch.url, recordId: record.id });
     }
   } catch (e) {
@@ -910,7 +992,7 @@ async function cleanup(s: Service, st: AcmeState, client: AcmeClient | null, dea
   for (const a of st.authz) {
     if (a.recordId) {
       try {
-        await s.dns.deleteById(a.recordId);
+        await dnsFor(s, st).deleteById(a.recordId);
         delete a.recordId;
       } catch (e) {
         console.warn(JSON.stringify({ event: "issuance-dns-cleanup-failed", record: a.recordId, error: errText(e) }));
@@ -989,10 +1071,13 @@ async function lostAuthority(s: Service, row: OrderRow): Promise<string | null> 
     s.deps,
     s.apex,
     s.now,
-    { class: row.class, device: row.device_pub, regGen: row.reg_gen, account: row.username, server: row.server_domain, grant: st.grant ?? null },
+    { class: row.class, device: row.device_pub, regGen: row.reg_gen, account: row.username, server: row.server_domain, grant: st.grant ?? null, direct: directOf(s, row, st) },
     { grantAge: false },
   );
   if (a.ok) return null;
+  // A direct name turned off or moved keeps its certificate until it expires (docs/direct-access-and-domains.md §5):
+  // no record points at the box any more, and the box's own removal still revokes it (above).
+  if (a.code === "issuance-direct-name") return null;
   if (a.code !== "issuance-no-serving") return a.code === "issuance-malformed" ? null : a.code;
   const reason = String(a.extra?.reason ?? "");
   if (!LEASE_LAPSE.has(reason)) return `issuance-no-serving:${reason}`;
