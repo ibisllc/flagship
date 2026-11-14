@@ -278,6 +278,16 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   each passes alone). Owner Qs: name orders ask for biometrics each time (voi.ci names use the unlocked session)?;
   direct orders carry no PQ half yet (strict would refuse). Running: retail-apps (ports + iOS claim screens + keyd
   box-claim-receipt purpose).
+- 2026-11-14 Owner: (1) direct app access is brokered through the existing forwarder (relay) and the fshp.app certificate
+  is issued even before the direct IPv6 path is live: this REVERSES the locked "no relay fallback" rule in
+  direct-access-and-domains.md; agent `0.4/direct-via-relay`. (2) Design agent: transport adapters, so a box can go
+  online over any network its host has (mesh, LAN-only, radio, overlay), with what it means for encryption, sessions
+  and HTTPS, and owner-responsibility warnings for exotic channels: `docs/transport-adapters.md`. (3) Retail: Wi-Fi
+  stack waits for hardware; release = wipe; wired data-centre claim path wanted (webapp in Firefox on a rugged laptop,
+  non-Bluetooth trays hot-plugged): design agent. (4) Backups: owner finds account-only backups counterproductive.
+  Today a Back up now backup with a passcode opens in any account, but SCHEDULED backups carry only the account slot,
+  so they die with the account. Proposed: a backup recovery key slot on every scheduled backup (box holds only its
+  public key); asked the owner.
 
 ## Resume point
 
