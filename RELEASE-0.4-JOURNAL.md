@@ -137,13 +137,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F15 Rate limits (first check, 2026-11-13, 30 days): `builder-pipe-upgrade` refused 2,685 from 339 sources (likely 0.2
       Studios looping on the STUDIO_PIPE_MIN refusal, see F12); `account-resolve` refused 6,019 across 1,224 usernames
       with 23 accounts in D1 (enumeration, or a client looping on unknown names?): find the callers' pattern, fix.
-- [ ] F16 Firefox extension (owner 2026-11-14): cert pinning + cross-site knock, QR-paired key-light session; AMO listing later.
+- [~] F16 (merged 2026-11-14: MV3 Firefox 140+, QR pairing from iOS/Android, cert pinning, knock bar, 6 languages, 52 tests; OWNER: AMO account + listed/unlisted; needs a live run; strict servers checked classical only) Firefox extension (owner 2026-11-14): cert pinning + cross-site knock, QR-paired key-light session; AMO listing later.
 - [ ] F17 OWNER: ask Let's Encrypt for a rate-limit increase on `fshp.app` (hosting-provider form) before direct names launch.
 - [ ] F14 The parked "after launch" work (from P14): second relay by DNS round-robin, Rust production
       qualification (G10), removal of old implementations once proven (G8), gym IPv6-only, `VOICI_CANONICAL`.
 
 ### U. UX feedback lane (parallel; owner's notes, Q4)
-- [ ] U4 (reviewer via owner, 2026-11-14) The webapp is phone-style only: make it responsive, iPad-like on desktop
+- [x] U4 (merged 2026-11-14: sidebar >=700px, list/detail >=1100px, phone unchanged; store tablet captures need re-rendering) (reviewer via owner, 2026-11-14) The webapp is phone-style only: make it responsive, iPad-like on desktop
       (sidebar instead of the tab bar, list/detail panes). Agent on `0.4/webapp-responsive`.
 - [ ] U1 Write each note as an item here with the screen and platform; iOS first, then port (memory rule).
 - [~] U3 (iOS merged 2026-11-14 with today's features, `docs/social-tab.md`; guests/comments/audience/calls need the protocol answers; Android + webapp ports next) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
@@ -226,6 +226,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `0.4/boot-remote` (F9 rest), `0.4/fold-features` (F2 fold: iOS catalog harvest, rebase), `0.4/firefox-extension`
   (F16), `0.4/pq-stage1` (F5 stage 1, hybrid admin root), `0.4/direct-access-com` (F1 step 3). Retail v2 Q1-Q8 asked
   of the owner again.
+- 2026-11-14 Merged U4 responsive webapp and F16 Firefox extension (tsc clean). Fold rebased but conflicts with U4 in
+  webapp/index.html: sent back to its agent. Fold notes: shell v208, migrations 0090/0091/0093/0094/0099 (no clash),
+  parity has two reds from release/0.4 itself (Social tab removed anchored files; device-revocation-list vectors unread).
+  Owner's round-3 retail notes recorded in docs/retail-box-setup.md §15 (ratcheting code, locked reset, network).
 
 ## Resume point
 
