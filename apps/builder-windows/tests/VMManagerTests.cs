@@ -349,4 +349,17 @@ public sealed class VMManagerTests : IDisposable
         Assert.Equal("Running", s.SidebarStatus);
         Assert.StartsWith("Healthy · 800 MB free", s.HealthText);
     }
+
+    /// <summary>F9: sealing the disk key reports nothing for minutes on the installer-ISO path, so the stall
+    /// advisory waits longer there than at any other checkpoint.</summary>
+    [Fact]
+    public void SealingTheDiskKeyWaitsLongerBeforeTheStallAdvisory()
+    {
+        var t0 = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
+        var sealing = new InstallObservation("sealing", null, t0);
+        var installing = new InstallObservation("installing", null, t0);
+        Assert.True(installing.IsStale(t0.AddMinutes(3)));
+        Assert.False(sealing.IsStale(t0.AddMinutes(7)));
+        Assert.True(sealing.IsStale(t0.AddMinutes(12)));
+    }
 }

@@ -29,7 +29,12 @@ public sealed record InstallObservation(string Phase, string? Detail, DateTimeOf
         _ => Strings.T("waitingForAnInstallerCheckpoint"),
     };
 
-    public bool IsStale(DateTimeOffset now) => now - UpdatedAt >= TimeSpan.FromMinutes(3);
+    /// <summary>How long a checkpoint may stand before the stall advisory. Sealing the disk key reports nothing
+    /// while it runs and takes ~7 minutes on the installer-ISO path (W8), so it gets longer before Studio calls
+    /// a healthy install stalled (Windows acceptance F9).</summary>
+    public TimeSpan StaleAfter => Phase == "sealing" ? TimeSpan.FromMinutes(12) : TimeSpan.FromMinutes(3);
+
+    public bool IsStale(DateTimeOffset now) => now - UpdatedAt >= StaleAfter;
     public int StaleMinutes(DateTimeOffset now) => Math.Max(0, (int)(now - UpdatedAt).TotalMinutes);
 }
 
