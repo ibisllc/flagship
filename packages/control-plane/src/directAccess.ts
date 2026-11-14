@@ -39,6 +39,7 @@ import {
 import { buildCaaIssueValue } from "@flagship/services-zone";
 import type {
   DeviceCapabilityGrantStorage,
+  DirectCertificate,
   DirectAccessRecord,
   DirectAccessStorage,
   DirectNameRecord,
@@ -433,8 +434,10 @@ export async function runDirectNamesPublish(deps: PublishDeps, limit = DIRECT_NA
 
 // ── reading it back, and the outside probe ────────────────────────────────
 
-function nameView(row: DirectNameRecord, apex: string) {
+function nameView(row: DirectNameRecord, apex: string, certificates: DirectCertificate[]) {
   const order = parseDirectNameOrder(safeJson(row.orderJson));
+  const fqdn = `${row.name}.${apex}`;
+  const cert = certificates.find((c) => c.fqdn === fqdn && c.serverDomain === row.serverDomain.toLowerCase());
   return {
     name: `${row.name}.${apex}`,
     kind: row.kind,
@@ -450,6 +453,8 @@ function nameView(row: DirectNameRecord, apex: string) {
     publishedAt: row.publishedAt ?? null,
     suspended: row.suspendedAt ? { at: row.suspendedAt, reason: row.suspendedReason ?? null } : null,
     probe: row.probeJson ? { at: row.probeAt ?? null, ...(safeJson(row.probeJson) as object) } : null,
+    // The box's certificate for the name, issued as soon as the owner's order verified, before any record exists.
+    certificate: cert ? { notAfter: cert.notAfter } : null,
     // The signed order itself, so a box (and an app) checks the owner's signature instead of trusting this list.
     order,
     signatureHex: row.signatureHex,
@@ -461,7 +466,11 @@ function nameView(row: DirectNameRecord, apex: string) {
 export async function handleGetDirectAccess(deps: DirectAccessDeps, username: string): Promise<HandlerResponseWithHeaders> {
   const u = username.toLowerCase();
   const apex = apexOf(deps);
-  const [orders, names] = await Promise.all([deps.directAccess.listOrdersForUser(u), deps.directAccess.listNamesForUser(u)]);
+  const [orders, names, certificates] = await Promise.all([
+    deps.directAccess.listOrdersForUser(u),
+    deps.directAccess.listNamesForUser(u),
+    deps.directAccess.directCertificatesForUser(u, nowOf(deps)),
+  ]);
   return ok({
     apex,
     servers: orders.map((o) => {
@@ -478,7 +487,7 @@ export async function handleGetDirectAccess(deps: DirectAccessDeps, username: st
         boxReportedAt: update?.issuedAt ?? null,
       };
     }),
-    names: names.map((n) => nameView(n, apex)),
+    names: names.map((n) => nameView(n, apex, certificates)),
   });
 }
 

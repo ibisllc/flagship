@@ -327,4 +327,19 @@ describe("reading back and the outside probe", () => {
     expect(signed.order.name).toBe(NAME);
     expect(signed.signatureHex).toMatch(/^[0-9a-f]{128}$/);
   });
+
+  it("shows a name's certificate before the name has any record (issuance doesn't wait for the direct path)", async () => {
+    const h = await harness();
+    await handlePostDirectName(h.deps, U, signedName(nameOrder(), h.admin));
+    await publishAll(h.deps);
+    h.storage.directAccess.recordDirectCertificate(U, NAME, BOX, NOW + 90 * 86_400_000);
+    h.storage.directAccess.recordDirectCertificate(U, NAME, "old.plucky-avocet.flagship.services", NOW + 90 * 86_400_000);
+    h.storage.directAccess.recordDirectCertificate(U, NAME, BOX, NOW - 1);
+    const view = (await handleGetDirectAccess(h.deps, U)).body as { names: Array<{ state: string; reason: string; published: unknown[]; certificate: { notAfter: number } | null }> };
+    expect(view.names[0]!.state).toBe("empty");
+    expect(view.names[0]!.reason).toBe("direct-access-off");
+    expect(view.names[0]!.published).toEqual([]);
+    expect(view.names[0]!.certificate).toEqual({ notAfter: NOW + 90 * 86_400_000 });
+    expect(h.zone.at(NAME)).toEqual([]);
+  });
 });
