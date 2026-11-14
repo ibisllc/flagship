@@ -32,6 +32,14 @@ describe("box health reporter", () => {
     expect(script).not.toMatch(/journalctl|\/var\/log/);
   });
 
+  it("waits briefly for the relay tunnel, so the report that ends Studio's \"Unlocking\" comes as soon as it is up", () => {
+    const script = buildHealthReportScript({ ...ARGS, keyPath: "/boot/identity.pem" });
+    const wait = script.indexOf("tunnel_up && break; sleep 5");
+    expect(wait).toBeGreaterThan(0);
+    expect(wait).toBeLessThan(script.indexOf("uptime_s="));
+    expect(script).toContain("tunnel_up && tunnel=true");
+  });
+
   it("signs with the boot key when the box has one (no STK on /boot), else the STK PEM", () => {
     expect(healthKeyPath((p) => p === "/boot/flagship-boot-key.pem")).toBe("/boot/flagship-boot-key.pem");
     expect(healthKeyPath(() => false)).toBe("/boot/identity.pem");

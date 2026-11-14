@@ -67,6 +67,9 @@ export function buildHealthReportScript(args: {
   return `#!/bin/bash
 # Flagship box health report (installed by the daemon; see healthReporter.ts).
 set -u
+tunnel_up() { ss -Htn state established '( dport = :8443 )' 2>/dev/null | grep -q .; }
+# Studio shows "Unlocking" until a report says the tunnel is up: send it within seconds of the tunnel, not a minute later.
+for _ in 1 2 3 4 5 6 7 8 9 10; do tunnel_up && break; sleep 5; done
 num() { case "\${1:-}" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
 mem_total=$(num "$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo)")
 mem_avail=$(num "$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo)")
@@ -78,7 +81,7 @@ case "$state" in active|activating|deactivating|inactive|failed|reloading) ;; *)
 restarts=$(num "$(systemctl show -p NRestarts --value flagship-daemon 2>/dev/null)")
 last_exit=$(num "$(systemctl show -p ExecMainStatus --value flagship-daemon 2>/dev/null)")
 tunnel=false
-ss -Htn state established '( dport = :8443 )' 2>/dev/null | grep -q . && tunnel=true
+tunnel_up && tunnel=true
 disk=$(num "$(df -P / | awk 'NR==2{gsub("%","",$5); print $5}')")
 at=$(( $(date +%s) * 1000 ))
 report="{\\"v\\":1,\\"domain\\":\\"${domain}\\",\\"at\\":$at,\\"uptimeS\\":$uptime_s,\\"memTotalMB\\":$mem_total,\\"memAvailMB\\":$mem_avail,\\"swapUsedMB\\":$swap_used,\\"oomKills\\":$oom,\\"daemon\\":{\\"state\\":\\"$state\\",\\"restarts\\":$restarts,\\"lastExit\\":$last_exit},\\"tunnel\\":$tunnel,\\"diskUsedPct\\":$disk}"
