@@ -22,10 +22,11 @@ import { DbusConnection } from "./dbus.js";
 import { connectAndDiagnose, systemNetworkProbes } from "./network.js";
 import { EvdevPowerKeySource, ensureLogindPowerKeyIgnored, type PowerKeySource } from "./powerKey.js";
 import { verifyClaimRecipe } from "./recipe.js";
+import { keydClaimIdentity, type KeydBoxSigner } from "./keydIdentity.js";
 import { defaultEntropyReader } from "./rngGate.js";
 import { SetupCodeStore } from "./setupCode.js";
 import { httpMailboxClient, type ClaimPeripheral } from "./transport.js";
-import { retailWipeAsRoot, type RetailImage, type RetailWipeResult } from "./wipe.js";
+import { resetKeydAsRoot, retailWipeAsRoot, type RetailImage, type RetailWipeResult } from "./wipe.js";
 
 export const RETAIL_STATE_DIR = "/var/lib/flagship-retail";
 
@@ -84,20 +85,43 @@ export async function bluezPeripheral(log: (m: string) => void): Promise<ClaimPe
   }
 }
 
+/**
+ * The claim's box key from keyd, over a new connection each time: after a wipe keyd restarts with a
+ * fresh identity, and a connection made before it would still name the old one.
+ */
+export async function freshKeydIdentity(
+  connect: () => KeydBoxSigner & { close(): void },
+  opts: { tries?: number; waitMs?: number } = {},
+): Promise<ClaimIdentity> {
+  let last: Error | null = null;
+  for (let i = 0; i < (opts.tries ?? 40); i++) {
+    try {
+      const k = connect();
+      try {
+        const id = keydClaimIdentity(k);
+        return { ...id, sign: (p, payload) => id.sign(p, payload) };
+      } catch (e) {
+        k.close();
+        throw e;
+      }
+    } catch (e) {
+      last = e as Error;
+      await new Promise((r) => setTimeout(r, opts.waitMs ?? 500));
+    }
+  }
+  throw last ?? new Error("flagship-keyd did not answer");
+}
+
 /** The wipe, as root (the box still runs as root before privd is in) or through the root step. */
 export async function retailWipe(image: RetailImage, dir = RETAIL_STATE_DIR, log: (m: string) => void = () => {}): Promise<void> {
   let r: RetailWipeResult | null;
   if (runsUnprivileged()) {
     r = await runSetupStep<RetailWipeResult>("retail-wipe");
   } else {
-    r = await retailWipeAsRoot({
-      image,
-      markerPresent: existsSync(retailPaths(dir).marker),
-      run: async (c, a) => (await localCommandRunner.capture!(c, a, { timeoutMs: 5 * 60_000 })).stdout,
-      log,
-    });
+    const run = async (c: string, a: string[]) => (await localCommandRunner.capture!(c, a, { timeoutMs: 5 * 60_000 })).stdout;
+    r = await retailWipeAsRoot({ image, markerPresent: existsSync(retailPaths(dir).marker), run, resetKeyd: () => resetKeydAsRoot(run), retailDir: dir, log });
   }
-  if (!r?.erased) throw new Error("the wipe did not finish");
+  if (!r?.erased || !r.keydReset) throw new Error("the wipe did not finish");
 }
 
 /**

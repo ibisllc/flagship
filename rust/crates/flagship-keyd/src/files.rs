@@ -47,6 +47,37 @@ pub fn save_key_file(dir: &Path, name: &str, key: &[u8; 32]) -> std::io::Result<
     write_atomic(&dir.join(format!("{name}.key")), text.as_bytes(), 0o400)
 }
 
+/// The flag `flagship-keyd reset` needs, as the TS backend's (`KEYD_RESET_FLAG`).
+pub const RESET_FLAG: &str = "--yes-erase-every-key";
+
+/// A retail wipe (TS `resetKeydState`): empties the state folder of every key and record the
+/// previous owner left, and writes a fresh STK seed and ML-DSA seed from the OS RNG. keyd must be
+/// stopped; the caller hands the folder back to the keyd user.
+pub fn reset_state(dir: &Path) -> std::io::Result<()> {
+    match fs::read_dir(dir) {
+        Ok(entries) => {
+            for e in entries {
+                let p = e?.path();
+                let meta = fs::symlink_metadata(&p)?;
+                if meta.is_dir() {
+                    fs::remove_dir_all(&p)?;
+                } else {
+                    fs::remove_file(&p)?;
+                }
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    ensure_dir(dir, 0o700)?;
+    let mut seed = Zeroizing::new([0u8; 32]);
+    let mut pq = Zeroizing::new([0u8; 32]);
+    getrandom::fill(seed.as_mut()).map_err(|e| std::io::Error::other(e.to_string()))?;
+    getrandom::fill(pq.as_mut()).map_err(|e| std::io::Error::other(e.to_string()))?;
+    save_key_file(dir, "identity", &seed)?;
+    save_key_file(dir, "identity-mldsa", &pq)
+}
+
 #[derive(Debug)]
 pub enum KeyFileError {
     Io(std::io::Error),

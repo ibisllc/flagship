@@ -274,8 +274,9 @@ import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
 import { quotaNotices } from "./appQuota/notices.js";
 import { readRetailImage, type RetailImage } from "./retailClaim/wipe.js";
-import { RETAIL_STATE_DIR, retailLifecycle, retailPaths, startRetailClaim, ensureRetailHostConfig } from "./retailClaim/daemon.js";
-import { keydClaimIdentity } from "./retailClaim/keydIdentity.js";
+import { RETAIL_STATE_DIR, freshKeydIdentity, retailLifecycle, retailPaths, startRetailClaim, ensureRetailHostConfig } from "./retailClaim/daemon.js";
+
+const KEYD_SOCKET_DEFAULT = "/run/flagship-keyd/keyd.sock";
 import { retailNotices } from "./retailClaim/notices.js";
 import { BoxReleaseConsumer } from "./retailClaim/releaseOrder.js";
 import { withQuotaUsage } from "./appQuota/usage.js";
@@ -989,10 +990,7 @@ async function main(): Promise<void> {
     const claim = await startRetailClaim({
       image: retailImage,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
-      identity: async () => {
-        if (!keyd) throw new Error("no flagship-keyd: a claim needs the box key held there");
-        return keydClaimIdentity(keyd);
-      },
+      identity: () => freshKeydIdentity(() => new KeydCustodian({ socketPath: process.env.FLAGSHIP_KEYD_SOCKET ?? KEYD_SOCKET_DEFAULT, component: "retail-claim" })),
       restart: () => new SystemctlPowerRunner().power("restart"),
     });
     const stop = () => void claim.stop().finally(() => process.exit(0));
@@ -2543,7 +2541,7 @@ async function main(): Promise<void> {
       liveCertPemRef,
       hostPowerRunner,
       stkHybridSigner: keyd?.pqPublicKeyHex() ? (m: Uint8Array) => keyd.signHybridAsBox(m) : null,
-      retail: retailImage ? { image: retailImage, keyd } : null,
+      retail: retailImage ? { image: retailImage } : null,
     });
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
@@ -3632,7 +3630,7 @@ async function wireRuntimeSurfaces(deps: {
   /** The STK's hybrid signer where keyd holds an ML-DSA key (the rescue hello's PQ half). */
   stkHybridSigner: ((msg: Uint8Array) => Uint8Array) | null;
   /** A claimed retail box (retailClaim/): the reset window and "Release this box". */
-  retail: { image: RetailImage; keyd: KeydCustodian | null } | null;
+  retail: { image: RetailImage } | null;
 }): Promise<void> {
   const {
     runtime,
@@ -4867,10 +4865,7 @@ async function wireRuntimeSurfaces(deps: {
     const claim = await startRetailClaim({
       image: retail.image,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
-      identity: async () => {
-        if (!retail.keyd) throw new Error("no flagship-keyd: a claim needs the box key held there");
-        return keydClaimIdentity(retail.keyd);
-      },
+      identity: () => freshKeydIdentity(() => new KeydCustodian({ socketPath: process.env.FLAGSHIP_KEYD_SOCKET ?? KEYD_SOCKET_DEFAULT, component: "retail-claim" })),
       restart: () => deps.hostPowerRunner.power("restart"),
       notify,
     });

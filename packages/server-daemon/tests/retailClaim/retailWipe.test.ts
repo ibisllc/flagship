@@ -1,4 +1,7 @@
 import { randomFillSync } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cryptoEraseLuks, luksHeaderBytes, readRetailImage, retailWipeAsRoot, type BlockIo } from "../../src/retailClaim/wipe.js";
 
@@ -66,10 +69,14 @@ describe("retail wipe", () => {
     const { io } = fakeDisk();
     const run = async () => LUKS2_DUMP;
     const image = { v: 1 as const, dataLuksDevice: "/dev/nvme0n1", recoveryPartition: null };
-    await expect(retailWipeAsRoot({ image: null, markerPresent: true, run, io })).rejects.toThrow(/retail/);
-    await expect(retailWipeAsRoot({ image, markerPresent: false, run, io })).rejects.toThrow(/marker/);
-    await expect(retailWipeAsRoot({ image: { ...image, dataLuksDevice: null }, markerPresent: true, run, io })).rejects.toThrow(/names no data volume/);
-    expect(await retailWipeAsRoot({ image, markerPresent: true, run, io })).toEqual({ erased: true, reimaged: false });
+    let resets = 0;
+    const base = { run, io, resetKeyd: async () => void resets++, retailDir: mkdtempSync(join(tmpdir(), "rw-")), bootDir: mkdtempSync(join(tmpdir(), "rb-")) };
+    await expect(retailWipeAsRoot({ ...base, image: null, markerPresent: true })).rejects.toThrow(/retail/);
+    await expect(retailWipeAsRoot({ ...base, image, markerPresent: false })).rejects.toThrow(/marker/);
+    await expect(retailWipeAsRoot({ ...base, image: { ...image, dataLuksDevice: null }, markerPresent: true })).rejects.toThrow(/names no data volume/);
+    expect(resets).toBe(0);
+    expect(await retailWipeAsRoot({ ...base, image, markerPresent: true })).toEqual({ erased: true, reimaged: false, keydReset: true });
+    expect(resets).toBe(1);
   });
 
   it("reads the image marker: none on other boxes, nothing erasable when damaged", async () => {
@@ -81,5 +88,22 @@ describe("retail wipe", () => {
       dataLuksDevice: "/dev/disk/by-partlabel/data",
       recoveryPartition: null,
     });
+  });
+});
+
+describe("the claim's box key after a wipe", () => {
+  it("connects to keyd afresh, waiting while it restarts", async () => {
+    const { freshKeydIdentity } = await import("../../src/retailClaim/daemon.js");
+    let tries = 0;
+    const id = await freshKeydIdentity(
+      () => {
+        if (++tries < 3) throw new Error("ECONNREFUSED");
+        return { boxPublicKey: () => new Uint8Array(32).fill(tries), pqPublicKeyHex: () => "ab".repeat(1952), signHybridAsBox: () => new Uint8Array(0), close: () => {} };
+      },
+      { waitMs: 1 },
+    );
+    expect(tries).toBe(3);
+    expect(id.stkHybridPubHex.slice(0, 64)).toBe("03".repeat(32));
+    await expect(freshKeydIdentity(() => { throw new Error("down"); }, { tries: 2, waitMs: 1 })).rejects.toThrow("down");
   });
 });

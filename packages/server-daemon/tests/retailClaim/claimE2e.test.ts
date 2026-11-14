@@ -5,7 +5,8 @@
  * contention, bad presses, the reset window and re-claim, an interrupted reset, the remote claim
  * by setup code through the blind mailbox, wrong codes and the network report.
  */
-import { mkdtempSync, existsSync } from "node:fs";
+import { mkdtempSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomFillSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -58,6 +59,9 @@ import { InMemoryBleRadio, MailboxLink, type ClaimLink, type MailboxClient } fro
 import { PhoneDriver } from "./phoneDriver.js";
 import { BoxReleaseConsumer } from "../../src/retailClaim/releaseOrder.js";
 import { verifyClaimRecipe } from "../../src/retailClaim/recipe.js";
+import { retailWipeAsRoot, type BlockIo } from "../../src/retailClaim/wipe.js";
+import { retailPaths } from "../../src/retailClaim/daemon.js";
+import { resetKeydState } from "@flagship/keyd";
 import { RESET_WINDOW_OPENED, retailNotices } from "../../src/retailClaim/notices.js";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -158,7 +162,7 @@ function verifyRecipe(text: string): RecipeCheck {
 }
 
 /** One box: its disk under a temp dir, a fake button, a radio, scripted network and wipe. */
-async function makeBox(com: Com, opts: { dir?: string; t0: number; mailbox?: boolean; wipeFails?: boolean; network?: Array<NetworkResult> } ) {
+async function makeBox(com: Com, opts: { dir?: string; t0: number; mailbox?: boolean; wipeFails?: boolean; network?: Array<NetworkResult>; identity?: () => Promise<ReturnType<typeof newIdentity>>; wipe?: () => Promise<void>; afterProvision?: (text: string) => Promise<void> } ) {
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), "retail-box-"));
   let now = opts.t0;
   const clock = {
@@ -197,13 +201,14 @@ async function makeBox(com: Com, opts: { dir?: string; t0: number; mailbox?: boo
     ...(opts.mailbox ? { mailbox: mailboxClient } : {}),
     verifyRecipe,
     createIdentity: async () => {
-      const id = newIdentity();
+      const id = opts.identity ? await opts.identity() : newIdentity();
       identities.push(id);
       return id;
     },
     wipe: async () => {
       wipes.push(now);
       if (opts.wipeFails) throw new Error("power lost during the wipe");
+      await opts.wipe?.();
     },
     network: {
       scan: async () => [{ ssid: "Home Net", security: "wpa2", signal: 80, band: "5" }],
@@ -212,6 +217,7 @@ async function makeBox(com: Com, opts: { dir?: string; t0: number; mailbox?: boo
     provision: async (text, identity) => {
       const id = identities.find((i) => i.stkHybridPubHex === identity.stkHybridPubHex)!;
       registrations.push(await registerAtCom(com, text, id.edSeed, now));
+      await opts.afterProvision?.(text);
     },
     notify: (e) => void events.push(e),
     model: "Mini PC N100",
@@ -686,5 +692,76 @@ describe("Release this box (an admin-root order) and the owner's notices", () =>
     expect(verifyClaimRecipe(r.text, T0 + 7 * 3600_000)).toEqual({ ok: false, reason: "recipe-expired" });
     expect(verifyClaimRecipe(r.text.replace('"home"', '"cabin"'), T0)).toEqual({ ok: false, reason: "recipe-invalid" });
     expect(verifyClaimRecipe("{", T0)).toEqual({ ok: false, reason: "recipe-invalid" });
+  });
+});
+
+describe("a new owner gets a new box", () => {
+  it("after a reset claim the receipt carries a fresh key and nothing of the first owner is left", async () => {
+    const com = await makeCom(T0);
+    const root = mkdtempSync(join(tmpdir(), "retail-fresh-"));
+    const retailDir = join(root, "retail");
+    const keydDir = join(root, "keyd");
+    const bootDir = join(root, "boot");
+    for (const d of [retailDir, bootDir]) mkdirSync(d, { recursive: true });
+    resetKeydState(keydDir);
+    const keydIdentity = async () => {
+      const read = (f: string) => Uint8Array.from(Buffer.from(readFileSync(join(keydDir, f), "utf8").trim(), "hex"));
+      const edSeed = read("identity.key");
+      const { publicKey, secretKey } = hybridSigKeygen(edSeed, read("identity-mldsa.key"));
+      return { edSeed, stkHybridPubHex: hex(publicKey), bootKeyBindingSha256: "", sign: (p: string, payload: Uint8Array) => hybridSign(secretKey, p, payload) };
+    };
+    const disk = Buffer.alloc(17 * 1024 * 1024, 0x41);
+    const io: BlockIo = {
+      readAt: async (_d, off, n) => Uint8Array.from(disk.subarray(off, off + n)),
+      overwriteHead: async (_d, n) => void randomFillSync(disk, 0, n),
+    };
+    const ownerFiles = () => {
+      for (const f of ["swk.key", "cgk.key", "policy.json", "owner.json", "audit.log", "revocations.json"]) writeFileSync(join(keydDir, f), "first owner");
+      mkdirSync(join(keydDir, "tls"), { recursive: true });
+      writeFileSync(join(keydDir, "tls", "home.key"), "first owner tls");
+      for (const f of ["flagship-boot-key.pem", "flagship-owner-key.pub", "flagship-boot-unlock-mode"]) writeFileSync(join(bootDir, f), "first owner");
+      writeFileSync(join(bootDir, "flagship-unseal"), "the unlock helper");
+    };
+    const box = await makeBox(com, {
+      t0: T0,
+      dir: retailDir,
+      identity: keydIdentity,
+      afterProvision: async (text) => {
+        writeFileSync(retailPaths(retailDir).recipe, text);
+        writeFileSync(retailPaths(retailDir).release, "{}");
+        ownerFiles();
+      },
+      wipe: async () => {
+        await retailWipeAsRoot({
+          image: { v: 1, dataLuksDevice: "/dev/disk/by-partlabel/flagship-data", recoveryPartition: null },
+          markerPresent: existsSync(join(retailDir, "reset-marker.json")),
+          run: async (_c, a) => (a[0] === "luksDump" ? "Data segments:\n  0: crypt\n\toffset: 16777216 [bytes]" : ""),
+          io,
+          resetKeyd: async () => void resetKeydState(keydDir),
+          retailDir,
+          bootDir,
+        });
+      },
+    });
+    box.clock.advance(15_000);
+    const first = await com.recipe("home");
+    const one = await bluetoothClaim(box, first.text, { serverDomain: first.code.serverDomain, serial: first.code.serial });
+    expect((await preRegister(com, first.code, one.stkPubHex, box.clock.now())).status).toBe(200);
+    await one.p.send({ t: "network", wifi: null });
+    await one.p.until("network-status");
+    await box.settle();
+    expect(readdirSync(keydDir)).toContain("swk.key");
+    const firstKeyd = readFileSync(join(keydDir, "identity.key"), "utf8");
+
+    await box.press(5);
+    const second = await com.recipe("cabin");
+    const two = await bluetoothClaim(box, second.text, { serverDomain: second.code.serverDomain, serial: second.code.serial });
+    expect(two.stkPubHex).not.toBe(one.stkPubHex);
+    expect(two.receipt.stkHybridPub.slice(64)).not.toBe(one.receipt.stkHybridPub.slice(64));
+    expect(readFileSync(join(keydDir, "identity.key"), "utf8")).not.toBe(firstKeyd);
+    expect(readdirSync(keydDir).sort()).toEqual(["identity-mldsa.key", "identity.key"]);
+    expect(readdirSync(bootDir)).toEqual(["flagship-unseal"]);
+    expect(readdirSync(retailDir).sort()).toEqual(["claim-state.json"]);
+    expect(disk.subarray(0, 4).toString("latin1")).not.toBe("AAAA");
   });
 });

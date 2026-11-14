@@ -59,6 +59,21 @@ fn run() -> Result<(), String> {
             "migrate is run by the TS backend (node packages/keyd/dist/main.js migrate)".to_owned(),
         );
     }
+    if cmd == "reset" {
+        if std::env::args().nth(2).as_deref() != Some(flagship_keyd::files::RESET_FLAG) {
+            return Err(format!(
+                "reset erases every key keyd holds: pass {}",
+                flagship_keyd::files::RESET_FLAG
+            ));
+        }
+        if nix::unistd::geteuid().as_raw() != 0 {
+            return Err("reset runs as root".to_owned());
+        }
+        let state = env_path("FLAGSHIP_KEYD_STATE", "/var/lib/flagship-keyd");
+        flagship_keyd::files::reset_state(&state).map_err(|e| format!("reset: {e}"))?;
+        println!("{{\"reset\":true}}");
+        return Ok(());
+    }
     if cmd != "serve" {
         return Err(format!("unknown command {cmd}"));
     }
