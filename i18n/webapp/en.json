@@ -13874,22 +13874,6 @@
     "en": "Changed account name",
     "ctx": "webapp/lib/auditLog.js:92"
   },
-  "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.": {
-    "en": "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.",
-    "ctx": "webapp/views/service-detail.js:1181"
-  },
-  "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).": {
-    "en": "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).",
-    "ctx": "webapp/views/service-detail.js:1239"
-  },
-  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
-    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
-    "ctx": "webapp/views/service-detail.js:1161"
-  },
-  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
-    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
-    "ctx": "webapp/views/service-detail.js:1163"
-  },
   "CUSTOM DOMAIN": {
     "en": "CUSTOM DOMAIN",
     "ctx": "webapp/views/service-detail.js:1115"
