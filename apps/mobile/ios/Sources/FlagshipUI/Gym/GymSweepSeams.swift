@@ -66,6 +66,8 @@ public enum GymSweepSeams {
         // The create form's draft (including the backup pick) lives in
         // UserDefaults: every launch starts with nothing chosen.
         CreateServerDraftStore().reset()
+        // Servers marked untrusted by an earlier retail alarm: every launch starts with none.
+        UntrustedServers.shared.clear()
         if let server = mocks.server {
             let mailbox = mocks.mailbox
             server.onServerNameReleased = { [weak mailbox] domain in mailbox?.deletedDomains.insert(domain.lowercased()) }

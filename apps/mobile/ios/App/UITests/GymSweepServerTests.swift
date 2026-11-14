@@ -747,8 +747,23 @@ final class GymSweepServerTests: GymSweepCase {
         let cable = any(app, "rc-cable")
         XCTAssertTrue(cable.waitForExistence(timeout: 30), "After the receipt: how the box reaches the internet.")
         expectProbe(app, "signed auth-code-admin by admin-root")
+        expectProbe(app, "signed box-claim-key by admin-root")
         cable.tap()
+        XCTAssertTrue(any(app, "rc-certificate").waitForExistence(timeout: 30), "Online: it waits for the certificate before done.")
         XCTAssertTrue(any(app, "rc-done").waitForExistence(timeout: 30), "The box that came online is the one paired.")
+    }
+
+    /// No certificate yet: a calm wait, then "taking longer" with Check again, never done.
+    func test_retailBoxWaitsCalmlyForASlowCertificate() throws {
+        let app = launchServer(["-smoke-retail-normal", "-smoke-retail-cert-slow"])
+        openRetail(app, name: "cellar")
+        let cable = any(app, "rc-cable")
+        XCTAssertTrue(cable.waitForExistence(timeout: 40))
+        cable.tap()
+        XCTAssertTrue(any(app, "rc-certificate").waitForExistence(timeout: 30), "Getting its security certificate.")
+        XCTAssertTrue(any(app, "rc-certificate-slow").waitForExistence(timeout: 20), "Then it says it is taking long.")
+        XCTAssertTrue(any(app, "rc-certificate-again").exists)
+        XCTAssertFalse(any(app, "rc-done").exists, "Never done without the TLS check.")
     }
 
     /// Wi-Fi: the box's list, the password, the warning before it leaves, then online.
@@ -806,6 +821,32 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(cable.waitForExistence(timeout: 40))
         cable.tap()
         XCTAssertTrue(any(app, "rc-alarm").waitForExistence(timeout: 30), "The alarm covers the screen.")
+        XCTAssertTrue(any(app, "rc-alarm-untrusted").exists, "The phone stops trusting the server.")
+        XCTAssertTrue(any(app, "rc-alarm-reset").exists, "The 5-press reset instructions.")
+        XCTAssertTrue(any(app, "rc-alarm-delete").exists, "Delete this server.")
+        any(app, "rc-alarm-close").tap()
+        let done = app.buttons["cs-done-button"]
+        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        done.tap()
+        XCTAssertTrue(any(app, "pod-card-untrusted").waitForExistence(timeout: 15), "Home marks the server untrusted in red.")
+    }
+
+    /// The alarm's Delete this server is the signed delete: the name is released.
+    func test_retailBoxAlarmDeletesTheServer() throws {
+        let app = launchServer(["-smoke-retail-normal", "-smoke-retail-key-mismatch"])
+        openRetail(app, name: "byre")
+        let cable = any(app, "rc-cable")
+        XCTAssertTrue(cable.waitForExistence(timeout: 40))
+        cable.tap()
+        let delete = any(app, "rc-alarm-delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 30))
+        delete.tap()
+        let field = app.textFields["delete-server-name-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("byre")
+        app.buttons["delete-server-confirm"].tap()
+        expectProbe(app, "signed release-server-name by admin-root")
     }
 
     // ─── Backups section, import and restore ────────────────────────────────

@@ -3433,7 +3433,6 @@
   "Certificate ready. Waiting for the direct path.": "証明書の準備ができました。直接接続を待っています。",
   "Set up a box from a store": "店舗で購入したボックスを設定",
   "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": "インストール不要の Flagship ボックスです。電源を入れると、この電話が Bluetooth で見つけます。",
-  "Register your new box": "新しいボックスを登録",
   "Keep the box unplugged for now": "ボックスはまだ電源につながないでください",
   "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": "この電話は Bluetooth でボックスを探します。ここから始めて、アプリに求められたときだけボックスの電源をつないでください。",
   "I have a setup code from the box's screen": "ボックスの画面に表示された設定コードがあります",
@@ -3481,7 +3480,6 @@
   "No new box appeared": "新しいボックスが見つかりませんでした",
   "Not supported": "非対応",
   "Don't use this server": "このサーバーを使わないでください",
-  "Open the server to delete it": "サーバーを開いて削除する",
   "More than one box nearby": "近くに複数のボックスがあります",
   "Don't continue": "続行しないでください",
   "Someone else tried at the same moment": "ほかの人が同時に試しました",
@@ -3651,5 +3649,15 @@
   "Admin": "管理者",
   "Board member: lifts freezes": "役員：凍結を解除できる",
   "Recovery key": "復旧キー",
-  "Run servers together, with signed approvals": "署名付きの承認で、サーバーを一緒に運用"
+  "Run servers together, with signed approvals": "署名付きの承認で、サーバーを一緒に運用",
+  "Untrusted: this phone won't connect to this server": "信頼できません：この電話はこのサーバーに接続しません",
+  "Untrusted": "信頼できません",
+  "Getting its security certificate…": "セキュリティ証明書を取得しています…",
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": "ペアリングしたボックスはオンラインです。ボックスとのすべての接続を非公開に保つ証明書を取得しており、この電話がボックスの鍵と照合します。通常は 1〜2 分かかります。",
+  "This is taking longer than usual": "通常より時間がかかっています",
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": "この電話はもうこのサーバーを信頼していません。接続も送信も行いません。",
+  "Delete this server": "このサーバーを削除",
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": "ボックスを設定し直すには、電源ボタンをすばやく 5 回押して、再起動するまで待ちます。その後、ネットワークケーブルをつないで「サーバーを追加 / 復元」から始め直してください。",
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": "ボックスはオンラインですが、まだセキュリティ証明書がありません。通常は数分かかります。電源とネットワークをつないだままにしてください。この画面を閉じても、サーバーはホームに設定中として残ります。",
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": "この電話はこのサーバーを信頼していません。設定したボックスではありません。ホームから削除してください。"
 }

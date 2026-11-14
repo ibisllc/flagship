@@ -415,6 +415,22 @@ public final class CreateServerViewModel {
         return (json, blob.blob.serverDomain, blob.blob.authCode.serial)
     }
 
+    /// The retail claim's mint: the recipe plus the key that signed it (the admin root; the IRK on a
+    /// demo account), held so the box key registration needs no second Face ID. The claim drops it
+    /// right after the registration.
+    public func mintRecipeForRetailClaim() async throws -> RetailClaimRecipe {
+        var held: Curve25519.Signing.PrivateKey?
+        let blob = try await mintInstallBlob(keepSigner: { held = $0 })
+        guard let key = held else { throw CocoaError(.coderReadCorrupt) }
+        held = nil
+        lastDeliveredSerial = blob.blob.authCode.serial
+        let data = try JSONEncoder().encode(blob.onWire())
+        recordDeliveredBookkeeping(serverDomain: blob.blob.serverDomain)
+        let signer = RetailClaimSigner { Array(try key.signature(for: $0)) }
+        return RetailClaimRecipe(json: String(data: data, encoding: .utf8) ?? "", serverDomain: blob.blob.serverDomain,
+                                 serial: blob.blob.authCode.serial, signer: signer)
+    }
+
     /// Persist the boot-unlock + disk-encryption choices for this server and
     /// clear the draft — shared by every delivery method (website, pair,
     /// share, copy, burn-on-device).
@@ -445,7 +461,7 @@ public final class CreateServerViewModel {
     /// deposit-store bookkeeping) rather than duplicating it — the builder peer
     /// receives a byte-identical `SignedInstallBlob`, just over a different
     /// transport. Configure the design fields, then call this.
-    func mintInstallBlob() async throws -> SignedInstallBlob {
+    func mintInstallBlob(keepSigner: ((Curve25519.Signing.PrivateKey) -> Void)? = nil) async throws -> SignedInstallBlob {
         // Only an admin device of the account adds servers, and only opening
         // the account mints an admin root: refuse here, before any prompt or
         // `.com` call, rather than mint a recipe the account's admins don't
@@ -518,6 +534,7 @@ public final class CreateServerViewModel {
             ? nil
             : try await adminRootSigner(String(localized: "Add \(name) to your account"))
         let acAdminSig = try adminKey.map { try $0.signature(for: authCode.adminCanonicalBytes()) }
+        keepSigner?(adminKey ?? irk)
         try await server.issueAuthCode(.init(
             code: .init(
                 version: authCode.version,

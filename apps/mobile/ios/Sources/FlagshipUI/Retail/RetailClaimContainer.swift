@@ -32,7 +32,6 @@ struct RetailClaimContainer: View {
 
     private func deps() -> RetailClaimDeps {
         let server = self.server, mailbox = self.mailbox, username = self.username, minter = self.minter
-        let isDemo = isDemoAccount
         #if DEBUG
         let radio: any BoxClaimRadio = GymSweepSeams.retailRadio ?? CoreBluetoothClaimRadio()
         let gym = GymSweepSeams.retailRadio != nil
@@ -46,21 +45,12 @@ struct RetailClaimContainer: View {
             mailboxLink: { MailboxClaimLink(client: server, mailboxId: $0) },
             mintRecipe: {
                 do {
-                    return try await minter.mintRecipeJSON()
+                    return try await minter.mintRecipeForRetailClaim()
                 } catch is AddServerRefused {
                     throw RetailClaimKeyError.notAdmin
                 }
             },
-            registerKey: { key in
-                let signer: Curve25519.Signing.PrivateKey
-                if Keystore.hasAdminRoot {
-                    signer = try await Keystore.adminRootKey(reason: String(localized: "Register your new box"))
-                } else if isDemo {
-                    signer = try await Keystore.deriveIRK(reason: String(localized: "Register your new box"))
-                } else {
-                    throw RetailClaimKeyError.notAdmin
-                }
-                let sig = try key.sign(with: signer)
+            registerKey: { key, sig in
                 do {
                     try await server.registerBoxClaimKey(BoxClaimKeyRequest(
                         key: .init(username: key.username, serial: key.serial, serverDomain: key.serverDomain,
@@ -82,15 +72,19 @@ struct RetailClaimContainer: View {
                 return r.pods.first { $0.serverDomain.lowercased() == domain.lowercased() && $0.revokedAt == nil }?.identityPubKey.lowercased()
             },
             tlsCheck: { domain in
-                if gym { return true }
+                #if DEBUG
+                if gym { return GymSweepSeams.retailTlsCheck() }
+                #endif
                 return await Self.pinnedTlsCheck(domain)
             },
             onClaimed: onClaimed,
+            markUntrusted: { UntrustedServers.shared.mark($0) },
             region: Locale.current.region?.identifier.count == 2 ? (Locale.current.region?.identifier ?? "") : ""
         )
         if gym {
             deps.pauseMs = { 2_000 }
             deps.pollMs = 500
+            deps.certificateSlowMs = 3_000
         }
         return deps
     }

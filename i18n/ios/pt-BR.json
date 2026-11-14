@@ -3435,7 +3435,6 @@
   "Certificate ready. Waiting for the direct path.": "Certificado pronto. Aguardando o caminho direto.",
   "Set up a box from a store": "Configurar uma caixa comprada na loja",
   "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": "Uma caixa Flagship sem nada para instalar. Este telefone a encontra por Bluetooth quando você a liga na tomada.",
-  "Register your new box": "Registrar sua nova caixa",
   "Keep the box unplugged for now": "Deixe a caixa desligada da tomada por enquanto",
   "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": "Este telefone procura a caixa por Bluetooth. Comece aqui e ligue a caixa na tomada só quando o app pedir.",
   "I have a setup code from the box's screen": "Tenho um código de configuração da tela da caixa",
@@ -3483,7 +3482,6 @@
   "No new box appeared": "Nenhuma caixa nova apareceu",
   "Not supported": "Não compatível",
   "Don't use this server": "Não use este servidor",
-  "Open the server to delete it": "Abrir o servidor para excluí-lo",
   "More than one box nearby": "Mais de uma caixa por perto",
   "Don't continue": "Não continue",
   "Someone else tried at the same moment": "Outra pessoa tentou ao mesmo tempo",
@@ -3653,5 +3651,15 @@
   "Admin": "Administrador",
   "Board member: lifts freezes": "Membro do conselho: suspende congelamentos",
   "Recovery key": "Chave de recuperação",
-  "Run servers together, with signed approvals": "Administre servidores em conjunto, com aprovações assinadas"
+  "Run servers together, with signed approvals": "Administre servidores em conjunto, com aprovações assinadas",
+  "Untrusted: this phone won't connect to this server": "Não confiável: este telefone não vai se conectar a este servidor",
+  "Untrusted": "Não confiável",
+  "Getting its security certificate…": "Obtendo o certificado de segurança…",
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": "A caixa que você pareou está on-line. Ela está obtendo o certificado que mantém privada cada conexão com ela, e este telefone o confere com a chave da caixa. Isso costuma levar um ou dois minutos.",
+  "This is taking longer than usual": "Está demorando mais que o normal",
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": "Este telefone não confia mais neste servidor: não vai se conectar a ele nem enviar nada a ele.",
+  "Delete this server": "Excluir este servidor",
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": "Para configurar a caixa de novo: aperte o botão liga/desliga 5 vezes, rapidamente, e espere ela reiniciar. Depois comece de novo em Adicionar / Restaurar um servidor, com um cabo de rede.",
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": "A caixa está on-line, mas ainda não tem certificado de segurança. Isso costuma levar alguns minutos. Deixe-a ligada e conectada; você pode fechar isto e o servidor continua no Início como em configuração.",
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": "Este telefone não confia neste servidor: não é a caixa que você configurou. Exclua-o no Início."
 }

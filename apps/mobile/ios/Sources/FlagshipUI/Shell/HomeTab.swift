@@ -44,6 +44,8 @@ public struct HomeTab: View {
     /// list's "Delete server" context action). Non-nil ⇒ the typed-name
     /// delete sheet is shown.
     @State private var pendingDeletePod: PodInfo?
+    /// Servers this phone stopped trusting (the retail key-mismatch alarm), red on Home.
+    @State private var untrustedServers = UntrustedServers.shared.all
     /// SEC-REPAIR-001: the once-only "Update your account recovery" sheet.
     @State private var recoveryUpdate: RecoveryUpdateViewModel?
 
@@ -304,11 +306,15 @@ public struct HomeTab: View {
                     path.append(.importBackup(targetFqdn: pod.fqdn))
                 }
                 .updatesRequired(app.podsUpdateRequired)
+                .untrusted(untrustedServers)
             } else {
                 ProgressView()
             }
         }
+        .onChange(of: path) { untrustedServers = UntrustedServers.shared.all }
+        .onChange(of: app.pods.count) { untrustedServers = UntrustedServers.shared.all }
         .task {
+            untrustedServers = UntrustedServers.shared.all
             if vm == nil {
                 vm = HomeViewModel(client: client, podContext: app.currentPodId ?? app.leaderPodId)
             }
@@ -935,6 +941,7 @@ func cancelPendingServer(
         app.removePod(pod.podId)
         PendingServerStore().remove(username: username, podId: pod.podId)
         PendingRckStore().clear(for: pod.fqdn)
+        if releasedName { UntrustedServers.shared.forget(pod.fqdn) }
         return true
     case .failed(let message):
         // Keep the pod: the name is still reserved, so dropping it locally

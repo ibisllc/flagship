@@ -3429,7 +3429,6 @@
   "Certificate ready. Waiting for the direct path.": "b9398872d2b0",
   "Set up a box from a store": "427c2983d8ac",
   "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": "1b42ff4dcf49",
-  "Register your new box": "215a67a8cd7b",
   "Keep the box unplugged for now": "7d214a64b267",
   "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": "1c63fdb31ae5",
   "I have a setup code from the box's screen": "0cb691a96798",
@@ -3477,7 +3476,6 @@
   "No new box appeared": "d4c885336376",
   "Not supported": "26ce87746094",
   "Don't use this server": "4940a94b2f12",
-  "Open the server to delete it": "2a62a6146fe2",
   "More than one box nearby": "47038db435da",
   "Don't continue": "545b9009460c",
   "Someone else tried at the same moment": "e66240248014",
@@ -3647,5 +3645,15 @@
   "Admin": "1beb01e34ccd",
   "Board member: lifts freezes": "f63f86445c56",
   "Recovery key": "6d02fe400dad",
-  "Run servers together, with signed approvals": "d6b3b178d318"
+  "Run servers together, with signed approvals": "d6b3b178d318",
+  "Untrusted: this phone won't connect to this server": "71e8801f8ba1",
+  "Untrusted": "3a386f2385ec",
+  "Getting its security certificate…": "470a304231bd",
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": "7d5422f40afe",
+  "This is taking longer than usual": "48c129867053",
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": "4a8c6bb89117",
+  "Delete this server": "fd3d60fe3e8c",
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": "9fa93fe2fc94",
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": "2591861e8fe0",
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": "8831d5eb419a"
 }

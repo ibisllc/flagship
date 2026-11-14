@@ -23,6 +23,15 @@ extension GymSweepSeams {
     static var retailRadio: MockBoxClaimRadio?
     /// The box key the gym's `.com` lists once the box is online (`-smoke-retail-key-mismatch`: another).
     static var retailComStk: String?
+    /// How many TLS checks find no certificate before the box serves one (`-smoke-retail-cert-slow`: never).
+    static var retailCertificateAfter: Int? = 2
+    nonisolated(unsafe) private static var retailTlsChecks = 0
+    /// The pinned TLS check on the scripted box: nil (no certificate yet), then true.
+    static func retailTlsCheck() -> Bool? {
+        retailTlsChecks += 1
+        guard let after = retailCertificateAfter else { return nil }
+        return retailTlsChecks > after ? true : nil
+    }
     static let gymFirewallReason = "its internet firewall isn't running: nftables isn't installed"
     static let gymGvisorReason = "runsc failed its test container"
 
@@ -224,6 +233,7 @@ extension GymSweepSeams {
         let retail = args.first { $0.hasPrefix("-smoke-retail-") }.map { String($0.dropFirst("-smoke-retail-".count)) }
         retailRadio = retail.map { MockBoxClaimRadio(scenario: MockBoxClaimRadio.Scenario(rawValue: $0) ?? .normal, appearAfterMs: 4_000) }
         retailComStk = args.contains("-smoke-retail-key-mismatch") ? String(repeating: "ee", count: 32) : MockBoxClaimRadio.stkPubHex
+        retailCertificateAfter = args.contains("-smoke-retail-cert-slow") ? nil : 2
     }
 
     /// A stable fake STK for a server.
