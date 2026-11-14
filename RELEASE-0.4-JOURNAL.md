@@ -106,7 +106,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] S2 Group by priority (security first, then W14 and W19, then the rest) and show the owner before building.
 
 ### F. 0.4 features and fixes (order after S2; security items from S1 go first)
-- [~] F1 (step 3 + 6 + box side merged 2026-11-14: .com registry, direct-name/v1, D1 0133, publisher, direct certs, box sync/gate/routing; keyd boxes need per-name TLS slots; screens (step 5) next. Steps 1-2 merged 2026-11-13: `flagship/direct-access/v1` order, `direct-address/v1` box update, `lan-hint/v2`, box public listener, iOS/Android probe; vectors TS/Swift/Kotlin; also fixed: the LAN listener counted forwarded public IPv4 as LAN, exposing rescue routes. NEXT: step 3 `.com` registry + fshp.app records + issuance; step 5 screens. Owner Qs: non-admin devices using the public path; forwarded IPv4 changes) Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
+- [~] F1 (step 3 + 6 + box side merged 2026-11-14: .com registry, direct-name/v1, D1 0133, publisher, direct certs, box sync/gate/routing; keyd boxes need per-name TLS slots; screens (step 5) MERGED 2026-11-14 on iOS/Android/webapp with mock-gym scenarios; keyd boxes served via per-name slots. Steps 1-2 merged 2026-11-13: `flagship/direct-access/v1` order, `direct-address/v1` box update, `lan-hint/v2`, box public listener, iOS/Android probe; vectors TS/Swift/Kotlin; also fixed: the LAN listener counted forwarded public IPv4 as LAN, exposing rescue routes. NEXT: step 3 `.com` registry + fshp.app records + issuance; step 5 screens. Owner Qs: non-admin devices using the public path; forwarded IPv4 changes) Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
       direct-access order + vectors (TS/Swift/Kotlin), `.com` direct-name registry + prober + `fshp.app` records +
       issuance, clients' opt-in and name screens, take `fshp.app` off the website mirror, tests.
 - [~] F2 (fold MERGED 2026-11-14: marketplace, Pro payments + vouchers, custom names, custom domains, outbound proxy on release/0.4; shell v208; migrations 0090/0091/0093/0094/0099; parity green; no iOS Xcode build since; new dep undici: run npm ci) Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
@@ -274,6 +274,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   daemon + keyd + Rust ingress + rebuilt Go tlsd together. Found: keyd `boxPurposes.test.ts` fails on release/0.4:
   retail's `flagship/box-claim-receipt/v1` is signed by the daemon, not through keyd (give it to the retail-apps agent).
   Direct-access screens rebased (i18n merged key by key); one webapp test failing, being identified.
+- 2026-11-14 Merged direct-access screens (F1 step 5). Webapp test flakes under load (pairing, server order, phoneRoute;
+  each passes alone). Owner Qs: name orders ask for biometrics each time (voi.ci names use the unlocked session)?;
+  direct orders carry no PQ half yet (strict would refuse). Running: retail-apps (ports + iOS claim screens + keyd
+  box-claim-receipt purpose).
 
 ## Resume point
 
