@@ -369,6 +369,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   hybrid release order under strict and the phones' Release screen. Partition layout/recovery image wait for hardware.
 - 2026-11-14 Calls: D1 accepted conversations, D2 iPads ring, D3 60 min, D4 China ships without ringing if legal.
   Build agent `0.4/calls`. Design agent `0.4/calls-v2`: video calls, enterprise no-account visitor calls, paid calls.
+- 2026-11-14 Merged design docs/voici-calls-v2.md: video as an in-call switch (VP8 -> H.264 -> AV1, no simulcast,
+  360p default, audio first, quota-counted); anonymous visitor calls for org pages only (off by default, hours + queue,
+  proof of work / Private Access Tokens, no phone/email checks); paid calls phase 1 via the org's own Stripe Connect
+  (Flagship fee, never holds money), vouchers only after counsel; adult content: facts (stores, card networks, Stripe,
+  2257, FOSTA-SESTA, REPORT Act, DSA) and a recommended "not allowed". Owner Qs V-1..2, A-1..3, P-1..4, AD-1.
 
 ## Resume point
 
