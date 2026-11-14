@@ -32,10 +32,22 @@ class PairingWatch:
         self.online = True
         self._failures = 0
         self._cancel_retry: Optional[Callable[[], None]] = None
+        # The relay refused this Studio (its `error` frame, e.g. STUDIO_PIPE_MIN): nothing starts a new session
+        # until clear_refusal(). A fresh code per refusal is what made 0.2 Studios loop (journal F12).
+        self.refused = False
 
     def launch(self) -> None:
-        if self.online and self._wants():
+        if not self.refused and self.online and self._wants():
             self._start()
+
+    def on_refused(self) -> None:
+        self.refused = True
+        self._drop_retry()
+
+    def clear_refusal(self) -> None:
+        """The owner asked to try again."""
+        self.refused = False
+        self._failures = 0
 
     def on_connectivity(self, online: bool) -> None:
         if online == self.online:
@@ -44,7 +56,7 @@ class PairingWatch:
         self._on_online_change(online)
         if online:
             self._failures = 0
-            if self._wants():
+            if not self.refused and self._wants():
                 self._start()
         else:
             self._drop_retry()
@@ -55,7 +67,7 @@ class PairingWatch:
         self._failures = 0
 
     def on_failed(self) -> None:
-        if not self.online or self._cancel_retry is not None:
+        if self.refused or not self.online or self._cancel_retry is not None:
             return
         delay = RETRY_DELAYS[min(self._failures, len(RETRY_DELAYS) - 1)]
         self._failures += 1
@@ -63,7 +75,7 @@ class PairingWatch:
 
     def _retry(self) -> None:
         self._cancel_retry = None
-        if self.online and self._wants():
+        if not self.refused and self.online and self._wants():
             self._start()
 
     def _drop_retry(self) -> None:

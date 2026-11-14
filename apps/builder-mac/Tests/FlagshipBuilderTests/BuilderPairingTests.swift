@@ -193,6 +193,29 @@ final class BuilderPairingTests: XCTestCase {
         }
     }
 
+    /// A relay `error` frame (STUDIO_PIPE_MIN) is a refusal, not an ordinary end: the model must show it and
+    /// stop, never open a fresh session (journal F12). Later frames don't turn it back into an end.
+    func test_engineRelayErrorIsTerminalRefusal() {
+        let e = engine()
+        let reason = BuilderPairingEngine.studioOutdatedRelayReason
+        XCTAssertEqual(e.onRelayFrame(["kind": "error", "reason": reason]), [.stage(.refused(reason: reason))])
+        XCTAssertEqual(e.stage, .refused(reason: reason))
+        XCTAssertEqual(e.onRelayFrame(["kind": "expired"]), [])
+        XCTAssertEqual(e.onRelayFrame(["kind": "error", "reason": reason]), [])
+        XCTAssertTrue(BuilderPairingEngine.isOutdatedRefusal(reason))
+        XCTAssertFalse(BuilderPairingEngine.isOutdatedRefusal("malformed"))
+    }
+
+    /// The relay's sentence must match apps/com/src/builderRelay.ts word for word.
+    func test_outdatedReasonMatchesRelay() throws {
+        let relay = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("apps/com/src/builderRelay.ts")
+        let text = try String(contentsOf: relay, encoding: .utf8)
+        XCTAssertTrue(text.contains("\"\(BuilderPairingEngine.studioOutdatedRelayReason)\""))
+    }
+
     // MARK: - Session-end policy (model behaviour via the shared seam)
 
     /// A DELIVERED recipe survives a terminal `.ended` (e.g. expiry): the one-shot

@@ -240,5 +240,9 @@
   "recipeMadeByOlderApp": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。",
   "copiesOnYourPhoneOrPeersStay": "スマートフォンやピアに保存されたコピー（バックアップポリシーによる）は削除されません。",
   "ifItPersistsRedownloadTheBase": "続く場合は、ベースイメージを再ダウンロードして作り直してください。",
-  "cantReachFlagshipTryingAgain": "Flagship に接続できません。この PC のインターネット接続を確認してください。Studio は再試行を続けます。"
+  "cantReachFlagshipTryingAgain": "Flagship に接続できません。この PC のインターネット接続を確認してください。Studio は再試行を続けます。",
+  "studioOutOfDateDownloadTheNew": "このバージョンの Flagship Studio は古くなっています。flagshipserver.com/studio から新しいバージョンをダウンロードして、もう一度ペアリングしてください。",
+  "downloadTheNewStudio": "新しい Studio をダウンロード",
+  "flagshipCouldntStartPairingDetailsInLog": "Flagship はペアリングを開始できませんでした。詳細はログにあります。",
+  "tryAgain": "もう一度試す"
 }

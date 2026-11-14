@@ -785,3 +785,19 @@ msgstr "Não foi possível verificar se o pacote de software deste servidor est�
 #: vm/older_app_recipe.py:21 (prose)
 msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."
 msgstr "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo."
+
+#: wizard.py (pairing refused)
+msgid "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again."
+msgstr "Esta versão do Flagship Studio está desatualizada. Baixe a nova em flagshipserver.com/studio e pareie de novo."
+
+#: wizard.py (pairing cover)
+msgid "Download the new Studio"
+msgstr "Baixar o novo Studio"
+
+#: wizard.py (pairing refused)
+msgid "Flagship couldn't start pairing. The details are in the log."
+msgstr "O Flagship não conseguiu iniciar o pareamento. Os detalhes estão no registro."
+
+#: wizard.py (pairing cover)
+msgid "Try again"
+msgstr "Tentar de novo"

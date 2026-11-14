@@ -38,9 +38,26 @@ public sealed class PairingWatch
 
     public bool IsOnline { get; private set; } = true;
 
+    /// <summary>The relay refused this Studio (an <c>error</c> frame, e.g. STUDIO_PIPE_MIN). Nothing starts a new
+    /// session until <see cref="ClearRefusal"/>: a fresh code per refusal is what made 0.2 Studios loop (journal F12).</summary>
+    public bool Refused { get; private set; }
+
     public void Launch()
     {
-        if (IsOnline && _wantsPairing()) _start();
+        if (!Refused && IsOnline && _wantsPairing()) _start();
+    }
+
+    public void OnRefused()
+    {
+        Refused = true;
+        DropRetry();
+    }
+
+    /// <summary>The owner asked to try again.</summary>
+    public void ClearRefusal()
+    {
+        Refused = false;
+        _failures = 0;
     }
 
     public void OnConnectivity(bool online)
@@ -50,7 +67,7 @@ public sealed class PairingWatch
         if (online)
         {
             _failures = 0;
-            if (_wantsPairing()) _start();
+            if (!Refused && _wantsPairing()) _start();
         }
         else
         {
@@ -64,7 +81,7 @@ public sealed class PairingWatch
 
     public void OnFailed()
     {
-        if (!IsOnline || _cancelRetry is not null) return;
+        if (Refused || !IsOnline || _cancelRetry is not null) return;
         var delay = RetryDelays[Math.Min(_failures, RetryDelays.Length - 1)];
         _failures++;
         _cancelRetry = _schedule(delay, Retry);
@@ -73,7 +90,7 @@ public sealed class PairingWatch
     private void Retry()
     {
         _cancelRetry = null;
-        if (IsOnline && _wantsPairing()) _start();
+        if (!Refused && IsOnline && _wantsPairing()) _start();
     }
 
     private void DropRetry()

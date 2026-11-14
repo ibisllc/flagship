@@ -736,4 +736,16 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
     <value>Não foi possível acessar o Flagship. Verifique a conexão com a internet deste PC; o Studio continua tentando.</value>
   </data>
+  <data name="studioOutOfDateDownloadTheNew" xml:space="preserve">
+    <value>Esta versão do Flagship Studio está desatualizada. Baixe a nova em flagshipserver.com/studio e pareie de novo.</value>
+  </data>
+  <data name="downloadTheNewStudio" xml:space="preserve">
+    <value>Baixar o novo Studio</value>
+  </data>
+  <data name="flagshipCouldntStartPairingDetailsInLog" xml:space="preserve">
+    <value>O Flagship não conseguiu iniciar o pareamento. Os detalhes estão no registro.</value>
+  </data>
+  <data name="tryAgain" xml:space="preserve">
+    <value>Tentar de novo</value>
+  </data>
 </root>

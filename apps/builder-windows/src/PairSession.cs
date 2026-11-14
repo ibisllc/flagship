@@ -105,6 +105,16 @@ public sealed class PairSession : IDisposable
     public string SessionId { get; }
     public string QrPayload { get; }
 
+    /// <summary>The relay's word-for-word refusal for a Studio below STUDIO_PIPE_MIN (apps/com/src/builderRelay.ts).</summary>
+    public const string StudioOutdatedRelayReason =
+        "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.";
+
+    public const string StudioDownloadUrl = "https://flagshipserver.com/studio";
+
+    /// <summary>True when a relay refusal asks for a newer Studio.</summary>
+    public static bool IsStudioOutdatedRefusal(string? reason)
+        => reason is not null && (reason == StudioOutdatedRelayReason || reason.Contains("flagshipserver.com/studio", StringComparison.Ordinal));
+
     public PairSession(bool debug, string? outPath = null)
     {
         _debug = debug;
@@ -178,8 +188,13 @@ public sealed class PairSession : IDisposable
                     case "expired":
                         throw new InvalidOperationException("Pairing session timed out.");
                     case "error":
+                        // A refusal (STUDIO_PIPE_MIN): report it as one and end; never as a failure the watch retries.
                         var reason = root.TryGetProperty("reason", out var rv) ? rv.ToString() : "unknown";
-                        throw new InvalidOperationException($"Relay error: {reason}");
+                        OnLog?.Invoke(new LogLine(LogStream.Stderr, $"the pairing relay refused this Studio: {reason}"));
+                        OnEvent?.Invoke(new PairEvent { Event = "refused", Message = reason });
+                        pingCts.Cancel();
+                        try { await pingTask; } catch (OperationCanceledException) { }
+                        return;
                     case "peer":
                         if (!root.TryGetProperty("frame", out var frame) || frame.ValueKind != JsonValueKind.Object) break;
                         var completed = await HandlePeerFrameAsync(frame, _keys, aeadKey, _socket, _cts.Token);

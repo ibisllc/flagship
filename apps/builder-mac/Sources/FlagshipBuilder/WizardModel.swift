@@ -74,6 +74,11 @@ final class WizardModel: ObservableObject {
     @Published var pairCodeDisplay: String? = nil
     /// One-line status under the QR ("Waiting for your phone…", etc.).
     @Published var pairStatus: String = String(localized: "Waiting for your phone…")
+    /// The relay refused this Studio (journal F12): the cover shows this sentence instead of a QR, and no new
+    /// session opens until the owner asks (a fresh QR per refusal is what made 0.2 Studios loop).
+    @Published var pairRefusal: String? = nil
+    /// True when the refusal asks for a newer Studio: the cover offers the download.
+    @Published var pairRefusalNeedsUpdate: Bool = false
     /// The 6-digit SAS to confirm on the phone (set in `.pairing`).
     @Published var pairMatchCode: String? = nil
     /// Network reachability. The locked cover swaps its whole pairing block for a
@@ -155,7 +160,7 @@ final class WizardModel: ObservableObject {
         if online {
             // Only auto-(re)start pairing from the locked/pairing cover — never
             // disturb a delivered recipe, the recipe-file path, or a live burn.
-            if builderStage == .locked || builderStage == .pairing {
+            if (builderStage == .locked || builderStage == .pairing) && pairRefusal == nil {
                 beginPairing()
             }
         } else {
@@ -176,6 +181,12 @@ final class WizardModel: ObservableObject {
         sessionClient = nil
         pairMatchCode = nil
         builderStage = .locked
+        // Held refusal: stay on it. Only "Try again" (retryAfterRefusal) clears it.
+        guard pairRefusal == nil else {
+            pairQrPayload = nil
+            pairCodeDisplay = nil
+            return
+        }
         // No relay session without a network — the cover shows the "waiting for
         // internet connection" placeholder until connectivity returns, at which
         // point handleConnectivityChange calls back in. This is what stops the QR
@@ -216,6 +227,19 @@ final class WizardModel: ObservableObject {
         case .reconnecting:
             pairStatus = String(localized: "Phone left before sending the recipe — waiting for it to reconnect…")
             builderStage = .session
+        case .refused(let reason):
+            sessionClient?.close()
+            sessionClient = nil
+            appendLog(stream: .stderr, text: String(localized: "Pairing session ended: \(reason)"))
+            let outdated = BuilderPairingEngine.isOutdatedRefusal(reason)
+            pairRefusalNeedsUpdate = outdated
+            pairRefusal = outdated
+                ? String(localized: "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.")
+                : String(localized: "Flagship couldn't start pairing. The details are in the log.")
+            pairMatchCode = nil
+            pairQrPayload = nil
+            pairCodeDisplay = nil
+            if recipe != nil { builderStage = .recipeReady } else if !isRunning { builderStage = .locked }
         case .ended(let reason):
             // One-shot deposit: a DELIVERED recipe survives a phone disconnect.
             // The phone's job is done after delivery and it may lock/leave — keep
@@ -329,6 +353,13 @@ final class WizardModel: ObservableObject {
             try? FileManager.default.removeItem(at: staging)
             pastedRecipeStaging = nil
         }
+        beginPairing()
+    }
+
+    /// "Try again" on a refusal: one fresh session, on the owner's word.
+    func retryAfterRefusal() {
+        pairRefusal = nil
+        pairRefusalNeedsUpdate = false
         beginPairing()
     }
 

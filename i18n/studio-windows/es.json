@@ -240,5 +240,9 @@
   "recipeMadeByOlderApp": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship en tu teléfono y vuelve a crear el servidor.",
   "copiesOnYourPhoneOrPeersStay": "las copias guardadas en tu teléfono o en otros servidores (según su política de copias de seguridad) no se eliminan.",
   "ifItPersistsRedownloadTheBase": "si persiste, vuelve a descargar la imagen base y vuelve a prepararla.",
-  "cantReachFlagshipTryingAgain": "No se puede conectar con Flagship. Revisa la conexión a internet de este PC; Studio lo sigue intentando."
+  "cantReachFlagshipTryingAgain": "No se puede conectar con Flagship. Revisa la conexión a internet de este PC; Studio lo sigue intentando.",
+  "studioOutOfDateDownloadTheNew": "Esta versión de Flagship Studio está desactualizada. Descarga la nueva desde flagshipserver.com/studio y vuelve a vincular.",
+  "downloadTheNewStudio": "Descargar el nuevo Studio",
+  "flagshipCouldntStartPairingDetailsInLog": "Flagship no pudo iniciar la vinculación. Los detalles están en el registro.",
+  "tryAgain": "Reintentar"
 }

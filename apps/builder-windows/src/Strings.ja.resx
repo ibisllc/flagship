@@ -736,4 +736,16 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
     <value>Flagship に接続できません。この PC のインターネット接続を確認してください。Studio は再試行を続けます。</value>
   </data>
+  <data name="studioOutOfDateDownloadTheNew" xml:space="preserve">
+    <value>このバージョンの Flagship Studio は古くなっています。flagshipserver.com/studio から新しいバージョンをダウンロードして、もう一度ペアリングしてください。</value>
+  </data>
+  <data name="downloadTheNewStudio" xml:space="preserve">
+    <value>新しい Studio をダウンロード</value>
+  </data>
+  <data name="flagshipCouldntStartPairingDetailsInLog" xml:space="preserve">
+    <value>Flagship はペアリングを開始できませんでした。詳細はログにあります。</value>
+  </data>
+  <data name="tryAgain" xml:space="preserve">
+    <value>もう一度試す</value>
+  </data>
 </root>

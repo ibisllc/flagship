@@ -174,3 +174,38 @@ def test_a_delivered_recipe_is_not_paired_over(tmp_path):
     m.pairing_watch.on_connectivity(True)
     assert len(FakePair.instances) == 1
     assert clock.pending == []
+
+
+def test_a_relay_refusal_is_shown_and_never_retried(tmp_path):
+    from pair_session import STUDIO_OUTDATED_RELAY_REASON
+
+    m, clock = model(tmp_path)
+    m.pairing_watch.launch()
+    m._handle_pair_event(PairEvent(event="refused", message=STUDIO_OUTDATED_RELAY_REASON))
+    assert m.state.is_pairing and m.state.pair_refused and m.state.pair_refusal_needs_update
+    assert m.state.pair_status == STUDIO_OUTDATED_RELAY_REASON
+    assert m.state.pair_qr is None and m.state.pair_code is None
+    m.pairing_watch.on_failed()
+    m.pairing_watch.on_connectivity(False)
+    m.pairing_watch.on_connectivity(True)
+    m.start_pairing()
+    assert len(FakePair.instances) == 1
+    assert m.state.pair_refused and m.state.pair_status == STUDIO_OUTDATED_RELAY_REASON
+    m.retry_after_refusal()
+    assert not m.state.pair_refused and len(FakePair.instances) == 2
+
+
+def test_an_unknown_refusal_points_to_the_log(tmp_path):
+    m, _clock = model(tmp_path)
+    m.pairing_watch.launch()
+    m._handle_pair_event(PairEvent(event="refused", message="malformed"))
+    assert m.state.pair_refused and not m.state.pair_refusal_needs_update
+    assert m.state.pair_status == "Flagship couldn't start pairing. The details are in the log."
+
+
+def test_the_outdated_sentence_matches_the_relay():
+    from pathlib import Path as _P
+    from pair_session import STUDIO_OUTDATED_RELAY_REASON
+
+    relay = (_P(__file__).resolve().parents[3] / "apps/com/src/builderRelay.ts").read_text()
+    assert f'"{STUDIO_OUTDATED_RELAY_REASON}"' in relay

@@ -978,4 +978,20 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Can't reach Flagship. Check this PC's internet connection; Studio keeps trying.</value>
     <comment>Wizard.cs EndPairing (start screen, pairing failed)</comment>
   </data>
+  <data name="studioOutOfDateDownloadTheNew" xml:space="preserve">
+    <value>This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.</value>
+    <comment>Wizard.cs ShowPairingRefusal (prose)</comment>
+  </data>
+  <data name="downloadTheNewStudio" xml:space="preserve">
+    <value>Download the new Studio</value>
+    <comment>MainWindow.xaml (pairing refused)</comment>
+  </data>
+  <data name="flagshipCouldntStartPairingDetailsInLog" xml:space="preserve">
+    <value>Flagship couldn't start pairing. The details are in the log.</value>
+    <comment>Wizard.cs ShowPairingRefusal (prose)</comment>
+  </data>
+  <data name="tryAgain" xml:space="preserve">
+    <value>Try again</value>
+    <comment>MainWindow.xaml (pairing refused)</comment>
+  </data>
 </root>

@@ -736,4 +736,16 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
     <value>Flagship ist nicht erreichbar. Prüfe die Internetverbindung dieses PCs; Studio versucht es weiter.</value>
   </data>
+  <data name="studioOutOfDateDownloadTheNew" xml:space="preserve">
+    <value>Diese Version von Flagship Studio ist veraltet. Lade die neue von flagshipserver.com/studio herunter und kopple dann erneut.</value>
+  </data>
+  <data name="downloadTheNewStudio" xml:space="preserve">
+    <value>Neues Studio herunterladen</value>
+  </data>
+  <data name="flagshipCouldntStartPairingDetailsInLog" xml:space="preserve">
+    <value>Flagship konnte die Kopplung nicht starten. Details stehen im Protokoll.</value>
+  </data>
+  <data name="tryAgain" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
 </root>

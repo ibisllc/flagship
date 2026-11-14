@@ -35,6 +35,21 @@ public final class BuilderPairingEngine {
         case paired
         case reconnecting
         case ended(reason: String)
+        /// The relay refused this Studio (an `error` frame, e.g. `STUDIO_PIPE_MIN`). Terminal: the model shows
+        /// the reason and must not open a new session, or it would loop on fresh QR codes.
+        case refused(reason: String)
+    }
+
+    /// The relay's word-for-word refusal for a Studio below `STUDIO_PIPE_MIN` (apps/com/src/builderRelay.ts).
+    public static let studioOutdatedRelayReason =
+        "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again."
+
+    /// Where an out-of-date Studio is sent.
+    public static let studioDownloadURL = URL(string: "https://flagshipserver.com/studio")!
+
+    /// True when a relay refusal asks for a newer Studio.
+    public static func isOutdatedRefusal(_ reason: String) -> Bool {
+        reason == studioOutdatedRelayReason || reason.contains("flagshipserver.com/studio")
     }
 
     public enum Outbound: Equatable {
@@ -117,7 +132,7 @@ public final class BuilderPairingEngine {
             return end(String(localized: "This pairing session reached its time limit."))
         case "error":
             let reason = (obj["reason"] as? String) ?? "relay error"
-            return end(reason)
+            return refuse(reason)
         case "peer":
             guard let frame = obj["frame"] as? [String: Any] else { return [] }
             return onPeerFrame(frame)
@@ -189,7 +204,14 @@ public final class BuilderPairingEngine {
 
     private func end(_ reason: String) -> [Action] {
         if case .ended = stage { return [] }
+        if case .refused = stage { return [] }
         stage = .ended(reason: reason)
+        return [.stage(stage)]
+    }
+
+    private func refuse(_ reason: String) -> [Action] {
+        if case .refused = stage { return [] }
+        stage = .refused(reason: reason)
         return [.stage(stage)]
     }
 

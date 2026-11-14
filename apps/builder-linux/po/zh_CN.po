@@ -785,3 +785,19 @@ msgstr "无法确认此服务器的软件包是否已在 {0} 上发布。请检�
 #: vm/older_app_recipe.py:21 (prose)
 msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."
 msgstr "此配方由旧版 Flagship 应用创建。请在手机上更新 Flagship 应用，然后重新创建服务器。"
+
+#: wizard.py (pairing refused)
+msgid "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again."
+msgstr "此版本的 Flagship Studio 已过时。请从 flagshipserver.com/studio 下载新版本，然后重新配对。"
+
+#: wizard.py (pairing cover)
+msgid "Download the new Studio"
+msgstr "下载新版 Studio"
+
+#: wizard.py (pairing refused)
+msgid "Flagship couldn't start pairing. The details are in the log."
+msgstr "Flagship 无法开始配对。详细信息见日志。"
+
+#: wizard.py (pairing cover)
+msgid "Try again"
+msgstr "重试"

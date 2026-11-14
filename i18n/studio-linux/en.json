@@ -839,5 +839,21 @@
   "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": {
     "en": "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.",
     "ctx": "vm/older_app_recipe.py:21 (prose)"
+  },
+  "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.": {
+    "en": "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.",
+    "ctx": "wizard.py (pairing refused)"
+  },
+  "Download the new Studio": {
+    "en": "Download the new Studio",
+    "ctx": "wizard.py (pairing cover)"
+  },
+  "Flagship couldn't start pairing. The details are in the log.": {
+    "en": "Flagship couldn't start pairing. The details are in the log.",
+    "ctx": "wizard.py (pairing refused)"
+  },
+  "Try again": {
+    "en": "Try again",
+    "ctx": "wizard.py (pairing cover)"
   }
 }

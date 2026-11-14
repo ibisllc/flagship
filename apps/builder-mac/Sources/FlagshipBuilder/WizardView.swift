@@ -454,7 +454,32 @@ struct WizardView: View {
             Text("Pair your phone to begin")
                 .font(FB.Font.title())
                 .foregroundStyle(FB.Colors.ink)
-            if model.isOnline {
+            if let refusal = model.pairRefusal {
+                // The relay refused this Studio (journal F12): say so and stop; no QR to churn.
+                VStack(spacing: FB.Spacing.s3) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 32))
+                        .foregroundStyle(FB.Colors.danger)
+                    Text(refusal)
+                        .font(FB.Font.rowTitle())
+                        .foregroundStyle(FB.Colors.ink)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, FB.Spacing.s4)
+                    if model.pairRefusalNeedsUpdate {
+                        Button("Download the new Studio") {
+                            NSWorkspace.shared.open(BuilderPairingEngine.studioDownloadURL)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    Button("Try again") {
+                        model.retryAfterRefusal()
+                    }
+                    .buttonStyle(.link)
+                    .font(FB.Font.caption())
+                }
+                .frame(minHeight: 200)
+            } else if model.isOnline {
                 Text("Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.")
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)

@@ -93,6 +93,14 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>Set when the owner cancels pairing; New Server or the pair
     /// button clears it.</summary>
     private bool _pairingOptedOut;
+    /// <summary>The relay refused this Studio (journal F12): the cover shows why and no new code goes up until the
+    /// owner presses Try again.</summary>
+    private bool _pairRefused;
+    private bool _pairRefusalNeedsUpdate;
+    public bool PairRefused => _pairRefused;
+    public bool PairRefusalNeedsUpdate => _pairRefused && _pairRefusalNeedsUpdate;
+    /// <summary>The progress bar where the code goes: only while a code is on its way, never under a refusal.</summary>
+    public bool ShowPairQrSpinner => PairQr == null && !_pairRefused;
 
     /// <summary>Put a pairing code up at launch and keep one up (paused while
     /// offline, retried after a failure). Mirrors the Mac's beginPairing.</summary>
@@ -113,6 +121,7 @@ public sealed class Wizard : INotifyPropertyChanged
         var pair = _pair;
         _pair = null;
         pair?.Cancel();
+        if (_pairRefused) return;
         if (!IsPairing && !WantsPairing()) return;
         IsPairing = true;
         PairingStage = PairingStage.Qr;
@@ -193,6 +202,13 @@ public sealed class Wizard : INotifyPropertyChanged
     public void StartPairing()
     {
         if (IsPairing && _pair is not null) return;
+        if (_pairRefused)
+        {
+            // Held refusal: show it again, never a new code (only Try again does that).
+            ManualRecipeMode = false;
+            IsPairing = true;
+            return;
+        }
         _pairingOptedOut = false;
         SelectedServerName = null;
         Destination = null;
@@ -310,7 +326,39 @@ public sealed class Wizard : INotifyPropertyChanged
             case "error":
                 EndPairing(ev.Message ?? Strings.T("pairingFailed"), failed: true);
                 break;
+            case "refused":
+                ShowPairingRefusal(ev.Message);
+                break;
         }
+    }
+
+    /// <summary>The relay refused this Studio: keep the cover up with the reason and stop (journal F12).</summary>
+    private void ShowPairingRefusal(string? reason)
+    {
+        _pair = null;
+        _pairRefused = true;
+        _pairRefusalNeedsUpdate = PairSession.IsStudioOutdatedRefusal(reason);
+        _pairingWatch.OnRefused();
+        IsPairing = true;
+        PairingStage = PairingStage.Qr;
+        PairQr = null;
+        PairCode = null;
+        PairSas = null;
+        PairStatus = _pairRefusalNeedsUpdate
+            ? Strings.T("studioOutOfDateDownloadTheNew")
+            : Strings.T("flagshipCouldntStartPairingDetailsInLog");
+        FireBag();
+    }
+
+    /// <summary>Try again after a refusal: one new session, on the owner's word.</summary>
+    public void RetryAfterRefusal()
+    {
+        if (!_pairRefused) return;
+        _pairRefused = false;
+        _pairRefusalNeedsUpdate = false;
+        _pairingWatch.ClearRefusal();
+        IsPairing = false;
+        StartPairing();
     }
 
     // ---- Hosted VMs (the "Host here" destination) ----
@@ -1262,6 +1310,7 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(IsPairing), nameof(ShowPairingCover), nameof(PairQr), nameof(PairCode), nameof(PairWaitingNote),
         nameof(PairSas), nameof(PairStatus), nameof(PairDebug), nameof(HasPairSas),
         nameof(PairingStage), nameof(ManualRecipeMode), nameof(ShowPairingQr),
+        nameof(PairRefused), nameof(PairRefusalNeedsUpdate), nameof(ShowPairQrSpinner),
         nameof(ShowPairingConfirm), nameof(ShowAwaitingAuthorization), nameof(AdvancedAllowed),
         nameof(HasHostedServers), nameof(HostHereDisabledReason), nameof(HostHereEnabled),
         nameof(HostHereSpecSummary), nameof(HardwareBadgeLabel), nameof(HostedVmBadgeLabel),

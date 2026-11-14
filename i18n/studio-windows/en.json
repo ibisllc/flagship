@@ -971,5 +971,21 @@
   "cantReachFlagshipTryingAgain": {
     "en": "Can't reach Flagship. Check this PC's internet connection; Studio keeps trying.",
     "ctx": "Wizard.cs EndPairing (start screen, pairing failed)"
+  },
+  "studioOutOfDateDownloadTheNew": {
+    "en": "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.",
+    "ctx": "Wizard.cs ShowPairingRefusal (prose)"
+  },
+  "downloadTheNewStudio": {
+    "en": "Download the new Studio",
+    "ctx": "MainWindow.xaml (pairing refused)"
+  },
+  "flagshipCouldntStartPairingDetailsInLog": {
+    "en": "Flagship couldn't start pairing. The details are in the log.",
+    "ctx": "Wizard.cs ShowPairingRefusal (prose)"
+  },
+  "tryAgain": {
+    "en": "Try again",
+    "ctx": "MainWindow.xaml (pairing refused)"
   }
 }

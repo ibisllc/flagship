@@ -105,7 +105,10 @@ export type PairEvent =
   /** Terminal success: the recipe is written to `recipePath`. */
   | { event: "done"; recipePath: string; serverDomain: string; debugGranted: boolean; studioConfirmKeyHex?: string }
   /** Terminal failure. */
-  | { event: "error"; message: string };
+  | { event: "error"; message: string }
+  /** Terminal: the relay refused this Studio (its `error` frame, e.g. `STUDIO_PIPE_MIN`). `message` is the relay's
+   *  sentence. A Studio shows it and stops; it must not put up a new code (journal F12). */
+  | { event: "refused"; message: string };
 
 const DEFAULT_DEBUG_WARNING =
   "Turning on debug lets someone log into this server's console. Only approve this for a box you're actively debugging.";
@@ -203,6 +206,13 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
       cleanup();
       emit({ event: "error", message: msg });
       reject(new Error(msg));
+    };
+    const refuse = (reason: string) => {
+      if (finalized) return;
+      finalized = true;
+      cleanup();
+      emit({ event: "refused", message: reason });
+      reject(new Error(`relay refused: ${reason}`));
     };
 
     /** Write the recipe (with the debug grant, if granted) and resolve once. */
@@ -329,7 +339,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
           if (recipeText) return void finalize();
           return fail("pairing session timed out — re-run `flagship-build pair`");
         case "error":
-          return fail(`relay error: ${String(obj["reason"] ?? "unknown")}`);
+          return refuse(String(obj["reason"] ?? "unknown"));
         case "peer": {
           const frame = obj["frame"] as Record<string, unknown> | undefined;
           if (frame) await onPeerFrame(frame);
