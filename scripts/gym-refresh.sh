@@ -17,6 +17,8 @@
 #               then the gym Fly app, scaled to one machine. It NEVER runs `npm run
 #               deploy` and never touches flagship-webapp (the production static Worker
 #               that owns webapp./remote.flagshipserver.com).
+#   5b. test CA when wrangler.gym.toml names the gym's Pebble (docs/gym-test-acme.md), restart it: a fresh root
+#               and empty state for the run (GYM_ACME_RESTART=0 keeps it running).
 #   6. health   gym.flagshipserver.com and flagship-services-gym answer 200.
 #
 # Usage: bash scripts/gym-refresh.sh [--no-push] [--skip-fly-deploy] [--skip-deploy] [--dry-run]
@@ -67,6 +69,7 @@ MAIN_CHECKOUT="$(dirname "$COMMON_DIR")"
 SECRETS_FILE="${GYM_SECRETS_FILE:-$MAIN_CHECKOUT/.gym-secrets.env}"
 UPCLOUD_TOKEN_FILE="${GYM_UPCLOUD_TOKEN_FILE:-$HOME/.config/flagship/upcloud-token}"
 FLY_APP="flagship-services-gym"
+ACME_APP="flagship-acme-gym"
 # GYM_RELAY=rust runs the gym on the Rust relay (Dockerfile.relay); anything else keeps the Node hub.
 FLY_CONFIG="fly.gym.toml"; [ "${GYM_RELAY:-}" = rust ] && FLY_CONFIG="fly.gym.relay.toml"
 # GYM_MESH=on deploys the same relay as `gym-a` of the gym relay mesh (fly.gym.mesh.toml / fly.gym.relay.mesh.toml,
@@ -349,6 +352,33 @@ else
   fi
 fi
 run flyctl scale count 1 -a "$FLY_APP" --yes
+
+# ── 5b. test CA ───────────────────────────────────────────────────────────
+# docs/gym-test-acme.md: when the gym Worker issues from the gym's Pebble (ISSUANCE_ACME_DIRECTORY in $CFG), restart
+# it so the run starts on a fresh root and an empty state. .com registers its ACME account again on its own when the CA
+# has forgotten it; the live runner fetches the new root. GYM_ACME_RESTART=0 keeps the running Pebble.
+ACME_DIR="$(grep -E '^[[:space:]]*ISSUANCE_ACME_DIRECTORY[[:space:]]*=' "$WT/apps/com/$CFG" 2>/dev/null | head -1 | sed -E 's/^[^=]*=[[:space:]]*"([^"]*)".*/\1/' || true)"
+phase "5b test CA (${ACME_DIR:-none, Lets Encrypt})"
+if [ -z "$ACME_DIR" ]; then
+  say "the gym Worker issues from Let's Encrypt: this is the real-LE lane, or the test CA isn't configured"
+elif [ "$deploy" = "0" ] || [ "${GYM_ACME_RESTART:-1}" = "0" ]; then
+  say "leaving the test CA running"
+else
+  case "$ACME_DIR" in
+    https://flagship-acme-gym.fly.dev/*) ;;
+    *) die "ISSUANCE_ACME_DIRECTORY in $CFG names $ACME_DIR, not the gym's Pebble (flagship-acme-gym); refusing to restart anything" ;;
+  esac
+  run flyctl apps restart "$ACME_APP"
+  if [ "$DRY" != "1" ]; then
+    ok=0
+    for _ in $(seq 1 30); do
+      if curl -fsS --max-time 10 "$ACME_DIR" >/dev/null 2>&1 && curl -fsS --max-time 10 "${ACME_DIR%/dir}/roots/0" >/dev/null 2>&1; then ok=1; break; fi
+      sleep 5
+    done
+    [ "$ok" = 1 ] || die "the gym's test CA did not come back: $ACME_DIR"
+    say "test CA up: root $(curl -fsS --max-time 10 "${ACME_DIR%/dir}/roots/0" | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | cut -c1-23)…"
+  fi
+fi
 
 # ── 6. health ─────────────────────────────────────────────────────────────
 phase "6/6 health"
