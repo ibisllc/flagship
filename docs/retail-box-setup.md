@@ -195,7 +195,8 @@ says so in the app's help. Defences that close it: a monitor on the box (8.4), o
   a new window. Reset window: also 10 minutes (section 7.5).
 - A claimed box advertises nothing.
 - No LAN claim path. Claims are Bluetooth only, so the presence rule means something. (Ethernet only gives the box its
-  internet.)
+  internet.) Trays without Bluetooth claim through the `.com` lobby and mailbox instead, never over the LAN:
+  `docs/retail-wired-fleet.md`.
 
 ### 7.3 The handshake (`flagship/box-claim/v1`, mode `open`)
 
@@ -589,3 +590,6 @@ unique is printed per box.
   rugged laptop as the command centre running the webapp in Firefox, and server trays without Bluetooth hot-plugged
   into the network. Design the wired claim for that scenario (fleet claims from the webapp over the LAN, many trays
   at once). "The app is for the cool kids": Bluetooth stays the phone path for homes.
+  **Design: `docs/retail-wired-fleet.md`** (console code as the default, a `.com` claim lobby with an arm-all timed
+  press for trays with no console, batch claims, replace and bulk release from the webapp, its own questions Q-W1 to
+  Q-W11).
