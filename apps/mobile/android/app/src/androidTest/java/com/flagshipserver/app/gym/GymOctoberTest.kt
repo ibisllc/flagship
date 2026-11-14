@@ -744,6 +744,8 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("shared-app-row-bright-maple--plants").performScrollTo().performClick()
         waitUntilExists("shared-app-card", timeoutMs = 20_000)
         assertEquals(0, count("co-invite-open"))
+    }
+
     // ─── A separate access list on each server (Pro; feat/marketplace) ──────
 
     private fun openPlantsAccess(listsPlan: String, separateLists: Boolean = false) {
