@@ -101,6 +101,7 @@ export * from "./releasePqPin.js";
 export * from "./caLeasePq.js";
 export * from "./bootUnlockV2.js";
 export * from "./signedTime.js";
+export * from "./deviceRevocationList.js";
 export * from "./archV2Switch.js";
 export * from "./rustOwnership.js";
 export * from "./servingAuthority.js";

@@ -109,6 +109,8 @@ export interface AccountDeviceBookOptions {
    *  the members screen): that read must not be satisfied by the doorbell's
    *  "unchanged since the last beat" (doorbell.ts), which is up to one heartbeat old. */
   fetchGrants?: (opts: { live: boolean }) => Promise<unknown>;
+  /** `.com`'s signed revocation list beside the grants (deviceRevocationList.ts), for keyd; passed on unread. */
+  onRevocationList?: (list: unknown) => void;
   now?: () => number;
   /** Least time between two refreshes asked for by an unknown key. Default 30 s. */
   minRefreshMs?: number;
@@ -156,7 +158,14 @@ export class AccountDeviceBook {
     this.refreshing ??= (async () => {
       if (live) this.lastLiveRefresh = this.now();
       try {
-        const body = (await this.opts.fetchGrants!({ live })) as { grants?: unknown; pqKeyBindings?: unknown } | null;
+        const body = (await this.opts.fetchGrants!({ live })) as { grants?: unknown; pqKeyBindings?: unknown; revocationList?: unknown } | null;
+        if (body?.revocationList !== undefined) {
+          try {
+            this.opts.onRevocationList?.(body.revocationList);
+          } catch (e) {
+            this.opts.log?.(`[device-book] keyd did not take the revocation list: ${String((e as Error)?.message ?? e)}`);
+          }
+        }
         if (!body || !Array.isArray(body.grants)) return;
         this.adopt(body.grants, body.pqKeyBindings);
         await this.persist();

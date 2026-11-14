@@ -92,7 +92,10 @@ export function checkIdentityAssertion(msg: Uint8Array | string): IdentityAssert
 // owner's signed revocations and rank orders (`held`, keyd's revocations.json): a revoked grant or
 // device key, or a later order for the same target in this app. keyd learns those only when the
 // daemon hands them over, so a daemon can withhold one it has not passed on yet, but never forge
-// one or roll back one keyd holds. A statement dated more than the clock skew ahead is refused.
+// one or roll back one keyd holds. Withholding device revocations is bounded: keyd signs master only
+// while it holds `.com`'s CA-signed list of the account's revoked grants issued within the last 7
+// days (deviceRevocationList.ts, keyd `evidence.list`). Rank orders do not go through `.com`, so a
+// withheld demotion is not covered. A statement dated more than the clock skew ahead is refused.
 
 export type MasterEvidenceRefusal =
   | "not-master"

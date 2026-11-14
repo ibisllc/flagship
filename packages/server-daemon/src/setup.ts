@@ -26,6 +26,8 @@ import { showServerCode } from "./enrollment.js";
 import { loadArchV2Config, rootEngine, setActiveEngine } from "./engine/engine.js";
 import { migrateDockerToPodman, rollbackToDocker } from "./engine/migrate.js";
 import { installHealthReporter } from "./healthReporter.js";
+import { writeKeydCaKeys } from "./keydCaKeys.js";
+import { caTrustChainFromFolder } from "./releaseVerifier.js";
 import { installRustStack } from "./rustStack/install.js";
 import { DAEMON_USER, SERVER_CODE_REQUEST } from "./privileged.js";
 import { ensureWasiRuntime } from "./wasi/install.js";
@@ -194,6 +196,8 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
     const sandbox = await refreshDaemonHardening({ run, onLog: log });
     return { installed: guard || sandbox, rootConfig };
   },
+  // The CA keys keyd checks .com's revocation lists against, from this release's own pin (keydCaKeys.ts).
+  "keyd-ca-keys": () => writeKeydCaKeys({ keydState: "/var/lib/flagship-keyd", chain: () => caTrustChainFromFolder({ gitRepoPath: REPO }) }),
   "container-links": () => ensureContainerLinksUnmanaged(localCommandRunner, { log }),
   "data-unit": syncDataUnit,
   "debug-access": openDebugAccess,

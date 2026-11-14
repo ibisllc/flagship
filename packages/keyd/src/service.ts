@@ -14,7 +14,11 @@ import {
   openLlmPayload,
   openGossip,
   openSealedFromEd25519Recipient,
+  parseKeydCaKeys,
+  REVOCATION_LIST_MAX_AGE_MS,
+  REVOCATION_LIST_MAX_IDS,
   sealGossip,
+  verifyDeviceRevocationList,
   sealLlmPayload,
   validatePurposeTag,
 } from "@flagship/protocol";
@@ -69,6 +73,13 @@ export interface KeydServiceInit {
   archivePoolPath?: string;
   /** Where keyd keeps the owner's revocations and rank orders it was handed (`revocations.json`); absent keeps them in memory. */
   revocationsPath?: string;
+  /**
+   * `.com`'s signed revocation lists (deviceRevocationList.ts): the CA keys root wrote
+   * (`ca-keys.json`) and where keyd keeps the newest list's time (`revocation-list.json`). Without
+   * `caKeysPath` keyd takes no list, and so signs no master assertion.
+   */
+  caKeysPath?: string;
+  revocationListPath?: string;
   now?: () => number;
 }
 
@@ -97,6 +108,10 @@ export class KeydService {
   readonly #revocationsPath: string | null;
   /** Null when `revocations.json` is unreadable: every master assertion is refused rather than forgetting a revocation. */
   #held: HeldRevocationsState | null;
+  readonly #caKeysPath: string | null;
+  readonly #revocationListPath: string | null;
+  /** The newest `.com` revocation list keyd took (its issuedAt); null: none yet. */
+  #listAt: number | null;
 
   constructor(init: KeydServiceInit) {
     if (init.identitySeed.length !== 32) throw new Error("keyd: identity seed must be 32 bytes");
@@ -126,6 +141,9 @@ export class KeydService {
     this.#archive = new ArchiveKeys(init.archivePoolPath ?? null, this.#now);
     this.#revocationsPath = init.revocationsPath ?? null;
     this.#held = loadHeld(this.#revocationsPath);
+    this.#caKeysPath = init.caKeysPath ?? null;
+    this.#revocationListPath = init.revocationListPath ?? null;
+    this.#listAt = loadListAt(this.#revocationListPath);
   }
 
   get publicKeyHex(): string {
@@ -181,6 +199,11 @@ export class KeydService {
           ...(a.signInPubHex !== undefined ? { signInPubHex: strArg(a, "signInPubHex", 64) } : {}),
         };
         if (!isServiceId(ev.appId)) throw new KeydError("bad-request", "appId must be <creator>--<slug> or <slug>");
+        // A daemon that withholds revocations must not keep master working: keyd needs a recent
+        // list of the account's revoked grants from `.com` (evidence.list) to sign master at all.
+        if (this.#listAt === null || this.#now() - this.#listAt > REVOCATION_LIST_MAX_AGE_MS) {
+          throw new KeydError("forbidden", "master needs a recent revocation list from .com (stale-revocations)");
+        }
         const refused = checkMasterEvidence(
           new TextDecoder().decode(msg),
           ev,
@@ -215,6 +238,35 @@ export class KeydService {
           this.#held = r.held;
         }
         return { result: { changed: r.changed } };
+      }
+      case "evidence.list": {
+        // `.com`'s CA-signed list of the account's revoked device grants (deviceRevocationList.ts),
+        // checked against the CA keys root wrote: its grant ids join what keyd holds (removal
+        // only), and its time is what keeps master signing open.
+        noExtraArgs(a, ["list"]);
+        if (!this.#owner) throw new KeydError("forbidden", "no owner key is pinned for this box");
+        const caKeys = this.#caKeysPath ? parseKeydCaKeys(readJsonOrNull(this.#caKeysPath)) : null;
+        if (!caKeys) throw new KeydError("forbidden", "root has written no CA keys for keyd");
+        const r = verifyDeviceRevocationList(a.list, { irkPubHex: toHex(this.#owner.irkPub), caKeys, now: this.#now() });
+        if (!r.ok) throw new KeydError("forbidden", `keyd takes only .com's signed list for this account (${r.code})`);
+        if (this.#listAt !== null && r.list.issuedAt <= this.#listAt) return { result: { changed: false } };
+        const held = this.#heldOrThrow();
+        const fresh = r.list.grantIds.filter((id) => !held.grants.includes(id));
+        if (held.grants.length + fresh.length > REVOCATION_LIST_MAX_IDS) throw new KeydError("forbidden", "keyd holds too many revocations (full)");
+        if (fresh.length > 0) {
+          const next = normalizeHeldRevocations({ ...held, grants: [...held.grants, ...fresh] });
+          if (this.#revocationsPath) {
+            writeFileSync(`${this.#revocationsPath}.tmp`, JSON.stringify(next), { mode: 0o600 });
+            renameSync(`${this.#revocationsPath}.tmp`, this.#revocationsPath);
+          }
+          this.#held = next;
+        }
+        if (this.#revocationListPath) {
+          writeFileSync(`${this.#revocationListPath}.tmp`, JSON.stringify({ issuedAt: r.list.issuedAt }), { mode: 0o600 });
+          renameSync(`${this.#revocationListPath}.tmp`, this.#revocationListPath);
+        }
+        this.#listAt = r.list.issuedAt;
+        return { result: { changed: true, added: fresh.length } };
       }
       case "pq.status":
         noExtraArgs(a, []);
@@ -599,6 +651,21 @@ function verifyHex(sig: string, m: Uint8Array, pub: string): boolean {
   } catch {
     return false;
   }
+}
+
+function readJsonOrNull(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** `revocation-list.json`'s issuedAt; null when missing or damaged (master waits for the next list). */
+function loadListAt(path: string | null): number | null {
+  if (!path) return null;
+  const v = readJsonOrNull(path) as { issuedAt?: unknown } | null;
+  return v && typeof v.issuedAt === "number" && Number.isSafeInteger(v.issuedAt) && v.issuedAt > 0 ? v.issuedAt : null;
 }
 
 /** keyd's `revocations.json`: empty when missing, null when unreadable. */

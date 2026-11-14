@@ -2777,6 +2777,7 @@ export async function tryControlPlane(
           identities: storage.deviceIdentities,
           usernames: storage.usernames,
           pqTrust: storage.pqTrust,
+          ca,
         },
         username,
       ),

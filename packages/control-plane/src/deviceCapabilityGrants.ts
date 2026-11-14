@@ -28,6 +28,8 @@ import {
   DEVICE_SCOPES,
   isSensitiveScope,
   RELAY_LOG_GRANT_ID,
+  REVOCATION_LIST_MAX_IDS,
+  signDeviceRevocationList,
   verifyDeviceCapabilityGrant,
   verifyDeviceCapabilityGrantFast,
   verifyRevokeDeviceCapabilityGrant,
@@ -44,6 +46,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
+import type { CaIssuer } from "./pubkeyCert.js";
 import {
   conflict,
   forbidden,
@@ -62,6 +65,12 @@ export interface DeviceCapabilityGrantsDeps {
    * account's `account-irk` / `admin-root` bindings (current keys only; the box verifies them).
    */
   pqTrust?: PqTrustStorage;
+  /**
+   * The CA operational key: when present, the list also carries `revocationList`, `.com`'s signed
+   * list of the account's revoked grants (deviceRevocationList.ts) that keyd needs, fresh, to sign
+   * master. The doorbell's digest reads the list without it, so its stamp stays stable.
+   */
+  ca?: CaIssuer;
   now?: () => number;
 }
 
@@ -467,5 +476,23 @@ export async function handleListAccountDeviceGrants(
     });
   }
   const pqBody = pq ? { pqKeyBindings: { accountIrk: pq.accountIrk, adminRoot: pq.adminRoot } } : {};
-  return ok({ username: userNorm, grants: out, ...pqBody }, { "cache-control": "private, no-store" });
+  // Every grant that no longer counts: revoked, or for a device that is gone or holds another key.
+  const listBody = deps.ca && /^[0-9a-f]{64}$/.test(userRec.irkPubHex.toLowerCase())
+    ? {
+        revocationList: signDeviceRevocationList(
+          {
+            irkPubHex: userRec.irkPubHex.toLowerCase(),
+            issuedAt: (deps.now ?? Date.now)(),
+            grantIds: grants
+              .filter((g) => g.revokedAt !== null || live.get(g.deviceId) !== g.devicePubHex.toLowerCase())
+              .sort((a, b) => b.issuedAt - a.issuedAt)
+              .map((g) => g.grantId)
+              .filter((id) => /^[0-9a-zA-Z-]{8,64}$/.test(id))
+              .slice(0, REVOCATION_LIST_MAX_IDS),
+          },
+          deps.ca.keypair.privateKey,
+        ),
+      }
+    : {};
+  return ok({ username: userNorm, grants: out, ...pqBody, ...listBody }, { "cache-control": "private, no-store" });
 }

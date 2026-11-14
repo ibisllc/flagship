@@ -511,6 +511,12 @@ describe("policy.rename: the owner moves the box to another name in its account"
 
 describe("sign.identity: master only with the owner's evidence", () => {
   const MV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/identity-assertion/master-evidence.json"), "utf8"));
+  /** keyd has taken a recent `.com` revocation list (evidence.list), so master is open to the evidence. */
+  const freshList = (dir: string) => {
+    const p = join(dir, "revocation-list.json");
+    writeFileSync(p, JSON.stringify({ issuedAt: MV.now - 60_000 }));
+    return p;
+  };
   it("matches every vector, and plain sign refuses master", async () => {
     const { KeydService } = await import("../src/service.js");
     const dir = mkdtempSync(join(tmpdir(), "keyd-held-"));
@@ -523,6 +529,7 @@ describe("sign.identity: master only with the owner's evidence", () => {
         swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
         owner: { irkPubHex: c.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: c.anchors.adminRootPubHex ?? null },
         revocationsPath,
+        revocationListPath: freshList(dir),
         now: () => MV.now,
       });
       const msg = Buffer.from(c.msg).toString("hex");
@@ -577,6 +584,7 @@ describe("sign.identity: master only with the owner's evidence", () => {
         swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
         owner: { irkPubHex: ok.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: ok.anchors.adminRootPubHex },
         revocationsPath,
+        revocationListPath: freshList(dir),
         now: () => MV.now,
       });
     const sign = (svc: InstanceType<typeof KeydService>, c: { msg: string; ev: object }) =>
@@ -608,9 +616,81 @@ describe("sign.identity: master only with the owner's evidence", () => {
       swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
       owner: { irkPubHex: ok.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: ok.anchors.adminRootPubHex },
       revocationsPath,
+      revocationListPath: freshList(dir),
       now: () => MV.now,
     });
     expect(() => svc.handle({ op: "sign.identity", args: { msg: Buffer.from(ok.msg).toString("hex"), ...ok.ev } } as never)).toThrow("revocations");
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("evidence.list: master needs a recent revocation list from .com (B2 #6 residual)", () => {
+  const MV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/identity-assertion/master-evidence.json"), "utf8"));
+  const RV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/device-revocation-list/vectors.json"), "utf8"));
+
+  it("takes exactly the lists the shared vectors accept", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-list-"));
+    writeFileSync(join(dir, "ca-keys.json"), JSON.stringify(RV.caKeys));
+    for (const c of RV.cases) {
+      rmSync(join(dir, "revocation-list.json"), { force: true });
+      const svc = new KeydService({
+        identitySeed: SEED,
+        owner: { irkPubHex: RV.irkPubHex, serverFqdn: "home.john.flagship.services" },
+        caKeysPath: join(dir, "ca-keys.json"),
+        revocationListPath: join(dir, "revocation-list.json"),
+        now: () => RV.now,
+      });
+      const run = () => svc.handle({ op: "evidence.list", args: { list: c.list } } as never);
+      if (c.expect === "ok") expect(run().result.changed, c.name).toBe(true);
+      else expect(run, c.name).toThrow(`(${c.expect})`);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses master with no list or a stale one, signs once a list arrives, and keeps the list's revocations", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const { signDeviceRevocationList, REVOCATION_LIST_MAX_AGE_MS } = await import("@flagship/protocol");
+    const ok = MV.cases.find((c: { name: string }) => c.name === "admin device grant under the admin root");
+    const grantId = (ok.ev.statement as string).split("|")[1]!;
+    const ca = new Uint8Array(32).fill(0x0c);
+    const dir = mkdtempSync(join(tmpdir(), "keyd-fresh-"));
+    let now = MV.now as number;
+    writeFileSync(join(dir, "ca-keys.json"), JSON.stringify({ v: 1, keys: [Buffer.from(ed.getPublicKey(ca)).toString("hex")], validFrom: now - 86_400_000, validUntil: now + 30 * 86_400_000 }));
+    const make = () =>
+      new KeydService({
+        identitySeed: SEED,
+        swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
+        owner: { irkPubHex: ok.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: ok.anchors.adminRootPubHex },
+        revocationsPath: join(dir, "revocations.json"),
+        caKeysPath: join(dir, "ca-keys.json"),
+        revocationListPath: join(dir, "revocation-list.json"),
+        now: () => now,
+      });
+    const sign = (svc: InstanceType<typeof KeydService>) =>
+      svc.handle({ op: "sign.identity", args: { msg: Buffer.from(ok.msg).toString("hex"), ...ok.ev } } as never);
+    const list = (ids: string[], at: number) => ({ list: signDeviceRevocationList({ irkPubHex: ok.anchors.irkPubHex, issuedAt: at, grantIds: ids }, ca) });
+
+    let svc = make();
+    expect(() => sign(svc)).toThrow("stale-revocations");
+    expect(svc.handle({ op: "evidence.list", args: list([], now - 1000) } as never).result).toEqual({ changed: true, added: 0 });
+    expect(() => sign(svc)).not.toThrow();
+    // Across a restart too.
+    svc = make();
+    expect(() => sign(svc)).not.toThrow();
+    // A newer list that names the device's grant: revoked for good, whatever is presented later.
+    expect(svc.handle({ op: "evidence.list", args: list([grantId], now - 500) } as never).result).toEqual({ changed: true, added: 1 });
+    expect(() => sign(svc)).toThrow("(revoked)");
+    expect(svc.handle({ op: "evidence.list", args: list([], now - 2000) } as never).result).toEqual({ changed: false });
+    expect(svc.handle({ op: "evidence.list", args: list([], now - 100) } as never).result).toEqual({ changed: true, added: 0 });
+    expect(() => make().handle({ op: "sign.identity", args: { msg: Buffer.from(ok.msg).toString("hex"), ...ok.ev } } as never)).toThrow("(revoked)");
+    // Once the newest list is too old, keyd signs no master (the daemon gets manager), whatever the evidence.
+    rmSync(join(dir, "revocations.json"));
+    now += REVOCATION_LIST_MAX_AGE_MS;
+    expect(() => sign(make())).toThrow("stale-revocations");
+    // No CA keys from root: no list is taken.
+    rmSync(join(dir, "ca-keys.json"));
+    expect(() => make().handle({ op: "evidence.list", args: list([], now) } as never)).toThrow("no CA keys");
     rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -16,6 +16,7 @@ pub const OPS: &[&str] = &[
     "sign.hybrid",
     "sign.identity",
     "evidence.note",
+    "evidence.list",
     "pq.status",
     "unseal",
     "swk.hkdf",
