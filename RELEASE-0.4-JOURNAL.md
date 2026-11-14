@@ -352,6 +352,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-14 Owner (enterprise): freeze yes; seats unlinkable with a mandatory pseudonym set before the invite;
   caps debated (5 fine for family, 10 small for business, tiers must differ); founder privileges + bylaws ceremony to
   overturn a rogue admin proposed. Recorded in docs/enterprise-accounts.md.
+- 2026-11-14 Owner: "I agree on all. Build!!!" Enterprise decisions recorded (caps Free 5 / Pro 10 / Pro Max 25 /
+  Enterprise per seat; Q-E3 yes; freeze only; pseudonym seats; founder 7-day removal with veto; bylaws ceremony).
+  Agents: `0.4/comanager-caps`, `0.4/enterprise-build` (phases in order).
 
 ## Resume point
 
