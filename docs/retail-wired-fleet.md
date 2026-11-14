@@ -424,3 +424,11 @@ To design with it: what the check-in proves and carries (signed by the site's ad
 content), how long a permission lasts between check-ins and what a lapsed site does (degrade, never wipe), the
 guidelines the warranty depends on, and how the "not hacked" record is evidenced. The warranty wording needs legal
 review before it is offered.
+
+### Owner note, 2026-11-14: multi-admin ceremonies and enterprise accounts
+
+The check-in ceremony may involve several people: the enterprise version can have elaborate multi-admin ceremonies
+(for example k of n admins sign the "still running, all fine" statement). More broadly, enterprise admin accounts
+should be the only ones that let you add multiple authorized user accounts and make some of them admins of certain
+servers or services. Normal accounts can still invite someone to share a server (`docs/share-a-server.md`), but not
+with the same granularity. Details to iron out: `docs/enterprise-accounts.md`.
