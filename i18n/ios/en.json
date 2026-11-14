@@ -15411,5 +15411,229 @@
   "Restore into this server…": {
     "en": "Restore into this server…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:367"
+  },
+  "That name is taken. Try another.": {
+    "en": "That name is taken. Try another.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Couldn't create the organization. Try again.": {
+    "en": "Couldn't create the organization. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "This organization's records didn't check out, so nothing is shown. Try again later.": {
+    "en": "This organization's records didn't check out, so nothing is shown. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Unlock Flagship to sign this.": {
+    "en": "Unlock Flagship to sign this.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "You can freeze one admin for up to 72 hours, once a week.": {
+    "en": "You can freeze one admin for up to 72 hours, once a week.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "That didn't go through. Try again.": {
+    "en": "That didn't go through. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Frozen for 72 hours. The bylaws' signers can lift it sooner.": {
+    "en": "Frozen for 72 hours. The bylaws' signers can lift it sooner.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Asked. You'll get your access back when enough of them approve.": {
+    "en": "Asked. You'll get your access back when enough of them approve.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Approved.": {
+    "en": "Approved.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Give this person a name the organization will know them by.": {
+    "en": "Give this person a name the organization will know them by.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Your plan has no free seats. Remove someone or add seats first.": {
+    "en": "Your plan has no free seats. Remove someone or add seats first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "An organization lets several people run servers together. No one person can delete everything, and every change is signed by the people who approved it.": {
+    "en": "An organization lets several people run servers together. No one person can delete everything, and every change is signed by the people who approved it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Your organizations": {
+    "en": "Your organizations",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Create an organization": {
+    "en": "Create an organization",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Organizations": {
+    "en": "Organizations",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Name your organization": {
+    "en": "Name your organization",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Create": {
+    "en": "Create",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "This becomes the organization's address, like home.name.flagship.services. You start as its only admin; invite others next.": {
+    "en": "This becomes the organization's address, like home.name.flagship.services. You start as its only admin; invite others next.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Invite a person": {
+    "en": "Invite a person",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Freeze this admin for 72 hours?": {
+    "en": "Freeze this admin for 72 hours?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Freeze for 72 hours": {
+    "en": "Freeze for 72 hours",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "They can't approve anything until it ends or the bylaws' signers lift it. You can freeze one admin once a week. Removing an admin takes more people.": {
+    "en": "They can't approve anything until it ends or the bylaws' signers lift it. You can freeze one admin once a week. Removing an admin takes more people.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Your access is frozen until %@.": {
+    "en": "Your access is frozen until %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "To lift it sooner, %lld of these must approve: %@.": {
+    "en": "To lift it sooner, %lld of these must approve: %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Restore my access": {
+    "en": "Restore my access",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Nothing to approve.": {
+    "en": "Nothing to approve.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Approved by %lld": {
+    "en": "Approved by %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "You approved this.": {
+    "en": "You approved this.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "People who can approve": {
+    "en": "People who can approve",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Frozen until %@": {
+    "en": "Frozen until %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Freeze": {
+    "en": "Freeze",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Seat %@": {
+    "en": "Seat %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Share the link": {
+    "en": "Share the link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "They open it on their phone and you both check the same 6-digit code before you approve.": {
+    "en": "They open it on their phone and you both check the same 6-digit code before you approve.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Name the organization will know them by": {
+    "en": "Name the organization will know them by",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Who is this?": {
+    "en": "Who is this?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Required. The organization sees only this name, never their own account.": {
+    "en": "Required. The organization sees only this name, never their own account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "What can they do?": {
+    "en": "What can they do?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Role": {
+    "en": "Role",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Admin of one server": {
+    "en": "Admin of one server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Admin of one app": {
+    "en": "Admin of one app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Server address": {
+    "en": "Server address",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "App id": {
+    "en": "App id",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Make the invitation": {
+    "en": "Make the invitation",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Lift a freeze": {
+    "en": "Lift a freeze",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Change who are admins or the rules": {
+    "en": "Change who are admins or the rules",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Give a person a seat or a role": {
+    "en": "Give a person a seat or a role",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Remove an admin after notice": {
+    "en": "Remove an admin after notice",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Delete a server": {
+    "en": "Delete a server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Update a server": {
+    "en": "Update a server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Approve an organization change": {
+    "en": "Approve an organization change",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Founder and admin": {
+    "en": "Founder and admin",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Admin": {
+    "en": "Admin",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Board member: lifts freezes": {
+    "en": "Board member: lifts freezes",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Recovery key": {
+    "en": "Recovery key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Run servers together, with signed approvals": {
+    "en": "Run servers together, with signed approvals",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
   }
 }

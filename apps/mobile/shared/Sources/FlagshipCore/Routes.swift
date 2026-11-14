@@ -171,6 +171,7 @@ public enum SettingsRoute: Hashable, Sendable {
     case accountSecurity
     /// Settings → Quantum-safe protection (architecture v2): the strict opt-in per server.
     case quantumSafety
+    case organizations
     case postRecoveryProgress
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
     /// export of the whole UMK. Reached from Settings → Recovery.
