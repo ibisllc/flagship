@@ -65,7 +65,7 @@ export interface AbuseEnv extends VoiciAbuseEnv {
 
 /** What the push forwarder takes (controlPlaneRoutes.buildOptionalPushForwarder). */
 export type AbusePushForward = (args: {
-  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush" | "unifiedpush"; providerToken: string }>;
   category: string;
   sealedPayloadHex: string;
   webpushPayloadBytes?: Uint8Array;

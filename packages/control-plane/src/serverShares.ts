@@ -38,6 +38,7 @@ import { equalBytes, hexToBytes } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
 import { conflict, forbidden, gone, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 import { sha256 } from "@noble/hashes/sha256";
+import { checkWebPushSubscription } from "./pushEndpointGuard.js";
 
 export interface ServerShareDeps {
   shares: ServerShareStorage;
@@ -348,6 +349,10 @@ export async function handleServerSharePush(
   const providerToken = typeof b.providerToken === "string" ? b.providerToken : "";
   if (providerToken.length === 0 || providerToken.length > MAX_PROVIDER_TOKEN) return malformed("providerToken required");
   if (shareSha256Hex(providerToken) !== push.tokenSha256) return forbidden("token is not the one that was signed");
+  if (push.platform === "webpush" || push.platform === "unifiedpush") {
+    const checked = checkWebPushSubscription(providerToken);
+    if (!checked.ok) return malformed(`push endpoint refused: ${checked.reason}`);
+  }
   const put = await deps.shares.putPush(
     {
       shareId,

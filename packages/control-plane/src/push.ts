@@ -6,7 +6,8 @@
  *   DELETE /api/push/<token-id> — IRK-signed; revoke
  *   POST   /api/push/relay      — STK-signed by a registered box of the
  *                                  target user; submits an encrypted payload
- *                                  + target user; Worker forwards to APNs/FCM
+ *                                  + target user; Worker forwards to APNs/FCM/
+ *                                  Web Push (browsers and UnifiedPush)
  *
  * Privacy invariant: the relay payload is opaque to .com. The phone
  * pre-shares an X25519 pubkey at register time; the sender (another
@@ -43,6 +44,8 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
+import type { PushTargetPlatform } from "./pushBridge.js";
+import { checkWebPushSubscription, type PushEndpointPolicy } from "./pushEndpointGuard.js";
 import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { hexToBytes, bytesToHex } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
@@ -85,12 +88,20 @@ export interface PushDeps {
    * returns ok=true for at-least-one-success.
    */
   forwardToProviders?: (args: {
-    targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+    targets: Array<{ tokenId: string; platform: PushTargetPlatform; providerToken: string }>;
     category: string;
     sealedPayloadHex: string;
     /** Web Push body; the others see the category only. */
     webpushPayloadBytes?: Uint8Array;
   }) => Promise<{ ok: boolean; sent: number; failed: number }>;
+  /** Extra hosts a Web Push / UnifiedPush endpoint may not name. */
+  pushEndpointPolicy?: PushEndpointPolicy;
+  /**
+   * Registration-time DNS check of a Web Push / UnifiedPush endpoint's host
+   * (`resolvePushEndpointHost`): false refuses the registration. Unset, only
+   * the syntactic check runs.
+   */
+  checkPushEndpointHost?: (url: URL) => Promise<boolean>;
 }
 
 interface RegisterBody {
@@ -106,6 +117,7 @@ interface RegisterBody {
 }
 
 const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
+const ANDROID_PLATFORMS: ReadonlySet<string> = new Set(["fcm", "unifiedpush"]);
 
 /**
  * Phase 3b — opt-in extras for the vouched cross-device admit path.
@@ -136,8 +148,8 @@ export async function handlePushRegister(
   ) {
     return malformed("malformed body");
   }
-  if (r.platform !== "apns" && r.platform !== "fcm" && r.platform !== "webpush") {
-    return malformed("platform must be apns|fcm|webpush");
+  if (r.platform !== "apns" && r.platform !== "fcm" && r.platform !== "webpush" && r.platform !== "unifiedpush") {
+    return malformed("platform must be apns|fcm|webpush|unifiedpush");
   }
   const deviceId = r.deviceId.toLowerCase();
   if (!DEVICE_ID_RE.test(deviceId)) return malformed("deviceId must be 16-byte lowercase hex");
@@ -172,9 +184,24 @@ export async function handlePushRegister(
   const now = (deps.now ?? (() => Date.now()))();
   if (Math.abs(now - r.issuedAt) > freshness) return forbidden("stale request");
 
-  const existingToken = (await deps.pushTokens.listByUser(r.username)).find(
+  if (r.platform === "webpush" || r.platform === "unifiedpush") {
+    const checked = checkWebPushSubscription(r.providerToken, deps.pushEndpointPolicy);
+    if (!checked.ok) return malformed(`push endpoint refused: ${checked.reason}`);
+    if (deps.checkPushEndpointHost && !(await deps.checkPushEndpointHost(checked.url))) {
+      return malformed("push endpoint refused: host does not resolve to a public address");
+    }
+  }
+
+  const userTokens = await deps.pushTokens.listByUser(r.username);
+  const existingToken = userTokens.find(
     (token) => token.deviceId === deviceId && token.platform === r.platform && token.providerToken === r.providerToken,
   );
+  // An Android device delivers through exactly one transport at a time (FCM
+  // or UnifiedPush): a new token replaces its others, so a switch never
+  // doubles every notification. Quarantine travels with the device.
+  const superseded = !existingToken && ANDROID_PLATFORMS.has(r.platform)
+    ? userTokens.filter((token) => token.deviceId === deviceId && ANDROID_PLATFORMS.has(token.platform))
+    : [];
   const tokenId = existingToken?.tokenId ?? generateTokenId();
   // Phase 3b — a vouched cross-device admit stamps the 14-day
   // quarantine on the row at insert time (rather than a follow-up
@@ -182,7 +209,9 @@ export async function handlePushRegister(
   // quarantined between put + stamp. quarantineAlertsFiredBitmap stays
   // 0; the cron OR-s in the T+0 rung on its first tick.
   const quarantine = options?.quarantine === true;
-  const quarantineUntil = quarantine ? now + QUARANTINE_MS : 0;
+  const carriedQuarantine = Math.max(0, ...superseded.map((token) => token.quarantineUntil ?? 0));
+  const carriedBitmap = superseded.reduce((bits, token) => bits | (token.quarantineAlertsFiredBitmap ?? 0), 0);
+  const quarantineUntil = Math.max(quarantine ? now + QUARANTINE_MS : 0, carriedQuarantine > now ? carriedQuarantine : 0);
   await deps.pushTokens.put({
     tokenId,
     username: r.username,
@@ -194,7 +223,9 @@ export async function handlePushRegister(
     registeredAt: existingToken?.registeredAt ?? now,
     lastSeenAt: now,
     quarantineUntil,
+    ...(carriedBitmap && quarantineUntil > now ? { quarantineAlertsFiredBitmap: carriedBitmap } : {}),
   });
+  for (const token of superseded) await deps.pushTokens.remove(token.tokenId);
   if (quarantine && !existingToken && deps.auditEvents) {
     // Best-effort: the audit insert never fails the admission. The
     // device-added row carries quarantineUntil so the Activity feed

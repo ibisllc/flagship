@@ -9,6 +9,12 @@
  *     mobile flows — Worker mints a short-lived VAPID JWT, POSTs to
  *     the per-subscription endpoint URL, browser receives the push
  *     in its service worker.
+ *   - Android without Google Play Services uses UnifiedPush: the phone's
+ *     distributor hands out a Web Push endpoint, so it is the same
+ *     RFC 8030 + RFC 8291 + VAPID send, carrying the FCM data map
+ *     (category and display fields, never the sealed blob) encrypted to
+ *     the phone and padded so its length doesn't tell categories apart.
+ *     Endpoints pass `checkPushEndpointUrl` and redirects are not followed.
  *
  * Webapp v1 sends *empty-payload* pushes: the SW shows a generic
  * notification, the user opens the webapp to see which server is
@@ -30,6 +36,7 @@
  */
 
 import { appRouteLink } from "./appLink.js";
+import { checkPushEndpointUrl, type PushEndpointPolicy } from "./pushEndpointGuard.js";
 
 /**
  * Minimal fetch signature this module needs. Defined locally so control-plane
@@ -43,6 +50,7 @@ export type FetchLike = (
     method?: string;
     headers?: Record<string, string>;
     body?: string | Uint8Array | ArrayBuffer;
+    redirect?: "follow" | "manual" | "error";
   },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }>;
 
@@ -66,14 +74,18 @@ export interface PushBridgeConfig {
     /** mailto: URI required by VAPID `sub` claim. */
     contact: string;
   };
+  /** Extra hosts no Web Push / UnifiedPush endpoint may name (the deployment's own apexes). */
+  endpointPolicy?: PushEndpointPolicy;
   fetchImpl?: FetchLike;
   /** Wall-clock for token caching. Tests inject. */
   now?: () => number;
 }
 
+export type PushTargetPlatform = "apns" | "fcm" | "webpush" | "unifiedpush";
+
 export interface PushTarget {
   tokenId: string;
-  platform: "apns" | "fcm" | "webpush";
+  platform: PushTargetPlatform;
   providerToken: string;
 }
 
@@ -162,6 +174,21 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
               payloadBytes: args.webpushPayloadBytes,
               fetchImpl,
               now,
+              ...(cfg.endpointPolicy ? { policy: cfg.endpointPolicy } : {}),
+            });
+            sent++;
+            return;
+          }
+          if (t.platform === "unifiedpush" && cfg.webpush) {
+            await sendWebpush({
+              cfg: cfg.webpush,
+              providerToken: t.providerToken,
+              payloadBytes: unifiedPushPayload(args.category, args.displayData),
+              padTo: UNIFIEDPUSH_PAD_BLOCK,
+              urgency: "high",
+              fetchImpl,
+              now,
+              ...(cfg.endpointPolicy ? { policy: cfg.endpointPolicy } : {}),
             });
             sent++;
             return;
@@ -192,7 +219,7 @@ export function wrapForwarderAsV12Fanout(
   username: string;
   targets: Array<{
     tokenId: string;
-    platform: "apns" | "fcm" | "webpush";
+    platform: PushTargetPlatform;
     providerToken: string;
   }>;
   payload: {
@@ -440,6 +467,27 @@ async function mintFcmAccessToken(
 }
 
 // ────────────────────────────────────────────────────────────────────
+// UnifiedPush (Web Push to the endpoint the phone's distributor gave it)
+// ────────────────────────────────────────────────────────────────────
+
+export const UNIFIEDPUSH_PAD_BLOCK = 512;
+const UNIFIEDPUSH_MAX_PLAINTEXT = 3072;
+
+/**
+ * The same `data` map FCM gets, as JSON, so the Android app handles both
+ * transports with one code path. The sealed blob is left out: the app never
+ * reads it, and it could outgrow one Web Push record. Display fields that
+ * would overflow are dropped down to the category alone.
+ */
+export function unifiedPushPayload(category: string, displayData?: Record<string, string>): Uint8Array {
+  const enc = new TextEncoder();
+  const full = enc.encode(JSON.stringify({ ...(displayData ?? {}), category }));
+  if (full.length <= UNIFIEDPUSH_MAX_PLAINTEXT) return full;
+  const kind = displayData?.kind;
+  return enc.encode(JSON.stringify(kind ? { kind, category } : { category }));
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Web Push (RFC 8030 + VAPID per RFC 8292)
 // ────────────────────────────────────────────────────────────────────
 
@@ -466,6 +514,10 @@ async function sendWebpush(args: {
   providerToken: string;
   /** Optional plaintext payload (RFC 8291). When omitted, an empty push is sent. */
   payloadBytes?: Uint8Array;
+  /** Pad the plaintext up to a multiple of this many bytes (RFC 8188 padding). */
+  padTo?: number;
+  urgency?: "very-low" | "low" | "normal" | "high";
+  policy?: PushEndpointPolicy;
   fetchImpl: FetchLike;
   now: () => number;
 }): Promise<void> {
@@ -475,10 +527,12 @@ async function sendWebpush(args: {
   } catch {
     throw new Error("webpush providerToken is not valid JSON");
   }
-  if (typeof sub.endpoint !== "string" || !/^https?:\/\//.test(sub.endpoint)) {
+  if (typeof sub.endpoint !== "string") {
     throw new Error("webpush providerToken missing valid endpoint URL");
   }
-  const endpointUrl = new URL(sub.endpoint);
+  const checked = checkPushEndpointUrl(sub.endpoint, args.policy);
+  if (!checked.ok) throw new Error(`webpush endpoint refused: ${checked.reason}`);
+  const endpointUrl = checked.url;
   const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
   const jwt = await mintVapidJwt({
     audience,
@@ -496,6 +550,7 @@ async function sendWebpush(args: {
     authorization: `vapid t=${jwt}, k=${args.cfg.vapidPublicKeyB64Url}`,
     ttl: String(WEBPUSH_DEFAULT_TTL_SEC),
   };
+  if (args.urgency) headers.urgency = args.urgency;
   if (args.payloadBytes && args.payloadBytes.length > 0) {
     if (typeof sub.keys?.p256dh !== "string" || typeof sub.keys?.auth !== "string") {
       throw new Error("webpush payload requested but subscription missing p256dh/auth keys");
@@ -504,6 +559,7 @@ async function sendWebpush(args: {
       args.payloadBytes,
       base64UrlDecode(sub.keys.p256dh),
       base64UrlDecode(sub.keys.auth),
+      args.padTo,
     );
     body = encrypted.body.buffer.slice(
       encrypted.body.byteOffset,
@@ -516,9 +572,10 @@ async function sendWebpush(args: {
     headers["content-length"] = "0";
   }
 
-  const r = await args.fetchImpl(sub.endpoint, {
+  const r = await args.fetchImpl(endpointUrl.href, {
     method: "POST",
     headers,
+    redirect: "manual",
     ...(body ? { body } : {}),
   });
   // 201 Created = queued. 410/404 = subscription revoked client-side
@@ -576,10 +633,11 @@ export function buildWebPushSender(cfg: { webpush: NonNullable<PushBridgeConfig[
  * the last record; this implementation is single-record so always
  * 0x02). No length-obfuscation padding for v1.
  */
-async function encryptWebPushPayload(
+export async function encryptWebPushPayload(
   plaintext: Uint8Array,
   uaP256dh: Uint8Array,        // 65-byte uncompressed P-256 pubkey
   authSecret: Uint8Array,      // 16-byte secret from subscription.keys.auth
+  padTo?: number,
 ): Promise<{ body: Uint8Array }> {
   if (uaP256dh.length !== 65 || uaP256dh[0] !== 0x04) {
     throw new Error("ua p256dh must be 65-byte uncompressed P-256 pubkey");
@@ -648,7 +706,10 @@ async function encryptWebPushPayload(
   );
 
   // Encrypt: plaintext || 0x02 (last-record delimiter) → AES-128-GCM.
-  const padded = new Uint8Array(plaintext.length + 1);
+  const paddedLength = padTo && padTo > 0
+    ? Math.min(RECORD_SIZE - 16, Math.ceil((plaintext.length + 1) / padTo) * padTo)
+    : plaintext.length + 1;
+  const padded = new Uint8Array(paddedLength);
   padded.set(plaintext, 0);
   padded[plaintext.length] = 0x02;
   const aesKey = await crypto.subtle.importKey(

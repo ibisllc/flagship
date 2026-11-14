@@ -54,8 +54,8 @@ export type ShareLevel = "view" | "manage";
 export const SHARE_LEVELS: readonly ShareLevel[] = ["view", "manage"];
 export type ShareInboxOp = "put" | "list" | "delete";
 export type SharePushOp = "put" | "delete";
-export type SharePushPlatform = "apns" | "fcm" | "webpush";
-export const SHARE_PUSH_PLATFORMS: readonly SharePushPlatform[] = ["apns", "fcm", "webpush"];
+export type SharePushPlatform = "apns" | "fcm" | "webpush" | "unifiedpush";
+export const SHARE_PUSH_PLATFORMS: readonly SharePushPlatform[] = ["apns", "fcm", "webpush", "unifiedpush"];
 
 const HEX32 = /^[0-9a-f]{32}$/;
 const HEX40 = /^[0-9a-f]{40}$/;
@@ -597,7 +597,7 @@ export function serverSharePushCanonicalBytes(p: ServerSharePush): Bytes {
   checkShareId(p.shareId);
   checkHex64("memberPubHex", p.memberPubHex);
   if (p.op !== "put" && p.op !== "delete") throw new Error("server-share: push op must be put or delete");
-  if (!SHARE_PUSH_PLATFORMS.includes(p.platform)) throw new Error("server-share: push platform must be apns, fcm or webpush");
+  if (!SHARE_PUSH_PLATFORMS.includes(p.platform)) throw new Error("server-share: push platform must be apns, fcm, webpush or unifiedpush");
   checkHex64("tokenSha256", p.tokenSha256);
   time("issuedAt", p.issuedAt);
   return join(TAG_SERVER_SHARE_PUSH, [p.serverDomain, p.shareId, p.memberPubHex, p.op, p.platform, p.tokenSha256, String(p.issuedAt)]);

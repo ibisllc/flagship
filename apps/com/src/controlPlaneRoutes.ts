@@ -204,6 +204,9 @@ import {
   handleListRevocations,
   handlePostEntitlementRevocations,
   handlePushRegister,
+  resolvePushEndpointHost,
+  type FetchLike,
+  type PushEndpointPolicy,
   handlePushRelay,
   handlePushRevoke,
   handleUsageReport,
@@ -3882,6 +3885,7 @@ export async function tryControlPlane(
           deviceSelfProfiles: storage.deviceSelfProfiles,
           usernames: storage.usernames,
           auditEvents: storage.auditEvents,
+          ...pushEndpointDeps(env),
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
@@ -3895,6 +3899,7 @@ export async function tryControlPlane(
           pushTokens: storage.pushTokens,
           deviceIdentities: storage.deviceIdentities,
           usernames: storage.usernames,
+          ...pushEndpointDeps(env),
         },
         await readJson(request),
       ),
@@ -4373,6 +4378,18 @@ function buildOptionalV12PushFanout(env: ControlPlaneEnv) {
   return forwarder ? wrapForwarderAsV12Fanout(forwarder) : null;
 }
 
+/** Web Push / UnifiedPush endpoints never name `.com` itself, and must resolve to public addresses when registered. */
+export function pushEndpointPolicy(env: Pick<ControlPlaneEnv, "CONTROL_APEX">): PushEndpointPolicy {
+  return { blockedHosts: env.CONTROL_APEX ? [env.CONTROL_APEX] : [] };
+}
+
+function pushEndpointDeps(env: ControlPlaneEnv) {
+  return {
+    pushEndpointPolicy: pushEndpointPolicy(env),
+    checkPushEndpointHost: (url: URL) => resolvePushEndpointHost(url, globalThis.fetch as unknown as FetchLike),
+  };
+}
+
 export function buildOptionalPushForwarder(env: ControlPlaneEnv) {
   const apnsConfigured =
     !!env.APNS_KEY_ID &&
@@ -4386,6 +4403,7 @@ export function buildOptionalPushForwarder(env: ControlPlaneEnv) {
     !!env.WEBPUSH_CONTACT;
   if (!apnsConfigured && !fcmConfigured && !webpushConfigured) return null;
   return buildPushForwarder({
+    endpointPolicy: pushEndpointPolicy(env),
     ...(apnsConfigured
       ? {
           apns: {

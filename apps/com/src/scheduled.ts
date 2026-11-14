@@ -500,6 +500,7 @@ function buildOptionalV12PushFanoutFromEnv(env: ScheduledEnv) {
     !!env.WEBPUSH_CONTACT;
   if (!apnsConfigured && !fcmConfigured && !webpushConfigured) return null;
   const forwarder = buildPushForwarder({
+    endpointPolicy: { blockedHosts: env.CONTROL_APEX ? [env.CONTROL_APEX] : [] },
     ...(apnsConfigured
       ? {
           apns: {
