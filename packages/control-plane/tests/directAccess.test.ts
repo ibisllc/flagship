@@ -323,5 +323,8 @@ describe("reading back and the outside probe", () => {
     expect(view.names[0]!.name).toBe(NAME);
     expect(view.names[0]!.state).toBe("published");
     expect(view.names[0]!.probe.reachable).toBe(true);
+    const signed = view.names[0] as unknown as { order: DirectNameOrder; signatureHex: string };
+    expect(signed.order.name).toBe(NAME);
+    expect(signed.signatureHex).toMatch(/^[0-9a-f]{128}$/);
   });
 });
