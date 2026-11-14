@@ -8534,5 +8534,77 @@
     "pages": [
       "pro.html"
     ]
+  },
+  "sa6e668d3b2": {
+    "en": "Enter your username (3–30 lowercase letters or digits).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sba431f090d": {
+    "en": "Redeeming…",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s49ee5c7974": {
+    "en": "Redeemed — Pro is now active on “<1/>”. Your higher allowance applies within a few minutes.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s8be7f29283": {
+    "en": "Redeemed — Pro Max (500 GB) is now active on “<1/>”. Your higher allowance applies within a few minutes.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s7ab7b7954a": {
+    "en": "That code couldn't be redeemed.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s836ea1b8a4": {
+    "en": "Network error — please try again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sf4602f0ad5": {
+    "en": "Starting checkout…",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sc8a67c2b25": {
+    "en": "Card checkout isn't switched on yet — use cash, Monero, or a voucher above.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s6f596af3e0": {
+    "en": "Couldn't start checkout.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
   }
 }
