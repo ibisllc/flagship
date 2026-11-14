@@ -14019,10 +14019,6 @@
     "en": "That install didn't take. Try again in a moment.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/MarketplaceViewModel.swift:131"
   },
-  "No messages yet. Turn on Accept messages on your page to get them.": {
-    "en": "No messages yet. Turn on Accept messages on your page to get them.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:182"
-  },
   "Outbound proxy": {
     "en": "Outbound proxy",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:11"
@@ -14106,30 +14102,6 @@
   "The proxy wasn't changed.": {
     "en": "The proxy wasn't changed.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:187"
-  },
-  "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.": {
-    "en": "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:41"
-  },
-  "Preview": {
-    "en": "Preview",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:71"
-  },
-  "Published": {
-    "en": "Published",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:296"
-  },
-  "Published · 1 change not published": {
-    "en": "Published · 1 change not published",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:297"
-  },
-  "Published · %lld changes not published": {
-    "en": "Published · %lld changes not published",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:297"
-  },
-  "Edit page": {
-    "en": "Edit page",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:239"
   },
   "Separate lists": {
     "en": "Separate lists",
@@ -14350,10 +14322,6 @@
   "Credits, usage, custom domains, reserved names": {
     "en": "Credits, usage, custom domains, reserved names",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:561"
-  },
-  "Websites you're signed in to, inbox key, rules": {
-    "en": "Websites you're signed in to, inbox key, rules",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1123"
   },
   "LLM credits": {
     "en": "LLM credits",
