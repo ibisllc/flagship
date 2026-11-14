@@ -116,7 +116,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       Rest (store drip, iOS in-app vs web, Stripe vs reseller, caps, marketplace cut, prices) to discuss. Then: fold the branches, voucher core + box stash, Stripe, stores, Monero, paid apps. Was: (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
       children Q3 names onto `release/0.4`; Pro payments + anonymous vouchers end to end on all three apps.
 - [ ] F3 Calls: build `docs/voici-calls.md` after the owner settles D1-D4 (plus its three voi.ci page fixes in the 0.4 list).
-- [ ] F4 Retail box setup (Q2): design `docs/retail-box-setup.md` (`c69d039aa`): printed 100-bit claim code (QR + 20 chars)
+- [ ] F4 Retail box setup (Q2): DESIGN v2 merged 2026-11-14 (Bluetooth-first, app opens first, only-one-advert rule, 10-min window, ONE timed power press, Ethernet advised, internet key check, 5-press reset, no hardware ids at .com, printed code = optional Verified tier; partner checklist H1-H7). Superseded v1 text: design `docs/retail-box-setup.md` (`c69d039aa`): printed 100-bit claim code (QR + 20 chars)
       keys a local-only X-Wing handshake (`flagship/box-claim/v1`), recipe as consent, box-signed receipt pins the
       server key, 5-press reset window; no NFC/first-come in v1; drop `box_serials`. Owner answers its Q1-Q10, then build
       (phase 1 software, testable on a VM; doubles as a preinstalled image for DIY metal).
@@ -144,7 +144,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 
 ### U. UX feedback lane (parallel; owner's notes, Q4)
 - [ ] U1 Write each note as an item here with the screen and platform; iOS first, then port (memory rule).
-- [ ] U3 (owner 2026-11-13) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
+- [~] U3 (iOS merged 2026-11-14 with today's features, `docs/social-tab.md`; guests/comments/audience/calls need the protocol answers; Android + webapp ports next) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
       the page previews itself (minus voi.ci's footer); title row "Your page" + Public switch + options menu (theme,
       share/copy link, accept messages); profile fields read as the live page with a pencil each; the unpublished bar
       only when something changed, spinning while it publishes; Profile / Messages tabs; Messages: who can reach you
@@ -154,7 +154,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       2026-11-14: iOS built on branch `0.4/social-ios` (not merged): Social tab, editor as the tab, Page options, the
       publish bar; GymMessagesTests 18/18. Spec and the protocol sketch for guests, comments, reach and calls:
       `docs/social-tab.md`. Android and the webapp next.
-- [ ] U2 (owner 2026-11-13) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
+- [x] U2 (iOS merged 2026-11-14; Android + webapp ports next) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
       bubble in a green circle reads oddly), and simplify the page (details in the owner's next messages). All apps,
       all languages.
 
@@ -216,6 +216,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   box release. Owner questions: GPU approval lifetime 90 d; gpud withdrawals direct?; owner PQ key for gpud on
   admin-root boxes (strict refuses every GPU approval today); GPU maintenance order design; revocation-list
   freshness 7 d vs data sovereignty, rank orders via .com?; keyd slot deactivation for a revoked key.
+- 2026-11-14 Merged `0.4/social-ios` (iOS Social tab; i18n conflict with small-fixes resolved by a 3-way key merge +
+  `i18n-ios.mjs build`; `npm run i18n` ok; full iOS build not re-run after the merge) and the retail design v2.
+  Owner questions: social-tab.md Q1-Q8 (guests, comments, passes); retail v2 Q1-Q8.
 
 ## Resume point
 
