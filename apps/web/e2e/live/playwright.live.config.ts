@@ -26,6 +26,10 @@ export default defineConfig({
   reporter: [["list"], ["json", { outputFile: jsonReport }]],
   use: {
     baseURL: origin,
+    // Box certificates come from the gym's private test CA unless this is the real-Let's-Encrypt lane
+    // (docs/gym-test-acme.md); Chromium can't be handed that run's root, so only then are TLS errors ignored. This
+    // weakens the run, which tools/live-e2e/shared-run.ts reports. Unset means Let's Encrypt: checks stay strict.
+    ignoreHTTPSErrors: process.env.GYM_ISSUANCE_CA === "test",
     trace: "off",
     screenshot: "only-on-failure",
     // The live backend can be slower than a local stub.
