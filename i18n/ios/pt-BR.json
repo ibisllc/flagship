@@ -3233,5 +3233,6 @@
   "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": "O Flagship não aceitou este arquivo de chave para %@. Nada foi alterado neste dispositivo. Tente novamente em alguns minutos.",
   "No camera on the other device? Send it this link and paste it there.": "O outro dispositivo não tem câmera? Envie este link para ele e cole-o lá.",
   "Share link": "Link de compartilhamento",
-  "No server on this phone can take a browser yet.": "Nenhum servidor deste celular pode aceitar um navegador ainda."
+  "No server on this phone can take a browser yet.": "Nenhum servidor deste celular pode aceitar um navegador ainda.",
+  "Choose where this server's backups go.": "Escolha para onde vão os backups deste servidor."
 }

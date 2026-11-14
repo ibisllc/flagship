@@ -3513,5 +3513,6 @@
   "keyfile_import_refused": "Flagship no aceptó este archivo de clave para %1$s. No se cambió nada en este dispositivo. Inténtalo de nuevo en unos minutos.",
   "no_camera_on_the_other_device_send_link": "¿El otro dispositivo no tiene cámara? Envíale este enlace y pégalo allí.",
   "backup_account_key_unavailable": "No se pudo usar la clave de tu cuenta para abrir esta copia. Inténtalo de nuevo o introduce su código.",
-  "backup_account_key_doesnt_open": "La clave de esta cuenta no abre esta copia. Introduce su código para abrirla."
+  "backup_account_key_doesnt_open": "La clave de esta cuenta no abre esta copia. Introduce su código para abrirla.",
+  "choose_where_this_servers_backups_go": "Elige adónde van las copias de seguridad de este servidor."
 }

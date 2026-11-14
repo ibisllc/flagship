@@ -784,6 +784,17 @@ private fun DesignPhase(
             block = true,
             modifier = Modifier.testTag("cs-continue-button"),
         )
+        if (backupPolicy == null) {
+            // W3: a disabled Continue with no reason read as "does nothing".
+            Spacer(Modifier.height(FS.space.s1))
+            Text(
+                stringResource(R.string.choose_where_this_servers_backups_go),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().testTag("cs-continue-hint"),
+            )
+        }
     }
     Spacer(Modifier.height(FS.space.s2))
     if (step > 0) {

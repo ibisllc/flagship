@@ -14503,5 +14503,9 @@
   "backup_account_key_doesnt_open": {
     "en": "This account's key doesn't open this backup. Enter its passcode to open it.",
     "ctx": "ui/screens/ServerArchiveScreens.kt (import backup: the account slot is not this account's)"
+  },
+  "choose_where_this_servers_backups_go": {
+    "en": "Choose where this server's backups go.",
+    "ctx": "ui/screens/CreateServerScreen.kt (W3: why Continue is off)"
   }
 }

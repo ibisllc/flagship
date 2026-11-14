@@ -3231,5 +3231,6 @@
   "Flagship didn't accept this key file for %@. Nothing was changed on this device. Try again in a few minutes.": "Flagship は %@ 用のこのキーファイルを受け付けませんでした。このデバイスでは何も変更されていません。数分後にもう一度お試しください。",
   "No camera on the other device? Send it this link and paste it there.": "相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。",
   "Share link": "共有リンク",
-  "No server on this phone can take a browser yet.": "このスマートフォンのサーバーは、まだブラウザーを受け入れられません。"
+  "No server on this phone can take a browser yet.": "このスマートフォンのサーバーは、まだブラウザーを受け入れられません。",
+  "Choose where this server's backups go.": "このサーバーのバックアップの保存先を選んでください。"
 }

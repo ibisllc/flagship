@@ -3516,4 +3516,5 @@
     <string name="no_camera_on_the_other_device_send_link">另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。</string>
     <string name="backup_account_key_unavailable">无法使用你的账户密钥打开此备份。请重试，或输入其密码。</string>
     <string name="backup_account_key_doesnt_open">此账户的密钥无法打开此备份。请输入其密码来打开。</string>
+    <string name="choose_where_this_servers_backups_go">选择此服务器的备份存放位置。</string>
 </resources>

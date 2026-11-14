@@ -3516,4 +3516,5 @@
     <string name="no_camera_on_the_other_device_send_link">相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。</string>
     <string name="backup_account_key_unavailable">アカウントの鍵でこのバックアップを開けませんでした。もう一度試すか、パスコードを入力してください。</string>
     <string name="backup_account_key_doesnt_open">このアカウントの鍵ではこのバックアップを開けません。開くにはそのパスコードを入力してください。</string>
+    <string name="choose_where_this_servers_backups_go">このサーバーのバックアップの保存先を選んでください。</string>
 </resources>
