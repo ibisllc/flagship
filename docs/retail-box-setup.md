@@ -548,3 +548,19 @@ Proposed reading (pending the owner's confirmation):
 - **Remote claim (the shared QR).** Only with Ethernet + DHCP: an unclaimed box online opens a claim mailbox at `.com`
   keyed by a hash of its current code, and whoever holds the code claims over the internet (handshake keyed by the
   code, `.com` blind). Over Wi-Fi someone must be at the box once to pass the Wi-Fi details.
+
+### 15.1 Owner, 2026-11-14: no printed cards
+
+"I want to avoid the printing of cards, as that would add a lot of operational complexity." So no code is printed,
+on any tier (section 9's card is dropped; Verified would rest on TPM attestation alone, if ever). The setup code
+still exists, but the box makes it and hands it out:
+
+1. **At the box:** an app (any phone with Flagship, no account needed) finds the unclaimed box over Bluetooth and
+   passes the timed press. The box gives that session its current setup code, shown in the app as a QR code.
+2. **Anyone with the code claims:** the same phone right away (the usual flow), or someone else it was shared with
+   (the cousin, a shop's setup desk), over the internet through a `.com` mailbox keyed by a hash of the code, when
+   the box has Ethernet + DHCP. Over Wi-Fi the phone at the box also sends the Wi-Fi details.
+3. **The code ratchets:** made fresh at every reset, claim, key change and wipe; single use; the box stores only its
+   hash; it expires with the 10-minute window, or (shared code) a set time after it was handed out.
+
+A monitor still shows the current code directly (8.4), which is the only path that also closes the relay case.
