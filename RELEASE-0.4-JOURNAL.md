@@ -330,6 +330,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   in all apps; closed a real gap: fshp.app/fshp.tech were not in `isOwnZone`, so a custom-domain order could have
   mapped a fshp.app name to a tunnel; the box also refuses fshp.app SNIs on relay streams. Owner Q: allow turning a
   name on (to fetch its certificate) while direct access on its box is still off?
+- 2026-11-14 Owner: air-gapped site mode is planned, NOT released in 0.4 (after Windows certification and funding).
+  Restore-into-server defaults accepted as proposed; keywords security + smooth UX. Build started on
+  `0.4/restore-merge-build`, store generations first.
 
 ## Resume point
 

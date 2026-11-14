@@ -399,3 +399,8 @@ update bundles, `site-time`, and a gym lane with the uplink cut.
 - **Q-W12** The claim port: 4433, or another fixed port the company can allow on its provisioning VLAN?
 - **Q-W13** Windows Studio code signing: needed before fleets ship, since the helper is now in the claim path.
 - **Q-W14** Helper-read codes: acceptable by default on the command laptop, or opt-in per batch?
+
+## Owner decision, 2026-11-14: air-gapped site mode
+
+Plan it, do not release it in 0.4. It comes after the Windows certification and after funding. 0.4 builds only the
+connected wired path (if at all), with Studio as the LAN helper.
