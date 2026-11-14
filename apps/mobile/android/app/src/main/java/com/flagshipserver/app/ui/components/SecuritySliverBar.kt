@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.RecoveryVetoEcho
 import com.flagshipserver.app.core.SliverLine
 import com.flagshipserver.app.core.SliverWords
 import com.flagshipserver.app.ui.theme.FS
@@ -53,6 +54,8 @@ fun SecuritySliverBar() {
             delay(60_000)
         }
     }
+    val vetoes by RecoveryVetoEcho.changes.collectAsState()
+    LaunchedEffect(vm, vetoes) { if (vetoes > 0) vm.refresh() }
     val lines by vm.lines.collectAsState()
     val lost by vm.lostHistory.collectAsState()
     val waiting by vm.waiting.collectAsState()
@@ -83,7 +86,8 @@ fun SecuritySliverBar() {
 
 @Composable
 private fun SliverRow(l: SliverLine, waiting: com.flagshipserver.app.core.WaitingPublisherResponse.Waiting?, onTrust: () -> Unit, onReject: () -> Unit) {
-    val tint = if (l.severity == "critical" || l.severity == "high") FS.colors.warning else FS.colors.accent
+    // A resolved line keeps its row (the record) but loses the alarm: no warning tint, no countdown (F9).
+    val tint = if (!l.isActive) FS.colors.textMuted else if (l.severity == "critical" || l.severity == "high") FS.colors.warning else FS.colors.accent
     Surface(color = FS.colors.surface, modifier = Modifier.fillMaxWidth().testTag("sliver-row-${l.issueKey}")) {
         Row(Modifier.fillMaxWidth().then(Modifier)) {
             Box(Modifier.width(4.dp).fillMaxHeight().background(tint))
@@ -93,7 +97,7 @@ private fun SliverRow(l: SliverLine, waiting: com.flagshipserver.app.core.Waitin
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(l.summary, style = MaterialTheme.typography.bodyMedium)
-                val extra = listOf(SliverWords.remaining(l.remainingMs), if (l.isActive) (l.action ?: "") else "").filter { it.isNotEmpty() }.joinToString(" · ")
+                val extra = if (l.isActive) listOf(SliverWords.remaining(l.remainingMs), l.action ?: "").filter { it.isNotEmpty() }.joinToString(" · ") else ""
                 if (extra.isNotEmpty()) Text(extra, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 if (waiting != null) {
                     Text(fsString(R.string.old_key_new_key, waiting.oldFingerprint, waiting.newFingerprint), style = MaterialTheme.typography.titleSmall)

@@ -9,6 +9,7 @@ import com.flagshipserver.app.core.FSStrings
 import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.userFacing
+import com.flagshipserver.app.core.RecoveryVetoEcho
 import com.flagshipserver.app.core.SliverLine
 import com.flagshipserver.app.core.WaitingPublisherResponse
 import com.flagshipserver.app.keystore.Keystore
@@ -35,7 +36,7 @@ class SecuritySliverViewModel(
     suspend fun refresh() {
         try {
             val r = client.securitySliver()
-            _lines.value = r.lines
+            _lines.value = RecoveryVetoEcho.apply(r.lines, now())
             _lostHistory.value = r.lostHistory
             val w = mutableMapOf<String, WaitingPublisherResponse.Waiting>()
             for (l in r.lines) {

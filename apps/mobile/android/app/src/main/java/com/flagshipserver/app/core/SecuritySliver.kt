@@ -5,6 +5,9 @@
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
@@ -79,6 +82,36 @@ data class WaitingPublisherResponse(
 
 @Serializable
 data class PublisherTrustBody(val trust: PublisherTrust, val signatureHex: String)
+
+/**
+ * An admin on this phone just rejected the account recovery. `.com` knows at once; the box learns on its next
+ * re-pair poll and resolves its "Someone is recovering this account" line (up to ~10 min). Until then, for at most
+ * [HOLD_MS], this phone shows the box's recovery line as resolved instead of a Critical banner that contradicts
+ * what the owner just did (Windows acceptance F9). Bounded, so a new recovery can never stay hidden for long.
+ */
+object RecoveryVetoEcho {
+    const val HOLD_MS = 15 * 60_000L
+    const val RECOVERY_ISSUE_KEY = "recovery-attempt"
+
+    @Volatile
+    private var rejectedAt: Long? = null
+    private val _changes = MutableStateFlow(0)
+    /** Bumps on every recorded veto, so the sliver refreshes at once. */
+    val changes: StateFlow<Int> = _changes.asStateFlow()
+
+    fun record(now: Long) {
+        rejectedAt = now
+        _changes.value = _changes.value + 1
+    }
+
+    fun clear() { rejectedAt = null }
+
+    fun apply(lines: List<SliverLine>, now: Long): List<SliverLine> {
+        val at = rejectedAt ?: return lines
+        if (now - at > HOLD_MS || now < at) return lines
+        return lines.map { if (it.issueKey == RECOVERY_ISSUE_KEY && it.isActive && it.updatedAt <= at) it.copy(state = "resolved") else it }
+    }
+}
 
 object SliverWords {
     const val HEADING = "Security"
