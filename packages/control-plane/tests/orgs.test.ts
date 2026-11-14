@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  canonicalOrgOverturn,
   canonicalOrgSeatAccept,
   canonicalOrgSeatFreeze,
   canonicalOrgSeatGrant,
@@ -24,6 +25,7 @@ import {
   handleOrgInviteAccept,
   handleOrgInviteCreate,
   handleOrgLog,
+  handleOrgOverturn,
   handleOrgSeatGrant,
   type OrgDeps,
 } from "../src/orgs.js";
@@ -142,5 +144,25 @@ describe(".com org accounts", () => {
     expect((await handleOrgCeremonyApprove(d, ORG, sha, { approval: approve(B, order, 1, now) })).status).toBe(200);
     const two = await authorizeOrgComOp(d, ORG, { kind: "destroy" }, order, [approve(A, order, 1, now), approve(B, order, 1, now)]);
     expect(two.ok).toBe(true);
+  });
+});
+
+describe("Restore my access", () => {
+  it("the frozen admin opens the overturn of its own freeze, the bylaws' set completes it", async () => {
+    const now = chain.entries[1].record.issuedAt + 3_600_000;
+    const d = await created(now);
+    const f = { orgId: ORG, seatId: B.seatId, untilMs: now + 72 * 3_600_000, oarVersion: 1, issuedAt: now };
+    expect((await handleOrgFreeze(d, ORG, { body: f, approvals: [approve(C, canonicalOrgSeatFreeze(f), 1, now)] })).status).toBe(200);
+    const body = { orgId: ORG, freezeSha256: orgSha256Hex(canonicalOrgSeatFreeze(f)), oarVersion: 1, issuedAt: now + 1 };
+    const order = canonicalOrgOverturn(body);
+    const open = await handleOrgCeremonyOpen(d, ORG, { order: new TextDecoder().decode(order), payload: { kind: "overturn" }, approvals: [approve(B, order, 1, now + 1)] });
+    expect(open.status).toBe(200);
+    const D = key("D board");
+    const done = await handleOrgOverturn(d, ORG, { body, approvals: [approve(C, order, 1, now + 2), approve(D, order, 1, now + 2)] });
+    expect(done.status).toBe(200);
+    const other = { orgId: ORG, freezeSha256: "ab".repeat(32), oarVersion: 1, issuedAt: now + 3 };
+    const o2 = canonicalOrgOverturn(other);
+    const refused = await handleOrgCeremonyOpen(d, ORG, { order: new TextDecoder().decode(o2), payload: {}, approvals: [approve(key("X outsider"), o2, 1, now + 3)] });
+    expect(refused.status).toBe(403);
   });
 });
