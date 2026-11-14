@@ -10,10 +10,15 @@
 // `?view=…` deep-link (Web Push notificationclick) at boot.
 
 import { dismissOverlays, isLockView } from "./lockSweep.js";
+import { SPLIT_QUERY, matches, onLayoutChange, splitParentOf } from "./layout.js";
 
 const VIEWS = new Set();
 const VIEW_TABS = new Map(); // view-id → tab id ("home" | "apps" | "activity" | "settings")
 let currentView = null;
+// Views shown since the last lock: only a list that has been drawn may stand
+// beside a detail screen (a deep link straight to a detail shows it alone).
+const SHOWN = new Set();
+let layoutWired = false;
 
 export function registerView(id, opts = {}) {
   VIEWS.add(id);
@@ -33,10 +38,9 @@ export function show(id) {
   // The lock surfaces never sit under a menu, dialog or sheet.
   if (isLockView(id)) dismissOverlays();
   currentView = id;
-  for (const v of VIEWS) {
-    const el = document.getElementById(v);
-    if (el) el.classList.toggle("hidden", v !== id);
-  }
+  if (isLockView(id)) SHOWN.clear();
+  SHOWN.add(id);
+  applyPanes(id);
   syncTabBar(id);
   // Hide the tab bar for pre-paired surfaces — bootstrap, unlock,
   // first-run wizard (#25). The wizard shell sets its own class.
@@ -47,6 +51,38 @@ export function show(id) {
   // Side-channel so views can lazy-refresh on activation without
   // wiring per-route callbacks into the shell.
   document.dispatchEvent(new CustomEvent("flagship:view-shown", { detail: { id } }));
+}
+
+/** The list view that stands beside `id` on a wide window, or null when `id` is shown alone. */
+export function splitListFor(id) {
+  const list = splitParentOf(id);
+  if (!list || !VIEWS.has(list) || !SHOWN.has(list)) return null;
+  return matches(SPLIT_QUERY) ? list : null;
+}
+
+/** Show `id` (and, on a wide window, the list it came from beside it); hide every other view. */
+function applyPanes(id) {
+  if (!layoutWired) {
+    layoutWired = true;
+    onLayoutChange(() => { if (currentView) applyPanes(currentView); });
+  }
+  const list = splitListFor(id);
+  for (const v of VIEWS) {
+    const el = document.getElementById(v);
+    if (!el) continue;
+    el.classList.toggle("hidden", v !== id && v !== list);
+    el.classList.toggle("pane-list", !!list && v === list);
+    el.classList.toggle("pane-detail", !!list && v === id);
+  }
+  if (typeof document.querySelector !== "function" || typeof document.querySelectorAll !== "function") return;
+  document.querySelector("main")?.classList.toggle("is-split", !!list);
+  // The row of the open page stays marked in the list beside it.
+  for (const row of document.querySelectorAll("[data-split-view]")) {
+    const on = !!list && row.getAttribute("data-split-view") === id;
+    row.classList.toggle("is-current", on);
+    if (on) row.setAttribute("aria-current", "page");
+    else row.removeAttribute("aria-current");
+  }
 }
 
 export function currentViewId() {
