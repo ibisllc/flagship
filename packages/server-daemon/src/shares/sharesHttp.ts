@@ -39,6 +39,7 @@ import { extractPairedSessionToken } from "../pairedSessionStore.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ActivityLog, type ActivityActor } from "./activityLog.js";
 import { isServerArchivePath } from "../serverArchive/service.js";
+import { isRestoreMergePath } from "../serverArchive/merge/service.js";
 import { shareRefusal, shareRouteNeed } from "./shareRoutes.js";
 import { hexBytes, type HeldShare, type ShareStore } from "./shareStore.js";
 import type { ShareUpdateOrder } from "./shareUpdate.js";
@@ -403,7 +404,7 @@ export function buildShares(deps: SharesDeps) {
       if (!path.startsWith("/api/screens/") || path.startsWith("/api/screens/shares") || res.status === 401) return res;
       // Backups and imports record their own events; their chunk uploads would
       // otherwise fill the log with one line per 4 MiB.
-      if (isServerArchivePath(path)) return res;
+      if (isServerArchivePath(path) || isRestoreMergePath(path)) return res;
       const caller = shareCallerOf(req);
       const need = shareRouteNeed(method, path, req.body);
       if (method === "GET" && !(caller && need?.action)) return res;

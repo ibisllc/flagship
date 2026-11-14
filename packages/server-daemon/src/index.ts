@@ -291,6 +291,11 @@ import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
+import { buildRestoreMergeService } from "./serverArchive/merge/service.js";
+import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
+import { legacyOrigin } from "./appLineage.js";
+import { hybridOrderSignature as hybridOrderSignatureForMerge } from "./pqAuthority.js";
+import { parseServiceId as parseServiceIdForMerge } from "@flagship/protocol";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
 import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
@@ -2470,6 +2475,7 @@ async function main(): Promise<void> {
       pairedSessions,
       authorityHub,
       restoredAccess,
+      accessPeersRef,
       delegations,
       browserBundle,
       alertInbox,
@@ -3550,6 +3556,7 @@ async function wireRuntimeSurfaces(deps: {
   pairedSessions: FilePairedSessionStore;
   authorityHub: AuthorityHub;
   restoredAccess: RestoredAccessDrafts;
+  accessPeersRef: { current: AccessPeers | null };
   delegations: CompanionDelegations;
   publisherPins: PublisherPins;
   securitySliver: SecuritySliver;
@@ -4507,6 +4514,124 @@ async function wireRuntimeSurfaces(deps: {
     runtime.addHandler((req) => service.handleDownload(req));
     return service;
   })();
+  // Restore a backup into this running server, app by app (docs/restore-into-server.md).
+  const restoreMergeService = await (async () => {
+    const platform = runtime.servicePlatform;
+    if (!cfg || !platform || !env.serverFqdn || !serverArchiveService) return null;
+    const ops = realAppCopyOps();
+    const archiveKeys = await archiveKeyCustody();
+    const savedBackups = new SavedBackups(join(dataDir, "server-backups"));
+    const activity = buildActivityResolver({ tracker: runtime.serviceActivity, chats: () => vibeRegistry.list(), builds: () => buildEditingRef.current?.() ?? [] });
+    const restoreDeps = {
+      serverFqdn: env.serverFqdn,
+      platform,
+      dataProvisioner: runtime.dataProvisioner,
+      ops,
+      signInstall: (r: Parameters<typeof custodian.signInstallService>[0]) => custodian.signInstallService(r),
+      envStore: runtime.envStore,
+      access: {
+        importDraft: async (id: string, e: unknown) => {
+          await restoredAccess.put(id, e as never);
+          await deps.serviceAccessRef.current?.importEntry(id, { mode: "restricted", allow: [], groups: {} });
+        },
+      },
+      egress: { noteCopied: (id: string, list: string, declared: Parameters<typeof runtime.egress.noteCopied>[2]) => runtime.egress.noteCopied(id, list, declared) },
+      sourceDir: vibeAppDir,
+      workDir: join(dataDir, "restore-merge"),
+      buildImage: async (a: { contextDir: string; files: Record<string, string>; binaries: Record<string, Buffer>; image: string }) => {
+        await ensureDocker();
+        return buildAppImage(serviceRunnerMod.realCommandRunner, { ...a, keepBinaries: false });
+      },
+      pullImage: async (image: string) => {
+        await ensureDocker();
+        await serviceRunnerMod.realCommandRunner.run("docker", ["pull", image]);
+      },
+      log: (m: string) => console.log(m),
+    };
+    const svc = buildRestoreMergeService({
+      serverFqdn: env.serverFqdn,
+      restore: restoreDeps,
+      platform,
+      runsDir: join(dataDir, "restore-merge"),
+      undoDir: join(dataDir, "restore-undo"),
+      clearUninstalled: async (sid, meta) => {
+        const id = parseServiceIdForMerge(sid);
+        const stores = (JSON.parse(meta.manifestJson) as { data?: { stores?: Record<string, unknown> } }).data?.stores ?? {};
+        if (id && runtime.dataProvisioner) await runtime.dataProvisioner.deprovisionApp({ creator: id.creator, slug: id.slug, stores });
+      },
+      ...(archiveKeys ? { keys: archiveKeys } : {}),
+      authorize: (canonical, signature, pq) =>
+        authorizeSensitiveOrder({
+          ownerIrkPub: cfg.irkPublicKey,
+          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+          username: cfg.userId,
+          order: canonical,
+          signature,
+          verify: (c: Uint8Array, sig: Uint8Array, pub: Uint8Array) => {
+            try {
+              return ed.verify(sig, c, pub);
+            } catch {
+              return false;
+            }
+          },
+          hybrid: hybridOrderSignatureForMerge(canonical, pq),
+        }),
+      busy: () =>
+        serverArchiveService.busy()
+          ? "A backup or restore is already running on this server."
+          : deps.restoreWait?.current()
+            ? "This server is waiting for a whole server's backup."
+            : deps.migratePause?.paused()
+              ? "This server is moving to another machine."
+              : null,
+      apps: async () => {
+        const ids = platform.list().map((a) => a.serviceId);
+        const busy = activity(ids);
+        const measured = runtime.appQuota.measured();
+        return platform.list().map((a) => {
+          const m = measured.get(a.serviceId);
+          return {
+            serviceId: a.serviceId,
+            name: a.manifest.name,
+            version: a.manifest.version,
+            manifestJson: a.manifestSource ?? JSON.stringify(a.manifest),
+            origin: a.origin ?? legacyOrigin(a.serviceId),
+            codeHistory: a.codeHistory ?? [],
+            appliedMigrations: a.appliedMigrations ?? [],
+            dataGeneration: a.dataGeneration ?? 0,
+            installedAt: a.installedAt,
+            postgresStores: Object.keys(a.data?.postgres ?? {}),
+            files: !!a.data?.files,
+            bytes: m && (m.filesBytes !== null || m.postgresBytes !== null) ? (m.filesBytes ?? 0) + (m.postgresBytes ?? 0) : null,
+            busy: busy.get(a.serviceId) ?? null,
+          };
+        });
+      },
+      // The account's other servers are asked box to box (accessPeers); .com never learns which apps.
+      accountApps: async (ids) => {
+        const peers = deps.accessPeersRef.current as PodsPeers | null;
+        if (!peers?.probeAll) return new Map();
+        const found = await peers.probeAll(ids);
+        return new Map([...found].map(([id, ds]) => [id, ds.map((d) => d.split(".")[0] ?? d)]));
+      },
+      addressMoves: (runners) => {
+        const peers = deps.accessPeersRef.current as PodsPeers | null;
+        return runners.length > 0 && !!peers?.wouldLead?.(runners.map((r) => `${r}.${env.serverFqdn!.split(".").slice(1).join(".")}`));
+      },
+      savedDataFile: async (archiveId) => {
+        const p = join(savedBackups.entryDir(archiveId), SAVED_DATA_FILE);
+        return (await statfsExists(p)) ? p : null;
+      },
+      freeBytes: (dir) => freeBytesAt(dir),
+      ...(backupCap ? { admitIncoming: (bytes: number) => backupCap.admit(bytes) } : {}),
+      note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
+      log: (m) => console.log(m),
+    });
+    serverArchiveService.setOtherJob(() => svc.active());
+    await svc.resume().catch((e: Error) => console.warn(`[restore-merge] couldn't resume: ${e.message}`));
+    setInterval(() => void svc.expireUndo().catch(() => {}), 60 * 60_000).unref();
+    return svc;
+  })();
   if (peerEngine && serverArchiveService) {
     serverArchiveService.setSavedHooks({
       onArchiveSaved: (meta, files) => peerEngine.onArchiveSaved(meta, files),
@@ -4745,6 +4870,7 @@ async function wireRuntimeSurfaces(deps: {
       : null,
     appCopy: appCopyTarget,
     serverArchive: serverArchiveService,
+    restoreMerge: restoreMergeService,
     // The owner's way in when `.com` is gone (docs/data-sovereignty.md): proven by
     // a signed order bound to this box's own certificate, no call to anyone.
     rescue:
@@ -6866,3 +6992,12 @@ export type { AcceptSyncUpgradeArgs } from "./sibling/siblingServer.js";
 // V5 — voi.ci-aware alias reconciler.
 export { AliasReconciler } from "./aliasReconciler.js";
 export type { AliasReconcilerDeps } from "./aliasReconciler.js";
+
+async function statfsExists(path: string): Promise<boolean> {
+  try {
+    await (await import("node:fs/promises")).stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}

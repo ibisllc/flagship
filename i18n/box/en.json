@@ -1,31 +1,31 @@
 {
   "That direct access order can't be read.": {
     "en": "That direct access order can't be read.",
-    "ctx": "packages/server-daemon/src/directAccess.ts:277"
+    "ctx": "packages/server-daemon/src/directAccess.ts:304"
   },
   "Direct access takes only public addresses. Private, local and reserved addresses can't be used.": {
     "en": "Direct access takes only public addresses. Private, local and reserved addresses can't be used.",
-    "ctx": "packages/server-daemon/src/directAccess.ts:281"
+    "ctx": "packages/server-daemon/src/directAccess.ts:308"
   },
   "That direct access order isn't valid ({0}).": {
     "en": "That direct access order isn't valid ({0}).",
-    "ctx": "packages/server-daemon/src/directAccess.ts:283"
+    "ctx": "packages/server-daemon/src/directAccess.ts:310"
   },
   "That direct access order is for another server.": {
     "en": "That direct access order is for another server.",
-    "ctx": "packages/server-daemon/src/directAccess.ts:285"
+    "ctx": "packages/server-daemon/src/directAccess.ts:312"
   },
   "This server takes direct access orders only from an admin device of this account.": {
     "en": "This server takes direct access orders only from an admin device of this account.",
-    "ctx": "packages/server-daemon/src/directAccess.ts:289"
+    "ctx": "packages/server-daemon/src/directAccess.ts:316"
   },
   "That direct access order is older than the last change. Try again.": {
     "en": "That direct access order is older than the last change. Try again.",
-    "ctx": "packages/server-daemon/src/directAccess.ts:292"
+    "ctx": "packages/server-daemon/src/directAccess.ts:319"
   },
   "This device's clock is too far from the server's. Check the time and try again.": {
     "en": "This device's clock is too far from the server's. Check the time and try again.",
-    "ctx": "packages/server-daemon/src/directAccess.ts:295"
+    "ctx": "packages/server-daemon/src/directAccess.ts:322"
   },
   "You've been invited · Flagship": {
     "en": "You've been invited · Flagship",
@@ -129,47 +129,47 @@
   },
   "This is a Flagship server.": {
     "en": "This is a Flagship server.",
-    "ctx": "packages/server-daemon/src/runtime.ts:944"
+    "ctx": "packages/server-daemon/src/runtime.ts:948"
   },
   "online": {
     "en": "online",
-    "ctx": "packages/server-daemon/src/runtime.ts:945"
+    "ctx": "packages/server-daemon/src/runtime.ts:949"
   },
   "It runs on private hardware and answers to its owner's keys — not to a cloud.": {
     "en": "It runs on private hardware and answers to its owner's keys — not to a cloud.",
-    "ctx": "packages/server-daemon/src/runtime.ts:946"
+    "ctx": "packages/server-daemon/src/runtime.ts:950"
   },
   "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.": {
     "en": "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.",
-    "ctx": "packages/server-daemon/src/runtime.ts:947"
+    "ctx": "packages/server-daemon/src/runtime.ts:951"
   },
   "TLS terminates on this server. Flagship relays ciphertext it cannot read.": {
     "en": "TLS terminates on this server. Flagship relays ciphertext it cannot read.",
-    "ctx": "packages/server-daemon/src/runtime.ts:950"
+    "ctx": "packages/server-daemon/src/runtime.ts:954"
   },
   "Get yours at": {
     "en": "Get yours at",
-    "ctx": "packages/server-daemon/src/runtime.ts:951"
+    "ctx": "packages/server-daemon/src/runtime.ts:955"
   },
   "No app here · Flagship": {
     "en": "No app here · Flagship",
-    "ctx": "packages/server-daemon/src/runtime.ts:2538"
+    "ctx": "packages/server-daemon/src/runtime.ts:2605"
   },
   "No app here yet.": {
     "en": "No app here yet.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2551"
+    "ctx": "packages/server-daemon/src/runtime.ts:2618"
   },
   "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.": {
     "en": "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2552"
+    "ctx": "packages/server-daemon/src/runtime.ts:2619"
   },
   "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.": {
     "en": "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2553"
+    "ctx": "packages/server-daemon/src/runtime.ts:2620"
   },
   "More on multiplexing →": {
     "en": "More on multiplexing →",
-    "ctx": "packages/server-daemon/src/runtime.ts:2553"
+    "ctx": "packages/server-daemon/src/runtime.ts:2620"
   },
   "Download a server backup — Flagship": {
     "en": "Download a server backup — Flagship",
@@ -225,15 +225,15 @@
   },
   "Link expired": {
     "en": "Link expired",
-    "ctx": "packages/server-daemon/src/serverArchive/service.ts:714"
+    "ctx": "packages/server-daemon/src/serverArchive/service.ts:715"
   },
   "This download link has expired or was replaced by a newer backup.": {
     "en": "This download link has expired or was replaced by a newer backup.",
-    "ctx": "packages/server-daemon/src/serverArchive/service.ts:714"
+    "ctx": "packages/server-daemon/src/serverArchive/service.ts:715"
   },
   "the backup is removed from the server": {
     "en": "the backup is removed from the server",
-    "ctx": "packages/server-daemon/src/serverArchive/service.ts:733"
+    "ctx": "packages/server-daemon/src/serverArchive/service.ts:734"
   },
   "Access restricted · Flagship": {
     "en": "Access restricted · Flagship",
