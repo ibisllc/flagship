@@ -637,6 +637,21 @@
       "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
     },
     {
+      "check": "test-vectors",
+      "key": "swift:box-release",
+      "reason": "The phones sign Release this box with the admin root once its screen is built (iOS first, then Android, docs/retail-box-setup.md §8.2); until then the TypeScript reference and the box are the only readers."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:box-release",
+      "reason": "The phones sign Release this box with the admin root once its screen is built (iOS first, then Android, docs/retail-box-setup.md §8.2); until then the TypeScript reference and the box are the only readers."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:box-release",
+      "reason": "A retail box is claimed and released from the phone app (docs/retail-box-setup.md §11.2); the webapp does not offer Release this box."
+    },
+    {
       "check": "signed-tags",
       "key": "web:flagship/box-setup-code-key/v1",
       "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
