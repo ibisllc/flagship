@@ -1188,3 +1188,73 @@ async fn prefers_an_in_date_certificate_that_covers_the_name() {
             .is_ok()
     );
 }
+
+/// A direct name's certificate is served for exactly that name (exact SNI, never by wildcard or for
+/// another name), beside the control and apps slots; a name with no direct certificate gets none.
+#[tokio::test(flavor = "multi_thread")]
+async fn serves_a_direct_names_certificate_for_exactly_that_name() {
+    const GAME: &str = "game--alice.fshp.app";
+    let control = fake_cert("control", &[HOME]);
+    let apps = fake_cert("apps", &["*.home.alice.flagship.services"]);
+    let game = fake_cert("game", &[GAME]);
+    // A direct entry whose leaf names something else is never served for it.
+    let liar = fake_cert("liar", &["chess--alice.fshp.app"]);
+    let kd = FakeKeyd::start(Some(control.clone()));
+    kd.set(|s| {
+        s.slots = vec![
+            ("control", control.clone(), 0),
+            ("apps", apps.clone(), 0),
+            ("direct", game.clone(), 0),
+            (
+                "direct",
+                FakeCert {
+                    names: vec!["blog--alice.fshp.app".into()],
+                    ..liar.clone()
+                },
+                0,
+            ),
+        ]
+    });
+    let up = start_upstream().await;
+    let ing = start_ingress(
+        &kd,
+        &up,
+        test_limits(),
+        KxPolicy::PreferHybrid,
+        Duration::from_secs(1),
+    )
+    .await;
+    assert!(
+        connect(ing.addr, GAME, &game.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    assert!(
+        connect(ing.addr, HOME, &control.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    assert!(
+        connect(ing.addr, CHESS, &apps.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    for other in [
+        "blog--alice.fshp.app",
+        "chess--alice.fshp.app",
+        "x.game--alice.fshp.app",
+    ] {
+        assert!(
+            connect(ing.addr, other, &liar.ca, ClientOpts::default())
+                .await
+                .is_err(),
+            "{other}"
+        );
+        assert!(
+            connect(ing.addr, other, &game.ca, ClientOpts::default())
+                .await
+                .is_err(),
+            "{other}"
+        );
+    }
+}

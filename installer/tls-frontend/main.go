@@ -52,6 +52,7 @@ type slotCert struct {
 	slot   string
 	handle string
 	chain  string
+	names  []string
 	cert   *tls.Certificate
 }
 
@@ -86,7 +87,7 @@ func (s *certSource) get() ([]slotCert, error) {
 			}
 			built[a.Handle+"\x00"+a.ChainPEM] = c
 		}
-		next = append(next, slotCert{slot: a.Slot, handle: a.Handle, chain: a.ChainPEM, cert: c})
+		next = append(next, slotCert{slot: a.Slot, handle: a.Handle, chain: a.ChainPEM, names: a.Names, cert: c})
 	}
 	if len(next) == 0 {
 		if s.cur != nil {
@@ -98,15 +99,25 @@ func (s *certSource) get() ([]slotCert, error) {
 	return next, nil
 }
 
-// pick chooses the certificate for a name: the control certificate for exactly the name it
-// was issued for, the apps certificate for any other, then whatever else covers the name. An
-// in-date certificate always wins over an expired one; a certificate that does not cover the
-// name is never served.
+// pick chooses the certificate for a name: a direct name's certificate for exactly that name
+// (and for no other), the control certificate for exactly the name it was issued for, the apps
+// certificate for any other, then whatever else covers the name. An in-date certificate always
+// wins over an expired one; a certificate that does not cover the name is never served.
 func pick(certs []slotCert, sni string, now time.Time) (*tls.Certificate, error) {
 	if sni == "" {
 		return nil, errors.New("no server name")
 	}
 	name := strings.ToLower(strings.TrimSuffix(sni, "."))
+	for _, inDate := range []bool{true, false} {
+		for _, c := range certs {
+			if c.slot != "direct" || len(c.names) != 1 || c.names[0] != name || (inDate && !now.Before(c.cert.Leaf.NotAfter)) {
+				continue
+			}
+			if c.cert.Leaf.VerifyHostname(name) == nil {
+				return c.cert, nil
+			}
+		}
+	}
 	controlName := false
 	for _, c := range certs {
 		if c.slot != "control" {

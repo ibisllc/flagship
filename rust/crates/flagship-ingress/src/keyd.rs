@@ -57,11 +57,12 @@ pub struct ActiveCert {
     pub names: Vec<String>,
 }
 
-/// Where keyd serves a certificate: `control` (the box's own name), `apps` (its app names) or
-/// `default` (the one certificate a keyd from before slots serves for every name).
-pub const SLOTS: [&str; 3] = ["control", "apps", "default"];
-/// keyd has at most three entries in service (two slots and the default).
-const MAX_SERVING: usize = 8;
+/// Where keyd serves a certificate: `control` (the box's own name), `apps` (its app names),
+/// `direct` (exactly the one direct name it was made for, one entry per name) or `default` (the
+/// one certificate a keyd from before slots serves for every name).
+pub const SLOTS: [&str; 4] = ["control", "apps", "direct", "default"];
+/// keyd has at most two slots, sixteen direct names and the default in service.
+const MAX_SERVING: usize = 24;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServedCert {

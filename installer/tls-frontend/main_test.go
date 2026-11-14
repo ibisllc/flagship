@@ -550,3 +550,41 @@ func TestOnlyALoopbackPeerHasAPortInTheHeader(t *testing.T) {
 		t.Fatalf("a header with no loopback peer = %s", b)
 	}
 }
+
+func TestPickServesADirectNamesCertificateForExactlyThatName(t *testing.T) {
+	cert := func(fc *fakeCert) *tls.Certificate {
+		c, err := buildCertificate(nil, &activeCert{Handle: fc.handle, ChainPEM: fc.chain})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	control := cert(newFakeCert(t, "c", "home.alice.flagship.services"))
+	apps := cert(newFakeCert(t, "a", "*.home.alice.flagship.services"))
+	game := cert(newFakeCert(t, "g", "game--alice.fshp.app"))
+	liar := cert(newFakeCert(t, "l", "chess--alice.fshp.app"))
+	now := time.Now()
+	set := []slotCert{
+		{slot: "control", cert: control},
+		{slot: "apps", cert: apps},
+		{slot: "direct", names: []string{"game--alice.fshp.app"}, cert: game},
+		{slot: "direct", names: []string{"blog--alice.fshp.app"}, cert: liar},
+		{slot: "default", cert: control},
+	}
+	for sni, want := range map[string]*tls.Certificate{
+		"game--alice.fshp.app":               game,
+		"GAME--alice.fshp.app.":              game,
+		"home.alice.flagship.services":       control,
+		"chess.home.alice.flagship.services": apps,
+	} {
+		if got, err := pick(set, sni, now); err != nil || got != want {
+			t.Fatalf("%s: got %v, %v", sni, got, err)
+		}
+	}
+	// Exact names only: never for another name, nor for a name its leaf does not cover.
+	for _, sni := range []string{"blog--alice.fshp.app", "chess--alice.fshp.app", "x.game--alice.fshp.app"} {
+		if _, err := pick(set, sni, now); err == nil {
+			t.Fatalf("%s got a certificate", sni)
+		}
+	}
+}
