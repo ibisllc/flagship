@@ -410,7 +410,7 @@ describe("buildPushForwarder — Web Push (RFC 8030 + VAPID)", () => {
     const { f, calls } = fakeFetch([{ status: 201, body: "" }]);
     const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1 });
     await forward({
-      targets: [{ tokenId: "t", platform: "webpush", providerToken: subscription("https://x/y") }],
+      targets: [{ tokenId: "t", platform: "webpush", providerToken: subscription("https://push.example.net/y") }],
       category: "x",
       sealedPayloadHex: "",
     });

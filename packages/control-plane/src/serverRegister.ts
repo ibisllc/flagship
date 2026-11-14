@@ -55,7 +55,7 @@ export interface ServerRegisterDeps {
    *  this point is reached at most once per server. */
   auditEvents?: AuditEventStorage;
   forwardToProviders?: (args: {
-    targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+    targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush" | "unifiedpush"; providerToken: string }>;
     category: string;
     sealedPayloadHex: string;
     /** Web Push body; the others see the category only. */

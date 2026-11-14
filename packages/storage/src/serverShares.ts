@@ -44,7 +44,7 @@ export interface ServerShareUnlockRecord {
   issuedAt: number;
 }
 
-export type SharePushPlatform = "apns" | "fcm" | "webpush";
+export type SharePushPlatform = "apns" | "fcm" | "webpush" | "unifiedpush";
 
 export interface ServerSharePushRecord {
   shareId: string;

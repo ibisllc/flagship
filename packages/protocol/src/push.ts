@@ -13,13 +13,16 @@ import type { Bytes, Keypair } from "./types.js";
 // ──────────────────────────────────────────────────────────────────────
 // Push-token registration
 //
-// The phone registers a device push token (APNs / FCM / WebPush) with
-// .com so other devices can reach it. The phone also pre-shares an
+// The phone registers a device push token (APNs / FCM / WebPush /
+// UnifiedPush) with
+// .com so other devices can reach it. A WebPush or UnifiedPush token is
+// the subscription JSON `{endpoint, keys: {p256dh, auth}}`, signed as the
+// exact string sent. The phone also pre-shares an
 // X25519 pubkey at register time; later relays seal payloads to it
 // so the Worker forwards opaque ciphertext (cannot read).
 // ──────────────────────────────────────────────────────────────────────
 
-export type PushPlatform = "apns" | "fcm" | "webpush";
+export type PushPlatform = "apns" | "fcm" | "webpush" | "unifiedpush";
 
 export interface PushTokenRegister {
   username: string;

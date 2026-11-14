@@ -161,7 +161,7 @@ export interface InProcessNotifyDeps {
 
 /** What a co-manager's device gets: the owner's category and alert, no content. */
 export interface ShareStartupPush {
-  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush" | "unifiedpush"; providerToken: string }>;
   category: string;
   sealedPayloadHex: string;
   webpushPayloadBytes: Uint8Array;

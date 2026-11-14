@@ -64,6 +64,7 @@ export * from "./deviceDirectoryEtag.js";
 export * from "./accountResolve.js";
 export * from "./auditEvents.js";
 export * from "./pushBridge.js";
+export * from "./pushEndpointGuard.js";
 export * from "./entitlementRevocations.js";
 export * from "./llmPromo.js";
 export * from "./freeAiCredits.js";

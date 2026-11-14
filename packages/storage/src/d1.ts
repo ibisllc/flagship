@@ -3952,7 +3952,7 @@ function pushRowToRecord(r: RawPushRow): PushTokenRecord {
     tokenId: r.token_id,
     username: r.username,
     deviceId: r.device_id,
-    platform: r.platform as "apns" | "fcm" | "webpush",
+    platform: r.platform as "apns" | "fcm" | "webpush" | "unifiedpush",
     providerToken: r.provider_token,
     pushX25519PubHex: r.push_x25519_pub_hex,
     registrationSignatureHex: r.registration_signature_hex,

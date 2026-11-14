@@ -2368,7 +2368,7 @@ export interface PushTokenRecord {
   username: string;
   /** Immutable account-scoped identity owning this transport token. */
   deviceId: string;
-  platform: "apns" | "fcm" | "webpush";
+  platform: "apns" | "fcm" | "webpush" | "unifiedpush";
   providerToken: string;                 // opaque
   pushX25519PubHex: string;
   registrationSignatureHex: string;

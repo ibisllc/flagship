@@ -2,7 +2,7 @@ import { secretRequestDisplayData, type PushFanoutResult } from "@flagship/contr
 import type { PushTokenStorage } from "@flagship/storage";
 
 export interface UserDevicesForward {
-  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush" | "unifiedpush"; providerToken: string }>;
   category: string;
   sealedPayloadHex: string;
   webpushPayloadBytes?: Uint8Array;

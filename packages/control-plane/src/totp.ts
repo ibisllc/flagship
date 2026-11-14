@@ -974,7 +974,7 @@ export async function handleTotpEnrollConfirm(
  */
 export interface V12PushTarget {
   tokenId: string;
-  platform: "apns" | "fcm" | "webpush";
+  platform: "apns" | "fcm" | "webpush" | "unifiedpush";
   providerToken: string;
 }
 
