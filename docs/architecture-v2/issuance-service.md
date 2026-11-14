@@ -186,7 +186,8 @@ more. Boxes no longer hold ACME account keys for the services apex. Migration of
   it also covers the box's own name via `*.<user>`, else the control one) and, with both valid, a `control` and an
   `apps` slot (`tls.activate {handle, slot}`; `tls.active` lists them under `serving`). flagship-tlsd and
   flagship-ingress serve the box's exact name the control certificate, any other name the apps one, then any in-date
-  certificate that covers the name; a default-only activate clears the slots.
+  certificate that covers the name; a default-only activate clears the slots. Each direct name has its own `direct`
+  slot (`tls.directNames`, docs/keyd.md), served for exactly that name, untouched by a default-only activate.
 - **Open (relay):** `AppUserAllocator.reserveControlNames` takes the registered control names from `.com`; connected
   boxes' own names are reserved already. Feeding the list belongs to the relay work (H3).
 - **Phone (H2):** sign `certificate-order/v1` with the phone's account device key (`device`), `regGen` 0, no `server`;

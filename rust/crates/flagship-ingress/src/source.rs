@@ -202,11 +202,26 @@ impl CertSource {
     }
 }
 
-/// The certificate for a name: the control certificate for exactly the name it was made for,
-/// the apps certificate for any other, then whatever else covers the name. An in-date
-/// certificate wins over an expired one; one that does not cover the name is never served.
+/// The certificate for a name: a direct name's certificate for exactly that name (and for no
+/// other), the control certificate for exactly the name it was made for, the apps certificate
+/// for any other, then whatever else covers the name. An in-date certificate wins over an
+/// expired one; one that does not cover the name is never served.
 pub fn pick<'a>(certs: &'a [Arc<Loaded>], name: &str, now_ms: i64) -> Option<&'a Arc<Loaded>> {
     let name = name.trim_end_matches('.').to_ascii_lowercase();
+    let in_date = |c: &Loaded| c.not_after_ms == 0 || c.not_after_ms > now_ms;
+    let direct = |c: &&Arc<Loaded>| {
+        c.slot == "direct"
+            && matches!(c.names.as_slice(), [n] if *n == name)
+            && c.cert.covers(&name)
+    };
+    if let Some(c) = certs
+        .iter()
+        .filter(direct)
+        .find(|c| in_date(c))
+        .or_else(|| certs.iter().find(direct))
+    {
+        return Some(c);
+    }
     let control_name = certs.iter().any(|c| {
         c.slot == "control"
             && c.names
@@ -218,7 +233,6 @@ pub fn pick<'a>(certs: &'a [Arc<Loaded>], name: &str, now_ms: i64) -> Option<&'a
     } else {
         ["apps", "control", "default"]
     };
-    let in_date = |c: &Loaded| c.not_after_ms == 0 || c.not_after_ms > now_ms;
     for want_in_date in [true, false] {
         for slot in order {
             if let Some(c) = certs

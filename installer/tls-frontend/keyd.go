@@ -133,8 +133,8 @@ type activeCert struct {
 }
 
 // servingCert is one certificate keyd has in service and where: "control" (the box's own
-// name), "apps" (its app names) or "default" (the one certificate an older keyd serves for
-// every name).
+// name), "apps" (its app names), "direct" (exactly the one direct name it was made for) or
+// "default" (the one certificate an older keyd serves for every name).
 type servingCert struct {
 	Slot string `json:"slot"`
 	activeCert
