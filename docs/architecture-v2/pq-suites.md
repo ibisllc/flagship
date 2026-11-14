@@ -1162,9 +1162,36 @@ The companion is the signing root's hybrid signature over the grant's own canoni
 
 ### 20.3 Vectors and ports
 
-`packages/protocol/test-vectors/pq-authority/vectors.json` (`tools/pq-authority-vectors.ts`, `--check`
-for freshness): the rotation's and both grants' canonical bytes, 11 rotation cases and 7 grant cases.
-TypeScript and Rust (`flagship_crypto::authority_records`, re-signing both companions byte for byte)
-check every case. Not yet ported: Swift and Kotlin signing (the phones do not send companions yet, so
-a strict account can neither rotate its admin root nor admit a device until they do) and the webapp
-(verify-only; it never signs hybrid, so under strict a browser admin device cannot add devices).
+`packages/protocol/test-vectors/pq-authority/vectors.json` (`tools/pq-authority-vectors.ts`; CI runs
+`--check`): the rotation's and both grants' canonical bytes, 11 rotation cases and 7 grant cases.
+TypeScript, Rust (`flagship_crypto::authority_records`), Swift (`PqAuthorityRecords.swift`) and Kotlin
+(`core/pq/PqAuthorityRecords.kt`) check every case and re-sign both companions (Swift only the ML-DSA
+half byte for byte: CryptoKit's Ed25519 is hedged).
+
+### 20.4 Who signs them
+
+- **Phones** (iOS `QuantumSafetyService`, Android `keystore/QuantumSafetyService`): Rotate admin key
+  sends the old root's companion with a fresh ML-DSA key and binding for the new root (Android keeps
+  the new seed only once `.com` accepts); Add a device puts the signing root's companion in the pairing
+  bundle (`grantPqSignature`, omitted when absent) and the joining phone passes it to `/devices/admit`;
+  account creation signs the founding grant's companion. A phone signs a companion only with a PQ key
+  `.com` holds for that root (this device bound it), except at account creation, where it is the only
+  holder: a companion under another device's key would make a box drop the device it vouches for.
+- **`.com`**: a re-pair's `refreshedGrants[].pqSignature` is stored like the others; a demo account's
+  admin root has a derived ML-DSA half (`deriveDemoAdminRootMldsaSeed`), its binding stored at
+  provisioning and its primary grant signed hybrid.
+- **No binding to check against.** A rotation companion that `.com` or a non-strict box holds no
+  old-root binding for is relayed (`.com`) or counted as absent (box), so companions can ride along
+  before every account's root is bound. Under strict the box stops the replay (`strict-requires-binding`).
+- **Not ported:** the webapp (verify-only; it never signs hybrid, and as a joining device it does not
+  yet pass `grantPqSignature` on, so a browser added by a phone does not count under strict).
+
+### 20.5 The IRK in the crypto graph
+
+Every box path an IRK signature authorizes under strict goes through `gateSigner` with the IRK's
+`account-irk` binding (owner update, stack switch, rescue and offline control, share and access orders
+signed through `authorizeSensitiveOrder`, GPU approvals in `flagship-gpu`), and the IRK's ML-DSA seed
+is fresh per device, never derived from the UMK. Those edges are compatibility-only in
+`crypto-graph.json`. The IRK's remaining classical uses (the LUKS deposit sealed to it, the boot gate
+and lock clear, SWK delivery, the RCK, the DNS broker, re-pair recovery, `.com`'s device admission)
+keep `key.irk` a classical source.
