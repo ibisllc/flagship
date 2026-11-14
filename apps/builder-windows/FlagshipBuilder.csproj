@@ -42,6 +42,7 @@
     <Compile Include="src\ArtifactPreflight.cs" />
     <Compile Include="src\OlderAppRecipe.cs" />
     <Compile Include="src\WindowsSupport.cs" />
+    <Compile Include="src\ElevationHandoff.cs" />
     <Compile Include="src\Wizard.cs" />
     <Compile Include="src\DiskEnumerator.cs" />
     <Compile Include="src\VerifyResult.cs" />

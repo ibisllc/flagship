@@ -76,8 +76,10 @@
     <Compile Include="..\src\ArtifactPreflight.cs" />
     <Compile Include="..\src\OlderAppRecipe.cs" />
     <Compile Include="..\src\WindowsSupport.cs" />
+    <Compile Include="..\src\ElevationHandoff.cs" />
     <Compile Include="DiskEnumeratorTests.cs" />
     <Compile Include="WindowsSupportTests.cs" />
+    <Compile Include="ElevationHandoffTests.cs" />
     <Compile Include="TargetDiskTests.cs" />
     <Compile Include="VerifyResultTests.cs" />
     <Compile Include="WizardStateMachineTests.cs" />
