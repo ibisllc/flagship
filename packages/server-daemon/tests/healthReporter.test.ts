@@ -128,7 +128,7 @@ describe("box health reporter", () => {
         stub("node", nodeOut === null ? "exit 1" : `[ "$2" = sign-health ] && [ -f "$3" ] && printf '%s' '${nodeOut}'`);
         stub("openssl", "head -c 64 /dev/zero");
         stub("systemctl", "echo 0");
-        stub("ss", "true");
+        stub("ss", "echo \"ESTAB 0 0 10.0.0.2:41000 1.2.3.4:8443\"");
         stub("curl", `while [ $# -gt 0 ]; do [ "$1" = --data ] && printf '%s' "$2" > ${join(dir, "body")}; shift; done`);
         writeFileSync(join(dir, "main.js"), "");
         writeFileSync(join(dir, "r.sh"), buildHealthReportScript({
