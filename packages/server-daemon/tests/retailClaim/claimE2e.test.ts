@@ -27,6 +27,11 @@ import {
   signBoxClaimKey,
   signBoxClaimReceipt,
   signBoxRelease,
+  signBoxReleaseHybrid,
+  canonicalPqKeyBinding,
+  verifyPqKeyBinding,
+  GENESIS_DIGEST,
+  type PolicyState,
   type BoxReleaseOrder,
   signInstallBlob,
   signServerRegister,
@@ -660,6 +665,31 @@ describe("Release this box (an admin-root order) and the owner's notices", () =>
     tampered.order = { ...o, nonceHex: "cd".repeat(16) };
     expect(await t.consumer.take(tampered)).toMatchObject({ ok: false, code: "release-not-admin" });
     expect(t.box.svc.lifecycle).toBe("claimed");
+  });
+
+  it("under strict the order needs the admin root's hybrid signature too", async () => {
+    const t = await claimedBox();
+    const mldsa = new Uint8Array(32).fill(0x55);
+    const sk = Uint8Array.from([...admin.privateKey, ...mldsa]);
+    const st = { role: "admin-root" as const, subjectId: "harry", ed25519PubHex: hex(admin.publicKey), mldsaPubHex: hex(hybridSigKeygen(admin.privateKey, mldsa).publicKey.subarray(32)), issuedAt: T0 };
+    const bound = verifyPqKeyBinding({ v: 1, ...st, signature: hex(hybridSign(sk, "flagship/pq-key-binding/v1", canonicalPqKeyBinding(st))) }, { role: "admin-root", subjectId: "harry", ed25519PubHex: hex(admin.publicKey), now: T0 + 1 });
+    const strict: PolicyState = { scope: { kind: "installation", id: t.r.code.serverDomain }, profile: "strict", rollout: "enforced", generation: 1, headDigest: GENESIS_DIGEST, enforcedEver: true };
+    const consumer = new BoxReleaseConsumer({
+      serverDomain: t.r.code.serverDomain,
+      stkPubHex: () => t.order().stkPubHex,
+      adminRootPub: () => admin.publicKey,
+      statePath: join(t.dir, "box-release-strict.json"),
+      now: t.box.clock.now,
+      release: () => t.box.svc.release(),
+      pq: { policy: () => strict, bindingFor: (p) => (p === hex(admin.publicKey) ? bound : null) },
+    });
+    const o = t.order();
+    expect(await consumer.take(t.signed(o))).toMatchObject({ ok: false, status: 403, code: "release-needs-hybrid" });
+    const wrong = signBoxReleaseHybrid(o, Uint8Array.from([...irk.privateKey, ...mldsa]));
+    expect(await consumer.take({ ...t.signed(o), pqSignature: wrong })).toMatchObject({ ok: false, code: "release-not-admin" });
+    expect(t.box.wipes).toEqual([]);
+    expect(await consumer.take({ ...t.signed(o), pqSignature: signBoxReleaseHybrid(o, sk) })).toEqual({ ok: true });
+    expect(t.box.svc.lifecycle).toBe("unclaimed");
   });
 
   it("an order is taken once", async () => {

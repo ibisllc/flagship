@@ -1,9 +1,12 @@
 // "Release this box" on the box (docs/retail-box-setup.md §7.8, §8.2): an order signed by the
 // account's pinned admin root, naming this box and its own server key, wipes the box back to
 // unclaimed. The IRK and admin-granted device keys are refused: releasing destroys everything.
-// Refusals are reason codes; the apps say them in the owner's language.
+// A strict installation also needs the admin root's hybrid signature, through the gate every
+// sensitive order goes through (pqAuthority.ts). Refusals are reason codes; the apps say them in
+// the owner's language.
 
-import { BOX_RELEASE_MAX_SKEW_MS, parseBoxRelease, verifyBoxRelease, type BoxReleaseOrder } from "@flagship/protocol";
+import { BOX_RELEASE_MAX_SKEW_MS, canonicalBoxRelease, parseBoxRelease, verifyBoxRelease, type BoxReleaseOrder } from "@flagship/protocol";
+import { gateSigner, hybridOrderSignature, pqAuthority, type PqAuthorityContext } from "../pqAuthority.js";
 import { readStateFile, writeFileDurable } from "../durableFile.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 
@@ -14,6 +17,7 @@ export type BoxReleaseRefusal =
   | "release-other-server"
   | "release-no-admin-root"
   | "release-not-admin"
+  | "release-needs-hybrid"
   | "release-replayed"
   | "release-clock"
   | "release-not-claimed"
@@ -34,6 +38,8 @@ export interface BoxReleaseDeps {
   release: () => Promise<void>;
   /** Runs once the order is answered: the reboot into an unclaimed box. */
   afterRelease?: () => void;
+  /** The assurance policy and bindings; the box's own (pqAuthority()) when absent. */
+  pq?: PqAuthorityContext | null;
   log?: (m: string) => void;
 }
 
@@ -61,7 +67,7 @@ export class BoxReleaseConsumer {
   }
 
   async take(body: unknown): Promise<BoxReleaseResult> {
-    const c = (body ?? {}) as { order?: unknown; signatureHex?: unknown };
+    const c = (body ?? {}) as { order?: unknown; signatureHex?: unknown; pqSignature?: unknown };
     const order: BoxReleaseOrder | null = parseBoxRelease(c.order);
     const sigHex = typeof c.signatureHex === "string" && /^[0-9a-fA-F]{128}$/.test(c.signatureHex) ? c.signatureHex : null;
     if (!order || !sigHex) return { ok: false, status: 400, code: "release-unreadable" };
@@ -71,6 +77,11 @@ export class BoxReleaseConsumer {
     const admin = this.d.adminRootPub();
     if (!admin || admin.length !== 32) return { ok: false, status: 403, code: "release-no-admin-root" };
     if (!verifyBoxRelease(order, Buffer.from(sigHex, "hex"), admin)) return { ok: false, status: 403, code: "release-not-admin" };
+    const gate = gateSigner(this.d.pq === undefined ? pqAuthority() : this.d.pq, Buffer.from(admin).toString("hex"), hybridOrderSignature(canonicalBoxRelease(order), c.pqSignature));
+    if (gate !== null) {
+      this.d.log?.(`[retail] release refused by the assurance policy: ${gate}`);
+      return { ok: false, status: 403, code: gate === "strict-requires-hybrid" || gate === "strict-requires-binding" ? "release-needs-hybrid" : "release-not-admin" };
+    }
     const now = (this.d.now ?? Date.now)();
     if (Math.abs(now - order.issuedAt) > BOX_RELEASE_MAX_SKEW_MS) return { ok: false, status: 422, code: "release-clock" };
     if (this.busy || order.issuedAt <= (await this.floor())) return { ok: false, status: 409, code: "release-replayed" };

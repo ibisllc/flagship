@@ -9,8 +9,14 @@
  * a co-manager, a non-admin device or a recovery mid-wait can never empty a box. `stkPubHex` is the
  * box's own Ed25519 server key, so an order for one box never releases another of the same name
  * (a replaced or re-claimed box); `nonceHex` (16 bytes) makes each order single use on the box.
+ *
+ * Beside the Ed25519 signature the order carries the admin root's hybrid signature
+ * (`pqSignature: { suite: "hybrid-ed25519-mldsa65/v1", signature }`, pq-suites.md §11) over the same
+ * canonical bytes. A box whose installation is strict refuses the order without it, through the
+ * gate every sensitive order goes through (server-daemon pqAuthority.ts).
  */
 import { ed } from "./edSync.js";
+import { hybridSign, hybridVerify } from "./pqHybrid.js";
 import { legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
@@ -69,4 +75,23 @@ export function parseBoxRelease(raw: unknown): BoxReleaseOrder | null {
   const o = raw as Record<string, unknown>;
   if (typeof o.serverDomain !== "string" || typeof o.stkPubHex !== "string" || typeof o.issuedAt !== "number" || typeof o.nonceHex !== "string") return null;
   return { serverDomain: o.serverDomain, stkPubHex: o.stkPubHex, issuedAt: o.issuedAt, nonceHex: o.nonceHex };
+}
+
+export const BOX_RELEASE_HYBRID_SUITE = "hybrid-ed25519-mldsa65/v1";
+
+/** The admin root's hybrid signature of the order (`secretKey` = Ed25519 seed ‖ ML-DSA seed). */
+export function signBoxReleaseHybrid(o: BoxReleaseOrder, hybridSecretKey: Bytes, opts: { deterministic?: boolean } = {}): { suite: typeof BOX_RELEASE_HYBRID_SUITE; signature: string } {
+  const sig = hybridSign(hybridSecretKey, TAG_BOX_RELEASE, canonicalBoxRelease(o), opts);
+  return { suite: BOX_RELEASE_HYBRID_SUITE, signature: Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("") };
+}
+
+/** Never throws. `hybridPub` is the admin root's Ed25519 ‖ ML-DSA-65 public key. */
+export function verifyBoxReleaseHybrid(o: BoxReleaseOrder, signatureHex: string, hybridPub: Bytes): boolean {
+  try {
+    if (boxReleaseProblem(o) || !/^(?:[0-9a-f]{2})+$/.test(signatureHex)) return false;
+    hybridVerify(hybridPub, TAG_BOX_RELEASE, canonicalBoxRelease(o), Uint8Array.from(signatureHex.match(/../g)!, (h) => parseInt(h, 16)));
+    return true;
+  } catch {
+    return false;
+  }
 }
