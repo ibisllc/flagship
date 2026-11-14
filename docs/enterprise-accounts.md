@@ -499,3 +499,17 @@ server names and breaks every link.
 - **Q-E14** Site check-in period and k_site; warranty guidelines.
 - **Q-E15** Should normal accounts get per-app sharing (share one app's admin, not the server) as a middle step, or is
   that the enterprise line? (Recommended: enterprise line.)
+
+## Owner answers and open debate, 2026-11-14
+
+- **Freeze: yes.** One admin may freeze another (72 h, at most once a week); removing an admin needs more (below).
+- **Seats unlinkable: yes.** The inviter must set a pseudonym for the person before the invitation QR or link is
+  generated; the org sees only that pseudonym.
+- **Caps: under debate.** Owner: 5 is good for a family, 10 may be small for a business, and the tiers should
+  differ. See the proposed ladder in the release journal (2026-11-14).
+- **Admin is binary, but scoped in an org.** On a personal account a device is admin or not. App ranks (member <
+  manager < master) are a separate thing that admins hand out inside apps. Q-E3 only asks whether, in an org, an
+  admin of server S (or app R) counts as "an admin" for changing app ranks on S (or in R).
+- **Founding user (owner proposal, to design):** the founder seat may remove an admin after a timeout; and an org can
+  write "bylaws" into its authority record (who must sign, e.g. a majority of admins or a board) so that anyone
+  frozen out by a rogue admin can go online and run that ceremony to overturn it, in a very simple UX.
