@@ -144,6 +144,18 @@ export class ServiceIssuer {
     return g && serverWildcardGrantInDate(g.issuedAt, (this.o.now ?? Date.now)()) ? g : undefined;
   }
 
+  /** Which of these leaf SHA-256s (hex) the issuance service revoked for this box (issuance-service.md §6). */
+  async revoked(sha256: string[]): Promise<string[]> {
+    if (sha256.length === 0) return [];
+    const r = await this.call(`${this.base()}/api/certificates/revoked`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ device: this.o.boxPubHex.toLowerCase(), sha256: sha256.slice(0, 4) }),
+    });
+    const list = Array.isArray(r.revoked) ? r.revoked : [];
+    return list.filter((h): h is string => typeof h === "string" && sha256.includes(h));
+  }
+
   /** An order this box placed and has not yet got an answer for (resumed by the next `issue`). */
   hasPending(cls: BoxCertClass): boolean {
     return this.pending.has(cls);

@@ -161,6 +161,15 @@ certificates each run: a phone that is no longer an admin device, an account wil
 revoked certificate no longer counts as the device's current one, so it may order again at once. The relay's revocation already ended its routes; this ends its Web PKI authority too. The box's own
 `revokeCurrentCert` is gone: the box holds no ACME account.
 
+### `POST /api/certificates/revoked`
+
+`{ "device": "<box key hex>", "sha256": ["<leaf SHA-256 hex>", …≤ 4] }` → `{ "revoked": [...] }`: which of those leaves
+the service revoked (or queued to revoke) for that device. Unsigned, like a CRL entry. The box asks every 6 hours
+(`acme/boxCertificates.ts` `checkRevoked`); a revoked certificate is dropped (classic path: no longer served; keyd
+path: replaced as soon as the new one is in, since keyd cannot drop the key in service) and a new one is ordered at
+once. A removed box gets none, so its app names are served no certificate. Rate limit `issuance-revoked` (60 an hour
+per address).
+
 ## 7. Retired
 
 `POST /api/dns-01/publish` and `/api/dns-01/delete` answer `410 dns01-retired`: no device writes a challenge record any

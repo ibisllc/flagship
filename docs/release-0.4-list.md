@@ -140,9 +140,11 @@ list; SP = `SECURITY-0.3-PROGRESS.md`; REG = `docs/architecture-v2/REGISTER.md`.
   while it holds a list issued within 7 days (else the admins get manager). Still open: rank demotions never reach
   `.com`, so a withheld one is not covered; manager rank still rests on the daemon's word. Deploy `.com` before the
   box release (without lists, keyd boxes stop asserting master). Source: B2 #6 residual.
-- **Low. A box keeps serving an app certificate the CA revoked** until its normal renewal: the issuance sweep revokes
-  at the CA, but the box never checks. Where: `packages/server-daemon/src/certManager.ts` (no revocation check),
-  `docs/architecture-v2/issuance-service.md` §6. Source: 3174b2e06 follow-up (SR issuance Lows).
+- **Low. A box keeps serving an app certificate the CA revoked. FIXED on `0.4/security-fixes`:** the box asks
+  `.com` (`POST /api/certificates/revoked`) every 6 hours whether the service revoked a certificate it serves, drops a
+  revoked one and orders anew; a removed box serves its app names nothing (classic path). Residual: under keyd the
+  revoked key stays in service until a replacement is activated (keyd refuses to remove the key in service), so a
+  removed keyd box keeps it until it expires. Needs a `.com` deploy and an endorsed box release.
 - **Low. A rogue relay among an account's top 3 ledgers can black-hole its bare phone name** (refuse claims, grant to
   a relay that does not hold the phone). Hijack is closed (7bd9412bc), but the threat table row still says relays do
   not check the admin grant chain: fix the text. Where: `docs/architecture-v2/relay-mesh.md` (threat table, "Rogue
