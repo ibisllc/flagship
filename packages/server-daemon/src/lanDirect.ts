@@ -28,6 +28,7 @@ import { X509Certificate } from "node:crypto";
 import { DEFAULT_SNI_LIMITS, parseClientHelloSni } from "@flagship/tunnel-protocol";
 import {
   isLanAddress,
+  isPublicAddress,
   signLanHint,
   LAN_HINT_MAX_TTL_MS,
   LAN_HINT_MAX_ENDPOINTS,
@@ -129,6 +130,24 @@ export interface LanListenerOptions {
   log?: (msg: string) => void;
   /** Where each connection to the TLS server is recorded while it lives, so the box can tell LAN from relay. */
   lanPorts?: LanIngressPorts;
+  /**
+   * `public`: the direct-access listener (directAccess.ts) on the box's public addresses; its connections are
+   * never recorded as LAN. Default `lan`.
+   */
+  ingress?: "lan" | "public";
+}
+
+/**
+ * Whether a connection the LAN listener accepted may count as LAN (rescue routes, docs/data-sovereignty.md). A public
+ * IPv4 source reached a private address only through the owner's port forward (direct access over IPv4,
+ * docs/direct-access-and-domains.md), so it is a visitor from the internet. IPv6 sources are kept: a ULA is not
+ * routable from outside the site, and a phone on the LAN may well use its global address as the source.
+ */
+export function lanSourceCountsAsLan(remoteAddress: string | undefined): boolean {
+  if (!remoteAddress) return false;
+  const v4 = remoteAddress.startsWith("::ffff:") ? remoteAddress.slice(7) : remoteAddress;
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) return true;
+  return !isPublicAddress(v4);
 }
 
 export interface LanListener {
@@ -231,7 +250,9 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
       let forget: (() => void) | null = null;
       const upstream = net.connect(o.backendPort, "127.0.0.1", () => {
         // Recorded before the first byte reaches the TLS server, so the server never sees this connection unmarked.
-        if (o.lanPorts && typeof upstream.localPort === "number") forget = o.lanPorts.add(upstream.localPort);
+        if (o.lanPorts && o.ingress !== "public" && lanSourceCountsAsLan(source) && typeof upstream.localPort === "number") {
+          forget = o.lanPorts.add(upstream.localPort);
+        }
         upstream.on("data", () => {
           boxAnswered = true;
         });

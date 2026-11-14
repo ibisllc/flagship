@@ -63,5 +63,12 @@
   "Request access · Flagship": "アクセスをリクエスト · Flagship",
   "{0} is private": "{0} は非公開です",
   "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "この Flagship アプリは制限されています。ホストに招待を依頼し、Flagship アプリで招待を承諾してください。",
-  "URL:": "URL："
+  "URL:": "URL：",
+  "That direct access order can't be read.": "この直接アクセスの指示を読み取れません。",
+  "Direct access takes only public addresses. Private, local and reserved addresses can't be used.": "直接アクセスにはパブリックアドレスしか使えません。プライベート、ローカル、予約済みのアドレスは使えません。",
+  "That direct access order isn't valid ({0}).": "この直接アクセスの指示は無効です（{0}）。",
+  "That direct access order is for another server.": "この直接アクセスの指示は別のサーバー宛てです。",
+  "This server takes direct access orders only from an admin device of this account.": "このサーバーは、このアカウントの管理者デバイスからの直接アクセスの指示しか受け付けません。",
+  "That direct access order is older than the last change. Try again.": "この直接アクセスの指示は最後の変更より古いものです。もう一度お試しください。",
+  "This device's clock is too far from the server's. Check the time and try again.": "このデバイスの時計がサーバーの時計と大きくずれています。時刻を確認して、もう一度お試しください。"
 }

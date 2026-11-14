@@ -1,0 +1,947 @@
+{
+  "about": "Direct access (docs/direct-access-and-domains.md). Addresses: `canonical` maps input to canonical text (null = not an address); `public`/`notPublic` classify canonical text. Prefixes: `valid` maps input to canonical, `invalid` must not parse, `contains` pins membership. Order: build `order.canonical` byte for byte, its SHA-256 is `order.sha256`; the pinned signature verifies under `keys.adminRootPubHex` and NOT under `keys.irkPubHex`; each `order.refused` entry has the reason code `problem` and must never verify. Address update and hint v2: build `canonical` from `fields`; each case verifies under `keys.stkPubHex` with the box's check against the order (`order` in the case, else the main order; `withOrder: false` = no verified order) and gives `reason` (null = accepted) or `useDirect`. Check time: address cases at `addressUpdate.now`, hint cases at `hintV2.now`, hint expectations `serverDomain` and `certSha256` of the main hint.",
+  "keys": {
+    "adminRootSeedHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "adminRootPubHex": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+    "irkPubHex": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+    "stkPubHex": "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+    "otherStkPubHex": "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9"
+  },
+  "addresses": {
+    "canonical": [
+      {
+        "input": "81.2.69.142",
+        "canonical": "81.2.69.142"
+      },
+      {
+        "input": "2A02:8010:6400:0001:0000:0000:0000:0010",
+        "canonical": "2a02:8010:6400:1::10"
+      },
+      {
+        "input": "2a02:8010:0:0:1:0:0:1",
+        "canonical": "2a02:8010::1:0:0:1"
+      },
+      {
+        "input": "2a02:0:0:1:0:0:0:1",
+        "canonical": "2a02:0:0:1::1"
+      },
+      {
+        "input": "2a02:8010:6400:1:2:3:4:0",
+        "canonical": "2a02:8010:6400:1:2:3:4:0"
+      },
+      {
+        "input": "::",
+        "canonical": "::"
+      },
+      {
+        "input": "::1",
+        "canonical": "::1"
+      },
+      {
+        "input": "1::",
+        "canonical": "1::"
+      },
+      {
+        "input": "081.2.69.142",
+        "canonical": null
+      },
+      {
+        "input": "256.1.1.1",
+        "canonical": null
+      },
+      {
+        "input": "1.2.3",
+        "canonical": null
+      },
+      {
+        "input": "::ffff:1.2.3.4",
+        "canonical": null
+      },
+      {
+        "input": "fe80::1%eth0",
+        "canonical": null
+      },
+      {
+        "input": "1:2:3:4:5:6:7:8:9",
+        "canonical": null
+      },
+      {
+        "input": "1::2::3",
+        "canonical": null
+      },
+      {
+        "input": "12345::",
+        "canonical": null
+      },
+      {
+        "input": "",
+        "canonical": null
+      }
+    ],
+    "public": [
+      "81.2.69.142",
+      "2a02:8010:6400:1::10",
+      "8.8.8.8",
+      "2606:4700:4700::1111"
+    ],
+    "notPublic": [
+      "10.0.0.1",
+      "172.16.0.1",
+      "192.168.1.20",
+      "100.64.0.9",
+      "127.0.0.1",
+      "169.254.1.1",
+      "0.0.0.0",
+      "224.0.0.1",
+      "255.255.255.255",
+      "192.0.2.1",
+      "198.51.100.1",
+      "203.0.113.5",
+      "198.18.0.1",
+      "::",
+      "::1",
+      "fd12:3456::7",
+      "fe80::1",
+      "ff02::1",
+      "2001:db8::1",
+      "2002:c000:204::1",
+      "2001::1",
+      "3fff::1",
+      "64:ff9b::1:2",
+      "fec0::1"
+    ]
+  },
+  "prefixes": {
+    "valid": [
+      {
+        "input": "2a02:8010:6400::/48",
+        "canonical": "2a02:8010:6400::/48"
+      },
+      {
+        "input": "2A02:8010:6400:0000::/56",
+        "canonical": "2a02:8010:6400::/56"
+      },
+      {
+        "input": "81.2.69.0/24",
+        "canonical": "81.2.69.0/24"
+      }
+    ],
+    "invalid": [
+      "2a02:8010:6400::1/48",
+      "81.2.69.1/24",
+      "81.2.69.0/33",
+      "2a02::/129",
+      "81.2.69.0",
+      "81.2.69.0/024",
+      "/24"
+    ],
+    "contains": [
+      {
+        "prefix": "2a02:8010:6400::/48",
+        "address": "2a02:8010:6400:7::1",
+        "inside": true
+      },
+      {
+        "prefix": "2a02:8010:6400::/48",
+        "address": "2a02:8010:6401::1",
+        "inside": false
+      },
+      {
+        "prefix": "81.2.69.0/24",
+        "address": "81.2.69.142",
+        "inside": true
+      },
+      {
+        "prefix": "81.2.69.0/24",
+        "address": "81.2.70.1",
+        "inside": false
+      },
+      {
+        "prefix": "81.2.69.0/24",
+        "address": "2a02:8010:6400:7::1",
+        "inside": false
+      }
+    ]
+  },
+  "order": {
+    "fields": {
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "enabled": true,
+      "addresses": [
+        "81.2.69.142",
+        "2a02:8010:6400:1::10"
+      ],
+      "prefixes": [
+        "2a02:8010:6400::/48"
+      ],
+      "port": 443,
+      "issuedAt": 1790000000000
+    },
+    "canonical": "flagship/direct-access/v1|home.plucky-avocet.flagship.services|on|2a02:8010:6400:1::10,81.2.69.142|2a02:8010:6400::/48|443|1790000000000",
+    "sha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+    "signatureHex": "04e3afc6c813341c06ccc135e7e9fff1291c9ab851f44cb8f942b688b4acc1697039f42e12692aa3f93dad177543625b76d94bdce3bef56f31d713769c691e06",
+    "off": {
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": false,
+        "addresses": [],
+        "prefixes": [],
+        "port": 443,
+        "issuedAt": 1790000060000
+      },
+      "canonical": "flagship/direct-access/v1|home.plucky-avocet.flagship.services|off|||443|1790000060000",
+      "signatureHex": "d3b2f5cac4c034b92ea1d1644ec20523482f49641077e2c7253d2fece68054de37e68a15fa2868629a1511ac2a9e696163ae7b88e76b2a6e7411c74453a92203"
+    },
+    "refused": [
+      {
+        "name": "private IPv4",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "192.168.1.20"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "CGNAT",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "100.64.0.9"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "loopback",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "127.0.0.1"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "ULA",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "fd12:3456::7"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "link-local",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "fe80::1"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "documentation v6",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "2001:db8::1"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "documentation v4",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "203.0.113.5"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "IPv4-mapped",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "::ffff:81.2.69.142"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "bad-address"
+      },
+      {
+        "name": "non-canonical v6",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "2A02:8010:6400:0001:0000:0000:0000:0010"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "non-canonical-address"
+      },
+      {
+        "name": "private prefix",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "81.2.69.142",
+            "2a02:8010:6400:1::10"
+          ],
+          "prefixes": [
+            "fd00::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "private-address"
+      },
+      {
+        "name": "prefix too wide",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "81.2.69.142",
+            "2a02:8010:6400:1::10"
+          ],
+          "prefixes": [
+            "2a02::/16"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "prefix-too-wide"
+      },
+      {
+        "name": "host bits in prefix",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "81.2.69.142",
+            "2a02:8010:6400:1::10"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::1/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "bad-prefix"
+      },
+      {
+        "name": "off with addresses",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": false,
+          "addresses": [
+            "81.2.69.142",
+            "2a02:8010:6400:1::10"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "off-with-addresses"
+      },
+      {
+        "name": "on with nothing",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [],
+          "prefixes": [],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "no-addresses"
+      },
+      {
+        "name": "bad port",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "81.2.69.142",
+            "2a02:8010:6400:1::10"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 0,
+          "issuedAt": 1790000000000
+        },
+        "problem": "bad-port"
+      },
+      {
+        "name": "duplicate",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "81.2.69.142",
+            "81.2.69.142"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "problem": "duplicate"
+      }
+    ]
+  },
+  "addressUpdate": {
+    "now": 1790000180000,
+    "fields": {
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+      "addresses": [
+        "2a02:8010:6400:7::1",
+        "81.2.69.142"
+      ],
+      "port": 443,
+      "issuedAt": 1790000120000
+    },
+    "canonical": "flagship/direct-address/v1|home.plucky-avocet.flagship.services|aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a|2a02:8010:6400:7::1,81.2.69.142|443|1790000120000",
+    "cases": [
+      {
+        "name": "inside the grant",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "dcab90f6c26cbcbd30cfd31f63a3dc99690a68d73d8864d45c6524694b8fb9fc358ea1a07eeb9ff941b0fdd722c40f756c0b71adb2706ec5478867741ca5930b",
+        "reason": null
+      },
+      {
+        "name": "signed by another box",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "2ec11037057e0423cca5c566af887180d541becbf62d84c1f8b74e25de26ed6521cde688e5cafb9e27fbc0ace16e03dc25cae45e77cbbda0cc9561258b7d8d0f",
+        "reason": "bad-signature"
+      },
+      {
+        "name": "for another server",
+        "fields": {
+          "serverDomain": "home.other-user.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "1adbd80d31565a69df298a7ad199f491bc4bb4fa9699319ad3af8383ad56b43c3cce66113fcd632d3346d7fece2ffd77e94769670795d8265ac200e2c5725808",
+        "reason": "wrong-server"
+      },
+      {
+        "name": "outside the grant",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "2a02:8010:6401::1"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "0c32bad378b27caf9f35e4b6256e385afe0d497284922ee854184b26ec0604931acbaaea0052d879e50ac8793854d2161589477288f8aa4fe4fe21b0418e6e04",
+        "reason": "outside-grant"
+      },
+      {
+        "name": "private address",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "192.168.1.20"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "a98a05287e31bd8d8d039aea1c121431a662c051fd9900295323efee14a78b488c8a09f5cec818b3e1e6ffb41ee07d08a3fb522316981035bfc20378c279da01",
+        "reason": "private-address"
+      },
+      {
+        "name": "names another order",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "6427eae2fe75a4d81e6639040f855afddfe13ec2629c1eb6f93e7cb113d5f67a8effb7c2f3baf7864d863f8f43413ddc2a954dbe23a91922dd0c288973d79f0c",
+        "reason": "order-mismatch"
+      },
+      {
+        "name": "wrong port",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 8443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "3e3d8f62db927af8d12078531364116ffaf3c8e70d308b6672fcf70186d00a7b21d1abf145440c55d6713ec214dd9a22394a98036b2160d9ce7915b391c4d10c",
+        "reason": "bad-port"
+      },
+      {
+        "name": "order turned off",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "580c48e0fcc226b1ed8726b70a7b3430fe1bab78c2c74336f74beca1caf7d244",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 443,
+          "issuedAt": 1790000120000
+        },
+        "signatureHex": "c54e7f9781b9713208deb1e6e001c836fa02b2f489d2e57f94b97fbe048bcffb365e3876a53d487b24b5fb58d6245a0edd944e940f1bea310ebf120189cd9b03",
+        "order": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": false,
+          "addresses": [],
+          "prefixes": [],
+          "port": 443,
+          "issuedAt": 1790000060000
+        },
+        "reason": "direct-access-off"
+      },
+      {
+        "name": "dated in the future",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "addresses": [
+            "2a02:8010:6400:7::1",
+            "81.2.69.142"
+          ],
+          "port": 443,
+          "issuedAt": 1790003600000
+        },
+        "signatureHex": "b51841e527387a4dc15d1156d107a1bdeb159c06f5e87a562cf4a3e9aad4e8ea1cd25ccdda5f50f4ee27770dea1f709736b84b22c80d6c25e481bbb709fe5d0e",
+        "reason": "not-yet-valid"
+      }
+    ]
+  },
+  "hintV2": {
+    "now": 1790000060000,
+    "fields": {
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "certSha256": "abababababababababababababababababababababababababababababababab",
+      "lan": [
+        {
+          "address": "192.168.1.20",
+          "port": 443
+        }
+      ],
+      "direct": [
+        {
+          "address": "2a02:8010:6400:7::1",
+          "port": 443
+        },
+        {
+          "address": "81.2.69.142",
+          "port": 443
+        }
+      ],
+      "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+      "issuedAt": 1790000000000,
+      "expiresAt": 1790021600000
+    },
+    "canonical": "flagship/lan-hint/v2|home.plucky-avocet.flagship.services|abababababababababababababababababababababababababababababababab|192.168.1.20:443|81.2.69.142:443,[2a02:8010:6400:7::1]:443|aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a|1790000000000|1790021600000",
+    "cases": [
+      {
+        "name": "direct inside the order",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "d55fc8d0177ca67c79f88d9a68ae4b48ddcb6f5d63dae1612ef27d8dbf947b7401501a214a1ce333ce6f348f6642631893519fd5fb0cf62ec93035c68655700e",
+        "withOrder": true,
+        "useDirect": true
+      },
+      {
+        "name": "no verified order: LAN only",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "d55fc8d0177ca67c79f88d9a68ae4b48ddcb6f5d63dae1612ef27d8dbf947b7401501a214a1ce333ce6f348f6642631893519fd5fb0cf62ec93035c68655700e",
+        "withOrder": false,
+        "useDirect": false
+      },
+      {
+        "name": "direct only, no verified order",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "172f82062c5326a684d8516bcf9712e8e47c18bcee0eff037071d43b63ac51ce81032a2f727e9c1d91ccf54b26b926328f0aeb420d72da73d0b9cce37315b50e",
+        "withOrder": false,
+        "reason": "direct-without-order"
+      },
+      {
+        "name": "order the hint doesn't name",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "d55fc8d0177ca67c79f88d9a68ae4b48ddcb6f5d63dae1612ef27d8dbf947b7401501a214a1ce333ce6f348f6642631893519fd5fb0cf62ec93035c68655700e",
+        "withOrder": true,
+        "order": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "enabled": true,
+          "addresses": [
+            "81.2.69.143"
+          ],
+          "prefixes": [
+            "2a02:8010:6400::/48"
+          ],
+          "port": 443,
+          "issuedAt": 1790000000000
+        },
+        "reason": "order-mismatch"
+      },
+      {
+        "name": "direct outside the order",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6401::1",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "a4e49ed653336a3929f81b526147fb175ae75a05ba8cb6978c6827d3d510eb5d9da27aa2d5e8e60539cce920d4ce82819295cafac31dcdd8132a63015bd21d06",
+        "withOrder": true,
+        "reason": "outside-grant"
+      },
+      {
+        "name": "private address as direct",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "10.0.0.5",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "831df495590187df8a723dcd26ce20a05b044874b81966c647c31dce53a17f6a0e744db3c13933e6d6afab2b4738fb457afb110efc91bcc53378de96bdeb7b0c",
+        "withOrder": true,
+        "reason": "private-address"
+      },
+      {
+        "name": "public address as LAN",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "d3db8e720894ecc354306d47ac29b355b3c39dfe5418c88cacd7b68c9a09e766d64b6bf1402ca95cc6b13eed7ef1ea34c1aa04005171afb14ab7bb150e8c3f0d",
+        "withOrder": true,
+        "reason": "non-lan-endpoint"
+      },
+      {
+        "name": "direct on another port",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "81.2.69.142",
+              "port": 8443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "09dbb48e6b5d6d477af21a0379c967366d07e3da471d2e19b56b65ccb6cc21eb6fd9bcb05b656e05c34036aafe208fe94de61ee21cea25bb4e5074a2364b7f0d",
+        "withOrder": true,
+        "reason": "bad-port"
+      },
+      {
+        "name": "signed by another box",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "63b170d3fa4e78cb8c17a3f129858a20515960848ab7030608478f6d04709f91d753e7547f2bcdf71687dd517b7ef15545652e3eeb0aa5cde483382f8ccc600f",
+        "withOrder": true,
+        "reason": "bad-signature"
+      },
+      {
+        "name": "another certificate",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [
+            {
+              "address": "2a02:8010:6400:7::1",
+              "port": 443
+            },
+            {
+              "address": "81.2.69.142",
+              "port": 443
+            }
+          ],
+          "orderSha256": "aa8f5bb3ff2c25f0858f4ab23dbc06e9b419fdd81cc3167823343382f7a6c49a",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "d803075627b6279e56ae9692ce561a0923f4be91dbd0593f6784c212106a7594716524e8a74e9a0fb6708cb7ca833ef04bbc3ede1d4375f086615d0ef740af00",
+        "withOrder": true,
+        "reason": "cert-mismatch"
+      },
+      {
+        "name": "LAN only, no order named",
+        "fields": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "certSha256": "abababababababababababababababababababababababababababababababab",
+          "lan": [
+            {
+              "address": "192.168.1.20",
+              "port": 443
+            }
+          ],
+          "direct": [],
+          "orderSha256": "",
+          "issuedAt": 1790000000000,
+          "expiresAt": 1790021600000
+        },
+        "signatureHex": "58881877b792e42cfeff18e3356474669b43294dfc91c028907ef60af6fb5f2b7694df1b719e992ea52be4415a5def4bf0802c9f07ea52308cd7361cad5afc00",
+        "withOrder": false,
+        "useDirect": false
+      }
+    ]
+  }
+}

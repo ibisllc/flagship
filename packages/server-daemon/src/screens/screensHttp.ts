@@ -46,6 +46,7 @@ import { SERVING_PATH, buildServingHttp } from "../servingHttp.js";
 import type { ServingStore } from "../servingStore.js";
 import type { ServerOrderHolder } from "../serverOrderHolder.js";
 import { DEBUG_PATH, DEBUG_REVOKE_PATH, buildDebugAccessHttp, type DebugAccessController } from "../debugAccessGate.js";
+import { DIRECT_ACCESS_PATH, DIRECT_ADDRESS_PATH, LAN_HINT_V2_PATH, buildDirectAccessHttp, type buildSignedLanHintV2, type DirectAccessController } from "../directAccess.js";
 import {
   summarizeAttachment,
   prepareAttachments,
@@ -242,6 +243,15 @@ export interface ScreensHttpDeps {
    * admin-signed SSH key let in until it ends. Its state rides server-detail.
    */
   debugAccess?: Pick<DebugAccessController, "view" | "grant" | "revoke"> | null;
+  /**
+   * Direct access (`/api/screens/direct-access`, `/lan-hint/v2`; directAccess.ts): the owner's signed order for
+   * reaching the box at its public addresses. Its state rides server-detail.
+   */
+  directAccess?: {
+    controller: DirectAccessController;
+    sign: (msg: Uint8Array) => Uint8Array;
+    lanHintV2: () => ReturnType<typeof buildSignedLanHintV2>;
+  } | null;
   /**
    * The owner's Database section (`/services/:id/db…`, dataLayer/ownerDb.ts):
    * an app's live data, owner sessions only (companions get 403 on every
@@ -663,6 +673,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.debugAccess && (path === DEBUG_PATH || path === DEBUG_REVOKE_PATH)) {
       const r = await buildDebugAccessHttp({
         controller: deps.debugAccess,
+        denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
+      })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.directAccess && (path === DIRECT_ACCESS_PATH || path === DIRECT_ADDRESS_PATH || path === LAN_HINT_V2_PATH)) {
+      const r = await buildDirectAccessHttp({
+        ...deps.directAccess,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
       if (r) return r;
@@ -1757,6 +1775,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     lastUpdate: deps.lastUpdate?.() ?? null,
     ...(deps.serving ? { serving: deps.serving.view() } : {}),
     ...(deps.debugAccess ? { debugAccess: deps.debugAccess.view() } : {}),
+    ...(deps.directAccess ? { directAccess: deps.directAccess.controller.view() } : {}),
     appSandbox: appSandboxStatus(),
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,

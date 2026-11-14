@@ -63,5 +63,12 @@
   "Request access · Flagship": "Solicitar acesso · Flagship",
   "{0} is private": "{0} é privado",
   "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "Este app Flagship tem acesso restrito. Peça ao anfitrião que convide você e aceite o convite no seu app Flagship.",
-  "URL:": "URL:"
+  "URL:": "URL:",
+  "That direct access order can't be read.": "Não foi possível ler essa ordem de acesso direto.",
+  "Direct access takes only public addresses. Private, local and reserved addresses can't be used.": "O acesso direto aceita apenas endereços públicos. Endereços privados, locais e reservados não podem ser usados.",
+  "That direct access order isn't valid ({0}).": "Essa ordem de acesso direto não é válida ({0}).",
+  "That direct access order is for another server.": "Essa ordem de acesso direto é para outro servidor.",
+  "This server takes direct access orders only from an admin device of this account.": "Este servidor só aceita ordens de acesso direto de um dispositivo administrador desta conta.",
+  "That direct access order is older than the last change. Try again.": "Essa ordem de acesso direto é anterior à última alteração. Tente de novo.",
+  "This device's clock is too far from the server's. Check the time and try again.": "O relógio deste dispositivo está muito diferente do relógio do servidor. Confira a hora e tente de novo."
 }
