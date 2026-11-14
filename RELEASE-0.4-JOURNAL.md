@@ -267,6 +267,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-14 Merged `0.4/fixups`: share-notice tests (test was wrong after the UnifiedPush guard), iOS marketplace
   calls through `gatedData`, OutboundProxyTests compile and pass, webapp passes grantPqSignature (shell **v209**),
   webapp reads pq-authority vectors. `npm run parity` fully green. Running: direct-access screens.
+- 2026-11-14 Started `0.4/retail-apps` (box-claim Swift/Kotlin/Rust ports + iOS claim screens, Android if time) and
+  `0.4/keyd-direct-slots` (per-name TLS slots in keyd + tlsd/ingress so arch-v2 boxes serve direct names).
 
 ## Resume point
 
