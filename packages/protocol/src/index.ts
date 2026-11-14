@@ -121,6 +121,7 @@ export * from "./messagesAttestation.js";
 export * from "./voiciPage.js";
 export * from "./voiciPageRemove.js";
 export * from "./voiciMessages.js";
+export * from "./voiciCalls.js";
 export * from "./voiciDraftsConsume.js";
 export * from "./abuseNotice.js";
 export * from "./appListScope.js";
