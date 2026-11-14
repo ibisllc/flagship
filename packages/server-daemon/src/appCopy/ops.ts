@@ -22,7 +22,7 @@ import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
-import { APP_PG_EXTENSIONS } from "../dataLayer/naming.js";
+import { APP_PG_EXTENSIONS, parseProdFilesVolume } from "../dataLayer/naming.js";
 import type { PostgresStore } from "../dataLayer/provisioner.js";
 import { filesArchiveDockerArgs, filesSizeDockerArgs } from "../volumeDump.js";
 import { describe, dockerFailure, dockerRepaired, wakeDocker } from "../dockerHealth.js";
@@ -43,14 +43,13 @@ export function brokerFilesActive(): boolean {
   return runsUnprivileged() && brokerActive();
 }
 
-const PROD_FILES_PREFIX = "flagship-files-";
-
 export async function brokerFiles(action: "dump" | "restore" | "size", volume: string, path?: string, socketPath = BROKER_V1_SOCKET): Promise<string> {
-  if (!volume.startsWith(PROD_FILES_PREFIX)) throw new Error(`not an app's files volume: ${volume}`);
-  const installation = volume.slice(PROD_FILES_PREFIX.length);
+  const parsed = parseProdFilesVolume(volume);
+  if (!parsed) throw new Error(`not an app's files volume: ${volume}`);
+  const { installation, generation } = parsed;
   archiveIsolationStats.brokerFiles++;
   try {
-    const r = (await brokerCall("appdata.files", { action, installation, ...(path ? { path } : {}) }, socketPath, TIMEOUT_MS)) as { stdout?: string };
+    const r = (await brokerCall("appdata.files", { action, installation, ...(generation > 0 ? { generation } : {}), ...(path ? { path } : {}) }, socketPath, TIMEOUT_MS)) as { stdout?: string };
     console.log(`[server-archive] the broker ${action === "dump" ? "read" : action === "restore" ? "wrote" : "measured"} the files folder of ${installation}`);
     return r?.stdout ?? "";
   } catch (e) {

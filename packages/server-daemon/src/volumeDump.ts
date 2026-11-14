@@ -4,7 +4,7 @@ import { createWriteStream, createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { dedicatedContainer, type DedicatedLogin } from "./dataLayer/dedicated.js";
-import { isProdFilesVolume } from "./dataLayer/naming.js";
+import { isProdFilesVolume, parseProdFilesVolume } from "./dataLayer/naming.js";
 import { routePrivileged } from "./privileged.js";
 import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js";
 
@@ -657,7 +657,7 @@ async function reloadFiles(cfg: VolumeReloadConfig, inDir: string): Promise<void
         "--label",
         "flagship.files=prod",
         "--label",
-        `flagship.app=${volume.slice("flagship-files-".length)}`,
+        `flagship.app=${parseProdFilesVolume(volume)!.installation}`,
         volume,
       ]);
       await cfg.runner.runFromFile("docker", filesTarArgs(cfg, volume, "restore"), join(inDir, f));

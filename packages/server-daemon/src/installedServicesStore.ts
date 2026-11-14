@@ -14,6 +14,7 @@ import { keepCorruptAside, writeFileDurable } from "./durableFile.js";
 import type { SwkOps } from "./keyCustodian.js";
 import type { AppDataCredentials } from "./dataLayer/provisioner.js";
 import type { AppMembershipSnapshot } from "./membership.js";
+import type { RetainedGeneration } from "./servicePlatform.js";
 
 export interface PersistedService {
   creator: string;
@@ -27,6 +28,8 @@ export interface PersistedService {
   installedAt: number;
   appliedMigrations?: string[];
   membership: AppMembershipSnapshot;
+  dataGeneration?: number;
+  retainedData?: RetainedGeneration[];
 }
 
 export interface InstalledServicesStore {

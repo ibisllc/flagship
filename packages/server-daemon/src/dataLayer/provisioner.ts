@@ -178,9 +178,12 @@ export class DataProvisioner {
     space?: "dev" | "prod";
     /** The disk a dedicated instance gets (manifest v2 `resources.diskMiB`). */
     dedicatedDiskBytes?: number;
+    /** Prod only: the store generation to make (absent = 0, the original names). */
+    generation?: number;
   }): Promise<AppDataCredentials> {
     const { creator, slug, stores } = args;
     const space = args.space ?? "prod";
+    const generation = args.generation ?? 0;
     const secret = this.opts.generateSecret ?? generateSecret;
     const ep = this.opts.endpoints ?? {};
     const out: AppDataCredentials = { creator, slug };
@@ -201,7 +204,7 @@ export class DataProvisioner {
         out.postgresSingleton = isSingletonStore(stores.postgres) || normalizeStoreFlag(stores.postgres).length === 0;
         out.postgres = {};
         for (const storeName of pgStores) {
-          const id: AppDataIdentity = { creator, slug, storeName, space };
+          const id: AppDataIdentity = { creator, slug, storeName, space, ...(generation > 0 ? { generation } : {}) };
           const db = pgDatabase(id, nameKey);
           const role = pgRole(id, nameKey);
           const password = secret();
@@ -217,11 +220,11 @@ export class DataProvisioner {
         }
       }
       if (files) {
-        const volume = filesVolume({ creator, slug, space });
+        const volume = filesVolume({ creator, slug, space, ...(generation > 0 ? { generation } : {}) });
         const sizeBytes = await this.opts.filesSizeBytes?.(volume);
         await this.opts.files!.createVolume({
           volume,
-          labels: { "flagship.files": space, "flagship.app": `${creator}--${slug}` },
+          labels: { "flagship.files": space, "flagship.app": `${creator}--${slug}`, ...(generation > 0 ? { "flagship.generation": String(generation) } : {}) },
           ...(sizeBytes !== undefined ? { sizeBytes } : {}),
         });
         out.files = { volume };
@@ -231,6 +234,10 @@ export class DataProvisioner {
       if (dedicatedAdmin) {
         for (const s of Object.values(out.postgres ?? {})) await dedicatedAdmin.dropRoleAndDb({ db: s.database, role: s.role }).catch(() => {});
         out.postgres = {};
+      }
+      if (generation > 0) {
+        await this.dropGeneration(out).catch(() => {});
+        throw e;
       }
       await this.dropCredentials(out).catch(() => {});
       throw e;
@@ -253,6 +260,55 @@ export class DataProvisioner {
       for (const s of pg) await this.opts.postgres.dropRoleAndDb({ db: s.database, role: s.role });
     }
     if (creds.files && this.opts.files) await this.opts.files.removeVolume(creds.files.volume);
+  }
+
+  /**
+   * Drop the stores of ONE generation of an app (a restore's rejected copy,
+   * or an expired undo point), never the app's dedicated instance as a
+   * whole: the live generation's databases are in it too. Refuses
+   * generation-0 credentials of the live app only by contract (the caller
+   * passes credentials it took out of the record).
+   */
+  async dropGeneration(creds: AppDataCredentials): Promise<void> {
+    const all = Object.values(creds.postgres ?? {});
+    const dedicated = all.filter((s) => s.profile === "dedicated");
+    if (dedicated.length > 0) {
+      if (!this.opts.dedicated) throw new Error("the app's own database instance isn't available on this server");
+      const { admin } = await this.opts.dedicated.forApp(creds.creator, creds.slug);
+      for (const s of dedicated) await admin.dropRoleAndDb({ db: s.database, role: s.role });
+    }
+    const pg = all.filter((s) => s.profile !== "dedicated");
+    if (pg.length > 0 && this.opts.postgres) {
+      await this.opts.ready?.();
+      for (const s of pg) await this.opts.postgres.dropRoleAndDb({ db: s.database, role: s.role });
+    }
+    if (creds.files && this.opts.files) await this.opts.files.removeVolume(creds.files.volume);
+  }
+
+  /**
+   * Drop whatever the names of one prod generation point at, whether or not
+   * it was ever made: clears what an interrupted restore left before the
+   * same generation is made again. Generation 0 is refused (those are the
+   * names every app started with).
+   */
+  async clearGeneration(args: { creator: string; slug: string; stores: AppDataStores; generation: number; dedicated?: boolean }): Promise<void> {
+    if (!(args.generation > 0)) throw new Error("generation 0 is never cleared by name");
+    const pgStores = postgresStoreNames(args.stores);
+    if (pgStores.length > 0 && this.opts.nameKey) {
+      const admin = args.dedicated && this.opts.dedicated
+        ? (await this.opts.dedicated.forApp(args.creator, args.slug)).admin
+        : this.opts.postgres;
+      if (admin) {
+        if (!args.dedicated) await this.opts.ready?.();
+        for (const storeName of pgStores) {
+          const n = pgDatabase({ creator: args.creator, slug: args.slug, storeName, generation: args.generation }, this.opts.nameKey);
+          await admin.dropRoleAndDb({ db: n, role: n });
+        }
+      }
+    }
+    if (wantsFiles(args.stores) && this.opts.files) {
+      await this.opts.files.removeVolume(filesVolume({ creator: args.creator, slug: args.slug, generation: args.generation }));
+    }
   }
 
   /** Drop the stores an identity's names point at (the dev dataspace). */

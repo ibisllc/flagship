@@ -17,7 +17,7 @@ use serde_json::{Map, Value, json};
 use std::io::{Read, Seek};
 use std::os::fd::OwnedFd;
 
-const MOUNTS: &str = "/dev/loop3 /var/lib/flagship-files/flagship-files-alice--chess ext4 rw,nosuid,nodev,noexec 0 0\n";
+const MOUNTS: &str = "/dev/loop3 /var/lib/flagship-files/flagship-files-alice--chess ext4 rw,nosuid,nodev,noexec 0 0\n/dev/loop4 /var/lib/flagship-files/flagship-files-alice--chess--g2 ext4 rw,nosuid,nodev,noexec 0 0\n";
 
 fn args(v: Value) -> Map<String, Value> {
     v.as_object().unwrap().clone()
@@ -109,6 +109,42 @@ fn refusals() {
     );
     assert_eq!(
         code(json!({"action":"size","installation":"alice--chess","volume":"x"})).code,
+        ErrorCode::BadRequest
+    );
+}
+
+#[test]
+fn a_store_generation_reaches_only_that_generations_folder() {
+    let e = call(json!({"action":"restore","installation":"alice--chess","generation":2,"path":"/var/flagship/restore/files.tar"})).unwrap();
+    assert!(
+        e.args
+            .contains(&"type=volume,src=flagship-files-alice--chess--g2,dst=/data".to_owned())
+    );
+    assert!(e.stdin_tar_check);
+    let code = |v: Value| call(v).unwrap_err().code;
+    // Not mounted: a generation the box never made.
+    assert_eq!(
+        code(json!({"action":"size","installation":"alice--chess","generation":3})),
+        ErrorCode::Forbidden
+    );
+    // Generation 0 is named by leaving it out; anything else that is not 1-999999 is refused.
+    for g in [
+        json!(0),
+        json!(-1),
+        json!(1_000_000),
+        json!("2"),
+        json!(2.5),
+        json!(null),
+    ] {
+        assert_eq!(
+            code(json!({"action":"size","installation":"alice--chess","generation":g})),
+            ErrorCode::BadRequest,
+            "{g}"
+        );
+    }
+    // A generation smuggled into the app name is still not an app name.
+    assert_eq!(
+        code(json!({"action":"size","installation":"alice--chess--g2"})),
         ErrorCode::BadRequest
     );
 }

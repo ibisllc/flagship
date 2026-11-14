@@ -17,7 +17,7 @@
  * numbers are on server-detail and app-detail.
  */
 import { readStateFile, writeFileDurable } from "../durableFile.js";
-import { DEV_FILES_PREFIX } from "../dataLayer/naming.js";
+import { DEV_FILES_PREFIX, parseProdFilesVolume } from "../dataLayer/naming.js";
 import {
   DEV_FILES_QUOTA_BYTES,
   DEV_PG_QUOTA_BYTES,
@@ -213,7 +213,9 @@ export class AppQuotaManager {
   /** The image a volume should start with (its budget, a staging copy's quota, or the safety size). */
   async imageSizeFor(volume: string): Promise<number> {
     if (volume.startsWith(DEV_FILES_PREFIX)) return DEV_FILES_QUOTA_BYTES;
-    const app = this.opts.apps().find((a) => a.files?.volume === volume);
+    const apps = this.opts.apps();
+    // A restore's next generation of an app's folder starts at that app's budget.
+    const app = apps.find((a) => a.files?.volume === volume) ?? apps.find((a) => a.serviceId === parseProdFilesVolume(volume)?.installation);
     const budgets = this.opts.budgets();
     const budget = app ? budgets?.get(app.serviceId) : undefined;
     if (budget) return imageTarget(budget.filesBytes, 0);

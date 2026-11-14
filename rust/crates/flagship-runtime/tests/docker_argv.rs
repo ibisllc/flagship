@@ -401,6 +401,20 @@ fn every_reference_must_be_resolved_and_nothing_else() {
         .is_err()
     );
     assert!(FilesVolumeName::parse("/var/flagship/data").is_err());
+    // Store generations (dataLayer/naming.ts): prod only, 1-999999, no leading zero.
+    assert!(FilesVolumeName::parse("flagship-files-alice--notes--g2").is_ok());
+    assert!(FilesVolumeName::parse("flagship-files-alice--notes--g999999").is_ok());
+    for bad in [
+        "flagship-files-alice--notes--g0",
+        "flagship-files-alice--notes--g02",
+        "flagship-files-alice--notes--g1000000",
+        "flagship-files-alice--notes--g",
+        "flagship-files-alice--notes--x2",
+        "flagship-files-alice--notes--g2--g3",
+        "flagship-devfiles-alice--notes--g2",
+    ] {
+        assert!(FilesVolumeName::parse(bad).is_err(), "{bad}");
+    }
     assert!(ResolvConf::for_bridge_key("../../etc/shadow").is_err());
 }
 
