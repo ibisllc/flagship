@@ -1,0 +1,209 @@
+{
+  "extName": {
+    "message": "Flagship"
+  },
+  "extDescription": {
+    "message": "Vérifie que chaque serveur Flagship que vous visitez présente le certificat qu’il a signé, et repère les pages de connexion Flagship. S’associe à l’app Flagship ; ne détient aucune clé capable d’agir en votre nom."
+  },
+  "badgeMatch": {
+    "message": "Flagship : le certificat de ce site est celui que votre serveur a signé"
+  },
+  "badgeMismatch": {
+    "message": "Flagship a arrêté ce site : son certificat n’est pas celui que votre serveur a signé"
+  },
+  "badgeStale": {
+    "message": "Flagship : le certificat de ce site correspond, mais votre serveur ne l’a pas confirmé cette semaine"
+  },
+  "badgeUnchecked": {
+    "message": "Flagship n’a pas encore pu vérifier le certificat de ce site"
+  },
+  "blockedTitle": {
+    "message": "Flagship a arrêté cette page"
+  },
+  "blockedLead": {
+    "message": "$1 a présenté un certificat que votre serveur $2 n’a pas signé."
+  },
+  "blockedExplain": {
+    "message": "Quelqu’un intercepte peut-être votre connexion à votre serveur, par exemple avec un certificat émis pour son nom à son insu. Rien de cette page n’a été chargé."
+  },
+  "blockedExpected": {
+    "message": "Certificat signé par votre serveur"
+  },
+  "blockedServed": {
+    "message": "Certificat utilisé par cette connexion"
+  },
+  "blockedUnknownFingerprint": {
+    "message": "inconnu"
+  },
+  "blockedAdvice": {
+    "message": "Ne vous connectez pas et ne saisissez rien sur ce site depuis ce réseau. Réessayez depuis un autre réseau, ou ouvrez le serveur dans l’app Flagship de votre téléphone, qui vérifie le même certificat."
+  },
+  "blockedBack": {
+    "message": "Retour"
+  },
+  "blockedRecheck": {
+    "message": "Vérifier à nouveau"
+  },
+  "blockedStillWrong": {
+    "message": "Ce n’est toujours pas le certificat que votre serveur a signé."
+  },
+  "knockForeignTitle": {
+    "message": "Ne scannez pas ce code de connexion"
+  },
+  "knockForeignBody": {
+    "message": "Cette page affiche un code de connexion pour $1, pas pour ce site ($2). Le scanner pourrait connecter le navigateur de quelqu’un d’autre en votre nom."
+  },
+  "knockVerifiedTitle": {
+    "message": "Flagship a vérifié cette page de connexion"
+  },
+  "knockVerifiedBody": {
+    "message": "Elle appartient à $1, et son certificat est celui que votre serveur a signé. Connectez-vous avec l’app Flagship."
+  },
+  "knockUncheckedTitle": {
+    "message": "Page de connexion Flagship"
+  },
+  "knockNotYourServerBody": {
+    "message": "Ce site n’est sur aucun de vos serveurs associés : l’extension ne peut donc pas garantir son certificat. Les vérifications habituelles de Firefox s’appliquent."
+  },
+  "knockNotPairedBody": {
+    "message": "Associez l’extension à l’app Flagship pour qu’elle vérifie les certificats de vos serveurs."
+  },
+  "knockStaleBody": {
+    "message": "Ce site est sur votre serveur $1, mais l’extension n’a pas pu confirmer son certificat pour le moment."
+  },
+  "knockDirectUnboundBody": {
+    "message": "Cette connexion concerne votre serveur $1, mais l’extension ne peut pas savoir quel serveur répond à cette adresse."
+  },
+  "knockSignInButton": {
+    "message": "Se connecter avec l’app"
+  },
+  "knockDismiss": {
+    "message": "Masquer"
+  },
+  "pairTitle": {
+    "message": "Associer à l’app Flagship"
+  },
+  "pairIntro": {
+    "message": "Sur votre téléphone, ouvrez l’app Flagship, scannez ce code, vérifiez que les deux écrans affichent les mêmes six chiffres, puis choisissez un serveur et approuvez."
+  },
+  "pairConnecting": {
+    "message": "Connexion…"
+  },
+  "pairWaiting": {
+    "message": "Scannez ce code avec l’app Flagship."
+  },
+  "pairMatching": {
+    "message": "Vérifiez que votre téléphone affiche le même code, puis approuvez sur le téléphone."
+  },
+  "pairCodeHint": {
+    "message": "Si les codes diffèrent, annulez sur le téléphone."
+  },
+  "pairRedeeming": {
+    "message": "Connexion à $1…"
+  },
+  "pairDone": {
+    "message": "Associé à $1. L’extension vérifie désormais le certificat de ce serveur."
+  },
+  "pairExpired": {
+    "message": "Ce code a expiré."
+  },
+  "pairFailed": {
+    "message": "L’association n’a pas abouti."
+  },
+  "pairUnreachable": {
+    "message": "Impossible de joindre Flagship. Vérifiez votre connexion et réessayez."
+  },
+  "pairRelayClosed": {
+    "message": "La connexion avec le téléphone s’est fermée. Réessayez."
+  },
+  "pairWrongKind": {
+    "message": "Le téléphone a envoyé un autre type d’approbation. Mettez à jour l’app Flagship et réessayez."
+  },
+  "pairUnreadable": {
+    "message": "Le téléphone a envoyé quelque chose que l’extension ne sait pas lire."
+  },
+  "pairBadServer": {
+    "message": "Le téléphone a indiqué un serveur auquel l’extension ne se connectera pas."
+  },
+  "pairRedeemFailed": {
+    "message": "Le serveur n’a pas accepté l’association. Réessayez depuis le téléphone."
+  },
+  "pairAgain": {
+    "message": "Afficher un nouveau code"
+  },
+  "pairQrLabel": {
+    "message": "Code d’association pour l’app Flagship"
+  },
+  "pairNeverKeys": {
+    "message": "L’extension ne détient jamais de clé capable d’agir en votre nom. Elle peut seulement lire l’empreinte signée du certificat de votre serveur, pendant 30 jours, et vous pouvez y mettre fin à tout moment depuis votre téléphone."
+  },
+  "pairNeedsPermission": {
+    "message": "Autorisez d’abord l’extension sur les sites Flagship : elle pourra ainsi contacter votre serveur et vérifier son certificat."
+  },
+  "pairGrantPermission": {
+    "message": "Autoriser et continuer"
+  },
+  "popupThisSite": {
+    "message": "Ce site"
+  },
+  "popupYourServers": {
+    "message": "Vos serveurs"
+  },
+  "popupSiteNotFlagship": {
+    "message": "Ce n’est pas un site Flagship."
+  },
+  "popupSiteReload": {
+    "message": "Rechargez la page pour la vérifier."
+  },
+  "popupSiteMatch": {
+    "message": "Certificat vérifié : c’est celui que $1 a signé."
+  },
+  "popupSiteMismatch": {
+    "message": "Arrêté : ce certificat n’est pas celui que $1 a signé."
+  },
+  "popupSiteStale": {
+    "message": "Le certificat correspond, mais $1 ne l’a pas confirmé cette semaine."
+  },
+  "popupSiteUnchecked": {
+    "message": "Impossible de vérifier ce certificat auprès de $1 pour l’instant."
+  },
+  "popupSiteUnknown": {
+    "message": "N’est sur aucun de vos serveurs associés. Les vérifications habituelles de Firefox s’appliquent."
+  },
+  "popupNoServers": {
+    "message": "Aucun serveur associé pour l’instant."
+  },
+  "popupPairButton": {
+    "message": "Associer à votre téléphone"
+  },
+  "popupRevokeHint": {
+    "message": "Pour mettre fin à une association, révoquez « Extension Firefox » dans les sessions à distance ou les sessions de navigateur du serveur, dans l’app Flagship."
+  },
+  "popupSessionActive": {
+    "message": "Associé jusqu’au $1"
+  },
+  "popupSessionEnded": {
+    "message": "Le serveur a mis fin à cette association. Associez à nouveau pour garder son certificat à jour."
+  },
+  "popupSessionExpired": {
+    "message": "L’association a expiré. Associez à nouveau pour garder son certificat à jour."
+  },
+  "popupPinHeld": {
+    "message": "Certificat épinglé $1…"
+  },
+  "popupPinNone": {
+    "message": "Aucun certificat épinglé pour l’instant."
+  },
+  "popupForget": {
+    "message": "Oublier"
+  },
+  "popupForgetConfirm": {
+    "message": "Oublier $1 ? L’extension cessera de vérifier son certificat."
+  },
+  "popupNeedsPermission": {
+    "message": "Autorisez l’extension sur les sites Flagship pour qu’elle puisse vérifier leurs certificats."
+  },
+  "popupGrantPermission": {
+    "message": "Autoriser"
+  }
+}

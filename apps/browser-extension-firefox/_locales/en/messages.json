@@ -1,0 +1,278 @@
+{
+  "extName": {
+    "message": "Flagship",
+    "description": "The extension's name in Firefox (brand: keep)"
+  },
+  "extDescription": {
+    "message": "Checks that each Flagship server you visit serves the certificate it signed, and spots Flagship sign-in pages. Pairs with the Flagship app; holds no key that can act as you.",
+    "description": "Add-ons Manager description"
+  },
+  "badgeMatch": {
+    "message": "Flagship: this site's certificate is the one your server signed",
+    "description": "Toolbar button tooltip"
+  },
+  "badgeMismatch": {
+    "message": "Flagship stopped this site: its certificate isn't the one your server signed",
+    "description": "Toolbar button tooltip"
+  },
+  "badgeStale": {
+    "message": "Flagship: this site's certificate matches, but your server hasn't confirmed it this week",
+    "description": "Toolbar button tooltip"
+  },
+  "badgeUnchecked": {
+    "message": "Flagship couldn't check this site's certificate yet",
+    "description": "Toolbar button tooltip"
+  },
+  "blockedTitle": {
+    "message": "Flagship stopped this page",
+    "description": "Warning page title and heading"
+  },
+  "blockedLead": {
+    "message": "$1 served a certificate that your server $2 didn't sign.",
+    "description": "Warning page: {0} site name, {1} server name"
+  },
+  "blockedExplain": {
+    "message": "Someone may be intercepting your connection to your server, for example with a certificate issued for its name without its knowledge. Nothing from this page was loaded.",
+    "description": "Warning page"
+  },
+  "blockedExpected": {
+    "message": "Certificate your server signed",
+    "description": "Warning page label above a fingerprint"
+  },
+  "blockedServed": {
+    "message": "Certificate this connection used",
+    "description": "Warning page label above a fingerprint"
+  },
+  "blockedUnknownFingerprint": {
+    "message": "unknown",
+    "description": "Warning page: shown instead of a fingerprint"
+  },
+  "blockedAdvice": {
+    "message": "Don't sign in or enter anything on this site from this network. Try again from another network, or open the server in the Flagship app on your phone, which checks the same certificate.",
+    "description": "Warning page"
+  },
+  "blockedBack": {
+    "message": "Go back",
+    "description": "Warning page button"
+  },
+  "blockedRecheck": {
+    "message": "Check again",
+    "description": "Warning page button: asks the server for its signed certificate again"
+  },
+  "blockedStillWrong": {
+    "message": "Still not the certificate your server signed.",
+    "description": "Warning page, after Check again"
+  },
+  "knockForeignTitle": {
+    "message": "Don't scan this sign-in code",
+    "description": "Bar on a page showing a sign-in code for another site"
+  },
+  "knockForeignBody": {
+    "message": "This page shows a sign-in code for $1, not for this site ($2). Scanning it could sign someone else's browser in as you.",
+    "description": "{0} the site the code is for, {1} this site"
+  },
+  "knockVerifiedTitle": {
+    "message": "Flagship checked this sign-in page",
+    "description": "Bar on a genuine sign-in page"
+  },
+  "knockVerifiedBody": {
+    "message": "It belongs to $1, and its certificate is the one your server signed. Sign in with the Flagship app.",
+    "description": "{0} site name"
+  },
+  "knockUncheckedTitle": {
+    "message": "Flagship sign-in page",
+    "description": "Bar on a sign-in page the extension can't fully check"
+  },
+  "knockNotYourServerBody": {
+    "message": "This site isn't on one of your paired servers, so the extension can't vouch for its certificate. Firefox's usual checks apply.",
+    "description": "Sign-in bar"
+  },
+  "knockNotPairedBody": {
+    "message": "Pair the extension with the Flagship app to have it check your servers' certificates.",
+    "description": "Sign-in bar"
+  },
+  "knockStaleBody": {
+    "message": "This site is on your server $1, but the extension couldn't confirm its certificate just now.",
+    "description": "{0} server name"
+  },
+  "knockDirectUnboundBody": {
+    "message": "This sign-in is for your server $1, but the extension can't tell which server serves this address.",
+    "description": "{0} server name"
+  },
+  "knockSignInButton": {
+    "message": "Sign in with the app",
+    "description": "Sign-in bar button: opens the page's own app link"
+  },
+  "knockDismiss": {
+    "message": "Hide",
+    "description": "Sign-in bar button"
+  },
+  "pairTitle": {
+    "message": "Pair with the Flagship app",
+    "description": "Pairing page title"
+  },
+  "pairIntro": {
+    "message": "On your phone, open the Flagship app, scan this code, check that both screens show the same six digits, then pick a server and approve.",
+    "description": "Pairing page"
+  },
+  "pairConnecting": {
+    "message": "Connecting…",
+    "description": "Pairing page status"
+  },
+  "pairWaiting": {
+    "message": "Scan this code with the Flagship app.",
+    "description": "Pairing page status"
+  },
+  "pairMatching": {
+    "message": "Check that your phone shows the same code, then approve on the phone.",
+    "description": "Pairing page status"
+  },
+  "pairCodeHint": {
+    "message": "If the codes differ, cancel on the phone.",
+    "description": "Pairing page, under the code"
+  },
+  "pairRedeeming": {
+    "message": "Connecting to $1…",
+    "description": "Pairing page status: {0} server name"
+  },
+  "pairDone": {
+    "message": "Paired with $1. The extension now checks this server's certificate.",
+    "description": "Pairing page status: {0} server name"
+  },
+  "pairExpired": {
+    "message": "This code expired.",
+    "description": "Pairing page status"
+  },
+  "pairFailed": {
+    "message": "Pairing didn't finish.",
+    "description": "Pairing page status"
+  },
+  "pairUnreachable": {
+    "message": "Couldn't reach Flagship. Check your connection and try again.",
+    "description": "Pairing page error"
+  },
+  "pairRelayClosed": {
+    "message": "The connection to the phone closed. Try again.",
+    "description": "Pairing page error"
+  },
+  "pairWrongKind": {
+    "message": "The phone sent a different kind of approval. Update the Flagship app and try again.",
+    "description": "Pairing page error"
+  },
+  "pairUnreadable": {
+    "message": "The phone sent something the extension can't read.",
+    "description": "Pairing page error"
+  },
+  "pairBadServer": {
+    "message": "The phone named a server the extension won't connect to.",
+    "description": "Pairing page error"
+  },
+  "pairRedeemFailed": {
+    "message": "The server didn't accept the pairing. Try again from the phone.",
+    "description": "Pairing page error"
+  },
+  "pairAgain": {
+    "message": "Show a new code",
+    "description": "Pairing page button"
+  },
+  "pairQrLabel": {
+    "message": "Pairing code for the Flagship app",
+    "description": "Pairing QR accessible label"
+  },
+  "pairNeverKeys": {
+    "message": "The extension never holds a key that can act as you. It can read only your server's signed certificate fingerprint, for 30 days, and you can end that from your phone at any time.",
+    "description": "Pairing page footnote"
+  },
+  "pairNeedsPermission": {
+    "message": "First allow the extension on Flagship sites, so it can reach your server and check its certificate.",
+    "description": "Pairing page: shown until Firefox grants the site permission"
+  },
+  "pairGrantPermission": {
+    "message": "Allow and continue",
+    "description": "Pairing page button: asks Firefox for the site permission"
+  },
+  "popupThisSite": {
+    "message": "This site",
+    "description": "Popup section heading"
+  },
+  "popupYourServers": {
+    "message": "Your servers",
+    "description": "Popup section heading"
+  },
+  "popupSiteNotFlagship": {
+    "message": "Not a Flagship site.",
+    "description": "Popup"
+  },
+  "popupSiteReload": {
+    "message": "Reload the page to check it.",
+    "description": "Popup"
+  },
+  "popupSiteMatch": {
+    "message": "Certificate checked: it's the one $1 signed.",
+    "description": "Popup: {0} server name"
+  },
+  "popupSiteMismatch": {
+    "message": "Stopped: this certificate isn't the one $1 signed.",
+    "description": "Popup: {0} server name"
+  },
+  "popupSiteStale": {
+    "message": "Certificate matches, but $1 hasn't confirmed it this week.",
+    "description": "Popup: {0} server name"
+  },
+  "popupSiteUnchecked": {
+    "message": "Couldn't check this certificate with $1 yet.",
+    "description": "Popup: {0} server name"
+  },
+  "popupSiteUnknown": {
+    "message": "Not on one of your paired servers. Firefox's usual checks apply.",
+    "description": "Popup"
+  },
+  "popupNoServers": {
+    "message": "No servers paired yet.",
+    "description": "Popup"
+  },
+  "popupPairButton": {
+    "message": "Pair with your phone",
+    "description": "Popup button"
+  },
+  "popupRevokeHint": {
+    "message": "To end a pairing, revoke “Firefox extension” under the server’s Remote or Browser sessions in the Flagship app.",
+    "description": "Popup footnote"
+  },
+  "popupSessionActive": {
+    "message": "Paired until $1",
+    "description": "Popup: {0} a date"
+  },
+  "popupSessionEnded": {
+    "message": "The server ended this pairing. Pair again to keep its certificate current.",
+    "description": "Popup"
+  },
+  "popupSessionExpired": {
+    "message": "Pairing expired. Pair again to keep its certificate current.",
+    "description": "Popup"
+  },
+  "popupPinHeld": {
+    "message": "Pinned certificate $1…",
+    "description": "Popup: {0} start of a fingerprint"
+  },
+  "popupPinNone": {
+    "message": "No certificate pinned yet.",
+    "description": "Popup"
+  },
+  "popupForget": {
+    "message": "Forget",
+    "description": "Popup button"
+  },
+  "popupForgetConfirm": {
+    "message": "Forget $1? The extension stops checking its certificate.",
+    "description": "Popup confirm: {0} server name"
+  },
+  "popupNeedsPermission": {
+    "message": "Allow the extension on Flagship sites so it can check their certificates.",
+    "description": "Popup"
+  },
+  "popupGrantPermission": {
+    "message": "Allow",
+    "description": "Popup button"
+  }
+}

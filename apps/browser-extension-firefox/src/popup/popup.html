@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../pages/page.css">
+<style>
+  body { width: 340px; padding: 14px; }
+</style>
+<script type="module" src="popup.js"></script>
+</head>
+<body>
+  <h1 data-i18n="extName"></h1>
+
+  <section id="perm" class="card hidden">
+    <p data-i18n="popupNeedsPermission"></p>
+    <button id="grant" data-i18n="popupGrantPermission"></button>
+  </section>
+
+  <h2 data-i18n="popupThisSite"></h2>
+  <section class="card">
+    <div id="site-host" class="mono"></div>
+    <p id="site-status"></p>
+  </section>
+
+  <h2 data-i18n="popupYourServers"></h2>
+  <section id="servers"></section>
+  <p id="no-servers" class="muted hidden" data-i18n="popupNoServers"></p>
+  <button id="pair" data-i18n="popupPairButton"></button>
+  <p class="muted" data-i18n="popupRevokeHint"></p>
+</body>
+</html>
