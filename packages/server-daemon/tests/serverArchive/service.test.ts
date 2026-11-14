@@ -345,6 +345,10 @@ describe("Backup/clone server", () => {
     expect(w.tOps.restoredDbs.length).toBe(1);
     expect(w.tOps.restoredFiles.length).toBe(1);
     expect(await w.dstEnv.get(SERVICE)).toEqual({ OPENAI_KEY: "sk-secret", MODE: "prod" });
+    // The same app: its origin and the code it ran come with it (docs/restore-into-server.md §1).
+    const was = w.src.platform.byServiceId(SERVICE)!;
+    expect(app!.origin).toBe(was.origin);
+    expect(app!.codeHistory!.map((x) => x.digest)).toEqual(was.codeHistory!.map((x) => x.digest));
     expect(w.events).toContain("server.restore.finished");
     // A second upload is refused: the server no longer waits.
     expect(asJson(await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).code).toBe("not-waiting");

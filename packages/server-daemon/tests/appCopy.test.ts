@@ -384,8 +384,10 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
     await w.target.settle();
     expect(metas).toHaveLength(1);
     expect(Object.keys(metas[0] as object).sort()).toEqual(
-      ["v", "serviceId", "creator", "slug", "manifestJson", "appliedMigrations", "parts", "access", "membership", "env", "accessList"].sort(),
+      ["v", "serviceId", "creator", "slug", "manifestJson", "appliedMigrations", "parts", "access", "membership", "env", "accessList", "lineage"].sort(),
     );
+    // The copy is the same app: its origin and code history come along, nothing else about it.
+    expect(Object.keys((metas[0] as { lineage: object }).lineage).sort()).toEqual(["codeHistory", "origin"]);
     // A current target gets everything but the (already compressed) database dumps gzipped.
     expect((metas[0] as { parts: Array<{ name: string; encoding?: string }> }).parts.map((p) => [p.name, p.encoding])).toEqual([
       ["image", "gzip"],

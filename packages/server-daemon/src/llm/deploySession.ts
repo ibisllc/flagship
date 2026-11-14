@@ -27,6 +27,7 @@
  * goes live through `deploy` with no rebuild.
  */
 
+import { writtenTreeDigest } from "../appLineage.js";
 import { join } from "node:path";
 import {
   RUNTIME_BASES,
@@ -221,8 +222,9 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // container's process env on deploy; they are NOT part of this
     // signed install envelope.
     const migrations = migrationFiles(files);
+    const codeDigest = await writtenTreeDigest(deps.workingDir, serviceId);
     if (target.edit) {
-      const r = await deps.servicePlatform.redeploy({ request, signature, verify: verifyInstallService, migrations });
+      const r = await deps.servicePlatform.redeploy({ request, signature, verify: verifyInstallService, migrations, ...(codeDigest ? { codeDigest } : {}) });
       if (!r.ok) return { ok: false, reason: r.reason };
       return { ok: true, serviceId, url: `https://${target.urlLabel}.${session.meta.serverFqdn}`, image };
     }
@@ -231,6 +233,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       signature,
       verify: verifyInstallService,
       migrations,
+      ...(codeDigest ? { codeDigest } : {}),
     });
     if (!installResult.ok) {
       return { ok: false, reason: `install rejected: ${installResult.reason}` };

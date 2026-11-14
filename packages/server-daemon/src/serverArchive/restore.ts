@@ -47,6 +47,13 @@ import { ArchiveLimits } from "./limits.js";
 import { WasiModuleStore } from "../wasi/moduleStore.js";
 import { auditDumpToc, describeExecutable, ownerChanged, pinnedImageRef } from "./restoreAudit.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
+import { carriedLineage, parseLineage, treeDigest } from "../appLineage.js";
+
+/** The backup's lineage; a backup without a history still knows its rebuilt tree. */
+function lineageFor(meta: ArchiveAppMeta, sourceDigest: string | undefined): ReturnType<typeof carriedLineage> {
+  const c = carriedLineage(meta.lineage, meta.serviceId);
+  return c.codeDigest || !sourceDigest ? c : { ...c, codeDigest: sourceDigest };
+}
 
 /** The outer archive under the shared check: regular files only, and the bounds of limits.ts. */
 const ARCHIVE_TAR_LIMITS: Partial<TarLimits> = { maxEntries: 4096, maxEntryBytes: 512 * 1024 ** 3, maxTotalBytes: 512 * 1024 ** 3 };
@@ -185,6 +192,7 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
   }
   if (!Array.isArray(m!.appliedMigrations) || m!.appliedMigrations!.some((x) => typeof x !== "string")) bad("migrations");
   if (!m!.env || typeof m!.env !== "object") bad("env");
+  if (m!.lineage !== undefined && !parseLineage(m!.lineage)) bad("lineage");
   return m as ArchiveAppMeta;
 }
 
@@ -375,6 +383,7 @@ async function installOne(
     const manifest = JSON.parse(meta.manifestJson) as { runtime: { image: string; kind?: string; digest?: string }; network?: Parameters<typeof egressSuggestions>[0] };
     let image = manifest.runtime.image;
     let wasiDigest: string | null = null;
+    let sourceDigest: string | undefined;
     if (meta.rebuild === "module") {
       // The module goes back by its digest, and only if the bytes are the ones the manifest names.
       const bytes = await readFile(path("module")!);
@@ -385,6 +394,7 @@ async function installOne(
     } else if (meta.rebuild === "source") {
       if (!deps.sourceDir) throw new Error("this server can't rebuild apps (no working-tree folder)");
       const tree = await readTree(path("source")!);
+      sourceDigest = treeDigest(tree.files, tree.binaries);
       image = `flagship-vibe-${sid}:${now()}`.toLowerCase();
       held.tree = join(deps.sourceDir, sid);
       held.image = image;
@@ -435,6 +445,7 @@ async function installOne(
       signature: deps.signInstall(request),
       verify: verifyInstallService,
       appliedMigrations: meta.appliedMigrations,
+      ...lineageFor(meta, sourceDigest),
       // Members come back only through the held draft; what was already redeemed stays redeemed.
       ...(redeemedOf(meta.membership) ? { membership: { members: [], lastSeen: {}, redeemed: redeemedOf(meta.membership)! } as never } : {}),
       prepareData: async (data) => {

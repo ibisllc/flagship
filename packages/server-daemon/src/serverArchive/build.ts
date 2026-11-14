@@ -22,7 +22,8 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import tar from "tar-stream";
 import type { AppEnvStore } from "../serviceEnvStore.js";
-import type { InstalledService } from "../servicePlatform.js";
+import { lineageOf, type InstalledService } from "../servicePlatform.js";
+import type { AppLineage } from "../appLineage.js";
 import type { AppCopyOps } from "../appCopy/ops.js";
 import { readCarriedBinaries, readServiceSource } from "../llm/serviceSource.js";
 import { WasiModuleStore } from "../wasi/moduleStore.js";
@@ -70,6 +71,8 @@ export interface ArchiveAppMeta {
   accessList: string | null;
   /** The API keys clients use with this app (grant + secret hash; never the secret). */
   apiKeys: ArchivedApiKey[];
+  /** Which app this is and the code it has run (appLineage.ts); absent from older backups. */
+  lineage?: AppLineage;
 }
 
 /** The archive's first entry, `manifest.json`. */
@@ -361,6 +364,7 @@ export async function buildServerArchive(
           env: Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith("FLAGSHIP_"))),
           accessList: deps.accessList?.(app.serviceId) ?? null,
           apiKeys: deps.apiKeys?.exportService(app.serviceId) ?? [],
+          lineage: lineageOf(app),
         };
         await addBuffer(pack, `${prefix}/meta.json`, Buffer.from(JSON.stringify(meta)));
         for (const s of staged) await addFile(pack, s.info.file, s.path, s.info.bytes);

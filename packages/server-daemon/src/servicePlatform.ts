@@ -52,6 +52,7 @@ import {
   type AppDataCredentials,
 } from "./dataLayer/index.js";
 import { MAX_DATA_GENERATION, isDataGeneration } from "./dataLayer/naming.js";
+import { appendCode, isOrigin, legacyOrigin, manifestCodeDigest, mintOrigin, parseLineage, type AppLineage, type CodeHistoryEntry } from "./appLineage.js";
 import type { AppAuthTokens } from "./serviceAuthToken.js";
 import { whileDeploying, type DeployingTracker } from "./serviceActivity.js";
 import type { DomainGate } from "./browser/domainGate.js";
@@ -102,6 +103,12 @@ export interface InstalledService {
    * to the app; dropped by undo/discard/expiry and by uninstall.
    */
   retainedData?: RetainedGeneration[];
+  /** Which app this is (appLineage.ts): carried by copies, backups, restores and Migrate. */
+  origin?: string;
+  /** A side-by-side copy: the origin it was made from. */
+  forkedFrom?: string;
+  /** The code it has run, newest last. */
+  codeHistory?: CodeHistoryEntry[];
 }
 
 /** An app as it was before a swap: its stores, code and schema, held until `expiresAt`. */
@@ -112,6 +119,7 @@ export interface RetainedGeneration {
   data: AppDataCredentials | null;
   manifestJson: string;
   appliedMigrations: string[];
+  codeHistory?: CodeHistoryEntry[];
   keptAt: number;
   expiresAt: number;
 }
@@ -123,6 +131,8 @@ export interface DataSwap {
   /** The code to run with them; absent keeps the app's own (replace-data). */
   manifestJson?: string;
   appliedMigrations: string[];
+  /** With new code: the history it brings (a backup's); absent keeps the app's own. */
+  codeHistory?: CodeHistoryEntry[];
 }
 
 /** A schema migration shipped with a version of an app (`migrations/*.sql`). */
@@ -149,6 +159,10 @@ export interface ServiceInstallArgs {
   appliedMigrations?: string[];
   /** The copied app's members. */
   membership?: AppMembershipSnapshot;
+  /** A copy or restore: the app's origin and code history as they came; absent mints a new origin. */
+  lineage?: AppLineage;
+  /** What the code is (appLineage.ts digests); absent: read from the manifest. */
+  codeDigest?: string;
 }
 
 export interface ServiceRedeployArgs {
@@ -156,6 +170,7 @@ export interface ServiceRedeployArgs {
   signature: Bytes;
   verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
   migrations?: AppMigrationFile[];
+  codeDigest?: string;
 }
 
 export interface ServicePlatformDeps {
@@ -566,6 +581,13 @@ export class ServicePlatform {
       installedAt: this.now(),
       appliedMigrations: migrated.ok ? migrated.applied : [],
       ...ServicePlatform.v2Fields(parsed),
+      origin: args.lineage?.origin ?? mintOrigin(),
+      ...(args.lineage?.forkedFrom ? { forkedFrom: args.lineage.forkedFrom } : {}),
+      codeHistory: appendCode(args.lineage?.codeHistory, {
+        digest: args.codeDigest ?? manifestCodeDigest(r.manifestJson),
+        version: parsed.manifest.version,
+        at: this.now(),
+      }),
     };
     this.apps.set(serviceId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
@@ -834,7 +856,14 @@ export class ServicePlatform {
     const { app: _oldApp, manifestSource: _oldSource, ...oldBase } = old;
     void _oldApp;
     void _oldSource;
-    const updated: InstalledService = { ...oldBase, manifest, data, appliedMigrations: migrated.applied, ...ServicePlatform.v2Fields(parsed) };
+    const updated: InstalledService = {
+      ...oldBase,
+      manifest,
+      data,
+      appliedMigrations: migrated.applied,
+      ...ServicePlatform.v2Fields(parsed),
+      codeHistory: appendCode(old.codeHistory, { digest: args.codeDigest ?? manifestCodeDigest(r.manifestJson), version: manifest.version, at: this.now() }),
+    };
     this.apps.set(serviceId, updated);
     this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
     if (this.deps.domainGate) {
@@ -940,6 +969,7 @@ export class ServicePlatform {
         data: old.data,
         manifestJson: old.manifestSource ?? JSON.stringify(old.manifest),
         appliedMigrations: old.appliedMigrations ?? [],
+        ...(old.codeHistory ? { codeHistory: old.codeHistory } : {}),
         keptAt: this.now(),
         expiresAt: retain.expiresAt,
       };
@@ -953,6 +983,9 @@ export class ServicePlatform {
         data: next.data,
         dataGeneration: next.generation,
         appliedMigrations: next.appliedMigrations,
+        ...(next.manifestJson !== undefined
+          ? { codeHistory: appendCode(next.codeHistory ?? old.codeHistory, { digest: next.codeHistory?.at(-1)?.digest ?? manifestCodeDigest(next.manifestJson), version: manifest.version, at: this.now() }) }
+          : {}),
         retainedData: [...(old.retainedData ?? []), kept],
       };
       this.apps.set(serviceId, updated);
@@ -1007,6 +1040,7 @@ export class ServicePlatform {
         ...ServicePlatform.v2Fields(parsed),
         data: kept.data,
         appliedMigrations: kept.appliedMigrations,
+        ...(kept.codeHistory ? { codeHistory: kept.codeHistory } : {}),
         ...(kept.generation > 0 ? { dataGeneration: kept.generation } : {}),
         ...(rest.length > 0 ? { retainedData: rest } : {}),
       };
@@ -1187,6 +1221,9 @@ export class ServicePlatform {
       membership: a.membership.snapshot(),
       ...(a.dataGeneration ? { dataGeneration: a.dataGeneration } : {}),
       ...(a.retainedData?.length ? { retainedData: a.retainedData } : {}),
+      ...(a.origin ? { origin: a.origin } : {}),
+      ...(a.forkedFrom ? { forkedFrom: a.forkedFrom } : {}),
+      ...(a.codeHistory?.length ? { codeHistory: a.codeHistory } : {}),
     }));
     this.persistChain = this.persistChain
       .then(() => registry.save(services))
@@ -1259,6 +1296,7 @@ export class ServicePlatform {
         ...ServicePlatform.v2Fields(parsed),
         ...(isDataGeneration(p.dataGeneration) && p.dataGeneration > 0 ? { dataGeneration: p.dataGeneration } : {}),
         ...(Array.isArray(p.retainedData) && p.retainedData.length > 0 ? { retainedData: p.retainedData } : {}),
+        ...savedLineage(p),
       };
       this.apps.set(app.serviceId, app);
       this.byUrlLabel.set(app.urlLabel.toLowerCase(), app);
@@ -1858,4 +1896,20 @@ function sameStores(a: AppDataCredentials | null, b: AppDataCredentials | null):
   const x = names(a);
   for (const n of names(b)) if (x.has(n)) return true;
   return false;
+}
+
+/** An app saved before origins gets its legacy one, from the id it is seen under (appLineage.ts). */
+function savedLineage(p: PersistedService): Pick<InstalledService, "origin" | "forkedFrom" | "codeHistory"> {
+  const l = parseLineage({ origin: p.origin, forkedFrom: p.forkedFrom, codeHistory: p.codeHistory ?? [] });
+  if (l) return { origin: l.origin, ...(l.forkedFrom ? { forkedFrom: l.forkedFrom } : {}), ...(l.codeHistory.length ? { codeHistory: l.codeHistory } : {}) };
+  return { origin: isOrigin(p.origin) ? p.origin : legacyOrigin(p.serviceId) };
+}
+
+/** The lineage an app carries into a copy or a backup. */
+export function lineageOf(app: InstalledService): AppLineage {
+  return {
+    origin: app.origin ?? legacyOrigin(app.serviceId),
+    ...(app.forkedFrom ? { forkedFrom: app.forkedFrom } : {}),
+    codeHistory: app.codeHistory ?? [],
+  };
 }
