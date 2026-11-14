@@ -269,6 +269,12 @@ public partial class MainWindow : Window
     private void StartPairing_Click(object sender, RoutedEventArgs e)
         => _wizard.StartPairing();
 
+    private void DownloadNewStudio_Click(object sender, RoutedEventArgs e)
+        => OpenUrl(PairSession.StudioDownloadUrl);
+
+    private void RetryAfterRefusal_Click(object sender, RoutedEventArgs e)
+        => _wizard.RetryAfterRefusal();
+
     private void CancelPairing_Click(object sender, RoutedEventArgs e)
         => _wizard.ReturnToPairingCover();
 

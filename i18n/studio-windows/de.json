@@ -240,5 +240,9 @@
   "recipeMadeByOlderApp": "Dieses Rezept wurde mit einer älteren Version der Flagship-App erstellt. Aktualisiere die Flagship-App auf deinem Telefon und erstelle den Server dann erneut.",
   "copiesOnYourPhoneOrPeersStay": "Kopien auf deinem Telefon oder bei Peers (je nach Backup-Richtlinie) bleiben erhalten.",
   "ifItPersistsRedownloadTheBase": "wenn es weiterhin auftritt, lade das Basis-Image erneut herunter und erstelle es neu.",
-  "cantReachFlagshipTryingAgain": "Flagship ist nicht erreichbar. Prüfe die Internetverbindung dieses PCs; Studio versucht es weiter."
+  "cantReachFlagshipTryingAgain": "Flagship ist nicht erreichbar. Prüfe die Internetverbindung dieses PCs; Studio versucht es weiter.",
+  "studioOutOfDateDownloadTheNew": "Diese Version von Flagship Studio ist veraltet. Lade die neue von flagshipserver.com/studio herunter und kopple dann erneut.",
+  "downloadTheNewStudio": "Neues Studio herunterladen",
+  "flagshipCouldntStartPairingDetailsInLog": "Flagship konnte die Kopplung nicht starten. Details stehen im Protokoll.",
+  "tryAgain": "Erneut versuchen"
 }

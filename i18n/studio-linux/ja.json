@@ -182,5 +182,9 @@
   "Beta": "ベータ",
   "This server can't be installed yet: its software package isn't published on {0}. Update Flagship Studio and the Flagship app, or try again later.": "このサーバーはまだインストールできません。ソフトウェアパッケージが {0} で公開されていません。Flagship Studio と Flagship アプリをアップデートするか、しばらくしてからもう一度お試しください。",
   "Couldn't check that this server's software package is published on {0}. Check your internet connection and try again.": "このサーバーのソフトウェアパッケージが {0} で公開されているか確認できませんでした。インターネット接続を確認して、もう一度お試しください。",
-  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"
+  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。",
+  "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.": "このバージョンの Flagship Studio は古くなっています。flagshipserver.com/studio から新しいバージョンをダウンロードして、もう一度ペアリングしてください。",
+  "Download the new Studio": "新しい Studio をダウンロード",
+  "Flagship couldn't start pairing. The details are in the log.": "Flagship はペアリングを開始できませんでした。詳細はログにあります。",
+  "Try again": "もう一度試す"
 }

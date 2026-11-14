@@ -230,3 +230,6 @@
 "Disk to install on (optional)" = "Disco onde instalar (opcional)";
 "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes." = "Só é necessário quando o computador tem mais de um disco. Sem isso, o instalador para nesse computador, não apaga nada e lista os discos na tela. Digite by-id: e um nome dessa lista, serial: e o número de série do disco, ou size: e o tamanho exato em bytes.";
 "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces." = "Comece com by-id:, serial: ou size:, seguido do nome, do número de série ou do tamanho em bytes do disco, sem espaços.";
+"This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again." = "Esta versão do Flagship Studio está desatualizada. Baixe a nova em flagshipserver.com/studio e pareie de novo.";
+"Download the new Studio" = "Baixar o novo Studio";
+"Flagship couldn't start pairing. The details are in the log." = "O Flagship não conseguiu iniciar o pareamento. Os detalhes estão no registro.";

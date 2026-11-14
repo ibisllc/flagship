@@ -785,3 +785,19 @@ msgstr "このサーバーのソフトウェアパッケージが {0} で公開�
 #: vm/older_app_recipe.py:21 (prose)
 msgid "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again."
 msgstr "このレシピは古いバージョンの Flagship アプリで作成されました。スマートフォンの Flagship アプリをアップデートしてから、サーバーを作り直してください。"
+
+#: wizard.py (pairing refused)
+msgid "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again."
+msgstr "このバージョンの Flagship Studio は古くなっています。flagshipserver.com/studio から新しいバージョンをダウンロードして、もう一度ペアリングしてください。"
+
+#: wizard.py (pairing cover)
+msgid "Download the new Studio"
+msgstr "新しい Studio をダウンロード"
+
+#: wizard.py (pairing refused)
+msgid "Flagship couldn't start pairing. The details are in the log."
+msgstr "Flagship はペアリングを開始できませんでした。詳細はログにあります。"
+
+#: wizard.py (pairing cover)
+msgid "Try again"
+msgstr "もう一度試す"

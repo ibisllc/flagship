@@ -29,6 +29,20 @@ from cli_runner import CLIRunner, LogLine, Resolved, args_pair, locate
 
 PAIR_EVENT_PREFIX = tr("FLAGSHIP_PAIR ")
 
+# The relay's word-for-word refusal for a Studio below STUDIO_PIPE_MIN (apps/com/src/builderRelay.ts).
+STUDIO_OUTDATED_RELAY_REASON = (
+    "This version of Flagship Studio is out of date. "
+    "Download the new one from flagshipserver.com/studio, then pair again."
+)
+STUDIO_DOWNLOAD_URL = "https://flagshipserver.com/studio"
+
+
+def is_studio_outdated_refusal(reason: Optional[str]) -> bool:
+    """True when a relay refusal asks for a newer Studio."""
+    return reason is not None and (
+        reason == STUDIO_OUTDATED_RELAY_REASON or "flagshipserver.com/studio" in reason
+    )
+
 
 @dataclass(frozen=True)
 class PairEvent:

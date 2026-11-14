@@ -1053,5 +1053,17 @@
   "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.": {
     "en": "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/TargetDisk.swift"
+  },
+  "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.": {
+    "en": "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift (pairing refused)"
+  },
+  "Download the new Studio": {
+    "en": "Download the new Studio",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift (pairing refused)"
+  },
+  "Flagship couldn't start pairing. The details are in the log.": {
+    "en": "Flagship couldn't start pairing. The details are in the log.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift (pairing refused)"
   }
 }

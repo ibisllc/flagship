@@ -370,6 +370,25 @@ describe("runPair transport glue", () => {
     expect(events.some((e) => e.event === "error")).toBe(true);
   });
 
+  it("emitEvents reports a relay refusal as refused, with the relay's sentence (journal F12)", async () => {
+    const builderKp = newBuilderKeypair();
+    const harness = fakeTransport();
+    const events: Array<Record<string, unknown>> = [];
+    const p = runPair({
+      out: join(tmpdir(), "never.json"),
+      quiet: true,
+      keypair: builderKp,
+      transport: () => harness.transport,
+      emitEvents: (ev) => events.push(ev as unknown as Record<string, unknown>),
+    });
+    harness.open();
+    const reason = "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.";
+    harness.inject({ kind: "error", reason });
+    await expect(p).rejects.toThrow(/relay refused/);
+    expect(events.find((e) => e.event === "refused")).toEqual({ event: "refused", message: reason });
+    expect(events.some((e) => e.event === "error")).toBe(false);
+  });
+
   it("rejects when the relay session expires before any recipe", async () => {
     const builderKp = newBuilderKeypair();
     const harness = fakeTransport();

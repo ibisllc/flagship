@@ -182,5 +182,9 @@
   "Beta": "Beta",
   "This server can't be installed yet: its software package isn't published on {0}. Update Flagship Studio and the Flagship app, or try again later.": "Este servidor aún no se puede instalar: su paquete de software no está publicado en {0}. Actualiza Flagship Studio y la app Flagship, o inténtalo de nuevo más tarde.",
   "Couldn't check that this server's software package is published on {0}. Check your internet connection and try again.": "No se pudo comprobar si el paquete de software de este servidor está publicado en {0}. Revisa tu conexión a internet e inténtalo de nuevo.",
-  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship en tu teléfono y vuelve a crear el servidor."
+  "This recipe was made by an older version of the Flagship app. Update the Flagship app on your phone, then create the server again.": "Esta receta se creó con una versión anterior de la app Flagship. Actualiza la app Flagship en tu teléfono y vuelve a crear el servidor.",
+  "This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.": "Esta versión de Flagship Studio está desactualizada. Descarga la nueva desde flagshipserver.com/studio y vuelve a vincular.",
+  "Download the new Studio": "Descargar el nuevo Studio",
+  "Flagship couldn't start pairing. The details are in the log.": "Flagship no pudo iniciar la vinculación. Los detalles están en el registro.",
+  "Try again": "Reintentar"
 }

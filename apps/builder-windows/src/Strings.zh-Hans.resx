@@ -736,4 +736,16 @@ https://flagshipserver.com</value>
   <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
     <value>无法连接 Flagship。请检查这台电脑的网络连接；Studio 会继续重试。</value>
   </data>
+  <data name="studioOutOfDateDownloadTheNew" xml:space="preserve">
+    <value>此版本的 Flagship Studio 已过时。请从 flagshipserver.com/studio 下载新版本，然后重新配对。</value>
+  </data>
+  <data name="downloadTheNewStudio" xml:space="preserve">
+    <value>下载新版 Studio</value>
+  </data>
+  <data name="flagshipCouldntStartPairingDetailsInLog" xml:space="preserve">
+    <value>Flagship 无法开始配对。详细信息见日志。</value>
+  </data>
+  <data name="tryAgain" xml:space="preserve">
+    <value>重试</value>
+  </data>
 </root>

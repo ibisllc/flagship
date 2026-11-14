@@ -240,5 +240,9 @@
   "recipeMadeByOlderApp": "e7ef2e7d5286",
   "copiesOnYourPhoneOrPeersStay": "1698aab99104",
   "ifItPersistsRedownloadTheBase": "ea2fdd784563",
-  "cantReachFlagshipTryingAgain": "d64f48049251"
+  "cantReachFlagshipTryingAgain": "d64f48049251",
+  "studioOutOfDateDownloadTheNew": "fb34d2851220",
+  "downloadTheNewStudio": "f3455d74cb2a",
+  "flagshipCouldntStartPairingDetailsInLog": "eb7857cbd354",
+  "tryAgain": "514c63428de2"
 }

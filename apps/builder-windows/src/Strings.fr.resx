@@ -736,4 +736,16 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="cantReachFlagshipTryingAgain" xml:space="preserve">
     <value>Impossible de joindre Flagship. Vérifiez la connexion internet de ce PC ; Studio continue d'essayer.</value>
   </data>
+  <data name="studioOutOfDateDownloadTheNew" xml:space="preserve">
+    <value>Cette version de Flagship Studio n’est plus à jour. Téléchargez la nouvelle sur flagshipserver.com/studio, puis associez à nouveau.</value>
+  </data>
+  <data name="downloadTheNewStudio" xml:space="preserve">
+    <value>Télécharger le nouveau Studio</value>
+  </data>
+  <data name="flagshipCouldntStartPairingDetailsInLog" xml:space="preserve">
+    <value>Flagship n’a pas pu démarrer l’association. Les détails sont dans le journal.</value>
+  </data>
+  <data name="tryAgain" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
 </root>

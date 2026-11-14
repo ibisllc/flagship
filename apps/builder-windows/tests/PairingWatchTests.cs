@@ -92,4 +92,41 @@ public class PairingWatchTests
         r.Fire();
         Assert.Equal(new[] { "stop", "start" }, r.Calls);
     }
+
+    /// <summary>A relay refusal (STUDIO_PIPE_MIN) stops everything: no retry, no restart at launch or when the
+    /// network returns, until the owner asks again (journal F12: 0.2 Studios looped on fresh codes).</summary>
+    [Fact]
+    public void RefusalStopsRetriesAndRestartsUntilCleared()
+    {
+        var r = new Rig();
+        r.Watch.OnFailed();
+        r.Watch.OnRefused();
+        r.Fire();
+        r.Watch.OnFailed();
+        Assert.Empty(r.Pending);
+        r.Watch.Launch();
+        r.Watch.OnConnectivity(false);
+        r.Watch.OnConnectivity(true);
+        Assert.Equal(new[] { "stop" }, r.Calls);
+        r.Watch.ClearRefusal();
+        r.Watch.Launch();
+        Assert.Equal(new[] { "stop", "start" }, r.Calls);
+    }
+
+    [Fact]
+    public void OutdatedRefusalMatchesTheRelaySentence()
+    {
+        Assert.True(PairSession.IsStudioOutdatedRefusal(PairSession.StudioOutdatedRelayReason));
+        Assert.False(PairSession.IsStudioOutdatedRefusal("malformed"));
+        Assert.False(PairSession.IsStudioOutdatedRefusal(null));
+        var relay = File.ReadAllText(Path.Combine(RepoRoot(), "apps", "com", "src", "builderRelay.ts"));
+        Assert.Contains("\"" + PairSession.StudioOutdatedRelayReason + "\"", relay);
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "apps", "com", "src", "builderRelay.ts"))) dir = dir.Parent;
+        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
+    }
 }

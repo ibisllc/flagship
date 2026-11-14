@@ -240,5 +240,9 @@
   "recipeMadeByOlderApp": "Esta receita foi criada por uma versão mais antiga do app Flagship. Atualize o app Flagship no seu celular e crie o servidor de novo.",
   "copiesOnYourPhoneOrPeersStay": "as cópias guardadas no seu telefone ou com pares (conforme a política de backup) não são.",
   "ifItPersistsRedownloadTheBase": "se persistir, baixe a imagem base novamente e refaça-a.",
-  "cantReachFlagshipTryingAgain": "Não foi possível acessar o Flagship. Verifique a conexão com a internet deste PC; o Studio continua tentando."
+  "cantReachFlagshipTryingAgain": "Não foi possível acessar o Flagship. Verifique a conexão com a internet deste PC; o Studio continua tentando.",
+  "studioOutOfDateDownloadTheNew": "Esta versão do Flagship Studio está desatualizada. Baixe a nova em flagshipserver.com/studio e pareie de novo.",
+  "downloadTheNewStudio": "Baixar o novo Studio",
+  "flagshipCouldntStartPairingDetailsInLog": "O Flagship não conseguiu iniciar o pareamento. Os detalhes estão no registro.",
+  "tryAgain": "Tentar de novo"
 }

@@ -230,3 +230,6 @@
 "Disk to install on (optional)" = "インストール先のディスク（任意）";
 "Only needed when the computer has more than one disk. Without it, the installer stops on such a computer, erases nothing and lists its disks on the screen. Enter by-id: and a name from that list, serial: and the disk's serial number, or size: and its exact size in bytes." = "コンピューターに複数のディスクがある場合にだけ必要です。指定しないと、インストーラーはそのようなコンピューターで停止し、何も消去せずに画面にディスクの一覧を表示します。by-id: とその一覧の名前、serial: とディスクのシリアル番号、または size: と正確なサイズ（バイト）を入力してください。";
 "Start with by-id:, serial: or size:, followed by the disk's name, serial number or size in bytes, with no spaces." = "by-id:、serial:、size: のいずれかで始め、続けてディスクの名前、シリアル番号、またはバイト単位のサイズを空白なしで入力してください。";
+"This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again." = "このバージョンの Flagship Studio は古くなっています。flagshipserver.com/studio から新しいバージョンをダウンロードして、もう一度ペアリングしてください。";
+"Download the new Studio" = "新しい Studio をダウンロード";
+"Flagship couldn't start pairing. The details are in the log." = "Flagship はペアリングを開始できませんでした。詳細はログにあります。";

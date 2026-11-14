@@ -56,7 +56,7 @@ from cli_runner import (
     locate,
     parse_verify_json,
 )
-from pair_session import PairEvent, PairSession
+from pair_session import STUDIO_DOWNLOAD_URL, PairEvent, PairSession, is_studio_outdated_refusal
 from pairing_watch import PairingWatch, timer_schedule
 from version import VERSION, display_version, window_title
 from wifi_store import WifiStore, default_backend
@@ -271,6 +271,10 @@ class WizardState:
     pair_code: Optional[str] = None
     pair_sas: Optional[str] = None
     pair_status: Optional[str] = None
+    # The relay refused this Studio (journal F12): the cover says why, offers the download when it asks for a newer
+    # Studio, and puts no new code up until the owner presses Try again.
+    pair_refused: bool = False
+    pair_refusal_needs_update: bool = False
     # Optional Wi-Fi baked into a USB installer (never part of the recipe).
     wifi_ssid: str = ""
     wifi_password: str = ""
@@ -1253,6 +1257,9 @@ class WizardModel:
         if pair is not None:
             pair.cancel()
         s = self.state
+        if s.pair_refused:
+            self._notify()
+            return
         if s.is_pairing or self._wants_pairing():
             s.is_pairing = True
             s.pair_qr = None
@@ -1266,6 +1273,11 @@ class WizardModel:
         SAS / status, and on delivery load the received recipe (identical to a
         dropped-in recipe file) -> the destination chooser."""
         if self.state.is_pairing and self._pair is not None:
+            return
+        if self.state.pair_refused:
+            # Held refusal: show it again, never a new code (only Try again does that).
+            self.state.is_pairing = True
+            self._notify()
             return
         self._pairing_opted_out = False
         s = self.state
@@ -1361,7 +1373,40 @@ class WizardModel:
         elif ev.event == "error":
             self._end_pairing(ev.message or tr("Pairing failed."), failed=True)
             return
+        elif ev.event == "refused":
+            self._show_pairing_refusal(ev.message)
+            return
         self._notify()
+
+    def _show_pairing_refusal(self, reason: Optional[str]) -> None:
+        """The relay refused this Studio: keep the cover up with the reason and stop (journal F12)."""
+        s = self.state
+        self._pair = None
+        self.pairing_watch.on_refused()
+        self._append_log("stderr", f"the pairing relay refused this Studio: {reason}")
+        s.pair_refused = True
+        s.pair_refusal_needs_update = is_studio_outdated_refusal(reason)
+        s.is_pairing = True
+        s.pair_qr = None
+        s.pair_code = None
+        s.pair_sas = None
+        s.pair_status = (
+            tr("This version of Flagship Studio is out of date. Download the new one from flagshipserver.com/studio, then pair again.")
+            if s.pair_refusal_needs_update
+            else tr("Flagship couldn't start pairing. The details are in the log.")
+        )
+        self._notify()
+
+    def retry_after_refusal(self) -> None:
+        """Try again after a refusal: one new session, on the owner's word."""
+        s = self.state
+        if not s.pair_refused:
+            return
+        s.pair_refused = False
+        s.pair_refusal_needs_update = False
+        self.pairing_watch.clear_refusal()
+        s.is_pairing = False
+        self.start_pairing()
 
     def _run_cli(
         self,
@@ -1982,6 +2027,17 @@ def build_window(application, model: Optional[WizardModel] = None):
     pairing_sas.add_css_class("title-1")
     pairing_sas.set_visible(False)
     pairing_box.append(pairing_sas)
+    pairing_download = Gtk.Button(label=tr("Download the new Studio"))
+    pairing_download.set_halign(Gtk.Align.CENTER)
+    pairing_download.add_css_class("suggested-action")
+    pairing_download.set_visible(False)
+    pairing_download.connect("clicked", lambda _b: Gio.AppInfo.launch_default_for_uri(STUDIO_DOWNLOAD_URL, None))
+    pairing_box.append(pairing_download)
+    pairing_retry = Gtk.Button(label=tr("Try again"))
+    pairing_retry.set_halign(Gtk.Align.CENTER)
+    pairing_retry.set_visible(False)
+    pairing_retry.connect("clicked", lambda _b: wizard_model.retry_after_refusal())
+    pairing_box.append(pairing_retry)
     pairing_cancel = Gtk.Button(label=tr("Cancel"))
     pairing_cancel.set_halign(Gtk.Align.CENTER)
     pairing_cancel.connect("clicked", lambda _b: wizard_model.cancel_pairing())
@@ -2340,6 +2396,9 @@ def build_window(application, model: Optional[WizardModel] = None):
         pairing_sas_caption.set_visible(bool(s.pair_sas))
         pairing_sas.set_text(s.pair_sas or "")
         pairing_sas.set_visible(bool(s.pair_sas))
+        pairing_download.set_visible(s.pair_refused and s.pair_refusal_needs_update)
+        pairing_retry.set_visible(s.pair_refused)
+        pairing_cancel.set_visible(not s.pair_refused)
         # server detail
         server = wizard_model.selected_server
         if server is not None:
