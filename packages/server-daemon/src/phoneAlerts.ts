@@ -120,8 +120,23 @@ export type BackupExportAlert = {
   at: number;
 };
 
+/**
+ * Someone pressed a retail box's power button 5 times (docs/retail-box-setup.md §7.5): the reset
+ * window is open for 10 minutes. The push that wakes the phone is content-free (`generic`); the
+ * phone says, in the owner's language, that the server stays theirs unless someone sets it up in
+ * that window.
+ */
+export type ResetWindowAlert = {
+  kind: "reset-window-opened";
+  /** Always empty: the alert is about the server, not an app. */
+  serviceId: string;
+  at: number;
+  until: number;
+};
+
 export type PhoneAlert =
   | PhoneUpdateAlert
+  | ResetWindowAlert
   | BrowserAlert
   | ReissuanceAlert
   | AiChatAlert

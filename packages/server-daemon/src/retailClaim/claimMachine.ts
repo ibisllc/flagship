@@ -190,4 +190,16 @@ export class BoxClaimMachine {
   locked(): void {
     this.lifecycleNow = "locked";
   }
+
+  /** Released by its owner and wiped: unclaimed, with a fresh window from now. */
+  released(now: number): void {
+    this.lifecycleNow = "unclaimed";
+    this.advertiseFrom = now;
+    this.radioClosed = false;
+    this.resetWindowUntil = null;
+    this.armed = null;
+    this.grant = null;
+    this.lastArm = null;
+    this.codeFailures = 0;
+  }
 }

@@ -273,6 +273,11 @@ import { appSqlRunner } from "./dataLayer/appSql.js";
 import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
 import { quotaNotices } from "./appQuota/notices.js";
+import { readRetailImage, type RetailImage } from "./retailClaim/wipe.js";
+import { RETAIL_STATE_DIR, retailLifecycle, retailPaths, startRetailClaim, ensureRetailHostConfig } from "./retailClaim/daemon.js";
+import { keydClaimIdentity } from "./retailClaim/keydIdentity.js";
+import { retailNotices } from "./retailClaim/notices.js";
+import { BoxReleaseConsumer } from "./retailClaim/releaseOrder.js";
 import { withQuotaUsage } from "./appQuota/usage.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
 import { checkShareAcceptAdmin } from "./shares/acceptAdmin.js";
@@ -972,6 +977,27 @@ async function main(): Promise<void> {
     for (const f of await readdir(certDir).catch(() => [] as string[])) if (f.endsWith(".key")) await rm(join(certDir, f), { force: true }).catch(() => {});
   } else if (keyd && !tlsUpstream) {
     console.warn("[daemon] the TLS key is still held in this process: flagship-tlsd is not installed");
+  }
+
+  // A retail box that nobody has claimed (or whose wipe was cut short) serves nothing: it runs only
+  // the claim service until a claim restarts it into its new owner's first boot (retailClaim/daemon.ts).
+  const retailImage = await readRetailImage();
+  if (retailImage) await ensureRetailHostConfig((m) => console.log(m));
+  if (retailImage && (await retailLifecycle()) !== "claimed") {
+    console.log("[retail] this box is not claimed: running the claim service only");
+    const claim = await startRetailClaim({
+      image: retailImage,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
+      identity: async () => {
+        if (!keyd) throw new Error("no flagship-keyd: a claim needs the box key held there");
+        return keydClaimIdentity(keyd);
+      },
+      restart: () => new SystemctlPowerRunner().power("restart"),
+    });
+    const stop = () => void claim.stop().finally(() => process.exit(0));
+    process.once("SIGTERM", stop);
+    process.once("SIGINT", stop);
+    await new Promise<never>(() => {});
   }
 
   if (!env.serverFqdn || (!env.identityPrivKeyHex && !keyd)) {
@@ -2490,6 +2516,7 @@ async function main(): Promise<void> {
       liveCertPemRef,
       hostPowerRunner,
       stkHybridSigner: keyd?.pqPublicKeyHex() ? (m: Uint8Array) => keyd.signHybridAsBox(m) : null,
+      retail: retailImage ? { image: retailImage, keyd } : null,
     });
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
@@ -3577,6 +3604,8 @@ async function wireRuntimeSurfaces(deps: {
   hostPowerRunner: HostPowerRunner;
   /** The STK's hybrid signer where keyd holds an ML-DSA key (the rescue hello's PQ half). */
   stkHybridSigner: ((msg: Uint8Array) => Uint8Array) | null;
+  /** A claimed retail box (retailClaim/): the reset window and "Release this box". */
+  retail: { image: RetailImage; keyd: KeydCustodian | null } | null;
 }): Promise<void> {
   const {
     runtime,
@@ -4784,6 +4813,53 @@ async function wireRuntimeSurfaces(deps: {
     : null;
   void debugAccess?.start();
 
+  // A claimed retail box (docs/retail-box-setup.md §7.5, §8.2): 5 presses open the reset window (the
+  // owner hears of it), and the admin root's "Release this box" wipes it back to unclaimed.
+  const boxRelease = await (async () => {
+    const retail = deps.retail;
+    if (!retail) return null;
+    const notify = retailNotices({
+      note: (kind, detail, o) => deps.activityLog.note(kind, detail, o),
+      alert: (a) => void deps.alertInbox.emit(a),
+      ...(cfg
+        ? {
+            wake: () =>
+              sendPushRelay({
+                category: "generic",
+                targetUsername: cfg.userId,
+                signer: custodian,
+                controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+                logTag: "[retail] reset window push",
+                log: (l) => console.log(l),
+              }),
+          }
+        : {}),
+    });
+    const claim = await startRetailClaim({
+      image: retail.image,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
+      identity: async () => {
+        if (!retail.keyd) throw new Error("no flagship-keyd: a claim needs the box key held there");
+        return keydClaimIdentity(retail.keyd);
+      },
+      restart: () => deps.hostPowerRunner.power("restart"),
+      notify,
+    });
+    process.once("SIGTERM", () => void claim.stop());
+    return new BoxReleaseConsumer({
+      serverDomain: env.serverFqdn,
+      stkPubHex: () => Buffer.from(custodian.boxPublicKey()).toString("hex"),
+      adminRootPub: () => cfg?.adminRootPub ?? null,
+      statePath: retailPaths(RETAIL_STATE_DIR).release,
+      release: () => claim.release(),
+      afterRelease: () => void deps.hostPowerRunner.power("restart").catch((e: Error) => console.error(`[retail] restart after release: ${e.message}`)),
+      log: (m) => console.log(m),
+    });
+  })().catch((e: Error) => {
+    console.error(`[retail] claim service did not start: ${e.message}`);
+    return null;
+  });
+
   const upgradeTickets = new UpgradeTicketStore();
   const trackWork = buildTrackWork(deps.authorityHub, (r) =>
     pairedSessions.isCompanionRequest({ method: "GET", path: r.path, headers: r.headers, body: Buffer.alloc(0) }),
@@ -4802,6 +4878,7 @@ async function wireRuntimeSurfaces(deps: {
     // every other sensitive order.
     publisherTrustKeys: () => (cfg ? [...(cfg.adminRootPub ? [cfg.adminRootPub] : [cfg.irkPublicKey])] : []),
     debugAccess,
+    boxRelease,
     accelerators: startAccelerators({ dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", pairedSessions }).http,
     // AI02: models, the job queue, fine-tuning and app grants (docs/architecture-v2/local-ai.md).
     localAi: (() => {

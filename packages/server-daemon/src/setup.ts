@@ -39,6 +39,8 @@ import { repairSystemPackages } from "./systemRepair.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { refreshDaemonHardening } from "./privdInstall.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
+import { retailPaths } from "./retailClaim/daemon.js";
+import { readRetailImage, retailWipeAsRoot } from "./retailClaim/wipe.js";
 
 const REPO = "/opt/flagship";
 const DATA_DIR = "/var/flagship";
@@ -225,6 +227,14 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   "arch-v2-switch": async () => applySwitchAsRoot(await switchDeps()),
   "arch-v2-settle": async () => settleSwitchAsRoot(await switchDeps()),
   // The initramfs unlock pieces, brought up to this release's (bootChainRefresh.ts).
+  // A retail box's wipe (retailClaim/wipe.ts): only on a retail image, only once the reset marker is on disk.
+  "retail-wipe": async () =>
+    retailWipeAsRoot({
+      image: await readRetailImage(),
+      markerPresent: existsSync(retailPaths().marker),
+      run: async (c, a) => (await cmd.capture(c, a, { timeoutMs: 5 * 60_000 })).stdout,
+      log,
+    }),
   "boot-chain": () => refreshBootChainAsRoot({ releaseRoot: REPO, trustedFiles: [fileURLToPath(import.meta.resolve("@flagship/boot-chain"))], log }),
 };
 
