@@ -58,6 +58,8 @@ export const DIRECT_RECORD_TTL = 60;
 export const DIRECT_PROBE_MIN_INTERVAL_MS = 60_000;
 /** Names one cron run reconciles (each is one list and a few creates/deletes). */
 export const DIRECT_NAMES_PER_RUN = 4;
+/** A name nothing marked is looked at again after this long (an admin-root rotation announces nothing). */
+export const DIRECT_RECHECK_MS = 24 * 3_600_000;
 
 export interface DirectAccessDeps {
   usernames: UsernameStorage;
@@ -418,9 +420,9 @@ export async function reconcileDirectName(deps: PublishDeps, row: DirectNameReco
   return { state, reason: want.reason };
 }
 
-/** The cron pass: reconcile the oldest pending names. */
+/** The cron pass: reconcile the oldest pending names, then names not checked for a day. */
 export async function runDirectNamesPublish(deps: PublishDeps, limit = DIRECT_NAMES_PER_RUN): Promise<{ reconciled: number; failed: number }> {
-  const rows = await deps.directAccess.listPending(limit);
+  const rows = await deps.directAccess.listPending(limit, nowOf(deps) - DIRECT_RECHECK_MS);
   let failed = 0;
   for (const row of rows) {
     const r = await reconcileDirectName(deps, row);

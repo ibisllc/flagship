@@ -61,8 +61,11 @@ export interface DirectAccessStorage {
   getName(name: string): Promise<DirectNameRecord | null>;
   listNamesForUser(username: string): Promise<DirectNameRecord[]>;
   listNamesForServer(serverDomain: string): Promise<DirectNameRecord[]>;
-  /** Names whose zone records need reconciling, oldest change first. */
-  listPending(limit: number): Promise<DirectNameRecord[]>;
+  /**
+   * Names whose zone records need reconciling, oldest change first: those marked pending, then (when `staleBefore`
+   * is given) those not looked at since then, so a change nobody announced (an admin-root rotation) is found too.
+   */
+  listPending(limit: number, staleBefore?: number): Promise<DirectNameRecord[]>;
   /**
    * Stores the owner's newer order for a name: refused as `taken` when another account holds it, `stale` when the
    * held order is at least as new. Marks the name for reconciling.
@@ -226,10 +229,13 @@ export class D1DirectAccessStorage implements DirectAccessStorage {
     return (r.results ?? []).map(nameOf);
   }
 
-  async listPending(limit: number) {
+  async listPending(limit: number, staleBefore?: number) {
     const r = await this.db
-      .prepare("SELECT * FROM direct_names WHERE publish_state = 'pending' ORDER BY updated_at, name LIMIT ?1")
-      .bind(limit)
+      .prepare(
+        "SELECT * FROM direct_names WHERE publish_state = 'pending' OR updated_at < ?2 " +
+          "ORDER BY CASE WHEN publish_state = 'pending' THEN 0 ELSE 1 END, updated_at, name LIMIT ?1",
+      )
+      .bind(limit, staleBefore ?? 0)
       .all<NameRow>();
     return (r.results ?? []).map(nameOf);
   }
@@ -343,10 +349,11 @@ export class InMemoryDirectAccessStorage implements DirectAccessStorage {
     return [...this.names.values()].filter((r) => r.serverDomain === serverDomain.toLowerCase()).map((r) => ({ ...r }));
   }
 
-  async listPending(limit: number) {
+  async listPending(limit: number, staleBefore?: number) {
+    const rank = (r: DirectNameRecord) => (r.publishState === "pending" ? 0 : 1);
     return [...this.names.values()]
-      .filter((r) => r.publishState === "pending")
-      .sort((a, b) => a.updatedAt - b.updatedAt || a.name.localeCompare(b.name))
+      .filter((r) => r.publishState === "pending" || r.updatedAt < (staleBefore ?? 0))
+      .sort((a, b) => rank(a) - rank(b) || a.updatedAt - b.updatedAt || a.name.localeCompare(b.name))
       .slice(0, limit)
       .map((r) => ({ ...r }));
   }

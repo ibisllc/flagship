@@ -79,6 +79,8 @@ for (const adapter of ["InMemory", "D1"] as const) {
       expect(row?.publishedJson).toContain("2a02::1");
       expect(await s.directAccess.setPublished("game--alice", seen, { publishedJson: "[]", state: "empty", reason: null, error: null, now: 60 })).toBe(false);
       expect((await s.directAccess.getName("game--alice"))?.publishedJson).toBe("[]");
+      expect((await s.directAccess.listPending(5, 51)).map((p) => p.name)).toEqual(["game--alice"]);
+      expect(await s.directAccess.listPending(5, 50)).toEqual([]);
       await s.directAccess.markPending(["game--alice"], 70);
       expect((await s.directAccess.listPending(5)).length).toBe(1);
       expect((await s.directAccess.listNamesForServer(BOX)).length).toBe(1);
