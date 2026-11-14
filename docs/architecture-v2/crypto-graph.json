@@ -2,9 +2,9 @@
  "schemaVersion": 1,
  "baseCommit": "152ab3d87340c445505bb2d1ab11a35412d144aa",
  "generatedAt": "2026-10-23",
- "description": "Cryptographic dependency graph (IMPLEMENTATION-PLAN.md \u00a76.6), A01 seed. Edge A -[type]-> B: whoever controls A can <type> B. pq is the node's own exposure to a classical-public-key break. Evidence is path:line at baseCommit; entries marked inferred were not read end to end. Owners are placeholders. Checker: scripts/crypto-graph-check.mjs.",
+ "description": "Cryptographic dependency graph (IMPLEMENTATION-PLAN.md §6.6), A01 seed. Edge A -[type]-> B: whoever controls A can <type> B. pq is the node's own exposure to a classical-public-key break. Evidence is path:line at baseCommit; entries marked inferred were not read end to end. Owners are placeholders. Checker: scripts/crypto-graph-check.mjs.",
  "notInModel": [
-  "Physical access (plaintext /boot/identity.pem, shared VM-appliance volume key, unmeasured initramfs): see evidence-map.md \u00a73; not a classical-crypto break.",
+  "Physical access (plaintext /boot/identity.pem, shared VM-appliance volume key, unmeasured initramfs): see evidence-map.md §3; not a classical-crypto break.",
   "Firmware/Secure Boot/TPM/UKI: no code exists, so no nodes; Q06 must add them.",
   "Symmetric bearer secrets on .com (admin, read-token, inference HMAC) are PQ-neutral but single points of compromise."
  ],
@@ -41,6 +41,22 @@
     "apps/mobile/ios/Sources/Flagship/Keystore.swift:1618"
    ],
    "notes": "A local-only wrap: breaking it needs the wrapped blob, which iCloud Keychain sync carries (see store.icloud-keychain)."
+  },
+  {
+   "id": "store.ios-keychain-device",
+   "kind": "storage-envelope",
+   "label": "iOS Keychain device-only items (the admin root's wrapped seeds)",
+   "algorithms": [
+    "AES-256 (Data Protection, device UID)"
+   ],
+   "location": "iOS Keychain, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, not synchronizable (never in iCloud Keychain or a backup)",
+   "pq": "symmetric",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:743",
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:1571-1573"
+   ],
+   "notes": "Breaking the Secure Enclave wrap needs the wrapped blob and its ephemeral key, which only this device's Keychain holds."
   },
   {
    "id": "store.icloud-keychain",
@@ -109,15 +125,20 @@
    "kind": "key",
    "label": "Admin master root",
    "algorithms": [
-    "Ed25519"
+    "Ed25519",
+    "ML-DSA-65"
    ],
-   "location": "phone (device-local, SE-wrapped); escrowed in the passkey recovery record",
-   "pq": "classical-only",
+   "location": "phone (device-local, SE-wrapped; the ML-DSA seed beside it); escrowed in the passkey recovery record (Ed25519 seed only)",
+   "pq": "hybrid",
    "owner": "unassigned (security/protocol)",
    "evidence": [
     "packages/protocol/src/adminAuthority.ts:86",
-    "apps/mobile/ios/Sources/Flagship/Keystore.swift:743"
-   ]
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:743",
+    "packages/protocol/src/pqAuthorityRecords.ts:88",
+    "packages/server-daemon/src/adminRootRotationConsumer.ts:298",
+    "packages/server-daemon/src/accessPrincipals.ts:303"
+   ],
+   "gate": "all"
   },
   {
    "id": "key.device-grant",
@@ -547,7 +568,7 @@
   {
    "id": "chan.fly-tls",
    "kind": "transport",
-   "label": "Box\u2194relay tunnel WSS on :8443",
+   "label": "Box↔relay tunnel WSS on :8443",
    "algorithms": [
     "ECDHE",
     "WebPKI certificate (Fly)"
@@ -796,7 +817,7 @@
   {
    "id": "chan.box-tls",
    "kind": "transport",
-   "label": "Native/browser\u2194box TLS (flagship-tlsd)",
+   "label": "Native/browser↔box TLS (flagship-tlsd)",
    "algorithms": [
     "ECDHE X25519/P-256 (Go 1.22 defaults: no ML-KEM)",
     "ECDSA P-256 certificate"
@@ -984,7 +1005,7 @@
    "algorithms": [
     "Ed25519"
    ],
-   "location": "app \u2192 box",
+   "location": "app → box",
    "pq": "classical-only",
    "owner": "unassigned (security/protocol)",
    "evidence": [
@@ -997,7 +1018,7 @@
    "kind": "storage-envelope",
    "label": "Install-time LUKS key deposit (sealed to IRK)",
    "algorithms": [
-    "X25519 ECIES (Ed25519\u2192X25519)",
+    "X25519 ECIES (Ed25519→X25519)",
     "HKDF-SHA256",
     "AES-256-GCM"
    ],
@@ -1013,7 +1034,7 @@
   {
    "id": "env.unlock-response",
    "kind": "storage-envelope",
-   "label": "Phone\u2192box unlock response (sealed to directory STK)",
+   "label": "Phone→box unlock response (sealed to directory STK)",
    "algorithms": [
     "X25519 ECIES",
     "HKDF-SHA256",
@@ -1154,7 +1175,7 @@
   {
    "id": "data.box-session",
    "kind": "data",
-   "label": "Native\u2194box session traffic (admin and app data)",
+   "label": "Native↔box session traffic (admin and app data)",
    "algorithms": [],
    "location": "in transit",
    "pq": "n/a",
@@ -1502,7 +1523,9 @@
    "type": "recovers",
    "evidence": [
     "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AdminRootEscrow.kt:6"
-   ]
+   ],
+   "notes": "The escrow holds the Ed25519 seed only; the ML-DSA seed is never escrowed (pq-suites.md §11.2), and a recovered root cannot rebind another ML-DSA key (§11.3) or rotate without the old root's PQ half (§20). Under strict it recovers no authority.",
+   "profile": "compatibility"
   },
   {
    "from": "key.umk",
@@ -1576,7 +1599,18 @@
    "type": "unwraps",
    "evidence": [
     "apps/mobile/ios/Sources/Flagship/Keystore.swift:743"
-   ]
+   ],
+   "group": "se-wrap"
+  },
+  {
+   "from": "store.ios-keychain-device",
+   "to": "key.admin-root",
+   "type": "unwraps",
+   "group": "wrapped-blob",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:743"
+   ],
+   "notes": "The SE wrap of the admin root is device-local: opening it takes both the Secure Enclave key agreement and this device's Keychain items."
   },
   {
    "from": "key.irk",
@@ -1909,7 +1943,9 @@
    "to": "eff.device-enroll",
    "type": "authorizes",
    "evidence": [
-    "packages/protocol/src/deviceCapability.ts:71"
+    "packages/protocol/src/deviceCapability.ts:71",
+    "packages/protocol/src/pqAuthorityRecords.ts:129",
+    "packages/server-daemon/src/accessPrincipals.ts:303"
    ]
   },
   {
@@ -1941,7 +1977,8 @@
    "to": "eff.recovery",
    "type": "authorizes",
    "evidence": [
-    "packages/protocol/src/recovery.ts:15"
+    "packages/protocol/src/recovery.ts:15",
+    "packages/server-daemon/src/adminRootRotationConsumer.ts:298"
    ],
    "notes": "veto"
   },

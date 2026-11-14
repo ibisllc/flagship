@@ -1110,3 +1110,61 @@ keyd's next start.
     the reply's envelope header bytes, not only issuedAt and the nonce?
 26. Lease v3 keeps the worker's classical outer signature for its own checks. Is anything lost by
     the box ignoring the outer signature once the inner hybrid one verifies?
+
+## 20. Quantum-safe stage 1: the admin root's own records (`packages/protocol/src/pqAuthorityRecords.ts`)
+
+Two records still let a classical signature by an account root create authority that the strict gate
+(§10) then trusted: an admin-root rotation (`flagship/admin-root-rotation/v1`, the old root's Ed25519
+signature, with the new root's ML-DSA key taken first-come from `.com`) and a device capability grant
+(`flagship/device-capability-grant/v2`, signed by the admin root or the IRK; a forged grant admits an
+attacker's device, whose own binding then passes the gate). Each now carries a hybrid companion beside
+its v1 signature.
+
+### 20.1 Rotation
+
+```
+statement = "flagship/admin-root-rotation/v2|<username>|<oldRootHex>|<newRootHex>|<issuedAt>|<newRootKeyIdHex>"
+companion = { signature: { suite: "hybrid-ed25519-mldsa65/v1", signature }, newRootBinding }
+```
+
+`newRootKeyIdHex` is the hybrid key id (§3) of the new root's own `admin-root` binding (§9), which
+travels as `newRootBinding`. The old root signs the statement with its hybrid key. A verifier checks
+the new root's binding (role `admin-root`, subject the account, key the rotation's new root), then the
+statement through `verifyCriticalSignature` with the old root's binding as the verifier itself pins it.
+A classical suite in the companion is `strict-requires-hybrid`, any other suite `unknown-suite`.
+
+- **Box** (`adminRootRotationConsumer.ts`): a hop with a companion must verify it, under the box's
+  binding for the pinned root on the first hop and the binding the previous hop named after that.
+  While strict is in force a hop without one stops the replay. The pin (`admin-root-pin.json`) keeps
+  the last hop's `newRootBinding`, and the device book uses it for the pinned root over whatever
+  `.com` relays. Replays the box runs before its policy is wired (a pin lost at boot) take classical
+  hops: a known gap.
+- **`.com`** (`adminRootRotation.ts`, D1 **0138** `admin_root_rotations.pq_json`): a companion that is
+  sent must verify under the old root's stored binding (403 with the gate's code otherwise); it is
+  served with the hop, and the new root's binding is stored as the account's `admin-root` binding.
+- **Escrow.** The passkey escrow holds the Ed25519 seed only (§11.2), so under strict a recovered root
+  cannot rebind (§11.3) and cannot rotate without the old root's PQ half: a strict account that loses
+  every device holding the admin root's ML-DSA seed must leave strict to recover.
+
+### 20.2 Device grants
+
+The companion is the signing root's hybrid signature over the grant's own canonical bytes (purpose
+`flagship/device-capability-grant/v2`), `pqSignature: { suite, signature }` beside `signatureHex`.
+
+- **Box** (`accessPrincipals.ts`): the device book verifies the companion under the binding of the
+  root the classical signature verified under (admin root, or IRK). One that is sent and fails drops the
+  device, even outside strict; one the box cannot check yet (no binding for that root) counts as absent.
+  While strict is in force, a device without a verified companion is not a device of the account: it
+  classifies as nobody, holds no admin grant and its own binding is not served to the gate.
+- **`.com`** (D1 **0138** `device_capability_grants.pq_signature_json`): `POST /devices/admit` takes
+  `grantPqSignature`, account bootstrap takes `grant.pqSignature`; both are shape-checked, stored and
+  relayed on the device-grant book as `pqSignature`. `.com` does not verify them (the box does).
+
+### 20.3 Vectors and ports
+
+`packages/protocol/test-vectors/pq-authority/vectors.json` (`tools/pq-authority-vectors.ts`, `--check`
+for freshness): the rotation's and both grants' canonical bytes, 11 rotation cases and 7 grant cases.
+TypeScript and Rust (`flagship_crypto::authority_records`, re-signing both companions byte for byte)
+check every case. Not yet ported: Swift and Kotlin signing (the phones do not send companions yet, so
+a strict account can neither rotate its admin root nor admit a device until they do) and the webapp
+(verify-only; it never signs hybrid, so under strict a browser admin device cannot add devices).
