@@ -1096,6 +1096,22 @@ export class ServicePlatform {
     return [...this.apps.values()].flatMap((a) => (a.retainedData ?? []).filter((r) => r.expiresAt <= now).map((r) => ({ serviceId: a.serviceId, ref: r.ref })));
   }
 
+  /** Images kept copies ran: an undo needs them, so any image sweep must leave them. */
+  keptImages(): string[] {
+    const out = new Set<string>();
+    for (const a of this.apps.values()) {
+      for (const r of a.retainedData ?? []) {
+        try {
+          const img = (JSON.parse(r.manifestJson) as { runtime?: { image?: unknown } }).runtime?.image;
+          if (typeof img === "string" && img) out.add(img);
+        } catch {
+          /* a kept manifest is the app's own; a broken one names no image */
+        }
+      }
+    }
+    return [...out];
+  }
+
   /** Files volumes of kept generations: never set aside by the orphan sweep. */
   retainedVolumes(): string[] {
     return [...this.apps.values()].flatMap((a) => (a.retainedData ?? []).flatMap((r) => (r.data?.files ? [r.data.files.volume] : [])));

@@ -34,16 +34,32 @@ import {
   type ServerRestoreStageOrder,
 } from "@flagship/protocol";
 import { readStateFile, writeFileDurable } from "../../durableFile.js";
-import { t, languageFor } from "../../i18n/index.js";
+import { t, languageFor, VARY_LANGUAGE } from "../../i18n/index.js";
 import type { HttpRequest, HttpResponse } from "../../runtime.js";
 import type { ArchiveKeyCustody } from "../archiveKeys.js";
 import { daemonCustody } from "../archiveKeys.js";
 import { ArchiveError } from "../format.js";
 import { checkArchiveContents, localServiceId, unpackArchive, type ArchiveContents } from "../restore.js";
 import { buildPreview, checkPlan, type BoxAppView, type PreviewApp } from "./preview.js";
-import { dropUndoFiles, finishUndoFiles, loadRun, markRunsElsewhere, runDir, runPlan, saveRun, undoPath, type MergeRun, type MergeRunDeps } from "./run.js";
+import { dropUndoFiles, finishUndoFiles, type ActivityParams, loadRun, markRunsElsewhere, runDir, runPlan, saveRun, undoPath, type MergeRun, type MergeRunDeps } from "./run.js";
 
 export const MERGE_PATH = "/api/screens/server-restore-merge";
+
+/** What an app's address answers in the seconds its restored copy is swapped in. */
+export function restoringPage(lang = "en"): HttpResponse {
+  const body = `<!doctype html>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>${t(lang, "Restoring from a backup")}</title>
+<style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;color:#0f172a}
+@media (prefers-color-scheme: dark){body{background:#0b1220;color:#e2e8f0}}main{max-width:420px;padding:24px;text-align:center}h1{font-size:20px;margin:0 0 8px}p{margin:0;color:#64748b}</style>
+<meta http-equiv="refresh" content="10"></head>
+<body><main><h1>${t(lang, "This app is being restored from a backup")}</h1><p>${t(lang, "It will be back in a few seconds. This page checks again on its own.")}</p></main></body></html>`;
+  return {
+    status: 503,
+    headers: { "content-type": "text/html; charset=utf-8", "retry-after": "10", "cache-control": "no-store", "x-frame-options": "DENY", ...VARY_LANGUAGE },
+    body,
+  };
+}
 const CHUNK_BYTES = 4 * 1024 * 1024;
 const HEADROOM_BYTES = 1024 * 1024 * 1024;
 
@@ -72,7 +88,7 @@ export interface RestoreMergeServiceOptions extends Omit<MergeRunDeps, "note"> {
   /** Whether `bytes` more app data may come onto this server (the backup policy's limit): null, or why not. */
   admitIncoming?: (bytes: number) => string | null;
   keys?: ArchiveKeyCustody;
-  note: (kind: string, detail: string, ok?: boolean) => void;
+  note: (kind: string, detail: string, ok?: boolean, params?: ActivityParams) => void;
 }
 
 interface StageState {
@@ -100,8 +116,8 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
   let running: Promise<void> | null = null;
 
   const json = (status: number, body: unknown): HttpResponse => ({ status, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const refuse = (req: HttpRequest, status: number, code: string, text: string, ...args: Array<string | number>): HttpResponse =>
-    json(status, { error: t(languageFor(req.headers), text, ...args), code });
+  const refuse = (req: HttpRequest, status: number, code: string, text: (lang: string) => string): HttpResponse =>
+    json(status, { error: text(languageFor(req.headers)), code });
 
   const dataFile = (id: string) => join(runDir(opts, id), "data");
   const stagePath = (id: string) => join(runDir(opts, id), "stage.json");
@@ -110,6 +126,29 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     await mkdir(runDir(opts, stage.restoreId), { recursive: true, mode: 0o700 });
     await writeFileDurable(stagePath(stage.restoreId), JSON.stringify(stage), 0o600);
   };
+
+  const swapping = new Set<string>();
+
+  /**
+   * Delete the image a kept copy (or an undone restore) ran, unless an app
+   * here, or another kept copy, still runs it. A pulled image another app
+   * shares is left.
+   */
+  async function dropKeptImage(manifestJson: string): Promise<void> {
+    let image: string | undefined;
+    try {
+      image = (JSON.parse(manifestJson) as { runtime?: { image?: unknown } }).runtime?.image as string | undefined;
+    } catch {
+      return;
+    }
+    if (typeof image !== "string" || !image) return;
+    const list = (opts.platform as { list?: () => Array<{ manifest: { runtime: { image: string } }; retainedData?: Array<{ manifestJson: string }> }> }).list?.() ?? [];
+    for (const a of list) {
+      if (a.manifest.runtime.image === image) return;
+      for (const k of a.retainedData ?? []) if (k.manifestJson.includes(JSON.stringify(image))) return;
+    }
+    await opts.restore.ops.removeImage(image).catch((e: Error) => log(`[restore-merge] couldn't remove ${image}: ${e.message}`));
+  }
 
   async function parseBody<T>(req: HttpRequest): Promise<T | null> {
     try {
@@ -139,37 +178,37 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     const b = await parseBody<Signed>(req);
     const order = parseServerRestoreStage(b?.order);
     const sig = signatureOf(b?.signatureHex);
-    if (!order || !sig) return refuse(req, 400, "bad-order", "That restore order can't be read.");
-    if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", "That restore order is for another server.");
-    if (!fresh(order.issuedAt)) return refuse(req, 409, "stale", "That restore order is too old. Try again.");
-    if (!opts.authorize(serverRestoreStageCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", "Only an admin device of this account can restore a backup.");
-    if (order.source === "pull" || order.source === "peers") return refuse(req, 409, "source-unavailable", "This server can't restore from that place yet. Send the backup file instead.");
+    if (!order || !sig) return refuse(req, 400, "bad-order", (lang) => t(lang, "That restore order can't be read."));
+    if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", (lang) => t(lang, "That restore order is for another server."));
+    if (!fresh(order.issuedAt)) return refuse(req, 409, "stale", (lang) => t(lang, "That restore order is too old. Try again."));
+    if (!opts.authorize(serverRestoreStageCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+    if (order.source === "pull" || order.source === "peers") return refuse(req, 409, "source-unavailable", (lang) => t(lang, "This server can't restore from that place yet. Send the backup file instead."));
     const busy = opts.busy();
     if (busy) return json(409, { error: busy, code: "busy" });
-    if (run?.state === "running") return refuse(req, 409, "running", "A restore is already running on this server.");
-    if (stage && stage.state !== "failed" && stage.state !== "previewed") return refuse(req, 409, "staged", "Another restore is being checked on this server. Cancel it first.");
+    if (run?.state === "running") return refuse(req, 409, "running", (lang) => t(lang, "A restore is already running on this server."));
+    if (stage && stage.state !== "failed" && stage.state !== "previewed") return refuse(req, 409, "staged", (lang) => t(lang, "Another restore is being checked on this server. Cancel it first."));
     await dropStage();
     let received = 0;
     if (order.source === "saved") {
       const file = await opts.savedDataFile(order.archiveId);
-      if (!file) return refuse(req, 404, "no-saved-backup", "That backup isn't saved on this server.");
+      if (!file) return refuse(req, 404, "no-saved-backup", (lang) => t(lang, "That backup isn't saved on this server."));
       received = order.bytes;
     }
     if ((await opts.freeBytes(opts.runsDir)) < (order.source === "saved" ? order.bytes * 1.2 : order.bytes * 2.2) + HEADROOM_BYTES / 4) {
-      return refuse(req, 507, "disk", "This server doesn't have enough free disk space for that backup.");
+      return refuse(req, 507, "disk", (lang) => t(lang, "This server doesn't have enough free disk space for that backup."));
     }
     stage = { v: 1, restoreId: randomBytes(16).toString("hex"), order, state: received === order.bytes ? "ready" : "receiving", received, createdAt: now() };
     await saveStage();
-    opts.note("server.restore-merge.staged", "A backup is being checked before restoring its apps here.");
+    opts.note("server.restore-merge.staged", "A backup is being checked before restoring its apps here.", true, {});
     return json(202, { restoreId: stage.restoreId, received });
   }
 
   async function postChunk(req: HttpRequest): Promise<HttpResponse> {
-    if (!stage || stage.state !== "receiving") return refuse(req, 409, "not-receiving", "This server isn't waiting for backup data.");
+    if (!stage || stage.state !== "receiving") return refuse(req, 409, "not-receiving", (lang) => t(lang, "This server isn't waiting for backup data."));
     const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
     const offset = Number(q.get("offset") ?? "");
     if (!Number.isSafeInteger(offset) || offset !== stage.received) return json(409, { error: "chunk out of order", code: "offset", received: stage.received });
-    if (req.body.length === 0 || req.body.length > CHUNK_BYTES || offset + req.body.length > stage.order.bytes) return refuse(req, 400, "chunk-size", "That part of the backup has the wrong size.");
+    if (req.body.length === 0 || req.body.length > CHUNK_BYTES || offset + req.body.length > stage.order.bytes) return refuse(req, 400, "chunk-size", (lang) => t(lang, "That part of the backup has the wrong size."));
     const fh = await open(dataFile(stage.restoreId), offset === 0 ? "w" : "r+", 0o600);
     try {
       await fh.write(req.body, 0, req.body.length, offset);
@@ -197,10 +236,10 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
   }
 
   async function postCommit(req: HttpRequest): Promise<HttpResponse> {
-    if (!stage || stage.state !== "ready") return refuse(req, 409, "not-ready", "Send the whole backup file first.");
+    if (!stage || stage.state !== "ready") return refuse(req, 409, "not-ready", (lang) => t(lang, "Send the whole backup file first."));
     const b = await parseBody<{ key?: unknown }>(req);
-    if (typeof b?.key !== "string" || !/^[0-9a-f]{64}$/.test(b.key)) return refuse(req, 400, "bad-key", "That backup key can't be read.");
-    if (checking) return refuse(req, 409, "checking", "The backup is already being checked.");
+    if (typeof b?.key !== "string" || !/^[0-9a-f]{64}$/.test(b.key)) return refuse(req, 400, "bad-key", (lang) => t(lang, "That backup key can't be read."));
+    if (checking) return refuse(req, 409, "checking", (lang) => t(lang, "The backup is already being checked."));
     const s = stage;
     let key;
     try {
@@ -230,7 +269,7 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
         s.state = "failed";
         s.reason = e instanceof ArchiveError ? e.message : `the backup couldn't be opened: ${(e as Error).message}`;
         await rm(join(runDir(opts, s.restoreId), "unpacked"), { recursive: true, force: true }).catch(() => {});
-        opts.note("server.restore-merge.failed", `The backup couldn't be opened: ${s.reason}.`, false);
+        opts.note("server.restore-merge.failed", `The backup couldn't be opened: ${s.reason}.`, false, { reason: "unopened" });
       } finally {
         await key.close();
         checking = false;
@@ -294,36 +333,40 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     const order = parseServerRestoreMerge(b?.order);
     const sig = signatureOf(b?.signatureHex);
     const lines = Array.isArray(b?.lines) ? b!.lines.map(parseRestoreMergePlanLine) : null;
-    if (!order || !sig || !lines || lines.some((l) => !l)) return refuse(req, 400, "bad-order", "That restore order can't be read.");
+    if (!order || !sig || !lines || lines.some((l) => !l)) return refuse(req, 400, "bad-order", (lang) => t(lang, "That restore order can't be read."));
     const plan = lines as RestoreMergePlanLine[];
-    if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", "That restore order is for another server.");
-    if (!fresh(order.issuedAt) || order.expiresAt <= now()) return refuse(req, 409, "stale", "That restore order is too old. Try again.");
-    if (!opts.authorize(serverRestoreMergeCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", "Only an admin device of this account can restore a backup.");
-    if (!stage || !preview || stage.state !== "previewed" || order.restoreId !== stage.restoreId) return refuse(req, 409, "no-preview", "This restore isn't ready to choose from any more. Start again.");
-    if (order.archiveId !== stage.order.archiveId || order.sha256 !== stage.order.sha256) return refuse(req, 409, "other-backup", "That restore order names a different backup.");
+    if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", (lang) => t(lang, "That restore order is for another server."));
+    if (!fresh(order.issuedAt) || order.expiresAt <= now()) return refuse(req, 409, "stale", (lang) => t(lang, "That restore order is too old. Try again."));
+    if (!opts.authorize(serverRestoreMergeCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+    if (!stage || !preview || stage.state !== "previewed" || order.restoreId !== stage.restoreId) return refuse(req, 409, "no-preview", (lang) => t(lang, "This restore isn't ready to choose from any more. Start again."));
+    if (order.archiveId !== stage.order.archiveId || order.sha256 !== stage.order.sha256) return refuse(req, 409, "other-backup", (lang) => t(lang, "That restore order names a different backup."));
     let planSha: string;
     try {
       planSha = restoreMergePlanSha256(plan);
     } catch {
-      return refuse(req, 400, "bad-plan", "That restore plan can't be read.");
+      return refuse(req, 400, "bad-plan", (lang) => t(lang, "That restore plan can't be read."));
     }
-    if (planSha !== order.planSha256) return refuse(req, 409, "plan-mismatch", "That restore plan isn't the one you signed.");
+    if (planSha !== order.planSha256) return refuse(req, 409, "plan-mismatch", (lang) => t(lang, "That restore plan isn't the one you signed."));
     const busy = opts.busy();
     if (busy) return json(409, { error: busy, code: "busy" });
     // The server may have changed since the preview: decide again on what is here now.
     preview = await makePreview(contents!);
     const refused = checkPlan(preview, plan, { serverFqdn: opts.serverFqdn, taken: await takenIds(plan.flatMap((l) => (l.targetServiceId ? [l.targetServiceId] : []))) });
     if (refused) {
+      const lang = languageFor(req.headers);
       const text =
         refused.code === "plan-guard-mismatch"
-          ? "An app changed since you chose. Look at the choices again."
+          ? t(lang, "An app changed since you chose. Look at the choices again.")
           : refused.code === "plan-nothing-to-do"
-            ? "Choose at least one app to restore."
-            : "That restore plan doesn't fit this backup or this server any more. Look at the choices again.";
-      return json(409, { ...refused, error: t(languageFor(req.headers), text) });
+            ? t(lang, "Choose at least one app to restore.")
+            : t(lang, "That restore plan doesn't fit this backup or this server any more. Look at the choices again.");
+      return json(409, { ...refused, error: text });
     }
     const room = await roomFor(plan);
-    if (room) return json(507, { ...room, error: t(languageFor(req.headers), room.code === "disk" ? "This server doesn't have enough free disk space for that restore." : "That restore would go over this server's backup limit.") });
+    if (room) {
+      const lang = languageFor(req.headers);
+      return json(507, { ...room, error: room.code === "disk" ? t(lang, "This server doesn't have enough free disk space for that restore.") : t(lang, "That restore would go over this server's backup limit.") });
+    }
     stage.state = "running";
     await saveStage();
     run = {
@@ -344,7 +387,7 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     markRunsElsewhere(run, elsewhereIds);
     await writeFileDurable(join(runDir(opts, run.restoreId), "elsewhere.json"), JSON.stringify(elsewhereIds), 0o600);
     const n = plan.filter((l) => l.action !== "keep" && l.action !== "skip").length;
-    opts.note("server.restore-merge.started", `Restoring ${n} app${n === 1 ? "" : "s"} from the backup of ${new Date(run.backupCreatedAt).toISOString().slice(0, 10)}.`);
+    opts.note("server.restore-merge.started", `Restoring ${n} app${n === 1 ? "" : "s"} from the backup of ${new Date(run.backupCreatedAt).toISOString().slice(0, 10)}.`, true, { count: n, backupAt: run.backupCreatedAt });
     start(run, contents!);
     return json(202, { restoreId: run.restoreId });
   }
@@ -352,7 +395,7 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
   function start(r: MergeRun, c: ArchiveContents): void {
     running = (async () => {
       try {
-        run = await runPlan({ ...opts, note: opts.note }, r, c.metas);
+        run = await runPlan({ ...opts, note: opts.note, onSwapping: (sid, on) => void (on ? swapping.add(sid) : swapping.delete(sid)) }, r, c.metas);
       } catch (e) {
         log(`[restore-merge] the run stopped: ${(e as Error).message}`);
       } finally {
@@ -367,7 +410,7 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
 
   async function postCancel(req: HttpRequest): Promise<HttpResponse> {
     if (!stage) return json(200, { ok: true });
-    if (stage.state === "running" || checking) return refuse(req, 409, "running", "A restore is already running on this server.");
+    if (stage.state === "running" || checking) return refuse(req, 409, "running", (lang) => t(lang, "A restore is already running on this server."));
     await dropStage();
     return json(200, { ok: true });
   }
@@ -376,23 +419,28 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     const b = await parseBody<Signed>(req);
     const order = parseAppRestoreUndo(b?.order);
     const sig = signatureOf(b?.signatureHex);
-    if (!order || !sig) return refuse(req, 400, "bad-order", "That restore order can't be read.");
-    if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", "That restore order is for another server.");
-    if (!fresh(order.issuedAt)) return refuse(req, 409, "stale", "That restore order is too old. Try again.");
-    if (!opts.authorize(appRestoreUndoCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", "Only an admin device of this account can restore a backup.");
-    if (run?.state === "running") return refuse(req, 409, "running", "A restore is already running on this server.");
+    if (!order || !sig) return refuse(req, 400, "bad-order", (lang) => t(lang, "That restore order can't be read."));
+    if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", (lang) => t(lang, "That restore order is for another server."));
+    if (!fresh(order.issuedAt)) return refuse(req, 409, "stale", (lang) => t(lang, "That restore order is too old. Try again."));
+    if (!opts.authorize(appRestoreUndoCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+    if (run?.state === "running") return refuse(req, 409, "running", (lang) => t(lang, "A restore is already running on this server."));
     const app = opts.platform.byServiceId(order.serviceId);
-    if (!app?.retainedData?.some((r) => r.ref === order.restoreId)) return refuse(req, 404, "no-undo", "There is no earlier copy of that app to put back.");
+    if (!app?.retainedData?.some((r) => r.ref === order.restoreId)) return refuse(req, 404, "no-undo", (lang) => t(lang, "There is no earlier copy of that app to put back."));
     if (order.action === "undo") {
-      const r = await opts.platform.revertDataGeneration(order.serviceId, order.restoreId);
+      const restoredManifest = app.manifestSource ?? JSON.stringify(app.manifest);
+      swapping.add(order.serviceId);
+      const r = await opts.platform.revertDataGeneration(order.serviceId, order.restoreId).finally(() => swapping.delete(order.serviceId));
       if (!r.ok) return json(409, { error: r.reason, code: "undo-failed" });
       await finishUndoFiles(opts, order.restoreId, order.serviceId).catch((e: Error) => log(`[restore-merge] ${order.serviceId}: undo files: ${e.message}`));
-      opts.note("app.restore.undone", `${app.manifest.name} is back as it was before the restore.`);
+      await dropKeptImage(restoredManifest);
+      opts.note("app.restore.undone", `${app.manifest.name} is back as it was before the restore.`, true, { app: app.manifest.name, service: order.serviceId });
     } else {
+      const kept = app.retainedData?.find((x) => x.ref === order.restoreId);
       const r = await opts.platform.discardRetainedGeneration(order.serviceId, order.restoreId);
       if (!r.ok) return json(409, { error: r.reason, code: "discard-failed" });
       await dropUndoFiles(opts, order.restoreId, order.serviceId);
-      opts.note("app.restore.discarded", `The earlier copy of ${app.manifest.name} was deleted.`);
+      if (kept) await dropKeptImage(kept.manifestJson);
+      opts.note("app.restore.discarded", `The earlier copy of ${app.manifest.name} was deleted.`, true, { app: app.manifest.name, service: order.serviceId });
     }
     return json(200, { ok: true });
   }
@@ -417,10 +465,12 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     let n = 0;
     for (const e of list) {
       const app = opts.platform.byServiceId(e.serviceId);
+      const kept = app?.retainedData?.find((x) => x.ref === e.ref);
       const r = await opts.platform.discardRetainedGeneration(e.serviceId, e.ref);
       if (!r.ok) continue;
       await dropUndoFiles(opts, e.ref, e.serviceId).catch(() => {});
-      opts.note("app.restore.undo-expired", `The earlier copy of ${app?.manifest.name ?? e.serviceId} kept by a restore was deleted after 7 days.`);
+      if (kept) await dropKeptImage(kept.manifestJson);
+      opts.note("app.restore.undo-expired", `The earlier copy of ${app?.manifest.name ?? e.serviceId} kept by a restore was deleted after 7 days.`, true, { app: app?.manifest.name ?? e.serviceId, service: e.serviceId });
       n++;
     }
     return n;
@@ -501,6 +551,8 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
 
   return {
     handle,
+    /** Whether an app is in the seconds of its swap (its address shows "being restored"). */
+    isRestoring: (serviceId: string): boolean => swapping.has(serviceId),
     resume,
     expireUndo,
     view,

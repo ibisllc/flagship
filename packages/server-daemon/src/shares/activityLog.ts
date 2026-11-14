@@ -21,6 +21,8 @@ export interface ActivityEntry {
   /** One readable line, never a body, SQL, prompt or token. */
   detail?: string;
   target?: string;
+  /** What the apps fill their own translated sentence for `kind` with (app names, dates, counts, reason codes). */
+  params?: Record<string, string | number>;
   ok: boolean;
 }
 
@@ -74,6 +76,7 @@ export class ActivityLog {
       ...(entry.kind ? { kind: entry.kind } : {}),
       ...(entry.detail ? { detail: entry.detail.slice(0, 240) } : {}),
       ...(entry.target ? { target: entry.target } : {}),
+      ...(entry.params ? { params: cleanParams(entry.params) } : {}),
       ok: entry.ok,
     };
     this.entries.push(e);
@@ -102,7 +105,7 @@ export class ActivityLog {
   }
 
   /** Record something the box itself did (not an owner or share request). */
-  note(kind: string, detail: string, opts: { ok?: boolean; target?: string } = {}): void {
+  note(kind: string, detail: string, opts: { ok?: boolean; target?: string; params?: Record<string, string | number> } = {}): void {
     this.record({
       actor: { kind: "owner" },
       action: kind,
@@ -110,6 +113,7 @@ export class ActivityLog {
       detail,
       ok: opts.ok ?? true,
       ...(opts.target ? { target: opts.target } : {}),
+      ...(opts.params ? { params: opts.params } : {}),
     });
   }
 
@@ -120,4 +124,15 @@ export class ActivityLog {
 
 export function defaultActivityLogPath(dataDir: string): string {
   return join(dataDir, "activity.jsonl");
+}
+
+/** At most 8 parameters: short keys, strings cut to 120 characters, finite numbers. */
+function cleanParams(p: Record<string, string | number>): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(p).slice(0, 8)) {
+    if (!/^[a-zA-Z][a-zA-Z0-9]{0,23}$/.test(k)) continue;
+    if (typeof v === "string") out[k] = v.slice(0, 120);
+    else if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
 }

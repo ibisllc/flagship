@@ -16,7 +16,7 @@
  * puts the app back as it was. Who can use an app on the server is never
  * touched by a replace.
  */
-import { mkdir, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseServiceId, type RestoreMergePlanLine } from "@flagship/protocol";
 import { readStateFile, writeFileDurable } from "../../durableFile.js";
@@ -31,7 +31,7 @@ import { guardsOf } from "./preview.js";
 
 export const UNDO_KEEP_MS = 7 * 24 * 60 * 60_000;
 
-export type MergeStep = "waiting" | "started" | "built" | "stores-ready" | "migrated" | "swapped" | "done" | "failed" | "kept" | "skipped" | "refused-changed";
+export type MergeStep = "waiting" | "started" | "built" | "stores-ready" | "migrated" | "tree-moved" | "swapped" | "done" | "failed" | "kept" | "skipped" | "refused-changed";
 
 export interface MergeAppRun {
   archivedServiceId: string;
@@ -71,6 +71,12 @@ export interface UndoMeta {
   envAdded: string[];
 }
 
+export type ActivityParams = Record<string, string | number>;
+
+function note(deps: Pick<MergeRunDeps, "note">, kind: string, detail: string, ok: boolean, params: ActivityParams): void {
+  deps.note(kind, detail, ok, params);
+}
+
 export interface MergeRunDeps {
   restore: ArchiveRestoreDeps;
   platform: Pick<
@@ -83,7 +89,10 @@ export interface MergeRunDeps {
   runsDir: string;
   /** `<dataDir>/restore-undo`: the undo points' trees and notes. */
   undoDir: string;
-  note: (kind: string, detail: string, ok?: boolean) => void;
+  /** Activity: a kind, its parameters (each app renders its own sentence) and an English line for older apps. */
+  note: (kind: string, detail: string, ok?: boolean, params?: ActivityParams) => void;
+  /** An app is being swapped (its address shows the "being restored" page meanwhile). */
+  onSwapping?: (serviceId: string, on: boolean) => void;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -153,7 +162,7 @@ export async function runPlan(deps: MergeRunDeps, run: MergeRun, metas: readonly
         if (app.step !== "done") {
           app.step = "failed";
           app.reason = "it was interrupted twice, so it was kept as it was";
-          deps.note("app.restore.failed", `Couldn't restore ${meta?.name ?? app.targetServiceId}: interrupted twice. It is back as it was.`, false);
+          note(deps, "app.restore.failed", `Couldn't restore ${meta?.name ?? app.targetServiceId}: interrupted twice. It is back as it was.`, false, { app: meta?.name ?? app.targetServiceId, service: app.targetServiceId, reason: "interrupted-twice" });
         }
         await save();
         continue;
@@ -176,7 +185,7 @@ export async function runPlan(deps: MergeRunDeps, run: MergeRun, metas: readonly
     } catch (e) {
       app.step = "failed";
       app.reason = (e as Error).message;
-      deps.note("app.restore.failed", `Couldn't restore ${meta.name}: ${app.reason.replace(/[.\s]+$/, "")}. It is back as it was.`, false);
+      note(deps, "app.restore.failed", `Couldn't restore ${meta.name}: ${app.reason.replace(/[.\s]+$/, "")}. It is back as it was.`, false, { app: meta.name, service: app.targetServiceId, reason: "failed" });
     }
     await save();
     log(`[restore-merge] ${app.targetServiceId}: ${app.step}${app.reason ? ` (${app.reason})` : ""}`);
@@ -185,7 +194,7 @@ export async function runPlan(deps: MergeRunDeps, run: MergeRun, metas: readonly
   await save();
   const done = run.apps.filter((a) => a.step === "done").length;
   const failed = run.apps.filter((a) => a.step === "failed" || a.step === "refused-changed").length;
-  deps.note("server.restore-merge.finished", failed === 0 ? `Restored ${done} app${done === 1 ? "" : "s"} from the backup.` : `Restored ${done} app${done === 1 ? "" : "s"} from the backup; ${failed} kept as they were.`, failed === 0);
+  note(deps, "server.restore-merge.finished", failed === 0 ? `Restored ${done} app${done === 1 ? "" : "s"} from the backup.` : `Restored ${done} app${done === 1 ? "" : "s"} from the backup; ${failed} kept as they were.`, failed === 0, { restored: done, kept: failed });
   return run;
 }
 
@@ -202,7 +211,7 @@ async function installLine(deps: MergeRunDeps, run: MergeRun, app: MergeAppRun, 
   if (r.state !== "done") throw new Error(r.reason ?? "it couldn't be installed");
   app.step = "done";
   if (r.summary) app.summary = r.summary;
-  deps.note(copy ? "app.restore.copied" : "app.restore.installed", copy ? `${meta.name} was added as a separate app from the backup.` : `${meta.name} was restored from the backup.`);
+  note(deps, copy ? "app.restore.copied" : "app.restore.installed", copy ? `${meta.name} was added as a separate app from the backup.` : `${meta.name} was restored from the backup.`, true, { app: meta.name, service: app.targetServiceId });
 }
 
 /** Set by the service from the preview: install lines of apps the account runs on other servers. */
@@ -241,7 +250,7 @@ async function replaceLine(
   if (early) {
     app.step = "refused-changed";
     app.reason = early;
-    deps.note("app.restore.refused-changed", `${early}.`, false);
+    note(deps, "app.restore.refused-changed", `${early}.`, false, { app: meta.name, service: sid });
     return;
   }
   const held: Held = {};
@@ -274,29 +283,42 @@ async function replaceLine(
       app.step = "migrated";
       await save();
     }
-    const swapped = await deps.platform.swapDataGeneration(
-      sid,
-      { generation: prepared.generation, data: prepared.data, appliedMigrations: applied, ...(manifestJson !== undefined ? { manifestJson } : {}), ...(codeHistory ? { codeHistory } : {}) },
-      { ref: run.restoreId, expiresAt: now() + UNDO_KEEP_MS },
-      changed,
-    );
+    const pending = await beforeSwap(deps, run, app, meta, scratchTree, now);
+    app.step = "tree-moved";
+    await save();
+    deps.onSwapping?.(sid, true);
+    let swapped: Awaited<ReturnType<typeof deps.platform.swapDataGeneration>>;
+    try {
+      swapped = await deps.platform.swapDataGeneration(
+        sid,
+        { generation: prepared.generation, data: prepared.data, appliedMigrations: applied, ...(manifestJson !== undefined ? { manifestJson } : {}), ...(codeHistory ? { codeHistory } : {}) },
+        { ref: run.restoreId, expiresAt: pending.expiresAt },
+        changed,
+      );
+    } finally {
+      deps.onSwapping?.(sid, false);
+    }
     if (!swapped.ok) {
+      await finishUndoFiles(deps, run.restoreId, sid).catch((e: Error) => deps.log?.(`[restore-merge] ${sid}: couldn't put the working tree back: ${e.message}`));
       if (swapped.changed) {
         await dropPrepared(deps, sid, prepared, held);
         prepared = null;
         app.step = "refused-changed";
         app.reason = swapped.reason;
-        deps.note("app.restore.refused-changed", `${swapped.reason}.`, false);
+        note(deps, "app.restore.refused-changed", `${swapped.reason}.`, false, { app: meta.name, service: sid });
         return;
       }
       throw new Error(swapped.reason);
     }
     app.step = "swapped";
     await save();
-    const undo = await afterSwap(deps, run, app, meta, scratchTree, now);
+    // Live now: nothing below may drop these stores or this image.
+    prepared = null;
+    delete held.image;
+    const undo = await afterSwap(deps, run, app, meta, pending);
     app.step = "done";
     app.summary = summary;
-    deps.note(app.action === "replace" ? "app.restore.replaced" : "app.restore.replaced-data", `${meta.name} was restored from the backup. Its earlier copy is kept until ${new Date(undo.expiresAt).toISOString().slice(0, 10)}.`);
+    note(deps, app.action === "replace" ? "app.restore.replaced" : "app.restore.replaced-data", `${meta.name} was restored from the backup. Its earlier copy is kept until ${new Date(undo.expiresAt).toISOString().slice(0, 10)}.`, true, { app: meta.name, service: sid, until: undo.expiresAt });
   } catch (e) {
     if (prepared) await dropPrepared(deps, sid, prepared, held);
     else if (held.image) await deps.restore.ops.removeImage(held.image).catch(() => {});
@@ -323,30 +345,46 @@ async function boxMigrations(deps: MergeRunDeps, sid: string): Promise<AppMigrat
  * point and the backup's takes its place; env names only the backup had are
  * added (same account only; this server's values always win).
  */
-async function afterSwap(deps: MergeRunDeps, run: MergeRun, app: MergeAppRun, meta: ArchiveAppMeta, scratchTree: string, now: () => number): Promise<UndoMeta> {
+/**
+ * Before a replace goes live: the server's working tree moves into the undo
+ * point and the backup's takes its place, with the note written first, so a
+ * restart at any moment finds the tree to put back (finishUndoFiles).
+ */
+async function beforeSwap(deps: MergeRunDeps, run: MergeRun, app: MergeAppRun, meta: ArchiveAppMeta, scratchTree: string, now: () => number): Promise<UndoMeta> {
   const sid = app.targetServiceId;
   const at = undoPath(deps, run.restoreId, sid);
   await mkdir(at, { recursive: true, mode: 0o700 });
   const undo: UndoMeta = { v: 1, restoreId: run.restoreId, serviceId: sid, action: app.action as "replace" | "replace-data", keptAt: now(), expiresAt: now() + UNDO_KEEP_MS, tree: false, envAdded: [] };
   const src = deps.restore.sourceDir;
-  if (app.action === "replace" && src) {
+  const backupTree = app.action === "replace" && meta.rebuild === "source" ? scratchTree : null;
+  if (src && backupTree) {
+    undo.tree = true;
+    await writeFileDurable(join(at, "undo.json"), JSON.stringify(undo), 0o600);
     const liveTree = join(src, sid);
-    const backupTree = meta.rebuild === "source" ? scratchTree : null;
-    if (backupTree || meta.parts.some((p) => p.name === "source")) {
-      await rename(liveTree, join(at, "tree")).then(() => (undo.tree = true)).catch(() => {});
-      if (backupTree) await rename(backupTree, liveTree).catch(() => {});
-    }
+    await rename(liveTree, join(at, "tree")).catch((e: NodeJS.ErrnoException) => {
+      if (e.code !== "ENOENT") throw e;
+    });
+    await rename(backupTree, liveTree);
+  } else {
+    await writeFileDurable(join(at, "undo.json"), JSON.stringify(undo), 0o600);
   }
+  return undo;
+}
+
+/** After a replace went live: env names only the backup had are added (same account only; this server's values win). */
+async function afterSwap(deps: MergeRunDeps, run: MergeRun, app: MergeAppRun, meta: ArchiveAppMeta, undo: UndoMeta): Promise<UndoMeta> {
+  const sid = app.targetServiceId;
   const sameAccount = parseServiceId(meta.serviceId)?.creator === account(deps.restore.serverFqdn);
   if (app.action === "replace" && sameAccount && deps.restore.envStore && Object.keys(meta.env).length > 0) {
     const have = (await deps.restore.envStore.get(sid).catch(() => null)) ?? {};
     const add = Object.entries(meta.env).filter(([k, v]) => typeof v === "string" && !k.startsWith("FLAGSHIP_") && !(k in have));
     if (add.length > 0) {
-      await deps.restore.envStore.put(sid, { ...have, ...Object.fromEntries(add) });
+      // The note first: a restart between the two still knows which names to take out on an undo.
       undo.envAdded = add.map(([k]) => k).sort();
+      await writeFileDurable(join(undoPath(deps, run.restoreId, sid), "undo.json"), JSON.stringify(undo), 0o600);
+      await deps.restore.envStore.put(sid, { ...have, ...Object.fromEntries(add) });
     }
   }
-  await writeFileDurable(join(at, "undo.json"), JSON.stringify(undo), 0o600);
   return undo;
 }
 
@@ -365,8 +403,9 @@ async function recoverInterrupted(deps: MergeRunDeps, run: MergeRun, app: MergeA
     // The swap went through but the line never finished: take the server's copy back first.
     const back = await deps.platform.revertDataGeneration(sid, run.restoreId);
     if (!back.ok) throw new Error(back.reason);
-    await finishUndoFiles(deps, run.restoreId, sid).catch(() => {});
   }
+  // The working tree and env names a cut line moved, whether or not its swap went through.
+  await finishUndoFiles(deps, run.restoreId, sid).catch(() => {});
   await rm(join(runDir(deps, run.restoreId), "trees", sid), { recursive: true, force: true }).catch(() => {});
 }
 
@@ -376,7 +415,7 @@ export async function finishUndoFiles(deps: Pick<MergeRunDeps, "undoDir" | "rest
   const raw = await readFile(join(at, "undo.json"), "utf8").catch(() => null);
   const undo = raw ? (JSON.parse(raw) as UndoMeta) : null;
   const src = deps.restore.sourceDir;
-  if (undo?.tree && src) {
+  if (undo?.tree && src && (await stat(join(at, "tree")).then(() => true, () => false))) {
     await rm(join(src, serviceId), { recursive: true, force: true });
     await rename(join(at, "tree"), join(src, serviceId));
   }
