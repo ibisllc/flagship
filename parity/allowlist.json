@@ -357,6 +357,21 @@
       "reason": "Identity assertions are signed only by keyd on the box (TS packages/keyd and Rust flagship-keyd read these vectors); no client signs or checks flagship/inject/v1 (pq-suites.md §16.6)."
     },
     {
+      "check": "test-vectors",
+      "key": "swift:device-revocation-list",
+      "reason": "The device revocation list is signed by .com's CA and checked only by keyd on the box before it signs master (TS packages/keyd and Rust flagship-keyd read these vectors; protocol deviceRevocationList.ts); no client signs or checks flagship/device-revocation-list/v1."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:device-revocation-list",
+      "reason": "The device revocation list is signed by .com's CA and checked only by keyd on the box before it signs master (TS packages/keyd and Rust flagship-keyd read these vectors; protocol deviceRevocationList.ts); no client signs or checks flagship/device-revocation-list/v1."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:device-revocation-list",
+      "reason": "The device revocation list is signed by .com's CA and checked only by keyd on the box before it signs master (TS packages/keyd and Rust flagship-keyd read these vectors; protocol deviceRevocationList.ts); no client signs or checks flagship/device-revocation-list/v1."
+    },
+    {
       "check": "signed-tags",
       "key": "ios:flagship/pq-seed-wrap/v2",
       "reason": "The session KEK wrapping is Android's own storage format for its PQ seeds (pq-suites.md §18); iOS opens its seeds with the session's LAContext and the webapp holds no PQ seeds. Nothing is exchanged in this format."
