@@ -3293,5 +3293,6 @@
   "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.": "Flagship 未接受用于 {0} 的此密钥文件。此浏览器上没有任何更改。请几分钟后重试。",
   "Couldn't restore this key file. Nothing was changed in this browser. Try again.": "无法恢复此密钥文件。此浏览器上没有任何更改。请重试。",
   "Couldn't restore this key file": "无法恢复此密钥文件",
-  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "此代码在获得批准前已过期。请重新开始，然后用手机扫描新代码。"
+  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "此代码在获得批准前已过期。请重新开始，然后用手机扫描新代码。",
+  "Firefox extension": "Firefox 扩展"
 }

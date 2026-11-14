@@ -6521,6 +6521,22 @@
       "open/index.html"
     ]
   },
+  "s00dcdb3463": {
+    "en": "Pair the Flagship extension with the app",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s9b607e90aa": {
+    "en": "The Flagship extension for Firefox is waiting for your phone. Get the app, then scan the code in the extension again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
   "sa805fa7665": {
     "en": "Sign in to voi.ci with Flagship",
     "kind": "text",

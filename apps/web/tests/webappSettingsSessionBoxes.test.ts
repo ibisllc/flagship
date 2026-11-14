@@ -76,6 +76,18 @@ describe("Browser sessions", () => {
     expect(browserSessions(rows).map((r: { tokenPrefix: string }) => r.tokenPrefix)).toEqual(["laptop"]);
   });
 
+  it("lists the Firefox extension's session with the Remote browsers", async () => {
+    const { browserSessions } = await load();
+    const rows = [
+      { tokenPrefix: "phone", current: true, kind: "device" },
+      { tokenPrefix: "firefox", current: false, kind: "extension" },
+      { tokenPrefix: "laptop", current: false, kind: "remote" },
+    ];
+    expect(browserSessions(rows).map((r: { tokenPrefix: string }) => r.tokenPrefix)).toEqual(["firefox", "laptop"]);
+    const src = readFileSync(resolve(WEBAPP, "views", "paired-sessions.js"), "utf8");
+    expect(src).toContain('tr("Firefox extension")');
+  });
+
   it("on a box that doesn't say which kind, at least this device is left out", async () => {
     const { browserSessions } = await load();
     const rows = [

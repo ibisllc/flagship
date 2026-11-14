@@ -69,6 +69,22 @@
             "comment": "Trailing-slash variant of the same remote sign-in link."
           },
           {
+            "/": "/pair-extension",
+            "?": {
+              "s": "?*",
+              "k": "?*"
+            },
+            "comment": "Pair the Flagship Firefox extension. The extension shows /pair-extension?s=<sid>&k=<browser key> as a QR; the phone approves it for one server."
+          },
+          {
+            "/": "/pair-extension/",
+            "?": {
+              "s": "?*",
+              "k": "?*"
+            },
+            "comment": "Trailing-slash variant of the same extension pairing link."
+          },
+          {
             "/": "/builder",
             "?": {
               "c": "?*",
