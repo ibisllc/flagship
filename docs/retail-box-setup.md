@@ -250,6 +250,8 @@ The box is the authority. The phone checks too, to catch a fake that makes press
     changed. The owner gets an Activity entry and a push: "Someone pressed the reset button on
     home. If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10
     minutes." (Wording through i18n.)
+  - Unclaimed or reset window, a burst of 3 (owner, 2026-11-14): show the current setup code as a QR code on an
+    attached monitor, for the sharing method (15.1). Nothing appears on screen until asked. No monitor: nothing.
   - Claimed, any other burst: ignored.
 
 ### 7.6 What the claim carries
@@ -564,9 +566,16 @@ clarification the same day: there are two separate methods, and the normal one u
    safety (a screen showing a setup code lets anyone who sees it claim the box). The phone at the box claims it
    directly: sections 4 and 7, no code shown or handed out.
 2. **Monitor (the sharing method).** For setting up a box for someone else (a cousin, a shop's setup desk): plug in a
-   monitor; the box shows its current setup code as a QR code; a photo of it can be sent to whoever will own the
+   monitor and press the power button 3 times (owner: the code appears only when asked); the box shows its current
+   setup code as a QR code; a photo of it can be sent to whoever will own the
    box, who claims over the internet through a `.com` mailbox keyed by a hash of the code (`.com` blind), with the
    box on Ethernet + DHCP. Because the code arrives off the radio, this method also closes the relay case.
 
 The code ratchets: made fresh at every reset, claim, key change and wipe; single use; the box keeps only its hash; it
 expires a set time after it is first shown. Seeing or keeping a used or expired code gives nothing away.
+
+### 15.2 Owner, 2026-11-14: one documentation page for every box
+
+The button gestures (1 press when the app asks, 3 presses to show the setup code on a monitor, 5 presses to reset)
+live on one public documentation page, the same for every box and every buyer, plus the generic booklet (4.1). Nothing
+unique is printed per box.
