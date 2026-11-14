@@ -15,8 +15,8 @@
 // are idempotent so replay is harmless — the bearer secret is the
 // right weight here.
 
-import type { CustomDomainOrderStorage, TierStorage } from "@flagship/storage";
-import { customDomainAllowance } from "./customDomainEntitlement.js";
+import type { CustomDomainOrderRecord, CustomDomainOrderStorage, TierStorage } from "@flagship/storage";
+import { customDomainAllowance, inLapseGrace } from "./customDomainEntitlement.js";
 import { malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 /** Length-checked, then XOR-accumulated constant-time compare. The
@@ -43,9 +43,11 @@ export interface ActiveRedirectionsDeps {
   now?: () => number;
 }
 
-async function paid(deps: ActiveRedirectionsDeps, userId: string): Promise<boolean> {
+/** Paid for, or inside the lapse grace the verifier started (fails closed once it ends). */
+async function paid(deps: ActiveRedirectionsDeps, order: CustomDomainOrderRecord): Promise<boolean> {
   const now = (deps.now ?? (() => Date.now()))();
-  return (await customDomainAllowance(deps.tiers, userId, now)).limit > 0;
+  if (inLapseGrace(order, now)) return true;
+  return (await customDomainAllowance(deps.tiers, order.userId, now)).limit > 0;
 }
 
 export interface RedirectionEntry {
@@ -73,7 +75,7 @@ export async function handleActiveRedirections(
   const active = await deps.customDomainOrders.listActive();
   const redirections: RedirectionEntry[] = [];
   for (const r of active) {
-    if (!r.podCanonical || !(await paid(deps, r.userId))) continue;
+    if (!r.podCanonical || !(await paid(deps, r))) continue;
     redirections.push({ fqdn: r.fqdn, podCanonical: r.podCanonical });
   }
   return ok({ redirections });
@@ -107,7 +109,7 @@ export async function handleRedirectionLookup(
   }
   const active = await deps.customDomainOrders.listActive();
   const hit = active.find((r) => r.fqdn.toLowerCase() === f && !!r.podCanonical);
-  if (!hit || !hit.podCanonical || !(await paid(deps, hit.userId))) {
+  if (!hit || !hit.podCanonical || !(await paid(deps, hit))) {
     return { status: 404, body: { found: false } };
   }
   return ok({ found: true, fqdn: hit.fqdn, podCanonical: hit.podCanonical });

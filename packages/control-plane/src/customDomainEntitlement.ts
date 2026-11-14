@@ -33,6 +33,20 @@ export function isSuspended(r: CustomDomainOrderRecord): boolean {
   return r.status === "pending" && !!r.podCanonical;
 }
 
+/** An active domain outside the plan keeps serving this long after the verifier first sees it (then fails closed). */
+export const CUSTOM_DOMAIN_GRACE_MS = 30 * 86_400_000;
+
+/** Still inside the grace period that began when the verifier first found it outside the plan. */
+export function inLapseGrace(r: CustomDomainOrderRecord, now: number): boolean {
+  return r.lapsedAt !== undefined && now - r.lapsedAt < CUSTOM_DOMAIN_GRACE_MS;
+}
+
+/** The order without its lapse mark. */
+export function withoutLapse(r: CustomDomainOrderRecord): CustomDomainOrderRecord {
+  const { lapsedAt: _drop, ...rest } = r;
+  return rest;
+}
+
 export interface CustomDomainAllowance {
   tier: TierName;
   limit: number;
