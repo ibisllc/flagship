@@ -13929,5 +13929,9 @@
   "No server on this phone can take a browser yet.": {
     "en": "No server on this phone can take a browser yet.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift"
+  },
+  "Choose where this server's backups go.": {
+    "en": "Choose where this server's backups go.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift (W3: why Continue is off)"
   }
 }

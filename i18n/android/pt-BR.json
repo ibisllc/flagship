@@ -3513,5 +3513,6 @@
   "keyfile_import_refused": "O Flagship não aceitou este arquivo de chave para %1$s. Nada foi alterado neste dispositivo. Tente novamente em alguns minutos.",
   "no_camera_on_the_other_device_send_link": "O outro dispositivo não tem câmera? Envie este link para ele e cole-o lá.",
   "backup_account_key_unavailable": "Não foi possível usar a chave da sua conta para abrir este backup. Tente de novo ou digite o código dele.",
-  "backup_account_key_doesnt_open": "A chave desta conta não abre este backup. Digite o código dele para abri-lo."
+  "backup_account_key_doesnt_open": "A chave desta conta não abre este backup. Digite o código dele para abri-lo.",
+  "choose_where_this_servers_backups_go": "Escolha para onde vão os backups deste servidor."
 }

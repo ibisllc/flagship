@@ -3450,5 +3450,6 @@
   "keyfile_import_refused": "c958c7baf23f",
   "no_camera_on_the_other_device_send_link": "fb69635d1b27",
   "backup_account_key_unavailable": "e0e59b2714a2",
-  "backup_account_key_doesnt_open": "296993e6ee1a"
+  "backup_account_key_doesnt_open": "296993e6ee1a",
+  "choose_where_this_servers_backups_go": "ba0b18a1f6b8"
 }

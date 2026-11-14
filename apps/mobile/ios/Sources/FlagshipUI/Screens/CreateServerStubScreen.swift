@@ -325,6 +325,14 @@ public struct CreateServerStubScreen: View {
                     vm.proceedToDelivery()
                 }
                 .accessibilityIdentifier("cs-continue-button")
+                if vm.backupPolicy == nil {
+                    // W3: a disabled Continue with no reason read as "does nothing".
+                    Text("Choose where this server's backups go.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .accessibilityIdentifier("cs-continue-hint")
+                }
             }
             if designStep > 0 {
                 FSGhostButton(String(localized: "Back"), block: true) { designStep -= 1 }

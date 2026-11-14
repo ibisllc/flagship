@@ -3516,4 +3516,5 @@
     <string name="no_camera_on_the_other_device_send_link">L’autre appareil n’a pas de caméra ? Envoyez-lui ce lien et collez-le là-bas.</string>
     <string name="backup_account_key_unavailable">Impossible d’utiliser la clé de votre compte pour ouvrir cette sauvegarde. Réessayez ou saisissez son code d’accès.</string>
     <string name="backup_account_key_doesnt_open">La clé de ce compte n’ouvre pas cette sauvegarde. Saisissez son code d’accès pour l’ouvrir.</string>
+    <string name="choose_where_this_servers_backups_go">Choisissez où vont les sauvegardes de ce serveur.</string>
 </resources>

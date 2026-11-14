@@ -3513,5 +3513,6 @@
   "keyfile_import_refused": "Flagship n’a pas accepté ce fichier de clé pour %1$s. Rien n’a été modifié sur cet appareil. Réessayez dans quelques minutes.",
   "no_camera_on_the_other_device_send_link": "L’autre appareil n’a pas de caméra ? Envoyez-lui ce lien et collez-le là-bas.",
   "backup_account_key_unavailable": "Impossible d’utiliser la clé de votre compte pour ouvrir cette sauvegarde. Réessayez ou saisissez son code d’accès.",
-  "backup_account_key_doesnt_open": "La clé de ce compte n’ouvre pas cette sauvegarde. Saisissez son code d’accès pour l’ouvrir."
+  "backup_account_key_doesnt_open": "La clé de ce compte n’ouvre pas cette sauvegarde. Saisissez son code d’accès pour l’ouvrir.",
+  "choose_where_this_servers_backups_go": "Choisissez où vont les sauvegardes de ce serveur."
 }
