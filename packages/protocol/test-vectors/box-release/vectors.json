@@ -1,0 +1,137 @@
+{
+  "description": "flagship/box-release/v1: an admin-root-signed order that wipes a retail box back to unclaimed (docs/retail-box-setup.md §8.2).",
+  "keys": {
+    "adminRootSeedHex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "adminRootPubHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "irkPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+  },
+  "order": {
+    "fields": {
+      "serverDomain": "home.alice.flagship.services",
+      "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "issuedAt": 1790000000000,
+      "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+    },
+    "canonical": "flagship/box-release/v1|home.alice.flagship.services|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1790000000000|0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "signatureHex": "75f9d320460597ef7a629b46ef0930a46b79d36ef9f8dc33d1c4232c703cefc461647ddde9030308c0f5bf87d824d9f32365399e647ad78c342203535a3ff800"
+  },
+  "reject": [
+    {
+      "why": "signed by the IRK, not the admin root",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "signatureHex": "4842d97956cfe18b467b27a70c6148ebf09cf70a0f2cd3fcd9650fb992c8aaba204ecbd40682282df1ed7c3091cf4f89b846b68c4a924050d289c07cbba15500",
+      "verifyUnder": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+    },
+    {
+      "why": "the admin root's signature checked under the IRK",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "signatureHex": "75f9d320460597ef7a629b46ef0930a46b79d36ef9f8dc33d1c4232c703cefc461647ddde9030308c0f5bf87d824d9f32365399e647ad78c342203535a3ff800",
+      "verifyUnder": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+    },
+    {
+      "why": "another box's key in the order",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "signatureHex": "75f9d320460597ef7a629b46ef0930a46b79d36ef9f8dc33d1c4232c703cefc461647ddde9030308c0f5bf87d824d9f32365399e647ad78c342203535a3ff800",
+      "verifyUnder": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+    },
+    {
+      "why": "a later time than signed",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000001,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "signatureHex": "75f9d320460597ef7a629b46ef0930a46b79d36ef9f8dc33d1c4232c703cefc461647ddde9030308c0f5bf87d824d9f32365399e647ad78c342203535a3ff800",
+      "verifyUnder": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+    }
+  ],
+  "refuse": [
+    {
+      "why": "upper-case domain",
+      "fields": {
+        "serverDomain": "Home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "domain"
+    },
+    {
+      "why": "separator in the domain",
+      "fields": {
+        "serverDomain": "home|x",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "domain"
+    },
+    {
+      "why": "short key",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "stk"
+    },
+    {
+      "why": "upper-case key",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17CB79FB2B4120F2B1EC65E4198D6E08B28E813FEB01E4A400839B85E18080CE",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "stk"
+    },
+    {
+      "why": "fractional time",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1.5,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "time"
+    },
+    {
+      "why": "zero time",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 0,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "time"
+    },
+    {
+      "why": "short nonce",
+      "fields": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "issuedAt": 1790000000000,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+      },
+      "problem": "nonce"
+    }
+  ]
+}
