@@ -11,6 +11,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/secret-request/v1",
     "flagship/tunnel-hello/v2",
     "flagship/daemon-status/v1",
+    "flagship/box-health/v1",
     "flagship/service-invite-list/v1",
     "flagship/service-invite-create-fetch/v1",
     "flagship/service-invite-co-manager/v1",
@@ -849,6 +850,25 @@ mod tests {
         ] {
             assert!(!is_pairing_order(bad));
         }
+    }
+
+    #[test]
+    fn signs_the_health_timers_report() {
+        // healthReporter.ts asks keyd (`sign-health`) so a strict installation keeps the box's health.
+        assert_eq!(
+            check_sign_with(
+                br#"flagship/box-health/v1|{"v":1}"#,
+                PUB,
+                BOX_SIGN_PURPOSES,
+                Some("ab")
+            )
+            .unwrap(),
+            "flagship/box-health/v1"
+        );
+        assert_eq!(
+            ok(r#"flagship/box-health/v1|{"v":1}"#),
+            "flagship/box-health/v1"
+        );
     }
 
     #[test]

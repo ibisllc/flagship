@@ -44,6 +44,11 @@ const ISSUANCE_BOX_PURPOSES = new Set(["flagship/certificate-order/v1"]);
  * signs one through keyd's policy.
  */
 const MESH_BOX_PURPOSES = new Set(["flagship/relay-attachment/v1"]);
+/**
+ * The health timer's report is signed through keyd's `sign-health` command (keyd healthSign.ts, run by the bash
+ * timer server-daemon healthReporter.ts writes), which this scan cannot follow; keyd tests/healthSign.test.ts signs one.
+ */
+const HEALTH_BOX_PURPOSES = new Set(["flagship/box-health/v1"]);
 
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [
@@ -76,7 +81,7 @@ describe("box signing purposes", () => {
   });
 
   it("lists nothing the box does not sign", () => {
-    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t) && !MESH_BOX_PURPOSES.has(t));
+    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t) && !MESH_BOX_PURPOSES.has(t) && !HEALTH_BOX_PURPOSES.has(t));
     expect(idle).toEqual([]);
     for (const t of NOT_BOX_PURPOSES) expect(BOX_SIGN_PURPOSES.has(t), t).toBe(false);
   });

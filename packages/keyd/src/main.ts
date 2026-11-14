@@ -8,6 +8,8 @@ import { AcmeAccount } from "./acme.js";
 import { TlsKeys } from "./tls.js";
 import { CEREMONY_TOKEN_FILE, CEREMONY_WINDOW_MS, handOverToKeydUser, legacyTlsFiles, loadOwnerAnchor, loadPolicy, migrateKeyFiles, namesFor, scrubEnvFile, shareInstallBlobWithDaemon, writeOwnerAnchorFromConfig, writePolicyFromEnv } from "./migrate.js";
 import { KEYD_CLIENT_GROUP, KEYD_USER } from "./unit.js";
+import { KeydClient } from "./client.js";
+import { signBoxHealth } from "./healthSign.js";
 
 const STATE = process.env.FLAGSHIP_KEYD_STATE ?? "/var/lib/flagship-keyd";
 const SOCKET = process.env.FLAGSHIP_KEYD_SOCKET ?? "/run/flagship-keyd/keyd.sock";
@@ -44,6 +46,19 @@ async function main(): Promise<void> {
       scrubEnvFile("/etc/flagship-bootstrap.env", ["SERVER_IDENTITY_PRIV_HEX"]),
     ];
     console.log(JSON.stringify({ ...r, tlsImported, scrubbedEnvFiles: scrubbed.filter(Boolean).length }));
+    return;
+  }
+  if (cmd === "sign-health") {
+    // The health timer (server-daemon healthReporter.ts), as root: sign one tagged report.
+    const file = process.argv[3];
+    if (!file) throw new Error("usage: sign-health <tagged report file>");
+    const client = new KeydClient({ socketPath: SOCKET, component: "health-timer", timeoutMs: 10_000 });
+    try {
+      await client.connect();
+      console.log(JSON.stringify(await signBoxHealth(client, new Uint8Array(readFileSync(file)))));
+    } finally {
+      client.close();
+    }
     return;
   }
   if (cmd !== "serve") throw new Error(`unknown command ${cmd}`);

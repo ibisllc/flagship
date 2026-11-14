@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { canonicalBoxHealthReport, ed, TAG_BOX_HEALTH } from "@flagship/protocol";
+import { canonicalBoxHealthReport, canonicalPqKeyBinding, ed, hybridSigKeygen, hybridSign, TAG_BOX_HEALTH } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import { handleGetUserPods, handlePostServerHealth } from "../src/index.js";
+import { handlePutPqKeyBinding } from "../src/pqKeyBindings.js";
 
 const NOW = 1_800_000_000_000;
 const DOMAIN = "home2.harry.flagship.services";
@@ -129,5 +130,20 @@ describe("tagged box health reports (B2 #2)", () => {
     const r = report();
     const res = await handlePostServerHealth(gated, DOMAIN, { report: r, signature: tagged(r), pqSignature: { suite: "x" } });
     expect(res.body).toMatchObject({ error: "signature refused: unknown-suite" });
+  });
+
+  it("takes a strict installation's report when the box signs it hybrid with its bound STK (keyd sign-health)", async () => {
+    const { storage, deps } = await setup();
+    const pqSeed = new Uint8Array(32).fill(0x2b);
+    const secret = Uint8Array.from([...sk, ...pqSeed]);
+    const st = { role: "box-stk" as const, subjectId: DOMAIN, ed25519PubHex: hex(pub), mldsaPubHex: hex(hybridSigKeygen(sk, pqSeed).publicKey.subarray(32)), issuedAt: NOW - 60_000 };
+    const binding = { v: 1 as const, ...st, signature: hex(hybridSign(secret, "flagship/pq-key-binding/v1", canonicalPqKeyBinding(st))) };
+    expect((await handlePutPqKeyBinding({ servers: storage.servers, pqTrust: storage.pqTrust, now: () => NOW }, DOMAIN, binding)).status).toBe(200);
+    await storage.pqTrust.putPolicy({ scopeKind: "installation", scopeId: DOMAIN, profile: "strict", rollout: "enforced", generation: 1, headDigest: "00".repeat(32), enforcedEver: true, updatedAt: NOW });
+    const gated = { ...deps, pqTrust: storage.pqTrust };
+    const r = report();
+    const pqSignature = { suite: "hybrid-ed25519-mldsa65/v1", signature: hex(hybridSign(secret, TAG_BOX_HEALTH, canonicalBoxHealthReport(r))) };
+    const res = await handlePostServerHealth(gated, DOMAIN, { report: r, signature: tagged(r), pqSignature });
+    expect(res.status).toBe(200);
   });
 });
