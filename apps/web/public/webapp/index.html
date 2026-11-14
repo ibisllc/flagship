@@ -24,6 +24,9 @@
       <p class="subtitle" id="subtitle">Setting up…</p>
     </header>
 
+    <!-- The shell: on a phone the nav is the bottom tab bar; from 700 px wide it is a sidebar beside main, and
+         from 1100 px a detail screen opens beside its list (lib/layout.js, style.css "Responsive shell"). -->
+    <div class="app-shell">
     <main>
       <div id="companion-mode-banner" class="companion-mode-banner hidden" role="status">
         <strong>Keyless remote</strong>
@@ -313,50 +316,50 @@
         <div class="fs-group-section">
           <div class="fs-group-header">ACCOUNT</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-quantum-safety"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Quantum-safe protection</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI API keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-account-security" data-split-view="view-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-quantum-safety" data-split-view="view-quantum-safety"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Quantum-safe protection</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-providers" data-split-view="view-settings"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI API keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-recovery" data-split-view="view-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-page"><span class="fs-row-icon icon" data-row-icon="page"></span><span class="fs-row-body"><span class="fs-row-title">Your page</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-messages"><span class="fs-row-icon icon" data-row-icon="messages"></span><span class="fs-row-body"><span class="fs-row-title">Messages</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-messages" data-split-view="view-messages-settings"><span class="fs-row-icon icon" data-row-icon="messages"></span><span class="fs-row-body"><span class="fs-row-title">Messages</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-profiles" data-split-view="view-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
         <div class="fs-group-section">
           <div class="fs-group-header">DEVICES</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-trusted-devices" data-split-view="view-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-join-account"><span class="fs-row-icon icon" data-row-icon="scan"></span><span class="fs-row-body"><span class="fs-row-title">Scan a code or enter a link</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Remote</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-sessions" data-split-view="view-paired-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-dock" data-split-view="view-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Remote</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-requests" data-split-view="view-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
         <div class="fs-group-section">
           <div class="fs-group-header">WEB ACCESS</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-secured-sessions" data-split-view="view-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
         <div class="fs-group-section">
           <div class="fs-group-header">BACKUP &amp; PEERS</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-peer-backup" data-split-view="view-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
         <div class="fs-group-section">
           <div class="fs-group-header">APP</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-appearance"><span class="fs-row-icon icon" data-row-icon="appearance"></span><span class="fs-row-body"><span class="fs-row-title">Appearance</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-appearance" data-split-view="view-appearance"><span class="fs-row-icon icon" data-row-icon="appearance"></span><span class="fs-row-body"><span class="fs-row-title">Appearance</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-push"><span class="fs-row-icon icon" data-row-icon="push"></span><span class="fs-row-body"><span class="fs-row-title">Notifications</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-privacy"><span class="fs-row-icon icon" data-row-icon="privacy"></span><span class="fs-row-body"><span class="fs-row-title">Privacy</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-about"><span class="fs-row-icon icon" data-row-icon="about"></span><span class="fs-row-body"><span class="fs-row-title">About</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-privacy" data-split-view="view-privacy"><span class="fs-row-icon icon" data-row-icon="privacy"></span><span class="fs-row-body"><span class="fs-row-title">Privacy</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-about" data-split-view="view-about"><span class="fs-row-icon icon" data-row-icon="about"></span><span class="fs-row-body"><span class="fs-row-title">About</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
@@ -1225,8 +1228,8 @@
     <!--
       Task #23 — 4-tab IA shell.
 
-      Bottom-fixed on ≤768px (the dominant mobile case — daily-use surface),
-      top-strip under the header on ≥769px. Tap-only switches (no swipe);
+      Bottom-fixed below 700px (the dominant mobile case — daily-use surface),
+      a sidebar beside main from 700px. Tap-only switches (no swipe);
       see commit body for the rationale (collides with the horizontal scrolls
       inside transcripts + JSON dumps and steals iOS back-swipe). The active
       tab is highlighted by the router via syncTabBar() reacting to show().
@@ -1254,6 +1257,7 @@
         <span class="tab-bar-label">Settings</span>
       </button>
     </nav>
+    </div>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 

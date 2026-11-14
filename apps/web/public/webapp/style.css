@@ -436,7 +436,7 @@ header .subtitle {
 
 main {
   padding: var(--space-6) var(--space-6) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
-  /* Tab bar fixed at the bottom of the viewport on ≤768px — pad main
+  /* Tab bar fixed at the bottom of the viewport below 700px — pad main
    * so the last card of every view never sits under it. The 80px figure
    * is tab-bar height (64) + a 16px optical breathing room. */
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
@@ -469,13 +469,6 @@ main {
   text-transform: uppercase;
 }
 [data-companion-unavailable="true"] { opacity: 0.42; cursor: not-allowed; }
-@media (min-width: 769px) {
-  main {
-    /* On desktop the tab strip is at the top, not the bottom — the
-     * bottom-bar padding above isn't needed and would leave a void. */
-    padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
-  }
-}
 
 /* Section headings. A view's own title (its first heading) is set like the
  * site's page titles: Geist, medium weight, tight tracking. Later headings
@@ -1381,16 +1374,14 @@ section:not(.hidden) {
 
 /* ── Tab bar (#23) ─────────────────────────────────────────────────
  *
- * Mobile (≤768px): bottom-fixed, glued to the bottom safe-area inset
+ * Phone (below 700px): bottom-fixed, glued to the bottom safe-area inset
  * so the iOS home indicator never overlaps an icon. Top-stroke shows
  * the active tab; we deliberately use the accent only on the active
  * label/icon (not the whole pill) so the bar stays calm in the
  * peripheral vision while the user reads the screen above.
  *
- * Desktop (≥769px): the same nav becomes a horizontal top strip
- * underneath the header. The strip pins to the same `position: sticky`
- * as the header so it scrolls with the page on overflow-y pages but
- * sticks to the top once anchored — same behaviour as Mail.app.
+ * From 700px: the same nav becomes the sidebar of the iPad layout
+ * ("Responsive shell" at the end of this file).
  *
  * Interaction model: tap-only. Swipe-between-tabs was considered and
  * dropped — would fight the horizontal scrolls inside transcripts /
@@ -1472,33 +1463,6 @@ section:not(.hidden) {
  * adds `.no-tabs` to body in app.js when those views are showing. */
 body.no-tabs .tab-bar { display: none; }
 
-@media (min-width: 769px) {
-  /* The nav comes last in the markup; on desktop it belongs right under the
-     header, so the body lays its children out in that order. */
-  body { display: flex; flex-direction: column; }
-  body > header { order: -2; }
-  body > .tab-bar { order: -1; }
-  .tab-bar {
-    position: sticky;
-    /* sit under the header (56px tall), which itself sits under the slivers */
-    top: calc(56px + env(safe-area-inset-top, 0px) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px));
-    bottom: auto;
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    border-top: none;
-    border-bottom: 1px solid var(--border-soft);
-    padding: 6px env(safe-area-inset-right, 0px) 6px env(safe-area-inset-left, 0px);
-  }
-  .tab-bar-btn {
-    flex-direction: row;
-    min-height: 44px;
-    font-size: 11px;
-    gap: 8px;
-  }
-  .tab-bar-btn::before { top: auto; bottom: 0; }
-  .tab-bar-btn.is-active::before { top: auto; bottom: -7px; left: 18%; right: 18%; }
-}
 
 /* ── Skeleton loading primitive (#37) ──────────────────────────
  *
@@ -3210,9 +3174,6 @@ button.ph-edit:hover .ph-edit-text { text-decoration: underline; text-decoration
 .ph-bar.is-revealed .ph-bar-in { opacity: 1; transform: none; pointer-events: auto; }
 .ph-bar-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ph-bar-status { font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
-@media (min-width: 769px) {
-  .ph-bar { top: calc(56px + 57px + env(safe-area-inset-top, 0px) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px)); }
-}
 @media (max-width: 380px) {
   .ph { padding: var(--space-3); }
   .ph-top { gap: 12px; }
@@ -3284,7 +3245,6 @@ button.fs-switch:disabled { opacity: 0.4; }
 }
 .pe-bar-text { font-size: 14px; font-weight: 500; min-width: 0; }
 .pe-bar button { width: auto; flex: 0 0 auto; }
-@media (min-width: 769px) { .pe-bar-slot { bottom: 16px; } }
 
 /* The Messages tab stands out in the bar: its glyph sits in a teal disc, a little larger and raised. */
 .tab-bar-btn[data-tab-target="messages"] { color: var(--ink); font-weight: 600; }
@@ -3305,9 +3265,159 @@ button.fs-switch:disabled { opacity: 0.4; }
 .tab-bar-btn[data-tab-target="messages"]:hover .icon,
 .tab-bar-btn[data-tab-target="messages"].is-active .icon { background: var(--teal-bright); color: var(--accent-on); }
 .tab-bar-btn[data-tab-target="messages"] .tab-bar-badge { top: -2px; left: calc(50% + 10px); box-shadow: 0 0 0 2px var(--canvas); }
-@media (min-width: 769px) {
-  .tab-bar-btn[data-tab-target="messages"] .icon { width: 30px; height: 30px; margin-top: 0; }
-  .tab-bar-btn[data-tab-target="messages"] .icon svg { width: 17px; height: 17px; }
-  .tab-bar-btn[data-tab-target="messages"] .tab-bar-badge { top: 2px; left: auto; right: 18%; }
-}
 .home-page-slot:empty { display: none; }
+
+/* ── Responsive shell (lib/layout.js; owner, 2026-11-14) ──────────────────────
+ * The iPad layout of the iOS app (RootShell iPadShell, ActivityScreen splitBody) on a wide window:
+ *   below 700px    the phone app: one screen, the bottom tab bar (unchanged)
+ *   700px up       the tab bar is a sidebar beside main; a screen keeps a comfortable reading width
+ *   1100px up      a detail screen opens beside the list it came from (router.js applyPanes marks
+ *                  .pane-list / .pane-detail and main.is-split)
+ *   1440px up      wider sidebar, list and reading column
+ * The breakpoints are mirrored in lib/layout.js. Pre-sign-in screens (body.no-tabs) stay one centred column. */
+.app-shell { min-width: 0; }
+.app-shell > main { min-width: 0; }
+
+@media (min-width: 700px) {
+  :root {
+    --sidebar-w: 224px;
+    --list-w: 340px;
+    --pane-max: 720px;
+    --detail-max: 760px;
+    --shell-top: calc(56px + env(safe-area-inset-top, 0px) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px));
+  }
+  body:not(.no-tabs) { max-width: none; }
+  body:not(.no-tabs) .app-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    align-items: start;
+  }
+  body:not(.no-tabs) .app-shell > main {
+    grid-column: 2;
+    grid-row: 1;
+    padding: var(--space-6) var(--space-8) calc(48px + env(safe-area-inset-bottom, 0px));
+  }
+  /* One screen: a reading column, centred in the space beside the sidebar. */
+  body:not(.no-tabs) main:not(.is-split) > section {
+    max-width: var(--pane-max);
+    margin-inline: auto;
+  }
+  body:not(.no-tabs) main > .companion-mode-banner {
+    max-width: var(--pane-max);
+    margin-inline: auto;
+  }
+
+  /* The sidebar: the tab bar's own buttons, one per row, icon and name, as iOS's Sidebar. */
+  .app-shell > .tab-bar {
+    grid-column: 1;
+    grid-row: 1;
+    position: sticky;
+    top: var(--shell-top);
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 5;
+    height: calc(100dvh - var(--shell-top));
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-5) var(--space-3) calc(var(--space-5) + env(safe-area-inset-bottom, 0px)) calc(var(--space-3) + env(safe-area-inset-left, 0px));
+    overflow-y: auto;
+    background: color-mix(in srgb, var(--canvas-2) 70%, var(--canvas));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-top: none;
+    border-right: 1px solid var(--border-soft);
+  }
+  .tab-bar-btn {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+  }
+  .tab-bar-btn .icon { flex: none; }
+  .tab-bar-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-bar-btn:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
+  .tab-bar-btn.is-active { background: var(--surface); border-color: var(--border); color: var(--ink); font-weight: 600; }
+  .tab-bar-btn.is-active::before { left: -1px; right: auto; top: 10px; bottom: 10px; width: 2px; height: auto; }
+  .tab-bar-btn:focus-visible { outline-offset: 0; }
+  .tab-bar-badge { position: static; margin-left: auto; }
+  .tab-bar-btn[data-tab-target="messages"] .icon { width: 28px; height: 28px; margin: -4px; box-shadow: inset 0 0 0 1px var(--accent); }
+  .tab-bar-btn[data-tab-target="messages"] .icon svg { width: 16px; height: 16px; }
+  .tab-bar-btn[data-tab-target="messages"] .tab-bar-badge { position: static; box-shadow: none; }
+  .tab-bar-btn[data-tab-target="messages"] .icon + .tab-bar-label { margin-left: 4px; }
+
+  /* Bars that sat above the bottom tab bar sit at the bottom of the window. */
+  .pe-bar-slot { bottom: 16px; }
+  .thread-compose { bottom: 0; }
+
+  /* A row that opens a page shows where the pointer and the keyboard are. */
+  .fs-row:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: -2px; box-shadow: inset 0 0 0 3px var(--focus-inner); }
+}
+
+@media (min-width: 1100px) {
+  /* List and detail side by side: the list keeps its place and scrolls on its own, the page scrolls the detail. */
+  body:not(.no-tabs) main.is-split {
+    display: grid;
+    grid-template-columns: var(--list-w) minmax(0, 1fr);
+    align-items: start;
+    padding: 0;
+  }
+  main.is-split > :not(section) { grid-column: 1 / -1; grid-row: 1; margin: var(--space-4) var(--space-6) 0; }
+  main.is-split > .pane-list {
+    grid-column: 1;
+    grid-row: 2;
+    position: sticky;
+    top: var(--shell-top);
+    max-height: calc(100dvh - var(--shell-top));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: var(--space-6) var(--space-5) var(--space-8);
+    border-right: 1px solid var(--border-soft);
+    background: color-mix(in srgb, var(--canvas-2) 35%, var(--canvas));
+  }
+  main.is-split > .pane-detail {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-6) max(var(--space-8), calc((100% - var(--detail-max)) / 2)) calc(48px + env(safe-area-inset-bottom, 0px));
+  }
+  /* The list's folded headers follow the window's scroll; in a pane of its own the large title is enough. */
+  main.is-split > .pane-list .fs-hero-compact,
+  main.is-split > .pane-list .ph-bar { display: none; }
+  main.is-split > .pane-list .fs-row.is-current { background: var(--accent-soft) !important; }
+  main.is-split > .pane-list .fs-row.is-current .fs-row-icon { color: var(--accent-graphic); }
+
+  /* Activity on its own: approvals and requests beside the feed (iOS splits the sections from their content). */
+  body:not(.no-tabs) main:not(.is-split) > #view-activity {
+    max-width: calc(var(--pane-max) * 1.6);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    column-gap: var(--space-8);
+    align-items: start;
+  }
+  main:not(.is-split) > #view-activity > * { grid-column: 1; min-width: 0; }
+  main:not(.is-split) > #view-activity > #activity-with-server { grid-column: 2; grid-row: 1 / span 8; }
+  main:not(.is-split) > #view-activity > #activity-with-server > h2:first-child { margin-top: 0; }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --sidebar-w: 264px;
+    --list-w: 380px;
+    --pane-max: 780px;
+    --detail-max: 860px;
+  }
+  .app-shell > .tab-bar { padding-inline: var(--space-4); }
+}
