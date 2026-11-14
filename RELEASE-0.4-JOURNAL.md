@@ -343,6 +343,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   box's certificate before "done"; the alarm gets a real "untrusted" state; the retail entry SHOWS on store builds:
   an online sales channel starts with 0.4 (so the box-side BlueZ GATT peripheral and Android screens are 0.4 work).
   Agents: `0.4/retail-apps-2` (iOS fixes + Android screens), `0.4/retail-bluez` (box GATT peripheral + daemon wiring).
+- 2026-11-14 Merged design docs/enterprise-accounts.md: orgs with seats (normal personal accounts admitted by the
+  org, per-org unlinkable seat keys), a signed org authority record with k-of-n thresholds (collected hybrid approvals
+  `flagship/org-approval/v1`, not threshold crypto), roles org/server/service admin + member, offboarding rotates every
+  secret incl. the disk key, offline recovery kit with a 14-day veto window, audit chain, enterprise plan tier.
+  Today's limits found: no device cap, 100 co-managers per box, no per-account share cap, 5,000 app visitors per app,
+  64 servers. Recommendation: cap 5 co-managers (10 on Pro Max), app visitors unlimited. Owner Qs Q-E1..Q-E15.
 
 ## Resume point
 
