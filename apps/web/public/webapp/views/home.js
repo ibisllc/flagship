@@ -839,6 +839,34 @@ function renderRecoveryBanner() {
     });
 }
 
+const ALLOWANCE_CARD_ID = "home-allowance-card";
+
+/**
+ * #6 / #7 — fetch + render the bandwidth usage/allowance card (with the
+ * over-allowance upgrade alert) above the server list. Best-effort: the
+ * allowance lib resolves to null on any failure / `!ok` / missing endpoint,
+ * in which case the host is left empty and removed — Home never breaks.
+ */
+async function renderAllowance(username) {
+  if (!username) {
+    document.getElementById(ALLOWANCE_CARD_ID)?.remove();
+    return;
+  }
+  let host = document.getElementById(ALLOWANCE_CARD_ID);
+  if (!host) {
+    host = document.createElement("div");
+    host.id = ALLOWANCE_CARD_ID;
+    const list = document.getElementById("servers-list");
+    list?.parentNode?.insertBefore(host, list);
+  }
+  const status = await renderAllowanceCard(host, username);
+  if (!status) {
+    host.remove();
+    return;
+  }
+  // The upgrade CTA is a plain anchor to /pro; nothing to wire (full-page nav).
+}
+
 const PAGE_WELCOME_ID = "home-page-welcome";
 
 /**
@@ -931,34 +959,6 @@ async function renderPageWelcome() {
       </button>
     </div>`;
   host.querySelector("[data-home-page-row]")?.addEventListener("click", goToPage);
-}
-
-const ALLOWANCE_CARD_ID = "home-allowance-card";
-
-/**
- * #6 / #7 — fetch + render the bandwidth usage/allowance card (with the
- * over-allowance upgrade alert) above the server list. Best-effort: the
- * allowance lib resolves to null on any failure / `!ok` / missing endpoint,
- * in which case the host is left empty and removed — Home never breaks.
- */
-async function renderAllowance(username) {
-  if (!username) {
-    document.getElementById(ALLOWANCE_CARD_ID)?.remove();
-    return;
-  }
-  let host = document.getElementById(ALLOWANCE_CARD_ID);
-  if (!host) {
-    host = document.createElement("div");
-    host.id = ALLOWANCE_CARD_ID;
-    const list = document.getElementById("servers-list");
-    list?.parentNode?.insertBefore(host, list);
-  }
-  const status = await renderAllowanceCard(host, username);
-  if (!status) {
-    host.remove();
-    return;
-  }
-  // The upgrade CTA is a plain anchor to /pro; nothing to wire (full-page nav).
 }
 
 /**
