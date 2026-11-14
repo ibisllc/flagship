@@ -14435,5 +14435,13 @@
   "The username and password can't contain control characters.": {
     "en": "The username and password can't contain control characters.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/BoxProxy.swift:170"
+  },
+  "One more approval for %@: authorize it to join your cloud.": {
+    "en": "One more approval for %@: authorize it to join your cloud.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift (toast: a new server asks for its second first-boot approval; %@ is the server name)"
+  },
+  "During its first 14 days it is under review and acts as a non-admin device.": {
+    "en": "During its first 14 days it is under review and acts as a non-admin device.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift (under the \"Also make this device an admin\" switch; Windows acceptance W14)"
   }
 }

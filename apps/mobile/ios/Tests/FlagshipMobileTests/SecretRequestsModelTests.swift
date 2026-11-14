@@ -132,6 +132,48 @@ final class SecretRequestsModelTests: XCTestCase {
         XCTAssertEqual(m.pendingCount, 1, "still waiting")
     }
 
+    func test_approvingAFirstBootUnlockWatchesForTheSecondStep() async {
+        // A new server asks again ~80 s later ("Authorize device to join your cloud"); that one came silently.
+        let watch = SecondStepWatch(window: 600)
+        let m = SecretRequestsModel(
+            source: { Source([self.request("new.u.flagship.services")]) },
+            isFirstBoot: { _ in true },
+            bootUnlock: BootUnlockStore(defaults: UserDefaults(suiteName: "approvals-\(UUID().uuidString)")!),
+            secondStep: watch
+        )
+        await m.reload()
+        guard case .loaded(let r) = m.state, let req = r.first else { return XCTFail("expected a request") }
+        _ = await m.approve(req)
+        XCTAssertEqual(watch.arrived(["new.u.flagship.services"]), ["new.u.flagship.services"])
+        XCTAssertEqual(watch.arrived(["new.u.flagship.services"]), [], "reported once")
+    }
+
+    func test_aRebootUnlockArmsNothing() async {
+        let watch = SecondStepWatch(window: 600)
+        let m = SecretRequestsModel(
+            source: { Source([self.request("old.u.flagship.services")]) },
+            isFirstBoot: { _ in false },
+            bootUnlock: BootUnlockStore(defaults: UserDefaults(suiteName: "approvals-\(UUID().uuidString)")!),
+            secondStep: watch
+        )
+        await m.reload()
+        guard case .loaded(let r) = m.state, let req = r.first else { return XCTFail("expected a request") }
+        _ = await m.approve(req)
+        XCTAssertEqual(watch.arrived(["old.u.flagship.services"]), [])
+    }
+
+    func test_secondStepWatchForgetsAfterItsWindowAndRoutesFreshOrders() {
+        let watch = SecondStepWatch(window: 600)
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        watch.arm("Home.U.flagship.services", now: t0)
+        XCTAssertEqual(watch.arrived(["home.u.flagship.services"], now: t0.addingTimeInterval(601)), [])
+        let req = BoxRequest(nonceHex: "ab", serverDomain: "home.u.flagship.services", type: .unlockKey, issuedAt: 1, expiresAt: 2)
+        let inbox = ["home.u.flagship.services": [req]]
+        XCTAssertTrue(SecondStepWatch.opensApprovals(fqdn: "HOME.u.flagship.services", neverOnline: true, inbox: inbox))
+        XCTAssertFalse(SecondStepWatch.opensApprovals(fqdn: "home.u.flagship.services", neverOnline: false, inbox: inbox))
+        XCTAssertFalse(SecondStepWatch.opensApprovals(fqdn: "home.u.flagship.services", neverOnline: true, inbox: [:]))
+    }
+
     func test_isAlreadyAnswered() {
         XCTAssertTrue(SecretRequestsModel.isAlreadyAnswered(ScreensClientError.http(status: 409, message: "")))
         XCTAssertFalse(SecretRequestsModel.isAlreadyAnswered(ScreensClientError.http(status: 403, message: "")))

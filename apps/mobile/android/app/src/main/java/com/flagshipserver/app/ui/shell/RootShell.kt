@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.R
+import kotlin.time.Duration.Companion.seconds
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -81,6 +82,19 @@ fun RootShell(
     var selected by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialTab ?: RootDestination.HOME) }
     val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
+
+    // A new server's second approval ("Authorize device to join your cloud") comes about 80 s after the first: when it
+    // shows in the inbox, bring the approvals back with a line saying so (SecondStepWatch).
+    val shellApp = com.flagshipserver.app.core.LocalAppState.current
+    val shellToasts = com.flagshipserver.app.core.LocalToastCenter.current
+    val shellInbox by shellApp.boxRequestInbox.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(shellInbox) {
+        val waiting = shellApp.serversAwaiting(com.flagshipserver.app.core.SecretPurpose.ENTITLEMENT)
+        for (server in com.flagshipserver.app.core.SecondStepWatch.shared.arrived(waiting)) {
+            shellToasts.info(com.flagshipserver.app.core.FSStrings.get(R.string.second_approval_waiting, server), 8.seconds)
+            deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.SecretRequests)
+        }
+    }
 
     var backupApproval by remember { mutableStateOf<com.flagshipserver.app.core.DeepLink.ApproveBackupDownload?>(null) }
     var voiciSignIn by remember { mutableStateOf<String?>(null) }

@@ -3440,5 +3440,9 @@
   "Rotate your inbox key?": "Posteingangsschlüssel erneuern?",
   "Your page is published again with the new key.": "Deine Seite wird mit dem neuen Schlüssel neu veröffentlicht.",
   "Conversations": "Unterhaltungen",
-  "Social": "Social"
+  "Social": "Social",
+  "One more approval for {0}: authorize it to join your cloud.": "Noch eine Freigabe für {0}: erlaube ihm, deiner Cloud beizutreten.",
+  "Another approval is still running. Wait for it to finish, then try again.": "Eine andere Freigabe läuft noch. Warte, bis sie fertig ist, und versuche es dann erneut.",
+  "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "Die Freigabe für {0} hat zu lange gedauert und wurde abgebrochen. Versuche es erneut oder gib ihn auf deinem Telefon frei.",
+  "During its first 14 days it is under review and acts as a non-admin device.": "In seinen ersten 14 Tagen wird es überprüft und gilt als Gerät ohne Adminrechte."
 }

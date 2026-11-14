@@ -652,6 +652,7 @@ const OPTIONAL_SHELL = [
   "/lib/humanError.js",
   "/lib/journal.js",
   "/lib/liveSync.js",
+  "/lib/secondStepWatch.js",
   "/lib/localPassphrase.js",
   "/lib/lockAndPower.js",
   "/lib/bootSuspension.js",

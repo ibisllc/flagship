@@ -3356,5 +3356,7 @@
   "Enter a username and password.": "ユーザー名とパスワードを入力してください。",
   "The username and password can be at most 255 bytes each.": "ユーザー名とパスワードは、それぞれ最大 255 バイトです。",
   "The username can't contain a colon.": "ユーザー名にコロンは使えません。",
-  "The username and password can't contain control characters.": "ユーザー名とパスワードに制御文字は使えません。"
+  "The username and password can't contain control characters.": "ユーザー名とパスワードに制御文字は使えません。",
+  "One more approval for %@: authorize it to join your cloud.": "%@ の承認があと1つあります: クラウドへの参加を許可してください。",
+  "During its first 14 days it is under review and acts as a non-admin device.": "最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。"
 }

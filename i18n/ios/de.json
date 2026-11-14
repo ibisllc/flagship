@@ -3358,5 +3358,7 @@
   "Enter a username and password.": "Gib einen Benutzernamen und ein Passwort ein.",
   "The username and password can be at most 255 bytes each.": "Benutzername und Passwort dürfen jeweils höchstens 255 Bytes lang sein.",
   "The username can't contain a colon.": "Der Benutzername darf keinen Doppelpunkt enthalten.",
-  "The username and password can't contain control characters.": "Benutzername und Passwort dürfen keine Steuerzeichen enthalten."
+  "The username and password can't contain control characters.": "Benutzername und Passwort dürfen keine Steuerzeichen enthalten.",
+  "One more approval for %@: authorize it to join your cloud.": "Noch eine Freigabe für %@: erlaube ihm, deiner Cloud beizutreten.",
+  "During its first 14 days it is under review and acts as a non-admin device.": "In seinen ersten 14 Tagen wird es überprüft und gilt als Gerät ohne Adminrechte."
 }

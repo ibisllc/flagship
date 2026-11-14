@@ -110,6 +110,9 @@ public struct AddDeviceScreen: View {
                     Text("Off by default. If on, this device will be able to wipe, transfer, or decommission your cloud — the same powers as your own device. Only turn this on for a device you fully control or a person you completely trust.")
                         .font(FS.font.caption())
                         .foregroundColor(vm.promoteNewDeviceToAdmin ? c.danger : c.textMuted)
+                    Text("During its first 14 days it is under review and acts as a non-admin device.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
                 }
             }
         }

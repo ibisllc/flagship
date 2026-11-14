@@ -208,7 +208,14 @@ public struct HomeTab: View {
                     serverListLocked: app.isServerListLocked,
                     canAddServers: AddServerGate.allows(app),
                     canChangeServers: AdminOrderGate.allows(app),
-                    onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
+                    onOpenPod: { pod in
+                        // A fresh order waiting for an approval opens the approval, not its install screen.
+                        if SecondStepWatch.opensApprovals(fqdn: pod.fqdn, neverOnline: pod.status == .pending || !pod.cameOnline, inbox: app.boxRequestInbox) {
+                            linker.enqueue(.secretRequests)
+                        } else {
+                            path.append(.serverDetail(podId: pod.podId))
+                        }
+                    },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
                     },

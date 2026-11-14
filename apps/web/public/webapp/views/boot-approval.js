@@ -25,9 +25,21 @@ import { fetchFirstBootMap } from "../lib/boxInbox.js";
 import { codeBoxHtml, refusalHtml } from "../lib/firstContact.js";
 import { KEY_CHANGED_CODE, retrustServer } from "../lib/serverPins.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
+import { secondStepWatch } from "../lib/secondStepWatch.js";
 
 import { tr } from "../lib/i18n.js";
 let inFlightId = null;
+const APPROVE_DEADLINE_MS = 90_000;
+const APPROVE_TIMED_OUT = "approve-timed-out";
+
+/** An approval that never settles must not hold every other card: give up after `ms` with a reason. */
+export function withDeadline(work, ms) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("approval timed out"), { code: APPROVE_TIMED_OUT })), ms);
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
 let pollTimer = null;
 const POLL_MS = 5000;
 
@@ -183,18 +195,27 @@ function bindCards(root, verified, firstBootMap) {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-approve-id");
       const req = verified.find((r) => r.id === id);
-      if (!req || inFlightId) return;
+      if (!req) return;
+      // A tap while another approval runs used to do nothing at all (Windows acceptance W14): say why.
+      if (inFlightId) {
+        toast(tr("Another approval is still running. Wait for it to finish, then try again."), "err");
+        return;
+      }
       inFlightId = id;
       btn.disabled = true;
       btn.textContent = tr("Working…");
       let answered = false;
       try {
-        await satisfy(req);
+        await withDeadline(satisfy(req), APPROVE_DEADLINE_MS);
         answered = true;
         toast(tr("Approved {0}. Your box will pick it up.", req.serverDomain));
+        // A new server asks once more ("Authorize device to join your cloud"): watch for it.
+        if (req.purpose === "unlock-key" && (firstBootMap[req.serverDomain] ?? true)) secondStepWatch.arm(req.serverDomain);
       } catch (e) {
         if (isAlreadyAnswered(e)) {
           answered = true; // someone answered it already: done, no error
+        } else if (e?.code === APPROVE_TIMED_OUT) {
+          toast(tr("Approving {0} took too long and was stopped. Try again, or approve it from your phone.", req.serverDomain), "err");
         } else if (e?.code === KEY_CHANGED_CODE) {
           await offerTrustNewKey(e);
         } else {

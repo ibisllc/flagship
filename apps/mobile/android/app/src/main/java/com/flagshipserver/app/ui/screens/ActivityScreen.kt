@@ -104,7 +104,10 @@ fun ActivityScreen(
     LaunchedEffect(Unit) { vm.load() }
     // Server approvals live in their section, so the count is known while it is closed.
     val approvals = rememberApprovals()
-    LaunchedEffect(approvals) { approvals.reload() }
+    // The directory's inbox changed (a box asked something, or a request was answered): fetch the list again, so a new
+    // server's second request shows without a manual refresh.
+    val inboxIds = app.boxRequestInbox.collectAsState().value.values.flatten().map { it.id }.toSet()
+    LaunchedEffect(approvals, inboxIds) { approvals.reload() }
     val approvalsState by approvals.state.collectAsState()
     val approvalsCount = (approvalsState as? LoadingState.Loaded)?.value?.size ?: 0
     val chatCenter = com.flagshipserver.app.core.LocalChatRequestCenter.current

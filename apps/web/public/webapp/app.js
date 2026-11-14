@@ -43,6 +43,7 @@ import { initSliverUi } from "./lib/sliverUi.js";
 import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./lib/companionGuard.js";
 import { applyDemoSettingsRestrictions, isDemoProfile } from "./lib/demoAccount.js";
 import { liveSync } from "./lib/liveSync.js";
+import { secondStepWatch } from "./lib/secondStepWatch.js";
 import { autoPairFromSnapshot } from "./lib/autoPair.js";
 import { preferLeaderAsCurrent } from "./lib/appPlacement.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
@@ -138,7 +139,7 @@ import { initBrowserViewerView } from "./views/browser-viewer.js";
 import { initCreateServerView } from "./views/create-server.js";
 import { initActivityView, renderActivity } from "./views/activity.js";
 import { initAccountAuditView } from "./views/account-audit.js";
-import { initBootApprovalView } from "./views/boot-approval.js";
+import { initBootApprovalView, enterBootApproval } from "./views/boot-approval.js";
 import { initPendingServerView, enterPendingServer } from "./views/pending-server.js";
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
@@ -785,6 +786,15 @@ async function boot() {
   // that does NOT hard-halt .com I/O (unlike the control-CA class); the box
   // keeps relaying once an owner exception covers it.
   liveSync.subscribe((snap) => { void updateRelayTrustFromPods(snap.pods); });
+
+  // A new server's second approval ("Authorize device to join your cloud") comes about 80 s after the first: when it
+  // shows in the inbox, bring the approvals back with a line saying so (lib/secondStepWatch.js).
+  liveSync.subscribe((snap) => {
+    for (const server of secondStepWatch.arrived(snap?.pods ?? [])) {
+      toast(tr("One more approval for {0}: authorize it to join your cloud.", server));
+      void enterBootApproval().catch(() => {});
+    }
+  });
 
   // Re-evaluate BOTH slivers' visibility on every navigation: the lock surfaces
   // hide them; unlocking back into the app reveals any running operations / a
