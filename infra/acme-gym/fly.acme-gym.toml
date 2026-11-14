@@ -1,0 +1,42 @@
+# flagship-acme-gym: the gym's private ACME CA (docs/gym-test-acme.md option D). Pebble behind Caddy; Fly ends TLS
+# with its own certificate for flagship-acme-gym.fly.dev (publicly trusted, not under our domain), which is what lets
+# the gym Worker fetch it. Gym only: production's `.com` never names this directory, and no production box trusts its
+# root (box trust is a seam on the `gym` branch).
+#
+# CREATE (owner, once; nothing here runs by itself), from this directory:
+#   flyctl apps create flagship-acme-gym
+#   flyctl ips allocate-v4 --shared -a flagship-acme-gym
+#   flyctl ips allocate-v6 -a flagship-acme-gym
+#   flyctl deploy -c fly.acme-gym.toml -a flagship-acme-gym --remote-only
+#   curl -fsS https://flagship-acme-gym.fly.dev/dir                        # newAccount etc. name this host
+#   curl -fsS https://flagship-acme-gym.fly.dev/roots/0 | openssl x509 -noout -subject     # "Pebble Root CA ..."
+#   curl -s -o /dev/null -w '%{http_code}\n' https://flagship-acme-gym.fly.dev/root-keys/0  # must be 404
+# RESTART (fresh root, fresh state; gym-refresh.sh does it before a run): flyctl apps restart flagship-acme-gym
+# TEAR DOWN: flyctl apps destroy flagship-acme-gym --yes (and empty ISSUANCE_ACME_DIRECTORY in wrangler.gym.toml first)
+
+app = "flagship-acme-gym"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Pebble keeps everything in memory: a stopped machine forgets every account and order and starts a new root.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/dir"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
