@@ -355,6 +355,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-14 Owner: "I agree on all. Build!!!" Enterprise decisions recorded (caps Free 5 / Pro 10 / Pro Max 25 /
   Enterprise per seat; Q-E3 yes; freeze only; pseudonym seats; founder 7-day removal with veto; bylaws ceremony).
   Agents: `0.4/comanager-caps`, `0.4/enterprise-build` (phases in order).
+- 2026-11-14 Merged restore-into-server box side (store generations incl. Rust broker, origin + codeHistory, stage/
+  plan/undo/discard orders with vectors and Swift/Kotlin/web ports, journaled runs, 7-day undo, no migration).
+  Decided under the owner's keywords: calm "being restored" page during the swap; restore Activity as code + params
+  translated by each app; undo images deleted on expiry; doc follows the built path. Agent continues with the screens.
+  Found: server-daemon `centralAuthorization` fails on /api/box-claim (given to the retail-bluez agent).
 
 ## Resume point
 
