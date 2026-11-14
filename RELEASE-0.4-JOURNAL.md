@@ -36,8 +36,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 
 ## Open questions for the owner (answer before the matching item starts)
 
-- Q1 **Calls:** what is a call here? (voice/video between Flagship accounts inside Messages? between a box's app
-  members? through the box or peer to peer?) No design doc exists yet.
+- Q1 **Calls:** ANSWERED by the plan found on branch `claude/sleepy-archimedes-pme2jy` (now on `release/0.4`):
+  `docs/voici-calls.md` (a visitor calls the page owner's phone, audio only, WebRTC over TURNS to the phone's bare
+  name) and the spike `docs/voici-calls-spike.md`. Its open decisions D1-D4 still need the owner.
 - Q2 **Preinstalled ISO:** an ISO/appliance with Flagship already installed that only needs pairing (no install
   step)? For USB on metal, VMs, or retail boxes (`feat/retail`)? No design doc exists yet.
 - Q3 **Subscriptions:** = the Pro / Pro Max plans with anonymous vouchers from `feat/marketplace`
@@ -107,7 +108,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       issuance, clients' opt-in and name screens, take `fshp.app` off the website mirror, tests.
 - [ ] F2 Subscriptions (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
       children Q3 names onto `release/0.4`; Pro payments + anonymous vouchers end to end on all three apps.
-- [ ] F3 Calls (Q1): design doc first, owner review, then build.
+- [ ] F3 Calls: build `docs/voici-calls.md` after the owner settles D1-D4 (plus its three voi.ci page fixes in the 0.4 list).
 - [ ] F4 Preinstalled ISO (Q2): design doc first, owner review, then build.
 - [ ] F5 Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
       strict check green); hybrid channel on by default with classical fallback and a fallback count; strict default
@@ -144,6 +145,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   by `STUDIO_PIPE_MIN = 2`, and it loops on new QR codes instead of showing the refusal (F12); owner told to update.
 - 2026-11-13 Owner: "make sure to include the post-0.3 work we kept for after 0.3 is in stores; let us clean
   everything". Swept code + docs for parked items: added P-clean (P7-P14) and F14.
+- 2026-11-13 P8 done (`1d6eceb57`). Found the calls plan on the unmerged branch `claude/sleepy-archimedes-pme2jy`
+  (spike, `docs/voici-calls.md`, 0.4 list items): replayed onto `release/0.4` (6 commits; its abuse-page commit was
+  already on main). The branch can be deleted (P9). Agents running: S1 advisor sweep, P3 gym test CA.
 
 ## Resume point
 
