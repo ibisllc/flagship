@@ -120,13 +120,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       keys a local-only X-Wing handshake (`flagship/box-claim/v1`), recipe as consent, box-signed receipt pins the
       server key, 5-press reset window; no NFC/first-come in v1; drop `box_serials`. Owner answers its Q1-Q10, then build
       (phase 1 software, testable on a VM; doubles as a preinstalled image for DIY metal).
-- [~] F5 (stage 1 part merged 2026-11-14: hybrid admin root, rotation + device-grant PQ companions, TS/Rust vectors, box + .com, D1 0138; crypto-graph 74 -> 65 bypasses, 18/18 strict targets still reachable; next: Swift/Kotlin signing of companions, then split key.irk) Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
+- [~] F5 (2026-11-14 also merged: Swift/Kotlin companions on rotate/add-device/create, re-pair + demo grants, CI vector check, IRK-signed box orders hybrid under strict; graph 16/18 strict targets reachable, 74 fallen, 59 paths. OPEN: webapp passes grantPqSignature (shell bump), rest of IRK sealing/boot. Stage 1 part merged 2026-11-14: hybrid admin root, rotation + device-grant PQ companions, TS/Rust vectors, box + .com, D1 0138; crypto-graph 74 -> 65 bypasses, 18/18 strict targets still reachable; next: Swift/Kotlin signing of companions, then split key.irk) Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
       strict check green); hybrid channel on by default with classical fallback and a fallback count; strict default
       for new accounts after the external review. Also the hybrid release catalog and the boot client's ML-DSA key.
 - [ ] F6 Take the zone-wide DNS token off `.com` (challenge TXT through the broker; release step 20 skips when unset).
 - [x] F7 (merged 2026-11-14: Web Push to UnifiedPush endpoints from .com with an SSRF guard, Android distributor-first transport, Settings row; D1 0136; needs WEBPUSH_VAPID_* secrets, an Android store build, a real ntfy test) UnifiedPush for de-Googled Android.
 - [x] F8 (merged 2026-11-14: correction window, weekly cooldown, account claim budget, 30-day custom-domain lapse grace; D1 0137; owner Qs in named-links §8.5) Human `voi.ci` service names (`docs/voici-service-names-todo.md`).
-- [~] F9 (merged 2026-11-13: Android stale recovery banner, "another account" backup refusal, W3 hint, W10, W26, raw recipe error, remaster temp folders, sealing stall at 12 min. LEFT: W14, W19, silent second boot approval, first-boot restarts, lingering Unlocking, window close, keep-awake log, MessageBox Pane) Windows acceptance findings (0.4 list section): W14, the silent second boot approval, first-boot daemon
+- [~] F9 (2026-11-14 merged: W19, silent second boot approval, first-boot restarts (order resumes across restarts incl. direct names), Unlocking lingering, W14 partly (taps never ignored, 90 s stop, review-period sentence; OWNER: may a device under review unlock boots?). Earlier merged 2026-11-13: Android stale recovery banner, "another account" backup refusal, W3 hint, W10, W26, raw recipe error, remaster temp folders, sealing stall at 12 min. LEFT: W14, W19, silent second boot approval, first-boot restarts, lingering Unlocking, window close, keep-awake log, MessageBox Pane) Windows acceptance findings (0.4 list section): W14, the silent second boot approval, first-boot daemon
       restarts restarting the certificate order, W19 empty Home, Android stale recovery banner and "another account"
       backup refusal, the Studio for Windows items, W3 Continue hint.
 - [x] F10 (merged 2026-11-13) In-app rules sheet names the nudity / violence rule (all apps, all languages).
@@ -253,6 +253,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   approval, first-boot restarts, Unlocking lingering, W14 partly) sent back for a semantic rebase over direct certs.
   Owner Qs: voi.ci name caps 5/25/100 vs 5/50/250, liveness 60 d, keep D7, 30-day domain cooldown; W14: may a device
   under review unlock boots?
+- 2026-11-14 Merged PQ client port and the boot fixes. Breakages found on release/0.4 (from the fold): iOS test
+  target `OutboundProxyTests.swift` does not compile; `UpdateLockGateTests.testNoClientSkipsTheGate` flags
+  `LiveScreensClient.swift:239`; webapp `webappShareServerFlows` share-notice tests fail. Fix agent started on
+  `0.4/fixups` (also the webapp grantPqSignature passthrough, shell v209). Running: retail phase 1, direct-access
+  screens.
 
 ## Resume point
 
