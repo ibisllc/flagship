@@ -221,6 +221,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-14 Merged `0.4/social-ios` (iOS Social tab; i18n conflict with small-fixes resolved by a 3-way key merge +
   `i18n-ios.mjs build`; `npm run i18n` ok; full iOS build not re-run after the merge) and the retail design v2.
   Owner questions: social-tab.md Q1-Q8 (guests, comments, passes); retail v2 Q1-Q8.
+- 2026-11-14 Session restart: the previous session's agents had stopped mid-work. Relaunched 7, each in its own worktree
+  and continuing from its uncommitted changes: `0.4/webapp-responsive` (U4), `0.4/social-ports` (U2/U3 Android + webapp),
+  `0.4/boot-remote` (F9 rest), `0.4/fold-features` (F2 fold: iOS catalog harvest, rebase), `0.4/firefox-extension`
+  (F16), `0.4/pq-stage1` (F5 stage 1, hybrid admin root), `0.4/direct-access-com` (F1 step 3). Retail v2 Q1-Q8 asked
+  of the owner again.
 
 ## Resume point
 
