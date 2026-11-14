@@ -3677,5 +3677,9 @@
   "The box is being wiped. It restarts as a new box.": "ボックスを消去しています。新しいボックスとして再起動します。",
   "Releasing…": "解放しています…",
   "Release this box?": "このボックスを解放しますか？",
-  "Wipe and release": "消去して解放"
+  "Wipe and release": "消去して解放",
+  "%lld of %lld co-managers across your servers": "共同管理者 %lld / %lld 人（全サーバー）",
+  "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": "無料プランでは、サーバー全体で共同管理者は最大 %lld 人です。先に1人外すか、Pro に切り替えると増やせます。",
+  "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": "Pro プランでは、サーバー全体で共同管理者は最大 %lld 人です。先に1人外すか、Pro Max に切り替えると増やせます。",
+  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "Pro Max プランでは、サーバー全体で共同管理者は最大 %lld 人です。先に1人外すか、Enterprise に切り替えると増やせます。"
 }

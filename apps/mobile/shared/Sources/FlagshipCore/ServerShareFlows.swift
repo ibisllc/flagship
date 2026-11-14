@@ -273,11 +273,14 @@ public struct OwnerSharesSnapshot: Equatable, Sendable {
     public var invitationsRead: Bool
     /// The box answered its share list.
     public var serverAnswered: Bool
+    /// The account's co-managers across its servers and the plan's cap, as the box counts them.
+    public var coManagers: CoManagerCount?
 
-    public init(rows: [OwnerShareRow], invitationsRead: Bool, serverAnswered: Bool) {
+    public init(rows: [OwnerShareRow], invitationsRead: Bool, serverAnswered: Bool, coManagers: CoManagerCount? = nil) {
         self.rows = rows
         self.invitationsRead = invitationsRead
         self.serverAnswered = serverAnswered
+        self.coManagers = coManagers
     }
 }
 
@@ -354,7 +357,8 @@ public struct ServerShareOwnerFlow: Sendable {
         let endedOnBox = Set((boxList?.ended ?? []).map(\.shareId))
         guard readInvitations else {
             if rows.isEmpty, let boxError { throw boxError }
-            return OwnerSharesSnapshot(rows: rows, invitationsRead: false, serverAnswered: boxList != nil)
+            return OwnerSharesSnapshot(rows: rows, invitationsRead: false, serverAnswered: boxList != nil,
+                                       coManagers: boxList?.coManagers)
         }
         let listKey = try await keys.account()
         let list = ServerShareList(username: username, issuedAt: now())
@@ -391,7 +395,8 @@ public struct ServerShareOwnerFlow: Sendable {
                 pending.append(row)
             }
         }
-        return OwnerSharesSnapshot(rows: pending + rows, invitationsRead: true, serverAnswered: boxList != nil)
+        return OwnerSharesSnapshot(rows: pending + rows, invitationsRead: true, serverAnswered: boxList != nil,
+                                   coManagers: boxList?.coManagers)
     }
 
     /// Opens B's sealed acceptance and checks it names this server and share,

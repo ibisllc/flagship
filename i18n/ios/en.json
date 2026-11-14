@@ -15739,5 +15739,21 @@
   "Wipe and release": {
     "en": "Wipe and release",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "%lld of %lld co-managers across your servers": {
+    "en": "%lld of %lld co-managers across your servers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:57"
+  },
+  "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": {
+    "en": "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:68"
+  },
+  "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": {
+    "en": "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:64"
+  },
+  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": {
+    "en": "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:66"
   }
 }

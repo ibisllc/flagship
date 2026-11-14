@@ -30,12 +30,20 @@ public struct ServerShareHTTPError: Error, Equatable, Sendable {
     public let status: Int
     public let error: String?
     public let code: String?
+    /// The co-manager cap's refusal: the plan's cap and the plan (`free`, `hobby`, `maker`).
+    public let cap: Int?
+    public let plan: String?
 
-    public init(status: Int, error: String?, code: String?) {
+    public init(status: Int, error: String?, code: String?, cap: Int? = nil, plan: String? = nil) {
         self.status = status
         self.error = error
         self.code = code
+        self.cap = cap
+        self.plan = plan
     }
+
+    /// The account reached its co-manager cap (packages/protocol/src/coManagerCap.ts).
+    public var isCoManagerCap: Bool { status == 403 && code == "co-manager-cap" }
 
     /// The box refused a share sign-in because the share ended (revoked or left).
     public var isShareEnded: Bool { code == "share-ended" || error == "share-ended" }
@@ -127,13 +135,28 @@ public struct BoxEndedShare: Codable, Equatable, Sendable {
     public let reason: String?
 }
 
+/// The account's co-managers across its servers and the plan's cap (nil: unlimited).
+public struct CoManagerCount: Codable, Equatable, Sendable {
+    public let count: Int
+    public let cap: Int?
+    public let plan: String
+
+    public init(count: Int, cap: Int?, plan: String) {
+        self.count = count
+        self.cap = cap
+        self.plan = plan
+    }
+}
+
 public struct BoxSharesResponse: Codable, Equatable, Sendable {
     public let shares: [BoxShareSummary]
     public let ended: [BoxEndedShare]
+    public let coManagers: CoManagerCount?
 
-    public init(shares: [BoxShareSummary], ended: [BoxEndedShare] = []) {
+    public init(shares: [BoxShareSummary], ended: [BoxEndedShare] = [], coManagers: CoManagerCount? = nil) {
         self.shares = shares
         self.ended = ended
+        self.coManagers = coManagers
     }
 }
 
@@ -575,7 +598,8 @@ public final class ServerShareClient: Sendable {
         let (status, data) = try await t.send(try request(base, method, path, body: body, headers: headers))
         guard (200..<300).contains(status) else {
             let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            throw ServerShareHTTPError(status: status, error: o?["error"] as? String, code: o?["code"] as? String)
+            throw ServerShareHTTPError(status: status, error: o?["error"] as? String, code: o?["code"] as? String,
+                                       cap: (o?["cap"] as? NSNumber)?.intValue, plan: o?["plan"] as? String)
         }
         return data
     }

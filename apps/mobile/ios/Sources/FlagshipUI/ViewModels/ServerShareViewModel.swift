@@ -51,6 +51,24 @@ public enum ServerShareCopy {
     public static let startupKeyMissing = String(localized: "Start-up approval isn't set up for them yet.")
     public static let showInvitations = String(localized: "Show invitations waiting for an answer")
 
+    /// "n of N co-managers"; nil when the plan has no cap.
+    public static func coManagerCount(_ c: CoManagerCount?) -> String? {
+        guard let c, let cap = c.cap else { return nil }
+        return String(localized: "\(c.count) of \(cap) co-managers across your servers")
+    }
+
+    /// The co-manager cap's refusal in the plan's words: its cap, and the plan to move to.
+    public static func coManagerCap(plan: String?, cap: Int) -> String {
+        switch plan {
+        case "hobby":
+            return String(localized: "On the Pro plan your servers can have up to \(cap) co-managers in all. Remove one first, or move to Pro Max for more.")
+        case "maker":
+            return String(localized: "On the Pro Max plan your servers can have up to \(cap) co-managers in all. Remove one first, or move to Enterprise for more.")
+        default:
+            return String(localized: "On the Free plan your servers can have up to \(cap) co-managers in all. Remove one first, or move to Pro for more.")
+        }
+    }
+
     public static func activityLine(_ e: ShareActivityEntry) -> String {
         let who = e.actor.kind == "share" ? (e.actor.label ?? String(localized: "Someone")) : String(localized: "You")
         let what: String
@@ -79,6 +97,7 @@ public enum ServerShareCopy {
         if let e = error as? ShareInviteRefusal { return e.message }
         if let e = error as? ShareAcceptRefusal { return e.message }
         if let e = error as? ServerShareHTTPError, let sentence = e.acceptRefusal { return sentence }
+        if let e = error as? ServerShareHTTPError, e.isCoManagerCap { return coManagerCap(plan: e.plan, cap: e.cap ?? 5) }
         if let e = error as? ServerShareHTTPError {
             switch e.status {
             case 0: return String(localized: "Couldn't reach the server. Check your connection and try again.")
