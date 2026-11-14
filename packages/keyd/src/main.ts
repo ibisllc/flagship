@@ -10,6 +10,7 @@ import { CEREMONY_TOKEN_FILE, CEREMONY_WINDOW_MS, handOverToKeydUser, legacyTlsF
 import { KEYD_CLIENT_GROUP, KEYD_USER } from "./unit.js";
 import { KeydClient } from "./client.js";
 import { signBoxHealth } from "./healthSign.js";
+import { KEYD_RESET_FLAG, resetKeydState } from "./reset.js";
 
 const STATE = process.env.FLAGSHIP_KEYD_STATE ?? "/var/lib/flagship-keyd";
 const SOCKET = process.env.FLAGSHIP_KEYD_SOCKET ?? "/run/flagship-keyd/keyd.sock";
@@ -59,6 +60,15 @@ async function main(): Promise<void> {
     } finally {
       client.close();
     }
+    return;
+  }
+  if (cmd === "reset") {
+    // A retail wipe (server-daemon retailClaim/wipe.ts), as root with keyd stopped.
+    if (process.argv[3] !== KEYD_RESET_FLAG) throw new Error(`reset erases every key keyd holds: pass ${KEYD_RESET_FLAG}`);
+    if (typeof process.getuid === "function" && process.getuid() !== 0) throw new Error("reset runs as root");
+    const r = resetKeydState(STATE);
+    handOverToKeydUser(STATE, KEYD_USER, KEYD_CLIENT_GROUP);
+    console.log(JSON.stringify({ reset: true, publicKey: r.publicKeyHex.slice(0, 16) }));
     return;
   }
   if (cmd !== "serve") throw new Error(`unknown command ${cmd}`);

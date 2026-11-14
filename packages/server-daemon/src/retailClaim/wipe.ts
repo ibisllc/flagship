@@ -9,7 +9,9 @@
 // partition layout exists (docs/retail-box-setup.md §13.3 item 10). Until it does, the erase makes
 // the old owner's data unreadable from the next boot, and the OS stays as it is.
 
-import { open, readFile } from "node:fs/promises";
+import { open, readdir, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { KEYD_CLIENT_GROUP, KEYD_STATE_DIR, KEYD_USER, handOverToKeydUser, resetKeydState } from "@flagship/keyd";
 import { randomFillSync } from "node:crypto";
 import { verifyWipe, WIPE_READ_BYTES } from "./wipeVerifier.js";
 
@@ -122,24 +124,84 @@ export async function cryptoEraseLuks(device: string, run: Run, io: BlockIo, log
 export interface RetailWipeResult {
   erased: boolean;
   reimaged: boolean;
+  keydReset: boolean;
 }
 
-/**
- * The root step (setup.ts `retail-wipe`). It runs only on a retail image and only while the reset
- * marker is on disk, so the marker always goes down before the erase, whoever asks.
- */
-export async function retailWipeAsRoot(d: {
+/** What Flagship put on /boot for one owner and one box key; the unlock helper and the factory header stay. */
+export const BOOT_OWNER_FILES = [
+  "flagship-boot-key.pem",
+  "flagship-boot-key.pub",
+  "flagship-boot-mldsa.key",
+  "flagship-lease-kem.key",
+  "flagship-lease-kem.tpm",
+  "flagship-owner-key.pub",
+  "flagship-owner-pq.pub",
+  "flagship-boot-unlock-mode",
+  "flagship-unlock-policy",
+  "flagship-lock-once",
+  "flagship-lock-once.new",
+  "flagship-boot-host",
+  "flagship-boot-allowed-hosts",
+  "flagship-beacon-serial",
+  "flagship-debug-mode",
+  "flagship-wifi-build.log",
+] as const;
+
+/** The claim state machine's own files: the only thing in the retail folder a wipe keeps. */
+export const RETAIL_KEEP = ["claim-state.json", "reset-marker.json"] as const;
+
+export async function scrubFolder(dir: string, keep: readonly string[] = []): Promise<string[]> {
+  const removed: string[] = [];
+  for (const f of await readdir(dir).catch(() => [] as string[])) {
+    if (keep.includes(f)) continue;
+    await rm(join(dir, f), { recursive: true, force: true });
+    removed.push(f);
+  }
+  return removed;
+}
+
+export async function scrubBoot(bootDir = "/boot"): Promise<void> {
+  for (const f of BOOT_OWNER_FILES) await rm(join(bootDir, f), { recursive: true, force: true });
+}
+
+export interface RetailWipeDeps {
   image: RetailImage | null;
   markerPresent: boolean;
   run: Run;
   io?: BlockIo;
+  /** Stops keyd, empties its state into a fresh box identity (keyd reset.ts) and starts it again. */
+  resetKeyd: () => Promise<void>;
+  /** The retail claim folder (daemon.ts RETAIL_STATE_DIR). */
+  retailDir: string;
+  bootDir?: string;
   log?: (m: string) => void;
-}): Promise<RetailWipeResult> {
+}
+
+/**
+ * The root step (setup.ts `retail-wipe`). It runs only on a retail image and only while the reset
+ * marker is on disk, so the marker always goes down before the erase, whoever asks. After the
+ * erase nothing of the previous owner is left for the next one: keyd's keys and pins are replaced
+ * by a fresh identity, /boot loses the owner's keys and pins, and the retail folder keeps only the
+ * claim state machine.
+ */
+export async function retailWipeAsRoot(d: RetailWipeDeps): Promise<RetailWipeResult> {
   const log = d.log ?? (() => {});
   if (!d.image) throw new Error("not a retail image");
   if (!d.markerPresent) throw new Error("no reset marker: a wipe starts only after it is written");
   if (!d.image.dataLuksDevice) throw new Error("the retail image names no data volume");
   await cryptoEraseLuks(d.image.dataLuksDevice, d.run, d.io ?? nodeBlockIo, log);
+  await d.resetKeyd();
+  await scrubBoot(d.bootDir);
+  const removed = await scrubFolder(d.retailDir, RETAIL_KEEP);
+  log(`[retail] fresh box identity; removed ${removed.length} file(s) of the previous owner's claim`);
   if (d.image.recoveryPartition) log("[retail] reimaging from the recovery partition is not built; the OS stays as it is");
-  return { erased: true, reimaged: false };
+  return { erased: true, reimaged: false, keydReset: true };
+}
+
+/** keyd's reset as root: stop the unit, replace its state, hand it back, start it. */
+export async function resetKeydAsRoot(run: Run, stateDir = KEYD_STATE_DIR): Promise<void> {
+  await run("systemctl", ["stop", "flagship-keyd"]);
+  resetKeydState(stateDir);
+  handOverToKeydUser(stateDir, KEYD_USER, KEYD_CLIENT_GROUP);
+  await run("systemctl", ["start", "flagship-keyd"]);
 }

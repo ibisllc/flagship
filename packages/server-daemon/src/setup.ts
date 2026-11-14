@@ -39,8 +39,8 @@ import { repairSystemPackages } from "./systemRepair.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { refreshDaemonHardening } from "./privdInstall.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
-import { retailPaths } from "./retailClaim/daemon.js";
-import { readRetailImage, retailWipeAsRoot } from "./retailClaim/wipe.js";
+import { RETAIL_STATE_DIR, retailPaths } from "./retailClaim/daemon.js";
+import { readRetailImage, resetKeydAsRoot, retailWipeAsRoot } from "./retailClaim/wipe.js";
 
 const REPO = "/opt/flagship";
 const DATA_DIR = "/var/flagship";
@@ -229,12 +229,17 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   // The initramfs unlock pieces, brought up to this release's (bootChainRefresh.ts).
   // A retail box's wipe (retailClaim/wipe.ts): only on a retail image, only once the reset marker is on disk.
   "retail-wipe": async () =>
-    retailWipeAsRoot({
-      image: await readRetailImage(),
-      markerPresent: existsSync(retailPaths().marker),
-      run: async (c, a) => (await cmd.capture(c, a, { timeoutMs: 5 * 60_000 })).stdout,
-      log,
-    }),
+    (async () => {
+      const run = async (c: string, a: string[]) => (await cmd.capture(c, a, { timeoutMs: 5 * 60_000 })).stdout;
+      return retailWipeAsRoot({
+        image: await readRetailImage(),
+        markerPresent: existsSync(retailPaths().marker),
+        run,
+        resetKeyd: () => resetKeydAsRoot(run),
+        retailDir: RETAIL_STATE_DIR,
+        log,
+      });
+    })(),
   "boot-chain": () => refreshBootChainAsRoot({ releaseRoot: REPO, trustedFiles: [fileURLToPath(import.meta.resolve("@flagship/boot-chain"))], log }),
 };
 
