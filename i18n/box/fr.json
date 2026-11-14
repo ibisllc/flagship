@@ -70,5 +70,9 @@
   "That direct access order is for another server.": "Cet ordre d'accès direct est destiné à un autre serveur.",
   "This server takes direct access orders only from an admin device of this account.": "Ce serveur n'accepte les ordres d'accès direct que d'un appareil administrateur de ce compte.",
   "That direct access order is older than the last change. Try again.": "Cet ordre d'accès direct est antérieur à la dernière modification. Réessayez.",
-  "This device's clock is too far from the server's. Check the time and try again.": "L'horloge de cet appareil est trop éloignée de celle du serveur. Vérifiez l'heure et réessayez."
+  "This device's clock is too far from the server's. Check the time and try again.": "L'horloge de cet appareil est trop éloignée de celle du serveur. Vérifiez l'heure et réessayez.",
+  "Flagship setup code": "Code de configuration Flagship",
+  "Scan this code with the Flagship app on the phone of whoever will own this box.": "Scannez ce code avec l'app Flagship sur le téléphone de la personne à qui appartiendra ce boîtier.",
+  "Anyone who sees this code can set up this box. It works once, until {0} UTC.": "Toute personne qui voit ce code peut configurer ce boîtier. Il ne sert qu'une fois, jusqu'au {0} UTC.",
+  "Keep the box on a network cable until it is set up.": "Laissez le boîtier branché sur un câble réseau jusqu'à la fin de la configuration."
 }

@@ -111,49 +111,65 @@
     "en": "This invite link is incomplete. Ask for a new one.",
     "ctx": "packages/server-daemon/src/invitePage.ts:106"
   },
+  "Flagship setup code": {
+    "en": "Flagship setup code",
+    "ctx": "packages/server-daemon/src/retailClaim/codeDisplay.ts:37"
+  },
+  "Scan this code with the Flagship app on the phone of whoever will own this box.": {
+    "en": "Scan this code with the Flagship app on the phone of whoever will own this box.",
+    "ctx": "packages/server-daemon/src/retailClaim/codeDisplay.ts:43"
+  },
+  "Anyone who sees this code can set up this box. It works once, until {0} UTC.": {
+    "en": "Anyone who sees this code can set up this box. It works once, until {0} UTC.",
+    "ctx": "packages/server-daemon/src/retailClaim/codeDisplay.ts:44"
+  },
+  "Keep the box on a network cable until it is set up.": {
+    "en": "Keep the box on a network cable until it is set up.",
+    "ctx": "packages/server-daemon/src/retailClaim/codeDisplay.ts:45"
+  },
   "This is a Flagship server.": {
     "en": "This is a Flagship server.",
-    "ctx": "packages/server-daemon/src/runtime.ts:900"
+    "ctx": "packages/server-daemon/src/runtime.ts:944"
   },
   "online": {
     "en": "online",
-    "ctx": "packages/server-daemon/src/runtime.ts:901"
+    "ctx": "packages/server-daemon/src/runtime.ts:945"
   },
   "It runs on private hardware and answers to its owner's keys — not to a cloud.": {
     "en": "It runs on private hardware and answers to its owner's keys — not to a cloud.",
-    "ctx": "packages/server-daemon/src/runtime.ts:902"
+    "ctx": "packages/server-daemon/src/runtime.ts:946"
   },
   "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.": {
     "en": "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.",
-    "ctx": "packages/server-daemon/src/runtime.ts:903"
+    "ctx": "packages/server-daemon/src/runtime.ts:947"
   },
   "TLS terminates on this server. Flagship relays ciphertext it cannot read.": {
     "en": "TLS terminates on this server. Flagship relays ciphertext it cannot read.",
-    "ctx": "packages/server-daemon/src/runtime.ts:906"
+    "ctx": "packages/server-daemon/src/runtime.ts:950"
   },
   "Get yours at": {
     "en": "Get yours at",
-    "ctx": "packages/server-daemon/src/runtime.ts:907"
+    "ctx": "packages/server-daemon/src/runtime.ts:951"
   },
   "No app here · Flagship": {
     "en": "No app here · Flagship",
-    "ctx": "packages/server-daemon/src/runtime.ts:2524"
+    "ctx": "packages/server-daemon/src/runtime.ts:2538"
   },
   "No app here yet.": {
     "en": "No app here yet.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2537"
+    "ctx": "packages/server-daemon/src/runtime.ts:2551"
   },
   "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.": {
     "en": "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2538"
+    "ctx": "packages/server-daemon/src/runtime.ts:2552"
   },
   "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.": {
     "en": "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2539"
+    "ctx": "packages/server-daemon/src/runtime.ts:2553"
   },
   "More on multiplexing →": {
     "en": "More on multiplexing →",
-    "ctx": "packages/server-daemon/src/runtime.ts:2539"
+    "ctx": "packages/server-daemon/src/runtime.ts:2553"
   },
   "Download a server backup — Flagship": {
     "en": "Download a server backup — Flagship",
