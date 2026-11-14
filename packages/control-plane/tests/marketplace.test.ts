@@ -340,8 +340,8 @@ describe("handleMarketplaceGet / handleMarketplaceSearch", () => {
     const irk = makeIrk();
     await seedUser(usernames, "alice", irk);
 
-    for (const slug of ["habit-tracker", "study-club", "shopper"]) {
-      const claim = listingPayload({ slug, name: slug, issuedAt: Date.now() + Math.random() });
+    for (const [i, slug] of ["habit-tracker", "study-club", "shopper"].entries()) {
+      const claim = listingPayload({ slug, name: slug, issuedAt: Date.now() + i });
       const sig = signMarketplaceList(claim, irk);
       await handleMarketplaceList(
         { marketplace, usernames },
