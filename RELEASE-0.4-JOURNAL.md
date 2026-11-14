@@ -112,7 +112,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F2 Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
       currency; Apple IAP / Google Play / Stripe / Monero / Lightning (BTCPay) all sell vouchers; subscriptions as a
       voucher drip to the lead server; the box pays its own bill via OHTTP; plan via `plan-attestation/v1`. Owner
-      answers its §9 Q1-Q11. Then: fold the branches, voucher core + box stash, Stripe, stores, Monero, paid apps. Was: (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
+      answers its §9 Q1-Q11. DECIDED 2026-11-13: crypto = Monero only (no Lightning); no refunds; no cash by mail.
+      Rest (store drip, iOS in-app vs web, Stripe vs reseller, caps, marketplace cut, prices) to discuss. Then: fold the branches, voucher core + box stash, Stripe, stores, Monero, paid apps. Was: (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
       children Q3 names onto `release/0.4`; Pro payments + anonymous vouchers end to end on all three apps.
 - [ ] F3 Calls: build `docs/voici-calls.md` after the owner settles D1-D4 (plus its three voi.ci page fixes in the 0.4 list).
 - [ ] F4 Retail box setup (Q2): design `docs/retail-box-setup.md` (`c69d039aa`): printed 100-bit claim code (QR + 20 chars)
@@ -141,6 +142,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 
 ### U. UX feedback lane (parallel; owner's notes, Q4)
 - [ ] U1 Write each note as an item here with the screen and platform; iOS first, then port (memory rule).
+- [ ] U3 (owner 2026-11-13) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
+      the page previews itself (minus voi.ci's footer); title row "Your page" + Public switch + options menu (theme,
+      share/copy link, accept messages); profile fields read as the live page with a pencil each; the unpublished bar
+      only when something changed, spinning while it publishes; Profile / Messages tabs; Messages: who can reach you
+      (all / some people), conversations vs requests; guests-only posts; comments and calls fit in without clutter.
+      Prototype for critique: https://claude.ai/artifact/ABqoHvYhdTEWaDb7cGMkLt (owner will have other models critique
+      it before it is built; then iOS first, Android and webapp after).
 - [ ] U2 (owner 2026-11-13) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
       bubble in a green circle reads oddly), and simplify the page (details in the owner's next messages). All apps,
       all languages.
@@ -174,6 +182,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   started: retail box setup, payments rails.
 - 2026-11-13 Retail design merged (`c69d039aa`); owner questions Q1-Q10 in the doc §end.
 - 2026-11-13 Payments design merged (`8faecc2ec`); owner questions in its §9. Both design agents done.
+- 2026-11-13 Payment decisions: Monero only, no refunds, no cash. Social tab prototype published (U3) for critique.
 
 ## Resume point
 
