@@ -392,7 +392,7 @@ pub struct CertificateOrder {
 /// [`ServingError`] for any field out of shape.
 pub fn certificate_order_canonical(o: &CertificateOrder) -> Result<String, ServingError> {
     let min_gen = match o.class.as_str() {
-        "control" | "apps" => 1,
+        "control" | "apps" | "direct" => 1,
         "phone" => 0,
         _ => return Err(ServingError::BadClass),
     };

@@ -71,6 +71,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/lan-hint/v2": "vectors directAccess.test.ts + test-vectors/direct-access (STK-signed; direct part only inside a verified owner order)",
   "flagship/direct-access/v1": "vectors directAccess.test.ts + test-vectors/direct-access (sensitive-order key; forged, unsigned and private-address orders refused)",
   "flagship/direct-address/v1": "vectors directAccess.test.ts + test-vectors/direct-access (STK-signed; wrong box, outside-grant and private addresses refused)",
+  "flagship/direct-name/v1": "vectors directName.test.ts + test-vectors/direct-name; apps/com directNames.test.ts (sensitive-order key; forged, unsigned, other-account and private-address name orders refused)",
   "flagship/offline-secrets/v1": "vectors offline-secrets shared vectors (sharedVectorReaders.test.ts); sign returns a sibling object",
   "flagship/recovery-record/v2": "vectors recoveryRecordVectors.test.ts (irkPubHex must equal the verifying key)",
   "flagship/security-notice/v1": "vectors securityNoticeVectors.test.ts, securityNoticePqVectors.test.ts (PQ half once pinned)",

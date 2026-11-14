@@ -139,6 +139,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0131",
   // Messages: a second account on a device this month enrolls on the slow tier for good (slow_tier).
   "0132",
+  // Direct access: owner-signed orders, box address updates, the fshp.app name registry, the `direct` certificate class.
+  "0133",
   // UnifiedPush: push_tokens.platform may be 'unifiedpush' (table rebuilt for the CHECK).
   "0136",
   // voi.ci link-name changes say what they were (op) and whether they count; custom domains' 30-day lapse grace.

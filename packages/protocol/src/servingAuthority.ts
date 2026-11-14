@@ -194,7 +194,8 @@ export function canonicalRevocationEntry(e: RevocationEntry): Bytes {
 
 // ── certificate-order ─────────────────────────────────────────────────────
 
-export type CertificateClass = "control" | "apps" | "phone";
+/** `direct`: one name on the direct domain (directName.ts), held by the box the owner's name order names. */
+export type CertificateClass = "control" | "apps" | "phone" | "direct";
 
 export interface CertificateOrder {
   class: CertificateClass;
@@ -208,7 +209,7 @@ export interface CertificateOrder {
 }
 
 export function canonicalCertificateOrder(o: CertificateOrder): Bytes {
-  if (o.class !== "control" && o.class !== "apps" && o.class !== "phone") throw new Error("class must be control, apps or phone");
+  if (o.class !== "control" && o.class !== "apps" && o.class !== "phone" && o.class !== "direct") throw new Error("class must be control, apps, phone or direct");
   hexField("device", o.device);
   intField("regGen", o.regGen, o.class === "phone" ? 0 : 1);
   hexField("csrSha256", o.csrSha256);
