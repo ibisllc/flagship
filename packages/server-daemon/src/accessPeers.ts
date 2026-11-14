@@ -49,6 +49,10 @@ export interface PodsPeers extends AccessPeers {
   /** This box and the app's other live servers, in server order (feat/marketplace: the list picker). */
   inOrder(serviceRef: string): string[];
   servers(): string[];
+  /** Ask every other live server which of `refs` it runs (apps not on this box too: a restore's preview). */
+  probeAll(refs: readonly string[]): Promise<Map<string, string[]>>;
+  /** Whether this box would lead an app the given servers run (it comes first in the server order). */
+  wouldLead(runners: readonly string[]): boolean;
   /** Re-read the servers and ask each which of this box's apps it runs. */
   refresh(): Promise<void>;
   start(everyMs?: number): void;
@@ -135,6 +139,21 @@ export function buildPodsPeers(opts: PodsPeersOptions): PodsPeers {
       return pods
         .map((p) => p.serverDomain.toLowerCase())
         .filter((d) => d !== self && pods.find((p) => p.serverDomain.toLowerCase() === d)?.liveness !== "never");
+    },
+    async probeAll(refs) {
+      const others = pods
+        .map((p) => p.serverDomain.toLowerCase())
+        .filter((d) => d !== self && pods.find((p) => p.serverDomain.toLowerCase() === d)?.liveness !== "never");
+      const out = new Map<string, string[]>();
+      for (const ref of refs) {
+        const answers = await Promise.all(others.map(async (d) => ((await opts.probe(d, ref).catch(() => false)) ? d : null)));
+        const ds = answers.filter((d): d is string => d !== null).sort(byOrder);
+        if (ds.length > 0) out.set(ref, ds);
+      }
+      return out;
+    },
+    wouldLead(runnersOfApp) {
+      return [self, ...runnersOfApp].sort(byOrder)[0] === self;
     },
     refresh,
     start(everyMs = 30_000) {

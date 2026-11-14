@@ -229,6 +229,7 @@ interface RestoreJob {
 const J = { "content-type": "application/json" } as const;
 
 export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
+  let otherJob: () => boolean = () => false;
   const now = opts.now ?? (() => Date.now());
   const log = opts.log ?? (() => {});
   const note = (kind: string, detail: string, ok = true) => {
@@ -364,7 +365,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       if (!slots) return err(400, "slots must hold a passcode slot, an account slot, or both");
       // Back up now always has a passcode: it is what opens the backup on an account that isn't yours (owner, 2026-10-16).
       if (!slots.some((s) => s.kind === "passcode")) return err(400, "a backup made with Back up now needs a passcode", { code: "passcode-required" });
-      if (running) return err(409, "a backup or restore is already running here");
+      if (running || otherJob()) return err(409, "a backup or restore is already running here");
       await ensureDir();
       if ((await free(opts.dir)) < MIN_FREE_BYTES) return err(507, "this server doesn't have enough free disk space to make a backup");
       running = true;
@@ -866,7 +867,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   /** Start a saved backup now (Back up now, or the schedule). */
   async function runSaved(trigger: "schedule" | "now", purpose: "backup" | "migrate" = "backup"): Promise<HttpResponse> {
     if (!store) return err(404, "this server doesn't keep backups");
-    if (running) return err(409, "a backup or restore is already running here");
+    if (running || otherJob()) return err(409, "a backup or restore is already running here");
     if (purpose === "migrate" && !opts.migrate) return err(404, "this server can't be moved yet: update it first");
     const s = await state();
     const k = keyPool[0];
@@ -1054,7 +1055,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
 
   /** The schedule's tick: start a run when one is due. */
   async function tick(): Promise<void> {
-    if (!store || running || keyPool.length === 0) return;
+    if (!store || running || otherJob() || keyPool.length === 0) return;
     if (opts.saved?.scheduleActive && !opts.saved.scheduleActive()) return;
     const s = await state();
     if (!isDue(s.schedule, s.history, now())) return;
@@ -1161,7 +1162,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (b.archiveId !== w.archiveId || b.bytes !== w.bytes) {
       return err(409, "this server is waiting for a different backup", { code: "other-backup" });
     }
-    if (running) return err(409, "a backup or restore is already running here");
+    if (running || otherJob()) return err(409, "a backup or restore is already running here");
     const capRefusal = opts.admitIncoming?.(w.bytes) ?? null;
     if (capRefusal) return err(507, capRefusal, { code: "over-backup-limit" });
     // An upload of this backup already under way (the app closed, or the box
@@ -1227,7 +1228,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       return err(400, "invalid json");
     }
     if (typeof b.key !== "string" || !/^[0-9a-f]{64}$/.test(b.key)) return err(400, "key must be 32 bytes of lowercase hex");
-    if (running) return err(409, "a backup or restore is already running here");
+    if (running || otherJob()) return err(409, "a backup or restore is already running here");
     running = true;
     const job = restore;
     job.state = "checking";
@@ -1591,6 +1592,12 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     },
     /** One look at the schedule (the daemon calls it every few minutes). */
     tick,
+    /** Whether a backup or a whole-server restore is running here. */
+    busy: (): boolean => running,
+    /** Another job that holds backups back while it runs (a restore into this server). */
+    setOtherJob(fn: () => boolean): void {
+      otherJob = fn;
+    },
     /** The peer engine plugs in here: told of each saved backup, and asked which it still needs. */
     setSavedHooks(h: typeof hooks): void {
       hooks = h;

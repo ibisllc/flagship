@@ -136,6 +136,7 @@ import { isMemberRolesPath } from "../memberRoles.js";
 import { isListScopePath } from "../accessScopeHttp.js";
 import { isAppCopyPath } from "../appCopy/target.js";
 import { isServerArchivePath } from "../serverArchive/service.js";
+import { isRestoreMergePath } from "../serverArchive/merge/service.js";
 import { isBackupPolicyPath } from "../backupPolicy/http.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
 import type { AppStatusSource } from "../appStatus.js";
@@ -297,6 +298,8 @@ export interface ScreensHttpDeps {
    * Owner sessions only.
    */
   serverArchive?: { handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null> } | null;
+  /** Restore a backup into this running server (serverArchive/merge/service.ts): owner sessions only. */
+  restoreMerge?: { handle: (req: HttpRequest) => Promise<HttpResponse | null> } | null;
   /** The backup policy and its size limit (backupPolicy/http.ts). Owner sessions only. */
   backupPolicy?: { handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null> } | null;
   /**
@@ -775,6 +778,15 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.serverArchive && isServerArchivePath(path)) {
       const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
       const r = await deps.serverArchive.handle(path, method, req, { companion });
+      if (r) return r;
+    }
+
+    if (deps.restoreMerge && isRestoreMergePath(path)) {
+      // A Remote browser session never restores into the server; share callers never get here (no share rule).
+      if (deps.pairedSessions?.isCompanionRequest?.(req) === true) {
+        return { status: 403, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "Only an admin device of this account can restore a backup.", code: "companion" }) };
+      }
+      const r = await deps.restoreMerge.handle(req);
       if (r) return r;
     }
 

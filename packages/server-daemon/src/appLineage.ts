@@ -36,6 +36,10 @@ export interface AppLineage {
 const ORIGIN_RE = /^(?:[0-9a-f]{32}|[0-9a-f]{64})$/;
 const DIGEST_RE = /^(?:tree|sha256|wasi|manifest):[0-9a-f]{64}$/;
 
+export function isCodeDigest(v: unknown): v is string {
+  return typeof v === "string" && DIGEST_RE.test(v);
+}
+
 export function mintOrigin(): string {
   return randomBytes(16).toString("hex");
 }

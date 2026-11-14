@@ -52,7 +52,7 @@ import {
   type AppDataCredentials,
 } from "./dataLayer/index.js";
 import { MAX_DATA_GENERATION, isDataGeneration } from "./dataLayer/naming.js";
-import { appendCode, isOrigin, legacyOrigin, manifestCodeDigest, mintOrigin, parseLineage, type AppLineage, type CodeHistoryEntry } from "./appLineage.js";
+import { appendCode, isCodeDigest, isOrigin, legacyOrigin, manifestCodeDigest, mintOrigin, parseLineage, type AppLineage, type CodeHistoryEntry } from "./appLineage.js";
 import type { AppAuthTokens } from "./serviceAuthToken.js";
 import { whileDeploying, type DeployingTracker } from "./serviceActivity.js";
 import type { DomainGate } from "./browser/domainGate.js";
@@ -584,7 +584,7 @@ export class ServicePlatform {
       origin: args.lineage?.origin ?? mintOrigin(),
       ...(args.lineage?.forkedFrom ? { forkedFrom: args.lineage.forkedFrom } : {}),
       codeHistory: appendCode(args.lineage?.codeHistory, {
-        digest: args.codeDigest ?? manifestCodeDigest(r.manifestJson),
+        digest: isCodeDigest(args.codeDigest) ? args.codeDigest : manifestCodeDigest(r.manifestJson),
         version: parsed.manifest.version,
         at: this.now(),
       }),
@@ -862,7 +862,7 @@ export class ServicePlatform {
       data,
       appliedMigrations: migrated.applied,
       ...ServicePlatform.v2Fields(parsed),
-      codeHistory: appendCode(old.codeHistory, { digest: args.codeDigest ?? manifestCodeDigest(r.manifestJson), version: manifest.version, at: this.now() }),
+      codeHistory: appendCode(old.codeHistory, { digest: isCodeDigest(args.codeDigest) ? args.codeDigest : manifestCodeDigest(r.manifestJson), version: manifest.version, at: this.now() }),
     };
     this.apps.set(serviceId, updated);
     this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
@@ -911,6 +911,15 @@ export class ServicePlatform {
       });
       return { generation, data };
     });
+  }
+
+  /**
+   * Run the app's own migrations not yet in `applied` against prepared
+   * stores (a restore's next generation), as the app's role, in the same
+   * sandbox an update uses. The live app is not touched.
+   */
+  migrateData(serviceId: string, data: AppDataCredentials | null, applied: string[], files: AppMigrationFile[]): Promise<{ ok: true; applied: string[] } | { ok: false; reason: string; applied: string[] }> {
+    return this.migrate(serviceId, data, applied, files);
   }
 
   /** Drop a prepared generation that never went live (a failed or refused restore line). */

@@ -47,7 +47,7 @@ import { ArchiveLimits } from "./limits.js";
 import { WasiModuleStore } from "../wasi/moduleStore.js";
 import { auditDumpToc, describeExecutable, ownerChanged, pinnedImageRef } from "./restoreAudit.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
-import { carriedLineage, parseLineage, treeDigest } from "../appLineage.js";
+import { carriedLineage, parseLineage, treeDigest, type AppLineage } from "../appLineage.js";
 
 /** The backup's lineage; a backup without a history still knows its rebuilt tree. */
 function lineageFor(meta: ArchiveAppMeta, sourceDigest: string | undefined): ReturnType<typeof carriedLineage> {
@@ -333,7 +333,7 @@ export async function unpackArchive(
   return { manifest, metas };
 }
 
-interface Held {
+export interface Held {
   image?: string;
   /** The working tree this import wrote (removed again if the app fails). */
   tree?: string;
@@ -359,14 +359,25 @@ export function localServiceId(serverFqdn: string, archivedServiceId: string): s
   return id && host ? `${host}--${id.slug}` : archivedServiceId;
 }
 
-async function installOne(
+/** How a restore into a running server installs one app (docs/restore-into-server.md §3.2, §3.4). */
+export interface InstallOneOptions {
+  /** A side-by-side copy's new id (default: the archived app's local id). */
+  targetServiceId?: string;
+  /** A copy's new origin (forkedFrom the backup's); default: the backup's lineage. */
+  lineage?: AppLineage;
+  /** False when the app runs on the account's other servers: it joins their one list, no draft. */
+  accessDraft?: boolean;
+}
+
+export async function installOne(
   deps: ArchiveRestoreDeps,
   dir: string,
   meta: ArchiveAppMeta,
   log: (m: string) => void,
+  opts: InstallOneOptions = {},
 ): Promise<RestoreAppResult> {
   const now = deps.now ?? (() => Date.now());
-  const sid = localServiceId(deps.serverFqdn, meta.serviceId);
+  const sid = opts.targetServiceId ?? localServiceId(deps.serverFqdn, meta.serviceId);
   const result: RestoreAppResult = { serviceId: sid, name: meta.name, state: "restoring" };
   const summary: RestoreSummary = { code: "", awaitingApproval: [], reconnect: [], notes: [] };
   const changed = ownerChanged(meta.serviceId, hostAccount(deps.serverFqdn));
@@ -380,43 +391,8 @@ async function installOne(
     return p ? join(dir, p.file) : undefined;
   };
   try {
-    const manifest = JSON.parse(meta.manifestJson) as { runtime: { image: string; kind?: string; digest?: string }; network?: Parameters<typeof egressSuggestions>[0] };
-    let image = manifest.runtime.image;
-    let wasiDigest: string | null = null;
-    let sourceDigest: string | undefined;
-    if (meta.rebuild === "module") {
-      // The module goes back by its digest, and only if the bytes are the ones the manifest names.
-      const bytes = await readFile(path("module")!);
-      const digest = await (deps.wasiModules ?? new WasiModuleStore()).put(bytes);
-      if (digest !== manifest.runtime.digest) throw new Error("its module doesn't match the digest it was installed with");
-      wasiDigest = digest;
-      summary.code = "its WebAssembly module, as approved";
-    } else if (meta.rebuild === "source") {
-      if (!deps.sourceDir) throw new Error("this server can't rebuild apps (no working-tree folder)");
-      const tree = await readTree(path("source")!);
-      sourceDigest = treeDigest(tree.files, tree.binaries);
-      image = `flagship-vibe-${sid}:${now()}`.toLowerCase();
-      held.tree = join(deps.sourceDir, sid);
-      held.image = image;
-      const built = await deps.buildImage({ contextDir: held.tree, files: tree.files, binaries: tree.binaries, image });
-      if (!built.ok) throw new Error(`rebuilding it here failed: ${built.reason}`);
-      if (built.wasiDigest) wasiDigest = built.wasiDigest;
-    } else {
-      // Run exactly the code that was backed up: a tag is never allowed to resolve to new code.
-      const pinned = pinnedImageRef(image, meta.imageDigest);
-      if (!pinned.ok) throw new Error(pinned.reason);
-      image = pinned.ref;
-      if (!(await deps.ops.imageExists(image))) {
-        held.image = image;
-        await deps.pullImage(image);
-      }
-    }
-    if (!wasiDigest && !(await deps.ops.imageExists(image))) throw new Error(`its image ${image} isn't here after ${meta.rebuild === "source" ? "the build" : "the pull"}`);
-    if (meta.rebuild !== "module") summary.code = meta.rebuild === "source" ? "rebuilt here from its saved source" : `pinned image ${image.slice(-71)}`;
-    const manifestJson = wasiDigest
-      ? JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, digest: wasiDigest } })
-      : JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, image } });
-
+    const code = await prepareArchivedCode(deps, meta, sid, path, held, summary, deps.sourceDir ? join(deps.sourceDir, sid) : null);
+    const { manifest, manifestJson, sourceDigest } = code;
     if (Object.keys(meta.env).length > 0) {
       if (!deps.envStore || changed) {
         // A different account's keys and secrets are not carried over: they are set up again.
@@ -445,34 +421,13 @@ async function installOne(
       signature: deps.signInstall(request),
       verify: verifyInstallService,
       appliedMigrations: meta.appliedMigrations,
-      ...lineageFor(meta, sourceDigest),
+      ...(opts.lineage ? { lineage: opts.lineage, ...(lineageFor(meta, sourceDigest).codeDigest ? { codeDigest: lineageFor(meta, sourceDigest).codeDigest! } : {}) } : lineageFor(meta, sourceDigest)),
       // Members come back only through the held draft; what was already redeemed stays redeemed.
       ...(redeemedOf(meta.membership) ? { membership: { members: [], lastSeen: {}, redeemed: redeemedOf(meta.membership)! } as never } : {}),
       prepareData: async (data) => {
         held.postgres = Object.fromEntries(Object.entries(data?.postgres ?? {}).map(([k, v]) => [k, { database: v.database, role: v.role }]));
         if (data?.files) held.filesVolume = data.files.volume;
-        for (const p of meta.parts) {
-          if (p.name.startsWith("db:") && !data?.postgres?.[p.name.slice(3)]) throw new Error(`no database ${p.name.slice(3)} here`);
-          if (p.name === "files" && !data?.files) throw new Error("no files folder here");
-        }
-        for (const [store, cred] of Object.entries(data?.postgres ?? {})) {
-          const dump = path(`db:${store}`);
-          if (!dump) continue;
-          // The dump is read, not run, until its contents are known to be allowed.
-          if (!deps.ops.listDump) throw new Error("this server can't check a database dump before restoring it");
-          const audit = auditDumpToc(await deps.ops.listDump(cred, dump));
-          if (audit.refused.length > 0) throw new Error(`its database was not restored: ${audit.refused.slice(0, 3).join("; ")}`);
-          const note = describeExecutable(audit);
-          if (note) summary.notes.push(`${store}: ${note}`);
-          await deps.ops.restoreDatabase(cred, dump);
-        }
-        const files = path("files");
-        if (files && data?.files) {
-          // The folder's own tar is checked before anything unpacks it (and again by the broker on an arch-v2 box).
-          const v = await checkTarFile(files, "volume");
-          if (!v.ok) throw new Error(`its files were not restored: the archive was refused by the extraction check (${v.checker}): ${v.message} (${v.code})`);
-          await deps.ops.restoreFiles(data.files.volume, files);
-        }
+        await restoreArchivedData(deps, meta, data, path, summary);
       },
     });
     delete held.postgres;
@@ -480,7 +435,7 @@ async function installOne(
     if (!installResult.ok) throw new Error(installResult.reason);
     installed = true;
 
-    if (meta.access && deps.access) {
+    if (meta.access && deps.access && opts.accessDraft !== false) {
       await deps.access
         .importDraft(sid, meta.access)
         .then(() => {
@@ -507,6 +462,89 @@ async function installOne(
   } catch (e) {
     if (!installed) await release(deps, sid, held, log);
     return { ...result, state: "failed", reason: (e as Error).message };
+  }
+}
+
+/** The code an archived app runs, made ready here: its module, a rebuild from its saved tree in
+ *  `contextDir`, or its pinned image pulled. What it makes is recorded in `held` for a rollback. */
+export async function prepareArchivedCode(
+  deps: ArchiveRestoreDeps,
+  meta: ArchiveAppMeta,
+  sid: string,
+  path: (part: string) => string | undefined,
+  held: Held,
+  summary: RestoreSummary,
+  contextDir: string | null,
+): Promise<{ manifest: { runtime: { image: string; kind?: string; digest?: string }; network?: Parameters<typeof egressSuggestions>[0] }; manifestJson: string; sourceDigest?: string }> {
+  const now = deps.now ?? (() => Date.now());
+  const manifest = JSON.parse(meta.manifestJson) as { runtime: { image: string; kind?: string; digest?: string }; network?: Parameters<typeof egressSuggestions>[0] };
+  let image = manifest.runtime.image;
+  let wasiDigest: string | null = null;
+  let sourceDigest: string | undefined;
+  if (meta.rebuild === "module") {
+    // The module goes back by its digest, and only if the bytes are the ones the manifest names.
+    const bytes = await readFile(path("module")!);
+    const digest = await (deps.wasiModules ?? new WasiModuleStore()).put(bytes);
+    if (digest !== manifest.runtime.digest) throw new Error("its module doesn't match the digest it was installed with");
+    wasiDigest = digest;
+    summary.code = "its WebAssembly module, as approved";
+  } else if (meta.rebuild === "source") {
+    if (!contextDir) throw new Error("this server can't rebuild apps (no working-tree folder)");
+    const tree = await readTree(path("source")!);
+    sourceDigest = treeDigest(tree.files, tree.binaries);
+    image = `flagship-vibe-${sid}:${now()}`.toLowerCase();
+    held.tree = contextDir;
+    held.image = image;
+    const built = await deps.buildImage({ contextDir, files: tree.files, binaries: tree.binaries, image });
+    if (!built.ok) throw new Error(`rebuilding it here failed: ${built.reason}`);
+    if (built.wasiDigest) wasiDigest = built.wasiDigest;
+  } else {
+    // Run exactly the code that was backed up: a tag is never allowed to resolve to new code.
+    const pinned = pinnedImageRef(image, meta.imageDigest);
+    if (!pinned.ok) throw new Error(pinned.reason);
+    image = pinned.ref;
+    if (!(await deps.ops.imageExists(image))) {
+      held.image = image;
+      await deps.pullImage(image);
+    }
+  }
+  if (!wasiDigest && !(await deps.ops.imageExists(image))) throw new Error(`its image ${image} isn't here after ${meta.rebuild === "source" ? "the build" : "the pull"}`);
+  if (meta.rebuild !== "module") summary.code = meta.rebuild === "source" ? "rebuilt here from its saved source" : `pinned image ${image.slice(-71)}`;
+  const manifestJson = wasiDigest
+    ? JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, digest: wasiDigest } })
+    : JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, image } });
+  return { manifest, manifestJson, ...(sourceDigest ? { sourceDigest } : {}) };
+}
+
+/** Put an archived app's databases and files into fresh stores: every dump audited before it runs. */
+export async function restoreArchivedData(
+  deps: Pick<ArchiveRestoreDeps, "ops">,
+  meta: ArchiveAppMeta,
+  data: AppDataCredentials | null,
+  path: (part: string) => string | undefined,
+  summary: RestoreSummary,
+): Promise<void> {
+  for (const p of meta.parts) {
+    if (p.name.startsWith("db:") && !data?.postgres?.[p.name.slice(3)]) throw new Error(`no database ${p.name.slice(3)} here`);
+    if (p.name === "files" && !data?.files) throw new Error("no files folder here");
+  }
+  for (const [store, cred] of Object.entries(data?.postgres ?? {})) {
+    const dump = path(`db:${store}`);
+    if (!dump) continue;
+    // The dump is read, not run, until its contents are known to be allowed.
+    if (!deps.ops.listDump) throw new Error("this server can't check a database dump before restoring it");
+    const audit = auditDumpToc(await deps.ops.listDump(cred, dump));
+    if (audit.refused.length > 0) throw new Error(`its database was not restored: ${audit.refused.slice(0, 3).join("; ")}`);
+    const note = describeExecutable(audit);
+    if (note) summary.notes.push(`${store}: ${note}`);
+    await deps.ops.restoreDatabase(cred, dump);
+  }
+  const files = path("files");
+  if (files && data?.files) {
+    // The folder's own tar is checked before anything unpacks it (and again by the broker on an arch-v2 box).
+    const v = await checkTarFile(files, "volume");
+    if (!v.ok) throw new Error(`its files were not restored: the archive was refused by the extraction check (${v.checker}): ${v.message} (${v.code})`);
+    await deps.ops.restoreFiles(data.files.volume, files);
   }
 }
 
