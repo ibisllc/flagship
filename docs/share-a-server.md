@@ -401,6 +401,44 @@ links letting new people in; whoever joined stays until withdrawn or
 removed. Design, wire and strings: `service-access-gating.md` "Co-manager
 invites".
 
+### 5.8 How many people an account shares with (co-manager cap)
+
+Owner decision 2026-11-14 (`enterprise-accounts.md` "Owner decisions"): Free 5,
+Pro 10, Pro Max 25, Enterprise unlimited (`packages/protocol/src/coManagerCap.ts`).
+App visitors are never capped. An account already over its cap keeps every
+share; it adds none until it is under.
+
+- **Unit: one active share.** One person on one server is one co-manager; the
+  same person on two servers counts twice. The member and admin keys are per
+  share (§3, AT-LNK-10) and the owner rule forbids linking a person across
+  servers, so no server can tell two shares are the same account. Ended shares
+  free their slot at once.
+- **The box enforces it** when a first grant goes live (`ShareStore.put`, after
+  the admin proof). New grants on one box go live one at a time. The plan comes
+  from the CA-signed `flagship/plan-attestation/v1` the box already holds
+  (`PlanCheck.tier`); none, an expired one or a lapsed paid period is Free. On
+  a refusal the box re-reads the plan once (an upgrade a minute ago counts).
+- **The account's servers agree by summing.** A share lives on exactly one
+  server, so the account's count is this box's active shares plus each other
+  server's. The box asks each of the account's servers (`/pods`) with
+  `POST /api/access-sync/shares`, MAC'd under the cloud gossip key like the
+  one-list hand-over, answer `{active}`; `.com` sees neither. A server that
+  doesn't answer counts with its last answer (kept in
+  `<dataDir>/share-cap-peers.json`); one gone from the account's list for a
+  week stops counting. Two boxes accepting at the very same moment could each
+  take the last slot; the `.com` backstop makes that rare.
+- **`.com` backstop.** `POST /api/users/:u/server-shares` refuses a new link
+  once the account's open links (unexpired, not accepted) plus accepted shares
+  not ended reach the cap. It counts only the owner's own rows (server and
+  opaque id), which reveal nothing about who the shares are with.
+- **Refusal** (both): 403 `{error: "co-manager-cap", code: "co-manager-cap",
+  count, cap, plan}`. Each app shows its own sentence by plan, e.g. "On the
+  Free plan your servers can have up to 5 co-managers in all. Remove one
+  first, or move to Pro for more." (Pro → Pro Max, Pro Max → Enterprise).
+- **Shared with card:** `GET /api/screens/shares` carries `coManagers: {count,
+  cap, plan}` (`cap` null: unlimited; the other servers are asked at most once a
+  minute for it) and every app shows "n of N co-managers across your servers".
+
 ## 6. Route map
 
 ### 6.1 Box (daemon)
@@ -442,7 +480,7 @@ New box routes:
 | `GET /api/shares/me` | → `{shareId, level, unlockAtBoot, seeAppData, serverDomain, canUpdate}` |
 | `POST /api/shares/update` | `{update, signature}` → 202 `{ok, accepted, targetCommit}`; `{error, code}` otherwise (§5.6) |
 | `POST /api/shares/leave` | `{leave, signature}` → `{ok}` |
-| `GET /api/screens/shares` | → `{shares:[{shareId, label, level, unlockAtBoot, seeAppData, memberPubHex, issuedAt, sharedAt, lastSeenAt}], ended:[{shareId, label, endedAt, reason}]}` (`memberPubHex` lets A re-sign a change) |
+| `GET /api/screens/shares` | → `{shares:[{shareId, label, level, unlockAtBoot, seeAppData, memberPubHex, issuedAt, sharedAt, lastSeenAt}], ended:[{shareId, label, endedAt, reason}], coManagers?:{count, cap, plan}}` (`memberPubHex` lets A re-sign a change; `coManagers` §5.8) |
 | `POST /api/screens/shares` | `{grant, signature, accept?, acceptSignature?, acceptAdmin?}` → `{ok, share}`; the first grant for an id must carry B's acceptance and its admin proof (§5.1, refusal codes there) |
 | `POST /api/screens/shares/revoke` | `{revoke, signature}` → `{ok}` |
 | `GET /api/screens/activity?limit=` | → `{entries:[{ts, actor:{kind:"owner"} \| {kind:"share", shareId, label}, action, target?, ok}]}` |

@@ -518,6 +518,8 @@ server names and breaks every link.
 
 - **Co-manager caps:** Free 5, Pro 10, Pro Max 25, Enterprise unlimited (priced per seat). App visitors unlimited on
   every plan. Accounts already over a cap keep their active shares.
+  Built on `0.4/comanager-caps` (`share-a-server.md` §5.8): counted in active shares (one person on one server), since
+  per-share keys keep a person unlinkable across servers.
 - **Q-E3: yes.** In an org, an admin of server S counts as an admin for changing app ranks on S; an admin of app R,
   in R. Admin stays binary per scope.
 - **Q-E6: freeze only** (72 h, at most once a week); no admin removes another admin directly.

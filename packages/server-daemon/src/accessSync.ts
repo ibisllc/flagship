@@ -50,6 +50,9 @@ const MAX_ENTRIES_PER_PUSH = 2000;
 
 export type AccessScope = "account" | "server";
 
+/** `shares` is account-wide like `scopes`: how many shares a server holds (shares/coManagerCap.ts). */
+export type AccessSyncOp = "push" | "pull" | "scopes" | "shares";
+
 /** Where the app's other servers are, from gossip. */
 export interface AccessPeers {
   /** The app's lead server right now (this box's own FQDN when it leads), or null when unknown. */
@@ -101,7 +104,7 @@ export function accessSyncKeyFromOps(ops: { accessSyncMac(canonical: Uint8Array)
 
 export function accessSyncMac(
   key: AccessSyncKey,
-  f: { op: "push" | "pull" | "scopes"; from: string; to: string; serviceRef: string; issuedAt: number; body: string },
+  f: { op: AccessSyncOp; from: string; to: string; serviceRef: string; issuedAt: number; body: string },
 ): string {
   const bodyHash = createHash("sha256").update(f.body).digest("hex");
   const canonical = [ACCESS_SYNC_TAG, f.op, f.from.toLowerCase(), f.to.toLowerCase(), f.serviceRef, String(f.issuedAt), bodyHash].join("|");
@@ -126,6 +129,8 @@ export interface AccessSyncOptions {
   scopes?: ScopeSource;
   /** Another server's epoch says the plan changed: re-read it soon. */
   planRefresh?: () => void;
+  /** How many shares this server holds (`/api/access-sync/shares`); absent: the route answers 404. */
+  shareCount?: () => number;
   fetchImpl?: typeof fetch;
   baseUrl?: (fqdn: string) => string;
   now?: () => number;
@@ -164,6 +169,8 @@ export interface AccessSync {
   onScopeChange(serviceRef: string, change: ScopeChange): Promise<void>;
   /** The apps with a separate list on each server across the account, and each one's lead server. */
   separateAcross(): Promise<{ serviceRef: string; leader: string }[]>;
+  /** How many shares `peer` holds, or null when it didn't answer. */
+  sharesOn(peer: string): Promise<number | null>;
   start(): void;
   stop(): void;
 }
@@ -205,10 +212,10 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     if (!queuedSince.has(`${peer}\n${ref}`)) queuedSince.set(`${peer}\n${ref}`, now());
   }
 
-  async function post(op: "push" | "pull" | "scopes", to: string, ref: string, payload: Record<string, unknown>): Promise<Response | null> {
+  async function post(op: AccessSyncOp, to: string, ref: string, payload: Record<string, unknown>): Promise<Response | null> {
     if (!opts.key) return null;
     const issuedAt = now();
-    const body = JSON.stringify(op === "scopes" ? payload : withScope(ref, payload));
+    const body = JSON.stringify(op === "scopes" || op === "shares" ? payload : withScope(ref, payload));
     const mac = accessSyncMac(opts.key, { op, from: self, to, serviceRef: ref, issuedAt, body });
     try {
       const r = await fetchImpl(`${baseUrl(to)}/api/access-sync/${op}`, {
@@ -308,7 +315,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     return fresh;
   }
 
-  function readEnvelope(req: HttpRequest, op: "push" | "pull" | "scopes"): { from: string; ref: string; payload: Record<string, unknown> } | HttpResponse {
+  function readEnvelope(req: HttpRequest, op: AccessSyncOp): { from: string; ref: string; payload: Record<string, unknown> } | HttpResponse {
     if (!opts.key) return bad(404, "not found");
     let env: { from?: unknown; to?: unknown; serviceRef?: unknown; issuedAt?: unknown; mac?: unknown; body?: unknown };
     try {
@@ -337,7 +344,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       body: env.body,
     });
     if (!timingSafeEqualHex(want, env.mac)) return bad(403, "bad mac");
-    if (op !== "scopes" && !opts.installed(env.serviceRef)) return bad(404, "the app isn't on this server");
+    if (op !== "scopes" && op !== "shares" && !opts.installed(env.serviceRef)) return bad(404, "the app isn't on this server");
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(env.body) as Record<string, unknown>;
@@ -382,6 +389,12 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       const env = readEnvelope(req, "scopes");
       if ("status" in env) return env;
       return json(200, { apps: ownSeparate() });
+    }
+    if (req.path === "/api/access-sync/shares") {
+      if (!opts.shareCount) return bad(404, "not found");
+      const env = readEnvelope(req, "shares");
+      if ("status" in env) return env;
+      return json(200, { active: opts.shareCount() });
     }
     return null;
   }
@@ -598,6 +611,13 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
         }),
       );
       return [...byRef].map(([serviceRef, leader]) => ({ serviceRef, leader })).sort((a, b) => a.serviceRef.localeCompare(b.serviceRef));
+    },
+    async sharesOn(peer) {
+      const r = await post("shares", peer.toLowerCase(), "*", {});
+      if (!r || !r.ok) return null;
+      const body = (await r.json().catch(() => null)) as { active?: unknown } | null;
+      const n = body?.active;
+      return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : null;
     },
     start() {
       // Apps other servers ran (as of the last run) wait for the list first;

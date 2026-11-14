@@ -468,6 +468,24 @@ describe("PlanCheck", () => {
     expect(p.state()).toBe("unknown");
   });
 
+  it("tier(): the attested tier for the co-manager cap; Free with none, a forged one, an expired one or a lapsed period", async () => {
+    const clock = { t: NOW + 1 };
+    let served: unknown = null;
+    const p = check(() => served, clock);
+    await p.refresh();
+    expect(p.tier()).toBe("free");
+    served = attest("maker", NOW, NOW + 3_600_000, "alice", key(0x62));
+    await p.refresh();
+    expect(p.tier()).toBe("free");
+    served = attest("maker", NOW, NOW + 3_600_000);
+    await p.refresh();
+    expect(p.tier()).toBe("maker");
+    clock.t = NOW + 3_600_000;
+    expect(p.tier()).toBe("free");
+    clock.t = NOW + DAY;
+    expect(p.tier()).toBe("free");
+  });
+
   it("keeps the newest attestation across a restart", async () => {
     const clock = { t: NOW + 1 };
     const dir = mkdtempSync(join(tmpdir(), "plan-"));

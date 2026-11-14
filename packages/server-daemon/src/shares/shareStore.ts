@@ -18,6 +18,7 @@ import {
   type ServerShareGrant,
   type ShareAcceptAdminProof,
 } from "@flagship/protocol";
+import type { CoManagerCapRefusal } from "@flagship/protocol";
 import type { AcceptAdminVerdict } from "./acceptAdmin.js";
 
 export interface HeldShare {
@@ -41,7 +42,7 @@ export interface EndedShare {
 
 export type PutShareResult =
   | { ok: true; created: boolean; share: HeldShare }
-  | { ok: false; status: number; error: string; code?: string };
+  | { ok: false; status: number; error: string; code?: string; extra?: Record<string, unknown> };
 
 export interface ShareStoreOptions {
   serverDomain: string;
@@ -52,6 +53,8 @@ export interface ShareStoreOptions {
    * checked once, on the first grant for a share id.
    */
   verifyAcceptAdmin: (accept: ServerShareAccept, proof: ShareAcceptAdminProof | undefined) => AcceptAdminVerdict;
+  /** The account's co-manager cap (coManagerCap.ts): null lets a new share go live. */
+  admitNew?: () => Promise<CoManagerCapRefusal | null>;
   now?: () => number;
 }
 
@@ -64,6 +67,8 @@ export class ShareStore {
   /** `.com` share-ends cursor (ms). */
   private endsCursor = 0;
   private readonly now: () => number;
+  /** New shares go live one at a time, so two can't both take the last slot. */
+  private admitting: Promise<unknown> = Promise.resolve();
 
   /** `path` null ⇒ memory only (tests). */
   constructor(
@@ -161,7 +166,19 @@ export class ShareStore {
    * Take a new or changed grant. The first grant for an id must carry the
    * other account's acceptance; a change keeps the same key and a later time.
    */
-  async put(
+  put(
+    grant: ServerShareGrant,
+    signature: string,
+    accept?: ServerShareAccept,
+    acceptSignature?: string,
+    acceptAdmin?: ShareAcceptAdminProof,
+  ): Promise<PutShareResult> {
+    const run = this.admitting.then(() => this.putNow(grant, signature, accept, acceptSignature, acceptAdmin));
+    this.admitting = run.catch(() => {});
+    return run;
+  }
+
+  private async putNow(
     grant: ServerShareGrant,
     signature: string,
     accept?: ServerShareAccept,
@@ -191,6 +208,13 @@ export class ShareStore {
       }
     }
     if (!held && this.active.size >= MAX_ACTIVE) return { ok: false, status: 409, error: "too many shares" };
+    if (!held && this.opts.admitNew) {
+      // An account already over its cap keeps its shares (changes above pass) but adds none.
+      const refusal = await this.opts.admitNew();
+      if (refusal) {
+        return { ok: false, status: 403, error: refusal.error, code: refusal.code, extra: { count: refusal.count, cap: refusal.cap, plan: refusal.plan } };
+      }
+    }
     const share: HeldShare = {
       grant,
       signature: signature.toLowerCase(),
