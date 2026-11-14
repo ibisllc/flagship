@@ -206,6 +206,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   direct domain's per-service granularity (attributed differently). (3) BUILD the Firefox extension in 0.4
   (Firefox-only, the browser where Flagship runs well; possible Mozilla funding): agent on `0.4/firefox-extension`.
   (4) Retail: owner proposes first-boot Bluetooth pairing as the source of truth (no printed card); analysis given.
+- 2026-11-14 Merged `0.4/security-fixes` (6 commits): hybrid health reports via keyd `sign-health`; gpud approval
+  expiry (90 d), PQ half under strict, daemon maintenance off by default; `.com` CA-signed revocation list in
+  `/device-grants` + keyd `evidence.list` (master only with a list < 7 d old); boxes drop CA-revoked certificates
+  (`POST /api/certificates/revoked`). tsc clean; keyd/com/protocol tests 2293 pass. Deploy order: `.com` BEFORE the
+  box release. Owner questions: GPU approval lifetime 90 d; gpud withdrawals direct?; owner PQ key for gpud on
+  admin-root boxes (strict refuses every GPU approval today); GPU maintenance order design; revocation-list
+  freshness 7 d vs data sovereignty, rank orders via .com?; keyd slot deactivation for a revoked key.
 
 ## Resume point
 
