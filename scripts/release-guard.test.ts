@@ -114,6 +114,22 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     expect(r.stdout).toContain("OK");
   });
 
+  it("box code that trusts the gym's test CA fails a RELEASE build (the gym branch's dev builds pass)", () => {
+    dir = makeCleanTree();
+    const src = join(dir, "packages", "server-daemon", "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "gymAcmeTrust.ts"), 'import * as tls from "node:tls";\ntls.setDefaultCACertificates([]);\nconst U = "https://flagship-acme-gym.fly.dev/roots/0";\n');
+    expect(run({ RELEASE: "", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+    const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain("gym test-CA trust in box code");
+    // The harness and the infra may name it: only box code is scanned.
+    rmSync(join(src, "gymAcmeTrust.ts"));
+    mkdirSync(join(dir, "tools", "live-e2e", "lib"), { recursive: true });
+    writeFileSync(join(dir, "tools", "live-e2e", "lib", "acmeCa.ts"), 'const U = "https://flagship-acme-gym.fly.dev/dir";\n');
+    expect(run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+  });
+
   it("a reintroduced install-time passphrase constant fails EVERY build, dev included", () => {
     for (const bad of [
       'export const BURN_PASSPHRASE = "something-public";\n',
