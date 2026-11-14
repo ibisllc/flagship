@@ -5,6 +5,11 @@
 // phone mints a single-use companion ticket on the server the owner picked and
 // seals it to the browser, which redeems it there. Also lists and revokes the
 // browsers connected to the picked server.
+//
+// The same ceremony pairs the Flagship Firefox extension: its code is
+// `https://flagshipserver.com/pair-extension?s=<sid>&k=<pk>`, and the phone
+// seals an extension ticket plus the server key THIS phone pinned (never one
+// `.com` or the box reports), so the extension can check the certificate.
 
 package com.flagshipserver.app.viewmodels
 
@@ -12,11 +17,15 @@ import com.flagshipserver.app.core.FSStrings
 import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.CompanionListResponse
+import com.flagshipserver.app.api.CompanionSummary
 import com.flagshipserver.app.api.CompanionMintTicketRequest
 import com.flagshipserver.app.api.CompanionRevokeRequest
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.core.Base64URL
+import com.flagshipserver.app.core.BoxKeyPins
+import com.flagshipserver.app.core.ExtensionPairLink
+import com.flagshipserver.app.core.ExtensionPairPayload
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.QrRelayClient
@@ -38,6 +47,14 @@ import kotlinx.serialization.json.Json
 /** A server this phone can attach a browser to, with a client bound to it. */
 data class RemoteServer(val pod: PodInfo, val client: ScreensClient)
 
+/** The line under a connected companion: "Firefox extension" for the extension,
+ *  else the browser's user agent (absent `kind` = a remote). */
+fun companionDetailLine(c: CompanionSummary): String? =
+    if (c.isExtension) FSStrings.get(R.string.firefox_extension) else c.userAgent
+
+/** A refusal written for the owner, shown as it is. */
+private class ExtensionPairRefused(message: String) : Exception(message)
+
 class CompanionDockViewModel(
     /** Ordered as the picker shows them; the first is the default. Read on
      *  each use, so a refreshed server list doesn't restart the ceremony. */
@@ -54,7 +71,13 @@ class CompanionDockViewModel(
             authority.ensureFresh(FSStrings.get(R.string.let_this_browser_in_2), reason)
         }
     },
+    /** The server key (64 hex) THIS phone pinned for a server domain, or null.
+     *  The same pin store the certificate pinning and the sealing use. */
+    private val pinnedServerKey: (String) -> String? = { domain -> BoxKeyPins.shared.pinned("", domain) },
 ) {
+    /** What the scanned code asked for: a keyless browser remote, or the Firefox extension. */
+    enum class Mode { REMOTE, EXTENSION }
+
     sealed interface Phase {
         data object Idle : Phase
         data object Connecting : Phase
@@ -65,6 +88,9 @@ class CompanionDockViewModel(
 
     private val _state = MutableStateFlow<LoadingState<CompanionListResponse>>(LoadingState.Idle)
     val state: StateFlow<LoadingState<CompanionListResponse>> = _state.asStateFlow()
+
+    private val _mode = MutableStateFlow(Mode.REMOTE)
+    val mode: StateFlow<Mode> = _mode.asStateFlow()
 
     private val _phase = MutableStateFlow<Phase>(Phase.Idle)
     val phase: StateFlow<Phase> = _phase.asStateFlow()
@@ -110,16 +136,20 @@ class CompanionDockViewModel(
     }
 
     /** A scanned or pasted code. Joins the browser's relay session and shows
-     *  the code to compare; false when it isn't a remote page's code. */
+     *  the code to compare; false when it is neither a remote page's code nor
+     *  the Firefox extension's. */
     fun stageApproval(raw: String): Boolean {
         _approvalError.value = null
-        val qr = RemoteApprovalLink.parse(raw)
+        val remote = RemoteApprovalLink.parse(raw)
+        val extension = if (remote == null) ExtensionPairLink.parse(raw) else null
+        val qr = remote ?: extension
         if (qr == null) {
             _approvalError.value = FSStrings.get(R.string.that_isnt_the_code_from, com.flagshipserver.app.core.Endpoints.remoteHost)
             return false
         }
         if (_phase.value is Phase.Connecting || _phase.value is Phase.Approving) return false
         closeRelay()
+        _mode.value = if (extension != null) Mode.EXTENSION else Mode.REMOTE
         _phase.value = Phase.Connecting
         scope.launch {
             try {
@@ -143,6 +173,7 @@ class CompanionDockViewModel(
     fun cancel() {
         closeRelay()
         _phase.value = Phase.Idle
+        _mode.value = Mode.REMOTE
         _approvalError.value = null
     }
 
@@ -156,6 +187,16 @@ class CompanionDockViewModel(
         _phase.value = Phase.Approving
         _approvalError.value = null
         try {
+            if (_mode.value == Mode.EXTENSION) {
+                val plaintext = extensionPayload(server, user)
+                val sealed = s.seal(plaintext)
+                r.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
+                closeRelay()
+                _phase.value = Phase.Connected(server.pod.name)
+                delay(1_500)
+                load()
+                return@launch
+            }
             authenticate(FSStrings.get(R.string.let_this_browser_use_for_four, server.pod.name))
             val ticket = server.client.companionMintTicket(CompanionMintTicketRequest())
             val payload = RemoteTicketPayload(
@@ -173,6 +214,34 @@ class CompanionDockViewModel(
         } catch (t: Throwable) {
             fail(t)
         }
+    }
+
+    /** Biometric, then the pinned server key, then the ticket: the sealed JSON's bytes. */
+    private suspend fun extensionPayload(server: RemoteServer, user: String): ByteArray {
+        authenticate(FSStrings.get(R.string.let_this_browser_extension_check_your))
+        val domain = server.pod.fqdn.lowercase()
+        val stk = pinnedServerKey(domain)?.lowercase()?.takeIf { HEX32.matches(it) }
+            ?: throw ExtensionPairRefused(FSStrings.get(R.string.this_phone_hasnt_checked_this_server))
+        val ticket = try {
+            server.client.companionMintExtensionTicket()
+        } catch (e: ScreensError.Http) {
+            if (e.status == 404) throw ExtensionPairRefused(FSStrings.get(R.string.this_server_needs_an_update_extension))
+            throw e
+        } catch (e: ScreensError.NotImplemented) {
+            throw ExtensionPairRefused(FSStrings.get(R.string.this_server_needs_an_update_extension))
+        }
+        if (ticket.scope != "extension") {
+            throw ExtensionPairRefused(FSStrings.get(R.string.this_server_needs_an_update_extension))
+        }
+        val payload = ExtensionPairPayload(
+            podBaseUrl = "https://$domain",
+            serverDomain = domain,
+            stkPubHex = stk,
+            ticketId = ticket.ticketId,
+            ticketSecret = ticket.ticketSecret,
+            username = user,
+        )
+        return json.encodeToString(ExtensionPairPayload.serializer(), payload).toByteArray()
     }
 
     fun revoke(tokenPrefix: String): Job = scope.launch {
@@ -208,6 +277,7 @@ class CompanionDockViewModel(
     }
 
     private fun failureMessage(t: Throwable): String = when (t) {
+        is ExtensionPairRefused -> t.message.orEmpty()
         is ScreensError.Http -> NetworkErrorHumanizer.humanize(t, "remote")
         else -> {
             com.flagshipserver.app.core.ErrorLog.caught("remote", t, NetworkErrorHumanizer.errorCode(t))
@@ -217,5 +287,6 @@ class CompanionDockViewModel(
 
     private companion object {
         val json = Json { encodeDefaults = true }
+        val HEX32 = Regex("^[0-9a-f]{64}$")
     }
 }

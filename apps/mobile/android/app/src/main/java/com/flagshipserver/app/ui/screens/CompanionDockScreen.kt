@@ -128,6 +128,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
     val selectedPodId by vm.selectedPodId.collectAsState()
     val approvalError by vm.approvalError.collectAsState()
     val revokePending by vm.revokePending.collectAsState()
+    val mode by vm.mode.collectAsState()
     var pendingRevoke by remember { mutableStateOf<CompanionSummary?>(null) }
     var pastedLink by remember { mutableStateOf(initialLink) }
     var scanning by remember { mutableStateOf(false) }
@@ -243,7 +244,11 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                             }
                         }
                         Text(
-                            stringResource(R.string.it_gets_a_keyless_session_for),
+                            if (mode == CompanionDockViewModel.Mode.EXTENSION) {
+                                stringResource(R.string.the_firefox_extension_gets_this_servers)
+                            } else {
+                                stringResource(R.string.it_gets_a_keyless_session_for)
+                            },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -340,7 +345,7 @@ private fun CompanionRow(
     val remaining = (companion.expiresAt - now).coerceAtLeast(0L)
     val lines = buildList {
         add("last seen ${fmtRelative(companion.lastSeenMs, now)} · expires in ${formatRemaining(remaining)}")
-        companion.userAgent?.let { add(it) }
+        com.flagshipserver.app.viewmodels.companionDetailLine(companion)?.let { add(it) }
     }
     FSRow(
         title = fsString(R.string.session, companion.tokenPrefix),

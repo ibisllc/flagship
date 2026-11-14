@@ -3522,4 +3522,9 @@
     <string name="backup_account_key_unavailable">Couldn\'t use your account key to open this backup. Try again, or enter its passcode.</string>
     <string name="backup_account_key_doesnt_open">This account\'s key doesn\'t open this backup. Enter its passcode to open it.</string>
     <string name="choose_where_this_servers_backups_go">Choose where this server\'s backups go.</string>
+    <string name="firefox_extension">Firefox extension</string>
+    <string name="let_this_browser_extension_check_your">Let this browser extension check your server\'s certificate</string>
+    <string name="this_phone_hasnt_checked_this_server">This phone hasn\'t checked this server\'s code yet. Approve the server on this phone first.</string>
+    <string name="this_server_needs_an_update_extension">This server needs an update before it can pair a browser extension.</string>
+    <string name="the_firefox_extension_gets_this_servers">The Firefox extension gets this server\'s address and the key this phone checked, so it can check the server\'s certificate.</string>
 </resources>

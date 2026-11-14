@@ -467,6 +467,9 @@ interface ScreensClient {
 
     // P14 — companion-dock (60s pairing ticket → 4h read-only browser).
     suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse
+    /** A single-use ticket for the Firefox extension. An older box answers 404. */
+    suspend fun companionMintExtensionTicket(): CompanionMintExtensionTicketResponse =
+        throw ScreensError.NotImplemented("extension pairing")
     suspend fun companionList(): CompanionListResponse
     suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse
 

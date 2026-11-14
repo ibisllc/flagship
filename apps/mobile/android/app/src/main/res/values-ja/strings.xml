@@ -3517,4 +3517,9 @@
     <string name="backup_account_key_unavailable">アカウントの鍵でこのバックアップを開けませんでした。もう一度試すか、パスコードを入力してください。</string>
     <string name="backup_account_key_doesnt_open">このアカウントの鍵ではこのバックアップを開けません。開くにはそのパスコードを入力してください。</string>
     <string name="choose_where_this_servers_backups_go">このサーバーのバックアップの保存先を選んでください。</string>
+    <string name="firefox_extension">Firefox 拡張機能</string>
+    <string name="let_this_browser_extension_check_your">このブラウザー拡張機能にサーバーの証明書の確認を許可</string>
+    <string name="this_phone_hasnt_checked_this_server">このスマートフォンはまだこのサーバーのコードを確認していません。先にこのスマートフォンでサーバーを承認してください。</string>
+    <string name="this_server_needs_an_update_extension">ブラウザー拡張機能をペアリングするには、このサーバーのアップデートが必要です。</string>
+    <string name="the_firefox_extension_gets_this_servers">Firefox 拡張機能は、このサーバーのアドレスと、このスマートフォンが確認した鍵を受け取り、サーバーの証明書を確認できるようになります。</string>
 </resources>

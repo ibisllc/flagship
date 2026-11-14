@@ -14507,5 +14507,25 @@
   "choose_where_this_servers_backups_go": {
     "en": "Choose where this server's backups go.",
     "ctx": "ui/screens/CreateServerScreen.kt (W3: why Continue is off)"
+  },
+  "firefox_extension": {
+    "en": "Firefox extension",
+    "ctx": "ui/screens/CompanionDockScreen.kt (connected companion row: the Flagship Firefox browser extension; keep 'Firefox' untranslated)"
+  },
+  "let_this_browser_extension_check_your": {
+    "en": "Let this browser extension check your server's certificate",
+    "ctx": "viewmodels/CompanionDockViewModel.kt (biometric prompt reason when pairing the Firefox extension)"
+  },
+  "this_phone_hasnt_checked_this_server": {
+    "en": "This phone hasn't checked this server's code yet. Approve the server on this phone first.",
+    "ctx": "viewmodels/CompanionDockViewModel.kt (extension pairing refused: no server key pinned on this phone)"
+  },
+  "this_server_needs_an_update_extension": {
+    "en": "This server needs an update before it can pair a browser extension.",
+    "ctx": "viewmodels/CompanionDockViewModel.kt (extension pairing refused: older server)"
+  },
+  "the_firefox_extension_gets_this_servers": {
+    "en": "The Firefox extension gets this server's address and the key this phone checked, so it can check the server's certificate.",
+    "ctx": "ui/screens/CompanionDockScreen.kt (explainer above Approve when pairing the Firefox extension; keep 'Firefox' untranslated)"
   }
 }

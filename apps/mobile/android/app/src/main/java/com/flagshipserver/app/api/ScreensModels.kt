@@ -884,7 +884,7 @@ data class PairedSessionSummary(
     /** Settings → Browser sessions lists Remote browsers only. On a box that
      *  doesn't say, this device's own session is still never a browser. */
     val isBrowserSession: Boolean
-        get() = if (kind != null) kind == "remote" else !current
+        get() = if (kind != null) kind == "remote" || kind == "extension" else !current
 }
 
 @Serializable
@@ -1576,6 +1576,16 @@ data class CompanionMintTicketResponse(
     val expiresAt: Long,
 )
 
+/** The Firefox extension's ticket (`POST /api/screens/companion/mint-extension-ticket`).
+ *  `scope` is "extension" on a box that knows the route. */
+@Serializable
+data class CompanionMintExtensionTicketResponse(
+    val ticketId: String,
+    val ticketSecret: String,
+    val expiresAt: Long,
+    val scope: String? = null,
+)
+
 @Serializable
 data class CompanionSummary(
     val tokenPrefix: String,
@@ -1583,7 +1593,11 @@ data class CompanionSummary(
     val lastSeenMs: Long,
     val expiresAt: Long,
     val userAgent: String?,
-)
+    /** "remote" or "extension"; absent on older boxes (a remote). */
+    val kind: String? = null,
+) {
+    val isExtension: Boolean get() = kind == "extension"
+}
 
 @Serializable
 data class CompanionListResponse(val companions: List<CompanionSummary>)
