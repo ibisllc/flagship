@@ -288,6 +288,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Today a Back up now backup with a passcode opens in any account, but SCHEDULED backups carry only the account slot,
   so they die with the account. Proposed: a backup recovery key slot on every scheduled backup (box holds only its
   public key); asked the owner.
+- 2026-11-14 Merged design `docs/transport-adapters.md`: adapters only move bytes (stream adapters into ingress like
+  the relay; message adapters carry signed sealed envelopes); box name = identity, routes in a box-signed endpoint
+  record to owner devices only; trust tiers WebPKI > key-bound TLS > pq-session; owner consent
+  `flagship/transport-consent/v1` (adapter hash, risk class, scopes, warning-text hash, expiry) enforced by the box.
+  0.4 candidate: `host-ip` adapter (WireGuard/Tailscale/ZeroTier/Yggdrasil/meshes as host interfaces), 3-5 weeks;
+  Tor 0.5; message adapters 0.5-0.6. Owner Qs in its §9 (8).
 
 ## Resume point
 
