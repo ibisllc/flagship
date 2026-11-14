@@ -9,6 +9,9 @@
  * every revoke and leave it reads back.
  */
 import {
+  coManagerCapFor,
+  coManagerCapRefusal,
+  coManagerPlanOf,
   parseServerShareLeave,
   parseServerShareList,
   parseServerShareOffer,
@@ -31,8 +34,10 @@ import type {
   ServerShareRecord,
   ServerShareStorage,
   ServerStorage,
+  TierStorage,
   UsernameStorage,
 } from "@flagship/storage";
+import { effectiveTierOf } from "./meter.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { equalBytes, hexToBytes } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
@@ -45,6 +50,8 @@ export interface ServerShareDeps {
   usernames: UsernameStorage;
   servers: ServerStorage;
   grants?: DeviceCapabilityGrantStorage;
+  /** The account's plan, for the co-manager cap on new share links (absent: no cap here; the box still enforces it). */
+  tiers?: TierStorage;
   now?: () => number;
   /** Replay window for signed envelopes. Default 5 min. */
   freshnessMs?: number;
@@ -112,6 +119,24 @@ async function liveServerOf(deps: ServerShareDeps, username: string, serverDomai
   return !!s && s.username === username && !s.revokedAt;
 }
 
+/**
+ * The backstop for the co-manager cap (packages/protocol/src/coManagerCap.ts):
+ * the boxes enforce it when a share goes live; here a new link is refused once
+ * the account's open links and live shares reach the plan's cap. It counts
+ * only this account's own rows, which name a server and an opaque id: nothing
+ * about who the shares are with. An account already over its cap keeps every
+ * share; only new links wait until it is under.
+ */
+async function coManagerCapReached(deps: ServerShareDeps, username: string, now: number): Promise<Res | null> {
+  if (!deps.tiers) return null;
+  const plan = coManagerPlanOf(await effectiveTierOf(deps.tiers, username, now));
+  const cap = coManagerCapFor(plan);
+  if (cap === null) return null;
+  const rows = await deps.shares.listForOwner(username);
+  const count = rows.filter((r) => r.endedAt === null && (r.acceptHex !== null || r.expiresAt > now)).length;
+  return count >= cap ? { status: 403, body: coManagerCapRefusal({ count, cap, plan }) } : null;
+}
+
 // POST /api/users/:u/server-shares — the owner offers a share.
 export async function handleCreateServerShare(deps: ServerShareDeps, username: string, body: unknown): Promise<Res> {
   const u = validateUserLabel(username);
@@ -132,6 +157,8 @@ export async function handleCreateServerShare(deps: ServerShareDeps, username: s
   const denied = await ownerAuthorized(deps, u.label, (pub) => verifyServerShareOffer(offer, s, hexToBytes(pub)));
   if (denied) return denied;
   if (!(await liveServerOf(deps, u.label, offer.serverDomain))) return notFound("no such server on this account");
+  const full = await coManagerCapReached(deps, u.label, now);
+  if (full) return full;
   const res = await deps.shares.create({
     shareId: offer.shareId,
     ownerUsername: u.label,
