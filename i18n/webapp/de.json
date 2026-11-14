@@ -3519,5 +3519,9 @@
   "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "Richte diese Box mit der Flagship-App auf deinem Telefon ein. Sie findet die Box über Bluetooth, das ein Browser nicht nutzen kann.",
   "Someone pressed the reset button on this server": "Jemand hat die Reset-Taste dieses Servers gedrückt",
   "The reset window closed. Nothing changed.": "Das Reset-Fenster ist abgelaufen. Nichts hat sich geändert.",
-  "This server is being wiped for a new owner": "Dieser Server wird für einen neuen Besitzer gelöscht"
+  "This server is being wiped for a new owner": "Dieser Server wird für einen neuen Besitzer gelöscht",
+  "{0} of {1} co-managers across your servers": "{0} von {1} Mitverwaltern auf deinen Servern",
+  "On the Free plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro for more.": "Mit dem kostenlosen Tarif können deine Server insgesamt bis zu {0} Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro, um mehr zu haben.",
+  "On the Pro plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro Max for more.": "Mit dem Tarif Pro können deine Server insgesamt bis zu {0} Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro Max, um mehr zu haben.",
+  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "Mit dem Tarif Pro Max können deine Server insgesamt bis zu {0} Mitverwalter haben. Entferne zuerst einen oder wechsle zu Enterprise, um mehr zu haben."
 }

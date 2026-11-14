@@ -3519,5 +3519,9 @@
   "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "Utilisez l'app Flagship sur votre téléphone pour configurer ce boîtier. Elle le trouve en Bluetooth, ce qu'un navigateur ne peut pas utiliser.",
   "Someone pressed the reset button on this server": "Quelqu’un a appuyé sur le bouton de réinitialisation de ce serveur",
   "The reset window closed. Nothing changed.": "La fenêtre de réinitialisation s’est fermée. Rien n’a changé.",
-  "This server is being wiped for a new owner": "Ce serveur est en cours d’effacement pour un nouveau propriétaire"
+  "This server is being wiped for a new owner": "Ce serveur est en cours d’effacement pour un nouveau propriétaire",
+  "{0} of {1} co-managers across your servers": "{0} cogestionnaires sur {1} pour l’ensemble de vos serveurs",
+  "On the Free plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro for more.": "Avec l’offre gratuite, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro pour en avoir plus.",
+  "On the Pro plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro Max for more.": "Avec l’offre Pro, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro Max pour en avoir plus.",
+  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus."
 }
