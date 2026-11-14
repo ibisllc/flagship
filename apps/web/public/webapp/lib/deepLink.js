@@ -120,11 +120,11 @@ export async function dispatchInitialView() {
     }
     if (q.view === "view-messages") {
       const { enterMessages } = await import("../views/messages.js");
-      return enterMessages();
+      return enterMessages({ side: "messages" });
     }
     if (q.view === "view-page-editor") {
-      const { enterPageEditor } = await import("../views/page-editor.js");
-      return enterPageEditor();
+      const { enterYourPage } = await import("../views/messages.js");
+      return enterYourPage();
     }
     if (q.view === "view-install-progress") {
       const { enterInstallProgress } = await import("../views/install-progress.js");

@@ -12774,10 +12774,6 @@
     "en": "Your page",
     "ctx": "webapp/index.html"
   },
-  "No messages yet. Turn on Accept messages on your page to get them.": {
-    "en": "No messages yet. Turn on Accept messages on your page to get them.",
-    "ctx": "webapp/views/messages.js:54"
-  },
   "No message requests.": {
     "en": "No message requests.",
     "ctx": "webapp/views/messages.js:57"
@@ -12802,21 +12798,9 @@
     "en": "Approve a voi.ci sign-in",
     "ctx": "webapp/views/messages.js:160"
   },
-  "Inbox key": {
-    "en": "Inbox key",
-    "ctx": "webapp/views/messages.js:162"
-  },
-  "Make a new key for messages people send to your page. Messages you already have stay readable.": {
-    "en": "Make a new key for messages people send to your page. Messages you already have stay readable.",
-    "ctx": "webapp/views/messages.js:164"
-  },
   "Rotate inbox key": {
     "en": "Rotate inbox key",
     "ctx": "webapp/views/messages.js:166"
-  },
-  "Only an admin device can rotate the inbox key.": {
-    "en": "Only an admin device can rotate the inbox key.",
-    "ctx": "webapp/views/messages.js:167"
   },
   "Signed out of that website.": {
     "en": "Signed out of that website.",
@@ -12829,14 +12813,6 @@
   "That isn't a voi.ci sign-in link.": {
     "en": "That isn't a voi.ci sign-in link.",
     "ctx": "webapp/views/messages.js:191"
-  },
-  "Rotate inbox key?": {
-    "en": "Rotate inbox key?",
-    "ctx": "webapp/views/messages.js:199"
-  },
-  "New messages will be sealed to a new key. People already writing to you keep their conversations.": {
-    "en": "New messages will be sealed to a new key. People already writing to you keep their conversations.",
-    "ctx": "webapp/views/messages.js:200"
   },
   "Rotate": {
     "en": "Rotate",
@@ -12853,14 +12829,6 @@
   "Profile": {
     "en": "Profile",
     "ctx": "webapp/views/page-editor.js:117"
-  },
-  "Your photo": {
-    "en": "Your photo",
-    "ctx": "webapp/views/page-editor.js:120"
-  },
-  "Choose photo": {
-    "en": "Choose photo",
-    "ctx": "webapp/views/page-editor.js:122"
   },
   "Remove photo": {
     "en": "Remove photo",
@@ -12882,10 +12850,6 @@
     "en": "Link address",
     "ctx": "webapp/views/page-editor.js:137"
   },
-  "Link label": {
-    "en": "Link label",
-    "ctx": "webapp/views/page-editor.js:138"
-  },
   "Move up": {
     "en": "Move up",
     "ctx": "webapp/views/page-editor.js:141"
@@ -12897,10 +12861,6 @@
   "Add link": {
     "en": "Add link",
     "ctx": "webapp/views/page-editor.js:149"
-  },
-  "Look": {
-    "en": "Look",
-    "ctx": "webapp/views/page-editor.js:150"
   },
   "Save profile": {
     "en": "Save profile",
@@ -12917,14 +12877,6 @@
   "Write a post": {
     "en": "Write a post",
     "ctx": "webapp/views/page-editor.js:165"
-  },
-  "Post": {
-    "en": "Post",
-    "ctx": "webapp/views/page-editor.js:166"
-  },
-  "Preview": {
-    "en": "Preview",
-    "ctx": "webapp/views/page-editor.js:173"
   },
   "Publish": {
     "en": "Publish",
@@ -12949,14 +12901,6 @@
   "Removal not published yet": {
     "en": "Removal not published yet",
     "ctx": "webapp/views/page-editor.js:203"
-  },
-  "Remove card": {
-    "en": "Remove card",
-    "ctx": "webapp/views/page-editor.js:211"
-  },
-  "Send me a message": {
-    "en": "Send me a message",
-    "ctx": "webapp/views/page-editor.js:262"
   },
   "That photo is too detailed to fit. Try another one.": {
     "en": "That photo is too detailed to fit. Try another one.",
@@ -13410,14 +13354,6 @@
     "en": "Not public",
     "ctx": "webapp/views/home.js:917"
   },
-  "Anyone with the link can see your page.": {
-    "en": "Anyone with the link can see your page.",
-    "ctx": "webapp/views/page-editor.js:104"
-  },
-  "Your page is not on voi.ci. Turn on Public to publish it.": {
-    "en": "Your page is not on voi.ci. Turn on Public to publish it.",
-    "ctx": "webapp/views/page-editor.js:104"
-  },
   "Changes": {
     "en": "Changes",
     "ctx": "webapp/views/page-editor.js:173"
@@ -13425,14 +13361,6 @@
   "Change photo": {
     "en": "Change photo",
     "ctx": "webapp/views/page-header.js:86"
-  },
-  "Edit page": {
-    "en": "Edit page",
-    "ctx": "webapp/views/page-header.js:106"
-  },
-  "Bio, links, posts, look, messages": {
-    "en": "Bio, links, posts, look, messages",
-    "ctx": "webapp/views/page-header.js:107"
   },
   "This is a sample account. Its page is an example, so you can't change it.": {
     "en": "This is a sample account. Its page is an example, so you can't change it.",
@@ -14041,5 +13969,97 @@
   "Saved. The server is reconnecting through the proxy.": {
     "en": "Saved. The server is reconnecting through the proxy.",
     "ctx": "webapp/views/server-detail.js:910"
+  },
+  "No messages yet. Turn on Accept messages in Page options to get them.": {
+    "en": "No messages yet. Turn on Accept messages in Page options to get them.",
+    "ctx": "webapp/views/messages.js:39"
+  },
+  "Page options": {
+    "en": "Page options",
+    "ctx": "webapp/views/messages.js:83"
+  },
+  "Your conversations with other pages are on voi.ci.": {
+    "en": "Your conversations with other pages are on voi.ci.",
+    "ctx": "webapp/views/messages.js:177"
+  },
+  "Publishing your page…": {
+    "en": "Publishing your page…",
+    "ctx": "webapp/views/page-editor.js:89"
+  },
+  "Add a display name.": {
+    "en": "Add a display name.",
+    "ctx": "webapp/views/page-editor.js:97"
+  },
+  "Edit display name": {
+    "en": "Edit display name",
+    "ctx": "webapp/views/page-editor.js:153"
+  },
+  "Edit bio": {
+    "en": "Edit bio",
+    "ctx": "webapp/views/page-editor.js:165"
+  },
+  "Post options": {
+    "en": "Post options",
+    "ctx": "webapp/views/page-editor.js:186"
+  },
+  "Add photo": {
+    "en": "Add photo",
+    "ctx": "webapp/views/page-editor.js:213"
+  },
+  "Edit links": {
+    "en": "Edit links",
+    "ctx": "webapp/views/page-editor.js:227"
+  },
+  "New post": {
+    "en": "New post",
+    "ctx": "webapp/views/page-editor.js:231"
+  },
+  "No posts yet.": {
+    "en": "No posts yet.",
+    "ctx": "webapp/views/page-editor.js:233"
+  },
+  "Add a short bio": {
+    "en": "Add a short bio",
+    "ctx": "webapp/views/page-editor.js:241"
+  },
+  "Give the link a short label (40 characters at most).": {
+    "en": "Give the link a short label (40 characters at most).",
+    "ctx": "webapp/views/page-editor.js:467"
+  },
+  "Add post": {
+    "en": "Add post",
+    "ctx": "webapp/views/page-editor.js:507"
+  },
+  "Remove link cards": {
+    "en": "Remove link cards",
+    "ctx": "webapp/views/page-editor.js:530"
+  },
+  "Theme": {
+    "en": "Theme",
+    "ctx": "webapp/views/page-editor.js:580"
+  },
+  "New messages are sealed to a new key. This device keeps reading the old ones.": {
+    "en": "New messages are sealed to a new key. This device keeps reading the old ones.",
+    "ctx": "webapp/views/page-editor.js:606"
+  },
+  "Remove page": {
+    "en": "Remove page",
+    "ctx": "webapp/views/page-editor.js:607"
+  },
+  "Rotate your inbox key?": {
+    "en": "Rotate your inbox key?",
+    "ctx": "webapp/views/page-editor.js:640"
+  },
+  "Your page is published again with the new key.": {
+    "en": "Your page is published again with the new key.",
+    "ctx": "webapp/views/page-editor.js:640"
+  },
+  "Conversations": {
+    "en": "Conversations",
+    "ctx": "webapp/index.html"
+  },
+  "Social": {
+    "en": "Social",
+    "ctx": "webapp/index.html"
   }
 }

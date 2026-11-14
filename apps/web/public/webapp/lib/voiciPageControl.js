@@ -1,7 +1,7 @@
-// The page's changes and its Public switch, shared by the Messages header (the quick control), the page editor and
-// Home (docs/voici-and-messages.md §3.3, §5, §11). Every edit is a draft op; an admin device publishes them with the
-// editor's Publish bar, or at once when the owner changes the name or photo on the header of a public page. Only an
-// admin device signs the page; a sample account's device never holds the key that does (§3.3), so it can't publish.
+// The page's changes and its Public switch, shared by the Social tab and Home (docs/social-tab.md,
+// docs/voici-and-messages.md §3.3, §5, §11). Every edit is a draft op; an admin device publishes them with the tab's
+// publish bar. Only an admin device signs the page; a sample account's device never holds the key that does (§3.3),
+// so it can't publish.
 
 import { canSignAdminOrders } from "./addServerGate.js";
 import { getSession } from "./state.js";
@@ -69,13 +69,13 @@ export function pageImageBytes(sha) {
 }
 
 /**
- * Records one change. An admin device keeps it as a draft (published by the Publish bar), or publishes at once with
- * `publishNow` when the page is public; any other device hands it to the admin device. Every draft goes into the
+ * Records one change. An admin device keeps it as a draft (published by the publish bar); any other device hands it
+ * to the admin device. Every draft goes into the
  * account's drafts lane on `.com` (sealed, device-signed), so it survives a reload or a lock and shows on the
  * account's other devices; until the lane has it, it waits here. A new profile change replaces the earlier ones
  * (an admin device consumes them from the lane), so the bar counts one profile change.
  */
-export async function addPageOp(op, { publishNow = false } = {}) {
+export async function addPageOp(op) {
   if (busy) return;
   if (op.op === "profile") {
     world.localOps = world.localOps.filter((o) => o.op !== "profile");
@@ -90,8 +90,7 @@ export async function addPageOp(op, { publishNow = false } = {}) {
   world.localOps.push(op);
   emitWorld();
   if (canPublishPage()) {
-    if (publishNow && world.page) await publishPending();
-    else void keepDraft(op);
+    void keepDraft(op);
     return;
   }
   busy = true;

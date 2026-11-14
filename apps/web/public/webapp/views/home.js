@@ -870,8 +870,8 @@ async function renderAllowance(username) {
 const PAGE_WELCOME_ID = "home-page-welcome";
 
 /**
- * Home's pointer to the voi.ci page (docs/voici-and-messages.md §11.1), which is managed at the top of the Messages
- * tab: the short welcome card until the page is first published or the card is dismissed, then a compact "Your page"
+ * Home's pointer to the voi.ci page (docs/voici-and-messages.md §11.1), which is managed on the Social tab
+ * (docs/social-tab.md): the short welcome card until the page is first published or the card is dismissed, then a compact "Your page"
  * row (pageHomeState). Nothing until `.com` answered for the page; nothing for a sample account (its device can't
  * sign the page). Same states as iOS PageWelcomeCardStore and Android's.
  */
@@ -880,7 +880,7 @@ export function shouldShowPageWelcome(o = {}) {
 }
 
 function goToPage() {
-  void import("./messages.js").then((m) => m.enterPageHeader());
+  void import("./messages.js").then((m) => m.enterYourPage());
 }
 
 /**
