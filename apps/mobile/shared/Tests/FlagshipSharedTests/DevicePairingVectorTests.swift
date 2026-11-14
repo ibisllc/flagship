@@ -1,6 +1,7 @@
 import XCTest
 import CryptoKit
 import FlagshipCore
+import FlagshipAPI
 
 /// Pins the Swift side of adding a device to
 /// `packages/protocol/test-vectors/device-pairing/vectors.json`: the admit and
@@ -90,7 +91,8 @@ final class DevicePairingVectorTests: XCTestCase {
             grant: .init(grantId: "g", username: "harry", deviceId: "10", devicePubHex: "ab",
                          scopes: DeviceCapabilityGrantEnvelope.memberScopes, issuedAt: 1, expiresAt: 2,
                          signerRoot: "membership"),
-            grantSignature: "01", wrappedAdminRoot: "02"
+            grantSignature: "01", wrappedAdminRoot: "02",
+            grantPqSignature: PqSignatureWire(suite: "s", signature: "03")
         )
         let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: try bundle.encoded()) as? [String: Any])
         let want = Set((v["bundleKeys"] as! [String]).map { $0.hasSuffix("?") ? String($0.dropLast()) : $0 })

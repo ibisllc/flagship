@@ -511,6 +511,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
   async function fixture(k: any, opts: {
     promote?: boolean; passphrase?: string | undefined; badGrantSigner?: boolean;
     grantDevicePubHex?: string; admitPubHex?: string; admitSigner?: any; accountIrk?: any;
+    grantPqSignature?: { suite: string; signature: string };
   } = {}) {
     const harryIrk = opts.accountIrk ?? deriveIRK({ seed: HARRY_SEED });
     const devicePubHex = k.bytesToHex((await k.deriveAdminRootFromSeed(DEVICE_SEED)).publicKey);
@@ -541,6 +542,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
       grant,
       grantSignature: toHex(signDeviceCapabilityGrant(protocolGrant(grant), grantSigner)),
       ...(promote ? { wrappedAdminRoot: k.bytesToHex(ADMIN_SEED) } : {}),
+      ...(opts.grantPqSignature ? { grantPqSignature: opts.grantPqSignature } : {}),
     });
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(200, { ok: true, tokenId: "tok-1", quarantineUntil: 100 + 14 * 86_400_000 }),
@@ -579,6 +581,18 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     };
     return { deps, fetchMock, addedProfiles, registerPush, grant, devicePubHex, bundle };
   }
+
+  it("passes the bundle's grantPqSignature on to /devices/admit, and sends none when the bundle has none", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    const pq = { suite: "ed25519+ml-dsa-65", signature: "ab".repeat(16) };
+    const withPq = await fixture(k, { grantPqSignature: pq });
+    await runIncomingJoin(withPq.deps);
+    expect(JSON.parse(withPq.fetchMock.mock.calls[0]![1].body).grantPqSignature).toEqual(pq);
+    const without = await fixture(k);
+    await runIncomingJoin(without.deps);
+    expect("grantPqSignature" in JSON.parse(without.fetchMock.mock.calls[0]![1].body)).toBe(false);
+  });
 
   it("verifies the admit and grant, POSTs grant + profile, persists the UMK under a NEW profile and leaves the EXISTING one untouched", async () => {
     const k = await loadKeystore();
@@ -784,14 +798,36 @@ describe("crossDevicePairing — packages/protocol/test-vectors/device-pairing",
       signWithIrk: k.signWithIrk, signWithAdminRoot: k.signWithAdminRoot, bytesToHex: k.bytesToHex,
       irkPubHex: k.bytesToHex(deriveIRK({ seed }).publicKey),
     });
+    const required = (keys: string[]) => keys.filter((x) => !x.endsWith("?")).sort();
+    const all = (keys: string[]) => keys.map((x) => x.replace("?", "")).sort();
+    // The webapp signs no hybrid companion, so its bundle carries every key but grantPqSignature.
     expect(Object.keys(JSON.parse(new TextDecoder().decode(sealed!))).sort())
-      .toEqual(V.bundleKeys.map((x: string) => x.replace("?", "")).sort());
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+      .toEqual(all(V.bundleKeys).filter((x) => x !== "grantPqSignature"));
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, {}));
     await postDeviceAdmit({
       username: "harry", admit: {}, admitSigHex: "a", grant: {}, grantSignatureHex: "b", profile: {},
       request: {}, signatureHex: "c", fetch: fetchMock,
     });
-    expect(Object.keys(JSON.parse(fetchMock.mock.calls[0]![1].body)).sort()).toEqual([...V.postKeys].sort());
+    expect(Object.keys(JSON.parse(fetchMock.mock.calls[0]![1].body)).sort()).toEqual(required(V.postKeys));
+    await postDeviceAdmit({
+      username: "harry", admit: {}, admitSigHex: "a", grant: {}, grantSignatureHex: "b",
+      grantPqSignature: { suite: "s", signature: "ab" }, profile: {},
+      request: {}, signatureHex: "c", fetch: fetchMock,
+    });
+    expect(Object.keys(JSON.parse(fetchMock.mock.calls[1]![1].body)).sort()).toEqual(all(V.postKeys));
+  });
+
+  it("a joining browser passes the bundle's hybrid companion on to /devices/admit", async () => {
+    const { parseSealedBundle } = await loadPairing();
+    const base = {
+      umkSeedHex: "aa".repeat(32), admit: V.admit.fields, admitSig: V.admit.signatureHex,
+      irkPubHex: V.keys.irkPubHex, grant: V.memberGrant.grant, grantSignature: V.memberGrant.signatureHex,
+    };
+    expect(parseSealedBundle(JSON.stringify(base)).grantPqSignature).toBeNull();
+    expect(parseSealedBundle(JSON.stringify({ ...base, grantPqSignature: { suite: "ed25519+ml-dsa-65", signature: "ABcd" } }))
+      .grantPqSignature).toEqual({ suite: "ed25519+ml-dsa-65", signature: "abcd" });
+    expect(() => parseSealedBundle(JSON.stringify({ ...base, grantPqSignature: { suite: 1, signature: "ab" } })))
+      .toThrow(/grantPqSignature/);
   });
 });
 
