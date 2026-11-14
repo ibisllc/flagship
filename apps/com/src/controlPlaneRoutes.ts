@@ -144,6 +144,11 @@ import {
   handleServerReleaseName,
   handleAccountDeletionBundle,
   handlePostServerOrder,
+  handleGetDirectAccess,
+  handlePostDirectAccessOrder,
+  handlePostDirectAddress,
+  handlePostDirectName,
+  handleProbeDirectName,
   handleAdminUsernameReclaim,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
@@ -300,8 +305,9 @@ import { protectedAccountsFrom } from "./prodReap.js";
 import { SERVING_ACCOUNT_ROUTES, servingForBox, tryServingRoute, type ServingEnv } from "./servingAuthority.js";
 import { PHONE_ROUTE_PREFIX, tryPhoneRouteRoute } from "./phoneRoute.js";
 import { tryIssuanceRoute } from "./certificateIssuance.js";
+import { directAccessDeps, fetchProber, publishPendingNow, type DirectNamesEnv } from "./directNames.js";
 
-export interface ControlPlaneEnv {
+export interface ControlPlaneEnv extends DirectNamesEnv {
   /** CODE_LENGTH for newly minted voi.ci codes (docs/voici-namespace-spec.md D3): 6 by default, can only grow. */
   VOICI_CODE_LENGTH?: string;
   /**
@@ -948,6 +954,10 @@ const ROUTE_RE = {
   ACCOUNT_READ_TOKEN: /^\/api\/accounts\/([^/]+)\/read-token$/,
   // The owner's server order (docs/server-order.md): POST the signed order.
   SERVER_ORDER: /^\/api\/accounts\/([^/]+)\/server-order$/,
+  // Direct access (docs/direct-access-and-domains.md §6): owner orders, the box's address update, fshp.app names.
+  DIRECT_ACCESS: /^\/api\/accounts\/([^/]+)\/direct-access$/,
+  DIRECT_NAMES: /^\/api\/accounts\/([^/]+)\/direct-names$/,
+  DIRECT_NAME_PROBE: /^\/api\/accounts\/([^/]+)\/direct-names\/([a-z0-9-]{1,63})\/probe$/,
   ACCOUNT_DIRECTORY: /^\/api\/accounts\/([^/]+)\/directory$/,
   DEVICE_SELF_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/profile$/,
   DEVICE_MANAGED_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/managed-profile$/,
@@ -2792,6 +2802,40 @@ export async function tryControlPlane(
       accountId,
       { device: directoryAuthorization(request, accountId, path), body: await readJson(request) },
     ));
+  }
+  if (path === "/api/direct-access/address" && method === "POST") {
+    const r = await handlePostDirectAddress(directAccessDeps(env, storage), await readJson(request));
+    if (r.status === 200) {
+      const host = (r.body as { serverDomain?: string }).serverDomain;
+      const owner = host ? (await storage.servers.get(host))?.username : undefined;
+      if (owner) options.waitUntil?.(publishPendingNow(env, storage, owner).catch(() => undefined));
+    }
+    return finish(r);
+  }
+  if ((m = path.match(ROUTE_RE.DIRECT_ACCESS))) {
+    const account = decodeURIComponent(m[1]!).toLowerCase();
+    if (method === "GET") {
+      const denied = await gateAccountRead(storage, env, request, account);
+      if (denied) return denied;
+      return finish(await handleGetDirectAccess(directAccessDeps(env, storage), account));
+    }
+    if (method === "POST") {
+      const r = await handlePostDirectAccessOrder(directAccessDeps(env, storage), account, await readJson(request));
+      if (r.status === 200) options.waitUntil?.(publishPendingNow(env, storage, account).catch(() => undefined));
+      return finish(r);
+    }
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.DIRECT_NAMES))) {
+    const account = decodeURIComponent(m[1]!).toLowerCase();
+    const r = await handlePostDirectName(directAccessDeps(env, storage), account, await readJson(request));
+    if (r.status === 200) options.waitUntil?.(publishPendingNow(env, storage, account).catch(() => undefined));
+    return finish(r);
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.DIRECT_NAME_PROBE))) {
+    const account = decodeURIComponent(m[1]!).toLowerCase();
+    const denied = await gateAccountRead(storage, env, request, account);
+    if (denied) return denied;
+    return finish(await handleProbeDirectName({ ...directAccessDeps(env, storage), prober: fetchProber() }, account, m[2]!));
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_ORDER))) {
     return finish(await handlePostServerOrder(

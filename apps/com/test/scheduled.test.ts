@@ -37,7 +37,7 @@ describe("cronPlan — who runs when", () => {
     for (let t = MONDAY; t < MONDAY + 86_400_000; t += 600_000) {
       for (const j of cronPlan(TEN_MINUTE_CRON, t).jobs) counts.set(j, (counts.get(j) ?? 0) + 1);
     }
-    for (const j of ["repair-alerts", "quarantine-alerts", "suggestions", "eviction-gc", "dns-gc", "legacy-dns-sweep", "voici-names", "voici-gc", "issuance-sweep"] as const) {
+    for (const j of ["repair-alerts", "quarantine-alerts", "suggestions", "eviction-gc", "dns-gc", "legacy-dns-sweep", "voici-names", "voici-gc", "issuance-sweep", "direct-names"] as const) {
       expect(counts.get(j), j).toBeGreaterThanOrEqual(22); // hourly, less the ticks the daily adapter jobs take
     }
     expect(counts.get("adapter-publish")).toBe(1);

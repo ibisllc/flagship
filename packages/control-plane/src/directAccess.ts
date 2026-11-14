@@ -234,7 +234,7 @@ export async function handlePostDirectAddress(deps: DirectAccessDeps, body: unkn
     updatedAt: now,
   });
   if (put.ok) await markServerNames(deps, update.serverDomain, now);
-  return ok({ ok: true, stored: put.ok });
+  return ok({ ok: true, stored: put.ok, serverDomain: server.serverDomain });
 }
 
 // ── the owner's name order ────────────────────────────────────────────────
