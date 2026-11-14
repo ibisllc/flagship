@@ -22,6 +22,7 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import { authCodeWire, issueAuthCode, newAuthCode } from "../../lib/fleet.js";
+import { NOT_LETS_ENCRYPT, isLetsEncryptProduction } from "../../lib/acmeCa.js";
 import { CONTROL, SERVICES, SkipError, assert, certInfo, http, postJson, short, tryHttp } from "../../lib/harness.js";
 import { SimPhone } from "../../lib/phoneSim.js";
 import { installWhoami, waitServing } from "../gating.js";
@@ -88,6 +89,8 @@ export const issuance: Group = {
 
     const serviceAccountUri = String(account.json?.accountUri ?? "");
     await rec.check("I-10: the apex CAA pins issuance to the service's ACME account and DNS-01, with no permissive record beside it", async () => {
+      // CAA binds Let's Encrypt only; a test CA (docs/gym-test-acme.md) neither reads it nor has an account it lists.
+      if (!isLetsEncryptProduction(String(account.json?.directory ?? ""))) throw new SkipError(NOT_LETS_ENCRYPT);
       let caa: Array<{ critical: number; issue?: string; issuewild?: string }> = [];
       for (const name of [SERVICES, SERVICES.split(".").slice(1).join(".")]) {
         caa = await resolveCaa(name).catch(() => []);

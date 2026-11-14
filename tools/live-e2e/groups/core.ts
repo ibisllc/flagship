@@ -22,6 +22,7 @@ import {
 } from "@flagship/protocol";
 import { pair, sweep } from "../lib/fleet.js";
 import { accountRecordSurprises } from "../lib/dnsBudget.js";
+import { expectedIssuer } from "../lib/acmeCa.js";
 import { CONTROL, SERVICES, assert, certInfo, http, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
 import type { Group } from "./types.js";
 
@@ -81,7 +82,7 @@ export const core: Group = {
         await sleep(5_000);
         c = certInfo(fqdn);
       }
-      assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
+      assert(expectedIssuer().test(c.issuer), `issuer=${c.issuer || "<none>"} (expected ${expectedIssuer()})`);
       assert(c.sans.length === 1 && c.sans[0] === fqdn, `control sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
     });
@@ -288,7 +289,7 @@ export const core: Group = {
         await sleep(5000);
         app = certInfo(name);
       }
-      assert(/Let's Encrypt/i.test(app.issuer) && app.sans.includes(`*.${fqdn}`) && !app.sans.includes(fqdn), `app-name sans=${app.sans.join(",") || "<none>"}`);
+      assert(expectedIssuer().test(app.issuer) && app.sans.includes(`*.${fqdn}`) && !app.sans.includes(fqdn), `app-name sans=${app.sans.join(",") || "<none>"}`);
       return app.sans.join(", ");
     });
     const envChange = (op: "set" | "unset", name: string, value?: string): ServiceEnvChange => ({

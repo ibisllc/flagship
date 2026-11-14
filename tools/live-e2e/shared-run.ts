@@ -32,10 +32,13 @@
  */
 import { BOX_RELEASE } from "@flagship/protocol";
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { deriveSWK, ed } from "@flagship/protocol";
-import { join } from "node:path";
-import { ADMIN, CONTROL, KEK, Recorder, SERVICES, runDir, tryHttp, writeJson } from "./lib/harness.js";
+import { dirname, join } from "node:path";
+import { ADMIN, CONTROL, KEK, Recorder, SERVICES, SkipError, runDir, tryHttp, writeJson } from "./lib/harness.js";
+import { ISSUANCE_CA_ENV, NOT_LETS_ENCRYPT } from "./lib/acmeCa.js";
+import { REEXEC_ENV, prepareAcmeTrust, testCaRootUnchanged, type AcmeTrust } from "./lib/acmeTrust.js";
 import { dnsRecordsNeeded } from "./lib/dnsBudget.js";
 import { startDnsProbe, type DnsProbe } from "./lib/dnsProbe.js";
 
@@ -162,6 +165,25 @@ async function main(): Promise<number> {
   log(`control=${CONTROL} services=${SERVICES} groups=${groups.map((g) => g.name).join(",")}`);
   log(`artifacts: ${dir}`);
 
+  // docs/gym-test-acme.md: the gym issues from a private test CA (Pebble) except on the real-Let's-Encrypt lane.
+  let acmeTrust: AcmeTrust;
+  try {
+    acmeTrust = await prepareAcmeTrust(CONTROL, dir, process.env, fetch, reusePath ? join(dirname(reusePath), "acme-roots.pem") : undefined);
+  } catch (e) {
+    log(`the gym's test CA is not usable: ${e instanceof Error ? e.message : String(e)}`);
+    return 2;
+  }
+  if (acmeTrust.kind === "test" && acmeTrust.reexec) {
+    log(`issuing CA: ${acmeTrust.ca.directory} (test CA, root ${acmeTrust.rootFingerprint.slice(0, 16)}…); running again trusting ${acmeTrust.rootsFile}`);
+    return reexecWith({ NODE_EXTRA_CA_CERTS: acmeTrust.rootsFile, [REEXEC_ENV]: "1", GYM_RUN_DIR: dir });
+  }
+  process.env[ISSUANCE_CA_ENV] = acmeTrust.kind === "test" ? "test" : "letsencrypt";
+  if (acmeTrust.kind === "test") {
+    log(`issuing CA: ${acmeTrust.ca.directory} (test CA, root ${acmeTrust.rootFingerprint.slice(0, 16)}…): no Let's Encrypt budget is spent and nothing reaches a CT log; the CAA and budget checks skip, and Playwright live specs run with ignoreHTTPSErrors (weaker)`);
+  } else if (acmeTrust.kind === "letsencrypt") {
+    log(`issuing CA: Let's Encrypt (${acmeTrust.ca.directory}): this run spends flagship.services' certificate budget`);
+  }
+
   let accounts: Account[] = [];
   let tornDown = false;
   const doTeardown = async (why: string): Promise<void> => {
@@ -179,7 +201,9 @@ async function main(): Promise<number> {
     });
   }
 
-  if (!reusePath && !flag("--skip-acme-check")) {
+  if (acmeTrust.kind === "test") {
+    log(`Let's Encrypt budget probe skipped: ${NOT_LETS_ENCRYPT}`);
+  } else if (!reusePath && !flag("--skip-acme-check")) {
     // Gym and prod certificates share flagship.services' Let's Encrypt budget.
     const budget = await acmeBudget(SERVICES);
     log(`Let's Encrypt budget for ${SERVICES}: ${budget.ok ? "room" : "EXHAUSTED"} (${budget.detail})`);
@@ -434,6 +458,18 @@ async function main(): Promise<number> {
           : "every route stayed within 10 ms";
       });
     }
+    if (acmeTrust.kind === "test") {
+      const trust = acmeTrust;
+      await fleetRec.check("the test CA kept the root this run started with (a new root means Pebble restarted mid-run)", async () => {
+        const r = await testCaRootUnchanged(trust).catch((e) => {
+          throw new SkipError(`the test CA did not answer at the end of the run: ${e instanceof Error ? e.message : String(e)}`);
+        });
+        if (!r.same) {
+          throw new Error(`root ${trust.rootFingerprint.slice(0, 16)}… became ${r.now.slice(0, 16)}…: rerun the failed groups (the new root is in ${trust.rootsFile})`);
+        }
+        return `root ${r.now.slice(0, 16)}…`;
+      });
+    }
     writeJson(dir, "fleet-checks.json", fleetRec.results);
     summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
     await doTeardown("end of run");
@@ -463,7 +499,11 @@ async function main(): Promise<number> {
     leftServers = Array.isArray(left.body?.servers) ? left.body.servers : [];
     leftDns = Number(left.body?.dnsWouldDelete ?? 0);
   }
-  writeJson(dir, "summary.json", { control: CONTROL, startedAt, finishedAt: new Date(), summary, gymServersLeft: leftServers, gymDnsLeft: leftDns });
+  const issuanceCa =
+    acmeTrust.kind === "no-account"
+      ? null
+      : { directory: acmeTrust.ca.directory, letsEncrypt: acmeTrust.kind === "letsencrypt", ...(acmeTrust.kind === "test" ? { rootFingerprint: acmeTrust.rootFingerprint } : {}) };
+  writeJson(dir, "summary.json", { control: CONTROL, issuanceCa, startedAt, finishedAt: new Date(), summary, gymServersLeft: leftServers, gymDnsLeft: leftDns });
   log("──────── summary");
   let fail = 0;
   let skip = 0;
@@ -476,6 +516,16 @@ async function main(): Promise<number> {
   log(`checks: ${Object.values(summary).reduce((n, s) => n + s.pass + s.fail + s.skip, 0)} in ${Math.round((Date.now() - startedAt.getTime()) / 60_000)} min`);
   log(`artifacts: ${dir}/summary.json`);
   return fail ? 1 : skip ? 3 : 0;
+}
+
+/** Runs this same command again with `extra` in its environment (tsx's loader is in execArgv) and returns its exit code. */
+function reexecWith(extra: Record<string, string>): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: "inherit", env: { ...process.env, ...extra } });
+    // The terminal sends SIGINT to both; the child tears its fleet down and exits, and this one waits for it.
+    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => child.kill(sig));
+    child.on("exit", (code, signal) => resolve(code ?? (signal ? 130 : 2)));
+  });
 }
 
 main()
