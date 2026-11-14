@@ -98,6 +98,21 @@
     },
     {
       "check": "signed-tags",
+      "key": "web:flagship/lan-hint/v2",
+      "reason": "LAN-direct and its direct-access part are native only (docs/lan-direct.md, docs/direct-access-and-domains.md): a browser can't choose a route."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/direct-access/v1",
+      "reason": "Direct access is native first (docs/direct-access-and-domains.md §6): the owner's screens (step 5) are not built on any surface yet, and the webapp gets them with step 5."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/direct-address/v1",
+      "reason": "The box's address update is read by native clients and, from step 3, by .com (docs/direct-access-and-domains.md §6); the webapp never routes direct."
+    },
+    {
+      "check": "signed-tags",
       "key": "web:flagship/lan-hint/v1",
       "reason": "LAN-direct is native only (docs/lan-direct.md): a browser can't choose a LAN route."
     },
