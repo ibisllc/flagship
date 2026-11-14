@@ -66312,43 +66312,43 @@
         }
       }
     },
-    "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.": {
+    "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tu página y tus mensajes no deben contener contenido ilegal, acoso, amenazas, spam ni contenido que se haga pasar por otra persona."
+            "value": "Tu página y tus mensajes no deben contener contenido ilegal, acoso, amenazas, desnudos ni contenido sexual, violencia real explícita, spam ni contenido que se haga pasar por otra persona."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre page et vos messages ne doivent contenir ni contenu illégal, ni harcèlement, ni menaces, ni spam, ni contenu qui se fait passer pour quelqu’un d’autre."
+            "value": "Votre page et vos messages ne doivent contenir ni contenu illégal, ni harcèlement, ni menaces, ni nudité ou contenu sexuel, ni violence réelle explicite, ni spam, ni contenu qui se fait passer pour quelqu’un d’autre."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deine Seite und deine Nachrichten dürfen keine illegalen Inhalte, Belästigung, Drohungen, Spam oder Inhalte enthalten, die sich als jemand anderes ausgeben."
+            "value": "Deine Seite und deine Nachrichten dürfen keine illegalen Inhalte, Belästigung, Drohungen, Nacktheit oder sexuellen Inhalte, drastische reale Gewalt, Spam oder Inhalte enthalten, die sich als jemand anderes ausgeben."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sua página e suas mensagens não podem conter conteúdo ilegal, assédio, ameaças, spam ou conteúdo que finja ser outra pessoa."
+            "value": "Sua página e suas mensagens não podem conter conteúdo ilegal, assédio, ameaças, nudez ou conteúdo sexual, violência real explícita, spam ou conteúdo que finja ser outra pessoa."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ページとメッセージには、違法なコンテンツ、嫌がらせ、脅迫、スパム、他人になりすますコンテンツを含めてはいけません。"
+            "value": "ページとメッセージには、違法なコンテンツ、嫌がらせ、脅迫、ヌードや性的なコンテンツ、現実の生々しい暴力、スパム、他人になりすますコンテンツを含めてはいけません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你的页面和消息不得包含违法内容、骚扰、威胁、垃圾信息或冒充他人的内容。"
+            "value": "你的页面和消息不得包含违法内容、骚扰、威胁、裸露或色情内容、真实的血腥暴力、垃圾信息或冒充他人的内容。"
           }
         }
       }

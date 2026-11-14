@@ -1616,7 +1616,7 @@
   "Use a full https:// address.": "完全な https:// アドレスを使ってください。",
   "Edit post": "投稿を編集",
   "Post": "投稿",
-  "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.": "ページとメッセージには、違法なコンテンツ、嫌がらせ、脅迫、スパム、他人になりすますコンテンツを含めてはいけません。",
+  "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.": "ページとメッセージには、違法なコンテンツ、嫌がらせ、脅迫、ヌードや性的なコンテンツ、現実の生々しい暴力、スパム、他人になりすますコンテンツを含めてはいけません。",
   "Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.": "ページやメッセージは誰でも報告できます。Flagship はページを削除したり、アカウントからのメッセージ送信を停止したりできます。",
   "Messages are private. If someone reports your message, Flagship can see which account sent it.": "メッセージは非公開です。誰かがあなたのメッセージを報告した場合、Flagship はどのアカウントが送信したかを確認できます。",
   "The full rules are in the terms at flagshipserver.com/terms.": "すべてのルールは flagshipserver.com/terms の利用規約に記載されています。",

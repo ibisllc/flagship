@@ -10,7 +10,7 @@ export const VOICI_PAGE_WARNING = () => tr("Anyone can see this page. It shares 
 
 export const VOICI_RULES_TITLE = () => tr("Page and message rules");
 export const VOICI_RULES_TEXT = () =>
-  tr("Don't post or send anything illegal, threatening, hateful or sexual involving minors, and don't use your page or messages to harass or deceive people. Flagship removes pages and stops accounts from sending messages when they break these rules.");
+  tr("Don't post or send anything illegal, threatening or hateful, nudity or sexual content, or graphic real-world violence, and don't use your page or messages to harass or deceive people. Flagship removes pages and stops accounts from sending messages when they break these rules.");
 
 export const VOICI_ACCEPT_NOTE = () => tr("People with a Flagship account can write to you. They appear as visitors, not by name.");
 export const VOICI_SIGN_IN_PRIVATE = () => tr("Messages are private. If someone reports your message, Flagship can see which account sent it.");
