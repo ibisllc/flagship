@@ -566,6 +566,27 @@ describe("configuration", () => {
   });
 });
 
+describe("a CA that forgot the stored account (Pebble restarted)", () => {
+  it("registers again, replaces the stored account URL and issues", async () => {
+    const w = await setup();
+    try {
+      const account = async () =>
+        (await (await tryIssuanceRoute(new Request(`${ORIGIN}/api/certificates/account`), w.env, w.deps))!.json()) as { accountUri: string };
+      const before = (await account()).accountUri;
+      w.ca.restart();
+      const r = await issue(w, { cls: "control", names: [SERVER] });
+      expect(r.done.status, JSON.stringify(r.done)).toBe("issued");
+      const rows = await w.db.prepare("SELECT account_url FROM issuance_acme_accounts").all<{ account_url: string }>();
+      expect(rows.results).toHaveLength(1);
+      expect(rows.results[0]!.account_url).not.toBe(before);
+      expect(w.ca.accounts.has(rows.results[0]!.account_url)).toBe(true);
+      expect((await account()).accountUri).toBe(rows.results[0]!.account_url);
+    } finally {
+      w.close();
+    }
+  });
+});
+
 // ── B2 / issuance Lows (2026-11-02 review) ─────────────────────────────────
 
 async function seedAcmeOrders(w: World, n: number, o: { username?: string; status?: "failed" | "issued"; acmeJson?: string; errorCode?: string | null } = {}) {

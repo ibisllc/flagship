@@ -370,6 +370,13 @@ async function acmeClient(s: Service): Promise<AcmeClient> {
     kid: row?.account_url ?? null,
     contact: s.contact,
     ...(s.deps.fetchImpl ? { fetchImpl: s.deps.fetchImpl } : {}),
+    onAccountReplaced: async (kid, staleKid) => {
+      console.warn(JSON.stringify({ event: "issuance-acme-account-replaced", directory: s.directory, changed: kid !== staleKid }));
+      await s.db
+        .prepare("UPDATE issuance_acme_accounts SET account_url = ?, created_at = ? WHERE directory = ? AND thumbprint = ? AND account_url = ?")
+        .bind(kid, s.now, s.directory, s.key.thumbprint, staleKid)
+        .run();
+    },
   });
   if (!row) {
     const kid = await client.ensureAccount();

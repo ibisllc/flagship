@@ -56,6 +56,7 @@ export class FakeAcme {
   validIdentifiers = new Set<string>();
   mode: { leafNames?: string[]; rateLimited?: boolean; processingPolls?: number; failValidation?: boolean } = {};
   private n = 0;
+  private epoch = 0;
   private ca: Promise<{ keys: CryptoKeyPair; cert: x509.X509Certificate }>;
 
   constructor(private readonly dns: FakeDns) {
@@ -74,6 +75,15 @@ export class FakeAcme {
     })();
   }
 
+  /** Like Pebble on a restart: every account, order and authorization is forgotten, and new account URLs differ. */
+  restart(): void {
+    this.epoch++;
+    this.accounts.clear();
+    this.orders.clear();
+    this.authzs.clear();
+    this.validIdentifiers.clear();
+  }
+
   fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input instanceof Request ? input.url : input);
     const path = url.slice(BASE.length);
@@ -89,7 +99,7 @@ export class FakeAcme {
     if (path === "/acct") {
       const jwk = prot.jwk!;
       const tp = b64u(new Uint8Array(await webcrypto.subtle.digest("SHA-256", new TextEncoder().encode(`{"crv":"P-256","kty":"EC","x":"${jwk.x}","y":"${jwk.y}"}`))));
-      const kid = `${BASE}/acct/${tp.slice(0, 8)}`;
+      const kid = `${BASE}/acct/${this.epoch ? `${this.epoch}-` : ""}${tp.slice(0, 8)}`;
       const existed = this.accounts.has(kid);
       this.accounts.set(kid, tp);
       return new Response(JSON.stringify({ status: "valid" }), { status: existed ? 200 : 201, headers: { ...headers, location: kid } });
