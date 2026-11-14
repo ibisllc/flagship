@@ -1,6 +1,18 @@
 # Restore a backup into a running server (merge its apps)
 
-> **Status: design, 2026-11-14. Nothing built.** Owner request 2026-11-14: "Restore-to-server means
+> **Status (2026-11-14, branch `0.4/restore-merge-build`): the box side is built; no client screens yet.**
+> Built: store generations (§3.3; TS provisioner, quotas, the Rust broker's `appdata.files` `generation`),
+> origin + `codeHistory` (§1-§2, `appLineage.ts`), the three orders with TS vectors (§4,
+> `test-vectors/server-restore-merge/`), stage → preview → plan → run with the journal, resume, undo and
+> discard, 7-day expiry and Activity (`serverArchive/merge/`). As built, differing from the text below:
+> each store generation has its own role (named like its database, so a role still reaches only its own
+> database; the app always holds only the live generation's credentials); archive meta stays `v: 1` with an
+> optional `lineage` (older boxes still restore newer backups); undo and discard are
+> `POST /api/screens/server-restore-merge/undo`; sources `pull` and `peers` are refused for now
+> (`source-unavailable`). Not built: Swift/Kotlin/webapp ports of the orders, the client screens, the live
+> gym group.
+>
+> **Original status: design, 2026-11-14.** Owner request 2026-11-14: "Restore-to-server means
 > deleting the data already on there? It would be nice if it means combining the backuped apps into the
 > server. That raises questions of versioning (code and data) if the app is already on the box." Restores
 > stay **admin-only** for now (owner, 2026-11-14). Builds on `docs/server-backup-and-clone.md`,
