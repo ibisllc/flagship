@@ -360,6 +360,17 @@ public protocol ScreensClient: Sendable {
     /// The waiting server fetches the backup's pieces from other servers.
     func serverRestoreFromPeers(_ req: PeerRestoreRequest) async throws
 
+    // Restore a backup into this running server, app by app (docs/restore-into-server.md §6).
+    func restoreMergeStatus() async throws -> RestoreMergeView
+    func restoreMergeStage(_ req: RestoreMergeSigned<RestoreMergeStageOrder>) async throws -> RestoreMergeStarted
+    func restoreMergeChunk(offset: Int64, data: Data) async throws
+    func restoreMergeCommit(keyHex: String) async throws
+    func restoreMergePlan(_ req: RestoreMergeSigned<RestoreMergePlanOrder>) async throws
+    func restoreMergeCancel() async throws
+    func restoreMergeUndo(_ req: RestoreMergeSigned<RestoreMergeUndoOrder>) async throws
+    /// A saved backup's small backup file (its key slots), to open it with the account key.
+    func savedBackupFile(archiveId: String) async throws -> Data
+
     // P8 — browser-tab framebuffer stream. Opens a WS to
     // `/api/screens/browser-tabs/:tabId/stream` (with the session token
     // as a query param) and returns a bidirectional handle: incoming
@@ -550,6 +561,14 @@ public extension ScreensClient {
         throw ScreensClientError.notImplemented("permissions")
     }
     func restoredAccessDrafts() async throws -> RestoredAccessList { throw ScreensClientError.notImplemented("restored permissions") }
+    func restoreMergeStatus() async throws -> RestoreMergeView { throw ScreensClientError.notImplemented("restore into a server") }
+    func restoreMergeStage(_ req: RestoreMergeSigned<RestoreMergeStageOrder>) async throws -> RestoreMergeStarted { throw ScreensClientError.notImplemented("restore into a server") }
+    func restoreMergeChunk(offset: Int64, data: Data) async throws { throw ScreensClientError.notImplemented("restore into a server") }
+    func restoreMergeCommit(keyHex: String) async throws { throw ScreensClientError.notImplemented("restore into a server") }
+    func restoreMergePlan(_ req: RestoreMergeSigned<RestoreMergePlanOrder>) async throws { throw ScreensClientError.notImplemented("restore into a server") }
+    func restoreMergeCancel() async throws { throw ScreensClientError.notImplemented("restore into a server") }
+    func restoreMergeUndo(_ req: RestoreMergeSigned<RestoreMergeUndoOrder>) async throws { throw ScreensClientError.notImplemented("restore into a server") }
+    func savedBackupFile(archiveId: String) async throws -> Data { throw ScreensClientError.notImplemented("restore into a server") }
     func approveRestoredAccess(request: [String: Any], signatureHex: String) async throws { throw ScreensClientError.notImplemented("restored permissions") }
     func discardRestoredAccess(serviceRef: String) async throws { throw ScreensClientError.notImplemented("restored permissions") }
     func updateMode(serviceId: String) async throws -> UpdateModeState { throw ScreensClientError.notImplemented("update modes") }

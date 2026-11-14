@@ -24,7 +24,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// The mock box's container stack (MockScreensClient+Stack.swift).
     public let stackMock = MockStack()
 
-    private func tick() async throws {
+    func tick() async throws {
         if simulatedLatency > 0 {
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
         }
@@ -2087,6 +2087,17 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var savedSchedule = BackupSchedule.boxDefault
     /// Newest first.
     public var savedBackupsList: [SavedBackup] = []
+    // Restore into a running server (MockScreensClient+RestoreMerge.swift).
+    public var restoreMergeState = RestoreMergeView(stage: nil, preview: nil, run: nil, undo: [])
+    public var restoreMergeApps: [RestoreMergeApp] = MockScreensClient.restoreMergeDemoApps()
+    public var restoreMergeStages: [RestoreMergeSigned<RestoreMergeStageOrder>] = []
+    public var restoreMergeCommits: [String] = []
+    public var restoreMergePlans: [RestoreMergeSigned<RestoreMergePlanOrder>] = []
+    public var restoreMergeUndos: [RestoreMergeSigned<RestoreMergeUndoOrder>] = []
+    /// The next plan is refused with this (`plan-guard-mismatch`, …).
+    public var restoreMergeNextRefusal: (code: String, sentence: String)?
+    /// A saved backup's backup file, by archive id (a sealed file the account key opens).
+    public var restoreMergeSavedFiles: [String: Data] = [:]
     public var savedKeyPool: [ArchiveKey] = []
     public var savedLastRun: SavedBackupLastRun?
     public var savedRunning: SavedBackupRunning?

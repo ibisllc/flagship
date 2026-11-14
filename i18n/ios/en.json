@@ -15131,5 +15131,285 @@
   "This server is being wiped for a new owner": {
     "en": "This server is being wiped for a new owner",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
+  },
+  "Restore apps from a backup": {
+    "en": "Restore apps from a backup",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:45"
+  },
+  "Checking the backup on %@": {
+    "en": "Checking the backup on %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:28"
+  },
+  "Sending the backup to %@": {
+    "en": "Sending the backup to %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:24"
+  },
+  "Backup of %@": {
+    "en": "Backup of %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:76"
+  },
+  "New on this server": {
+    "en": "New on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:79"
+  },
+  "Already on this server": {
+    "en": "Already on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:80"
+  },
+  "A different app with the same name": {
+    "en": "A different app with the same name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:81"
+  },
+  "Restore": {
+    "en": "Restore",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:82"
+  },
+  "Choose at least one app to restore.": {
+    "en": "Choose at least one app to restore.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:86"
+  },
+  "Name of the new app": {
+    "en": "Name of the new app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:177"
+  },
+  "Suggested": {
+    "en": "Suggested",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:165"
+  },
+  "Lowercase letters, digits and single hyphens.": {
+    "en": "Lowercase letters, digits and single hyphens.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:186"
+  },
+  "Delete the earlier copy?": {
+    "en": "Delete the earlier copy?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:232"
+  },
+  "Put the earlier copy back?": {
+    "en": "Put the earlier copy back?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:232"
+  },
+  "Earlier copies kept by a restore": {
+    "en": "Earlier copies kept by a restore",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:210"
+  },
+  "Kept until %@": {
+    "en": "Kept until %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:214"
+  },
+  "Undo": {
+    "en": "Undo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:217"
+  },
+  "Delete now": {
+    "en": "Delete now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:220"
+  },
+  "The copy of %@ from before the restore is deleted. This can't be undone.": {
+    "en": "The copy of %@ from before the restore is deleted. This can't be undone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:244"
+  },
+  "Changes to %@ since %@ are lost.": {
+    "en": "Changes to %@ since %@ are lost.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreMergeScreen.swift:246"
+  },
+  "Only an admin device of this account can restore a backup.": {
+    "en": "Only an admin device of this account can restore a backup.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:58"
+  },
+  "Delete the earlier copy of %@": {
+    "en": "Delete the earlier copy of %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:97"
+  },
+  "Put %@ back as it was": {
+    "en": "Put %@ back as it was",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:97"
+  },
+  "Check the backup on %@": {
+    "en": "Check the backup on %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:138"
+  },
+  "The backup couldn't be opened.": {
+    "en": "The backup couldn't be opened.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:176"
+  },
+  "Restore apps into %@": {
+    "en": "Restore apps into %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:263"
+  },
+  "Same version as this server's: %@": {
+    "en": "Same version as this server's: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:290"
+  },
+  "The backup is probably older: %@ vs %@": {
+    "en": "The backup is probably older: %@ vs %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:292"
+  },
+  "The backup is older: %@ vs %@": {
+    "en": "The backup is older: %@ vs %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:293"
+  },
+  "The backup is probably newer: %@ vs %@": {
+    "en": "The backup is probably newer: %@ vs %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:295"
+  },
+  "The backup is newer: %@ vs %@": {
+    "en": "The backup is newer: %@ vs %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:296"
+  },
+  "Changed separately here and in the backup: %@ vs %@": {
+    "en": "Changed separately here and in the backup: %@ vs %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:297"
+  },
+  "Backup %@, this server %@": {
+    "en": "Backup %@, this server %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:298"
+  },
+  "Runs on %@ (its data is likely newer)": {
+    "en": "Runs on %@ (its data is likely newer)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:286"
+  },
+  "Not on this server": {
+    "en": "Not on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:287"
+  },
+  "Restore it": {
+    "en": "Restore it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:304"
+  },
+  "Leave it out": {
+    "en": "Leave it out",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:305"
+  },
+  "Keep this server's": {
+    "en": "Keep this server's",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:306"
+  },
+  "Restore the backup's version": {
+    "en": "Restore the backup's version",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:307"
+  },
+  "Use the backup's data with this server's version": {
+    "en": "Use the backup's data with this server's version",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:308"
+  },
+  "Add as a separate app": {
+    "en": "Add as a separate app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:309"
+  },
+  "Comes back here too. Who can use it follows its list on your other servers.": {
+    "en": "Comes back here too. Who can use it follows its list on your other servers.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:318"
+  },
+  "Comes back with its data. Nobody from the backup's list can use it until you approve.": {
+    "en": "Comes back with its data. Nobody from the backup's list can use it until you approve.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:319"
+  },
+  "Nothing changes on this server.": {
+    "en": "Nothing changes on this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:320"
+  },
+  "Nothing changes. This server's version and data stay.": {
+    "en": "Nothing changes. This server's version and data stay.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:321"
+  },
+  "This server's copy is kept for 7 days, so you can undo. Who can use it: unchanged.": {
+    "en": "This server's copy is kept for 7 days, so you can undo. Who can use it: unchanged.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:322"
+  },
+  "This server's version runs on the backup's data. This server's copy is kept for 7 days. Who can use it: unchanged.": {
+    "en": "This server's version runs on the backup's data. This server's copy is kept for 7 days. Who can use it: unchanged.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:323"
+  },
+  "A new app with its own address. Nobody can use it until you invite them.": {
+    "en": "A new app with its own address. Nobody can use it until you invite them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:324"
+  },
+  "It isn't on this server.": {
+    "en": "It isn't on this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:332"
+  },
+  "It is already on this server.": {
+    "en": "It is already on this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:333"
+  },
+  "It is a different app with the same name.": {
+    "en": "It is a different app with the same name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:334"
+  },
+  "The backup's data is newer than this server's version can read.": {
+    "en": "The backup's data is newer than this server's version can read.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:335"
+  },
+  "The backup's data and this server's changed separately.": {
+    "en": "The backup's data and this server's changed separately.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:336"
+  },
+  "The backup keeps its data differently from this server's version.": {
+    "en": "The backup keeps its data differently from this server's version.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:337"
+  },
+  "There is no free name for a copy.": {
+    "en": "There is no free name for a copy.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:338"
+  },
+  "It is being changed right now. Try again when that is done.": {
+    "en": "It is being changed right now. Try again when that is done.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:339"
+  },
+  "Not possible for this app.": {
+    "en": "Not possible for this app.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:340"
+  },
+  "Also runs on %@: not changed.": {
+    "en": "Also runs on %@: not changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:347"
+  },
+  "Its address will move to this server (it is first in your server order).": {
+    "en": "Its address will move to this server (it is first in your server order).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:348"
+  },
+  "Jobs saved in the backup may run again.": {
+    "en": "Jobs saved in the backup may run again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:350"
+  },
+  "Files the app keeps are read as the backup left them.": {
+    "en": "Files the app keeps are read as the backup left them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:353"
+  },
+  "Restored": {
+    "en": "Restored",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:360"
+  },
+  "Kept": {
+    "en": "Kept",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:361"
+  },
+  "Left out": {
+    "en": "Left out",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:362"
+  },
+  "Couldn't restore. It is back as it was.": {
+    "en": "Couldn't restore. It is back as it was.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:363"
+  },
+  "Changed since you chose. Kept as it is.": {
+    "en": "Changed since you chose. Kept as it is.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:364"
+  },
+  "This backup wasn't made by this account, so it can't be opened here.": {
+    "en": "This backup wasn't made by this account, so it can't be opened here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:388"
+  },
+  "The restore didn't start.": {
+    "en": "The restore didn't start.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RestoreMergeViewModel.swift:371"
+  },
+  "Restore apps from a backup file…": {
+    "en": "Restore apps from a backup file…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:131"
+  },
+  "Restore into this server…": {
+    "en": "Restore into this server…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:367"
   }
 }
