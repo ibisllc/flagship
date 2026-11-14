@@ -139,7 +139,12 @@ struct FlagshipApp: App {
             pinFor: { CertPinRegistry.shared.pinFor(host: $0) },
             stkPubFor: { CertPinRegistry.shared.stkPub(forDomain: $0) },
             activeBox: { await store.podBaseUrl.flatMap { URL(string: $0)?.host } },
-            fetchHint: { try? await lanClient.lanHint() }
+            fetchHint: { try? await lanClient.lanHint() },
+            // Direct access (docs/direct-access-and-domains.md): public endpoints only inside an order
+            // that verifies under this account's admin root, which an admin device holds. Other devices
+            // use the LAN part alone.
+            fetchHintV2: { try? await lanClient.lanHintV2() },
+            authorityPubsFor: { _ in Keystore.adminRootPubHex().flatMap { HexUtil.decode($0) }.map { [$0] } ?? [] }
         )
         // Relay addresses (docs/relay-addresses.md): when a box's name won't resolve, ask `.com`
         // where the relay is, test it against a known box, and reach the box through it.

@@ -28,9 +28,15 @@ public protocol LanProber: Sendable {
 #if canImport(Network)
 public struct TlsPinProber: LanProber {
     public let timeout: TimeInterval
-    public init(timeout: TimeInterval = 1.5) { self.timeout = timeout }
+    /// A public (direct-access) endpoint crosses the internet, so it gets longer than a LAN one.
+    public let publicTimeout: TimeInterval
+    public init(timeout: TimeInterval = 1.5, publicTimeout: TimeInterval = 3) {
+        self.timeout = timeout
+        self.publicTimeout = publicTimeout
+    }
 
     public func probe(sniHost: String, address: String, port: Int, certSha256: String) async -> Bool {
+        let timeout = LanHint.isLanAddress(address) ? self.timeout : publicTimeout
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { return false }
         let tls = NWProtocolTLS.Options()
         let queue = DispatchQueue(label: "flagship.lan-probe")
@@ -88,6 +94,7 @@ public final class LanDirectRegistry: @unchecked Sendable {
     public static let refreshIntervalMs: Int64 = 10 * 60_000
 
     private struct Entry {
+        /// LAN endpoints first, then direct-access ones: a proven LAN route wins.
         let endpoints: [LanHint.Endpoint]
         let certSha256: String
         let expiresAt: Int64
@@ -109,6 +116,8 @@ public final class LanDirectRegistry: @unchecked Sendable {
     private var stkPubFor: (@Sendable (String) -> Data?)?
     private var activeBox: (@Sendable () async -> String?)?
     private var fetchHint: (@Sendable () async -> LanHint.Envelope?)?
+    private var fetchHintV2: (@Sendable () async -> DirectAccess.HintV2Envelope?)?
+    private var authorityPubsFor: (@Sendable (String) -> [Data])?
     #if canImport(Network)
     private var monitor: NWPathMonitor?
     #endif
@@ -137,17 +146,26 @@ public final class LanDirectRegistry: @unchecked Sendable {
 
     /// App-layer glue: where pins and box STKs come from, which box is active,
     /// and how to fetch its hint. Also starts watching for network changes.
+    ///
+    /// Direct access (docs/direct-access-and-domains.md): `fetchHintV2` asks for the v2 hint first (an
+    /// older box answers nothing, and the v1 hint is used); `authorityPubsFor` gives the keys the owner's
+    /// direct-access order must verify under (the account's admin root, or its IRK when it pins none).
+    /// Without them a hint's public endpoints are never dialed.
     public func configure(
         pinFor: @escaping @Sendable (String) -> String?,
         stkPubFor: @escaping @Sendable (String) -> Data?,
         activeBox: @escaping @Sendable () async -> String?,
-        fetchHint: @escaping @Sendable () async -> LanHint.Envelope?
+        fetchHint: @escaping @Sendable () async -> LanHint.Envelope?,
+        fetchHintV2: (@Sendable () async -> DirectAccess.HintV2Envelope?)? = nil,
+        authorityPubsFor: (@Sendable (String) -> [Data])? = nil
     ) {
         lock.lock()
         self.pinFor = pinFor
         self.stkPubFor = stkPubFor
         self.activeBox = activeBox
         self.fetchHint = fetchHint
+        self.fetchHintV2 = fetchHintV2
+        self.authorityPubsFor = authorityPubsFor
         lock.unlock()
         #if canImport(Network)
         guard monitor == nil else { return }
@@ -186,6 +204,37 @@ public final class LanDirectRegistry: @unchecked Sendable {
         return why
     }
 
+    /// Verify and keep a v2 hint for `box`. Its public endpoints are kept only when the owner's order
+    /// beside it verifies under one of `authorityPubs` and the hint sits inside it. Returns why it was
+    /// refused, or nil.
+    @discardableResult
+    public func accept(box: String, envelope: DirectAccess.HintV2Envelope, stkPub: Data, pinnedCertSha256: String, authorityPubs: [Data]) -> String? {
+        guard let sig = LanHint.hexDecode(envelope.signatureHex) else {
+            forget(box: box)
+            return "bad-signature"
+        }
+        let order = envelope.directAccess.flatMap { DirectAccess.verify($0, authorityPubs: authorityPubs) ? $0.order : nil }
+        if envelope.directAccess != nil && order == nil && !envelope.hint.direct.isEmpty {
+            log("\(box)'s direct-access order doesn't verify under the account's key; not using its public addresses")
+        }
+        let verdict = DirectAccess.check(envelope.hint, signature: sig, stkPub: stkPub, serverDomain: box,
+                                         certSha256: pinnedCertSha256, nowMs: clock(), order: order)
+        switch verdict {
+        case .refused(let why):
+            forget(box: box)
+            log("refused \(box)'s hint (\(why)); staying on the relay")
+            return why
+        case .accepted(let useDirect):
+            let endpoints = envelope.hint.lan + (useDirect ? envelope.hint.direct : [])
+            locked {
+                hints[box.lowercased()] = Entry(endpoints: endpoints, certSha256: envelope.hint.certSha256, expiresAt: envelope.hint.expiresAt)
+            }
+            // Offline control is LAN-only: only the LAN endpoints go into its book.
+            for e in envelope.hint.lan.reversed() { rescueBook?.saw(box, at: e.address.contains(":") ? "[\(e.address)]:\(e.port)" : "\(e.address):\(e.port)") }
+            return nil
+        }
+    }
+
     public func forget(box: String) {
         let b = box.lowercased()
         lock.lock()
@@ -206,8 +255,8 @@ public final class LanDirectRegistry: @unchecked Sendable {
     /// `refreshIntervalMs`. Call after each /pods pin refresh.
     public func refreshActive() {
         Task { [self] in
-            let (activeBox, pinFor, stkPubFor, fetchHint) = locked {
-                (self.activeBox, self.pinFor, self.stkPubFor, self.fetchHint)
+            let (activeBox, pinFor, stkPubFor, fetchHint, fetchHintV2, authorityPubsFor) = locked {
+                (self.activeBox, self.pinFor, self.stkPubFor, self.fetchHint, self.fetchHintV2, self.authorityPubsFor)
             }
             guard let activeBox, let pinFor, let stkPubFor, let fetchHint,
                   let box = await activeBox()?.lowercased(),
@@ -219,7 +268,9 @@ public final class LanDirectRegistry: @unchecked Sendable {
                 return true
             }
             guard due else { return }
-            if let env = await fetchHint() {
+            if let fetchHintV2, let env = await fetchHintV2() {
+                accept(box: box, envelope: env, stkPub: stk, pinnedCertSha256: pin, authorityPubs: authorityPubsFor?(box) ?? [])
+            } else if let env = await fetchHint() {
                 accept(box: box, envelope: env, stkPub: stk, pinnedCertSha256: pin)
             } else {
                 forget(box: box)

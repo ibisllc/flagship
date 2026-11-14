@@ -54,12 +54,16 @@ fun interface LanProber {
 class TlsPinProber(
     private val connectTimeoutMs: Int = 400,
     private val handshakeTimeoutMs: Int = 1_500,
+    /** A public (direct-access) endpoint crosses the internet, so it gets longer to answer. */
+    private val publicConnectTimeoutMs: Int = 1_500,
+    private val publicHandshakeTimeoutMs: Int = 3_000,
 ) : LanProber {
     override fun probe(sniHost: String, address: String, port: Int, certSha256: String): Boolean = try {
+        val lan = LanHint.isLanAddress(address)
         Socket().use { raw ->
             // An IP literal: getByName parses it without a DNS lookup.
-            raw.connect(InetSocketAddress(InetAddress.getByName(address), port), connectTimeoutMs)
-            raw.soTimeout = handshakeTimeoutMs
+            raw.connect(InetSocketAddress(InetAddress.getByName(address), port), if (lan) connectTimeoutMs else publicConnectTimeoutMs)
+            raw.soTimeout = if (lan) handshakeTimeoutMs else publicHandshakeTimeoutMs
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
             (factory.createSocket(raw, sniHost, port, true) as SSLSocket).use { ssl ->
                 ssl.sslParameters = ssl.sslParameters.apply { serverNames = listOf(SNIHostName(sniHost)) }
@@ -88,6 +92,7 @@ class LanDirectRegistry(
         const val HTTPS_PORT = 443
     }
 
+    /** [endpoints]: LAN first, then direct-access ones, so a proven LAN route wins. */
     private data class Entry(val endpoints: List<LanHint.Endpoint>, val certSha256: String, val expiresAt: Long)
 
     private val hints = ConcurrentHashMap<String, Entry>()
@@ -114,6 +119,44 @@ class LanDirectRegistry(
         return why
     }
 
+    /**
+     * Verify and keep a v2 hint for [box] (direct access, docs/direct-access-and-domains.md). Its public
+     * endpoints are kept only when the owner's order beside it verifies under one of [authorityPubs] (the
+     * account's admin root, or its IRK when it pins none) and the hint sits inside it. Returns why it was
+     * refused, or null.
+     */
+    fun accept(box: String, envelope: DirectAccess.HintV2Envelope, stkPub: ByteArray, pinnedCertSha256: String, authorityPubs: List<ByteArray>): String? {
+        val sig = HexUtil.decode(envelope.signatureHex) ?: return "bad-signature".also { forget(box) }
+        val order = envelope.directAccess?.takeIf { DirectAccess.verify(it, authorityPubs) }?.order
+        if (envelope.directAccess != null && order == null && envelope.hint.direct.isNotEmpty()) {
+            log("$box's direct-access order doesn't verify under the account's key; not using its public addresses")
+        }
+        return when (val v = DirectAccess.check(envelope.hint, sig, stkPub, box, pinnedCertSha256, clock(), order)) {
+            is DirectAccess.HintVerdict.Refused -> {
+                forget(box)
+                log("refused $box's hint (${v.reason}); staying on the relay")
+                v.reason
+            }
+            is DirectAccess.HintVerdict.Accepted -> {
+                val endpoints = envelope.hint.lan + if (v.useDirect) envelope.hint.direct else emptyList()
+                hints[box.lowercase()] = Entry(endpoints, envelope.hint.certSha256, envelope.hint.expiresAt)
+                // Offline control is LAN-only: only the LAN endpoints go into its book.
+                if (this === shared) {
+                    for (e in envelope.hint.lan.reversed()) {
+                        RescueServerBook.shared.saw(box, if (':' in e.address) "[${e.address}]:${e.port}" else "${e.address}:${e.port}")
+                    }
+                }
+                null
+            }
+        }
+    }
+
+    /** True when [address] is a direct-access endpoint of a hint this registry holds. */
+    fun isDirectAddress(address: String): Boolean {
+        val want = normalized(address)
+        return hints.values.any { e -> e.endpoints.any { !LanHint.isLanAddress(it.address) && normalized(it.address) == want } }
+    }
+
     fun forget(box: String) {
         val b = box.lowercase()
         hints.remove(b)
@@ -136,6 +179,8 @@ class LanDirectRegistry(
         stkPub: ByteArray,
         pinnedCertSha256: String?,
         fetch: suspend () -> LanHint.Envelope?,
+        fetchV2: (suspend () -> DirectAccess.HintV2Envelope?)? = null,
+        authorityPubs: () -> List<ByteArray> = { emptyList() },
     ) {
         if (pinnedCertSha256 == null) return
         val now = clock()
@@ -144,6 +189,12 @@ class LanDirectRegistry(
         if (last != null && now - last < REFRESH_INTERVAL_MS) return
         lastRefresh[b] = now
         backgroundScope.launch {
+            // An older box answers nothing on the v2 path; its v1 hint is used.
+            val v2 = fetchV2?.let { f -> runCatching { f() }.getOrNull() }
+            if (v2 != null) {
+                accept(b, v2, stkPub, pinnedCertSha256, authorityPubs())
+                return@launch
+            }
             val envelope = runCatching { fetch() }.getOrNull()
             if (envelope == null) forget(b) else accept(b, envelope, stkPub, pinnedCertSha256)
         }
@@ -218,7 +269,7 @@ class LanDirectRegistry(
         if (any) log("the local route to $host failed ($why); using the relay on this network")
     }
 
-    /** A connection to [address] (a LAN address) failed: stop using it. */
+    /** A connection to [address] (a LAN or direct-access address) failed: stop using it. */
     fun markAddressFailed(address: String, why: String) {
         val now = clock()
         val want = normalized(address)
@@ -265,6 +316,8 @@ class LanAwareSocketFactory(
 ) : SocketFactory() {
     companion object {
         const val LAN_CONNECT_TIMEOUT_MS = 1_500
+        /** A proven direct-access (public) endpoint gets a little longer before OkHttp moves to the relay. */
+        const val DIRECT_CONNECT_TIMEOUT_MS = 3_000
 
         /** The connect timeout for [address]: capped for LAN addresses only (0 = none). */
         fun connectTimeoutFor(address: String, timeout: Int, lanCapMs: Int = LAN_CONNECT_TIMEOUT_MS): Int = when {
@@ -277,11 +330,15 @@ class LanAwareSocketFactory(
     private inner class LanAwareSocket : Socket() {
         override fun connect(endpoint: SocketAddress, timeout: Int) {
             val address = (endpoint as? InetSocketAddress)?.address?.hostAddress
-            if (address == null || !LanHint.isLanAddress(address.substringBefore('%'))) {
+            val lan = address != null && LanHint.isLanAddress(address.substringBefore('%'))
+            val direct = address != null && !lan && registry.isDirectAddress(address)
+            if (address == null || (!lan && !direct)) {
                 return super.connect(endpoint, timeout)
             }
             try {
-                super.connect(endpoint, connectTimeoutFor(address, timeout, lanConnectTimeoutMs))
+                val cap = if (direct) (if (timeout == 0) DIRECT_CONNECT_TIMEOUT_MS else minOf(timeout, DIRECT_CONNECT_TIMEOUT_MS))
+                else connectTimeoutFor(address, timeout, lanConnectTimeoutMs)
+                super.connect(endpoint, cap)
             } catch (e: IOException) {
                 registry.markAddressFailed(address, e.javaClass.simpleName)
                 throw e

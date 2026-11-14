@@ -132,6 +132,30 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         return try JSONDecoder().decode(LanHint.Envelope.self, from: data)
     }
 
+    /// `GET /api/screens/lan-hint/v2` (direct access, docs/direct-access-and-domains.md); nil from a box without it.
+    public func lanHintV2() async throws -> DirectAccess.HintV2Envelope? {
+        guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
+        guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
+        guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/lan-hint/v2") else {
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
+        }
+        var req = URLRequest(url: url)
+        req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+        let (data, resp) = try await urlSession.gatedData(for: req)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try JSONDecoder().decode(DirectAccess.HintV2Envelope.self, from: data)
+    }
+
+    /// `GET /api/screens/direct-access`.
+    public func directAccess() async throws -> DirectAccess.View {
+        try await request("/api/screens/direct-access")
+    }
+
+    /// `POST /api/screens/direct-access` with an order signed by `DirectAccess.sign` behind the biometric gate.
+    public func setDirectAccess(_ signed: DirectAccess.SignedOrder) async throws -> DirectAccess.Change {
+        try await request("/api/screens/direct-access", method: "POST", body: try JSONEncoder().encode(signed))
+    }
+
     private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil,
                                        timeout: TimeInterval? = nil) async throws -> T {
         let data = try await requestData(path, method: method, body: body, timeout: timeout)

@@ -137,6 +137,32 @@ class LiveScreensClient(
         return json.decodeFromString(com.flagshipserver.app.core.LanHint.Envelope.serializer(), body)
     }
 
+    /** The v2 hint with direct-access endpoints (docs/direct-access-and-domains.md), or null from a box without it. */
+    suspend fun lanHintV2(): com.flagshipserver.app.core.DirectAccess.HintV2Envelope? {
+        val req = Request.Builder()
+            .url(base() + "/api/screens/lan-hint/v2")
+            .header("x-flagship-session", token())
+            .get()
+            .build()
+        val body = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp -> if (resp.code == 200) resp.body?.string() else null }
+        } ?: return null
+        return json.decodeFromString(com.flagshipserver.app.core.DirectAccess.HintV2Envelope.serializer(), body)
+    }
+
+    /** `GET /api/screens/direct-access`. */
+    suspend fun directAccess(): com.flagshipserver.app.core.DirectAccess.View =
+        request("/api/screens/direct-access", com.flagshipserver.app.core.DirectAccess.View.serializer())
+
+    /** `POST /api/screens/direct-access` with an order signed by `DirectAccess.sign` behind the biometric prompt. */
+    suspend fun setDirectAccess(signed: com.flagshipserver.app.core.DirectAccess.SignedOrder): com.flagshipserver.app.core.DirectAccess.Change =
+        request(
+            "/api/screens/direct-access",
+            com.flagshipserver.app.core.DirectAccess.Change.serializer(),
+            "POST",
+            json.encodeToString(com.flagshipserver.app.core.DirectAccess.SignedOrder.serializer(), signed).toByteArray(),
+        )
+
     override suspend fun serverDetail(): ServerDetailResponse =
         request("/api/screens/server-detail", ServerDetailResponse.serializer())
 

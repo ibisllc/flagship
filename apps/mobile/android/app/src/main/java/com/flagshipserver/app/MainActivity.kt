@@ -316,7 +316,13 @@ class MainActivity : FragmentActivity() {
                             box,
                             boxKey,
                             com.flagshipserver.app.core.CertPinRegistry.shared.pinFor(box),
-                        ) { liveScreens.lanHint() }
+                            fetch = { liveScreens.lanHint() },
+                            // Direct access (docs/direct-access-and-domains.md): public endpoints only
+                            // inside an order that verifies under this account's admin root, which an
+                            // admin device holds; other devices use the LAN part alone.
+                            fetchV2 = { liveScreens.lanHintV2() },
+                            authorityPubs = { listOfNotNull(Keystore.adminRootPubHex()?.let(com.flagshipserver.app.core.HexUtil::decode)) },
+                        )
                     }
                 }
             },
