@@ -300,6 +300,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Batch claims, rack-position names, hot-replace via wipe-now + restore from peers, decommission = release wipe;
   restricted egress yes, air-gapped no. Limits found: AuthCode 10/h, SERVER_ORDER_MAX 64, webapp classical-only.
   Owner Qs Q-W1..Q-W11 in the doc.
+- 2026-11-14 Owner corrections: (1) fshp.app names are NEVER served through the relay for users; central help only for
+  first-time certificate setup if it helps and exposes no new data. DNS-01 already issues without inbound reachability,
+  so the relay part is scrapped; the agent keeps only "issue before the direct path is live". Locked rule stays.
+  (2) Backups: Back up now stays passcode-protected (the emergency migration route; already true: a passcode slot is
+  required and opens in any account). Scheduled backups stay account-contained (proposal dropped). Owner wants ANY
+  device of the account able to order a restore; today restore is admin-only (restore = adding a server, admin-only
+  rule 2026-10-16). Asked the owner which way.
 
 ## Resume point
 
