@@ -215,7 +215,7 @@ public final class LanDirectRegistry: @unchecked Sendable {
         }
         let order = envelope.directAccess.flatMap { DirectAccess.verify($0, authorityPubs: authorityPubs) ? $0.order : nil }
         if envelope.directAccess != nil && order == nil && !envelope.hint.direct.isEmpty {
-            log("\(box)'s direct-access order doesn't verify under the account's key; not using its public addresses")
+            log("not using the public addresses of \(box): its direct-access order doesn't verify under the account's key")
         }
         let verdict = DirectAccess.check(envelope.hint, signature: sig, stkPub: stkPub, serverDomain: box,
                                          certSha256: pinnedCertSha256, nowMs: clock(), order: order)
