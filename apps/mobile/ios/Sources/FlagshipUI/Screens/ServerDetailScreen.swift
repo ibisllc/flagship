@@ -329,6 +329,7 @@ public struct ServerDetailScreen: View {
                     if d.debugAccess != nil {
                         DebugAccessCard(serverDomain: d.serverFqdn, view: d.debugAccess, onChanged: onRefreshDetail)
                     }
+                    DirectAccessCard(serverDomain: d.serverFqdn)
                     if let rt = d.runtime, rt.isUsable {
                         RuntimeCard(view: rt)
                     }

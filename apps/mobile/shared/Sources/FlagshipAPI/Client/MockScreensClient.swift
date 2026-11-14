@@ -329,6 +329,37 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return DebugAccessChange(ok: true, change: wasOn ? "revoked" : "unchanged", debugAccess: v)
     }
 
+    // MARK: - Direct access (docs/direct-access-and-domains.md §7)
+
+    public private(set) var directAccessByPod: [String: DirectAccess.View] = [:]
+    public private(set) var directAccessOrders: [DirectAccess.SignedOrder] = []
+
+    public func directAccess() async throws -> DirectAccess.View {
+        try await tick()
+        return directAccessByPod[podContext] ?? DirectAccess.View(on: false)
+    }
+
+    public func setDirectAccess(_ signed: DirectAccess.SignedOrder) async throws -> DirectAccess.Change {
+        try await tick()
+        let o = signed.order
+        if let why = DirectAccess.problem(o) {
+            let body = (try? JSONSerialization.data(withJSONObject: ["error": why, "code": why])).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            throw ScreensClientError.http(status: 422, message: body)
+        }
+        if o.serverDomain.lowercased() != mockFqdn {
+            let body = (try? JSONSerialization.data(withJSONObject: ["error": "wrong-server", "code": "wrong-server"])).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            throw ScreensClientError.http(status: 422, message: body)
+        }
+        directAccessOrders.append(signed)
+        let wasOn = directAccessByPod[podContext]?.on ?? false
+        let v = o.enabled
+            ? DirectAccess.View(on: true, addresses: o.addresses, prefixes: o.prefixes, port: o.port, issuedAt: o.issuedAt,
+                                endpoints: o.addresses.map { LanHint.Endpoint(address: $0, port: o.port) })
+            : DirectAccess.View(on: false)
+        directAccessByPod[podContext] = v
+        return DirectAccess.Change(ok: true, change: o.enabled ? (wasOn ? "changed" : "on") : "off", directAccess: v)
+    }
+
     // MARK: - P1.2 apps-list
 
     /// Replaces the fixture apps list (tests: what this box has).

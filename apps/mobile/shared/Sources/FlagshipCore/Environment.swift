@@ -258,6 +258,23 @@ public extension EnvironmentValues {
     }
 }
 
+/// Direct access on `.com` (docs/direct-access-and-domains.md §8): the
+/// account's orders, names, zone state and the outside check.
+private struct DirectNamesClientKey: EnvironmentKey {
+#if DEBUG
+    static let defaultValue: any DirectNamesClient = MockDirectNamesClient.shared
+#else
+    static let defaultValue: any DirectNamesClient = LiveDirectNamesClient()
+#endif
+}
+
+public extension EnvironmentValues {
+    var directNamesClient: any DirectNamesClient {
+        get { self[DirectNamesClientKey.self] }
+        set { self[DirectNamesClientKey.self] = newValue }
+    }
+}
+
 /// Server-migration lane client (`.com`): deposits the admin-signed initiate /
 /// confirm-ready / freeze / abort and polls the public phase state
 /// (docs/server-migration.md). Hits `.com` (the migration orchestration lane),

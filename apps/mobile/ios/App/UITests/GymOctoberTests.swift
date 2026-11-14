@@ -619,6 +619,67 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "debug-access-read-only")
     }
 
+    // ─── Direct access ───────────────────────────────────────────────────────
+
+    /// An admin device turns direct access on (the privacy warning first),
+    /// turns on an app's direct name, checks it from outside, and then the
+    /// app's page offers the direct link beside the relay one.
+    func test_directAccessOnNameProbeAndShareChoice() throws {
+        let app = launch(tab: "home", ["-smoke-admin-root"])
+        openServerPage(app, named: "Home")
+        let on = app.buttons["sd-direct-access-on"]
+        XCTAssertTrue(reveal(app, on, tries: 18), "An admin device can turn direct access on.")
+        on.tap()
+        let warning = app.staticTexts["sd-direct-access-warning"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        XCTAssertTrue(warning.label.hasPrefix("Turning this on puts this server's home IP address in public DNS."), "Got: \(warning.label)")
+        let field = app.descendants(matching: .any)["sd-direct-access-addresses-field"]
+        XCTAssertTrue(reveal(app, field))
+        field.tap()
+        field.typeText("81.2.69.142")
+        gymShot(app, "direct-access-form")
+        let submit = app.buttons["sd-direct-access-submit"]
+        XCTAssertTrue(reveal(app, submit))
+        submit.tap()
+        XCTAssertTrue(app.buttons["sd-direct-access-off"].waitForExistence(timeout: 15), "Once on, it can be turned off.")
+
+        let nameOn = app.buttons["sd-direct-name-on-bright-maple--plants"]
+        XCTAssertTrue(reveal(app, nameOn, tries: 12), "Each app of this account gets a direct name.")
+        nameOn.tap()
+        let state = app.staticTexts["sd-direct-name-state-bright-maple--plants"]
+        XCTAssertTrue(state.waitForExistence(timeout: 15))
+        XCTAssertEqual(state.label, "Published")
+        let probe = app.buttons["sd-direct-name-probe-btn-bright-maple--plants"]
+        XCTAssertTrue(reveal(app, probe))
+        probe.tap()
+        let probed = app.staticTexts["sd-direct-name-probe-bright-maple--plants"]
+        XCTAssertTrue(probed.waitForExistence(timeout: 15))
+        XCTAssertTrue(probed.label.hasSuffix("Reachable from outside."), "Got: \(probed.label)")
+        gymShot(app, "direct-access-name-published")
+
+        for _ in 0..<16 { app.swipeDown() }
+        let plants = app.buttons["server-app-bright-maple--plants"]
+        XCTAssertTrue(reveal(app, plants))
+        plants.tap()
+        let choice = app.descendants(matching: .any)["app-direct-link-choice"]
+        XCTAssertTrue(reveal(app, choice, tries: 16), "A published direct name adds the share choice.")
+        XCTAssertEqual(app.staticTexts["app-direct-link-url"].label, "plants--bright-maple.fshp.app")
+        app.buttons["Through the relay"].tap()
+        XCTAssertNotEqual(app.staticTexts["app-direct-link-url"].label, "plants--bright-maple.fshp.app")
+        gymShot(app, "direct-access-share-choice")
+    }
+
+    /// A device without the admin root sees direct access but can't change it.
+    func test_directAccessReadOnlyOnANonAdminDevice() throws {
+        let app = launch(tab: "home")
+        openServerPage(app, named: "Home")
+        let note = app.staticTexts["sd-direct-access-admin-only"]
+        XCTAssertTrue(reveal(app, note, tries: 18))
+        XCTAssertEqual(note.label, "Only an admin device can change direct access. This device can see it.")
+        XCTAssertFalse(app.buttons["sd-direct-access-on"].exists)
+        gymShot(app, "direct-access-read-only")
+    }
+
     // ─── Offline server ──────────────────────────────────────────────────────
 
     /// A server that stopped reporting (Music) doesn't answer: its page says

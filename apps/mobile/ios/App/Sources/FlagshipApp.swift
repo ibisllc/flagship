@@ -91,6 +91,7 @@ struct FlagshipApp: App {
         )
         self.readTokens = readTokens
         self.liveVoiciName = LiveVoiciNameClient(readTokens: readTokens)
+        self.liveDirectNames = LiveDirectNamesClient(readTokens: readTokens)
         self.liveVoiciCom = LiveVoiciComClient(readTokens: readTokens, caKeys: { await TrustChecker().authorizedCaKeys() })
         ServerShareServices.readTokens.set(readTokens)
         var pqLive = true
@@ -599,6 +600,8 @@ struct FlagshipApp: App {
     // Custom voi.ci name client — hits `.com` with the account read token for
     // its checks and list.
     private let liveVoiciName: any VoiciNameClient
+    // Direct access on `.com` (docs/direct-access-and-domains.md §8), read token for the state and the probe.
+    private let liveDirectNames: any DirectNamesClient
     // voi.ci pages and Messages (`.com`, docs/voici-and-messages.md).
     private let liveVoiciCom: any VoiciComClient
     // Cross-device pairing relay (Add a device / Join an account): the live
@@ -668,6 +671,7 @@ struct FlagshipApp: App {
     private let mockNameDibs = MockNameDibsClient()
     // Custom voi.ci name client — mock half; the live half is built with the read token.
     private let mockVoiciName = MockVoiciNameClient()
+    private let mockDirectNames = MockDirectNamesClient.shared
     // voi.ci pages and Messages: the in-memory `.com` the GymMessages scenarios seed.
     private let mockVoiciCom = MockVoiciComClient()
     // Server-migration lane client — hits `.com` (the migration orchestration
@@ -794,6 +798,12 @@ struct FlagshipApp: App {
         #endif
         return liveNameDibs
     }
+    private var activeDirectNames: any DirectNamesClient {
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockDirectNames }
+        #endif
+        return liveDirectNames
+    }
     private var activeVoiciName: any VoiciNameClient {
         #if DEBUG
         if GymLaunch.usesMocks { return mockVoiciName }
@@ -848,6 +858,7 @@ struct FlagshipApp: App {
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.nameDibsClient, activeNameDibs)
                 .environment(\.voiciNameClient, activeVoiciName)
+                .environment(\.directNamesClient, activeDirectNames)
                 .environment(\.voiciComClient, activeVoiciCom)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
