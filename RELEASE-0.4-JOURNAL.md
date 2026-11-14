@@ -109,7 +109,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F1 Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
       direct-access order + vectors (TS/Swift/Kotlin), `.com` direct-name registry + prober + `fshp.app` records +
       issuance, clients' opt-in and name screens, take `fshp.app` off the website mirror, tests.
-- [ ] F2 Subscriptions (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
+- [ ] F2 Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
+      currency; Apple IAP / Google Play / Stripe / Monero / Lightning (BTCPay) all sell vouchers; subscriptions as a
+      voucher drip to the lead server; the box pays its own bill via OHTTP; plan via `plan-attestation/v1`. Owner
+      answers its §9 Q1-Q11. Then: fold the branches, voucher core + box stash, Stripe, stores, Monero, paid apps. Was: (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
       children Q3 names onto `release/0.4`; Pro payments + anonymous vouchers end to end on all three apps.
 - [ ] F3 Calls: build `docs/voici-calls.md` after the owner settles D1-D4 (plus its three voi.ci page fixes in the 0.4 list).
 - [ ] F4 Retail box setup (Q2): design `docs/retail-box-setup.md` (`c69d039aa`): printed 100-bit claim code (QR + 20 chars)
@@ -170,6 +173,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   cleanup OK (P9, P10 done), first UX note (U2: Messages -> Social). P4 rate-limit check run (F15). Design agents
   started: retail box setup, payments rails.
 - 2026-11-13 Retail design merged (`c69d039aa`); owner questions Q1-Q10 in the doc §end.
+- 2026-11-13 Payments design merged (`8faecc2ec`); owner questions in its §9. Both design agents done.
 
 ## Resume point
 
