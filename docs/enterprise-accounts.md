@@ -513,3 +513,18 @@ server names and breaks every link.
 - **Founding user (owner proposal, to design):** the founder seat may remove an admin after a timeout; and an org can
   write "bylaws" into its authority record (who must sign, e.g. a majority of admins or a board) so that anyone
   frozen out by a rogue admin can go online and run that ceremony to overturn it, in a very simple UX.
+
+## Owner decisions, 2026-11-14 (binding)
+
+- **Co-manager caps:** Free 5, Pro 10, Pro Max 25, Enterprise unlimited (priced per seat). App visitors unlimited on
+  every plan. Accounts already over a cap keep their active shares.
+- **Q-E3: yes.** In an org, an admin of server S counts as an admin for changing app ranks on S; an admin of app R,
+  in R. Admin stays binary per scope.
+- **Q-E6: freeze only** (72 h, at most once a week); no admin removes another admin directly.
+- **Seats:** unlinkable, with a mandatory pseudonym set by the inviter before the QR or link is generated.
+- **Founder:** the founder seat may remove an admin after a 7-day notice, during which the admin being removed cannot
+  block it but other admins can veto. The founder role moves only by ceremony.
+- **Bylaws:** the org's authority record names who must sign to overturn a freeze or removal (e.g. a majority of
+  admins, or named board members). A frozen-out member taps "Restore my access"; the app shows who must approve and
+  collects their approvals online; boxes check the bylaws themselves. Changing the bylaws needs the strictest
+  ceremony of all.
