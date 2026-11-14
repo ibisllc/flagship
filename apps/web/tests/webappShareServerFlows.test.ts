@@ -540,7 +540,13 @@ function memoryStorage() {
 }
 
 describe("share this server — start-up notices", () => {
-  const TOKEN = JSON.stringify({ endpoint: "https://push.example/b", keys: { p256dh: "04", auth: "aa" } });
+  const TOKEN = JSON.stringify({
+    endpoint: "https://fcm.googleapis.com/fcm/send/b",
+    keys: {
+      p256dh: Buffer.from(new Uint8Array(65).fill(4)).toString("base64url"),
+      auth: Buffer.from(new Uint8Array(16).fill(0xaa)).toString("base64url"),
+    },
+  });
 
   it("registers this browser for a share with unlock at boot, and drops it when turned off", async () => {
     const w = await world();
