@@ -125,22 +125,57 @@ public enum RetailClaimCopy {
 
     public static let wifiWarning = String(localized: "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.")
     public static let resetInstructions = String(localized: "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.")
+    public static let alarmResetInstructions = String(localized: "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.")
+    public static let certificateSlow = String(localized: "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.")
+}
+
+/// The admin key the create flow unsealed for the recipe, held only until it signs the box key
+/// (`flagship/box-claim-key/v1`), so a claim asks for Face ID once. `discard` drops it; the flow
+/// discards it right after the registration and on every stop.
+public final class RetailClaimSigner: @unchecked Sendable {
+    private let lock = NSLock()
+    private var signer: (([UInt8]) throws -> [UInt8])?
+
+    public init(_ sign: @escaping ([UInt8]) throws -> [UInt8]) { signer = sign }
+
+    public var isHeld: Bool { lock.lock(); defer { lock.unlock() }; return signer != nil }
+
+    public func sign(_ message: [UInt8]) throws -> [UInt8] {
+        lock.lock(); let s = signer; lock.unlock()
+        guard let s else { throw RetailClaimKeyError.signerGone }
+        return try s(message)
+    }
+
+    public func discard() { lock.lock(); signer = nil; lock.unlock() }
+}
+
+/// What the create flow hands the claim: the signed recipe and the key that signed it.
+public struct RetailClaimRecipe: Sendable {
+    public let json: String
+    public let serverDomain: String
+    public let serial: String
+    public let signer: RetailClaimSigner
+    public init(json: String, serverDomain: String, serial: String, signer: RetailClaimSigner) {
+        self.json = json; self.serverDomain = serverDomain; self.serial = serial; self.signer = signer
+    }
 }
 
 /// The key registration at `.com` refused (§4 step 8).
 public enum RetailClaimKeyError: Error, Equatable {
     case taken
     case notAdmin
+    case signerGone
 }
 
 public struct RetailClaimDeps {
     public var username: String
     public var radio: any BoxClaimRadio
     public var mailboxLink: (_ mailboxId: String) -> any BoxClaimLink
-    /// Signs the recipe (the create flow; one biometric) and returns it with its server and serial.
-    public var mintRecipe: () async throws -> (json: String, serverDomain: String, serial: String)
-    /// Signs `flagship/box-claim-key/v1` with the admin root and posts it; throws RetailClaimKeyError.
-    public var registerKey: (BoxClaim.ClaimKey) async throws -> Void
+    /// Signs the recipe (the create flow; the claim's one biometric) and returns it with the key
+    /// that signed it, held for the box key registration.
+    public var mintRecipe: () async throws -> RetailClaimRecipe
+    /// Posts `flagship/box-claim-key/v1` signed by `signature`; throws RetailClaimKeyError.
+    public var registerKey: (_ key: BoxClaim.ClaimKey, _ signature: [UInt8]) async throws -> Void
     /// Pins the box key the receipt named (first contact from the box itself, §3 G4).
     public var pinStk: (_ serverDomain: String, _ stkPubHex: String) -> Void
     /// The STK `.com` lists for the server, once it registered.
@@ -150,6 +185,8 @@ public struct RetailClaimDeps {
     public var tlsCheck: (_ serverDomain: String) async -> Bool?
     /// The server is on the account now (Home shows it as setting up).
     public var onClaimed: (_ serverDomain: String, _ serial: String) -> Void
+    /// The key-mismatch alarm: this phone stops trusting the server (persisted).
+    public var markUntrusted: (_ serverDomain: String) -> Void
     public var region: String
     public var now: () -> Int64
     public var sleepMs: (Int64) async throws -> Void
@@ -159,22 +196,27 @@ public struct RetailClaimDeps {
     public var noBoxMs: Int64 = 180_000
     public var answerTimeoutMs: Int64 = 30_000
     public var onlineTimeoutMs: Int64 = 600_000
+    /// After this long without a certificate the screen says it is taking long, and keeps checking.
+    public var certificateSlowMs: Int64 = 300_000
+    /// Checking stops after this long; "Check again" starts it over.
+    public var certificateGiveUpMs: Int64 = 1_800_000
     public var pollMs: Int64 = 5_000
 
     public init(username: String, radio: any BoxClaimRadio, mailboxLink: @escaping (String) -> any BoxClaimLink,
-                mintRecipe: @escaping () async throws -> (json: String, serverDomain: String, serial: String),
-                registerKey: @escaping (BoxClaim.ClaimKey) async throws -> Void,
+                mintRecipe: @escaping () async throws -> RetailClaimRecipe,
+                registerKey: @escaping (BoxClaim.ClaimKey, [UInt8]) async throws -> Void,
                 pinStk: @escaping (String, String) -> Void,
                 registeredStk: @escaping (String) async -> String?,
                 tlsCheck: @escaping (String) async -> Bool?,
                 onClaimed: @escaping (String, String) -> Void,
+                markUntrusted: @escaping (String) -> Void,
                 region: String,
                 now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
                 sleepMs: @escaping (Int64) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64(max(0, $0)) * 1_000_000) },
                 pauseMs: @escaping () -> Int64 = { (try? BoxClaim.instructionPauseMs()) ?? 4_000 }) {
         self.username = username; self.radio = radio; self.mailboxLink = mailboxLink; self.mintRecipe = mintRecipe
         self.registerKey = registerKey; self.pinStk = pinStk; self.registeredStk = registeredStk; self.tlsCheck = tlsCheck
-        self.onClaimed = onClaimed; self.region = region; self.now = now; self.sleepMs = sleepMs; self.pauseMs = pauseMs
+        self.onClaimed = onClaimed; self.markUntrusted = markUntrusted; self.region = region; self.now = now; self.sleepMs = sleepMs; self.pauseMs = pauseMs
     }
 }
 
@@ -204,6 +246,10 @@ public final class RetailClaimViewModel {
         case connectingNetwork
         case networkFailed(BoxClaim.NetworkFailure)
         case checkingInternet(serverDomain: String)
+        /// The right box is online; waiting for its certificate and the pinned TLS check.
+        case gettingCertificate(serverDomain: String)
+        /// Still no certificate after `certificateSlowMs`; checking goes on until the give-up time.
+        case certificateSlow(serverDomain: String)
         case done(serverDomain: String)
         case alarm(RetailClaimAlarm, serverDomain: String)
         case stopped(RetailClaimStop)
@@ -213,6 +259,8 @@ public final class RetailClaimViewModel {
     public private(set) var phase: Phase = .intro
     public private(set) var receipt: BoxClaim.Receipt?
     public private(set) var mode: BoxClaim.Mode = .open
+    /// The box key `.com` listed when the alarm went off (for Delete this server).
+    public private(set) var alarmStk: String?
 
     private let deps: RetailClaimDeps
     private var presence = BoxClaimPresence()
@@ -224,7 +272,8 @@ public final class RetailClaimViewModel {
     private var inbox: [(msg: BoxClaim.BoxMessage, at: Int64)] = []
     private var waiter: CheckedContinuation<Void, Never>?
     private var linkDead = false
-    private var minted: (json: String, serverDomain: String, serial: String)?
+    private var minted: RetailClaimRecipe?
+    private var certificate: Task<Void, Never>?
     private var pendingWifi: BoxClaim.WiFiConfig?
     private var generation = 0
 
@@ -313,14 +362,15 @@ public final class RetailClaimViewModel {
 
     private func reset() {
         generation += 1
-        flow?.cancel(); reader?.cancel(); hints?.cancel()
-        flow = nil; reader = nil; hints = nil
+        flow?.cancel(); reader?.cancel(); hints?.cancel(); certificate?.cancel()
+        flow = nil; reader = nil; hints = nil; certificate = nil
+        minted?.signer.discard()
         deps.radio.stopScan()
         link?.close()
         link = nil; channel = nil; inbox = []; linkDead = false
         waiter?.resume(); waiter = nil
         presence = BoxClaimPresence()
-        minted = nil; receipt = nil; pendingWifi = nil
+        minted = nil; receipt = nil; pendingWifi = nil; alarmStk = nil
     }
 
     private func stop(_ s: RetailClaimStop) {
@@ -572,7 +622,7 @@ public final class RetailClaimViewModel {
 
     private func claim(_ l: any BoxClaimLink, _ ch: BoxClaim.Channel, gen: Int) async throws {
         phase = .signing
-        let m: (json: String, serverDomain: String, serial: String)
+        let m: RetailClaimRecipe
         do {
             m = try await deps.mintRecipe()
         } catch {
@@ -581,7 +631,7 @@ public final class RetailClaimViewModel {
             }
             return
         }
-        guard gen == generation else { return }
+        guard gen == generation else { m.signer.discard(); return }
         minted = m
         send(.claim(recipe: m.json))
         guard let r = await next(timeoutMs: deps.answerTimeoutMs * 2, gen: gen) else { if gen == generation { stop(.linkLost) }; return }
@@ -602,8 +652,12 @@ public final class RetailClaimViewModel {
         deps.pinStk(m.serverDomain, rc.stkPubHex)
         phase = .registeringKey
         do {
-            try await deps.registerKey(BoxClaim.ClaimKey(username: deps.username, serial: m.serial, serverDomain: m.serverDomain,
-                                                         stkPubHex: rc.stkPubHex, issuedAt: deps.now()))
+            let key = BoxClaim.ClaimKey(username: deps.username, serial: m.serial, serverDomain: m.serverDomain,
+                                        stkPubHex: rc.stkPubHex, issuedAt: deps.now())
+            let signature: [UInt8]
+            do { signature = try m.signer.sign(key.canonical) } catch { m.signer.discard(); throw error }
+            m.signer.discard()
+            try await deps.registerKey(key, signature)
         } catch RetailClaimKeyError.taken {
             if gen == generation { stop(.keyTaken) }
             return
@@ -671,36 +725,69 @@ public final class RetailClaimViewModel {
         }
     }
 
+    private func raiseAlarm(_ alarm: RetailClaimAlarm, serverDomain: String, stk: String?) {
+        if alarm == .keyMismatch { deps.markUntrusted(serverDomain) }
+        alarmStk = stk
+        phase = .alarm(alarm, serverDomain: serverDomain)
+    }
+
     private func internetCheck(_ gen: Int) async {
         guard let m = minted, let rc = receipt else { return }
         phase = .checkingInternet(serverDomain: m.serverDomain)
         link?.close()
+        let want = rc.stkPubHex.lowercased()
         let deadline = deps.now() + deps.onlineTimeoutMs
-        while gen == generation && deps.now() < deadline {
-            if let stk = await deps.registeredStk(m.serverDomain) {
+        while gen == generation {
+            if let stk = await deps.registeredStk(m.serverDomain)?.lowercased() {
                 guard gen == generation else { return }
-                if stk.lowercased() != rc.stkPubHex.lowercased() {
-                    phase = .alarm(.keyMismatch, serverDomain: m.serverDomain)
-                    return
-                }
-                switch await deps.tlsCheck(m.serverDomain) {
-                case false?:
-                    if gen == generation { phase = .alarm(.keyMismatch, serverDomain: m.serverDomain) }
-                    return
-                case true?:
-                    if gen == generation { phase = .done(serverDomain: m.serverDomain) }
-                    return
-                case nil:
-                    break
-                }
+                if stk != want { raiseAlarm(.keyMismatch, serverDomain: m.serverDomain, stk: stk); return }
+                break
+            }
+            if deps.now() >= deadline {
+                if gen == generation { raiseAlarm(.neverOnline, serverDomain: m.serverDomain, stk: nil) }
+                return
             }
             try? await deps.sleepMs(deps.pollMs)
         }
         guard gen == generation else { return }
-        if await deps.registeredStk(m.serverDomain) == rc.stkPubHex.lowercased() {
-            phase = .done(serverDomain: m.serverDomain)
-        } else {
-            phase = .alarm(.neverOnline, serverDomain: m.serverDomain)
+        await waitForCertificate(m.serverDomain, want: want, gen: gen)
+    }
+
+    /// "Done" only once the box serves a certificate that the pinned key vouched for: a nil check
+    /// means no certificate yet and keeps waiting, a false one is the alarm.
+    private func waitForCertificate(_ domain: String, want: String, gen: Int) async {
+        phase = .gettingCertificate(serverDomain: domain)
+        let start = deps.now()
+        while gen == generation && !Task.isCancelled {
+            if let stk = await deps.registeredStk(domain)?.lowercased(), stk != want {
+                if gen == generation { raiseAlarm(.keyMismatch, serverDomain: domain, stk: stk) }
+                return
+            }
+            switch await deps.tlsCheck(domain) {
+            case false?:
+                if gen == generation { raiseAlarm(.keyMismatch, serverDomain: domain, stk: nil) }
+                return
+            case true?:
+                if gen == generation { phase = .done(serverDomain: domain) }
+                return
+            case nil:
+                break
+            }
+            guard gen == generation, !Task.isCancelled else { return }
+            let waited = deps.now() - start
+            if waited >= deps.certificateSlowMs, phase == .gettingCertificate(serverDomain: domain) {
+                phase = .certificateSlow(serverDomain: domain)
+            }
+            if waited >= deps.certificateGiveUpMs { return }
+            try? await deps.sleepMs(deps.pollMs)
         }
+    }
+
+    /// "Check again" on the slow-certificate screen.
+    public func checkCertificateAgain() {
+        guard case .certificateSlow(let domain) = phase, let want = receipt?.stkPubHex.lowercased() else { return }
+        let gen = generation
+        certificate?.cancel()
+        certificate = Task { [weak self] in await self?.waitForCertificate(domain, want: want, gen: gen) }
     }
 }

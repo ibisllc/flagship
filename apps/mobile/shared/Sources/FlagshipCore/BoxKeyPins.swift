@@ -40,19 +40,23 @@ public final class BoxKeyPins: @unchecked Sendable {
 
     /// The one pin store this reads and writes.
     public let serverKeys: ServerKeyPins
+    /// Servers this device stopped trusting: nothing is sealed to them.
+    public let untrusted: UntrustedServers
     private let lock = NSLock()
     private let now: () -> Int64
 
-    public init(serverKeys: ServerKeyPins,
+    public init(serverKeys: ServerKeyPins, untrusted: UntrustedServers = .shared,
                 now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.serverKeys = serverKeys
+        self.untrusted = untrusted
         self.now = now
     }
 
     /// `defaults == nil` keeps pins in memory only (tests).
     public convenience init(defaults: UserDefaults? = .standard,
                             now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
-        self.init(serverKeys: defaults.map { ServerKeyPins(defaults: $0) } ?? .volatile(), now: now)
+        self.init(serverKeys: defaults.map { ServerKeyPins(defaults: $0) } ?? .volatile(),
+                  untrusted: defaults.map { UntrustedServers(defaults: $0) } ?? .volatile(), now: now)
     }
 
     public static func decide(pinned: String?, reported: String) -> BoxKeyPinVerdict {
@@ -76,6 +80,7 @@ public final class BoxKeyPins: @unchecked Sendable {
     @discardableResult
     public func require(username: String, serverDomain: String, reportedHex: String) throws -> String {
         let domain = serverDomain.lowercased()
+        if untrusted.contains(host: domain) { throw ServerUntrustedError(serverDomain: domain) }
         let reported = reportedHex.lowercased()
         let pin = serverKeys.pinnedStkHex(domain)
         switch Self.decide(pinned: pin, reported: reported) {
