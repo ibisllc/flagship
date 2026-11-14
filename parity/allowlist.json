@@ -3,6 +3,21 @@
   "entries": [
     {
       "check": "test-vectors",
+      "key": "swift:direct-name",
+      "reason": "The owner's direct-name order (docs/direct-access-and-domains.md §7) is verified on .com only so far; the apps sign it from the step-5 name screens, which port the vectors with them."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:direct-name",
+      "reason": "The owner's direct-name order (docs/direct-access-and-domains.md §7) is verified on .com only so far; the apps sign it from the step-5 name screens, which port the vectors with them."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:direct-name",
+      "reason": "The owner's direct-name order (docs/direct-access-and-domains.md §7) is verified on .com only so far; the apps sign it from the step-5 name screens, which port the vectors with them."
+    },
+    {
+      "check": "test-vectors",
       "key": "web:direct-access",
       "reason": "Direct access is native only so far (docs/direct-access-and-domains.md §6): a browser can't choose a route, and the owner's screens (step 5) aren't built on any surface yet."
     },
