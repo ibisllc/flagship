@@ -70,5 +70,9 @@
   "That direct access order is for another server.": "这条直接访问指令是给另一台服务器的。",
   "This server takes direct access orders only from an admin device of this account.": "这台服务器只接受本账户管理员设备发出的直接访问指令。",
   "That direct access order is older than the last change. Try again.": "这条直接访问指令早于上一次更改。请重试。",
-  "This device's clock is too far from the server's. Check the time and try again.": "这台设备的时钟与服务器相差太多。请检查时间后重试。"
+  "This device's clock is too far from the server's. Check the time and try again.": "这台设备的时钟与服务器相差太多。请检查时间后重试。",
+  "Flagship setup code": "Flagship 设置码",
+  "Scan this code with the Flagship app on the phone of whoever will own this box.": "请在将拥有这台主机的人的手机上，用 Flagship 应用扫描此码。",
+  "Anyone who sees this code can set up this box. It works once, until {0} UTC.": "任何看到此码的人都可以设置这台主机。它只能使用一次，有效期至 {0} UTC。",
+  "Keep the box on a network cable until it is set up.": "设置完成前，请让主机保持连接网线。"
 }

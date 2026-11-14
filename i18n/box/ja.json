@@ -70,5 +70,9 @@
   "That direct access order is for another server.": "この直接アクセスの指示は別のサーバー宛てです。",
   "This server takes direct access orders only from an admin device of this account.": "このサーバーは、このアカウントの管理者デバイスからの直接アクセスの指示しか受け付けません。",
   "That direct access order is older than the last change. Try again.": "この直接アクセスの指示は最後の変更より古いものです。もう一度お試しください。",
-  "This device's clock is too far from the server's. Check the time and try again.": "このデバイスの時計がサーバーの時計と大きくずれています。時刻を確認して、もう一度お試しください。"
+  "This device's clock is too far from the server's. Check the time and try again.": "このデバイスの時計がサーバーの時計と大きくずれています。時刻を確認して、もう一度お試しください。",
+  "Flagship setup code": "Flagship セットアップコード",
+  "Scan this code with the Flagship app on the phone of whoever will own this box.": "このボックスの持ち主になる人のスマートフォンで、Flagship アプリを使ってこのコードをスキャンしてください。",
+  "Anyone who sees this code can set up this box. It works once, until {0} UTC.": "このコードを見た人は誰でもこのボックスをセットアップできます。使えるのは 1 回だけで、{0} UTC まで有効です。",
+  "Keep the box on a network cable until it is set up.": "セットアップが終わるまで、ボックスはネットワークケーブルにつないだままにしてください。"
 }
