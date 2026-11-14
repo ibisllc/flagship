@@ -150867,6 +150867,170 @@
           }
         }
       }
+    },
+    "%lld of %lld co-managers across your servers": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld de %lld cogestores en tus servidores"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld cogestionnaires sur %lld pour l’ensemble de vos serveurs"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld von %lld Mitverwaltern auf deinen Servern"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld de %lld coadministradores nos seus servidores"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共同管理者 %lld / %lld 人（全サーバー）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共同管理者 %lld/%lld 位（所有服务器）"
+          }
+        }
+      }
+    },
+    "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con el plan gratuito tus servidores pueden tener hasta %lld cogestores en total. Quita uno primero o pásate a Pro para tener más."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec l’offre gratuite, vos serveurs peuvent avoir jusqu’à %lld cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro pour en avoir plus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit dem kostenlosen Tarif können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro, um mehr zu haben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No plano gratuito seus servidores podem ter até %lld coadministradores no total. Remova um primeiro ou mude para o Pro para ter mais."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無料プランでは、サーバー全体で共同管理者は最大 %lld 人です。先に1人外すか、Pro に切り替えると増やせます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "免费套餐下，你的所有服务器最多共有 %lld 位共同管理者。请先移除一位，或升级到 Pro 以添加更多。"
+          }
+        }
+      }
+    },
+    "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con el plan Pro tus servidores pueden tener hasta %lld cogestores en total. Quita uno primero o pásate a Pro Max para tener más."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec l’offre Pro, vos serveurs peuvent avoir jusqu’à %lld cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro Max pour en avoir plus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit dem Tarif Pro können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro Max, um mehr zu haben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No plano Pro seus servidores podem ter até %lld coadministradores no total. Remova um primeiro ou mude para o Pro Max para ter mais."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro プランでは、サーバー全体で共同管理者は最大 %lld 人です。先に1人外すか、Pro Max に切り替えると増やせます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro 套餐下，你的所有服务器最多共有 %lld 位共同管理者。请先移除一位，或升级到 Pro Max 以添加更多。"
+          }
+        }
+      }
+    },
+    "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con el plan Pro Max tus servidores pueden tener hasta %lld cogestores en total. Quita uno primero o pásate a Enterprise para tener más."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à %lld cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit dem Tarif Pro Max können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Enterprise, um mehr zu haben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No plano Pro Max seus servidores podem ter até %lld coadministradores no total. Remova um primeiro ou mude para o Enterprise para ter mais."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro Max プランでは、サーバー全体で共同管理者は最大 %lld 人です。先に1人外すか、Enterprise に切り替えると増やせます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro Max 套餐下，你的所有服务器最多共有 %lld 位共同管理者。请先移除一位，或升级到 Enterprise 以添加更多。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

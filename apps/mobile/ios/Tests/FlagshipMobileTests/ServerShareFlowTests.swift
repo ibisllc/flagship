@@ -51,6 +51,9 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
     var attestedKeys: Set<String> = []
     /// A demo account's admin root, which `.com` holds and signs the request with.
     var demoAdmin: Curve25519.Signing.PrivateKey?
+    /// The co-manager count the box reports, and a cap `.com` and the box enforce (plan, cap).
+    var coManagers: [String: Any]?
+    var capReached: (plan: String, cap: Int)?
 
     init(domain: String, ownerSensitivePub: Data, ownerAccountPub: Data, stk: Curve25519.Signing.PrivateKey) {
         self.domain = domain
@@ -115,6 +118,9 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
             let (status, obj, key) = ShareAcceptMockWorld.answerAttestationRequest(signed, adminPub: demoAdmin.publicKey.rawRepresentation)
             if let key { attestedKeys.insert(key) }
             return (status, obj)
+        }
+        if m == "POST", p.hasSuffix("/server-shares"), parts.count == 4, let full = capReached {
+            return (403, ["error": "co-manager-cap", "code": "co-manager-cap", "count": full.cap, "cap": full.cap, "plan": full.plan])
         }
         if m == "POST", p.hasSuffix("/server-shares"), parts.count == 4 {
             guard let offer = ServerShareOffer.parse(jsonObject: b["offer"] as Any),
@@ -266,7 +272,8 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
                     ["shareId": g.grant.shareId, "label": g.grant.label, "level": g.grant.level.rawValue,
                      "unlockAtBoot": g.grant.unlockAtBoot, "seeAppData": g.grant.seeAppData,
                      "memberPubHex": g.grant.memberPubHex, "issuedAt": g.grant.issuedAt, "lastSeenAt": 5]
-                }, "ended": endedOnBox.map { ["shareId": $0, "label": "x", "endedAt": 1, "reason": "revoked"] }])
+                }, "ended": endedOnBox.map { ["shareId": $0, "label": "x", "endedAt": 1, "reason": "revoked"] },
+                "coManagers": coManagers as Any? ?? NSNull()])
             }
             if m == "POST", p == "/api/screens/shares" {
                 lastGrantBody = b
@@ -968,6 +975,25 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertEqual(ServerShareCopy.membersOnlyHint, "Members only. As a co-manager you can open it.")
         XCTAssertEqual(ServerShareCopy.unlockHouseKey,
                        "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.")
+    }
+
+    @MainActor
+    func test_coManagerCap_cardShowsCount_andARefusalReadsInThePlansWords() async throws {
+        backend.coManagers = ["count": 3, "cap": 10, "plan": "hobby"]
+        let snap = try await owner.load(serverDomain: domain, ownerToken: backend.ownerToken, readInvitations: false)
+        XCTAssertEqual(snap.coManagers, CoManagerCount(count: 3, cap: 10, plan: "hobby"))
+        XCTAssertEqual(ServerShareCopy.coManagerCount(snap.coManagers), "3 of 10 co-managers across your servers")
+        XCTAssertNil(ServerShareCopy.coManagerCount(CoManagerCount(count: 40, cap: nil, plan: "enterprise")))
+
+        backend.capReached = ("free", 5)
+        let card = ShareServerCardModel(serverDomain: domain, serverName: "Home", stkPubHex: stkHex, flow: owner,
+                                        ownerToken: { "owner-token" }, keysUnlocked: { true })
+        let created = await card.create(ShareDraft(label: "Sam"))
+        XCTAssertNil(created)
+        XCTAssertEqual(card.errorMessage,
+                       "On the Free plan your servers can have up to 5 co-managers in all. Remove one first, or move to Pro for more.")
+        XCTAssertEqual(ServerShareCopy.coManagerCap(plan: "maker", cap: 25),
+                       "On the Pro Max plan your servers can have up to 25 co-managers in all. Remove one first, or move to Enterprise for more.")
     }
 
     @MainActor

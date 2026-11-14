@@ -3679,5 +3679,9 @@
   "The box is being wiped. It restarts as a new box.": "Le boîtier est en cours d’effacement. Il redémarrera comme un boîtier neuf.",
   "Releasing…": "Libération…",
   "Release this box?": "Libérer ce boîtier ?",
-  "Wipe and release": "Effacer et libérer"
+  "Wipe and release": "Effacer et libérer",
+  "%lld of %lld co-managers across your servers": "%lld cogestionnaires sur %lld pour l’ensemble de vos serveurs",
+  "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": "Avec l’offre gratuite, vos serveurs peuvent avoir jusqu’à %lld cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro pour en avoir plus.",
+  "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": "Avec l’offre Pro, vos serveurs peuvent avoir jusqu’à %lld cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro Max pour en avoir plus.",
+  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à %lld cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus."
 }

@@ -137,6 +137,10 @@ struct ShareServerCard: View {
                     Text(msg).font(FS.font.bodySm()).foregroundColor(c.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 case .loaded(let snap):
+                    if let count = ServerShareCopy.coManagerCount(snap.coManagers) {
+                        Text(count).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            .accessibilityIdentifier("share-co-manager-count")
+                    }
                     if snap.rows.isEmpty {
                         Text(ServerShareCopy.nobodyYet).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)

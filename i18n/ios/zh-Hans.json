@@ -3677,5 +3677,9 @@
   "The box is being wiped. It restarts as a new box.": "正在清除主机。它将以全新主机的状态重启。",
   "Releasing…": "正在释放…",
   "Release this box?": "要释放此主机吗？",
-  "Wipe and release": "清除并释放"
+  "Wipe and release": "清除并释放",
+  "%lld of %lld co-managers across your servers": "共同管理者 %lld/%lld 位（所有服务器）",
+  "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": "免费套餐下，你的所有服务器最多共有 %lld 位共同管理者。请先移除一位，或升级到 Pro 以添加更多。",
+  "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": "Pro 套餐下，你的所有服务器最多共有 %lld 位共同管理者。请先移除一位，或升级到 Pro Max 以添加更多。",
+  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "Pro Max 套餐下，你的所有服务器最多共有 %lld 位共同管理者。请先移除一位，或升级到 Enterprise 以添加更多。"
 }
