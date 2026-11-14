@@ -360,6 +360,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Decided under the owner's keywords: calm "being restored" page during the swap; restore Activity as code + params
   translated by each app; undo images deleted on expiry; doc follows the built path. Agent continues with the screens.
   Found: server-daemon `centralAuthorization` fails on /api/box-claim (given to the retail-bluez agent).
+- 2026-11-14 Merged `0.4/retail-bluez`: in-tree D-Bus client + BlueZ GATT peripheral (advert + scan response, MTU
+  framing, one phone at a time, per-boot random address), claim service runs only on retail images
+  (/etc/flagship/retail-image.json) and serves nothing while locked, reset-window Activity + push, `retail-wipe` root
+  step (cryptsetup erase + header overwrite + read-back), `flagship/box-release/v1` order (admin root, vectors),
+  wipeVerifier false-positive fix (1 in 8 erased headers looked unerased), centralAuthorization fixed. MUST-FIX before
+  any sale (found by the agent): a re-claimed box kept the previous owner's keyd identity; agent fixing now, plus the
+  hybrid release order under strict and the phones' Release screen. Partition layout/recovery image wait for hardware.
 
 ## Resume point
 
