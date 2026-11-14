@@ -62,16 +62,23 @@ public struct DirectNameState: Decodable, Equatable, Sendable, Identifiable {
     public let publishedAt: Int64?
     public let suspended: DirectSuspension?
     public let probe: DirectProbe?
+    /// The box's certificate for the name: issued once the owner's order verifies, before the direct path is live.
+    public let certificate: DirectNameCertificate?
     public var id: String { name }
     public var isPublished: Bool { state == "published" }
 
     public init(name: String, serverDomain: String, enabled: Bool, caa: String = "pin", addresses: [String] = [],
                 issuedAt: Int64? = nil, state: String, reason: String? = nil, publishedAt: Int64? = nil,
-                suspended: DirectSuspension? = nil, probe: DirectProbe? = nil) {
+                suspended: DirectSuspension? = nil, probe: DirectProbe? = nil, certificate: DirectNameCertificate? = nil) {
         self.name = name; self.serverDomain = serverDomain; self.enabled = enabled; self.caa = caa
         self.addresses = addresses; self.issuedAt = issuedAt; self.state = state; self.reason = reason
-        self.publishedAt = publishedAt; self.suspended = suspended; self.probe = probe
+        self.publishedAt = publishedAt; self.suspended = suspended; self.probe = probe; self.certificate = certificate
     }
+}
+
+public struct DirectNameCertificate: Decodable, Equatable, Sendable {
+    public let notAfter: Int64
+    public init(notAfter: Int64) { self.notAfter = notAfter }
 }
 
 public struct DirectSuspension: Decodable, Equatable, Sendable {
@@ -148,7 +155,11 @@ public enum DirectAccessText {
         switch n.state {
         case "published": return String(localized: "Published")
         case "pending": return String(localized: "Waiting to be published")
-        default: return reason(n.reason) ?? String(localized: "Not published")
+        default:
+            if n.certificate != nil, n.reason == "direct-access-off" || n.reason == "no-addresses" {
+                return String(localized: "Certificate ready. Waiting for the direct path.")
+            }
+            return reason(n.reason) ?? String(localized: "Not published")
         }
     }
 
@@ -287,7 +298,8 @@ public final class MockDirectNamesClient: DirectNamesClient, @unchecked Sendable
         scripted = DirectAccountState(apex: scripted.apex, servers: scripted.servers, names: scripted.names.map {
             $0.name == fqdn ? DirectNameState(name: $0.name, serverDomain: $0.serverDomain, enabled: $0.enabled, caa: $0.caa,
                                               addresses: $0.addresses, issuedAt: $0.issuedAt, state: $0.state, reason: $0.reason,
-                                              publishedAt: $0.publishedAt, suspended: $0.suspended, probe: p) : $0
+                                              publishedAt: $0.publishedAt, suspended: $0.suspended, probe: p,
+                                              certificate: $0.certificate) : $0
         })
         return p
     }
@@ -297,7 +309,7 @@ public final class MockDirectNamesClient: DirectNamesClient, @unchecked Sendable
             : (!n.addresses.isEmpty || accessOn) ? ("published", nil) : ("empty", "direct-access-off")
         return DirectNameState(name: n.name, serverDomain: n.serverDomain, enabled: n.enabled, caa: n.caa, addresses: n.addresses,
                                issuedAt: n.issuedAt, state: state, reason: reason, publishedAt: state == "published" ? n.issuedAt : nil,
-                               suspended: n.suspended, probe: n.probe)
+                               suspended: n.suspended, probe: n.probe, certificate: n.certificate)
     }
 }
 #endif

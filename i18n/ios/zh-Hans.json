@@ -3429,5 +3429,6 @@
   "Not published": "未发布",
   "Reachable from outside.": "可从外部访问。",
   "Not reachable from outside.": "无法从外部访问。",
-  "Not published yet, so there is nothing to check.": "尚未发布，因此没有可检查的内容。"
+  "Not published yet, so there is nothing to check.": "尚未发布，因此没有可检查的内容。",
+  "Certificate ready. Waiting for the direct path.": "证书已就绪。正在等待直接连接。"
 }

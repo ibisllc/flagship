@@ -14353,5 +14353,9 @@
   "Through the relay": {
     "en": "Through the relay",
     "ctx": "webapp/views/direct-access.js:622"
+  },
+  "Certificate ready. Waiting for the direct path.": {
+    "en": "Certificate ready. Waiting for the direct path.",
+    "ctx": "webapp/lib/directNames.js:124"
   }
 }

@@ -3513,5 +3513,6 @@
   "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.": "Führt direkt zu deinem Server und verbraucht kein Relay-Datenvolumen. Funktioniert nur, solange dein Server von außen erreichbar ist.",
   "Goes through the Flagship relay. It works even when your server can't be reached from outside.": "Führt über das Flagship-Relay. Funktioniert auch, wenn dein Server von außen nicht erreichbar ist.",
   "Link to share": "Link zum Teilen",
-  "Through the relay": "Über das Relay"
+  "Through the relay": "Über das Relay",
+  "Certificate ready. Waiting for the direct path.": "Zertifikat bereit. Wartet auf den direkten Weg."
 }

@@ -14747,5 +14747,9 @@
   "Not published yet, so there is nothing to check.": {
     "en": "Not published yet, so there is nothing to check.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:173"
+  },
+  "Certificate ready. Waiting for the direct path.": {
+    "en": "Certificate ready. Waiting for the direct path.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift (name state)"
   }
 }

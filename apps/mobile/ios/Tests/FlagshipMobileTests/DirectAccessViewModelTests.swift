@@ -131,5 +131,8 @@ final class DirectAccessViewModelTests: XCTestCase {
         XCTAssertEqual(DirectAccessText.refusal("nope", fallback: "box sentence"), "box sentence")
         let empty = DirectNameState(name: "a--bright-maple.fshp.app", serverDomain: domain, enabled: true, state: "empty", reason: "direct-access-off")
         XCTAssertEqual(DirectAccessText.state(empty), "Direct access is off on its server.")
+        let ready = DirectNameState(name: "a--bright-maple.fshp.app", serverDomain: domain, enabled: true, state: "empty",
+                                    reason: "no-addresses", certificate: DirectNameCertificate(notAfter: 1_900_000_000_000))
+        XCTAssertEqual(DirectAccessText.state(ready), "Certificate ready. Waiting for the direct path.")
     }
 }

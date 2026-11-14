@@ -3513,5 +3513,6 @@
   "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.": "直接连到你的服务器，不占用你的中继流量。只有在你的服务器可从外部访问时才有效。",
   "Goes through the Flagship relay. It works even when your server can't be reached from outside.": "经过 Flagship 中继。即使你的服务器无法从外部访问也有效。",
   "Link to share": "要分享的链接",
-  "Through the relay": "通过中继"
+  "Through the relay": "通过中继",
+  "Certificate ready. Waiting for the direct path.": "证书已就绪。正在等待直接连接。"
 }

@@ -3714,5 +3714,6 @@
   "da_reason_caa_unknown": "証明書アカウントを待っています。まもなく公開されます。",
   "da_probe_reachable": "外部からアクセスできます。",
   "da_probe_unreachable": "外部からアクセスできません。",
-  "da_probe_nothing": "まだ公開されていないため、確認するものがありません。"
+  "da_probe_nothing": "まだ公開されていないため、確認するものがありません。",
+  "da_state_certificate_ready": "証明書の準備ができました。直接接続を待っています。"
 }

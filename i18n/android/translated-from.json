@@ -3651,5 +3651,6 @@
   "da_reason_caa_unknown": "c24c19d1d754",
   "da_probe_reachable": "e7f7748ce740",
   "da_probe_unreachable": "c357959bb79c",
-  "da_probe_nothing": "fc11d13e13f2"
+  "da_probe_nothing": "fc11d13e13f2",
+  "da_state_certificate_ready": "b9398872d2b0"
 }

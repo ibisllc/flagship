@@ -119,6 +119,10 @@ export function directNameStateText(n) {
     case "pending":
       return tr("Waiting to be published");
     default:
+      // The certificate is issued once the owner's order verifies; the records wait for the direct path.
+      if (n?.certificate && (n.reason === "direct-access-off" || n.reason === "no-addresses")) {
+        return tr("Certificate ready. Waiting for the direct path.");
+      }
       return directReasonText(n?.reason) ?? tr("Not published");
   }
 }

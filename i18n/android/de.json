@@ -3714,5 +3714,6 @@
   "da_reason_caa_unknown": "Wartet auf das Zertifikatskonto. Der Name wird bald veröffentlicht.",
   "da_probe_reachable": "Von außen erreichbar.",
   "da_probe_unreachable": "Von außen nicht erreichbar.",
-  "da_probe_nothing": "Noch nicht veröffentlicht, daher gibt es nichts zu prüfen."
+  "da_probe_nothing": "Noch nicht veröffentlicht, daher gibt es nichts zu prüfen.",
+  "da_state_certificate_ready": "Zertifikat bereit. Wartet auf den direkten Weg."
 }

@@ -3714,5 +3714,6 @@
   "da_reason_caa_unknown": "Esperando a la cuenta de certificados. Se publicará pronto.",
   "da_probe_reachable": "Accesible desde fuera.",
   "da_probe_unreachable": "No accesible desde fuera.",
-  "da_probe_nothing": "Todavía no está publicado, así que no hay nada que comprobar."
+  "da_probe_nothing": "Todavía no está publicado, así que no hay nada que comprobar.",
+  "da_state_certificate_ready": "Certificado listo. Esperando la ruta directa."
 }

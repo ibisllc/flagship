@@ -3513,5 +3513,6 @@
   "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.": "サーバーに直接つながり、リレーのデータ量を使いません。サーバーに外部から到達できる間だけ使えます。",
   "Goes through the Flagship relay. It works even when your server can't be reached from outside.": "Flagship のリレーを経由します。サーバーに外部から到達できないときでも使えます。",
   "Link to share": "共有するリンク",
-  "Through the relay": "リレー経由"
+  "Through the relay": "リレー経由",
+  "Certificate ready. Waiting for the direct path.": "証明書の準備ができました。直接接続を待っています。"
 }
