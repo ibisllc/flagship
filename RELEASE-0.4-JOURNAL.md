@@ -137,6 +137,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F15 Rate limits (first check, 2026-11-13, 30 days): `builder-pipe-upgrade` refused 2,685 from 339 sources (likely 0.2
       Studios looping on the STUDIO_PIPE_MIN refusal, see F12); `account-resolve` refused 6,019 across 1,224 usernames
       with 23 accounts in D1 (enumeration, or a client looping on unknown names?): find the callers' pattern, fix.
+- [ ] F16 Firefox extension (owner 2026-11-14): cert pinning + cross-site knock, QR-paired key-light session; AMO listing later.
+- [ ] F17 OWNER: ask Let's Encrypt for a rate-limit increase on `fshp.app` (hosting-provider form) before direct names launch.
 - [ ] F14 The parked "after launch" work (from P14): second relay by DNS round-robin, Rust production
       qualification (G10), removal of old implementations once proven (G8), gym IPv6-only, `VOICI_CANONICAL`.
 
@@ -199,6 +201,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   shell at the next webapp release.
 - 2026-11-13 Merged `0.4/direct-access` (F1 steps 1-2): tsc clean, direct-access tests + vectors check pass.
   Owner leaning: per-service certificates on `fshp.app` (asked to confirm).
+- 2026-11-14 Owner decisions: (1) per-service/direct names on `fshp.app`; the owner will get Let's Encrypt's
+  rate-limit increase for it (many certificates). (2) Relayed names on `flagship.services` need not match the
+  direct domain's per-service granularity (attributed differently). (3) BUILD the Firefox extension in 0.4
+  (Firefox-only, the browser where Flagship runs well; possible Mozilla funding): agent on `0.4/firefox-extension`.
+  (4) Retail: owner proposes first-boot Bluetooth pairing as the source of truth (no printed card); analysis given.
 
 ## Resume point
 
