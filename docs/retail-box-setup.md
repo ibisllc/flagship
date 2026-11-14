@@ -515,3 +515,36 @@ or hardware id at `.com` (old Q7); the second-hand reset race (old Q10: no secre
   attacker's cost but does not stop one who also claimed the real box, so this doc does not include it.
 - **Q8** What the app calls the two tiers to the buyer (for example nothing for Standard, "Verified box" for the
   other), and whether the Standard help text names the relay risk outright.
+
+## 15. Owner notes, 2026-11-14 (round 3), to fold into the design
+
+Verbatim: "The QR code should change whenever the server is reset (5 clicks). As well as key changes and memory
+wipes. A server that powers off during resets should be bricked - you must either do a complete reset again or bring
+it back to the store. Seeing and storing the QR code should not leak any information. It should be a first come
+first serve throwable key that sets things in motion but is discarded entirely over time." Question: how does a
+headless box get its internet (Ethernet can be tricky, Wi-Fi finicky), especially when the QR code is shared
+(a cousin, a shop's setup desk)? Mandate an easy network (working DHCP, no captive portal)?
+
+Proposed reading (pending the owner's confirmation):
+
+- **The code ratchets.** A claim code is single use. Each claim, key change or wipe makes a new one on the box (only
+  its hash kept), so a code that has been used, seen or stored is worthless afterwards. The printed card is code 0:
+  it dies at the first claim (this reverses 9.1's "survives resets"). The new code goes sealed to the owner's app
+  ("Show this box's setup code", for handing over). A 5-press reset with nobody holding the current code falls back
+  to the Standard claim (Bluetooth + timed press), so a 5-press reset also kills any leaked code. A monitor (8.4)
+  always shows the current code.
+- **Nothing in the code.** 100 random bits, no serial, model, MAC, account or server name. Before use it is a bearer
+  claim (first come, first served); after use or a reset it is junk. Any internet mailbox keyed by it at `.com`
+  holds only a hash and expires.
+- **Interrupted reset = locked.** Once the wipe starts (a "reset in progress" marker is fsynced first; the LUKS
+  header is crypto-erased, so the window is seconds), a power loss leaves the box in a locked state that serves
+  nothing and accepts only a fresh 5-press reset. Recommended: lock only from the moment the wipe starts, not from
+  the 5 presses, else 5 presses + pulling the plug destroys a working server (cheap grief by anyone at the box).
+- **Network.** Supported: Ethernet with DHCP; Wi-Fi WPA2/WPA3-Personal on 2.4/5 GHz sent over Bluetooth, with the box
+  scanning and listing the networks it can see, then reporting the exact failure (wrong password, no DHCP address,
+  no DNS, captive portal, relay unreachable) before the Bluetooth session closes. Not supported, said up front:
+  captive portals, 802.1X enterprise Wi-Fi, networks that block outbound 443. Optional: static IP sent over
+  Bluetooth; Wi-Fi Easy Connect (DPP, Android only); WPS push button (often disabled).
+- **Remote claim (the shared QR).** Only with Ethernet + DHCP: an unclaimed box online opens a claim mailbox at `.com`
+  keyed by a hash of its current code, and whoever holds the code claims over the internet (handshake keyed by the
+  code, `.com` blind). Over Wi-Fi someone must be at the box once to pass the Wi-Fi details.
