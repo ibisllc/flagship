@@ -36,7 +36,6 @@ export type CronJobId =
   | "custom-domain-verify"
   | "ca-lease-warning"
   | "prune-rate-limit-log"
-  | "prune-late-logs"
   | "demo"
   | "ct-scan"
   | "repair-alerts"
@@ -86,7 +85,7 @@ const MINOR_GROUPS: CronJobId[][] = [
 export function cronPlan(cron: string, scheduledTime: number): CronPlan {
   if (cron === SIX_HOURLY_CRON) {
     return {
-      jobs: ["custom-domain-verify", "ca-lease-warning", "prune-rate-limit-log", "prune-late-logs", "relay-directory", "names", "prune-update-receipts"],
+      jobs: ["custom-domain-verify", "ca-lease-warning", "prune-rate-limit-log", "relay-directory", "names", "prune-update-receipts"],
     };
   }
   if (cron === TEN_MINUTE_CRON) {

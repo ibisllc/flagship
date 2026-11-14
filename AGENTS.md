@@ -1748,7 +1748,7 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
 5. ~~`DEV_LATE_LOG` / W12 debug endpoints~~ removed 2026-10-17 (late-log, Hetzner
    rescue/destroy/server-info, upload-iso; installers post no logs any more; needs
    an endorsed box release and a `.com` deploy; `legacyLateLogs.ts` and its cron
-   call go on or after 2026-10-31).
+   call removed in 0.4).
 6. Quiet the box console: diagnose `journalctl -b -p warning` on a real box
    first, fix real warnings at the source, then add `quiet loglevel=3`.
 - Owner debug access ships at GA by owner decision (2026-10-16): SSH key only,

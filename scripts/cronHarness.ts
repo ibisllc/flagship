@@ -161,7 +161,6 @@ export async function buildCronWorld(opts: CronWorldOptions = {}): Promise<CronW
     ADAPTERS_GITHUB_TOKEN: "cron-harness-gh",
     ADAPTERS_REPO: "ibisllc/flagship-adapters",
     ADAPTERS_BUCKET: { get: async () => null, put: async () => undefined, delete: async () => undefined, list: async () => ({ objects: [], truncated: false }) } as never,
-    ISO_TEMP_BUCKET: { list: async () => ({ objects: [], truncated: false }), delete: async () => undefined } as never,
     VOICI: {
       get: async () => null,
       put: async () => undefined,
