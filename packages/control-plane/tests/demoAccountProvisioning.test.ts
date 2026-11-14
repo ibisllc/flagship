@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { decryptAccountProfile, deriveAccountProfileKey } from "@flagship/protocol";
+import { decryptAccountProfile, deriveAccountProfileKey, legacyPolicyState, verifyDeviceGrantPq, verifyPqKeyBinding, type DeviceScope } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import { handleAccountResolve } from "../src/accountResolve.js";
 import { handleGetDemoUser, runDemoProvisioningPoller } from "../src/demoUsers.js";
@@ -56,6 +56,21 @@ describe("atomic demo account provisioning", () => {
     expect(JSON.stringify(profile)).not.toContain(body.accountName);
     expect(decryptAccountProfile(profile!, deriveAccountProfileKey(deriveDemoUmk(kek, body.username))).displayName)
       .toBe(body.accountName);
+  });
+
+  it("signs the primary grant's hybrid companion and stores the admin root's binding (pq-suites.md §20)", async () => {
+    const { storage, deps } = harness();
+    deps.pqTrust = storage.pqTrust;
+    expect((await handleCreateDemoAccount(deps, body)).status).toBe(202);
+    const user = await storage.usernames.get(body.username);
+    const rec = await storage.pqTrust.getBinding("admin-root", body.username);
+    const b = verifyPqKeyBinding({ v: 1, role: rec!.role, subjectId: rec!.subjectId, ed25519PubHex: rec!.ed25519PubHex, mldsaPubHex: rec!.mldsaPubHex, issuedAt: rec!.issuedAt, signature: rec!.signatureHex },
+      { role: "admin-root", subjectId: body.username, ed25519PubHex: user!.adminRootPubHex!, now });
+    const [g] = await storage.deviceCapabilityGrants.listForUser(body.username);
+    const grant = { grantId: g!.grantId, username: body.username, deviceId: g!.deviceId, devicePubKey: Uint8Array.from(Buffer.from(g!.devicePubHex, "hex")),
+      scopes: JSON.parse(g!.scopesJson) as DeviceScope[], issuedAt: g!.issuedAt, expiresAt: g!.expiresAt };
+    expect(() => verifyDeviceGrantPq({ grant, pq: JSON.parse(g!.pqSignatureJson!), signerPubHex: user!.adminRootPubHex!, signerBinding: b,
+      policy: legacyPolicyState({ kind: "installation", id: "x" }) })).not.toThrow();
   });
 
   it("builds the box on the container stack the request names (the release gym runs both)", async () => {

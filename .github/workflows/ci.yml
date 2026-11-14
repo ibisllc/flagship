@@ -83,6 +83,12 @@ jobs:
         if: matrix.shard == 1
         run: npx tsx tools/test-vectors.ts --check
 
+      # The hybrid admin-root rotation and device-grant companions (pq-suites.md §20): TS, Rust, Swift
+      # and Kotlin all read this file, so a stale one fails here first.
+      - name: PQ authority vectors are fresh
+        if: matrix.shard == 1
+        run: npx tsx tools/pq-authority-vectors.ts --check
+
       # Release plan G2: release/runtime-lock.json and every other Node pin (artifact pins, security floor, box
       # release floors, the box CI jobs) agree, and the signed runtime manifest's shared vectors are current.
       - name: Runtime lock agrees with every Node pin

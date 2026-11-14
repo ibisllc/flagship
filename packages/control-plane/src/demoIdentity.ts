@@ -49,6 +49,11 @@ export function deriveDemoAdminRoot(kek: Uint8Array, username: string): Keypair 
   return keypair(deriveSeed(kek, username, USER_SALT, "admin-root"));
 }
 
+/** The demo admin root's ML-DSA-65 seed (its hybrid half; pq-suites.md §20). */
+export function deriveDemoAdminRootMldsaSeed(kek: Uint8Array, username: string): Uint8Array {
+  return deriveSeed(kek, username, USER_SALT, "admin-root-mldsa");
+}
+
 export function deriveDemoPrimaryDeviceKey(kek: Uint8Array, username: string): Keypair {
   return keypair(deriveSeed(kek, username, DEVICE_SALT, "primary-device"));
 }

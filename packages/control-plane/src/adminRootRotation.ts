@@ -204,8 +204,8 @@ export async function handleApplyAdminRootRotation(
     return forbidden("invalid rotation signature");
   }
 
-  // A hybrid companion that is sent must verify under the old root's stored binding: `.com` never
-  // relays one a box would refuse, and it takes the new root's binding the old root named.
+  // A hybrid companion that is sent must verify under the old root's stored binding when `.com`
+  // holds one (it never relays one a box would refuse), and it takes the new root's binding.
   const now = (deps.now ?? Date.now)();
   let pqJson: string | undefined;
   let newRootBinding: PqKeyBindingWire | undefined;
@@ -220,7 +220,9 @@ export async function handleApplyAdminRootRotation(
         now,
       });
     } catch (e) {
-      return forbidden(e instanceof PqTrustError ? e.code : "bad-signature");
+      // `.com` holds no binding for the old root to check the companion against: relay it and let
+      // each box judge it under its own pin.
+      if (!(e instanceof PqTrustError) || e.code !== "no-binding") return forbidden(e instanceof PqTrustError ? e.code : "bad-signature");
     }
     newRootBinding = (body.pq as { newRootBinding: PqKeyBindingWire }).newRootBinding;
     pqJson = JSON.stringify({ signature: (body.pq as { signature: unknown }).signature, newRootBinding });

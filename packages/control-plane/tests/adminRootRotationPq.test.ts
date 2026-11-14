@@ -70,4 +70,14 @@ describe("hybrid admin-root rotation on .com", () => {
     expect((await storage.usernames.get(USER))?.adminRootPubHex).toBe(hex(a.publicKey));
     expect(await storage.adminRootRotations.list(USER)).toHaveLength(0);
   });
+
+  it("relays a companion it holds no old-root binding to check", async () => {
+    const a = hybridKey(1);
+    const b = hybridKey(2);
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({ username: USER, irkPubHex: "11".repeat(32), claimedAt: 1, adminRootPubHex: hex(a.publicKey) });
+    const deps = { usernames: storage.usernames, rotations: storage.adminRootRotations, pqTrust: storage.pqTrust, now: () => NOW };
+    expect((await handleApplyAdminRootRotation(deps, USER, body(a, b))).status).toBe(200);
+    expect((await storage.adminRootRotations.list(USER))[0]?.pqJson).toBeTruthy();
+  });
 });

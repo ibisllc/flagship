@@ -95,6 +95,13 @@ describe("hybrid admin-root rotation on the box", () => {
     expect(r.applied).toBe(0);
   });
 
+  it("compatibility: a companion the box holds no old-root binding for counts as absent; strict stops", () => {
+    const none = { ...pqWith(compat), bindingFor: () => null };
+    const r = applyRotationChain({ pinnedHex: hex(a.publicKey), username: USER, chain: [hop(1, a, b, true)], pq: none });
+    expect(r.applied).toBe(1);
+    expect(r.pqBinding).toBeUndefined();
+  });
+
   it("compatibility: a classical hop still re-pins, and an offered companion must verify", () => {
     expect(applyRotationChain({ pinnedHex: hex(a.publicKey), username: USER, chain: [hop(1, a, b, false)], pq: pqWith(compat) }).applied).toBe(1);
     expect(applyRotationChain({ pinnedHex: hex(a.publicKey), username: USER, chain: [hop(1, a, b, true, c)], pq: pqWith(compat) }).applied).toBe(0);

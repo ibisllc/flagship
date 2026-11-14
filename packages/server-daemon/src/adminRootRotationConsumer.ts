@@ -292,8 +292,11 @@ export function applyRotationChain(args: {
         nextWire = (entry.pq as { newRootBinding: PqKeyBindingWire }).newRootBinding;
       } catch (e) {
         if (!(e instanceof PqTrustError)) throw e;
-        stoppedEarly = true;
-        break;
+        // Outside strict, a companion the box holds no old-root binding to check counts as absent.
+        if (e.code !== "no-binding" || strict) {
+          stoppedEarly = true;
+          break;
+        }
       }
     } else if (strict) {
       stoppedEarly = true;
