@@ -1,4 +1,5 @@
 import { languageFor } from "./i18n/index.js";
+import { startGymAcmeTrust } from "./gymAcmeTrust.js";
 import { existsSync, readFileSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
 import { readdir, readFile, rename, rm, stat, statfs } from "node:fs/promises";
@@ -765,6 +766,8 @@ export async function persistCgkHex(path: string, cgkHex: string): Promise<void>
 
 async function main(): Promise<void> {
   assertNodeFloor();
+  // GYM BRANCH ONLY: trust the gym's Pebble root for box-to-box fetches (gymAcmeTrust.ts).
+  void startGymAcmeTrust();
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
 
