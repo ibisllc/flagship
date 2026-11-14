@@ -123,10 +123,13 @@ list; SP = `SECURITY-0.3-PROGRESS.md`; REG = `docs/architecture-v2/REGISTER.md`.
   `pqSignature`, which `.com`'s gate already takes under the stored STK binding; `flagship/box-health/v1` is on both
   keyds' purpose lists; with keyd down it falls back to the boot key, classical only (fine while not strict). Needs
   an endorsed box release. Source: B2 #2 residual (3174b2e06 notes).
-- **Medium. gpud approval residuals.** A withdrawal the daemon withholds when it is made is never enforced; an
-  approval has no maximum age (used at every start); the strict PQ half is not required; maintenance orders are the
-  daemon's word. Where: `rust/crates/flagship-gpu/src/owner_approval.rs`, `docs/architecture-v2/gpu.md` (Owner
-  approval). Source: B2 #3/#4 residuals (7c34cd7db).
+- **Medium. gpud approval residuals. PARTLY FIXED on `0.4/security-fixes`:** approvals expire after 90 days and
+  can't be future-dated (the daemon asks the owner again), which bounds a withheld withdrawal; strict needs the
+  owner's hybrid signature under `/boot/flagship-owner-pq.pub`; maintenance ops are refused unless root passes
+  `--allow-daemon-maintenance yes`. Still open (design): a withdrawal channel to gpud that bypasses the daemon, a
+  root-held owner PQ key (the /boot copy is daemon-written; none for an admin root), clients signing approvals
+  hybrid, owner-signed maintenance orders. Where: `rust/crates/flagship-gpu/src/owner_approval.rs`,
+  `docs/architecture-v2/gpu.md` §5. Source: B2 #3/#4 residuals (7c34cd7db).
 - **Medium (design). No external review of the new crypto.** `flagship/pq-session/v1`, the hybrid KEM combiner and
   signature binding, and boot unlock v2 are unreviewed compositions; the plan says not to rely on them before an
   external review. Gate for strict-by-default (F5 stage 3). Where: `docs/architecture-v2/pq-suites.md` §15.1. Source:

@@ -218,14 +218,23 @@ gym group `gpu-real` runs them over SSH on a GPU host (`GYM_GPU_SSH`) or an UpCl
   `flagship-localai-`/`flagship-aitrain-<16 hex>` container). This is the minimal verifiable form;
   R02's capability issuer (not built) should replace it with short-lived capabilities. Still open:
   the box takes and stores the owner's signed approvals (§2, daemon side), and the clients' approval
-  screens are being built against that contract; the
-  strict-mode PQ half is not required (the gate runs under the legacy policy, as keyd's master
-  evidence does); a withdrawal reaches gpud through the daemon, so one a daemon withholds at the
-  time it is made is not enforced (once gpud has it, its root-owned floor refuses every approval of
-  that installation signed before it, whatever a later daemon presents); there is no maximum age
-  (an app's approval is used at every start); cooperative app claims carry no share yet (the box
-  lists `share: null`, so gpud refuses them); maintenance orders
-  (`maintenanceRef`) are still the daemon's word.
+  screens are being built against that contract. 2026-11-13 (`0.4/security-fixes`): an approval
+  lasts at most 90 days (`DEFAULT_APPROVAL_MAX_AGE_MS`, root's `--approval-max-age-days`) and may
+  not be dated ahead of gpud's clock; the daemon then lists it pending and asks the owner again
+  (`GPU_APPROVAL_MAX_AGE_MS`). A withdrawal still reaches gpud only through the daemon, so one a
+  daemon withholds is enforced only when the approval runs out (once gpud has it, its root-owned
+  floor refuses every approval of that installation signed before it). While
+  `/boot/flagship-unlock-policy` says strict, gpud needs the owner's hybrid signature
+  (`approvalProof.pqSignature`, which the daemon takes beside a grant and passes on) under the
+  hybrid key in `/boot/flagship-owner-pq.pub`, whose Ed25519 half must be keyd's pinned signer;
+  that file holds the IRK's key, so an admin-root box refuses every approval while strict, and no
+  client signs approvals hybrid yet. Both /boot files are written by the daemon (it can only claim
+  "not strict", leaving the classical check). Maintenance (`gpu.maintenance.propose`,
+  `gpu.mig.apply`, `gpu.quarantine.clear`) is refused unless root starts gpud with
+  `--allow-daemon-maintenance yes` (the hardware runbooks), since there is no owner-signed
+  maintenance order yet; `gpu.maintenance.advance` only moves an already proposed one through its
+  checks. Cooperative app claims carry no share yet (the box lists `share: null`, so gpud refuses
+  them).
 - **Owner UI:** the screen API exists; no client renders it yet (the AI02 job UI is the natural
   home). Strings will need `tr()` / `String(localized:)` / `i18n/android` like every screen.
 - **Kept across a gpud restart (2026-10-25):** each open allocation's terms (share limits, maximum

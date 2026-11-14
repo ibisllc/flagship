@@ -316,6 +316,20 @@ pub fn approval(
 
 /// The box name test anchors pin.
 pub const TEST_SERVER: &str = "home.alice.flagship.services";
+/// The clock tests and the simulated matrix give gpud: the time [`TestOwner::sign_claim`] signs at.
+pub const TEST_NOW_MS: u64 = 1_800_000_000_000;
+
+fn test_now_ms() -> u64 {
+    TEST_NOW_MS
+}
+
+/// A test gpud: the fixed clock, nothing read from the host's /boot, and maintenance on the
+/// caller's word (the matrix drives it directly).
+pub fn test_config(c: &mut crate::service::ServiceConfig) {
+    c.now_ms = test_now_ms;
+    c.boot_dir = None;
+    c.daemon_maintenance = true;
+}
 
 /// The owner's sensitive-order key in tests and the simulated matrix.
 pub struct TestOwner {
@@ -333,6 +347,40 @@ impl TestOwner {
         Self {
             key: ed25519_dalek::SigningKey::from_bytes(&[seed; 32]),
         }
+    }
+
+    /// The owner's hybrid key (this Ed25519 key and an ML-DSA-65 key from `mldsa_seed`).
+    pub fn hybrid(&self, mldsa_seed: u8) -> HybridSigningKey {
+        HybridSigningKey::from_seeds(&self.key.to_bytes(), &[mldsa_seed; 32])
+            .unwrap_or_else(|_| unreachable!("fixed test seeds"))
+    }
+
+    /// `claim` signed as [`Self::sign_claim_at`], with the hybrid signature beside it.
+    pub fn sign_claim_hybrid(
+        &self,
+        claim: &serde_json::Value,
+        issued_at: u64,
+        mldsa_seed: u8,
+    ) -> serde_json::Value {
+        let mut c = self.sign_claim_at(claim, issued_at);
+        let pq = c
+            .get("approval")
+            .and_then(|a| serde_json::from_value::<GpuApproval>(a.clone()).ok())
+            .and_then(|a| owner_approval::canonical(TEST_SERVER, &a, issued_at).ok())
+            .and_then(|m| {
+                self.hybrid(mldsa_seed)
+                    .sign(owner_approval::GPU_APPROVAL_TAG, m.as_bytes())
+                    .ok()
+            })
+            .map(|s| hex(&s))
+            .unwrap_or_default();
+        if let Some(p) = c
+            .get_mut("approvalProof")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            p.insert("pqSignature".into(), serde_json::Value::String(pq));
+        }
+        c
     }
 
     pub fn anchor(&self) -> OwnerAnchor {
@@ -354,6 +402,7 @@ impl TestOwner {
         ApprovalProof {
             issued_at,
             signature,
+            pq_signature: None,
         }
     }
 
@@ -379,7 +428,7 @@ impl TestOwner {
 
     /// `claim` with `approvalProof` set from its own `approval`.
     pub fn sign_claim(&self, claim: &serde_json::Value) -> serde_json::Value {
-        self.sign_claim_at(claim, 1_800_000_000_000)
+        self.sign_claim_at(claim, TEST_NOW_MS)
     }
 
     /// The owner signs the claim's container, userspace, run-time limit and share with it.

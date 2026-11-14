@@ -82,6 +82,7 @@ fn open_svc(
     c.run_claims_path = dir.join("run-claims.json");
     c.rocm_version = Some(d.rocm.clone());
     c.owner_anchor = OwnerAnchorSource::Fixed(owner().anchor());
+    flagship_gpu::testkit::test_config(&mut c);
     GpuService::new(c, parts)
 }
 
@@ -534,6 +535,7 @@ fn driver_maintenance_through_the_gpud_operations() {
         c.enforce_root_owned_cdi = false;
         c.run_claims_path = dir.path().join("run-claims.json");
         c.owner_anchor = OwnerAnchorSource::Fixed(owner().anchor());
+        flagship_gpu::testkit::test_config(&mut c);
         GpuService::new(c, parts).unwrap()
     };
     let mut s = mk(parts.clone());

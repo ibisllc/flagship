@@ -12,8 +12,8 @@ use flagship_gpu::catalog::VerifiedCatalog;
 use flagship_gpu::catalog_trust::{CatalogTrust, ReleaseKeyVerifier};
 use flagship_gpu::device::{Backend, Capability};
 use flagship_gpu::owner_approval::{
-    ApprovalProof, OwnerAnchor, OwnerAnchorSource, Withdrawal, box_local, canonical, verify,
-    verify_withdrawal, withdraw_canonical,
+    ApprovalProof, DEFAULT_APPROVAL_MAX_AGE_MS, OwnerAnchor, OwnerAnchorSource, Withdrawal,
+    box_local, canonical, verify, verify_withdrawal, withdraw_canonical,
 };
 use flagship_gpu::provider::IsolationProfile;
 use flagship_gpu::request::GpuApproval;
@@ -183,6 +183,15 @@ fn service(dir: &std::path::Path, anchor: OwnerAnchorSource) -> (SimHost, GpuSer
 
 /// gpud again on the same host and state directory, as after a restart.
 fn reopen(host: &SimHost, dir: &std::path::Path, anchor: OwnerAnchorSource) -> GpuService {
+    reopen_with(host, dir, anchor, |_| {})
+}
+
+fn reopen_with(
+    host: &SimHost,
+    dir: &std::path::Path,
+    anchor: OwnerAnchorSource,
+    tweak: impl FnOnce(&mut ServiceConfig),
+) -> GpuService {
     let d = host.drivers();
     let s = TestSigner::new(5).unwrap();
     let e = envelope(&sim_payload(2, &d, &[]), &[&s], false, NOW).unwrap();
@@ -207,6 +216,8 @@ fn reopen(host: &SimHost, dir: &std::path::Path, anchor: OwnerAnchorSource) -> G
     c.enforce_root_owned_cdi = false;
     c.run_claims_path = dir.join("run-claims.json");
     c.owner_anchor = anchor;
+    flagship_gpu::testkit::test_config(&mut c);
+    tweak(&mut c);
     GpuService::new(c, parts).unwrap()
 }
 
@@ -493,7 +504,8 @@ fn a_damaged_floor_file_refuses_every_earlier_approval() {
     std::fs::write(dir.path().join("state/approval-floors.json"), "{not json").unwrap();
     let mut s = reopen(&host, dir.path(), anchor());
     let a = exclusive_app();
-    let before = 1_700_000_000_000;
+    // gpud found the damaged file at NOW (its clock): inside the approval's maximum age.
+    let before = NOW - 60_000;
     assert_eq!(
         code(
             &mut s,
@@ -505,7 +517,7 @@ fn a_damaged_floor_file_refuses_every_earlier_approval() {
     assert_eq!(
         code(
             &mut s,
-            &owner.sign_claim_at(&claim("b", &a, "flagship-app", "exclusive"), NOW)
+            &owner.sign_claim_at(&claim("b", &a, "flagship-app", "exclusive"), NOW + 1_000)
         ),
         "reserved",
         "an approval signed since"
@@ -572,4 +584,123 @@ fn the_claims_container_image_run_time_and_share_are_what_the_owner_signed() {
         "a longer run than signed"
     );
     assert_eq!(code(&mut s, &signed), "reserved");
+}
+
+#[test]
+fn an_approval_expires_and_is_never_dated_ahead() {
+    let dir = tempfile::tempdir().unwrap();
+    let owner = TestOwner::new(0x0a);
+    let (_h, mut s) = service(dir.path(), OwnerAnchorSource::Fixed(owner.anchor()));
+    let a = exclusive_app();
+    let at = |id: &str, t: u64| owner.sign_claim_at(&claim(id, &a, "flagship-app", "exclusive"), t);
+    assert_eq!(
+        code(&mut s, &at("old", NOW - DEFAULT_APPROVAL_MAX_AGE_MS - 1)),
+        "forbidden",
+        "older than the maximum age: a withdrawal the daemon withheld stops mattering"
+    );
+    assert_eq!(
+        code(&mut s, &at("ahead", NOW + 10 * 60_000)),
+        "forbidden",
+        "dated ahead of gpud's clock"
+    );
+    assert_eq!(
+        code(
+            &mut s,
+            &at("ok", NOW - DEFAULT_APPROVAL_MAX_AGE_MS + 60_000)
+        ),
+        "reserved"
+    );
+}
+
+#[test]
+fn a_strict_box_needs_the_owners_hybrid_signature() {
+    let dir = tempfile::tempdir().unwrap();
+    let boot = dir.path().join("boot");
+    std::fs::create_dir_all(&boot).unwrap();
+    let owner = TestOwner::new(0x0a);
+    std::fs::write(boot.join("flagship-unlock-policy"), "strict\n").unwrap();
+    std::fs::write(
+        boot.join("flagship-owner-pq.pub"),
+        format!(
+            "{}\n",
+            flagship_crypto::trust::hex(owner.hybrid(7).verifying_key().as_bytes())
+        ),
+    )
+    .unwrap();
+    let host = SimHost::new(dir.path().join("h"), vec![SimGpu::rtx4090(1)]).unwrap();
+    let b = boot.clone();
+    let mut s = reopen_with(
+        &host,
+        dir.path(),
+        OwnerAnchorSource::Fixed(owner.anchor()),
+        move |c| c.boot_dir = Some(b),
+    );
+    let a = exclusive_app();
+    let c = |id: &str| claim(id, &a, "flagship-app", "exclusive");
+    assert_eq!(
+        code(&mut s, &owner.sign_claim(&c("classical"))),
+        "forbidden",
+        "classical only on a strict box"
+    );
+    assert_eq!(
+        code(&mut s, &owner.sign_claim_hybrid(&c("other-pq"), NOW, 8)),
+        "forbidden",
+        "an ML-DSA key the box does not hold for the owner"
+    );
+    let mut swapped = owner.sign_claim_hybrid(&c("swapped"), NOW, 7);
+    swapped["approval"]["secrecy"] = json!(false);
+    assert_eq!(code(&mut s, &swapped), "forbidden", "changed after signing");
+    assert_eq!(
+        code(&mut s, &owner.sign_claim_hybrid(&c("hybrid"), NOW, 7)),
+        "reserved"
+    );
+    release(&mut s, "hybrid");
+
+    // A damaged policy file counts as strict; `compat` takes the classical approval.
+    std::fs::write(boot.join("flagship-unlock-policy"), "strct").unwrap();
+    assert_eq!(code(&mut s, &owner.sign_claim(&c("damaged"))), "forbidden");
+    std::fs::write(boot.join("flagship-unlock-policy"), "compat\n").unwrap();
+    assert_eq!(code(&mut s, &owner.sign_claim(&c("compat"))), "reserved");
+    release(&mut s, "compat");
+
+    // Approvals signed by an admin root: /boot holds only the IRK's hybrid key, so strict refuses.
+    std::fs::write(boot.join("flagship-unlock-policy"), "strict\n").unwrap();
+    drop(s);
+    let root = TestOwner::new(0x0c);
+    let b = boot.clone();
+    let mut s = reopen_with(
+        &host,
+        dir.path(),
+        OwnerAnchorSource::Fixed(root.anchor()),
+        move |c| c.boot_dir = Some(b),
+    );
+    assert_eq!(
+        code(&mut s, &root.sign_claim_hybrid(&c("root"), NOW, 7)),
+        "forbidden"
+    );
+}
+
+#[test]
+fn maintenance_is_not_taken_on_the_daemons_word() {
+    let dir = tempfile::tempdir().unwrap();
+    let host = SimHost::new(dir.path().join("h"), vec![SimGpu::rtx4090(1)]).unwrap();
+    let mut s = reopen_with(&host, dir.path(), OwnerAnchorSource::None, |c| {
+        c.daemon_maintenance = false;
+    });
+    for (op, args) in [
+        (
+            "gpu.quarantine.clear",
+            json!({"device": "gpu-0", "maintenanceRef": "order-1"}),
+        ),
+        (
+            "gpu.mig.apply",
+            json!({"device": "gpu-0", "profiles": [], "maintenanceRef": "order-1"}),
+        ),
+        (
+            "gpu.maintenance.propose",
+            json!({"id": "m", "maintenanceRef": "order-1", "backend": "nvidia-cuda", "driver": "1"}),
+        ),
+    ] {
+        assert_eq!(s.handle(op, &args).unwrap_err().code, "forbidden", "{op}");
+    }
 }

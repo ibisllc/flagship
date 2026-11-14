@@ -5,7 +5,8 @@
 //! first).
 //!
 //! ```text
-//! flagship-gpud serve --state <dir> --socket <path> [--allow-uid <n>]... [--keyd-state <dir>] [host flags]
+//! flagship-gpud serve --state <dir> --socket <path> [--allow-uid <n>]... [--keyd-state <dir>]
+//!   [--boot-dir <dir>] [--approval-max-age-days <n>] [--allow-daemon-maintenance yes] [host flags]
 //! flagship-gpud probe [host flags]            inventory of this host, no state kept
 //! flagship-gpud self-test [--podman <path>]   the simulated-device matrix
 //! flagship-gpud verify-catalog --catalog <file> --trust <file> [--min-serial <n>]
@@ -177,6 +178,17 @@ fn service(f: &Flags, state: PathBuf) -> Result<GpuService, String> {
     if let Some(d) = f.path("keyd-state") {
         cfg.owner_anchor = flagship_gpu::owner_approval::OwnerAnchorSource::KeydState(d);
     }
+    if let Some(d) = f.path("boot-dir") {
+        cfg.boot_dir = Some(d);
+    }
+    if let Some(days) = f.one("approval-max-age-days") {
+        match days.parse::<u64>() {
+            Ok(n @ 1..=3650) => cfg.approval_max_age_ms = n.saturating_mul(24 * 60 * 60_000),
+            _ => fail("--approval-max-age-days is 1 to 3650"),
+        }
+    }
+    // Root's choice on the command line, for the hardware runbooks: the daemon cannot set it.
+    cfg.daemon_maintenance = f.one("allow-daemon-maintenance").as_deref() == Some("yes");
     GpuService::new(cfg, parts)
 }
 
