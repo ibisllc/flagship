@@ -16,6 +16,12 @@ import { KeydError } from "./wire.js";
 
 const MAX_NAMES = 8;
 const MAX_KEYS = 8;
+/** Direct names (docs/direct-access-and-domains.md §8) a box may serve, and keys for them (one serving, one renewing). */
+export const MAX_DIRECT_NAMES = 16;
+const MAX_DIRECT_KEYS = 2 * MAX_DIRECT_NAMES;
+export const DIRECT_APEX = "fshp.app";
+const DIRECT_SLUG = /^[a-z0-9](?:-?[a-z0-9]){0,29}$/;
+const DIRECT_USER = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const HANDLE = /^[0-9a-f]{32}$/;
 const NAME = /^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
@@ -25,9 +31,33 @@ const NAME = /^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
  */
 export const TLS_SLOTS = ["control", "apps"] as const;
 export type TlsSlot = (typeof TLS_SLOTS)[number];
+/** A direct name's certificate is served for exactly that name, one slot per name. */
+export type ActivateSlot = TlsSlot | "direct";
+
+/**
+ * The account a box's allowed names belong to: `<user>` of its own name `<server>.<user>.<apex>`, or null.
+ */
+function accountOf(allowed: ReadonlySet<string>): string | null {
+  for (const n of allowed) if (!n.startsWith("*.")) return n.split(".")[1] ?? null;
+  return null;
+}
+
+/** Why `name` can't be a direct name of a box in `account`, or null: `<slug>--<account>.fshp.app` only. */
+function directNameProblem(name: string, account: string | null): KeydError | null {
+  const suffix = `.${DIRECT_APEX}`;
+  const label = name.endsWith(suffix) ? name.slice(0, -suffix.length) : "";
+  const parts = label.split("--");
+  if (parts.length !== 2 || !DIRECT_SLUG.test(parts[0]!) || !DIRECT_USER.test(parts[1]!) || parts[1]!.includes("--")) {
+    return new KeydError("bad-request", "not a direct name");
+  }
+  if (parts[1] !== account) return new KeydError("forbidden", "a direct name must be one of this box's account");
+  return null;
+}
+
+const isDirect = (names: readonly string[]) => names.length === 1 && names[0]!.endsWith(`.${DIRECT_APEX}`);
 
 export interface ServingCert {
-  slot: TlsSlot | "default";
+  slot: TlsSlot | "direct" | "default";
   handle: string;
   chainPem: string;
   notAfter: number;
@@ -61,6 +91,9 @@ export class TlsKeys {
   private readonly keys = new Map<string, StoredKey>();
   private activeHandle: string | null = null;
   private slots: Partial<Record<TlsSlot, string>> = {};
+  private direct: string[] = [];
+  /** Direct name -> the key serving it. */
+  private directSlots = new Map<string, string>();
 
   constructor(
     private allowedNames: ReadonlySet<string>,
@@ -92,11 +125,73 @@ export class TlsKeys {
       const h = readFileSync(f, "utf8").trim();
       if (this.keys.get(h)?.chainPem) this.slots[slot] = h;
     }
+    try {
+      const names = JSON.parse(readFileSync(join(dir, "direct-names.json"), "utf8")) as unknown;
+      if (Array.isArray(names)) this.direct = names.filter((n): n is string => typeof n === "string" && directNameProblem(n, accountOf(this.allowedNames)) === null).sort().slice(0, MAX_DIRECT_NAMES);
+    } catch {
+      /* none yet, or damaged: the daemon hands the names over again */
+    }
+    try {
+      const slots = JSON.parse(readFileSync(join(dir, "active-direct.json"), "utf8")) as unknown;
+      if (slots && typeof slots === "object" && !Array.isArray(slots)) {
+        for (const [name, h] of Object.entries(slots as Record<string, unknown>)) {
+          const k = typeof h === "string" ? this.keys.get(h) : undefined;
+          if (this.direct.includes(name) && k?.chainPem && k.names.length === 1 && k.names[0] === name) this.directSlots.set(name, h as string);
+        }
+      }
+    } catch {
+      /* none in service */
+    }
   }
 
   /** Whether the key is in service anywhere: the default certificate or a slot. */
   private serving(handle: string): boolean {
-    return handle === this.activeHandle || TLS_SLOTS.some((s) => this.slots[s] === handle);
+    return handle === this.activeHandle || TLS_SLOTS.some((s) => this.slots[s] === handle) || [...this.directSlots.values()].includes(handle);
+  }
+
+  private writeState(file: string, value: unknown): void {
+    if (!this.dir) return;
+    mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(this.dir, `${file}.tmp`), JSON.stringify(value), { mode: 0o400 });
+    renameSync(join(this.dir, `${file}.tmp`), join(this.dir, file));
+  }
+
+  private persistDirectSlots(): void {
+    this.writeState("active-direct.json", Object.fromEntries([...this.directSlots].sort(([a], [b]) => (a < b ? -1 : 1))));
+  }
+
+  /**
+   * The box's verified direct names (the daemon checks each owner-signed order). keyd takes only
+   * `<slug>--<account>.fshp.app` of this box's own account, at most 16. A name that goes loses its slot and every key
+   * made for it.
+   */
+  setDirectNames(names: string[]): { names: string[]; removed: number } {
+    if (names.length > MAX_DIRECT_NAMES) throw new KeydError("bad-request", "at most 16 direct names");
+    const account = accountOf(this.allowedNames);
+    const next = [...new Set(names)].sort();
+    for (const n of next) {
+      const p = directNameProblem(n, account);
+      if (p) throw p;
+    }
+    let removed = 0;
+    for (const gone of this.direct.filter((n) => !next.includes(n))) {
+      this.directSlots.delete(gone);
+      for (const [h, k] of [...this.keys]) {
+        if (k.names.length === 1 && k.names[0] === gone) {
+          this.keys.delete(h);
+          if (this.dir) rmSync(join(this.dir, `${h}.json`), { force: true });
+          removed++;
+        }
+      }
+    }
+    this.direct = next;
+    this.writeState("direct-names.json", next);
+    this.persistDirectSlots();
+    return { names: next, removed };
+  }
+
+  directNames(): string[] {
+    return [...this.direct];
   }
 
   private persist(handle: string): void {
@@ -129,15 +224,19 @@ export class TlsKeys {
     const unique = [...new Set(names.map((n) => n.toLowerCase()))].sort();
     for (const n of unique) {
       if (!NAME.test(n)) throw new KeydError("bad-request", "not a valid DNS name");
-      if (!this.allowedNames.has(n)) throw new KeydError("forbidden", "that name is not one this box may have a certificate for");
+      if (!this.allowedNames.has(n) && !this.direct.includes(n)) throw new KeydError("forbidden", "that name is not one this box may have a certificate for");
     }
-    // Old keys that never got a certificate, or were replaced, make room for new ones.
-    if (this.keys.size >= MAX_KEYS) {
-      for (const [h, k] of this.keys) {
-        if (!this.serving(h) && (!k.notAfter || k.notAfter < this.now())) this.remove(h);
-        if (this.keys.size < MAX_KEYS) break;
+    const direct = unique.some((n) => this.direct.includes(n));
+    if (direct && unique.length !== 1) throw new KeydError("forbidden", "a direct name's key is for that name alone");
+    // Old keys that never got a certificate, or were replaced, make room for new ones. Direct names have their own budget.
+    const max = direct ? MAX_DIRECT_KEYS : MAX_KEYS;
+    const inClass = () => [...this.keys.values()].filter((k) => isDirect(k.names) === direct).length;
+    if (inClass() >= max) {
+      for (const [h, k] of [...this.keys]) {
+        if (isDirect(k.names) === direct && !this.serving(h) && (!k.notAfter || k.notAfter < this.now())) this.remove(h);
+        if (inClass() < max) break;
       }
-      if (this.keys.size >= MAX_KEYS) throw new KeydError("forbidden", "too many TLS keys; remove one first");
+      if (inClass() >= max) throw new KeydError("forbidden", "too many TLS keys; remove one first");
     }
     const priv = p256.utils.randomSecretKey();
     const pub = p256.getPublicKey(priv, false);
@@ -225,9 +324,15 @@ export class TlsKeys {
    * Put a key in service. Without a slot it becomes the one default certificate and every slot is cleared (one
    * certificate for every name, as before slots existed); with a slot it serves that class of names beside it.
    */
-  activate(handle: string, slot?: TlsSlot): void {
+  activate(handle: string, slot?: ActivateSlot): void {
     const k = this.get(handle);
     if (!k.chainPem) throw new KeydError("forbidden", "install a certificate before serving with this key");
+    if (slot === "direct") {
+      if (k.names.length !== 1 || !this.direct.includes(k.names[0]!)) throw new KeydError("forbidden", "this key is not for one of this box's direct names");
+      this.directSlots.set(k.names[0]!, handle);
+      this.persistDirectSlots();
+      return;
+    }
     if (slot === undefined) {
       this.activeHandle = handle;
       this.slots = {};
@@ -243,14 +348,15 @@ export class TlsKeys {
     }
   }
 
-  /** Every certificate in service, slots first (control, apps), then the default one. */
+  /** Every certificate in service, slots first (control, apps), then each direct name's (by name), then the default one. */
   servingCerts(): ServingCert[] {
     const out: ServingCert[] = [];
-    const add = (slot: TlsSlot | "default", h: string | null | undefined) => {
+    const add = (slot: ServingCert["slot"], h: string | null | undefined) => {
       const k = h ? this.keys.get(h) : undefined;
       if (h && k?.chainPem) out.push({ slot, handle: h, chainPem: k.chainPem, notAfter: k.notAfter ?? 0, names: k.names, legacy: k.legacy === true });
     };
     for (const s of TLS_SLOTS) add(s, this.slots[s]);
+    for (const n of this.direct) add("direct", this.directSlots.get(n));
     add("default", this.activeHandle);
     return out;
   }
@@ -298,6 +404,8 @@ export class TlsKeys {
     this.keys.clear();
     this.activeHandle = null;
     this.slots = {};
+    this.direct = [];
+    this.directSlots.clear();
   }
 }
 

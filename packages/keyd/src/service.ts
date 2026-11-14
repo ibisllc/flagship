@@ -30,7 +30,7 @@ import { AcmeAccount, type AcmeRequest } from "./acme.js";
 import { ArchiveKeys } from "./archive.js";
 import { accountZoneOf, namesFor } from "./migrate.js";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
-import { TLS_SLOTS, TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage, type TlsSlot } from "./tls.js";
+import { TLS_SLOTS, TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage, type ActivateSlot } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 import type { HeldRevocationsState } from "@flagship/protocol";
 
@@ -430,10 +430,10 @@ export class KeydService {
       }
       case "tls.activate": {
         noExtraArgs(a, ["handle", "slot"]);
-        let slot: TlsSlot | undefined;
+        let slot: ActivateSlot | undefined;
         if (a.slot !== undefined) {
-          if (typeof a.slot !== "string" || !(TLS_SLOTS as readonly string[]).includes(a.slot)) throw new KeydError("bad-request", "slot must be control or apps");
-          slot = a.slot as TlsSlot;
+          if (typeof a.slot !== "string" || ![...TLS_SLOTS, "direct"].includes(a.slot)) throw new KeydError("bad-request", "slot must be control, apps or direct");
+          slot = a.slot as ActivateSlot;
         }
         this.#tlsOrThrow().activate(strArg(a, "handle", 32), slot);
         return { result: { active: true } };
@@ -466,9 +466,16 @@ export class KeydService {
         }
         return { result: { sig: toHex(this.#tlsOrThrow().signHandshake(handle, message)) } };
       }
+      case "tls.directNames": {
+        // The box's direct names, each one the daemon verified under the owner's signed order. keyd bounds them to
+        // its own account's derived names; a name that goes takes its keys with it.
+        noExtraArgs(a, ["names"]);
+        if (!Array.isArray(a.names) || a.names.some((n) => typeof n !== "string")) throw new KeydError("bad-request", "names must be a list of strings");
+        return { result: this.#tlsOrThrow().setDirectNames(a.names as string[]) };
+      }
       case "tls.list":
         noExtraArgs(a, []);
-        return { result: { keys: this.#tlsOrThrow().list(), allowedNames: this.#tlsOrThrow().names() } };
+        return { result: { keys: this.#tlsOrThrow().list(), allowedNames: this.#tlsOrThrow().names(), directNames: this.#tlsOrThrow().directNames() } };
       case "tls.remove": {
         noExtraArgs(a, ["handle"]);
         this.#tlsOrThrow().remove(strArg(a, "handle", 32));

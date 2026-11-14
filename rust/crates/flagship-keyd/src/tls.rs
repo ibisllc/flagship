@@ -25,6 +25,10 @@ use crate::wire::{KeydError, KeydResult, decode_hex, js_is_space, to_hex};
 
 const MAX_NAMES: usize = 8;
 const MAX_KEYS: usize = 8;
+/// Direct names a box may serve (`MAX_DIRECT_NAMES` in tls.ts), and keys for them (one serving, one renewing).
+pub const MAX_DIRECT_NAMES: usize = 16;
+const MAX_DIRECT_KEYS: usize = 2 * MAX_DIRECT_NAMES;
+pub const DIRECT_APEX: &str = "fshp.app";
 const DAY_MS: i64 = 24 * 3600 * 1000;
 
 pub type Clock = Box<dyn Fn() -> i64 + Send>;
@@ -205,12 +209,88 @@ fn num(v: Option<&Value>) -> Option<i64> {
 /// box's own name gets the `control` certificate, app names the `apps` one (`TLS_SLOTS` in tls.ts).
 pub const TLS_SLOTS: [&str; 2] = ["control", "apps"];
 
+/// Where `tls.activate` puts a key: a slot of `TLS_SLOTS`, or the slot of the one direct name it was made for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivateSlot {
+    Slot(usize),
+    Direct,
+}
+
+/// `^[a-z0-9](?:-?[a-z0-9]){0,29}$`
+fn is_direct_slug(s: &str) -> bool {
+    let b = s.as_bytes();
+    let alnum = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
+    let mut count = 0usize;
+    let mut prev_dash = true;
+    for c in b {
+        if *c == b'-' {
+            if prev_dash {
+                return false;
+            }
+            prev_dash = true;
+        } else if alnum(c) {
+            count = count.saturating_add(1);
+            prev_dash = false;
+        } else {
+            return false;
+        }
+    }
+    !b.is_empty() && !prev_dash && count <= 30
+}
+
+/// `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`
+fn is_direct_user(s: &str) -> bool {
+    let b = s.as_bytes();
+    let alnum = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
+    (3..=30).contains(&b.len())
+        && b.first().is_some_and(alnum)
+        && b.last().is_some_and(alnum)
+        && b.iter().all(|c| alnum(c) || *c == b'-')
+}
+
+/// The account of a box's allowed names: `<user>` of its own name `<server>.<user>.<apex>`.
+fn account_of(allowed: &[String]) -> Option<&str> {
+    allowed
+        .iter()
+        .find(|n| !n.starts_with("*."))
+        .and_then(|n| n.split('.').nth(1))
+}
+
+/// `directNameProblem` in tls.ts: `<slug>--<account>.fshp.app` only.
+fn direct_name_problem(name: &str, account: Option<&str>) -> Option<KeydError> {
+    let label = name
+        .strip_suffix(DIRECT_APEX)
+        .and_then(|l| l.strip_suffix('.'))
+        .unwrap_or("");
+    let parts: Vec<&str> = label.split("--").collect();
+    let shape = match parts.as_slice() {
+        [slug, user] => is_direct_slug(slug) && is_direct_user(user) && !user.contains("--"),
+        _ => false,
+    };
+    if !shape {
+        return Some(KeydError::bad_request("not a direct name"));
+    }
+    if parts.get(1).copied() != account {
+        return Some(KeydError::forbidden(
+            "a direct name must be one of this box's account",
+        ));
+    }
+    None
+}
+
+fn is_direct_key(names: &[String]) -> bool {
+    matches!(names, [n] if n.ends_with(&format!(".{DIRECT_APEX}")))
+}
+
 pub struct TlsKeys {
     allowed: Vec<String>,
     dir: Option<PathBuf>,
     keys: Vec<(String, StoredKey)>,
     active: Option<String>,
     slots: [Option<String>; 2],
+    direct: Vec<String>,
+    /// Direct name -> the key serving it, sorted by name.
+    direct_slots: Vec<(String, String)>,
     now: Clock,
 }
 
@@ -233,6 +313,8 @@ impl TlsKeys {
             keys: Vec::new(),
             active: None,
             slots: [None, None],
+            direct: Vec::new(),
+            direct_slots: Vec::new(),
             now,
         };
         if let Some(d) = dir {
@@ -274,12 +356,117 @@ impl TlsKeys {
                 }
             }
         }
+        // None yet, or damaged: the daemon hands the names over again.
+        if let Some(Value::Array(list)) = fs::read_to_string(dir.join("direct-names.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        {
+            let account = account_of(&self.allowed).map(str::to_owned);
+            let mut names: Vec<String> = list
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|n| direct_name_problem(n, account.as_deref()).is_none())
+                .map(str::to_owned)
+                .collect();
+            names.sort();
+            names.truncate(MAX_DIRECT_NAMES);
+            self.direct = names;
+        }
+        if let Some(Value::Object(map)) = fs::read_to_string(dir.join("active-direct.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        {
+            for (name, h) in map {
+                let Some(h) = h.as_str() else { continue };
+                let ok = self.direct.contains(&name)
+                    && self.find(h).is_some_and(|k| {
+                        k.chain_pem.is_some()
+                            && k.names.len() == 1
+                            && k.names.first() == Some(&name)
+                    });
+                if ok {
+                    self.direct_slots.push((name, h.to_owned()));
+                }
+            }
+            self.direct_slots.sort();
+        }
     }
 
     /// Whether the key is in service anywhere: the default certificate or a slot.
     fn serving(&self, handle: &str) -> bool {
         self.active.as_deref() == Some(handle)
             || self.slots.iter().any(|s| s.as_deref() == Some(handle))
+            || self.direct_slots.iter().any(|(_, h)| h == handle)
+    }
+
+    fn write_state(&self, file: &str, value: &Value) -> KeydResult<()> {
+        let Some(dir) = &self.dir else {
+            return Ok(());
+        };
+        ensure_dir(dir, 0o700).map_err(io_failed)?;
+        let text = serde_json::to_string(value).map_err(|_| KeydError::failed("internal error"))?;
+        write_atomic(&dir.join(file), text.as_bytes(), 0o400).map_err(io_failed)
+    }
+
+    fn persist_direct_slots(&self) -> KeydResult<()> {
+        let map: serde_json::Map<String, Value> = self
+            .direct_slots
+            .iter()
+            .map(|(n, h)| (n.clone(), Value::from(h.clone())))
+            .collect();
+        self.write_state("active-direct.json", &Value::Object(map))
+    }
+
+    /// `setDirectNames`: the box's verified direct names, only `<slug>--<account>.fshp.app` of this box's
+    /// account, at most 16. A name that goes loses its slot and every key made for it.
+    pub fn set_direct_names(&mut self, names: &[String]) -> KeydResult<(Vec<String>, usize)> {
+        if names.len() > MAX_DIRECT_NAMES {
+            return Err(KeydError::bad_request("at most 16 direct names"));
+        }
+        let account = account_of(&self.allowed).map(str::to_owned);
+        let mut next: Vec<String> = names.to_vec();
+        next.sort();
+        next.dedup();
+        for n in &next {
+            if let Some(e) = direct_name_problem(n, account.as_deref()) {
+                return Err(e);
+            }
+        }
+        let gone: Vec<String> = self
+            .direct
+            .iter()
+            .filter(|n| !next.contains(n))
+            .cloned()
+            .collect();
+        let mut removed = 0usize;
+        for name in gone {
+            self.direct_slots.retain(|(n, _)| *n != name);
+            let handles: Vec<String> = self
+                .keys
+                .iter()
+                .filter(|(_, k)| k.names.len() == 1 && k.names.first() == Some(&name))
+                .map(|(h, _)| h.clone())
+                .collect();
+            for h in handles {
+                self.keys.retain(|(x, _)| *x != h);
+                if let Some(dir) = &self.dir {
+                    match fs::remove_file(dir.join(format!("{h}.json"))) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(io_failed(e)),
+                    }
+                }
+                removed = removed.saturating_add(1);
+            }
+        }
+        self.direct = next.clone();
+        self.write_state("direct-names.json", &Value::from(next.clone()))?;
+        self.persist_direct_slots()?;
+        Ok((next, removed))
+    }
+
+    pub fn direct_names(&self) -> Vec<String> {
+        self.direct.clone()
     }
 
     fn read_stored(path: &Path) -> Option<StoredKey> {
@@ -401,30 +588,46 @@ impl TlsKeys {
             if !is_dns_name(n) {
                 return Err(KeydError::bad_request("not a valid DNS name"));
             }
-            if !self.allowed.contains(n) {
+            if !self.allowed.contains(n) && !self.direct.contains(n) {
                 return Err(KeydError::forbidden(
                     "that name is not one this box may have a certificate for",
                 ));
             }
         }
-        // Old keys that never got a certificate, or were replaced, make room for new ones.
-        if self.keys.len() >= MAX_KEYS {
+        let direct = unique.iter().any(|n| self.direct.contains(n));
+        if direct && unique.len() != 1 {
+            return Err(KeydError::forbidden(
+                "a direct name's key is for that name alone",
+            ));
+        }
+        // Old keys that never got a certificate, or were replaced, make room for new ones. Direct names have their
+        // own budget.
+        let max = if direct { MAX_DIRECT_KEYS } else { MAX_KEYS };
+        let in_class = |t: &Self| {
+            t.keys
+                .iter()
+                .filter(|(_, k)| is_direct_key(&k.names) == direct)
+                .count()
+        };
+        if in_class(self) >= max {
             let now = (self.now)();
             let candidates: Vec<String> = self
                 .keys
                 .iter()
                 .filter(|(h, k)| {
-                    !self.serving(h) && k.not_after.is_none_or(|na| na == 0 || na < now)
+                    is_direct_key(&k.names) == direct
+                        && !self.serving(h)
+                        && k.not_after.is_none_or(|na| na == 0 || na < now)
                 })
                 .map(|(h, _)| h.clone())
                 .collect();
             for h in candidates {
                 self.remove(&h)?;
-                if self.keys.len() < MAX_KEYS {
+                if in_class(self) < max {
                     break;
                 }
             }
-            if self.keys.len() >= MAX_KEYS {
+            if in_class(self) >= max {
                 return Err(KeydError::forbidden("too many TLS keys; remove one first"));
             }
         }
@@ -525,12 +728,31 @@ impl TlsKeys {
 
     /// Put a key in service. Without a slot it becomes the one default certificate and every
     /// slot is cleared; with a slot (an index into `TLS_SLOTS`) it serves that class of names.
-    pub fn activate(&mut self, handle: &str, slot: Option<usize>) -> KeydResult<()> {
-        if self.get(handle)?.chain_pem.is_none() {
+    pub fn activate(&mut self, handle: &str, slot: Option<ActivateSlot>) -> KeydResult<()> {
+        let k = self.get(handle)?;
+        if k.chain_pem.is_none() {
             return Err(KeydError::forbidden(
                 "install a certificate before serving with this key",
             ));
         }
+        let slot = match slot {
+            Some(ActivateSlot::Direct) => {
+                let name = match k.names.as_slice() {
+                    [n] if self.direct.contains(n) => n.clone(),
+                    _ => {
+                        return Err(KeydError::forbidden(
+                            "this key is not for one of this box's direct names",
+                        ));
+                    }
+                };
+                self.direct_slots.retain(|(n, _)| *n != name);
+                self.direct_slots.push((name, handle.to_owned()));
+                self.direct_slots.sort();
+                return self.persist_direct_slots();
+            }
+            Some(ActivateSlot::Slot(i)) => Some(i),
+            None => None,
+        };
         let file = match slot {
             None => {
                 self.active = Some(handle.to_owned());
@@ -539,7 +761,9 @@ impl TlsKeys {
             }
             Some(i) => {
                 let (Some(s), Some(name)) = (self.slots.get_mut(i), TLS_SLOTS.get(i)) else {
-                    return Err(KeydError::bad_request("slot must be control or apps"));
+                    return Err(KeydError::bad_request(
+                        "slot must be control, apps or direct",
+                    ));
                 };
                 *s = Some(handle.to_owned());
                 format!("active-{name}")
@@ -561,7 +785,8 @@ impl TlsKeys {
         Ok(())
     }
 
-    /// Every certificate in service, slots first (control, apps), then the default one.
+    /// Every certificate in service, slots first (control, apps), then each direct name's (by name), then the
+    /// default one.
     pub fn serving_certs(&self) -> Vec<Value> {
         let entry = |slot: &str, h: &str| {
             let k = self.find(h)?;
@@ -580,6 +805,10 @@ impl TlsKeys {
             .zip(self.slots.iter())
             .filter_map(|(name, h)| entry(name, h.as_deref()?))
             .collect();
+        out.extend(self.direct.iter().filter_map(|n| {
+            let (_, h) = self.direct_slots.iter().find(|(x, _)| x == n)?;
+            entry("direct", h)
+        }));
         if let Some(v) = self.active.as_deref().and_then(|h| entry("default", h)) {
             out.push(v);
         }
@@ -658,6 +887,8 @@ impl TlsKeys {
         self.keys.clear();
         self.active = None;
         self.slots = [None, None];
+        self.direct.clear();
+        self.direct_slots.clear();
     }
 }
 
@@ -832,6 +1063,46 @@ mod tests {
     }
 
     #[test]
+    fn direct_names_are_this_accounts_derived_names_only() {
+        let fqdn = "home.alice.flagship.services";
+        let mut t = TlsKeys::new(crate::files::names_for(fqdn), None, system_clock());
+        for (bad, code) in [
+            ("game--bob.fshp.app", crate::wire::ErrorCode::Forbidden),
+            ("game.fshp.app", crate::wire::ErrorCode::BadRequest),
+            ("a--b--alice.fshp.app", crate::wire::ErrorCode::BadRequest),
+            ("a---alice.fshp.app", crate::wire::ErrorCode::BadRequest),
+            ("ga--me--alice.fshp.app", crate::wire::ErrorCode::BadRequest),
+            (
+                "game--alice.fshp.app.evil.com",
+                crate::wire::ErrorCode::BadRequest,
+            ),
+            ("game--alicefshp.app", crate::wire::ErrorCode::BadRequest),
+        ] {
+            assert_eq!(
+                t.set_direct_names(&[bad.into()]).unwrap_err().code,
+                code,
+                "{bad}"
+            );
+        }
+        let many: Vec<String> = (0..17).map(|i| format!("a{i}--alice.fshp.app")).collect();
+        assert!(t.set_direct_names(&many).is_err());
+        let (names, removed) = t
+            .set_direct_names(&["game--alice.fshp.app".into(), "a-b--alice.fshp.app".into()])
+            .unwrap();
+        assert_eq!(names, vec!["a-b--alice.fshp.app", "game--alice.fshp.app"]);
+        assert_eq!(removed, 0);
+        assert!(
+            t.create_key(&["game--alice.fshp.app".into(), fqdn.into()])
+                .is_err()
+        );
+        let (h, _) = t.create_key(&["game--alice.fshp.app".into()]).unwrap();
+        assert!(t.activate(&h, Some(ActivateSlot::Direct)).is_err());
+        let (_, removed) = t.set_direct_names(&[]).unwrap();
+        assert_eq!(removed, 1);
+        assert!(t.create_key(&["game--alice.fshp.app".into()]).is_err());
+    }
+
+    #[test]
     fn csr_is_signed_and_lists_exactly_the_names() {
         let fqdn = "home.alice.flagship.services";
         let mut t = TlsKeys::new(vec![fqdn.into(), format!("*.{fqdn}")], None, system_clock());
@@ -846,7 +1117,7 @@ mod tests {
         assert!(t.activate(&h, None).is_err());
         // Slots need an installed certificate too; serving and removal rules are pinned against
         // the TS backend in packages/keyd/tests/rustBackend.test.ts.
-        assert!(t.activate(&h, Some(1)).is_err());
+        assert!(t.activate(&h, Some(ActivateSlot::Slot(1))).is_err());
         assert!(t.serving_certs().is_empty());
         assert!(t.remove(&h).is_ok());
         assert_eq!(
