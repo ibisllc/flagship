@@ -157,6 +157,15 @@ public enum DirectAccess {
         public let port: Int?
         public let issuedAt: Int64?
         public let endpoints: [LanHint.Endpoint]
+        public init(on: Bool, addresses: [String] = [], prefixes: [String] = [], port: Int? = nil, issuedAt: Int64? = nil,
+                    endpoints: [LanHint.Endpoint] = []) {
+            self.on = on
+            self.addresses = addresses
+            self.prefixes = prefixes
+            self.port = port
+            self.issuedAt = issuedAt
+            self.endpoints = endpoints
+        }
     }
 
     /// `POST /api/screens/direct-access` answer.
@@ -164,6 +173,11 @@ public enum DirectAccess {
         public let ok: Bool
         public let change: String
         public let directAccess: View
+        public init(ok: Bool, change: String, directAccess: View) {
+            self.ok = ok
+            self.change = change
+            self.directAccess = directAccess
+        }
     }
 
     /// The reason code an order can't be signed or taken, or nil.

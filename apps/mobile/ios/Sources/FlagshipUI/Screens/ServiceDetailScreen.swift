@@ -228,6 +228,9 @@ public struct ServiceDetailScreen: View {
             }
 
             setCustomDomainSection(c: c)
+            if let user = username {
+                DirectLinkShareGroup(username: user, slug: d.app.slug, creator: d.app.creator, relayUrl: vm.appLinks.value?.canonicalUrl ?? "https://\(Endpoints.serverFqdn(server: d.app.urlLabel, user: user))")
+            }
         }
         .alert(
             vm.customDomainPrompt?.title ?? "",

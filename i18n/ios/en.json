@@ -14443,5 +14443,305 @@
   "During its first 14 days it is under review and acts as a non-admin device.": {
     "en": "During its first 14 days it is under review and acts as a non-admin device.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift (under the \"Also make this device an admin\" switch; Windows acceptance W14)"
+  },
+  "443": {
+    "en": "443",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:162",
+    "translatable": false
+  },
+  "Turn off direct access?": {
+    "en": "Turn off direct access?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:46"
+  },
+  "Direct access": {
+    "en": "Direct access",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:27"
+  },
+  "Its names stop pointing at this server. The address stays in public DNS history.": {
+    "en": "Its names stop pointing at this server. The address stays in public DNS history.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:51"
+  },
+  "On. Visitors can reach this server's apps directly, without the relay.": {
+    "en": "On. Visitors can reach this server's apps directly, without the relay.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:62"
+  },
+  "Off. Visitors reach this server's apps through the relay.": {
+    "en": "Off. Visitors reach this server's apps through the relay.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:69"
+  },
+  "Addresses: %@": {
+    "en": "Addresses: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:120"
+  },
+  "Address ranges: %@": {
+    "en": "Address ranges: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:125"
+  },
+  "This server reports: %@": {
+    "en": "This server reports: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:129"
+  },
+  "Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line": {
+    "en": "Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:143"
+  },
+  "Address ranges this server may report its own address in (optional)": {
+    "en": "Address ranges this server may report its own address in (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:152"
+  },
+  "81.2.69.142": {
+    "en": "81.2.69.142",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:145",
+    "translatable": false
+  },
+  "2a02:8010:6400::/48": {
+    "en": "2a02:8010:6400::/48",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:154",
+    "translatable": false
+  },
+  "Direct names": {
+    "en": "Direct names",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:182"
+  },
+  "One name per app on fshp.app. Visitors go straight to this server and the relay never carries it.": {
+    "en": "One name per app on fshp.app. Visitors go straight to this server and the relay never carries it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:185"
+  },
+  "Not turned on": {
+    "en": "Not turned on",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:234"
+  },
+  "Any host may get a certificate for this name (CAA off).": {
+    "en": "Any host may get a certificate for this name (CAA off).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:219"
+  },
+  "Points at: %@": {
+    "en": "Points at: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:223"
+  },
+  "Check from outside": {
+    "en": "Check from outside",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:252"
+  },
+  "Direct name": {
+    "en": "Direct name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:314"
+  },
+  "Turn this off only if the name points at a host that gets its own certificate.": {
+    "en": "Turn this off only if the name points at a host that gets its own certificate.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:286"
+  },
+  "Point at other addresses (optional). Leave empty to follow this server's addresses.": {
+    "en": "Point at other addresses (optional). Leave empty to follow this server's addresses.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:289"
+  },
+  "203.0.114.7": {
+    "en": "203.0.114.7",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:292",
+    "translatable": false
+  },
+  "Only this server can get a certificate (CAA)": {
+    "en": "Only this server can get a certificate (CAA)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:282"
+  },
+  "Link to share": {
+    "en": "Link to share",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:358"
+  },
+  "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.": {
+    "en": "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:366"
+  },
+  "Goes through the Flagship relay. It works even when your server can't be reached from outside.": {
+    "en": "Goes through the Flagship relay. It works even when your server can't be reached from outside.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:367"
+  },
+  "Through the relay": {
+    "en": "Through the relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:361"
+  },
+  "Turning this on puts this server's home IP address in public DNS. Anyone can look it up, and it stays in public DNS history even after you turn it off. The server then takes connections from the whole internet, attacks land on your home connection, and some internet providers don't allow running a server.": {
+    "en": "Turning this on puts this server's home IP address in public DNS. Anyone can look it up, and it stays in public DNS history even after you turn it off. The server then takes connections from the whole internet, attacks land on your home connection, and some internet providers don't allow running a server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:20"
+  },
+  "Only an admin device can change direct access. This device can see it.": {
+    "en": "Only an admin device can change direct access. This device can see it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:21"
+  },
+  "This app was made by another account, so it can't have a direct name here.": {
+    "en": "This app was made by another account, so it can't have a direct name here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:22"
+  },
+  "Change direct access": {
+    "en": "Change direct access",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:183"
+  },
+  "Turn on direct access": {
+    "en": "Turn on direct access",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:183"
+  },
+  "Direct access is on.": {
+    "en": "Direct access is on.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:185"
+  },
+  "Turn off direct access": {
+    "en": "Turn off direct access",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:194"
+  },
+  "Direct access is off.": {
+    "en": "Direct access is off.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:196"
+  },
+  "Direct access wasn't changed.": {
+    "en": "Direct access wasn't changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:293"
+  },
+  "Change a direct name": {
+    "en": "Change a direct name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:263"
+  },
+  "Checked %@: %@": {
+    "en": "Checked %@: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/DirectAccessViewModel.swift:309"
+  },
+  "That change couldn't be read. Try again.": {
+    "en": "That change couldn't be read. Try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:119"
+  },
+  "Only public addresses can be used. Private, local and reserved addresses can't.": {
+    "en": "Only public addresses can be used. Private, local and reserved addresses can't.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:120"
+  },
+  "One of the addresses isn't an IP address.": {
+    "en": "One of the addresses isn't an IP address.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:121"
+  },
+  "One of the address ranges isn't valid.": {
+    "en": "One of the address ranges isn't valid.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:122"
+  },
+  "An address range is too wide. Use an IPv6 /32 or longer, or an IPv4 /24 or longer.": {
+    "en": "An address range is too wide. Use an IPv6 /32 or longer, or an IPv4 /24 or longer.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:123"
+  },
+  "Add at least one public address or address range.": {
+    "en": "Add at least one public address or address range.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:124"
+  },
+  "Too many addresses: at most 8 addresses and 4 ranges.": {
+    "en": "Too many addresses: at most 8 addresses and 4 ranges.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:125"
+  },
+  "An address is listed twice.": {
+    "en": "An address is listed twice.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:126"
+  },
+  "The port must be a number from 1 to 65535.": {
+    "en": "The port must be a number from 1 to 65535.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:127"
+  },
+  "That name can't be used on fshp.app.": {
+    "en": "That name can't be used on fshp.app.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:128"
+  },
+  "This device's clock is off. Check the time and try again.": {
+    "en": "This device's clock is off. Check the time and try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:129"
+  },
+  "This account wasn't found.": {
+    "en": "This account wasn't found.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:130"
+  },
+  "That server isn't one of this account's servers.": {
+    "en": "That server isn't one of this account's servers.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:131"
+  },
+  "Only an admin device of this account can change direct access.": {
+    "en": "Only an admin device of this account can change direct access.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:132"
+  },
+  "A newer change is already saved. Reload and try again.": {
+    "en": "A newer change is already saved. Reload and try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:133"
+  },
+  "Chosen names on fshp.app aren't available yet.": {
+    "en": "Chosen names on fshp.app aren't available yet.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:134"
+  },
+  "A direct name must end in this account's own name.": {
+    "en": "A direct name must end in this account's own name.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:135"
+  },
+  "That name belongs to another account.": {
+    "en": "That name belongs to another account.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:136"
+  },
+  "This name isn't on this account.": {
+    "en": "This name isn't on this account.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:137"
+  },
+  "This name was checked a moment ago. Try again in a minute.": {
+    "en": "This name was checked a moment ago. Try again in a minute.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:138"
+  },
+  "Direct access couldn't be changed. Try again.": {
+    "en": "Direct access couldn't be changed. Try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:141"
+  },
+  "Suspended after an abuse report.": {
+    "en": "Suspended after an abuse report.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:147"
+  },
+  "Published": {
+    "en": "Published",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:149"
+  },
+  "Waiting to be published": {
+    "en": "Waiting to be published",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:150"
+  },
+  "Turned off.": {
+    "en": "Turned off.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:157"
+  },
+  "The account is gone.": {
+    "en": "The account is gone.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:159"
+  },
+  "Its server is no longer on this account.": {
+    "en": "Its server is no longer on this account.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:160"
+  },
+  "Its order no longer checks out under this account's admin key. Turn it on again.": {
+    "en": "Its order no longer checks out under this account's admin key. Turn it on again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:161"
+  },
+  "Direct access is off on its server.": {
+    "en": "Direct access is off on its server.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:162"
+  },
+  "Its server hasn't reported a public address yet.": {
+    "en": "Its server hasn't reported a public address yet.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:163"
+  },
+  "Waiting for the certificate account. It will be published soon.": {
+    "en": "Waiting for the certificate account. It will be published soon.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:164"
+  },
+  "Not published": {
+    "en": "Not published",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:151"
+  },
+  "Reachable from outside.": {
+    "en": "Reachable from outside.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:171"
+  },
+  "Not reachable from outside.": {
+    "en": "Not reachable from outside.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:172"
+  },
+  "Not published yet, so there is nothing to check.": {
+    "en": "Not published yet, so there is nothing to check.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift:173"
   }
 }
