@@ -318,6 +318,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   .com lobby dropped, code mailbox kept as remote fallback. Air-gapped "site mode" mapped (17 .com functions, each with a
   substitute; reopens D1 in bounded form); recommended: connected wired path in 0.4, site mode later. Owner Qs Q-W1..14
   (site mode when, site-only accounts, Studio+Rust, port 4433, sign Windows Studio, helper-read codes default).
+- 2026-11-14 Merged design docs/restore-into-server.md: restore INTO a running server app by app; a random per-app
+  `origin` decides "same app"; codeHistory + appliedMigrations compare code/data versions; per app Install / Keep /
+  Replace / Replace data only / Copy (no row merge in v1); store "generations" swap in seconds with a 7-day undo point;
+  stage + plan orders (admin root); access lists never overwritten. Riskiest piece: store generations (Rust broker
+  too). Found: server-backup-and-clone.md says API keys come back on restore, restore.ts never restores one.
+  Owner Qs in its §10.
 
 ## Resume point
 
