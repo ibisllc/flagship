@@ -127,6 +127,10 @@ fn run() -> Result<(), String> {
     }
     service = service.with_archive_pool(state.join("archive-keks.json"));
     service = service.with_revocations(state.join("revocations.json"));
+    service = service.with_revocation_list(
+        state.join("ca-keys.json"),
+        state.join("revocation-list.json"),
+    );
     service =
         service.with_admin_root(flagship_keyd::files::load_admin_root_anchor(&state).as_deref());
     if let Some((token, not_after)) = ceremony {

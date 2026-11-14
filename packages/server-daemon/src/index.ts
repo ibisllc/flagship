@@ -131,7 +131,8 @@ import {
 import { AppMembership } from "./membership.js";
 import { KeyCustodian, type SwkOps } from "./keyCustodian.js";
 import { KEYD_CEREMONY_TOKEN_PATH, KeydCustodian, type DeliveryProof } from "./keydCustodian.js";
-import { KeydClient } from "@flagship/keyd";
+import { writeKeydCaKeys } from "./keydCaKeys.js";
+import { KEYD_STATE_DIR, KeydClient } from "@flagship/keyd";
 import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
@@ -5214,10 +5215,29 @@ async function wireOwnerHandlers(deps: {
       const r = await reader.fetch(`${base}/api/users/${encodeURIComponent(cfg.userId)}/device-grants`);
       return r.ok ? await r.json() : null;
     },
+    // keyd signs master only while it holds a recent `.com` revocation list (keydCaKeys.ts).
+    onRevocationList: (list) => {
+      if (deps.custodian instanceof KeydCustodian) deps.custodian.noteRevocationList(list);
+    },
     log: (m) => console.warn(m),
   });
   await deviceBook.load();
   deps.accessPrincipals.book = deviceBook;
+  if (deps.custodian instanceof KeydCustodian) {
+    // Root rewrites keyd's CA keys, then a live read (never the doorbell's replay) brings a fresh list.
+    const freshenRevocations = async () => {
+      try {
+        if (runsUnprivileged()) await runSetupStep("keyd-ca-keys");
+        else await writeKeydCaKeys({ keydState: KEYD_STATE_DIR, chain: () => caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" }) });
+      } catch (e) {
+        console.warn(`[keyd] CA keys for revocation lists not written: ${(e as Error).message}`);
+      }
+      await deviceBook.refresh({ live: true });
+    };
+    void freshenRevocations();
+    const t = setInterval(() => void freshenRevocations(), 12 * 60 * 60_000);
+    if (typeof t.unref === "function") t.unref();
+  }
   // Architecture v2 (docs/architecture-v2/pq-suites.md §11): replay the owner's assurance
   // policy chain for this installation and apply it to every sensitive order.
   const assurance = new AssurancePolicySync({

@@ -129,6 +129,11 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     return this.#client.call("evidence.note", { ...n }).changed === true;
   }
 
+  /** `.com`'s CA-signed revocation list (keyd checks it against root's CA keys; needed, fresh, for master). */
+  noteRevocationList(list: unknown): boolean {
+    return this.#client.call("evidence.list", { list }).changed === true;
+  }
+
   /** Hybrid-sign (STK AND its ML-DSA key) under the same purpose list as `signAsBox`. */
   signHybridAsBox(msg: Bytes): Bytes {
     return unhex(this.#client.call("sign.hybrid", { msg: hex(msg) }).sig);

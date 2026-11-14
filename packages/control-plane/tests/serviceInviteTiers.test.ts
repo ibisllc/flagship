@@ -23,6 +23,7 @@ import {
   signCreateServiceInvite,
   signDeviceCapabilityGrant,
   signRevokeServiceInvite,
+  verifyDeviceRevocationList,
   signServiceInviteListQuery,
   type CreateServiceInvite,
   type DeviceCapabilityGrant,
@@ -79,7 +80,7 @@ async function seed(opts: { pinned?: boolean } = {}) {
     ...(opts.pinned === false ? {} : { adminRootPubHex: hex(adminRoot.publicKey) }),
   });
   const grant: DeviceCapabilityGrant = {
-    grantId: "g-admin",
+    grantId: "g-admin-0001",
     username: USER,
     deviceId: ADMIN_DEVICE_ID,
     devicePubKey: adminDevice.publicKey,
@@ -372,6 +373,22 @@ describe("the device book a box reads", () => {
     await s.deviceIdentities.revoke(USER, ADMIN_DEVICE_ID, NOW);
     expect(((await handleListAccountDeviceGrants(deps, USER)).body as { grants: unknown[] }).grants).toEqual([]);
     expect((await handleListAccountDeviceGrants(deps, "nobody")).status).toBe(404);
+  });
+
+  it("carries .com's CA-signed list of revoked grants for keyd, which the doorbell's read leaves out", async () => {
+    const { s } = await seed();
+    const caKp = { privateKey: new Uint8Array(32).fill(0x0c), publicKey: ed.getPublicKey(new Uint8Array(32).fill(0x0c)) };
+    const deps = { storage: s.deviceCapabilityGrants, identities: s.deviceIdentities, usernames: s.usernames, now: () => NOW };
+    expect((await handleListAccountDeviceGrants(deps, USER)).body).not.toHaveProperty("revocationList");
+    const withCa = { ...deps, ca: { keypair: caKp, issuer: "test" } };
+    const caKeys = { v: 1 as const, keys: [hex(caKp.publicKey)], validFrom: NOW - 1, validUntil: NOW + 1 };
+    const listOf = async () => (await handleListAccountDeviceGrants(withCa, USER)).body as { revocationList: unknown };
+    const before = verifyDeviceRevocationList((await listOf()).revocationList, { irkPubHex: hex(irk.publicKey), caKeys, now: NOW });
+    expect(before).toMatchObject({ ok: true, list: { issuedAt: NOW } });
+    const grantIds = before.ok ? before.list.grantIds : [];
+    await s.deviceIdentities.revoke(USER, ADMIN_DEVICE_ID, NOW);
+    const after = verifyDeviceRevocationList((await listOf()).revocationList, { irkPubHex: hex(irk.publicKey), caKeys, now: NOW });
+    expect(after.ok && after.list.grantIds.length).toBe(grantIds.length + 1);
   });
 });
 

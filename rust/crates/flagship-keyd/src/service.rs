@@ -64,6 +64,10 @@ pub struct KeydService {
     /// is unreadable (every master assertion is then refused rather than forgetting one).
     held: Option<crate::revocations::HeldRevocations>,
     held_path: Option<PathBuf>,
+    /// TS `caKeysPath` / `revocationListPath`: root's CA keys and the newest `.com` list's time.
+    ca_keys_path: Option<PathBuf>,
+    list_path: Option<PathBuf>,
+    list_at: Option<i64>,
 }
 
 impl std::fmt::Debug for KeydService {
@@ -137,7 +141,19 @@ impl KeydService {
             archive: crate::archive::ArchiveKeys::load(None),
             held: Some(crate::revocations::HeldRevocations::default()),
             held_path: None,
+            ca_keys_path: None,
+            list_path: None,
+            list_at: None,
         }
+    }
+
+    /// Where root's CA keys (`ca-keys.json`) and the newest list's time (`revocation-list.json`) live.
+    #[must_use]
+    pub fn with_revocation_list(mut self, ca_keys: PathBuf, list: PathBuf) -> Self {
+        self.list_at = crate::revocation_list::load_list_at(&list);
+        self.ca_keys_path = Some(ca_keys);
+        self.list_path = Some(list);
+        self
     }
 
     /// Where keyd keeps the owner's revocations and rank orders (`revocations.json` in keyd's state).
@@ -357,6 +373,14 @@ impl KeydService {
                         "appId must be <creator>--<slug> or <slug>",
                     ));
                 }
+                // A daemon that withholds revocations must not keep master working (TS sign.identity).
+                if self.list_at.is_none_or(|at| {
+                    (self.clock)().saturating_sub(at) > crate::revocation_list::MAX_AGE_MS
+                }) {
+                    return Err(KeydError::forbidden(
+                        "master needs a recent revocation list from .com (stale-revocations)",
+                    ));
+                }
                 let ev = crate::policy::MasterEvidence {
                     app_id,
                     identity_pub_hex: identity,
@@ -456,6 +480,63 @@ impl KeydService {
                     self.held = Some(after);
                 }
                 done(obj! { "changed" => changed })
+            }
+            "evidence.list" => {
+                // `.com`'s CA-signed list of the account's revoked grants (TS evidence.list).
+                no_extra_args(a, &["list"])?;
+                let Some((irk, _)) = &self.owner else {
+                    return Err(KeydError::forbidden("no owner key is pinned for this box"));
+                };
+                let irk_hex = to_hex(irk.as_bytes());
+                let ca = self
+                    .ca_keys_path
+                    .as_deref()
+                    .and_then(crate::revocation_list::load_ca_keys)
+                    .ok_or_else(|| KeydError::forbidden("root has written no CA keys for keyd"))?;
+                let (issued_at, ids) = crate::revocation_list::verify(
+                    a.get("list").unwrap_or(&Value::Null),
+                    &irk_hex,
+                    &ca,
+                    (self.clock)(),
+                )
+                .map_err(|code| {
+                    KeydError::forbidden(format!(
+                        "keyd takes only .com's signed list for this account ({code})"
+                    ))
+                })?;
+                if self.list_at.is_some_and(|at| issued_at <= at) {
+                    return done(obj! { "changed" => false });
+                }
+                let held = self.held()?;
+                let fresh: Vec<String> = ids
+                    .into_iter()
+                    .filter(|id| !held.grant_revoked(id))
+                    .collect();
+                if held.grants.len().saturating_add(fresh.len()) > crate::revocation_list::MAX_IDS {
+                    return Err(KeydError::forbidden(
+                        "keyd holds too many revocations (full)",
+                    ));
+                }
+                let added = fresh.len();
+                if added > 0 {
+                    let mut next = held.clone();
+                    next.grants.extend(fresh);
+                    if let Some(p) = &self.held_path {
+                        crate::files::write_atomic(p, next.to_json().as_bytes(), 0o600)
+                            .map_err(|_| KeydError::failed("could not keep the revocation"))?;
+                    }
+                    self.held = Some(next);
+                }
+                if let Some(p) = &self.list_path {
+                    crate::files::write_atomic(
+                        p,
+                        format!("{{\"issuedAt\":{issued_at}}}").as_bytes(),
+                        0o600,
+                    )
+                    .map_err(|_| KeydError::failed("could not keep the revocation list"))?;
+                }
+                self.list_at = Some(issued_at);
+                done(obj! { "changed" => true, "added" => added })
             }
             "pq.status" => {
                 no_extra_args(a, &[])?;

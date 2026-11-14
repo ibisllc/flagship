@@ -819,11 +819,46 @@ describe.skipIf(!HAVE_BIN)("master evidence in the Rust keyd", () => {
     const ev = { appId: app, identityPubHex: dev, statement: grant, signatureHex: Buffer.from(ed.sign(new TextEncoder().encode(grant), root)).toString("hex") };
     const dir = stateDir({ owner: false });
     writeFileSync(join(dir, "owner.json"), JSON.stringify({ irkPubHex: OWNER_PUB_HEX, adminRootPubHex: rootHex }), { mode: 0o400 });
+    // Root's CA keys for keyd, in both state directories: master needs a recent `.com` list.
+    const { signDeviceRevocationList } = await import("@flagship/protocol");
+    const caSeed = new Uint8Array(32).fill(0x27);
+    const caKeys = JSON.stringify({ v: 1, keys: [Buffer.from(ed.getPublicKey(caSeed)).toString("hex")], validFrom: Date.now() - 86_400_000, validUntil: Date.now() + 86_400_000 });
+    writeFileSync(join(dir, "ca-keys.json"), caKeys);
     const k = await spawnRust(dir);
     const tsDir = mkdtempSync(join(tmpdir(), "tkeyd-held-"));
-    const ts = new KeydService({ identitySeed: SEED, swk: SWK, owner: { irkPubHex: OWNER_PUB_HEX, serverFqdn: FQDN, adminRootPubHex: rootHex }, revocationsPath: join(tsDir, "revocations.json") });
+    writeFileSync(join(tsDir, "ca-keys.json"), caKeys);
+    const ts = new KeydService({
+      identitySeed: SEED, swk: SWK, owner: { irkPubHex: OWNER_PUB_HEX, serverFqdn: FQDN, adminRootPubHex: rootHex }, revocationsPath: join(tsDir, "revocations.json"),
+      caKeysPath: join(tsDir, "ca-keys.json"), revocationListPath: join(tsDir, "revocation-list.json"),
+    });
     try {
       const c = await client(k.sock);
+      const listOf = (ids: string[], at: number, key = caSeed, irk = OWNER_PUB_HEX) => ({ list: signDeviceRevocationList({ irkPubHex: irk, issuedAt: at, grantIds: ids }, key) });
+      for (const [op, args] of [
+        ["sign.identity", { msg: hex(enc(`flagship/inject/v1|${app}|${me}|master|${Date.now()}`)), ...ev }],
+        ["evidence.list", listOf([], Date.now() - 5000, new Uint8Array(32).fill(0x28))],
+        ["evidence.list", listOf([], Date.now() - 5000, caSeed, rootHex)],
+        ["evidence.list", { list: { ...listOf(["grant-0000-0001"], Date.now() - 5000).list, grantIds: [] } }],
+        ["evidence.list", { list: 1 }],
+        ["evidence.list", listOf(["grant-0000-0009"], Date.now() - 5000)],
+        ["evidence.list", listOf([], Date.now() - 6000)],
+      ] as const) {
+        const tsA = (() => {
+          try {
+            return { ok: ts.handle({ op, args } as never).result };
+          } catch (e) {
+            return { err: (e as Error).message };
+          }
+        })();
+        let rsA: unknown;
+        try {
+          rsA = { ok: await c.call(op, args as Record<string, unknown>) };
+        } catch (e) {
+          rsA = { err: (e as Error).message };
+        }
+        expect(rsA, `${op} ${JSON.stringify(args).slice(0, 80)}`).toEqual(tsA);
+      }
+      expect(readFileSync(join(dir, "revocation-list.json"), "utf8")).toBe(readFileSync(join(tsDir, "revocation-list.json"), "utf8"));
       const msgOk = hex(enc(`flagship/inject/v1|${app}|${me}|master|${Date.now()}`));
       const other = hex(enc(`flagship/inject/v1|${app}|${"0".repeat(32)}|master|1`));
       const tsAnswer = (op: string, args: Record<string, unknown>) => {

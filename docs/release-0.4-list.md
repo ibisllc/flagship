@@ -134,10 +134,12 @@ list; SP = `SECURITY-0.3-PROGRESS.md`; REG = `docs/architecture-v2/REGISTER.md`.
   signature binding, and boot unlock v2 are unreviewed compositions; the plan says not to rely on them before an
   external review. Gate for strict-by-default (F5 stage 3). Where: `docs/architecture-v2/pq-suites.md` §15.1. Source:
   REG Q01/Q07 and blocker 6.
-- **Low/Medium. keyd's master check trusts the daemon to deliver revocations.** keyd refuses revoked or superseded
-  master evidence only after the daemon hands it the owner's revocation (it can withhold, not forge), and manager rank
-  still rests on the daemon's word. Where: `packages/keyd/src/service.ts` (`revocations.json`), REG "Gap closure".
-  Source: B2 #6 residual.
+- **Low/Medium. keyd's master check trusts the daemon to deliver revocations. PARTLY FIXED on `0.4/security-fixes`:**
+  `.com` signs (CA key) the account's revoked-grant list beside `GET /device-grants`; keyd (TS and Rust,
+  `evidence.list`) checks it against CA keys root writes (`keyd-ca-keys` step, `ca-keys.json`) and signs master only
+  while it holds a list issued within 7 days (else the admins get manager). Still open: rank demotions never reach
+  `.com`, so a withheld one is not covered; manager rank still rests on the daemon's word. Deploy `.com` before the
+  box release (without lists, keyd boxes stop asserting master). Source: B2 #6 residual.
 - **Low. A box keeps serving an app certificate the CA revoked** until its normal renewal: the issuance sweep revokes
   at the CA, but the box never checks. Where: `packages/server-daemon/src/certManager.ts` (no revocation check),
   `docs/architecture-v2/issuance-service.md` §6. Source: 3174b2e06 follow-up (SR issuance Lows).

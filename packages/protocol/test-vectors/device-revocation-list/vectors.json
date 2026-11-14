@@ -1,0 +1,141 @@
+{
+  "now": 1800000000000,
+  "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "caKeys": {
+    "v": 1,
+    "keys": [
+      "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d"
+    ],
+    "validFrom": 1799913600000,
+    "validUntil": 1800259200000
+  },
+  "canonical": "flagship/device-revocation-list/v1|ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c|1799999940000|grant-aaaa-0001,grant-bbbb-0002",
+  "cases": [
+    {
+      "name": "a list .com's CA signed for this account",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999940000,
+        "grantIds": [
+          "grant-aaaa-0001",
+          "grant-bbbb-0002"
+        ],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "3e865a089156d2ada37958c4cdf5798b3a63567f8a57d07aad134f56a9788c01b7bc502b7266d2ab36578924f97819674a82315942f49eff4fc0a8b36a913c0a"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "an empty list",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999999999,
+        "grantIds": [],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "c47b1950f3a24e1eafb669c9ed313d9474d96ef84ca8889358691922a94ac22aa4e20f292182f82043a8f286a268ecf385182e060755c9e9d5e548147bd81f0e"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a grant id added after signing",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999940000,
+        "grantIds": [
+          "grant-aaaa-0001",
+          "grant-bbbb-0002",
+          "grant-cccc-0003"
+        ],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "3e865a089156d2ada37958c4cdf5798b3a63567f8a57d07aad134f56a9788c01b7bc502b7266d2ab36578924f97819674a82315942f49eff4fc0a8b36a913c0a"
+      },
+      "expect": "signature"
+    },
+    {
+      "name": "a grant id dropped after signing",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999940000,
+        "grantIds": [
+          "grant-aaaa-0001"
+        ],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "3e865a089156d2ada37958c4cdf5798b3a63567f8a57d07aad134f56a9788c01b7bc502b7266d2ab36578924f97819674a82315942f49eff4fc0a8b36a913c0a"
+      },
+      "expect": "signature"
+    },
+    {
+      "name": "another account's list",
+      "list": {
+        "irkPubHex": "1398f62c6d1a457c51ba6a4b5f3dbd2f69fca93216218dc8997e416bd17d93ca",
+        "issuedAt": 1799999999999,
+        "grantIds": [],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "afd1735e5d91ed8e1ef4800b43a4a3707bf45ae82bfd4de3d8bc3e412ddc2d629225741e80634ae99e5ca88100b64d44afcdfddcae8870697bb2a1fbda1ecb09"
+      },
+      "expect": "wrong-account"
+    },
+    {
+      "name": "signed by a key root did not write",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999999999,
+        "grantIds": [],
+        "keyHex": "91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a",
+        "signature": "07d7d873f2499a44a4d6ebab6942f9761aa1c34d009d988af0eae040d8f85dd33cf9e65b7564d66bb92f5dcc98dda6155220c148756b5c2c8b5824408e19ee06"
+      },
+      "expect": "key-not-authorized"
+    },
+    {
+      "name": "issued before root's window",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799827200000,
+        "grantIds": [],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "1233e9f98c5cf95d8f815519105ee065af5a25aa41d84f14f1315071e515306af0611ac07818a77675f5b6e3e0035c5f459bc26be2bafc7c81c3e254fdfa3f00"
+      },
+      "expect": "outside-window"
+    },
+    {
+      "name": "dated ahead of keyd's clock",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1800000600000,
+        "grantIds": [],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "ed22a40d22e067b0d60e02232a9191a10333e57d7d311f4ba6cc736455850cbd7046b55b91df235492cffe73f44ac245c54fb08192454059fea1518a8a504d04"
+      },
+      "expect": "future"
+    },
+    {
+      "name": "grant ids out of order",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999940000,
+        "grantIds": [
+          "grant-bbbb-0002",
+          "grant-aaaa-0001"
+        ],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "3e865a089156d2ada37958c4cdf5798b3a63567f8a57d07aad134f56a9788c01b7bc502b7266d2ab36578924f97819674a82315942f49eff4fc0a8b36a913c0a"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "an unknown field",
+      "list": {
+        "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "issuedAt": 1799999940000,
+        "grantIds": [
+          "grant-aaaa-0001",
+          "grant-bbbb-0002"
+        ],
+        "keyHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+        "signature": "3e865a089156d2ada37958c4cdf5798b3a63567f8a57d07aad134f56a9788c01b7bc502b7266d2ab36578924f97819674a82315942f49eff4fc0a8b36a913c0a",
+        "extra": 1
+      },
+      "expect": "malformed"
+    }
+  ]
+}
