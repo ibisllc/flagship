@@ -61,6 +61,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       `docs/runbooks/receipts/`; OWNER runs `npm run rate-limits` (never checked yet) and records the date in AGENTS.md.
 - [ ] P5 Fold the 0.3 journal's still-true state into `AGENTS.md` "Current status" and archive
       `RELEASE-0.3-JOURNAL.md` (on `main`, since it is status, not a feature).
+- [ ] P1b OWNER: re-sign the runtime manifest before ~2026-12-20 (signed 2026-11-05 for 45 days): `release.sh --only 10`.
 - [ ] P6 The demo server `playstore-test-0725`: update it to 0.3 (it was parked on 0.2 compat through the review
       window), then recreate it on a 20 GB disk (0.4 list "Costs"; set `UPCLOUD_STORAGE_GB` 20 first). OWNER confirms
       the moment; check the review sign-in afterwards.
@@ -94,7 +95,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       address dropped (AGENTS.md "Make Fly redundant" 1), `VOICI_CANONICAL` decision.
 
 ### S. Gather every advisor's open findings (playbook phase 2 in `docs/release-0.4-list.md`)
-- [ ] S1 Sweep each source, check each finding against today's code, write what is still open into the 0.4 list with
+- [x] S1 (`7e76b6542`: 10 security + 8 other open, 9 owner decisions, 13 lines already fixed) Sweep each source, check each finding against today's code, write what is still open into the 0.4 list with
       its source: Windows device-test agent (`device-results/windows-2026-11-05`, anything after `8669e1970`), B2
       reviewers (journal "B2 OPEN, not fixed", 2026-10-25), the independent security review (journal "SECURITY REVIEW
       (since 10-25, read-only)", 2026-11-02, M1-M6 + Lows), the voi.ci + Messages review (2026-11-03, items 1-6), the
@@ -148,6 +149,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-13 P8 done (`1d6eceb57`). Found the calls plan on the unmerged branch `claude/sleepy-archimedes-pme2jy`
   (spike, `docs/voici-calls.md`, 0.4 list items): replayed onto `release/0.4` (6 commits; its abuse-page commit was
   already on main). The branch can be deleted (P9). Agents running: S1 advisor sweep, P3 gym test CA.
+- 2026-11-13 S1 merged (`7e76b6542`): section "Advisor findings still open" in the 0.4 list. Top open: app image builds
+  under root dockerd, never-reviewed flagship-wasi/runtime/crypto/typed.rs, strict servers refuse their own Ed25519
+  health reports, gpud residuals, no external review of the new crypto. Found: runtime manifest expires ~2026-12-20
+  (P1b); owner decision on translating `.com` refusal sentences. Next: S2, show the owner the grouped list.
 
 ## Resume point
 
