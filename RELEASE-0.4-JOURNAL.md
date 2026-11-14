@@ -264,6 +264,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   shown, code claim needs no press; 5 presses on an unclaimed box reopen its window; box registers alone 2 min after
   the receipt if the phone vanishes. Owner Qs: confirm these; Wi-Fi stack on the metal image (NetworkManager/iwd/
   wpa_supplicant); doc Q3 (release = wipe?) and Q6 (LAN claim path).
+- 2026-11-14 Merged `0.4/fixups`: share-notice tests (test was wrong after the UnifiedPush guard), iOS marketplace
+  calls through `gatedData`, OutboundProxyTests compile and pass, webapp passes grantPqSignature (shell **v209**),
+  webapp reads pq-authority vectors. `npm run parity` fully green. Running: direct-access screens.
 
 ## Resume point
 
