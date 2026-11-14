@@ -71,13 +71,10 @@ describe("wipe verifier (N-BOX-9)", () => {
   });
 
   it("rejects a JSON-looking buffer with low overall printable density", () => {
-    // Mostly garbage but plant `{"` marker.
+    // Mostly garbage but with `{"` markers planted (one alone is what noise holds now and then).
     const v = randomGarbage(WIPE_READ_BYTES, 3);
-    v.set([0x7b, 0x22], 500);
-    // Force the rest non-printable so density stays low.
-    for (let i = 0; i < v.length; i++) {
-      if (i < 500 || i > 501) v[i] = (v[i]! & 0x80) | 0x80;
-    }
+    for (let i = 0; i < v.length; i++) v[i] = (v[i]! & 0x80) | 0x80;
+    for (const at of [500, 900, 1300, 1700]) v.set([0x7b, 0x22], at);
     const r = verifyWipe(v);
     expect(r.ok).toBe(false);
     expect(r.reason).toBe("recognizable-plaintext");
@@ -89,5 +86,17 @@ describe("wipe verifier (N-BOX-9)", () => {
     v.set([0x4c, 0x55, 0x4b, 0x53, 0xba, 0xbe], WIPE_READ_BYTES + 10);
     const r = verifyWipe(v);
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("random bytes after a crypto-erase", () => {
+  it("pass the check every time (a short marker in noise is not plaintext)", async () => {
+    const { randomFillSync } = await import("node:crypto");
+    const b = new Uint8Array(4096);
+    for (let i = 0; i < 2000; i++) {
+      randomFillSync(b);
+      const v = verifyWipe(b);
+      if (v.reason !== "luks-header-present") expect(v.ok, `run ${i}: ${v.reason}`).toBe(true);
+    }
   });
 });
