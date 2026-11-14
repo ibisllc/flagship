@@ -14357,5 +14357,13 @@
   "Certificate ready. Waiting for the direct path.": {
     "en": "Certificate ready. Waiting for the direct path.",
     "ctx": "webapp/lib/directNames.js:124"
+  },
+  "Set up a box from a store": {
+    "en": "Set up a box from a store",
+    "ctx": "webapp/views/import-backup.js"
+  },
+  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": {
+    "en": "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.",
+    "ctx": "webapp/views/import-backup.js"
   }
 }

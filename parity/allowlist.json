@@ -600,6 +600,46 @@
       "check": "test-vectors",
       "key": "web:box-claim",
       "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim-confirm/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim-key/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim-keys/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim-mailbox/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim-receipt/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim-record/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-claim/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-setup-code-key/v1",
+      "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
     }
   ]
 }

@@ -72,6 +72,7 @@ export function openAddOrRestore({ onAdd, onCoManage }) {
     <h3 class="modal-title">${tr("Add / Restore a server")}</h3>
     <button class="full-width" data-choice-add>${tr("Create a server")}</button>
     <button class="secondary full-width mt-2" data-choice-co-manage>${tr("Co-manage a running server")}</button>
+    <button class="secondary full-width mt-2" data-choice-retail>${tr("Set up a box from a store")}</button>
     <button class="secondary full-width mt-2" data-choice-restore>${tr("Restore from backup")}</button>
     <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>${tr("Cancel")}</button></div>
   `,
@@ -89,6 +90,23 @@ export function openAddOrRestore({ onAdd, onCoManage }) {
     close();
     openRestoreChooser();
   });
+  dlg.querySelector("[data-choice-retail]").addEventListener("click", () => {
+    close();
+    openRetailBoxNote();
+  });
+}
+
+/** A retail box is claimed over Bluetooth, which a browser cannot do (docs/retail-box-setup.md §11.2). */
+function openRetailBoxNote() {
+  const { dlg, close } = openDialog(
+    tr("Set up a box from a store"),
+    `
+    <h3 class="modal-title">${tr("Set up a box from a store")}</h3>
+    <p data-retail-note>${tr("Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.")}</p>
+    <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>${tr("Close")}</button></div>
+  `,
+  );
+  dlg.querySelector("[data-choice-cancel]").addEventListener("click", close);
 }
 
 export const RESTORE_SOURCES = Object.freeze({
