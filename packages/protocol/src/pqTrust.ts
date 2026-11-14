@@ -41,7 +41,16 @@ export const TAG_PQ_KEY_BINDING = "flagship/pq-key-binding/v1";
  *   flagship/pq-key-binding/v2|<role>|<subjectId>|<ed25519PubHex>|<issuedAt>
  */
 export const TAG_PQ_KEY_BINDING_V2 = "flagship/pq-key-binding/v2";
-export const PQ_BINDING_ROLES = ["account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key"] as const;
+export const PQ_BINDING_ROLES = [
+  "account-irk",
+  "admin-root",
+  "device",
+  "box-stk",
+  "boot-key",
+  "release-key",
+  "org-seat-admin",
+  "org-seat-member",
+] as const;
 export type PqBindingRole = (typeof PQ_BINDING_ROLES)[number];
 /** How far ahead of the verifier's clock a binding may be dated. */
 export const PQ_BINDING_MAX_SKEW_MS = 5 * 60 * 1000;
