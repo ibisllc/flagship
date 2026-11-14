@@ -403,7 +403,7 @@ fun HomeTab() {
                 onDismissRecoveryBackupBanner = { recoveryBannerStore.setDismissed(true) },
                 showPageWelcome = pagePointer == com.flagshipserver.app.core.PagePointer.Welcome,
                 pageRowPublic = (pagePointer as? com.flagshipserver.app.core.PagePointer.Row)?.isPublic,
-                onSetUpPage = { deepLinker.enqueue(DeepLink.Messages()) },
+                onSetUpPage = { deepLinker.enqueue(DeepLink.PageEditor) },
                 onDismissPageWelcome = { pageWelcomeStore.dismiss(voiciPage.username) },
                 dibsNoticeClosesAt = dibsWindow?.end?.takeIf {
                     !isDemoAccount && com.flagshipserver.app.viewmodels.NameDibsViewModel.shouldShowBanner(dibsWindow, dibsDismissed)

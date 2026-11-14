@@ -1,4 +1,4 @@
-// GYM Android: voi.ci pages and Messages (docs/voici-and-messages.md §11), the Android twin of iOS GymMessages*.
+// GYM Android: the Social tab (docs/social-tab.md, docs/voici-and-messages.md §11), the Android twin of iOS GymMessages*.
 // The mock `.com` (GymVoici / MockVoiciClient) runs the real checks: an admin device publishes its page after the
 // rules and the linkability warning; a visitor's message arrives as a request, is answered and blocked; a device
 // without the admin root keeps its change grayed until an admin publishes it; and "Sign in with Flagship" for Ana's
@@ -11,6 +11,7 @@ import com.flagshipserver.app.core.voici.VoiciJs
 import com.flagshipserver.app.core.voici.VoiciMessages
 import com.flagshipserver.app.core.voici.VoiciPage
 import kotlinx.coroutines.runBlocking
+import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -21,7 +22,7 @@ class GymMessagesTest : GymBase() {
 
     private fun account(): String = GymVoici.client.accounts.keys.first { it != GymVoici.OTHER }
 
-    /** The Public switch at the top of Messages: the rules, then the one-time public warning, then the page. */
+    /** The Public switch in the title row: the rules, then the one-time public warning, then the page. */
     private fun publishFirstPage() {
         waitUntilExists("page-public-switch")
         gymShot("messages-header-off")
@@ -35,21 +36,23 @@ class GymMessagesTest : GymBase() {
 
     @Test fun anAdminPublishesItsPageThenAnswersAndBlocksAVisitor() {
         launch(tab = "messages", adminRoot = true)
-        waitUntilExists("messages-title", 20_000)
-        gymShot("messages-empty")
+        waitUntilExists("social-title", 20_000)
+        gymShot("social-profile-off")
+        assertEquals("nothing unpublished, no bar", 0, tagCount("page-publish-bar"))
         publishFirstPage()
-        gymShot("messages-header-on")
-        // In the editor every change is a draft until the one Publish bar.
-        tap("messages-edit-page")
+        gymShot("social-profile-on")
+        // Every change is a draft until the one Publish bar, which shows only while something is unpublished.
+        tap("page-options")
         tap("page-accept-messages")
+        tap("page-options-done")
         waitUntilExists("page-publish-bar")
-        gymShot("page-editor-bar")
+        gymShot("social-publish-bar")
         tap("page-publish")
         eventually(15_000, "accepting") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsMessages == 1 }
-        tap("nav-back")
+        eventually(15_000, "the bar goes once published") { tagCount("page-publish-bar") == 0 }
 
         runBlocking { GymVoici.client.visitorWrites(account(), visitor, "Hi! Your photos on https://example.com/gallery are lovely.") }
-        composeRule.onNode(androidx.compose.ui.test.hasTestTag("messages-title")).assertExists()
+        tap("social-tab-messages")
         tap("messages-segment-requests")
         eventually(15_000, "the request arrives") {
             runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.refreshInbox() }
@@ -71,9 +74,26 @@ class GymMessagesTest : GymBase() {
         eventually(10_000, "blocked at .com") { GymVoici.client.blocks[account()].orEmpty().isNotEmpty() }
     }
 
+    @Test fun theNameIsEditedThroughItsPencilAndPublishedFromTheBar() {
+        launch(tab = "messages", adminRoot = true)
+        waitUntilExists("social-title", 20_000)
+        publishFirstPage()
+        val before = VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))!!.body.seq
+        tap("page-edit-name")
+        waitUntilExists("page-display-name")
+        composeRule.onNode(androidx.compose.ui.test.hasTestTag("page-display-name")).performTextReplacement("River Otter")
+        composeRule.waitForIdle()
+        tap("page-edit-done")
+        waitUntilExists("page-publish-bar")
+        assertTrue(textOfTag("page-name-text").contains("River Otter"))
+        tap("page-publish")
+        eventually(15_000, "the name is published") { (VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.seq ?: 0) > before }
+        eventually(15_000, "the bar goes") { tagCount("page-publish-bar") == 0 }
+    }
+
     @Test fun turningThePageOffRemovesItAndOnBringsItBack() {
         launch(tab = "messages", adminRoot = true)
-        waitUntilExists("messages-title", 20_000)
+        waitUntilExists("social-title", 20_000)
         publishFirstPage()
         tap("page-public-switch")
         tap("page-remove-confirm")
@@ -84,17 +104,16 @@ class GymMessagesTest : GymBase() {
 
     @Test fun aDeviceWithoutTheAdminRootKeepsItsChangeGrayed() {
         launch(tab = "messages", adminRoot = false)
-        waitUntilExists("messages-title", 20_000)
+        waitUntilExists("social-title", 20_000)
         waitUntilExists("page-admin-only")
-        tap("messages-edit-page")
-        waitUntilExists("page-warning")
         assertEquals("only an admin device has a Publish button", 0, tagCount("page-publish"))
-        tap("page-new-post")
+        tap("page-new-post-open")
         type("post-text", "Written on the tablet")
         tap("post-save")
         waitUntilExists("page-waiting-admin")
         eventually(15_000, "handed to the drafts lane") { GymVoici.client.drafts[account()].orEmpty().isNotEmpty() }
-        gymShot("page-editor-waiting")
+        assertEquals("only an admin device has a Publish button", 0, tagCount("page-publish"))
+        gymShot("social-waiting-admin")
     }
 
     @Test fun signInWithFlagshipForAnasPage() {
@@ -117,6 +136,7 @@ class GymMessagesTest : GymBase() {
         // Ana answers; the app (on open, no push) offers "You have a reply on voi.ci/ana-page".
         GymVoici.anaReplies()
         tap("tab-messages")
+        tap("social-tab-messages")
         eventually(15_000, "the reply notice") {
             runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.checkReplies() }
             tagCount("messages-reply-notice") > 0

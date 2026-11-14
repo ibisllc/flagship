@@ -1,6 +1,7 @@
 # The Social tab (0.4, U2 + U3)
 
-Status: iOS built on `0.4/social-ios` (2026-11-13), Android and the webapp to follow. Owner direction: the Messages
+Status: iOS built on `0.4/social-ios` (2026-11-13); Android ported on `0.4/social-ports` (2026-11-14,
+`SocialScreens.kt`, the gym's `GymMessagesTest`); the webapp to follow. Owner direction: the Messages
 tab was too cumbersome; rename it **Social**, make the page editor the tab, and let the page show itself as visitors
 see it. Prototype the owner approved: <https://claude.ai/artifact/ABqoHvYhdTEWaDb7cGMkLt>. Protocol and formats are
 unchanged: everything below uses `docs/voici-and-messages.md` as it is. The new features in the prototype (guests,

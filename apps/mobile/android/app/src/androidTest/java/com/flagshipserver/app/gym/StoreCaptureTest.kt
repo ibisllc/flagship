@@ -144,9 +144,10 @@ class StoreCaptureTest : GymBase() {
         bring("sd-backups", 0.11f)
         shot("05")
 
-        // 06 Messages: the conversation someone started from voi.ci/river-otter, under the owner's nickname for them.
+        // 06 Social, Messages: the conversation someone started from voi.ci/river-otter, under the owner's nickname for them.
         launchStore("messages", dark = true)
-        waitUntilExists("messages-your-page", 20_000)
+        waitUntilExists("social-title", 20_000)
+        tap("social-tab-messages")
         tapMatching(tagPrefix("messages-row-"), 20_000)
         waitUntilExists("thread-compose", 15_000)
         waitUntilExists("bubble-status", 15_000)

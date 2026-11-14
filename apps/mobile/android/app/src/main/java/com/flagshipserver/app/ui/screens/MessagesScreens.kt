@@ -1,4 +1,4 @@
-// The Messages tab (docs/voici-and-messages.md §11.1): your page, then Messages | Requests, then a thread. Text from
+// The Social tab's Messages side (docs/social-tab.md, docs/voici-and-messages.md §11.1): a thread and its rows. Text from
 // a visitor is shown only as plain text (Compose `Text`, never HTML); https links in it are underlined and open
 // only after "Open <host>?" with the full address shown (§12.1).
 
@@ -90,21 +90,8 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-/** Bumped when something points to the page (Home, Settings): the Messages tab scrolls back to its header. */
-object MessagesScroll {
-    val toTop = kotlinx.coroutines.flow.MutableStateFlow(0)
-}
-
 /** The app's VoiciCenter (MainActivity provides it; null before an account is open). */
 val LocalVoiciCenter = staticCompositionLocalOf<VoiciCenter?> { null }
-
-fun voiciPageStatus(p: VoiciPageUi): String = when {
-    !p.canPublish && p.pendingCount > 0 -> FSStrings.get(R.string.voici_waiting_for_admin)
-    p.pendingCount == 1 -> FSStrings.get(R.string.voici_one_change_not_published)
-    p.pendingCount > 1 -> FSStrings.get(R.string.voici_changes_not_published, p.pendingCount)
-    p.publishedSeq > 0 -> FSStrings.get(R.string.voici_published)
-    else -> FSStrings.get(R.string.voici_not_published)
-}
 
 private fun shortTime(ms: Long): String {
     val now = System.currentTimeMillis()
@@ -113,130 +100,7 @@ private fun shortTime(ms: Long): String {
 }
 
 @Composable
-fun MessagesScreen(nav: NavController) {
-    val center = LocalVoiciCenter.current ?: return FSScreen(title = stringResource(R.string.voici_tab)) {
-        FSNote(stringResource(R.string.voici_messages_paused))
-    }
-    val app = com.flagshipserver.app.core.LocalAppState.current
-    val profiles by app.profiles.collectAsState()
-    val activeCloud by app.activeCloudName.collectAsState()
-    val pods by app.pods.collectAsState()
-    if (com.flagshipserver.app.core.AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods)) {
-        return DemoMessagesScreen(center, app.currentUser.collectAsState().value.orEmpty())
-    }
-    val page by center.page.collectAsState()
-    val ui by center.messages.collectAsState()
-    val scope = rememberCoroutineScope()
-    var showRequests by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(center) { center.start() }
-    val flow = rememberPagePublicFlow(center)
-    val scroll = androidx.compose.foundation.rememberScrollState()
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    // Like a large title: once the header has scrolled away, a slim bar carries the photo, the name and the switch.
-    val collapsed by remember { androidx.compose.runtime.derivedStateOf { scroll.value > with(density) { 180.dp.roundToPx() } } }
-    val toTop by MessagesScroll.toTop.collectAsState()
-    LaunchedEffect(toTop) { if (toTop > 0) scroll.animateScrollTo(0) }
-    PagePublicDialogs(flow)
-
-    FSScreen(
-        title = stringResource(R.string.voici_tab),
-        titleTag = "messages-title",
-        scrollState = scroll,
-        topPinned = {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = collapsed,
-                enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
-            ) { PageHeaderBar(center, page, flow) { scope.launch { scroll.animateScrollTo(0) } } }
-        },
-        onRefresh = { scope.launch { center.refresh() } },
-        refreshing = ui.loading,
-        actions = { FSBarAction(Icons.Outlined.Settings, stringResource(R.string.voici_settings_title), { nav.navigate("messages-settings") }, Modifier.testTag("messages-settings")) },
-    ) {
-        // The page is managed here, at the top (Home and Settings only point to it).
-        PageHeaderCard(center, page, flow) { nav.navigate("page-editor") }
-        val replies by center.replyNotices.collectAsState()
-        if (replies.isNotEmpty()) {
-            val context = LocalContext.current
-            FSGroup {
-                replies.forEach { n ->
-                    FSRow(
-                        title = stringResource(R.string.voici_reply_notice, n.username),
-                        icon = Icons.Outlined.ChatBubbleOutline,
-                        iconTint = FS.colors.accent,
-                        onClick = {
-                            scope.launch { center.openedReply(n) }
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse("${com.flagshipserver.app.core.Endpoints.voiciOrigin}/${n.username}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                )
-                            }
-                        },
-                        modifier = Modifier.testTag("messages-reply-notice"),
-                    )
-                }
-            }
-        }
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = !showRequests, onClick = { showRequests = false },
-                shape = SegmentedButtonDefaults.itemShape(0, 2), modifier = Modifier.testTag("messages-segment-messages"),
-            ) { Text(stringResource(R.string.voici_segment_messages)) }
-            SegmentedButton(
-                selected = showRequests, onClick = { showRequests = true },
-                shape = SegmentedButtonDefaults.itemShape(1, 2), modifier = Modifier.testTag("messages-segment-requests"),
-            ) {
-                Text(if (ui.requests.isEmpty()) stringResource(R.string.voici_segment_requests_none) else stringResource(R.string.voici_segment_requests, ui.requests.size))
-            }
-        }
-        val list = if (showRequests) ui.requests else ui.accepted
-        if (page.publishedSeq == 0L && ui.conversations.isEmpty()) {
-            FSNote(stringResource(R.string.voici_messages_paused))
-        } else if (list.isEmpty()) {
-            FSEmptyState(
-                title = stringResource(if (showRequests) R.string.voici_empty_requests else R.string.voici_empty_messages),
-                icon = Icons.Outlined.ChatBubbleOutline,
-                modifier = Modifier.testTag("messages-empty"),
-            )
-        } else {
-            FSGroup {
-                list.forEachIndexed { i, c ->
-                    ConversationRow(c, ui.name(c, VoiciCopy::visitorName), ui.unread(c)) { nav.navigate("thread/${c.conv}") }
-                    if (i < list.size - 1) FSDivider(0.dp)
-                }
-            }
-        }
-    }
-}
-
-/**
- * A sample account's Messages tab: its page is the operator's example, shown read only (VoiciDemoPage). No editor,
- * no conversations: the device holds none of the account's keys.
- */
-@Composable
-private fun DemoMessagesScreen(center: VoiciCenter, username: String) {
-    val demo by center.demoPage.collectAsState()
-    val scope = rememberCoroutineScope()
-    var refreshing by remember { mutableStateOf(false) }
-    LaunchedEffect(username) { if (username.isNotEmpty()) center.refreshDemoPage(username) }
-    FSScreen(
-        title = stringResource(R.string.voici_tab),
-        titleTag = "messages-title",
-        onRefresh = {
-            scope.launch {
-                refreshing = true
-                center.refreshDemoPage(username)
-                refreshing = false
-            }
-        },
-        refreshing = refreshing,
-    ) {
-        DemoPageHeaderCard(demo?.takeIf { it.username == username.lowercase() } ?: com.flagshipserver.app.core.voici.VoiciDemoPageUi(username.lowercase()))
-    }
-}
-
-@Composable
-private fun ConversationRow(c: StoredVoiciConversation, name: String, unread: Boolean, onClick: () -> Unit) {
+internal fun ConversationRow(c: StoredVoiciConversation, name: String, unread: Boolean, onClick: () -> Unit) {
     val last = c.ordered.lastOrNull()
     Row(
         Modifier

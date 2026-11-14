@@ -13359,8 +13359,8 @@
     "ctx": "core/BoxEventLabels.kt (Activity, server.relay.move-refused)"
   },
   "voici_tab": {
-    "en": "Messages",
-    "ctx": "voi.ci / Messages: bottom bar tab"
+    "en": "Social",
+    "ctx": "Social tab: bottom bar tab (the account's voi.ci page and its messages)"
   },
   "voici_publish_reason": {
     "en": "Publish your page",
@@ -13369,22 +13369,6 @@
   "voici_your_page": {
     "en": "Your page",
     "ctx": "voi.ci / Messages: Messages tab row"
-  },
-  "voici_published": {
-    "en": "Published",
-    "ctx": "voi.ci / Messages: page status"
-  },
-  "voici_not_published": {
-    "en": "Not published",
-    "ctx": "voi.ci / Messages: page status"
-  },
-  "voici_changes_not_published": {
-    "en": "%1$d changes not published",
-    "ctx": "voi.ci / Messages: page status, count"
-  },
-  "voici_one_change_not_published": {
-    "en": "1 change not published",
-    "ctx": "voi.ci / Messages: page status"
   },
   "voici_waiting_for_admin": {
     "en": "Waiting for an admin device to publish",
@@ -13405,10 +13389,6 @@
   "voici_visitor_name": {
     "en": "Visitor %1$s",
     "ctx": "voi.ci / Messages: a generated visitor name; %1$s is a 4-character code like 4F3A"
-  },
-  "voici_empty_messages": {
-    "en": "No messages yet. Turn on Accept messages on your page to get them.",
-    "ctx": "voi.ci / Messages: empty state"
   },
   "voici_empty_requests": {
     "en": "No message requests.",
@@ -13562,22 +13542,6 @@
     "en": "This is a message request. Reply or accept to move it to Messages.",
     "ctx": "voi.ci / Messages: thread banner"
   },
-  "voici_editor_title": {
-    "en": "Your page",
-    "ctx": "voi.ci / Messages: screen title"
-  },
-  "voici_warning": {
-    "en": "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
-    "ctx": "voi.ci / Messages: linkability warning (O1)"
-  },
-  "voici_photo": {
-    "en": "Photo",
-    "ctx": "voi.ci / Messages: section"
-  },
-  "voici_choose_photo": {
-    "en": "Choose photo",
-    "ctx": "voi.ci / Messages: button"
-  },
   "voici_remove_photo": {
     "en": "Remove photo",
     "ctx": "voi.ci / Messages: button"
@@ -13670,17 +13634,9 @@
     "en": "Not published yet",
     "ctx": "voi.ci / Messages: grayed item"
   },
-  "voici_preview": {
-    "en": "Preview",
-    "ctx": "voi.ci / Messages: button"
-  },
   "voici_publish": {
     "en": "Publish",
     "ctx": "voi.ci / Messages: button"
-  },
-  "voici_publishing": {
-    "en": "Publishing…",
-    "ctx": "voi.ci / Messages: status"
   },
   "voici_copy_link": {
     "en": "Copy link",
@@ -13742,22 +13698,6 @@
     "en": "Delete this post?",
     "ctx": "voi.ci / Messages: confirm"
   },
-  "voici_preview_title": {
-    "en": "Preview",
-    "ctx": "voi.ci / Messages: screen title"
-  },
-  "voici_send_me_a_message": {
-    "en": "Send me a message",
-    "ctx": "voi.ci / Messages: page preview button"
-  },
-  "voici_show_older": {
-    "en": "Show older posts",
-    "ctx": "voi.ci / Messages: page preview"
-  },
-  "voici_preview_note": {
-    "en": "Grayed parts aren't published yet.",
-    "ctx": "voi.ci / Messages: preview note"
-  },
   "voici_rules_title": {
     "en": "Page and message rules",
     "ctx": "voi.ci / Messages: sheet title"
@@ -13769,14 +13709,6 @@
   "voici_rules_agree": {
     "en": "I agree",
     "ctx": "voi.ci / Messages: button"
-  },
-  "voici_settings_title": {
-    "en": "Messages",
-    "ctx": "voi.ci / Messages: screen title"
-  },
-  "voici_settings_row_subtitle": {
-    "en": "Websites you're signed in to, inbox key, rules",
-    "ctx": "voi.ci / Messages: settings row"
   },
   "voici_sites": {
     "en": "Websites you're signed in to",
@@ -13801,10 +13733,6 @@
   "voici_rotate": {
     "en": "Rotate inbox key",
     "ctx": "voi.ci / Messages: button"
-  },
-  "voici_rotate_body": {
-    "en": "Messages sent before the change stay readable on this device. New messages use the new key.",
-    "ctx": "voi.ci / Messages: help"
   },
   "voici_rotate_done": {
     "en": "Inbox key changed",
@@ -14449,10 +14377,6 @@
     "en": "Only an admin device can publish your page.",
     "ctx": "voi.ci / Messages: why the Public switch is off on a device without the admin key"
   },
-  "voici_edit_page": {
-    "en": "Edit page",
-    "ctx": "voi.ci / Messages: header link that opens the full page editor"
-  },
   "voici_changes_pending": {
     "en": {
       "one": "%1$d change not published",
@@ -14983,5 +14907,105 @@
   "the_server_refused_this_change_check_2": {
     "en": "The server refused this change. Check this phone's clock and try again.",
     "ctx": "viewmodels/OutboundProxyOrder.kt:78 (prose)"
+  },
+  "voici_profile": {
+    "en": "Profile",
+    "ctx": "Social tab: the switch under the title, the page side"
+  },
+  "voici_page_options": {
+    "en": "Page options",
+    "ctx": "Social tab: the ⋯ button and its sheet title"
+  },
+  "voici_add_display_name": {
+    "en": "Add a display name.",
+    "ctx": "Social tab: the display name was left empty"
+  },
+  "voici_add_photo": {
+    "en": "Add photo",
+    "ctx": "Social tab: the photo's pencil when there is no photo"
+  },
+  "voici_change_photo": {
+    "en": "Change photo",
+    "ctx": "Social tab: the photo's pencil"
+  },
+  "voici_done": {
+    "en": "Done",
+    "ctx": "Social tab: ends editing a field, closes a sheet"
+  },
+  "voici_edit_name": {
+    "en": "Edit display name",
+    "ctx": "Social tab: the display name's pencil (screen reader)"
+  },
+  "voici_edit_bio": {
+    "en": "Edit bio",
+    "ctx": "Social tab: the bio's pencil (screen reader)"
+  },
+  "voici_add_bio": {
+    "en": "Add a short bio",
+    "ctx": "Social tab: shown where the bio goes while it is empty"
+  },
+  "voici_edit_links": {
+    "en": "Edit links",
+    "ctx": "Social tab: under the page's links"
+  },
+  "voici_no_posts": {
+    "en": "No posts yet.",
+    "ctx": "Social tab: the page has no posts"
+  },
+  "voici_post_options": {
+    "en": "Post options",
+    "ctx": "Social tab: a post's ⋯ menu (screen reader)"
+  },
+  "voici_remove_link_cards": {
+    "en": "Remove link cards",
+    "ctx": "Social tab: a post's menu, drops the link previews"
+  },
+  "voici_add": {
+    "en": "Add",
+    "ctx": "Social tab: Add link dialog button"
+  },
+  "voici_one_email_link": {
+    "en": "A page can have one email link.",
+    "ctx": "Social tab: Add link refused"
+  },
+  "voici_link_label_problem": {
+    "en": "Give the link a short label (40 characters at most).",
+    "ctx": "Social tab: Add link refused"
+  },
+  "voici_rotate_footer": {
+    "en": "New messages are sealed to a new key. This device keeps reading the old ones.",
+    "ctx": "Page options: under Rotate inbox key"
+  },
+  "voici_remove_page": {
+    "en": "Remove page",
+    "ctx": "Page options: takes the page off voi.ci (red)"
+  },
+  "voici_rotate_confirm_title": {
+    "en": "Rotate your inbox key?",
+    "ctx": "Page options: confirm before rotating"
+  },
+  "voici_rotate_confirm_body": {
+    "en": "Your page is published again with the new key.",
+    "ctx": "Page options: confirm before rotating"
+  },
+  "voici_rotate_short": {
+    "en": "Rotate",
+    "ctx": "Page options: confirm button"
+  },
+  "voici_publishing_page": {
+    "en": "Publishing your page…",
+    "ctx": "Social tab: the publish bar while it signs"
+  },
+  "voici_reply_footer": {
+    "en": "Your conversations with other pages are on voi.ci.",
+    "ctx": "Social tab Messages: under the reply notices"
+  },
+  "voici_segment_conversations": {
+    "en": "Conversations",
+    "ctx": "Social tab Messages: segment"
+  },
+  "voici_empty_messages_options": {
+    "en": "No messages yet. Turn on Accept messages in Page options to get them.",
+    "ctx": "Social tab Messages: empty list"
   }
 }
