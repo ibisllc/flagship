@@ -202,6 +202,8 @@ export type RateLimitEndpoint =
   // the requests themselves. A device orders about twice in 60 days and polls every 5 s while one runs.
   | "issuance-order"
   | "issuance-poll"
+  // A box asks which of its certificates the issuance service revoked, a few times a day.
+  | "issuance-revoked"
   // voi.ci Messages (docs/voici-and-messages.md §9.4): a device's request for a pseudonym attestation (signed; the
   // per-account daily allowance of new recipients is counted in D1 by the handler), the unattested-tier enrollments
   // per address (charged by the handler), and reports (anonymous; the address is counted here, never stored).
@@ -467,6 +469,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   ],
   "issuance-order": [{ axis: "ip", limit: 30, windowSec: 3600 }],
   "issuance-poll": [{ axis: "ip", limit: 240, windowSec: 60 }],
+  "issuance-revoked": [{ axis: "ip", limit: 60, windowSec: 3600 }],
   "messages-attest": [
     { axis: "ip", limit: 30, windowSec: 3600 },
     { axis: "usernameHash", limit: 60, windowSec: 3600 },
@@ -712,6 +715,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/(?:serving-policy|renewal-delegations)$/.test(pathname)) return "serving-signed";
   if (m === "POST" && pathname === "/api/certificates/orders") return "issuance-order";
   if (m === "GET" && /^\/api\/certificates\/orders\/[0-9a-f]{32}$/.test(pathname)) return "issuance-poll";
+  if (m === "POST" && pathname === "/api/certificates/revoked") return "issuance-revoked";
   if (m === "POST" && pathname === "/api/time") return "signed-time";
   if (m === "POST" && /^\/api\/dev\/sample-user\/[^/]+\/voici-example-page$/.test(pathname)) return "demo-example-page";
   if (m === "POST" && pathname === "/api/update-receipts") return "update-receipt";

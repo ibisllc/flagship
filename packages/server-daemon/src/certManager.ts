@@ -53,6 +53,18 @@ export class CertManager implements AlpnChallengeServer {
     }
   }
 
+  /** Stop serving the app certificate (the CA revoked it): its names get no certificate until a new one is in. */
+  dropReal(): void {
+    this.real = null;
+    this.realX509 = null;
+    this.notAfterMs = 0;
+  }
+
+  /** Stop serving the control certificate (the CA revoked it). */
+  dropControl(): void {
+    this.control = null;
+  }
+
   /** Install (or replace) the certificate served for exactly `name`, the box's control name. */
   installControl(name: string, cert: CertMaterial, notAfterMs: number): void {
     this.control = { name: name.toLowerCase(), cert, notAfterMs };

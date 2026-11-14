@@ -90,8 +90,10 @@ const RE_ORDER = /^\/api\/certificates\/orders\/([0-9a-f]{32})$/;
 export const ISSUANCE_ORDERS_PATH = "/api/certificates/orders";
 export const ISSUANCE_ACCOUNT_PATH = "/api/certificates/account";
 export const ISSUANCE_ADMIN_REVOKE_PATH = "/api/certificates/admin/revoke";
+/** Which of a device's certificates the service revoked: the box drops one it still serves (§6). */
+export const ISSUANCE_REVOKED_PATH = "/api/certificates/revoked";
 export function isIssuancePath(path: string): boolean {
-  return path === ISSUANCE_ORDERS_PATH || path === ISSUANCE_ACCOUNT_PATH || path === ISSUANCE_ADMIN_REVOKE_PATH || RE_ORDER.test(path);
+  return path === ISSUANCE_ORDERS_PATH || path === ISSUANCE_ACCOUNT_PATH || path === ISSUANCE_ADMIN_REVOKE_PATH || path === ISSUANCE_REVOKED_PATH || RE_ORDER.test(path);
 }
 
 const POLL_MS = 5_000;
@@ -420,9 +422,37 @@ export async function tryIssuanceRoute(request: Request, env: IssuanceEnv, deps:
     if (!env.FLAGSHIP_ADMIN_SECRET || !constantTimeEqual(secret, env.FLAGSHIP_ADMIN_SECRET)) return json({ error: "Not authorized.", code: "unauthorized" }, 401);
     return adminRevoke(s, request);
   }
+  if (path === ISSUANCE_REVOKED_PATH && method === "POST") return revokedCertificates(s, request);
   const m = path.match(RE_ORDER);
   if (m && method === "GET") return getOrder(s, m[1]!);
   return null;
+}
+
+/**
+ * `POST /api/certificates/revoked` `{ device, sha256: [leaf SHA-256 hex, ≤ 4] }` → `{ revoked: [...] }`: which of the
+ * leaves the box serves this service revoked (or queued to revoke) for that device. Unsigned like a CRL: it says only
+ * whether a certificate the caller already holds is revoked. The box drops one that is and orders anew.
+ */
+async function revokedCertificates(s: Service, request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as { device?: unknown; sha256?: unknown } | null;
+  const hashes = Array.isArray(body?.sha256) ? body.sha256 : null;
+  if (typeof body?.device !== "string" || !/^[0-9a-f]{64}$/.test(body.device) || !hashes || hashes.length > 4 || !hashes.every((h) => typeof h === "string" && /^[0-9a-f]{64}$/.test(h))) {
+    return json({ error: "Expected { device, sha256: [hex] }.", code: "issuance-malformed" }, 400);
+  }
+  const rows = await s.db
+    .prepare(
+      "SELECT r.leaf_b64 FROM certificate_revocations r JOIN certificate_orders o ON o.order_id = r.order_id " +
+        "WHERE o.device_pub = ? AND r.status IN ('queued', 'revoked') ORDER BY r.created_at DESC LIMIT 50",
+    )
+    .bind(body.device)
+    .all<{ leaf_b64: string }>();
+  const want = new Set(hashes as string[]);
+  const revoked: string[] = [];
+  for (const r of rows.results ?? []) {
+    const h = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", base64ToBytes(r.leaf_b64))));
+    if (want.has(h) && !revoked.includes(h)) revoked.push(h);
+  }
+  return json({ revoked }, 200);
 }
 
 function parseOrder(v: unknown): CertificateOrder | null {

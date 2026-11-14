@@ -12,7 +12,7 @@ import { X509Certificate } from "node:crypto";
 import { D1Storage, type D1Database } from "@flagship/storage";
 import { ed, signServerWildcardGrant } from "@flagship/protocol";
 import { createSqliteD1 } from "../../storage/tests/support/sqliteD1.js";
-import { tryIssuanceRoute } from "../../../apps/com/src/certificateIssuance.js";
+import { runIssuanceSweep, tryIssuanceRoute } from "../../../apps/com/src/certificateIssuance.js";
 import { accountKeyPem, FakeAcme, FakeDns, makeCsr } from "../../../apps/com/test/support/fakeAcme.js";
 import { CertManager } from "../src/certManager.js";
 import { PersistentAcmeStore } from "../src/acme/persistentStore.js";
@@ -70,7 +70,7 @@ async function world(o: { grant?: boolean; lose?: (req: { method: string; url: s
     });
   const orders = async () =>
     (await db.prepare("SELECT class, status, error_code FROM certificate_orders ORDER BY rowid").all<{ class: string; status: string; error_code: string | null }>()).results ?? [];
-  return { sqlite, ca, dns, clock, issuer, orders, close: () => sqlite.close() };
+  return { sqlite, db, env, deps, ca, dns, clock, issuer, orders, close: () => sqlite.close() };
 }
 
 /** keyd's real TLS key store behind the daemon's interfaces: keys never leave it, certificates are checked on install. */
@@ -89,6 +89,56 @@ function realKeyd() {
 }
 
 const sanOf = (pem: string) => new X509Certificate(pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/)![0]).subjectAltName;
+
+describe("a certificate the issuance service revoked (issuance-service.md §6)", () => {
+  it("is dropped by the box, which orders a new one; a removed box serves its app names nothing", async () => {
+    const w = await world({ grant: true });
+    const dir = await mkdtemp(join(tmpdir(), "box-certs-revoked-"));
+    try {
+      const cm = new CertManager();
+      const revoked: string[] = [];
+      const certs = new BoxCertificates({
+        issuer: w.issuer(),
+        serverFqdn: SERVER,
+        certManager: cm,
+        store: new PersistentAcmeStore(dir),
+        now: () => w.clock.t,
+        random: () => 0,
+        onRevoked: (cls) => revoked.push(cls),
+      });
+      await certs.tick();
+      const first = cm.currentCertPem()!;
+      expect(w.ca.newOrders).toBe(2);
+
+      // The service revokes the app certificate (the sweep's authority-lost path) without the box being removed.
+      const leaf = Buffer.from(new X509Certificate(first).raw).toString("base64url");
+      await w.db
+        .prepare("INSERT INTO certificate_revocations (order_id, leaf_b64, reason, status, attempts, created_at, updated_at) SELECT order_id, ?, 'authority-lost', 'revoked', 1, ?, ? FROM certificate_orders WHERE class = 'apps'")
+        .bind(leaf, w.clock.t, w.clock.t)
+        .run();
+      await certs.tick();
+      expect(revoked).toEqual(["apps"]);
+      expect(w.ca.newOrders).toBe(3);
+      expect(cm.currentCertPem()).not.toBe(first);
+      expect(cm.contextFor(`app.${SERVER}`)).not.toBeNull();
+      // Asked again only a few hours later.
+      await certs.tick();
+      expect(revoked).toEqual(["apps"]);
+
+      // The box is removed: the sweep revokes both certificates, the box drops them and gets no new one.
+      await w.db.prepare("UPDATE servers SET revoked_at = ? WHERE server_domain = ?").bind(w.clock.t, SERVER).run();
+      await runIssuanceSweep(w.env, w.deps);
+      w.clock.t += 7 * 3_600_000;
+      await certs.tick();
+      expect(revoked.sort()).toEqual(["apps", "apps", "control"]);
+      expect(cm.contextFor(`app.${SERVER}`)).toBeNull();
+      expect(cm.contextFor(SERVER)).toBeNull();
+    } finally {
+      w.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("box certificates through the issuance service", () => {
   it("gets a control and an app certificate, serves each by name, and reuses them across a restart", async () => {

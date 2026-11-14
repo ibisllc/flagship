@@ -1,3 +1,4 @@
+import { createHash, X509Certificate } from "node:crypto";
 import type { CertManager, CertMaterial } from "../certManager.js";
 import type { PersistentAcmeStore } from "./persistentStore.js";
 import { IssuanceDeferred, IssuanceRefused, type BoxCertClass, type IssuedCertificate, type ServiceIssuer } from "./serviceIssuer.js";
@@ -29,7 +30,7 @@ interface Held {
 }
 
 export interface BoxCertificatesOptions {
-  issuer: Pick<ServiceIssuer, "issue" | "names"> & Partial<Pick<ServiceIssuer, "hasPending">>;
+  issuer: Pick<ServiceIssuer, "issue" | "names"> & Partial<Pick<ServiceIssuer, "hasPending" | "revoked">>;
   serverFqdn: string;
   certManager: CertManager;
   /** Classic: the PEM store (key + chain in this process). */
@@ -38,6 +39,8 @@ export interface BoxCertificatesOptions {
   keyd?: KeydCertSlots;
   onInstalled?(cls: BoxCertClass, cert: CertMaterial, notAfter: number, names: string[]): void;
   onAttemptFailed?(cls: BoxCertClass, attempt: number, error: string): void;
+  /** The issuance service revoked a certificate this box held: it was dropped and a new one is ordered. */
+  onRevoked?(cls: BoxCertClass): void;
   now?: () => number;
   random?: () => number;
   /** Bound on each keyd call (default 30 s): no keyd answer may hold the renewal lock. */
@@ -52,6 +55,8 @@ const NO_SERVING_RETRY_MS = 3_600_000;
 const RESUME_RETRY_MS = 60_000;
 const KEYD_TIMEOUT_MS = 30_000;
 const UNTAKEN_TRIES = 5;
+/** How often the box asks whether the issuance service revoked a certificate it serves (§6). */
+export const REVOCATION_CHECK_MS = 6 * 3_600_000;
 const CLASSES: readonly BoxCertClass[] = ["control", "apps"];
 const storeKey = (cls: BoxCertClass, fqdn: string) => `${cls}.${fqdn}`;
 
@@ -68,6 +73,7 @@ export class BoxCertificates {
   /** Issued by `.com` but not yet taken into keyd/the store: installed again before anything new is ordered. */
   private untaken: Record<BoxCertClass, { cert: IssuedCertificate; tries: number } | null> = { control: null, apps: null };
   private classes: readonly BoxCertClass[] = CLASSES;
+  private nextRevocationCheck = 0;
 
   constructor(private readonly o: BoxCertificatesOptions) {
     this.jitter = Math.floor((o.random ?? Math.random)() * RENEWAL_JITTER_MS);
@@ -113,6 +119,12 @@ export class BoxCertificates {
         // keyd does not keep notBefore; Let's Encrypt's lifetime is 90 days.
         if (best) this.held[cls] = { names: want, chainPem: "", privateKeyPem: "", handle: best.handle, notBefore: best.notAfter! - 90 * 86_400_000, notAfter: best.notAfter! };
       }
+      // keyd lists no chains; the one it serves by default gives its chain, so the revocation check covers it.
+      const active = await this.keydCall("tls.active", () => this.o.keyd!.active()).catch(() => null);
+      for (const cls of CLASSES) {
+        const h = this.held[cls];
+        if (h && active && h.handle === active.handle) h.chainPem = active.chainPem;
+      }
       await this.activateKeyd();
       return;
     }
@@ -131,6 +143,7 @@ export class BoxCertificates {
     this.running ??= (async () => {
       try {
         if (this.unconfirmed && this.o.keyd) await this.activateKeyd().catch((e: Error) => console.warn(`[certs] keyd: ${e.message}`));
+        await this.checkRevoked();
         for (const cls of this.classes) await this.maybeRenew(cls);
       } finally {
         this.running = null;
@@ -181,6 +194,50 @@ export class BoxCertificates {
         (e: unknown) => (clearTimeout(t), reject(e instanceof Error ? e : new Error(String(e)))),
       );
     });
+  }
+
+  /**
+   * The issuance service revokes at the CA what a box or device should no longer hold (issuance-service.md §6), but
+   * browsers rarely check, so the box asks every few hours and drops a revoked certificate itself: the classic path
+   * stops serving it at once, and either path orders a new one now (a revoked certificate is no longer the box's
+   * current one, so `.com` takes the order). A box `.com` removed gets none, and serves its app names nothing.
+   */
+  async checkRevoked(): Promise<void> {
+    const now = this.now();
+    if (!this.o.issuer.revoked || now < this.nextRevocationCheck) return;
+    const byHash = new Map<string, BoxCertClass>();
+    for (const cls of CLASSES) {
+      const h = this.held[cls];
+      const leaf = h?.chainPem ? leafSha256(h.chainPem) : null;
+      if (leaf) byHash.set(leaf, cls);
+    }
+    if (byHash.size === 0) return;
+    this.nextRevocationCheck = now + REVOCATION_CHECK_MS;
+    let revoked: string[];
+    try {
+      revoked = await this.o.issuer.revoked([...byHash.keys()]);
+    } catch (e) {
+      this.nextRevocationCheck = now + BACKOFF_BASE_MS;
+      console.warn(`[certs] could not ask which certificates were revoked: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    for (const hash of revoked) {
+      const cls = byHash.get(hash);
+      if (!cls) continue;
+      this.held[cls] = null;
+      this.untaken[cls] = null;
+      this.retry[cls] = { failures: 0, at: 0 };
+      if (!this.o.keyd) {
+        if (cls === "control") this.o.certManager.dropControl();
+        else this.o.certManager.dropReal();
+      }
+      console.warn(`[certs] the ${cls} certificate for ${this.o.serverFqdn} was revoked; dropped it and ordering a new one`);
+      try {
+        this.o.onRevoked?.(cls);
+      } catch {
+        /* observability */
+      }
+    }
   }
 
   private async maybeRenew(cls: BoxCertClass): Promise<void> {
@@ -296,6 +353,14 @@ export class BoxCertificates {
     } catch {
       /* observability */
     }
+  }
+}
+
+function leafSha256(chainPem: string): string | null {
+  try {
+    return createHash("sha256").update(new X509Certificate(chainPem).raw).digest("hex");
+  } catch {
+    return null;
   }
 }
 
