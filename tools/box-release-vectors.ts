@@ -9,7 +9,8 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { boxReleaseProblem, canonicalBoxRelease, signBoxRelease, type BoxReleaseOrder } from "../packages/protocol/src/boxRelease.js";
+import { boxReleaseProblem, canonicalBoxRelease, signBoxRelease, signBoxReleaseHybrid, verifyBoxReleaseHybrid, type BoxReleaseOrder } from "../packages/protocol/src/boxRelease.js";
+import { hybridSigKeygen } from "../packages/protocol/src/pqHybrid.js";
 import { ed } from "../packages/protocol/src/edSync.js";
 
 const OUT = resolve(import.meta.dirname, "..", "packages/protocol/test-vectors/box-release/vectors.json");
@@ -32,6 +33,14 @@ const sig = signBoxRelease(order, admin);
 const irkSig = ed.sign(canonicalBoxRelease(order), irkSeed);
 const other = { ...order, stkPubHex: hex(ed.getPublicKey(seed(0x44))) };
 
+const adminMldsaSeed = seed(0x55);
+const adminHybrid = hybridSigKeygen(adminSeed, adminMldsaSeed);
+const pq = signBoxReleaseHybrid(order, Uint8Array.from([...adminSeed, ...adminMldsaSeed]), { deterministic: true });
+const irkHybrid = hybridSigKeygen(irkSeed, seed(0x66));
+const irkPq = signBoxReleaseHybrid(order, Uint8Array.from([...irkSeed, ...seed(0x66)]), { deterministic: true });
+if (!verifyBoxReleaseHybrid(order, pq.signature, adminHybrid.publicKey)) throw new Error("hybrid vector does not verify");
+if (verifyBoxReleaseHybrid(order, irkPq.signature, adminHybrid.publicKey)) throw new Error("IRK hybrid verifies under the admin root");
+
 const refuse: Array<{ why: string; fields: unknown; problem: string }> = [
   { why: "upper-case domain", fields: { ...order, serverDomain: "Home.alice.flagship.services" }, problem: "domain" },
   { why: "separator in the domain", fields: { ...order, serverDomain: "home|x" }, problem: "domain" },
@@ -50,6 +59,16 @@ const out = {
     fields: order,
     canonical: new TextDecoder().decode(canonicalBoxRelease(order)),
     signatureHex: hex(sig),
+  },
+  hybrid: {
+    about: "The admin root's hybrid signature (hybrid-ed25519-mldsa65/v1, purpose flagship/box-release/v1) over the same canonical bytes, sent as `pqSignature`. Signed deterministically here; a client may sign hedged, the box verifies either. A strict box refuses an order without it.",
+    adminRootMldsaSeedHex: hex(adminMldsaSeed),
+    adminRootHybridPubHex: hex(adminHybrid.publicKey),
+    pqSignature: pq,
+    reject: [
+      { why: "the IRK's hybrid signature checked under the admin root's hybrid key", signatureHex: irkPq.signature, verifyUnder: hex(adminHybrid.publicKey) },
+      { why: "the admin root's hybrid signature checked under the IRK's hybrid key", signatureHex: pq.signature, verifyUnder: hex(irkHybrid.publicKey) },
+    ],
   },
   reject: [
     { why: "signed by the IRK, not the admin root", fields: order, signatureHex: hex(irkSig), verifyUnder: hex(admin.publicKey) },
