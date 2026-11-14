@@ -150,6 +150,7 @@ const ALLOWLIST_FILES = [
   "packages/control-plane/src/deviceCapabilityGrants.ts",
   "packages/control-plane/src/routing.ts",
   "packages/control-plane/src/authCode.ts",
+  "packages/control-plane/src/directAccess.ts",
 ];
 
 describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .com set", () => {
@@ -177,6 +178,7 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
       "deviceCapabilityGrants.ts|handleMintDeviceGrant",
       "routing.ts|handleRegisterRck",
       "authCode.ts|handleAuthCodeIssue",
+      "directAccess.ts|authorizeDirectOrder",
     ];
     for (const e of expected) expect(script).toContain(e);
   });
