@@ -8,6 +8,7 @@ import {
 import type {
   AuditEventStorage,
   AuthCodeStorage,
+  BoxClaimStorage,
   InstallPolicyFanoutStorage,
   PushTokenStorage,
   RoutingStorage,
@@ -20,6 +21,7 @@ import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
 import { clearLegacyAccountDns, type AccountDnsDeps } from "./accountDns.js";
 import { userZoneOf } from "@flagship/services-zone";
 import { setRoutingTargetFromRegistration } from "./routing.js";
+import { boxClaimRegisterGate } from "./boxClaim.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
@@ -30,6 +32,8 @@ const NONCE_HEX = /^[0-9a-f]{16,128}$/;
 export interface ServerRegisterDeps {
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
+  /** Retail claims: a box key the owner's phone pre-registered for this AuthCode is the only one admitted. */
+  boxClaims?: BoxClaimStorage;
   /** When wired, a real account's AuthCode must still pin its admin root. */
   usernames?: UsernameStorage;
   /** Optional. When provided, server registration also: (a) sets the
@@ -189,6 +193,10 @@ export async function handleServerRegister(
   }
   const age = now - r.issuedAt;
   if (age > maxAgeMs || age < -60_000) return forbidden("stale registration");
+
+  // Checked before the AuthCode is used, so a relay's box cannot burn the owner's code either.
+  const claimRefusal = await boxClaimRegisterGate(deps.boxClaims, authCode.serial, r.serverIdentityPubKey);
+  if (claimRefusal) return claimRefusal;
 
   const useResult = await validateAndUseAuthCode(deps.authCodes, authCode.serial, now);
   if (!useResult.ok) {

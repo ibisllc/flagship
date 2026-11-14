@@ -141,6 +141,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0132",
   // Direct access: owner-signed orders, box address updates, the fshp.app name registry, the `direct` certificate class.
   "0133",
+  // Retail box claims: the phone's pre-registered box key per AuthCode, and the blind remote-claim mailbox.
+  "0134",
   // UnifiedPush: push_tokens.platform may be 'unifiedpush' (table rebuilt for the CHECK).
   "0136",
   // voi.ci link-name changes say what they were (op) and whether they count; custom domains' 30-day lapse grace.

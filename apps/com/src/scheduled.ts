@@ -181,6 +181,8 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runIssuanceSweepCron(env, now);
     case "prune-update-receipts":
       return env.DB ? pruneUpdateReceipts(env.DB, now) : null;
+    case "prune-box-claim-mailbox":
+      return env.DB ? new D1Storage(env.DB).boxClaims.sweep(now.getTime()) : null;
     case "relay-probe":
       return runRelayProbeCron(env, now, { apex: env.CONTROL_APEX ?? "flagshipserver.com" });
     case "direct-names":

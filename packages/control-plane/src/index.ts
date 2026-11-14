@@ -11,6 +11,7 @@ export * from "./nameChange.js";
 export * from "./usersCheck.js";
 export * from "./authCode.js";
 export * from "./serverRegister.js";
+export * from "./boxClaim.js";
 export * from "./pubkeyCert.js";
 export * from "./routing.js";
 export * from "./installEvents.js";
