@@ -307,6 +307,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   required and opens in any account). Scheduled backups stay account-contained (proposal dropped). Owner wants ANY
   device of the account able to order a restore; today restore is admin-only (restore = adding a server, admin-only
   rule 2026-10-16). Asked the owner which way.
+- 2026-11-14 Owner: restores stay admin-only; Add a device gets a line "only admin devices manage backups" (agent
+  `0.4/backup-admin-note`). Restore INTO an existing server should merge the backup's apps (versioning of code + data
+  when the app exists): design agent `0.4/restore-merge` -> docs/restore-into-server.md. Wired fleet: routing setup
+  through .com is backwards; a small local helper on the laptop (LAN direct, needed for air-gapped) is fine: design
+  agent revising docs/retail-wired-fleet.md (Studio as the helper?, air-gapped dependency list).
 
 ## Resume point
 
