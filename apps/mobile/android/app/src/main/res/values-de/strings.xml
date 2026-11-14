@@ -3517,4 +3517,9 @@
     <string name="backup_account_key_unavailable">Der Schlüssel deines Kontos konnte dieses Backup nicht öffnen. Versuche es erneut oder gib seinen Passcode ein.</string>
     <string name="backup_account_key_doesnt_open">Der Schlüssel dieses Kontos öffnet dieses Backup nicht. Gib seinen Passcode ein, um es zu öffnen.</string>
     <string name="choose_where_this_servers_backups_go">Wähle, wohin die Backups dieses Servers gehen.</string>
+    <string name="firefox_extension">Firefox-Erweiterung</string>
+    <string name="let_this_browser_extension_check_your">Diese Browser-Erweiterung das Zertifikat deines Servers prüfen lassen</string>
+    <string name="this_phone_hasnt_checked_this_server">Dieses Telefon hat den Code dieses Servers noch nicht geprüft. Genehmige den Server zuerst auf diesem Telefon.</string>
+    <string name="this_server_needs_an_update_extension">Dieser Server braucht ein Update, bevor er eine Browser-Erweiterung koppeln kann.</string>
+    <string name="the_firefox_extension_gets_this_servers">Die Firefox-Erweiterung erhält die Adresse dieses Servers und den Schlüssel, den dieses Telefon geprüft hat, damit sie das Zertifikat des Servers prüfen kann.</string>
 </resources>

@@ -106,7 +106,9 @@ sealed interface DeepLink {
     data class ApproveBackupDownload(val serverFqdn: String, val archiveId: String, val requestId: String) : DeepLink
 
     /** A browser asking to become a remote: the QR on remote.<apex>, naming
-     *  only a relay session and the browser's key (see [RemoteApprovalLink]). */
+     *  only a relay session and the browser's key (see [RemoteApprovalLink]),
+     *  or the Flagship Firefox extension's pairing code ([ExtensionPairLink]);
+     *  the Remote screen tells them apart. */
     data class CompanionDockApproval(val rawLink: String) : DeepLink
 
     /** Flagship Studio's pairing QR, `https://flagshipserver.com/builder?c=<code>&k=<pk>`
@@ -208,7 +210,7 @@ sealed interface DeepLink {
             return parseHost(host, uri)
         }
 
-        private val APP_LINK_PATHS = listOf("join", "remote", "builder", "access", "invite", "invite-accept", "voici-sign-in")
+        private val APP_LINK_PATHS = listOf("join", "remote", "pair-extension", "builder", "access", "invite", "invite-accept", "voici-sign-in")
 
         /** `http(s)://<control host>/app/<route>[/<more>][?q]` ≡ `flagship://<route>[/<more>][?q]`. */
         private fun appRouteTwin(uri: Uri): Uri? {
@@ -298,6 +300,10 @@ sealed interface DeepLink {
                 // flagship://remote?s=<sid>&k=<pk> — the QR on remote.<apex>.
                 "remote" -> {
                     if (RemoteApprovalLink.parse(uri.toString()) != null) CompanionDockApproval(uri.toString()) else null
+                }
+                // flagship://pair-extension?s=<sid>&k=<pk> — the Firefox extension's code.
+                "pair-extension" -> {
+                    if (ExtensionPairLink.parse(uri.toString()) != null) CompanionDockApproval(uri.toString()) else null
                 }
                 "builder" -> {
                     if (params["c"].isNullOrEmpty() || BuilderPairing.parse(uri.toString()) == null) null

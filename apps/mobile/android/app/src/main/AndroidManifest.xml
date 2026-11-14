@@ -60,13 +60,16 @@
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/share" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/share/" />
                 <!-- QR codes and shared links (the old flagship:// forms below still
-                     open): the remote page's /remote?s=&k=, Studio's /builder?c=&k=,
+                     open): the remote page's /remote?s=&k=, the Firefox extension's
+                     /pair-extension?s=&k=, Studio's /builder?c=&k=,
                      the knock page's /access#server=&svc=&ref=&page= and a friend's
                      /invite-accept#server=&iid=&ref=&aid=&sig=&at= reply (filters match
                      the path only, so the fragment and older ?query forms both open). Without the
                      app, the site shows a "get the app" page at each path. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote/" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/pair-extension" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/pair-extension/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/voici-sign-in" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/voici-sign-in/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/builder" />
@@ -126,6 +129,14 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="remote" />
+            </intent-filter>
+            <!-- The Flagship Firefox extension's pairing code in its custom-scheme
+                 form (flagship://pair-extension?s=<sid>&k=<pk>). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="pair-extension" />
             </intent-filter>
             <!-- Older Studio builds' pairing QR (flagship://builder?c=<code>&k=<pk>). -->
             <intent-filter>

@@ -52,6 +52,7 @@ private class FakeBrowser {
     val sk: ByteArray = X25519.generatePrivateKey()
     val sid: String = Base64URL.encode(ByteArray(16) { (it * 3).toByte() })
     val qr = "flagship://remote?s=$sid&k=${Base64URL.encode(X25519.publicFromPrivate(sk))}"
+    val extensionQr = "https://flagshipserver.com/pair-extension?s=$sid&k=${Base64URL.encode(X25519.publicFromPrivate(sk))}"
 
     private fun shared(phonePk: String) = X25519.computeSharedSecret(sk, Base64URL.decode(phonePk)!!)
 
@@ -77,6 +78,7 @@ class CompanionDockViewModelTest {
         servers: List<RemoteServer>,
         relay: QrRelayClient = FakeRelay(),
         authenticate: suspend (String) -> Unit = {},
+        pins: Map<String, String> = emptyMap(),
     ) = CompanionDockViewModel(
         serversProvider = { servers },
         username = { "alice" },
@@ -84,6 +86,7 @@ class CompanionDockViewModelTest {
         scope = backgroundScope,
         confirmGateMs = 0,
         authenticate = authenticate,
+        pinnedServerKey = { pins[it] },
     )
 
     private fun TestScope.vm(client: ScreensClient) = vm(listOf(RemoteServer(home, client)))
@@ -252,5 +255,114 @@ class CompanionDockViewModelTest {
         val r = client.companionRevoke(CompanionRevokeRequest(tokenPrefix = "xyz"))
         assertTrue(r.ok)
         assertEquals(listOf("xyz"), client.companionRevokeCalls)
+    }
+
+    private val officeStk = "AB".repeat(32)
+
+    @Test fun extension_sealsTheTicketAndThisPhonesPin() = runTest {
+        val homeClient = MockScreensClient(simulatedLatencyMs = 0)
+        val officeClient = MockScreensClient(simulatedLatencyMs = 0)
+        val relay = FakeRelay()
+        val reasons = mutableListOf<String>()
+        val vm = vm(
+            listOf(RemoteServer(home, homeClient), RemoteServer(office, officeClient)),
+            relay = relay,
+            authenticate = { reasons += it },
+            pins = mapOf("office.alice.flagship.services" to officeStk),
+        )
+        val browser = FakeBrowser()
+
+        assertTrue(vm.stageApproval(browser.extensionQr))
+        runCurrent()
+        assertEquals(CompanionDockViewModel.Mode.EXTENSION, vm.mode.first())
+        val (_, phonePk) = relay.hello!!
+        val matching = vm.phase.first() as CompanionDockViewModel.Phase.Matching
+        assertEquals(browser.matchCode(phonePk), matching.matchCode)
+
+        vm.selectServer("p2")
+        vm.approve().join()
+
+        assertEquals(listOf("Let this browser extension check your server's certificate"), reasons)
+        assertEquals(0, homeClient.companionMintExtensionCalls)
+        assertEquals(1, officeClient.companionMintExtensionCalls)
+        assertTrue(officeClient.companionMintCalls.isEmpty())
+        val payload = browser.open(phonePk, relay.delivered!!)
+        assertEquals(
+            listOf("kind", "podBaseUrl", "serverDomain", "stkPubHex", "ticketId", "ticketSecret", "username"),
+            payload.keys.toList(),
+        )
+        assertEquals("flagship/extension-pair/v1", payload["kind"]!!.jsonPrimitive.content)
+        assertEquals("https://office.alice.flagship.services", payload["podBaseUrl"]!!.jsonPrimitive.content)
+        assertEquals("office.alice.flagship.services", payload["serverDomain"]!!.jsonPrimitive.content)
+        assertEquals("ab".repeat(32), payload["stkPubHex"]!!.jsonPrimitive.content)
+        assertEquals("alice", payload["username"]!!.jsonPrimitive.content)
+        assertTrue(Regex("^[0-9a-f]{32}$").matches(payload["ticketId"]!!.jsonPrimitive.content))
+        assertTrue(Regex("^[0-9a-f]{64}$").matches(payload["ticketSecret"]!!.jsonPrimitive.content))
+        assertEquals(CompanionDockViewModel.Phase.Connected("office"), vm.phase.first())
+    }
+
+    @Test fun extension_unpinnedServerIsRefused() = runTest {
+        val client = MockScreensClient(simulatedLatencyMs = 0)
+        val relay = FakeRelay()
+        val vm = vm(listOf(RemoteServer(home, client)), relay = relay, pins = mapOf("office.alice.flagship.services" to officeStk))
+        assertTrue(vm.stageApproval(FakeBrowser().extensionQr))
+        runCurrent()
+        vm.approve().join()
+        assertEquals(0, client.companionMintExtensionCalls)
+        assertNull(relay.delivered)
+        assertEquals(CompanionDockViewModel.Phase.Idle, vm.phase.first())
+        assertEquals(
+            "This phone hasn't checked this server's code yet. Approve the server on this phone first.",
+            vm.approvalError.first(),
+        )
+    }
+
+    @Test fun extension_olderServerAsksForAnUpdate() = runTest {
+        val update = "This server needs an update before it can pair a browser extension."
+        for (answer in listOf<() -> com.flagshipserver.app.api.CompanionMintExtensionTicketResponse>(
+            { throw ScreensError.Http(404, "not found") },
+            { com.flagshipserver.app.api.CompanionMintExtensionTicketResponse("ab".repeat(16), "cd".repeat(32), 1L, scope = null) },
+            { com.flagshipserver.app.api.CompanionMintExtensionTicketResponse("ab".repeat(16), "cd".repeat(32), 1L, scope = "remote") },
+        )) {
+            val client = MockScreensClient(simulatedLatencyMs = 0).apply { companionMintExtensionFixture = answer }
+            val relay = FakeRelay()
+            val vm = vm(listOf(RemoteServer(home, client)), relay = relay, pins = mapOf("home.alice.flagship.services" to officeStk))
+            assertTrue(vm.stageApproval(FakeBrowser().extensionQr))
+            runCurrent()
+            vm.approve().join()
+            assertEquals(1, client.companionMintExtensionCalls)
+            assertNull(relay.delivered)
+            assertEquals(update, vm.approvalError.first())
+        }
+    }
+
+    @Test fun remoteCode_staysInRemoteMode() = runTest {
+        val relay = FakeRelay()
+        val client = MockScreensClient(simulatedLatencyMs = 0)
+        val vm = vm(listOf(RemoteServer(home, client)), relay = relay)
+        assertTrue(vm.stageApproval(FakeBrowser().extensionQr))
+        runCurrent()
+        vm.cancel()
+        assertTrue(vm.stageApproval(FakeBrowser().qr))
+        runCurrent()
+        assertEquals(CompanionDockViewModel.Mode.REMOTE, vm.mode.first())
+        vm.approve().join()
+        assertEquals(1, client.companionMintCalls.size)
+        assertEquals(0, client.companionMintExtensionCalls)
+    }
+
+    @Test fun listLabel_extensionRowsReadFirefoxExtension() {
+        val ext = CompanionSummary("a", 0L, 0L, 1L, userAgent = "Mozilla/5.0 Firefox", kind = "extension")
+        val remote = CompanionSummary("b", 0L, 0L, 1L, userAgent = "Mozilla/5.0", kind = "remote")
+        val old = CompanionSummary("c", 0L, 0L, 1L, userAgent = "Mozilla/5.0")
+        assertEquals("Firefox extension", companionDetailLine(ext))
+        assertEquals("Mozilla/5.0", companionDetailLine(remote))
+        assertEquals("Mozilla/5.0", companionDetailLine(old))
+        val decoded = Json { ignoreUnknownKeys = true }.decodeFromString(
+            CompanionListResponse.serializer(),
+            """{"companions":[{"tokenPrefix":"a","redeemedAt":0,"lastSeenMs":0,"expiresAt":1,"userAgent":null,"kind":"extension"},{"tokenPrefix":"b","redeemedAt":0,"lastSeenMs":0,"expiresAt":1,"userAgent":"UA"}]}""",
+        )
+        assertTrue(decoded.companions[0].isExtension)
+        assertNull(decoded.companions[1].kind)
     }
 }

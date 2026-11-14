@@ -3514,5 +3514,10 @@
   "no_camera_on_the_other_device_send_link": "另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。",
   "backup_account_key_unavailable": "无法使用你的账户密钥打开此备份。请重试，或输入其密码。",
   "backup_account_key_doesnt_open": "此账户的密钥无法打开此备份。请输入其密码来打开。",
-  "choose_where_this_servers_backups_go": "选择此服务器的备份存放位置。"
+  "choose_where_this_servers_backups_go": "选择此服务器的备份存放位置。",
+  "firefox_extension": "Firefox 扩展",
+  "let_this_browser_extension_check_your": "允许此浏览器扩展核对你的服务器证书",
+  "this_phone_hasnt_checked_this_server": "此手机尚未核对此服务器的代码。请先在此手机上批准该服务器。",
+  "this_server_needs_an_update_extension": "此服务器需要更新后才能配对浏览器扩展。",
+  "the_firefox_extension_gets_this_servers": "Firefox 扩展会收到此服务器的地址和此手机核对过的密钥，以便核对服务器的证书。"
 }

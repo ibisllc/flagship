@@ -3514,5 +3514,10 @@
   "no_camera_on_the_other_device_send_link": "L’autre appareil n’a pas de caméra ? Envoyez-lui ce lien et collez-le là-bas.",
   "backup_account_key_unavailable": "Impossible d’utiliser la clé de votre compte pour ouvrir cette sauvegarde. Réessayez ou saisissez son code d’accès.",
   "backup_account_key_doesnt_open": "La clé de ce compte n’ouvre pas cette sauvegarde. Saisissez son code d’accès pour l’ouvrir.",
-  "choose_where_this_servers_backups_go": "Choisissez où vont les sauvegardes de ce serveur."
+  "choose_where_this_servers_backups_go": "Choisissez où vont les sauvegardes de ce serveur.",
+  "firefox_extension": "Extension Firefox",
+  "let_this_browser_extension_check_your": "Autoriser cette extension de navigateur à vérifier le certificat de votre serveur",
+  "this_phone_hasnt_checked_this_server": "Ce téléphone n’a pas encore vérifié le code de ce serveur. Approuvez d’abord le serveur sur ce téléphone.",
+  "this_server_needs_an_update_extension": "Ce serveur doit être mis à jour avant de pouvoir associer une extension de navigateur.",
+  "the_firefox_extension_gets_this_servers": "L’extension Firefox reçoit l’adresse de ce serveur et la clé que ce téléphone a vérifiée, pour pouvoir vérifier le certificat du serveur."
 }

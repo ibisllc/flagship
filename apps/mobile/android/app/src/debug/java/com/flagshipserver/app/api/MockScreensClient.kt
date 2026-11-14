@@ -1516,6 +1516,26 @@ class MockScreensClient(
         )
     }
 
+    /** Records each `companionMintExtensionTicket` call. */
+    var companionMintExtensionCalls: Int = 0
+
+    /** Null: a box that knows the route. Set to answer like an older box (404) or otherwise. */
+    var companionMintExtensionFixture: (() -> CompanionMintExtensionTicketResponse)? = null
+
+    override suspend fun companionMintExtensionTicket(): CompanionMintExtensionTicketResponse {
+        tick()
+        companionMintExtensionCalls += 1
+        companionMintExtensionFixture?.let { return it() }
+        val id = (1..16).joinToString("") { "%02x".format(kotlin.random.Random.nextInt(0, 256)) }
+        val secret = (1..32).joinToString("") { "%02x".format(kotlin.random.Random.nextInt(0, 256)) }
+        return CompanionMintExtensionTicketResponse(
+            ticketId = id,
+            ticketSecret = secret,
+            expiresAt = now() + 60_000L,
+            scope = "extension",
+        )
+    }
+
     override suspend fun companionList(): CompanionListResponse {
         tick()
         return companionListFixture ?: CompanionListResponse(companions = emptyList())

@@ -3451,5 +3451,10 @@
   "no_camera_on_the_other_device_send_link": "fb69635d1b27",
   "backup_account_key_unavailable": "e0e59b2714a2",
   "backup_account_key_doesnt_open": "296993e6ee1a",
-  "choose_where_this_servers_backups_go": "ba0b18a1f6b8"
+  "choose_where_this_servers_backups_go": "ba0b18a1f6b8",
+  "firefox_extension": "90762a153d5a",
+  "let_this_browser_extension_check_your": "dcda353b4daa",
+  "this_phone_hasnt_checked_this_server": "8e7a341aa85f",
+  "this_server_needs_an_update_extension": "81ac3423ad7d",
+  "the_firefox_extension_gets_this_servers": "ace55183f6c1"
 }

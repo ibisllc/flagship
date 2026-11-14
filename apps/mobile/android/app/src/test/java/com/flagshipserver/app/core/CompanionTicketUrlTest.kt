@@ -58,4 +58,56 @@ class CompanionTicketUrlTest {
             json,
         )
     }
+
+    @Test fun extensionCodeParses() {
+        for (raw in listOf(
+            "https://flagshipserver.com/pair-extension?s=$sid&k=$pk",
+            "https://flagshipserver.com/pair-extension/?s=$sid&k=$pk",
+            "flagship://pair-extension?s=$sid&k=$pk",
+        )) {
+            val parsed = ExtensionPairLink.parse(raw)
+            assertNotNull(raw, parsed)
+            assertEquals(sid, parsed!!.sid)
+            assertEquals(32, parsed.browserPublicKey.size)
+        }
+    }
+
+    @Test fun extensionAndRemoteCodesNeverCross() {
+        for (raw in listOf(
+            "https://flagshipserver.com/remote?s=$sid&k=$pk",
+            "flagship://remote?s=$sid&k=$pk",
+        )) assertNull(raw, ExtensionPairLink.parse(raw))
+        for (raw in listOf(
+            "https://flagshipserver.com/pair-extension?s=$sid&k=$pk",
+            "flagship://pair-extension?s=$sid&k=$pk",
+        )) assertNull(raw, RemoteApprovalLink.parse(raw))
+        assertNull(ExtensionPairLink.parse("https://flagshipserver.com/pair-extension-x?s=$sid&k=$pk"))
+        assertNull(ExtensionPairLink.parse("https://flagshipserver.com/remote/pair-extension?s=$sid&k=$pk"))
+    }
+
+    @Test fun extensionCodeRefusesOtherHostsAndShapes() {
+        assertNull(ExtensionPairLink.parse("https://evil.example/pair-extension?s=$sid&k=$pk"))
+        assertNull(ExtensionPairLink.parse("http://flagshipserver.com/pair-extension?s=$sid&k=$pk"))
+        assertNull(ExtensionPairLink.parse("https://home.alice.flagship.services/pair-extension?s=$sid&k=$pk"))
+        // A 16-byte sid only, a 32-byte key only.
+        val longSid = Base64URL.encode(ByteArray(24) { 1 })
+        assertNull(ExtensionPairLink.parse("https://flagshipserver.com/pair-extension?s=$longSid&k=$pk"))
+        assertNull(ExtensionPairLink.parse("https://flagshipserver.com/pair-extension?s=short&k=$pk"))
+        assertNull(ExtensionPairLink.parse("https://flagshipserver.com/pair-extension?s=$sid&k=${Base64URL.encode(ByteArray(31))}"))
+        assertNull(ExtensionPairLink.parse("https://flagshipserver.com/pair-extension?s=$sid"))
+    }
+
+    @Test fun extensionPayloadKeysAreSorted() {
+        val json = Json { encodeDefaults = true }.encodeToString(
+            ExtensionPairPayload.serializer(),
+            ExtensionPairPayload(
+                podBaseUrl = "U", serverDomain = "D", stkPubHex = "K",
+                ticketId = "T", ticketSecret = "S", username = "N",
+            ),
+        )
+        assertEquals(
+            """{"kind":"flagship/extension-pair/v1","podBaseUrl":"U","serverDomain":"D","stkPubHex":"K","ticketId":"T","ticketSecret":"S","username":"N"}""",
+            json,
+        )
+    }
 }

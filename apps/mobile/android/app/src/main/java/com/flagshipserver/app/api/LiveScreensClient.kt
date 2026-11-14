@@ -704,6 +704,14 @@ class LiveScreensClient(
         return request("/api/screens/companion/mint-ticket", CompanionMintTicketResponse.serializer(), "POST", body)
     }
 
+    override suspend fun companionMintExtensionTicket(): CompanionMintExtensionTicketResponse =
+        request(
+            "/api/screens/companion/mint-extension-ticket",
+            CompanionMintExtensionTicketResponse.serializer(),
+            "POST",
+            "{}".toByteArray(),
+        )
+
     override suspend fun companionList(): CompanionListResponse =
         request("/api/screens/companion/list", CompanionListResponse.serializer())
 

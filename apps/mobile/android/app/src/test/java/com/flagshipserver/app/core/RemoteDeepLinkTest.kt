@@ -43,4 +43,18 @@ class RemoteDeepLinkTest {
         assertNull(DeepLink.parse(Uri.parse("flagship://dock?server=home.alice.flagship.services&request=$request&code=$code")))
         assertNull(DeepLink.parse(Uri.parse("flagship://remote?s=x")))
     }
+
+    @Test fun extensionCodeRoutesToTheRemoteScreen() {
+        val q = link.substringAfter("?")
+        for (raw in listOf(
+            "https://flagshipserver.com/pair-extension?$q",
+            "https://flagshipserver.com/pair-extension/?$q",
+            "flagship://pair-extension?$q",
+        )) {
+            assertEquals(raw, DeepLink.CompanionDockApproval(raw), DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, DeepLink.CompanionDockApproval(raw), AppLink.resolve(Uri.parse(raw)))
+        }
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/pair-extension?$q")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/pair-extension?s=x")))
+    }
 }
