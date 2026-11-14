@@ -116,11 +116,19 @@ describe("the verifier keeps routing in step with the tier", () => {
     expect(pushed).toEqual([]);
   });
 
-  it("suspends on lapse (route removed, order kept) and restores on renewal", async () => {
+  it("keeps a lapsed domain serving for the 30-day grace, then suspends it (route removed, order kept) and restores on renewal", async () => {
     const { s } = await setup("hobby", NOW - DAY);
     await active(s, "blog", "www.example.com", 1);
 
-    const lapsed = await pass(s);
+    const first = await pass(s);
+    expect(first.r).toMatchObject({ graced: 1, suspended: 0 });
+    expect(first.pushed).toEqual([]);
+    expect((await s.customDomainOrders.get(USER, "blog"))?.lapsedAt).toBe(NOW);
+    const deps = { customDomainOrders: s.customDomainOrders, tiers: s.tiers, now: () => NOW + 29 * DAY };
+    expect((await handleRedirectionLookup(deps, "S", "S", "www.example.com")).status).toBe(200);
+    expect((await pass(s, NOW + 29 * DAY)).r).toMatchObject({ graced: 0, suspended: 0 });
+
+    const lapsed = await pass(s, NOW + 30 * DAY);
     expect(lapsed.r.suspended).toBe(1);
     expect(lapsed.pushed).toEqual([{ op: "delete", fqdn: "www.example.com" }]);
     const row = await s.customDomainOrders.get(USER, "blog");
@@ -133,12 +141,13 @@ describe("the verifier keeps routing in step with the tier", () => {
     );
     expect((shown.body as { status: string }).status).toBe("suspended");
 
+    expect(row?.lapsedAt).toBeUndefined();
     // Days later, still unpaid: never given up on.
-    const later = await pass(s, NOW + 3 * DAY);
+    const later = await pass(s, NOW + 33 * DAY);
     expect(later.r.failed).toBe(0);
 
-    await s.tiers.put({ username: USER, tier: "hobby", currentPeriodEnd: NOW + 40 * DAY, updatedAt: NOW });
-    const renewed = await pass(s, NOW + 4 * DAY);
+    await s.tiers.put({ username: USER, tier: "hobby", currentPeriodEnd: NOW + 70 * DAY, updatedAt: NOW });
+    const renewed = await pass(s, NOW + 34 * DAY);
     expect(renewed.r.reactivated).toBe(1);
     expect(renewed.pushed).toEqual([{ op: "add", fqdn: "www.example.com" }]);
     expect((await s.customDomainOrders.get(USER, "blog"))?.status).toBe("active");
@@ -149,10 +158,21 @@ describe("the verifier keeps routing in step with the tier", () => {
     await active(s, "c", "c.example.com", 300);
     await active(s, "a", "a.example.com", 100);
     await active(s, "b", "b.example.com", 200);
-    const { r, pushed } = await pass(s);
+    expect((await pass(s)).r).toMatchObject({ graced: 2, suspended: 0 });
+    const { r, pushed } = await pass(s, NOW + 30 * DAY);
     expect(r.suspended).toBe(2);
     expect(pushed.map((p) => p.fqdn).sort()).toEqual(["b.example.com", "c.example.com"]);
     expect((await s.customDomainOrders.get(USER, "a"))?.status).toBe("active");
+  });
+
+  it("a resubscription inside the grace forgets the lapse", async () => {
+    const { s } = await setup("hobby", NOW - DAY);
+    await active(s, "blog", "www.example.com", 1);
+    await pass(s);
+    await s.tiers.put({ username: USER, tier: "hobby", currentPeriodEnd: NOW + 40 * DAY, updatedAt: NOW });
+    await pass(s, NOW + 10 * DAY);
+    expect((await s.customDomainOrders.get(USER, "blog"))?.lapsedAt).toBeUndefined();
+    expect((await pass(s, NOW + 35 * DAY)).r.suspended).toBe(0);
   });
 });
 

@@ -30,6 +30,8 @@ import type {
 } from "@flagship/storage";
 import {
   customDomainAllowance,
+  inLapseGrace,
+  withoutLapse,
   isSuspended,
   type CustomDomainAllowance,
 } from "./customDomainEntitlement.js";
@@ -110,6 +112,8 @@ export interface VerificationPassResult {
   suspended: number;
   /** Suspended orders routed again after the tier allowed them. */
   reactivated: number;
+  /** Active orders found outside the plan this pass: they keep serving through the grace period. */
+  graced: number;
 }
 
 /** The user's serving pod = first non-revoked registered server. */
@@ -142,6 +146,7 @@ export async function runCustomDomainVerificationPass(
     invalidated: 0,
     suspended: 0,
     reactivated: 0,
+    graced: 0,
   };
   const allowances = new Map<string, CustomDomainAllowance>();
   const allowanceFor = async (userId: string): Promise<CustomDomainAllowance> => {
@@ -155,7 +160,7 @@ export async function runCustomDomainVerificationPass(
   const suspend = async (o: CustomDomainOrderRecord): Promise<void> => {
     // Keep podCanonical — it is what marks the order as suspended rather than
     // never-verified (isSuspended), and what renewal re-activates.
-    await deps.customDomainOrders.upsert({ ...o, status: "pending", updatedAt: now });
+    await deps.customDomainOrders.upsert({ ...withoutLapse(o), status: "pending", updatedAt: now });
     await deps.pushRedirection("delete", o.fqdn);
     out.suspended++;
   };
@@ -172,8 +177,22 @@ export async function runCustomDomainVerificationPass(
     const { limit } = await allowanceFor(userId);
     const keep = [...orders].sort((a, b) => a.createdAt - b.createdAt);
     const over = keep.splice(Number.isFinite(limit) ? limit : keep.length);
-    for (const o of over) await suspend(o);
-    activeCount.set(userId, keep.length);
+    // Back within the plan (resubscribed): forget the lapse.
+    for (const o of keep) if (o.lapsedAt !== undefined) await deps.customDomainOrders.upsert(withoutLapse(o));
+    // Outside it: serve through the grace period from the first pass that saw it, then fail closed.
+    let graced = 0;
+    for (const o of over) {
+      if (o.lapsedAt === undefined) {
+        await deps.customDomainOrders.upsert({ ...o, lapsedAt: now });
+        out.graced++;
+        graced++;
+      } else if (inLapseGrace(o, now)) {
+        graced++;
+      } else {
+        await suspend(o);
+      }
+    }
+    activeCount.set(userId, keep.length + graced);
   }
 
   // --- 2. PENDING + suspended: (re)activation ---
