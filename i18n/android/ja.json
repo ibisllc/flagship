@@ -3511,5 +3511,7 @@
   "keyfile_import_key_mismatch": "このキーファイルでは %1$s を開けなくなっています。別のアカウントのファイルか、ファイルの作成後にアカウントのキーが置き換えられています。",
   "keyfile_import_unreachable": "このキーファイルを確認するために Flagship に接続できませんでした。このデバイスでは何も変更されていません。接続を確認して、もう一度お試しください。",
   "keyfile_import_refused": "Flagship は %1$s 用のこのキーファイルを受け付けませんでした。このデバイスでは何も変更されていません。数分後にもう一度お試しください。",
-  "no_camera_on_the_other_device_send_link": "相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。"
+  "no_camera_on_the_other_device_send_link": "相手のデバイスにカメラがない場合は、このリンクを送って、そこに貼り付けてください。",
+  "backup_account_key_unavailable": "アカウントの鍵でこのバックアップを開けませんでした。もう一度試すか、パスコードを入力してください。",
+  "backup_account_key_doesnt_open": "このアカウントの鍵ではこのバックアップを開けません。開くにはそのパスコードを入力してください。"
 }

@@ -516,7 +516,24 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                     Text(stringResource(R.string.keep_this_screen_open_if_it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
                 }
                 ImportBackupViewModel.Phase.Passcode -> {
-                    Text(stringResource(R.string.this_backup_was_made_on_another), color = FS.colors.text)
+                    val reason = vm.passcodeReason
+                    Text(
+                        when (reason) {
+                            com.flagshipserver.app.core.ServerBackupFormat.AccountOpen.KeyUnavailable -> stringResource(R.string.backup_account_key_unavailable)
+                            com.flagshipserver.app.core.ServerBackupFormat.AccountOpen.NotThisAccount -> stringResource(R.string.backup_account_key_doesnt_open)
+                            else -> stringResource(R.string.this_backup_was_made_on_another)
+                        },
+                        color = FS.colors.text,
+                        modifier = Modifier.testTag("import-backup-passcode-reason"),
+                    )
+                    if (reason == com.flagshipserver.app.core.ServerBackupFormat.AccountOpen.KeyUnavailable) {
+                        FSSecondaryButton(
+                            label = stringResource(R.string.try_again),
+                            onClick = { scope.launch { vm.retryAccountKey() } },
+                            block = true,
+                            modifier = Modifier.testTag("import-backup-retry-account"),
+                        )
+                    }
                     FSField(
                         value = vm.passcode,
                         onValueChange = { vm.passcode = it },

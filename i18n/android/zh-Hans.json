@@ -3511,5 +3511,7 @@
   "keyfile_import_key_mismatch": "此密钥文件已无法打开 %1$s。它属于另一个账户，或者该账户的密钥在文件创建后已被更换。",
   "keyfile_import_unreachable": "无法连接 Flagship 来检查此密钥文件。此设备上没有任何更改。请检查网络连接后重试。",
   "keyfile_import_refused": "Flagship 未接受用于 %1$s 的此密钥文件。此设备上没有任何更改。请几分钟后重试。",
-  "no_camera_on_the_other_device_send_link": "另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。"
+  "no_camera_on_the_other_device_send_link": "另一台设备没有摄像头？把此链接发送过去，然后在那里粘贴。",
+  "backup_account_key_unavailable": "无法使用你的账户密钥打开此备份。请重试，或输入其密码。",
+  "backup_account_key_doesnt_open": "此账户的密钥无法打开此备份。请输入其密码来打开。"
 }
