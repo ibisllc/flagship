@@ -126,12 +126,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F6 Take the zone-wide DNS token off `.com` (challenge TXT through the broker; release step 20 skips when unset).
 - [ ] F7 UnifiedPush for de-Googled Android.
 - [ ] F8 Human `voi.ci` service names (`docs/voici-service-names-todo.md`).
-- [ ] F9 Windows acceptance findings (0.4 list section): W14, the silent second boot approval, first-boot daemon
+- [~] F9 (merged 2026-11-13: Android stale recovery banner, "another account" backup refusal, W3 hint, W10, W26, raw recipe error, remaster temp folders, sealing stall at 12 min. LEFT: W14, W19, silent second boot approval, first-boot restarts, lingering Unlocking, window close, keep-awake log, MessageBox Pane) Windows acceptance findings (0.4 list section): W14, the silent second boot approval, first-boot daemon
       restarts restarting the certificate order, W19 empty Home, Android stale recovery banner and "another account"
       backup refusal, the Studio for Windows items, W3 Continue hint.
-- [ ] F10 In-app rules sheet names the nudity / violence rule (all apps, all languages).
+- [x] F10 (merged 2026-11-13) In-app rules sheet names the nudity / violence rule (all apps, all languages).
 - [ ] F11 CI: Android emulator smoke on API 34; iOS CI green.
-- [ ] F12 The Studio pairing refusal must be visible: a 0.2 Studio refused by `STUDIO_PIPE_MIN` loops on new QR codes
+- [x] F12 (merged 2026-11-13; all three Studios show the refusal and stop; Windows WPF needs a Windows CI build) The Studio pairing refusal must be visible: a 0.2 Studio refused by `STUDIO_PIPE_MIN` loops on new QR codes
       (found 2026-11-13 on the owner's Mac); the current Studios must show the relay's `error` reason and stop.
 - [ ] F13 Repo housekeeping: rebase the remaining feature branches and `gym` (0.4 list), smallest first.
 - [ ] F15 Rate limits (first check, 2026-11-13, 30 days): `builder-pipe-upgrade` refused 2,685 from 339 sources (likely 0.2
@@ -194,6 +194,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   per-service certificates: a special domain with a subdomain per service (fold into F1/fshp.app planning);
   asked what rank orders and the browser extension are (explained; the extension is a design-only branch,
   recommended to stay parked with other-os-installers; retail code folds after its design is settled).
+- 2026-11-13 Merged `0.4/small-fixes` (10 commits, F12, F10, F9 part): tsc clean, builder + rules tests 358/358.
+  Not built here: the Windows WPF app (needs Windows CI); no device runs. Webapp translations changed: bump the
+  shell at the next webapp release.
 
 ## Resume point
 
