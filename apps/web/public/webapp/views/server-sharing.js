@@ -24,6 +24,7 @@ import {
   activityLine,
   cancelShareOffer,
   changeShare,
+  coManagerCountText,
   confirmShare,
   createShareOffer,
   fetchActivity,
@@ -164,7 +165,9 @@ export function sharesListHtml(state, { canEdit = true, disk = true } = {}) {
   const body = rows.length
     ? rows.join("")
     : state.boxError ? "" : `<p class="note">${tr("Not shared with anyone. Share it to let another Flagship account see or manage it with their own account.")}</p>`;
-  return `${notes.join("")}${body}${state.ended?.length ? `<div class="mt-2">${state.ended.map(endedLine).join("")}</div>` : ""}`;
+  const count = coManagerCountText(state.coManagers);
+  const countLine = count ? `<p class="faint-sm" data-co-manager-count>${escapeHtml(count)}</p>` : "";
+  return `${countLine}${notes.join("")}${body}${state.ended?.length ? `<div class="mt-2">${state.ended.map(endedLine).join("")}</div>` : ""}`;
 }
 
 async function refreshShares(body) {

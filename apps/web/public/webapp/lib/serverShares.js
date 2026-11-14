@@ -55,6 +55,26 @@ export const SHARE_ACCEPT_UNLOCK_TITLE = tr("Accept this share?");
 export const SHARE_ACCEPT_UNLOCK_MESSAGE = tr("Your account's admin key signs that you accept.");
 // The box's refusals of a first grant (acceptAdmin.ts) carry a sentence for the owner.
 const ACCEPT_REFUSAL_CODES = new Set(["accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable"]);
+// The account's co-manager cap (packages/protocol/src/coManagerCap.ts): the box and `.com` send the plan and its cap.
+export const CO_MANAGER_CAP_CODE = "co-manager-cap";
+
+/** The refusal in the plan's words: its cap, and the plan to move to. */
+export function coManagerCapText(plan, cap) {
+  if (plan === "hobby") return tr("On the Pro plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro Max for more.", cap);
+  if (plan === "maker") return tr("On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.", cap);
+  return tr("On the Free plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro for more.", cap);
+}
+
+/** "n of N co-managers"; empty when the plan has no cap or the server didn't say. */
+export function coManagerCountText(c) {
+  if (!c || typeof c.count !== "number" || typeof c.cap !== "number") return "";
+  return tr("{0} of {1} co-managers across your servers", c.count, c.cap);
+}
+
+function coManagerCapError(status, body) {
+  if (status !== 403 || body?.code !== CO_MANAGER_CAP_CODE) return null;
+  return new ShareError(coManagerCapText(body.plan, body.cap), CO_MANAGER_CAP_CODE, 403);
+}
 
 export class ShareError extends Error {
   constructor(message, code, status) {
@@ -189,7 +209,7 @@ export async function createShareOffer(args, deps = {}) {
     offerHex,
     ownerHex,
   });
-  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't create the link. Try again.")), "create-failed", res.status);
+  if (!res.ok) throw coManagerCapError(res.status, res.body) ?? new ShareError(errText(res, tr("Couldn't create the link. Try again.")), "create-failed", res.status);
   return { shareId, secretHex, expiresAt, label, link: ss.buildShareLink(d.apex, shareId, secret) };
 }
 
@@ -248,6 +268,8 @@ export async function loadOwnerShares(serverDomain, deps = {}) {
   ]);
   const boxShares = boxSide.status === "fulfilled" && Array.isArray(boxSide.value?.shares) ? boxSide.value.shares : [];
   const boxEnded = boxSide.status === "fulfilled" && Array.isArray(boxSide.value?.ended) ? boxSide.value.ended : [];
+  const cm = boxSide.status === "fulfilled" ? boxSide.value?.coManagers : null;
+  const coManagers = cm && typeof cm.count === "number" ? { count: cm.count, cap: typeof cm.cap === "number" ? cm.cap : null, plan: String(cm.plan ?? "free") } : null;
   const comRows = comSide.status === "fulfilled" ? comSide.value.filter((r) => lower(r.serverDomain) === domain) : [];
 
   const household = d.umk instanceof Uint8Array ? await deriveHouseholdKeyFromSeed(d.umk) : null;
@@ -322,6 +344,7 @@ export async function loadOwnerShares(serverDomain, deps = {}) {
     offered,
     ended: boxEnded.slice(0, 3),
     unfinished: comRows.filter((r) => r.state !== "ended" && endedIds.has(r.shareId)).map((r) => r.shareId),
+    coManagers,
     boxError: boxSide.status === "rejected" ? boxSide.reason : null,
     comError: comSide.status === "rejected" ? comSide.reason : null,
   };
@@ -363,6 +386,8 @@ export async function confirmShare(serverDomain, awaiting, deps = {}) {
     if (e instanceof ScreensError && ACCEPT_REFUSAL_CODES.has(e.body?.code) && typeof e.body?.error === "string") {
       throw new ShareError(e.body.error, e.body.code, e.status);
     }
+    const capped = e instanceof ScreensError ? coManagerCapError(e.status, e.body) : null;
+    if (capped) throw capped;
     throw e;
   }
   let unlockError = null;

@@ -34,6 +34,7 @@ import {
 import { ShareStore } from "../../../packages/server-daemon/src/shares/shareStore.js";
 import { ActivityLog } from "../../../packages/server-daemon/src/shares/activityLog.js";
 import { ShareSessionStore, buildShares } from "../../../packages/server-daemon/src/shares/sharesHttp.js";
+import { CoManagerCap } from "../../../packages/server-daemon/src/shares/coManagerCap.js";
 import { TEST_CA, testVerifyAcceptAdmin } from "../../../packages/server-daemon/tests/shares/acceptAdminFixture.js";
 
 const enterShareAccept = vi.fn(async () => {});
@@ -66,16 +67,23 @@ const fromHex = (h: string) => new Uint8Array(Buffer.from(h, "hex"));
 
 type Init = { method?: string; headers?: Record<string, string>; body?: string };
 
-async function world() {
+async function world(opts: { capped?: boolean } = {}) {
   const storage = new InMemoryStorage();
   await storage.usernames.put({ username: "alice", irkPubHex: hex(owner.publicKey), claimedAt: 1 });
   await storage.usernames.put({ username: "bob", irkPubHex: hex(deriveIRK({ seed: umkB }).publicKey), adminRootPubHex: hex(bobAdminPub), claimedAt: 1 });
   await storage.servers.put({ serverDomain: S, username: "alice", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 });
-  const com = { shares: storage.serverShares, usernames: storage.usernames, servers: storage.servers };
-  const store = new ShareStore(null, {
+  const com = { shares: storage.serverShares, usernames: storage.usernames, servers: storage.servers, ...(opts.capped ? { tiers: storage.tiers } : {}) };
+  const cap = { full: false };
+  const coManagers = new CoManagerCap({
+    path: null,
+    localCount: () => store.list().length,
+    source: () => ({ tier: () => "free", servers: () => (cap.full ? ["media.alice.flagship.services"] : []), sharesOn: async () => 5 }),
+  });
+  const store: ShareStore = new ShareStore(null, {
     serverDomain: S,
     verifyOwnerGrant: (g, sig) => verifyServerShareGrant(g, sig, owner.publicKey),
     verifyAcceptAdmin: testVerifyAcceptAdmin(),
+    ...(opts.capped ? { admitNew: () => coManagers.admit() } : {}),
   });
   const updates: Array<{ level: string; memberPubHex: string; body: Record<string, any> }> = [];
   const box = buildShares({
@@ -88,6 +96,7 @@ async function world() {
       updates.push({ level: caller.level, memberPubHex: caller.memberPubHex, body: body ?? {} });
       return { status: 202, body: { ok: true, accepted: true, targetCommit: (body?.update as { targetCommit?: string })?.targetCommit } };
     },
+    ...(opts.capped ? { coManagers } : {}),
     log: () => {},
   });
   const gate = box.gate({ check: () => ({ status: 401, body: "owner session required" }) });
@@ -187,7 +196,7 @@ async function world() {
     isDemo: false,
     freshUnlock: async () => ({ ok: true }) as { ok: boolean; cancelled?: boolean; error?: string },
   };
-  return { storage, store, box, diskKey, log, boxPosts, accessPosts, boot, updates, fetchImpl, depsA, depsB };
+  return { storage, store, box, diskKey, log, boxPosts, accessPosts, boot, updates, fetchImpl, depsA, depsB, cap };
 }
 
 type World = Awaited<ReturnType<typeof world>>;
@@ -768,5 +777,47 @@ describe("the owner's Shared with card", () => {
       "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.",
     );
     expect(src.match(/UNLOCK_WARNING/g)!.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("the co-manager cap (owner decision 2026-11-14)", () => {
+  it("shows n of N on the Shared with card from the box's count", async () => {
+    const w = await world({ capped: true });
+    await sharedWithB(w);
+    const state = await shares.loadOwnerShares(S, w.depsA);
+    expect(state.coManagers).toEqual({ count: 1, cap: 5, plan: "free" });
+    const html = sharesListHtml(state);
+    expect(html).toContain("data-co-manager-count");
+    expect(html).toContain("1 of 5 co-managers across your servers");
+    expect(sharesListHtml({ ...state, coManagers: { count: 3, cap: null, plan: "enterprise" } })).not.toContain("data-co-manager-count");
+  });
+
+  it("a new link past the cap: .com refuses it and the owner reads the plan's sentence", async () => {
+    const w = await world({ capped: true });
+    for (let i = 0; i < 5; i++) await offerTo(w, { label: `Person ${i}` });
+    await expect(offerTo(w)).rejects.toMatchObject({
+      code: "co-manager-cap",
+      message: "On the Free plan your servers can have up to 5 co-managers in all. Remove one first, or move to Pro for more.",
+    });
+  });
+
+  it("an acceptance past the cap: the box refuses the grant and the owner reads the plan's sentence", async () => {
+    const w = await world({ capped: true });
+    const created = await offerTo(w);
+    await shares.acceptShare(await shares.openShareLink(parseShareLink(created.link)!, w.depsB), w.depsB);
+    w.cap.full = true;
+    const [a] = (await shares.loadOwnerShares(S, w.depsA)).awaiting;
+    await expect(shares.confirmShare(S, a, w.depsA)).rejects.toMatchObject({ code: "co-manager-cap", status: 403 });
+    expect(w.store.get(created.shareId)).toBeNull();
+  });
+
+  it("words each plan's refusal with its cap and the plan to move to", () => {
+    expect(shares.coManagerCapText("hobby", 10)).toBe(
+      "On the Pro plan your servers can have up to 10 co-managers in all. Remove one first, or move to Pro Max for more.",
+    );
+    expect(shares.coManagerCapText("maker", 25)).toBe(
+      "On the Pro Max plan your servers can have up to 25 co-managers in all. Remove one first, or move to Enterprise for more.",
+    );
+    expect(shares.coManagerCapText("free", 5)).toContain("move to Pro for more");
   });
 });
