@@ -303,3 +303,55 @@ describe("owner list with an admin root pinned", () => {
     expect((await handleCreateServerShare(d, "alice", offerBody({}, adminRoot))).status).toBe(200);
   });
 });
+
+describe("co-manager cap backstop (owner decision 2026-11-14)", () => {
+  const idOf = (i: number) => i.toString(16).padStart(32, "0");
+  const tokenOf = (i: number) => shareTokenFromSecret(new Uint8Array(32).fill(i));
+  async function capDeps() {
+    const x = await deps();
+    return { ...x, d: { ...x.d, tiers: x.storage.tiers } };
+  }
+  const offerN = (d: Parameters<typeof handleCreateServerShare>[0], i: number) =>
+    handleCreateServerShare(d, "alice", offerBody({ shareId: idOf(i), tokenHash: shareTokenHash(tokenOf(i)) }));
+
+  it("refuses a sixth live link on Free with the code, the count, the cap and the plan", async () => {
+    const { d } = await capDeps();
+    for (let i = 1; i <= 5; i++) expect((await offerN(d, i)).status).toBe(200);
+    const r = await offerN(d, 6);
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual({ error: "co-manager-cap", code: "co-manager-cap", count: 5, cap: 5, plan: "free" });
+  });
+
+  it("counts open links and live shares; expired, unaccepted links and ended shares free their slot", async () => {
+    const { d } = await capDeps();
+    for (let i = 1; i <= 5; i++) await offerN(d, i);
+    await handleAcceptServerShare(d, idOf(1), tokenOf(1), { acceptance: "aa".repeat(30) });
+    const revoke = { serverDomain: S, shareId: idOf(2), issuedAt: NOW };
+    await handleRevokeServerShare(d, "alice", idOf(2), { revoke, signature: hex(signServerShareRevoke(revoke, owner)) });
+    expect((await offerN(d, 6)).status).toBe(200);
+    expect((await offerN(d, 7)).status).toBe(403);
+    // A week on, the four links nobody opened lapse; the accepted share still counts.
+    const later = { ...d, now: () => NOW + SHARE_OFFER_TTL_MS + 1 };
+    const fresh = (i: number) =>
+      handleCreateServerShare(later, "alice", offerBody({ shareId: idOf(i), tokenHash: shareTokenHash(tokenOf(i)), issuedAt: later.now(), expiresAt: later.now() + SHARE_OFFER_TTL_MS }));
+    for (let i = 7; i <= 10; i++) expect((await fresh(i)).status).toBe(200);
+    expect((await fresh(11)).body).toMatchObject({ code: "co-manager-cap", count: 5 });
+  });
+
+  it("follows the plan: Pro 10, Pro Max 25, a lapsed paid period reads Free", async () => {
+    const { d, storage } = await capDeps();
+    await storage.tiers.put({ username: "alice", tier: "hobby", currentPeriodEnd: NOW + 1e9, updatedAt: NOW });
+    for (let i = 1; i <= 10; i++) expect((await offerN(d, i)).status).toBe(200);
+    expect((await offerN(d, 11)).body).toMatchObject({ code: "co-manager-cap", cap: 10, plan: "hobby" });
+    await storage.tiers.put({ username: "alice", tier: "maker", currentPeriodEnd: NOW + 1e9, updatedAt: NOW });
+    expect((await offerN(d, 11)).status).toBe(200);
+    await storage.tiers.put({ username: "alice", tier: "maker", currentPeriodEnd: NOW - 1, updatedAt: NOW });
+    // Over the Free cap after the lapse: the eleven stay, a twelfth waits.
+    expect((await offerN(d, 12)).body).toMatchObject({ code: "co-manager-cap", count: 11, cap: 5, plan: "free" });
+  });
+
+  it("without the plan store (an older Worker) the box alone enforces the cap", async () => {
+    const { d } = await deps();
+    for (let i = 1; i <= 6; i++) expect((await offerN(d, i)).status).toBe(200);
+  });
+});

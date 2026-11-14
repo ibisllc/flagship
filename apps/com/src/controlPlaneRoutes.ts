@@ -1924,6 +1924,7 @@ export async function tryControlPlane(
       usernames: storage.usernames,
       servers: storage.servers,
       grants: storage.deviceCapabilityGrants,
+      tiers: storage.tiers,
     };
     const shareToken = request.headers.get("x-flagship-share-token");
     if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARES))) {
