@@ -12,6 +12,10 @@
 // any reason is retired for good (D7): it answers 410 and nobody can take it or a
 // look-alike of it again, the account that gave it up included.
 //
+// Changes (docs/named-links.md §2.6): one counted change per service a week and three in 30 days; a change within 15
+// minutes of a set is a free correction (once); the account may claim its plan's budget of names in 30 days; giving up
+// the name of an app no server runs any more is never limited.
+//
 // Refusals carry `{ error, code, ... }`; the apps write their own sentences from
 // the code (nothing here is shown to a person).
 
@@ -50,6 +54,12 @@ export const VOICI_NAME_LIMITS: Readonly<Record<TierName, number>> = { free: 5, 
 /** Changes per service in any rolling window of `VOICI_CHANGE_WINDOW_MS`. */
 export const VOICI_CHANGES_PER_SERVICE = 3;
 export const VOICI_CHANGE_WINDOW_MS = 30 * DAY;
+/** At most one counted change per service in this long. */
+export const VOICI_CHANGE_COOLDOWN_MS = 7 * DAY;
+/** A change this soon after a counted set fixes it (a typo) without counting against the service's limits. */
+export const VOICI_CORRECTION_MS = 15 * 60_000;
+/** Names an account may claim in any rolling `VOICI_CHANGE_WINDOW_MS`, by plan (corrections included). */
+export const VOICI_CLAIM_BUDGETS: Readonly<Record<TierName, number>> = { free: 10, hobby: 100, maker: 500 };
 /** A brake on the whole account, not a product rule. */
 export const VOICI_CHANGES_PER_ACCOUNT_DAY = 10;
 /** No server running the app for this long releases its name. */
@@ -161,12 +171,60 @@ export interface VoiciLinkState {
   /** Custom names this account holds, and the most its plan allows. */
   held: number;
   limit: number;
-  /** Changes this service has left in the rolling window, and when the next one is allowed (null: now). */
+  /** Changes this service has left in the rolling window, and when the next one is allowed (null: now). Folds in the
+   *  weekly cooldown, the account's claim budget and an open correction window, so the field needs nothing else. */
   changesLeft: number;
   nextChangeAt: number | null;
   /** When the name is released for lack of a running server (null: no custom name). */
   releasesAt: number | null;
+  /** Until when the last set may be fixed without counting (null: no correction open). */
+  correctionUntil: number | null;
+  /** Names the account may still claim in the rolling window, of its plan's budget. */
+  claimsLeft: number;
+  claimBudget: number;
 }
+
+interface ServiceLimits {
+  /** Counted changes left in the rolling window. */
+  left: number;
+  /** When the service's own limits next allow a counted change (null: now). */
+  blockedUntil: number | null;
+  correctionUntil: number | null;
+}
+
+async function serviceLimits(deps: Pick<VoiciNamesDeps, "voiciNames">, u: string, serviceId: string, now: number): Promise<ServiceLimits> {
+  const [changes, last] = await Promise.all([
+    deps.voiciNames.changesForService(u, serviceId, now - VOICI_CHANGE_WINDOW_MS),
+    deps.voiciNames.lastChangeForService(u, serviceId),
+  ]);
+  const left = Math.max(0, VOICI_CHANGES_PER_SERVICE - changes.length);
+  const windowEnd = left > 0 ? null : changes[changes.length - VOICI_CHANGES_PER_SERVICE]! + VOICI_CHANGE_WINDOW_MS;
+  const newest = changes[changes.length - 1];
+  const cooldownEnd = newest !== undefined && now < newest + VOICI_CHANGE_COOLDOWN_MS ? newest + VOICI_CHANGE_COOLDOWN_MS : null;
+  const ends = [windowEnd, cooldownEnd].filter((x): x is number => x !== null);
+  const correctionUntil =
+    last && last.counted && last.op === "set" && now < last.at + VOICI_CORRECTION_MS ? last.at + VOICI_CORRECTION_MS : null;
+  return { left, blockedUntil: ends.length ? Math.max(...ends) : null, correctionUntil };
+}
+
+interface ClaimBudget {
+  left: number;
+  budget: number;
+  /** When the budget next frees a claim (null: one is free now). */
+  nextAt: number | null;
+}
+
+const claimsOf = (deps: Pick<VoiciNamesDeps, "voiciNames">, u: string, now: number): Promise<number[]> =>
+  deps.voiciNames.claimsForUser(u, now - VOICI_CHANGE_WINDOW_MS);
+
+function claimBudget(claims: number[], tier: TierName): ClaimBudget {
+  const budget = VOICI_CLAIM_BUDGETS[tier];
+  const left = Math.max(0, budget - claims.length);
+  return { left, budget, nextAt: left > 0 ? null : claims[claims.length - budget]! + VOICI_CHANGE_WINDOW_MS };
+}
+
+const tierOf = (deps: Pick<VoiciNamesDeps, "tiers">, u: string, now: number): Promise<TierName> =>
+  deps.tiers ? effectiveTierOf(deps.tiers, u, now).catch(() => "free" as TierName) : Promise.resolve("free" as TierName);
 
 /** What the service page needs to draw the link field. */
 export async function voiciLinkState(
@@ -176,20 +234,27 @@ export async function voiciLinkState(
 ): Promise<VoiciLinkState> {
   const now = nowOf(deps);
   const u = username.toLowerCase();
-  const [live, held, changes, tier] = await Promise.all([
+  const [live, held, svc, claimTimes, tier] = await Promise.all([
     deps.voiciNames.getLiveByService(u, serviceId),
     deps.voiciNames.countLive(u),
-    deps.voiciNames.changesForService(u, serviceId, now - VOICI_CHANGE_WINDOW_MS),
-    deps.tiers ? effectiveTierOf(deps.tiers, u, now).catch(() => "free" as TierName) : Promise.resolve("free" as TierName),
+    serviceLimits(deps, u, serviceId, now),
+    claimsOf(deps, u, now),
+    tierOf(deps, u, now),
   ]);
-  const changesLeft = Math.max(0, VOICI_CHANGES_PER_SERVICE - changes.length);
+  const claims = claimBudget(claimTimes, tier);
+  const serviceOpen = svc.correctionUntil !== null || svc.blockedUntil === null;
+  const changesLeft = svc.correctionUntil !== null ? Math.max(1, svc.left) : svc.blockedUntil === null ? svc.left : 0;
+  const blocks = [serviceOpen ? null : svc.blockedUntil, claims.nextAt].filter((x): x is number => x !== null);
   return {
     name: live?.display ?? null,
     held,
     limit: VOICI_NAME_LIMITS[tier],
-    changesLeft,
-    nextChangeAt: changesLeft > 0 ? null : changes[0]! + VOICI_CHANGE_WINDOW_MS,
+    changesLeft: blocks.length ? 0 : changesLeft,
+    nextChangeAt: blocks.length ? Math.max(...blocks) : null,
     releasesAt: live ? live.lastActiveAt + VOICI_NAME_INACTIVE_MS : null,
+    correctionUntil: svc.correctionUntil,
+    claimsLeft: claims.left,
+    claimBudget: claims.budget,
   };
 }
 
@@ -246,12 +311,15 @@ export async function handleVoiciNameSet(
 
   if (order.op === "clear") {
     if (current) {
-      const changes = await deps.voiciNames.changesForService(u, order.serviceId, now - VOICI_CHANGE_WINDOW_MS);
-      if (changes.length >= VOICI_CHANGES_PER_SERVICE) {
-        return refuse(429, "change-limit", "too many changes for this service", { nextChangeAt: changes[0]! + VOICI_CHANGE_WINDOW_MS });
+      // Giving up the name of an app no server of the account runs any more (it was deleted) is never limited.
+      const gone = deps.appRunning ? !(await deps.appRunning(u, order.serviceId)) : false;
+      const svc = await serviceLimits(deps, u, order.serviceId, now);
+      const free = gone || svc.correctionUntil !== null;
+      if (!free && svc.blockedUntil !== null) {
+        return refuse(429, "change-limit", "too many changes for this service", { nextChangeAt: svc.blockedUntil });
       }
       await deps.voiciNames.release(u, order.serviceId, "cleared", now);
-      await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce);
+      await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce, { op: "clear", counted: !free });
       await audit(deps, u, "voici-name-cleared", `voi.ci/${current.display}`, now);
     }
     return ok({ ok: true, link: await voiciLinkState(deps, u, order.serviceId) });
@@ -270,11 +338,20 @@ export async function handleVoiciNameSet(
   }
 
   // The account's limits first: they are known before a name is even looked at.
-  const state = await voiciLinkState(deps, u, order.serviceId);
-  const allowed = current ? state.held <= state.limit : state.held + 1 <= state.limit;
-  if (!allowed) return refuse(409, "name-limit", "all of this plan's custom names are in use", { held: state.held, limit: state.limit });
-  if (state.changesLeft === 0) {
-    return refuse(429, "change-limit", "too many changes for this service", { nextChangeAt: state.nextChangeAt });
+  const tier = await tierOf(deps, u, now);
+  const held = await deps.voiciNames.countLive(u);
+  const limit = VOICI_NAME_LIMITS[tier];
+  const allowed = current ? held <= limit : held + 1 <= limit;
+  if (!allowed) return refuse(409, "name-limit", "all of this plan's custom names are in use", { held, limit });
+  const svc = await serviceLimits(deps, u, order.serviceId, now);
+  const correction = svc.correctionUntil !== null;
+  if (!correction && svc.blockedUntil !== null) {
+    return refuse(429, "change-limit", "too many changes for this service", { nextChangeAt: svc.blockedUntil });
+  }
+  // The account's claim budget answers with the same code: to the person it is the same "next change on" date.
+  const budget = claimBudget(await claimsOf(deps, u, now), tier);
+  if (budget.nextAt !== null) {
+    return refuse(429, "change-limit", "this account claimed its plan's names for now", { nextChangeAt: budget.nextAt, scope: "account" });
   }
   if ((await deps.voiciNames.countChangesForUser(u, now - DAY)) >= VOICI_CHANGES_PER_ACCOUNT_DAY) {
     return refuse(429, "rate-limited", "too many changes today", { retryAfterSec: Math.ceil(DAY / 1000) });
@@ -294,7 +371,7 @@ export async function handleVoiciNameSet(
   // The registry insert is the collision check: anything holding the safety key refuses it.
   if (!claimed.ok) return refuse(409, "taken", "taken or too similar to an existing name");
   if (current) await deps.voiciNames.release(u, order.serviceId, "replaced", now, current.key);
-  await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce);
+  await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce, { op: "set", counted: !correction });
   await audit(deps, u, "voici-name-set", `voi.ci/${typed}${current ? ` (was ${current.display})` : ""}`, now);
   return ok({ ok: true, link: await voiciLinkState(deps, u, order.serviceId) });
 }

@@ -943,6 +943,17 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
       });
     });
 
+    it("keeps the lapse mark, and an upsert without it clears it (migration 0137)", async () => {
+      const r = await parityCase(async (s) => {
+        await s.customDomainOrders.upsert({ ...mk("svc", "alice", "a.example.com", "active"), lapsedAt: 42 });
+        const marked = (await s.customDomainOrders.get("alice", "svc"))?.lapsedAt;
+        await s.customDomainOrders.upsert(mk("svc", "alice", "a.example.com", "active"));
+        const cleared = (await s.customDomainOrders.get("alice", "svc"))?.lapsedAt;
+        return { marked, cleared: cleared ?? null };
+      });
+      expect(r).toEqual({ marked: 42, cleared: null });
+    });
+
     it("setStatus CAS: matches fqdn → true (+failCount bump on failed); stale fqdn → false", async () => {
       const r = await parityCase(async (s) => {
         await s.customDomainOrders.upsert(mk("svc", "alice", "a.example.com"));

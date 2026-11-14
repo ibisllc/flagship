@@ -115,6 +115,8 @@ import type {
   VoiciNameRecord,
   VoiciNameReleaseReason,
   VoiciNameStorage,
+  VoiciNameChange,
+  VoiciNameChangeKind,
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
@@ -1283,10 +1285,10 @@ export class D1VoiciNameStorage implements VoiciNameStorage {
   async setWarned(key: string, warned: number) {
     await this.db.prepare("UPDATE names SET warned = ? WHERE kind = 'link' AND name = ? AND status = 'active'").bind(warned, key).run();
   }
-  async recordChange(username: string, serviceId: string, at: number, nonce: string) {
+  async recordChange(username: string, serviceId: string, at: number, nonce: string, kind: VoiciNameChangeKind = { op: "set", counted: true }) {
     await this.db
-      .prepare("INSERT INTO voici_name_changes (username, service_id, at, nonce) VALUES (?, ?, ?, ?)")
-      .bind(username.toLowerCase(), serviceId, at, nonce)
+      .prepare("INSERT INTO voici_name_changes (username, service_id, at, nonce, op, counted) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(username.toLowerCase(), serviceId, at, nonce, kind.op, kind.counted ? 1 : 0)
       .run();
   }
   async nonceUsed(nonce: string) {
@@ -1295,8 +1297,22 @@ export class D1VoiciNameStorage implements VoiciNameStorage {
   }
   async changesForService(username: string, serviceId: string, since: number) {
     const rs = await this.db
-      .prepare("SELECT at FROM voici_name_changes WHERE username = ? AND service_id = ? AND at >= ? ORDER BY at")
+      .prepare("SELECT at FROM voici_name_changes WHERE username = ? AND service_id = ? AND at >= ? AND counted = 1 ORDER BY at")
       .bind(username.toLowerCase(), serviceId, since)
+      .all<{ at: number }>();
+    return (rs.results ?? []).map((x) => x.at);
+  }
+  async lastChangeForService(username: string, serviceId: string): Promise<VoiciNameChange | undefined> {
+    const r = await this.db
+      .prepare("SELECT at, op, counted FROM voici_name_changes WHERE username = ? AND service_id = ? ORDER BY at DESC, rowid DESC LIMIT 1")
+      .bind(username.toLowerCase(), serviceId)
+      .first<{ at: number; op: string; counted: number }>();
+    return r ? { at: r.at, op: r.op === "clear" ? "clear" : "set", counted: r.counted !== 0 } : undefined;
+  }
+  async claimsForUser(username: string, since: number) {
+    const rs = await this.db
+      .prepare("SELECT at FROM voici_name_changes WHERE username = ? AND op = 'set' AND at >= ? ORDER BY at")
+      .bind(username.toLowerCase(), since)
       .all<{ at: number }>();
     return (rs.results ?? []).map((x) => x.at);
   }
@@ -4536,6 +4552,7 @@ interface CustomDomainOrderRow {
   fail_count: number;
   created_at: number;
   updated_at: number;
+  lapsed_at?: number | null;
 }
 function rowToCustomDomainOrder(r: CustomDomainOrderRow): CustomDomainOrderRecord {
   return {
@@ -4548,6 +4565,7 @@ function rowToCustomDomainOrder(r: CustomDomainOrderRow): CustomDomainOrderRecor
     failCount: r.fail_count,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    ...(r.lapsed_at !== null && r.lapsed_at !== undefined ? { lapsedAt: r.lapsed_at } : {}),
   };
 }
 
@@ -4567,17 +4585,17 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
     await this.db
       .prepare(
         "INSERT INTO custom_domain_orders " +
-          "(service_id, user_id, fqdn, status, pod_canonical, last_changed, fail_count, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(service_id, user_id, fqdn, status, pod_canonical, last_changed, fail_count, created_at, updated_at, lapsed_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
           "ON CONFLICT(service_id, user_id) DO UPDATE SET " +
           "fqdn=excluded.fqdn, status=excluded.status, " +
           "pod_canonical=excluded.pod_canonical, " +
           "last_changed=excluded.last_changed, fail_count=excluded.fail_count, " +
-          "updated_at=excluded.updated_at",
+          "updated_at=excluded.updated_at, lapsed_at=excluded.lapsed_at",
       )
       .bind(
         rec.serviceId, uid, rec.fqdn, rec.status, rec.podCanonical ?? null,
-        rec.lastChanged, rec.failCount, rec.createdAt, rec.updatedAt,
+        rec.lastChanged, rec.failCount, rec.createdAt, rec.updatedAt, rec.lapsedAt ?? null,
       )
       .run();
     return { ...rec, userId: uid };

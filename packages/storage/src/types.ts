@@ -1642,6 +1642,15 @@ export interface VoiciNameRecord {
   releaseReason?: VoiciNameReleaseReason;
 }
 
+export interface VoiciNameChangeKind {
+  op: "set" | "clear";
+  counted: boolean;
+}
+
+export interface VoiciNameChange extends VoiciNameChangeKind {
+  at: number;
+}
+
 export interface VoiciNameStorage {
   /** The live or retired name, by its exact name. */
   get(name: string): Promise<VoiciNameRecord | undefined>;
@@ -1661,11 +1670,16 @@ export interface VoiciNameStorage {
   countAllLive(): Promise<number>;
   markActive(key: string, at: number): Promise<void>;
   setWarned(key: string, warned: number): Promise<void>;
-  /** Every set, replace or clear, for the limits; the order's nonce is single use. */
-  recordChange(username: string, serviceId: string, at: number, nonce: string): Promise<void>;
+  /** Every set, replace or clear, for the limits; the order's nonce is single use. `kind` defaults to a counted set;
+   *  a correction (`counted: false`) is skipped by the per-service limits. */
+  recordChange(username: string, serviceId: string, at: number, nonce: string, kind?: VoiciNameChangeKind): Promise<void>;
   nonceUsed(nonce: string): Promise<boolean>;
-  /** Changes of one service at or after `since`, oldest first. */
+  /** Counted changes of one service at or after `since`, oldest first (corrections left out). */
   changesForService(username: string, serviceId: string, since: number): Promise<number[]>;
+  /** The service's latest change, correction or not. */
+  lastChangeForService(username: string, serviceId: string): Promise<VoiciNameChange | undefined>;
+  /** Times of the account's claims (sets, corrections included) at or after `since`, oldest first. */
+  claimsForUser(username: string, since: number): Promise<number[]>;
   countChangesForUser(username: string, since: number): Promise<number>;
   pruneChanges(before: number): Promise<number>;
 }
@@ -2765,6 +2779,9 @@ export interface CustomDomainOrderRecord {
   failCount: number;
   createdAt: number;
   updatedAt: number;
+  /** ms — when the verifier first found this active domain outside the account's plan; it keeps serving for the
+   *  grace period from here, then is suspended. Undefined while the plan covers it. */
+  lapsedAt?: number;
 }
 
 export interface CustomDomainOrderStorage {
