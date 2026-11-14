@@ -63,6 +63,10 @@ are unchanged. The first bytes decide:
   SNI and certificate validation on the real hostname. Any other host or port is
   refused (403) without touching the backend.
 
+A connection from a public IPv4 source is never counted as LAN (rescue routes): it arrived through the
+owner's port forward (direct access, `docs/direct-access-and-domains.md`). The direct-access public
+listener is the same forwarder on the box's public addresses, and only behind the owner's signed order.
+
 Caps: 256 concurrent LAN connections, 5 s to send the first bytes, 5 min idle.
 Rescan every 60 s (DHCP changes). `FLAGSHIP_LAN_DIRECT=0` disables it;
 `FLAGSHIP_LAN_PORT` moves it.
