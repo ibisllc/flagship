@@ -89,6 +89,11 @@ jobs:
         if: matrix.shard == 1
         run: npx tsx tools/pq-authority-vectors.ts --check
 
+      # Restore into a running server (docs/restore-into-server.md §4): the stage, plan and undo orders.
+      - name: Restore-merge vectors are fresh
+        if: matrix.shard == 1
+        run: node --import tsx tools/server-restore-merge-vectors.mjs --check
+
       # Release plan G2: release/runtime-lock.json and every other Node pin (artifact pins, security floor, box
       # release floors, the box CI jobs) agree, and the signed runtime manifest's shared vectors are current.
       - name: Runtime lock agrees with every Node pin

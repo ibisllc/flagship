@@ -1,0 +1,167 @@
+{
+  "about": "Restore into a running server (docs/restore-into-server.md §4). Ed25519 with seed 0x52 repeated. stage: tag|serverDomain|archiveId|bytes|sha256|source|issuedAt. merge: tag|serverDomain|restoreId|archiveId|sha256|planSha256|issuedAt|expiresAt, where planSha256 = SHA-256 hex of the plan lines sorted by archived id and joined by \\n, a line being archivedServiceId|action|target or -|sameApp 0/1|guardCode or -|guardSchema or -|guardGen or -. undo: tag|serverDomain|restoreId|serviceId|undo or discard|issuedAt. Every invalid line must be refused before signing.",
+  "adminSeedHex": "5252525252525252525252525252525252525252525252525252525252525252",
+  "adminPubHex": "2012cb90ca60e8e5d8daf66e2272d2233e0486d557e8c66141ed8920177d7eb7",
+  "stage": {
+    "order": {
+      "serverDomain": "home.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 123456789,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "source": "saved",
+      "issuedAt": 1794000000000
+    },
+    "canonical": "flagship/server-restore-stage/v1|home.harry.flagship.services|00112233445566778899aabbccddeeff|123456789|abababababababababababababababababababababababababababababababab|saved|1794000000000",
+    "signatureHex": "18cd4440cce1a3bf4c96f38b814de4f16f42ddd0edbe101c47c79a983f3fc71cf0b132806884192edd4dcd0f618a31d8618ead9518bf312cbd403ebc1c92fa01"
+  },
+  "plan": {
+    "lines": [
+      {
+        "archivedServiceId": "harry--notes",
+        "action": "replace",
+        "sameApp": false,
+        "guardCode": "tree:1111111111111111111111111111111111111111111111111111111111111111",
+        "guardSchema": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guardGen": 0
+      },
+      {
+        "archivedServiceId": "sam--chess",
+        "action": "copy",
+        "targetServiceId": "harry--chess-restored",
+        "sameApp": false
+      },
+      {
+        "archivedServiceId": "harry--blog",
+        "action": "keep",
+        "sameApp": false
+      },
+      {
+        "archivedServiceId": "harry--photos",
+        "action": "replace-data",
+        "sameApp": false,
+        "guardCode": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guardSchema": "4444444444444444444444444444444444444444444444444444444444444444",
+        "guardGen": 2
+      },
+      {
+        "archivedServiceId": "harry--todo",
+        "action": "install",
+        "sameApp": false
+      },
+      {
+        "archivedServiceId": "bob--wiki",
+        "action": "replace",
+        "sameApp": true,
+        "guardCode": "wasi:5555555555555555555555555555555555555555555555555555555555555555",
+        "guardSchema": "6666666666666666666666666666666666666666666666666666666666666666",
+        "guardGen": 1
+      },
+      {
+        "archivedServiceId": "harry--old",
+        "action": "skip",
+        "sameApp": false
+      }
+    ],
+    "sortedLines": [
+      "bob--wiki|replace|-|1|wasi:5555555555555555555555555555555555555555555555555555555555555555|6666666666666666666666666666666666666666666666666666666666666666|1",
+      "harry--blog|keep|-|0|-|-|-",
+      "harry--notes|replace|-|0|tree:1111111111111111111111111111111111111111111111111111111111111111|2222222222222222222222222222222222222222222222222222222222222222|0",
+      "harry--old|skip|-|0|-|-|-",
+      "harry--photos|replace-data|-|0|sha256:3333333333333333333333333333333333333333333333333333333333333333|4444444444444444444444444444444444444444444444444444444444444444|2",
+      "harry--todo|install|-|0|-|-|-",
+      "sam--chess|copy|harry--chess-restored|0|-|-|-"
+    ],
+    "planSha256": "7a401315ebe285a6668bc04c6acb2112731d466017c4fe711aa78848dcdc1e69"
+  },
+  "merge": {
+    "order": {
+      "serverDomain": "home.harry.flagship.services",
+      "restoreId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "planSha256": "7a401315ebe285a6668bc04c6acb2112731d466017c4fe711aa78848dcdc1e69",
+      "issuedAt": 1794000060000,
+      "expiresAt": 1794086460000
+    },
+    "canonical": "flagship/server-restore-merge/v1|home.harry.flagship.services|a0a1a2a3a4a5a6a7a8a9aaabacadaeaf|00112233445566778899aabbccddeeff|abababababababababababababababababababababababababababababababab|7a401315ebe285a6668bc04c6acb2112731d466017c4fe711aa78848dcdc1e69|1794000060000|1794086460000",
+    "signatureHex": "6e13414b2d45e87f121f8a6b877309b0bef15a4c458dd130121b0284a8ddc906940cd5b41c2e51c1bd03b2a1b71d7d0e8bd0c5dc227085ad2c2f9dcfa41ec401"
+  },
+  "undo": [
+    {
+      "order": {
+        "serverDomain": "home.harry.flagship.services",
+        "restoreId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+        "serviceId": "harry--notes",
+        "action": "undo",
+        "issuedAt": 1794000120000
+      },
+      "canonical": "flagship/app-restore-undo/v1|home.harry.flagship.services|a0a1a2a3a4a5a6a7a8a9aaabacadaeaf|harry--notes|undo|1794000120000",
+      "signatureHex": "82960575ba78054db628e858fb4ccbe6164cf1ad01b2945fe196da00c41407f469e478398e393a7999a3dc2eeb69be5a6d3c7018105ab39d133f6daea726330f"
+    },
+    {
+      "order": {
+        "serverDomain": "home.harry.flagship.services",
+        "restoreId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+        "serviceId": "harry--notes",
+        "action": "discard",
+        "issuedAt": 1794000120000
+      },
+      "canonical": "flagship/app-restore-undo/v1|home.harry.flagship.services|a0a1a2a3a4a5a6a7a8a9aaabacadaeaf|harry--notes|discard|1794000120000",
+      "signatureHex": "8e38d9bc2f6cb9d3879f9a5432df35085e298b7b508932356ee2ae5c259f31d1ecd6307c3e6d4bcf12ff554b5920298653904bcfdc2283382c53a7261723070e"
+    }
+  ],
+  "invalidLines": [
+    {
+      "name": "a copy without its new app",
+      "line": {
+        "archivedServiceId": "harry--x",
+        "action": "copy",
+        "sameApp": false
+      }
+    },
+    {
+      "name": "a replace without guards",
+      "line": {
+        "archivedServiceId": "harry--x",
+        "action": "replace",
+        "sameApp": false
+      }
+    },
+    {
+      "name": "a keep with a guard",
+      "line": {
+        "archivedServiceId": "harry--x",
+        "action": "keep",
+        "sameApp": false,
+        "guardGen": 0
+      }
+    },
+    {
+      "name": "sameApp on a replace-data",
+      "line": {
+        "archivedServiceId": "harry--x",
+        "action": "replace-data",
+        "sameApp": true,
+        "guardCode": "tree:1111111111111111111111111111111111111111111111111111111111111111",
+        "guardSchema": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guardGen": 0
+      }
+    },
+    {
+      "name": "an unknown action",
+      "line": {
+        "archivedServiceId": "harry--x",
+        "action": "merge",
+        "sameApp": false
+      }
+    },
+    {
+      "name": "a bar in an id",
+      "line": {
+        "archivedServiceId": "harry--x|y",
+        "action": "skip",
+        "sameApp": false
+      }
+    }
+  ]
+}
