@@ -124,6 +124,6 @@ describe("web abuse notices", () => {
   it("the service worker shows the content-free abuse-notice push, on shell v201", () => {
     expect(sw).toContain('data.category === "abuse-notice"');
     expect(sw).toContain('"/lib/abuseNoticeUi.js"');
-    expect(sw).toContain('SHELL_VERSION = "v206"');
+    expect(sw).toContain('SHELL_VERSION = "v207"');
   });
 });

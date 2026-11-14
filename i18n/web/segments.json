@@ -7575,14 +7575,6 @@
       "pro.html"
     ]
   },
-  "s0e41e9604d": {
-    "en": "Flagship is free — genuinely, with no nags and nothing held back. Pro is the membership for the few who are running <1>real</1> things: more public bandwidth, and a way to keep the project independent. All we ever need is a username. Not your name.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
   "s3788b8bbca": {
     "en": "Most people never need this",
     "kind": "text",
@@ -7681,14 +7673,6 @@
   },
   "s0e852f80ad": {
     "en": "Run as many servers, apps, and devices as you like — those are never counted. Pro is for when your public traffic genuinely outgrows personal use, or when you simply want to back the project.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sa0d1bfeff3": {
-    "en": "One-off apps from the Flagship marketplace are a separate thing — you buy those when you want them, not as a subscription. Pro is just about bandwidth headroom and keeping the lights on.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -8503,6 +8487,50 @@
     "en": "Buy them exactly like Pro — cash by mail, Monero, or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.",
     "kind": "text",
     "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sc6609e0419": {
+    "en": "Flagship is free — genuinely, with no nags and nothing held back. Pro is the membership for the few who are running <1>real</1> things: more public bandwidth, your own domain names, and a way to keep the project independent. All we ever need is a username. Not your name.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s6e829bf75d": {
+    "en": "Custom domains",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s6def7dfbc4": {
+    "en": "Unlimited",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sb8ead65a51": {
+    "en": "One-off apps from the Flagship marketplace are a separate thing — you buy those when you want them, not as a subscription. Pro is about bandwidth headroom, your own domains, and keeping the lights on.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sa382c7b18e": {
+    "en": "A custom domain (<1>www.example.com</1> instead of <2>&lt;server&gt;.&lt;you&gt;.flagship.services</2>) is added from the service page in the app. You prove it's yours by pointing a CNAME record from it to your Flagship address; we route it only while your plan includes it, and your box still holds the certificate, so we still can't read the traffic.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "www.example.com",
+      "<server>.<you>.flagship.services"
+    ],
     "pages": [
       "pro.html"
     ]

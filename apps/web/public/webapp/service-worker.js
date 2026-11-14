@@ -490,7 +490,8 @@
 //  v205: the marketplace, Pro (allowance card, tier status, vouchers), the developer sales view and separate access
 //       lists per server, folded from feat/marketplace into release/0.4.
 //  v206: the paid name change (account rename, name-change and dibs-claim vouchers), folded from feat/custom-names.
-const SHELL_VERSION = "v206";
+//  v207: custom domains as a Pro feature (attach, confirm and the short-link swap on the service page), folded from feat/custom-domains.
+const SHELL_VERSION = "v207";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
