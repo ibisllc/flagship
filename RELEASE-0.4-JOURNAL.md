@@ -120,7 +120,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       keys a local-only X-Wing handshake (`flagship/box-claim/v1`), recipe as consent, box-signed receipt pins the
       server key, 5-press reset window; no NFC/first-come in v1; drop `box_serials`. Owner answers its Q1-Q10, then build
       (phase 1 software, testable on a VM; doubles as a preinstalled image for DIY metal).
-- [ ] F5 Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
+- [~] F5 (stage 1 part merged 2026-11-14: hybrid admin root, rotation + device-grant PQ companions, TS/Rust vectors, box + .com, D1 0138; crypto-graph 74 -> 65 bypasses, 18/18 strict targets still reachable; next: Swift/Kotlin signing of companions, then split key.irk) Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
       strict check green); hybrid channel on by default with classical fallback and a fallback count; strict default
       for new accounts after the external review. Also the hybrid release catalog and the boot client's ML-DSA key.
 - [ ] F6 Take the zone-wide DNS token off `.com` (challenge TXT through the broker; release step 20 skips when unset).
@@ -238,6 +238,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `0.4/unifiedpush` (F7; D1 0136 if needed), `0.4/voici-names` (F8; D1 0137). Direct access holds 0133. Still running:
   social-ports, boot-remote, pq-stage1, direct-access-com. Worktree `~/flagship-0.4-fold` and branch
   `0.4/fold-features` (local + origin) are merged and can be removed (my deletion was blocked by the permission gate).
+- 2026-11-14 Merged F5 stage-1 part (hybrid admin root, D1 **0138**). Started its client port (Swift + Kotlin).
 
 ## Resume point
 
