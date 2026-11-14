@@ -598,11 +598,6 @@
     },
     {
       "check": "test-vectors",
-      "key": "kotlin:box-claim",
-      "reason": "Retail box claim (docs/retail-box-setup.md): phase 1 built the TS reference and the box; the Android port follows the iOS screens (journal F4)."
-    },
-    {
-      "check": "test-vectors",
       "key": "web:box-claim",
       "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
     }
