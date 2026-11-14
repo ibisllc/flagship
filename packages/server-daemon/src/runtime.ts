@@ -8,7 +8,7 @@ import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
-import { ed, egressSuggestions, rescueDiscoveryId, type AppApiKeyGrant, type Bytes, type Keypair } from "@flagship/protocol";
+import { DIRECT_APEX, ed, egressSuggestions, rescueDiscoveryId, type AppApiKeyGrant, type Bytes, type Keypair } from "@flagship/protocol";
 import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
@@ -1352,6 +1352,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     resolveBackend: boxStreamGate({
       controlName: opts.serverFqdn,
       relayAllowed: () => relayLockdown.isRelayAllowed(),
+      directApex: DIRECT_APEX,
       // Only on a mesh relay, which gets leases from this box alone: an older relay reads them from .com, which a box
       // hears of a heartbeat later, so the box would keep apps stopped after the owner's renewal reached the relay.
       ...(opts.servingAppsAllowed ? { appsAllowed: () => tunnel.meshRelay() === null || opts.servingAppsAllowed!() } : {}),

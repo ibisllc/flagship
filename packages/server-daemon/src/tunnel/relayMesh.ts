@@ -343,10 +343,19 @@ function parseRate(v: unknown): MoveHintRateState {
  * the box's serving decision says apps are off, only its control name. A rogue holder relay can then black-hole the
  * box but cannot keep its apps serving past the owner's dead-man.
  */
-export function boxStreamGate<T>(o: { controlName: string; relayAllowed: () => boolean; appsAllowed?: () => boolean; target: T }): (sni: string) => T | null {
+export function boxStreamGate<T>(o: {
+  controlName: string;
+  relayAllowed: () => boolean;
+  appsAllowed?: () => boolean;
+  /** Names the relay may never carry: the direct domain's (docs/direct-access-and-domains.md §1, no relay fallback). */
+  directApex?: string;
+  target: T;
+}): (sni: string) => T | null {
   const control = o.controlName.toLowerCase();
+  const direct = o.directApex ? `.${o.directApex.toLowerCase()}` : null;
   return (sni) => {
     if (!o.relayAllowed()) return null;
+    if (direct && sni.toLowerCase().replace(/\.$/, "").endsWith(direct)) return null;
     if (o.appsAllowed && sni.toLowerCase() !== control && !o.appsAllowed()) return null;
     return o.target;
   };

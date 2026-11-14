@@ -679,6 +679,14 @@ describe("serving records on a mesh tunnel", () => {
     expect(store.helloLeases(T0 + 3 * DAY)).toEqual([]);
   });
 
+  it("box-side: a relay stream for a direct name (fshp.app) is never served", () => {
+    const gate = boxStreamGate({ controlName: FQDN, relayAllowed: () => true, directApex: "fshp.app", target: 1 });
+    expect(gate("game--plucky-avocet.fshp.app")).toBeNull();
+    expect(gate("GAME--plucky-avocet.FSHP.app.")).toBeNull();
+    expect(gate(FQDN)).toBe(1);
+    expect(gate("fshp.app.example.com")).toBe(1);
+  });
+
   it("box-side stop-apps: a lapsed policy closes app names but not the control name", async () => {
     let now = T0 + DAY;
     const store = servingStore(() => now);

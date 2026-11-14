@@ -97,7 +97,7 @@ describe("ordering a custom domain is a Pro feature", () => {
 
   it("refuses Flagship's own zones as a custom domain, whatever the tier", async () => {
     const { s, irk } = await setup("maker", NOW + 30 * DAY);
-    for (const fqdn of ["shop.bob.flagship.services", "x.flagshipserver.com", "a.b.voi.ci"]) {
+    for (const fqdn of ["shop.bob.flagship.services", "x.flagshipserver.com", "a.b.voi.ci", "game--bob.fshp.app", "www.fshp.tech"]) {
       expect((await order(s, irk, "blog", fqdn)).status).toBe(400);
     }
     expect(isOwnZone("flagship.services.example.com")).toBe(false);
