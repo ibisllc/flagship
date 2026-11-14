@@ -36,6 +36,7 @@ pub const OPS: &[&str] = &[
     "tls.csr",
     "tls.install",
     "tls.activate",
+    "tls.directNames",
     "tls.active",
     "tls.sign",
     "tls.list",

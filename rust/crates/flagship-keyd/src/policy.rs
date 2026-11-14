@@ -634,8 +634,15 @@ pub const DEFAULT_RATE_LIMITS: &[(&str, Limit)] = &[
     (
         "tls.createKey",
         Limit {
-            per_second: 5.0 / 3600.0,
-            burst: 5.0,
+            per_second: 24.0 / 3600.0,
+            burst: 24.0,
+        },
+    ),
+    (
+        "tls.directNames",
+        Limit {
+            per_second: 0.1,
+            burst: 10.0,
         },
     ),
     (

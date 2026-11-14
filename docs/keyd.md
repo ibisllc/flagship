@@ -82,6 +82,13 @@ tunnel --> flagship-tlsd (Go, no key) --tls.sign--> keyd        decrypted --> da
   may have (`<server>` and `*.<server>`) come from its own recipe through the migration step,
   never from a request. `tls.active` is what flagship-tlsd serves; a renewal is `tls.install`
   then `tls.activate`, picked up within seconds with no dropped connections.
+- Direct names (`docs/direct-access-and-domains.md` §8): `tls.directNames {names}` hands keyd the box's verified
+  direct names (the daemon checks each owner-signed order). keyd takes only `<slug>--<account>.fshp.app` of the box's
+  own account, at most 16, keeps them in `tls/direct-names.json`, lets `tls.createKey` make a key for exactly one of
+  them (its own budget of 32 keys, so they never crowd out the box's own) and `tls.activate {handle, slot: "direct"}`
+  put it in that name's slot (`tls/active-direct.json`). A name that goes takes its slot and every key made for it.
+  `tls.active` lists each under `serving` as `{slot: "direct", names: [<name>]}`; the frontends serve it for exactly
+  that SNI and never for another name.
 - keyd holds the per-box ACME account key and builds each signed request itself, by kind
   (`newAccount`, `newOrder`, `postAsGet`, `challenge`, `finalize`, `revoke`): only to Let's
   Encrypt hosts over https, only for the box's names, only with a CSR keyd made, only to revoke

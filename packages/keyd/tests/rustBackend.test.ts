@@ -540,6 +540,15 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["tls.sign", { handle: blob(16), ...t12({ params: hex(enc("flagship/x/v1|a")) }) }, true], ["tls.sign", { handle: blob(16), ...t12({ params: "" }) }, true],
         ["tls.sign", { handle: blob(16), tls: "1.2", transcriptHash: blob(32) }, true], ["tls.sign", { tls: "1.3", transcriptHash: blob(32) }, true],
         ["tls.remove", { handle: blob(16) }, true], ["tls.active", {}, true], ["tls.list", { x: 1 }, true],
+        ["tls.directNames", { names: "game--alice.fshp.app" }, true], ["tls.directNames", { names: [1] }, true], ["tls.directNames", {}, true],
+        ["tls.directNames", { names: [], x: 1 }, true], ["tls.directNames", { names: ["game--bob.fshp.app"] }, true], ["tls.directNames", { names: ["game.fshp.app"] }, true],
+        ["tls.directNames", { names: ["Game--alice.fshp.app"] }, true], ["tls.directNames", { names: ["a--b--alice.fshp.app"] }, true], ["tls.directNames", { names: ["-a--alice.fshp.app"] }, true],
+        ["tls.directNames", { names: ["a--alice.fshp.app.evil.com"] }, true], ["tls.directNames", { names: [`${"a".repeat(31)}--alice.fshp.app`] }, true], ["tls.directNames", { names: ["a--al.fshp.app"] }, true],
+        ["tls.directNames", { names: Array.from({ length: 17 }, (_, i) => `a${i}--alice.fshp.app`) }, true],
+        ["tls.createKey", { names: ["game--alice.fshp.app"] }, true],
+        ["tls.directNames", { names: ["game--alice.fshp.app", "chess--alice.fshp.app", "game--alice.fshp.app"] }, true],
+        ["tls.createKey", { names: ["game--alice.fshp.app", FQDN] }, true], ["tls.createKey", { names: ["game--alice.fshp.app"] }, false],
+        ["tls.activate", { handle: blob(16), slot: "direct" }, true], ["tls.directNames", { names: ["chess--alice.fshp.app"] }, true], ["tls.directNames", { names: [] }, true],
         ["acme.jwk", {}, true], ["acme.sign", { kind: "newOrder" }, true], ["acme.sign", { kind: "x", url: "u", nonce: "n" }, true],
         ["acme.sign", { kind: "newOrder", url: "https://acme-v02.api.letsencrypt.org/acme/new-order", nonce: "abcdefghij", names: [FQDN] }, true],
         ["acme.sign", { kind: "postAsGet", url: "https://acme-v02.api.letsencrypt.org/acme/order/1", nonce: "abcdefghij", kid: "k" }, true],
@@ -663,8 +672,34 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       await c.call("tls.activate", { handle: rh });
       expect(((await c.call("tls.active")).serving as unknown[]).length).toBe(1);
       expect(new TlsKeys(ALLOWED, join(dir, "tls")).servingCerts().map((x) => x.slot)).toEqual(["default"]);
+      // Direct names: TS sets them and serves one, Rust reads both; Rust drops a name, TS sees its keys gone.
       c.close();
       await k.stop();
+      const DIRECT = "game--alice.fshp.app";
+      const OTHER = "chess--alice.fshp.app";
+      const withDirect = new TlsKeys(ALLOWED, join(dir, "tls"));
+      withDirect.setDirectNames([DIRECT, OTHER]);
+      const dh = withDirect.createKey([DIRECT]).handle;
+      withDirect.install(dh, await issueFor(withDirect.csr(dh)));
+      withDirect.activate(dh, "direct");
+      const k2 = await spawnRust(dir);
+      const c2 = await client(k2.sock);
+      expect((await c2.call("tls.list")).directNames).toEqual([OTHER, DIRECT]);
+      const served2 = (await c2.call("tls.active")).serving as Array<{ slot: string; handle: string }>;
+      expect(served2.map((x) => [x.slot, x.handle])).toEqual([["direct", dh], ["default", rh]]);
+      expect(withDirect.servingCerts()).toEqual(served2);
+      expect((await c2.call("tls.sign", { handle: dh, ...t13(th) })).sig).toBe(hex(withDirect.signHandshake(dh, tls13ServerSignedMessage(th))));
+      const oh = String((await c2.call("tls.createKey", { names: [OTHER] })).handle);
+      await c2.call("tls.install", { handle: oh, chain: await issueFor(unhex((await c2.call("tls.csr", { handle: oh })).csr)) });
+      await c2.call("tls.activate", { handle: oh, slot: "direct" });
+      expect(new TlsKeys(ALLOWED, join(dir, "tls")).servingCerts().map((x) => [x.slot, x.handle])).toEqual([["direct", oh], ["direct", dh], ["default", rh]]);
+      expect(await c2.call("tls.directNames", { names: [OTHER] })).toEqual({ names: [OTHER], removed: 1 });
+      expect(existsSync(join(dir, "tls", `${dh}.json`))).toBe(false);
+      const after = new TlsKeys(ALLOWED, join(dir, "tls"));
+      expect(after.directNames()).toEqual([OTHER]);
+      expect(after.servingCerts().map((x) => [x.slot, x.handle])).toEqual([["direct", oh], ["default", rh]]);
+      c2.close();
+      await k2.stop();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

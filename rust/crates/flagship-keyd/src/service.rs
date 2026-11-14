@@ -17,8 +17,8 @@ use crate::policy::{
     is_pairing_order, is_service_id,
 };
 use crate::tls::{
-    Clock, TLS_SLOTS, TlsKeys, is_ecdhe_params, system_clock, tls12_server_signed_message,
-    tls13_server_signed_message,
+    ActivateSlot, Clock, TLS_SLOTS, TlsKeys, is_ecdhe_params, system_clock,
+    tls12_server_signed_message, tls13_server_signed_message,
 };
 use crate::wire::{
     Args, ErrorCode, HexBounds, KEYD_PROTOCOL_VERSION, KeydError, KeydResult, PEM_MAX, hex_arg,
@@ -726,9 +726,18 @@ impl KeydService {
                     None => None,
                     Some(v) => Some(
                         v.as_str()
-                            .and_then(|s| TLS_SLOTS.iter().position(|n| *n == s))
+                            .and_then(|s| {
+                                if s == "direct" {
+                                    Some(ActivateSlot::Direct)
+                                } else {
+                                    TLS_SLOTS
+                                        .iter()
+                                        .position(|n| *n == s)
+                                        .map(ActivateSlot::Slot)
+                                }
+                            })
                             .ok_or_else(|| {
-                                KeydError::bad_request("slot must be control or apps")
+                                KeydError::bad_request("slot must be control, apps or direct")
                             })?,
                     ),
                 };
@@ -777,10 +786,20 @@ impl KeydService {
                 let tls = self.tls()?;
                 done(obj! { "sig" => to_hex(&tls.sign_handshake(handle, &message)?) })
             }
+            "tls.directNames" => {
+                // The box's direct names, each verified by the daemon under the owner's signed order; keyd
+                // bounds them to its own account's derived names and drops a gone name's keys.
+                no_extra_args(a, &["names"])?;
+                let names = string_list(a.get("names"))?;
+                let (names, removed) = self.tls_mut()?.set_direct_names(&names)?;
+                done(obj! { "names" => names, "removed" => removed })
+            }
             "tls.list" => {
                 no_extra_args(a, &[])?;
                 let tls = self.tls()?;
-                done(obj! { "keys" => tls.list(), "allowedNames" => tls.names() })
+                done(
+                    obj! { "keys" => tls.list(), "allowedNames" => tls.names(), "directNames" => tls.direct_names() },
+                )
             }
             "tls.remove" => {
                 no_extra_args(a, &["handle"])?;

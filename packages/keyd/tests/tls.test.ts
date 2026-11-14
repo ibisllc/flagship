@@ -145,6 +145,62 @@ describe("TLS keys held by keyd", () => {
     t2.remove(control);
   });
 
+  it("holds one key and one slot per direct name of this box's account, and drops a name's keys when it goes", async () => {
+    const DIRECT = "game--alice.fshp.app";
+    const OTHER = "chess--alice.fshp.app";
+    const t1 = new TlsKeys(ALLOWED, dir);
+    expect(() => t1.createKey([DIRECT])).toThrow(/not one this box may have/);
+    for (const [bad, msg] of [
+      [["game--bob.fshp.app"], /one of this box's account/],
+      [["game.fshp.app"], /not a direct name/],
+      [["a--b--alice.fshp.app"], /not a direct name/],
+      [["Game--alice.fshp.app"], /not a direct name/],
+      [["game--alice.fshp.app.evil.com"], /not a direct name/],
+      [["game--alice.flagship.services"], /not a direct name/],
+      [Array.from({ length: 17 }, (_, i) => `a${i}--alice.fshp.app`), /at most 16/],
+    ] as const) {
+      expect(() => t1.setDirectNames([...bad]), bad[0]).toThrow(msg);
+    }
+    expect(t1.setDirectNames([OTHER, DIRECT, DIRECT])).toEqual({ names: [OTHER, DIRECT], removed: 0 });
+    expect(() => t1.createKey([DIRECT, FQDN])).toThrow(/for that name alone/);
+    const d = t1.createKey([DIRECT]).handle;
+    const o = t1.createKey([OTHER]).handle;
+    const csr = new Pkcs10CertificateRequest(Buffer.from(t1.csr(d)));
+    expect(sansOf(csr)).toEqual([DIRECT]);
+    expect(() => t1.activate(d, "direct")).toThrow(/install a certificate/);
+    t1.install(d, await issueFor(t1.csr(d)));
+    t1.install(o, await issueFor(t1.csr(o)));
+    const control = t1.createKey([FQDN]).handle;
+    t1.install(control, await issueFor(t1.csr(control)));
+    expect(() => t1.activate(control, "direct")).toThrow(/not for one of this box's direct names/);
+    t1.activate(control, "control");
+    t1.activate(d, "direct");
+    t1.activate(o, "direct");
+    // A default-only activate leaves the direct names in service.
+    t1.activate(control);
+    expect(t1.servingCerts().map((c) => [c.slot, c.handle, c.names])).toEqual([
+      ["direct", o, [OTHER]],
+      ["direct", d, [DIRECT]],
+      ["default", control, [FQDN]],
+    ]);
+    expect(t1.signHandshake(d, tls13ServerSignedMessage(sha256(new Uint8Array(1))))).toBeInstanceOf(Uint8Array);
+    expect(() => t1.remove(d)).toThrow(/in service/);
+    // A restart keeps the names and their slots.
+    const t2 = new TlsKeys(ALLOWED, dir);
+    expect(t2.directNames()).toEqual([OTHER, DIRECT]);
+    expect(t2.servingCerts().map((c) => [c.slot, c.handle])).toEqual([["direct", o], ["direct", d], ["default", control]]);
+    // The name goes: its slot and its keys go with it, also the one in service.
+    expect(t2.setDirectNames([DIRECT])).toEqual({ names: [DIRECT], removed: 1 });
+    expect(t2.list().map((k) => k.handle)).not.toContain(o);
+    expect(new TlsKeys(ALLOWED, dir).servingCerts().map((c) => [c.slot, c.handle])).toEqual([["direct", d], ["default", control]]);
+    expect(() => t2.createKey([OTHER])).toThrow(/not one this box may have/);
+    // Direct keys have their own budget: they never crowd out the box's own certificates.
+    for (let i = 0; i < 40; i++) t2.createKey([DIRECT]);
+    expect(t2.list().filter((k) => k.names[0] === DIRECT)).toHaveLength(32);
+    expect(t2.list().map((k) => k.handle)).toContain(d);
+    expect(() => t2.createKey([`*.${FQDN}`])).not.toThrow();
+  });
+
   it("takes a slot over the socket and lists every certificate in service with tls.active", async () => {
     const k = await startInProcess({ tls: new TlsKeys(ALLOWED) }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
     try {
@@ -152,7 +208,7 @@ describe("TLS keys held by keyd", () => {
       await c.connect();
       const h = String((await c.call("tls.createKey", { names: [FQDN] })).handle);
       await c.call("tls.install", { handle: h, chain: await issueFor(Uint8Array.from(Buffer.from(String((await c.call("tls.csr", { handle: h })).csr), "hex"))) });
-      await expect(c.call("tls.activate", { handle: h, slot: "other" })).rejects.toMatchObject({ code: "bad-request", message: "slot must be control or apps" });
+      await expect(c.call("tls.activate", { handle: h, slot: "other" })).rejects.toMatchObject({ code: "bad-request", message: "slot must be control, apps or direct" });
       await expect(c.call("tls.activate", { handle: h, slot: null })).rejects.toMatchObject({ code: "bad-request" });
       expect(await c.call("tls.active")).toEqual({ active: null, serving: [] });
       await c.call("tls.activate", { handle: h, slot: "control" });
