@@ -263,7 +263,7 @@ export interface ScreensHttpDeps {
    */
   debugAccess?: Pick<DebugAccessController, "view" | "grant" | "revoke"> | null;
   /** "Release this box" on a claimed retail box (`/api/screens/box-release`, retailClaim/releaseOrder.ts). */
-  boxRelease?: Pick<BoxReleaseConsumer, "take"> | null;
+  boxRelease?: Pick<BoxReleaseConsumer, "take" | "view"> | null;
   /**
    * Direct access (`/api/screens/direct-access`, `/lan-hint/v2`; directAccess.ts): the owner's signed order for
    * reaching the box at its public addresses. Its state rides server-detail.
@@ -1945,6 +1945,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     lastUpdate: deps.lastUpdate?.() ?? null,
     ...(deps.serving ? { serving: deps.serving.view() } : {}),
     ...(deps.debugAccess ? { debugAccess: deps.debugAccess.view() } : {}),
+    ...(deps.boxRelease ? { retail: deps.boxRelease.view() } : {}),
     ...(deps.directAccess ? { directAccess: deps.directAccess.controller.view() } : {}),
     appSandbox: appSandboxStatus(),
     ...(deps.outboundProxy ? { outboundProxy: deps.outboundProxy.summary() } : {}),

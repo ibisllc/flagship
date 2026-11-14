@@ -126,6 +126,11 @@ export interface ServerDetailResponse {
     lastEnded?: { at: number; why: "expired" | "revoked" };
   };
   /**
+   * A retail box (docs/retail-box-setup.md §8.2): the server key a "Release this box" order must
+   * name. Absent on every other box.
+   */
+  retail?: { stkPubHex: string };
+  /**
    * The sandbox every app runs in (gVisor, docs/app-runtimes.md §5.1):
    * `unavailable` means no app can start here, and says why. Older daemons
    * omit the field.
