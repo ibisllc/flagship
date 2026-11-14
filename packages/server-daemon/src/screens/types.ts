@@ -410,9 +410,10 @@ export interface PairedSessionSummary {
    * "remote": a browser docked through Remote (a companion session, read-only,
    * expires). "device": a session one of the account's own devices paired with
    * a signed order (its phone, tablet or webapp, listed under Trusted devices).
-   * Only "remote" sessions are browser sessions.
+   * "extension": the Flagship browser extension (docs/browser-extension.md), which reads only
+   * the box's signed certificate fingerprint. "remote" and "extension" are browser sessions.
    */
-  kind: "remote" | "device";
+  kind: "remote" | "device" | "extension";
   /** When a remote session stops working (unix ms). */
   expiresAt?: number;
 }

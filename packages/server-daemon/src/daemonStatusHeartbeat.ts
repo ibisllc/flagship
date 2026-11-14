@@ -72,6 +72,32 @@ function certDetails(certPem: string): {
   }
 }
 
+/**
+ * A fresh signed report for the certificate the box serves now, for the browser extension's
+ * `GET /api/companion/cert-pin` (docs/browser-extension.md). It names no apps: the extension needs
+ * only the fingerprint. Null when the certificate can't be read.
+ */
+export function buildSignedCertStatus(args: {
+  serverDomain: string;
+  certPem: string;
+  certValidUntil: number | null;
+  sign: MsgSigner;
+  now?: () => number;
+}): { report: DaemonStatusReport; signatureHex: string } | null {
+  const { certSha256, certIssuer } = certDetails(args.certPem);
+  if (!certSha256) return null;
+  const report: DaemonStatusReport = {
+    serverDomain: args.serverDomain,
+    certSha256,
+    certValidUntil: args.certValidUntil !== null && Number.isFinite(args.certValidUntil) ? args.certValidUntil : null,
+    certIssuer,
+    appsServed: [],
+    nonce: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
+    issuedAt: (args.now ?? (() => Date.now()))(),
+  };
+  return { report, signatureHex: bytesToHex(signDaemonStatusReport(report, args.sign)) };
+}
+
 /** POST one signed daemon-status report. Best-effort; never throws. */
 export async function postDaemonStatus(args: {
   serverDomain: string;
