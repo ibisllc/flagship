@@ -193,6 +193,7 @@ public struct SettingsTab: View {
                     onOpenOfflineControl: { path.append(.offlineControl) },
                     onOpenAccountSecurity: { path.append(.accountSecurity) },
                     onOpenQuantumSafety: { path.append(.quantumSafety) },
+                    onOpenOrganizations: { path.append(.organizations) },
                     pqLabels: pqLabels,
                     onOpenProfiles: { path.append(.profiles) },
                     nameDibsOpen: dibsWindowOpen,
@@ -461,6 +462,8 @@ public struct SettingsTab: View {
             AccountSecurityContainer()
         case .quantumSafety:
             QuantumSafetyScreen(viewModel: QuantumSafetyViewModel(app: app, clients: podClients))
+        case .organizations:
+            OrgListScreen(vm: OrgViewModel())
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")

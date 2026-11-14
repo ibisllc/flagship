@@ -117,6 +117,7 @@ public struct SettingsScreen: View {
     /// disable flows.
     var onOpenAccountSecurity: () -> Void = {}
     var onOpenQuantumSafety: () -> Void = {}
+    var onOpenOrganizations: () -> Void = {}
     /// Architecture v2: each trusted device's post-quantum key, by device id ("hardware PQ",
     /// "PQ, hardware-wrapped", or that it has none yet).
     var pqLabels: [String: String] = [:]
@@ -230,6 +231,7 @@ public struct SettingsScreen: View {
         onOpenOfflineControl: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenQuantumSafety: @escaping () -> Void = {},
+        onOpenOrganizations: @escaping () -> Void = {},
         pqLabels: [String: String] = [:],
         onOpenProfiles: @escaping () -> Void = {},
         nameDibsOpen: Bool = false,
@@ -289,6 +291,7 @@ public struct SettingsScreen: View {
         self.onOpenOfflineControl = onOpenOfflineControl
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenQuantumSafety = onOpenQuantumSafety
+        self.onOpenOrganizations = onOpenOrganizations
         self.pqLabels = pqLabels
         self.onOpenProfiles = onOpenProfiles
         self.nameDibsOpen = nameDibsOpen
@@ -595,6 +598,8 @@ public struct SettingsScreen: View {
         ))
         rows.append(FSSettingsRow(icon: "atom", title: String(localized: "Quantum-safe protection"), subtitle: String(localized: "Strict protection per server"),
                                   accessibilityId: "settings-open-quantum-safety", action: onOpenQuantumSafety))
+        rows.append(FSSettingsRow(icon: "person.3", title: String(localized: "Organizations"), subtitle: String(localized: "Run servers together, with signed approvals"),
+                                  accessibilityId: "settings-open-organizations", action: onOpenOrganizations))
         rows.append(FSSettingsRow(icon: "sparkles", title: String(localized: "AI API keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys))
         // Always present: it works when Flagship can't be reached (docs/data-sovereignty.md).
         rows.append(FSSettingsRow(icon: "wifi", title: String(localized: "Offline control"), subtitle: String(localized: "Your servers on this Wi-Fi, without Flagship"),

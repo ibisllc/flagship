@@ -655,6 +655,91 @@
       "check": "signed-tags",
       "key": "web:flagship/box-setup-code-key/v1",
       "reason": "A retail box is claimed over Bluetooth, which the webapp cannot use (iOS Safari has no Web Bluetooth); the webapp says to use the phone app (docs/retail-box-setup.md §11.2)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-admins/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-approval/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-authority/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-bylaws/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-delayed-change/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-overturn/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-accept/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-freeze/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-grant/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-invite/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-member/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-member-pq/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-revoke/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-roles/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-sas/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-veto/v1",
+      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:org-authority",
+      "reason": "The webapp holds no org keys and has no org console yet (docs/enterprise-accounts.md E4: web is view-and-collect, after iOS and Android); TS, Swift and Kotlin read the vectors."
     }
   ]
 }
