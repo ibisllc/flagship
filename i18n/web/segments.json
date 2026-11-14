@@ -7703,14 +7703,6 @@
       "pro.html"
     ]
   },
-  "s61465bf444": {
-    "en": "If that's in your threat model, <1>pay with cash or Monero instead.</1> No identity is ever attached — we only learn your username, which you chose, and which says nothing about who you are.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
   "s98acec296a": {
     "en": "It's the same content-blind promise as the rest of Flagship: your box terminates its own TLS, so we can't read your traffic; and your payment, done right, leaves no trail back to you.",
     "kind": "text",
@@ -7758,38 +7750,6 @@
     "en": "2 · Send the money",
     "kind": "text",
     "ctx": "h3",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s4e2d37bbaa": {
-    "en": "Cash by mail <1>most private</1>",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sc5375e2d97": {
-    "en": "Fold some cash into a slip of paper with your username and how many months you want, and post it to:",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s4d931637b1": {
-    "en": "[ your mailing address — fill in before publishing ]",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s8832af600a": {
-    "en": "No name needed on the envelope. Like Mullvad's cash-in-an-envelope, this leaves no digital trace at all.",
-    "kind": "text",
-    "ctx": "p",
     "pages": [
       "pro.html"
     ]
@@ -8483,14 +8443,6 @@
       "pro.html"
     ]
   },
-  "s959a6a5cd8": {
-    "en": "Buy them exactly like Pro — cash by mail, Monero, or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
   "sc6609e0419": {
     "en": "Flagship is free — genuinely, with no nags and nothing held back. Pro is the membership for the few who are running <1>real</1> things: more public bandwidth, your own domain names, and a way to keep the project independent. All we ever need is a username. Not your name.",
     "kind": "text",
@@ -8591,16 +8543,32 @@
       "pro.html"
     ]
   },
-  "sc8a67c2b25": {
-    "en": "Card checkout isn't switched on yet — use cash, Monero, or a voucher above.",
+  "s6f596af3e0": {
+    "en": "Couldn't start checkout.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s6f596af3e0": {
-    "en": "Couldn't start checkout.",
+  "s96c94e574c": {
+    "en": "If that's in your threat model, <1>pay with Monero instead.</1> No identity is ever attached — we only learn your username, which you chose, and which says nothing about who you are.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s9a0a80f97c": {
+    "en": "Card checkout isn't switched on yet — use Monero or a voucher above.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s30fae2c912": {
+    "en": "Buy them exactly like Pro — Monero or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.",
     "kind": "text",
     "ctx": "p",
     "pages": [
