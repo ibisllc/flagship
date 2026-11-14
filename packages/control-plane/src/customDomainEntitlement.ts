@@ -15,7 +15,7 @@ export const CUSTOM_DOMAIN_LIMITS: Readonly<Record<TierName, number>> = {
 };
 
 /** Hostnames that are ours and can never be someone's custom domain. */
-const OWN_ZONES = ["flagship.services", "flagshipserver.com", "voi.ci"];
+const OWN_ZONES = ["flagship.services", "flagshipserver.com", "voi.ci", "fshp.app", "fshp.tech"];
 
 export function isOwnZone(fqdn: string): boolean {
   const f = fqdn.trim().toLowerCase().replace(/\.$/, "");
