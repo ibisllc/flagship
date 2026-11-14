@@ -3637,4 +3637,9 @@
     <string name="voici_reply_footer">ほかのページとの会話は voi.ci にあります。</string>
     <string name="voici_segment_conversations">会話</string>
     <string name="voici_empty_messages_options">まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。</string>
+    <string name="push_service">プッシュサービス</string>
+    <string name="push_service_unifiedpush">UnifiedPush</string>
+    <string name="push_service_unifiedpush_through">UnifiedPush（%1$s 経由）</string>
+    <string name="push_service_fcm">Google（Firebase Cloud Messaging）</string>
+    <string name="push_service_none">なし：このスマートフォンにはプッシュサービスがありません。通知を受け取るには、ntfy などの UnifiedPush アプリをインストールしてください。</string>
 </resources>

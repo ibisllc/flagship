@@ -3634,5 +3634,10 @@
   "voici_publishing_page": "正在发布你的页面…",
   "voici_reply_footer": "你与其他页面的对话在 voi.ci 上。",
   "voici_segment_conversations": "对话",
-  "voici_empty_messages_options": "还没有消息。在“页面选项”中打开“接收消息”即可收到消息。"
+  "voici_empty_messages_options": "还没有消息。在“页面选项”中打开“接收消息”即可收到消息。",
+  "push_service": "推送服务",
+  "push_service_unifiedpush": "UnifiedPush",
+  "push_service_unifiedpush_through": "UnifiedPush（通过 %1$s）",
+  "push_service_fcm": "Google（Firebase Cloud Messaging）",
+  "push_service_none": "无：这部手机没有推送服务。请安装 UnifiedPush 应用（例如 ntfy）以接收通知。"
 }

@@ -3634,5 +3634,10 @@
   "voici_publishing_page": "ページを公開しています…",
   "voici_reply_footer": "ほかのページとの会話は voi.ci にあります。",
   "voici_segment_conversations": "会話",
-  "voici_empty_messages_options": "まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。"
+  "voici_empty_messages_options": "まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。",
+  "push_service": "プッシュサービス",
+  "push_service_unifiedpush": "UnifiedPush",
+  "push_service_unifiedpush_through": "UnifiedPush（%1$s 経由）",
+  "push_service_fcm": "Google（Firebase Cloud Messaging）",
+  "push_service_none": "なし：このスマートフォンにはプッシュサービスがありません。通知を受け取るには、ntfy などの UnifiedPush アプリをインストールしてください。"
 }

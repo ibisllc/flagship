@@ -73,7 +73,7 @@ object ServerShare {
     const val OP_LIST = "list"
     const val OP_DELETE = "delete"
 
-    val SHARE_PUSH_PLATFORMS: List<String> = listOf("apns", "fcm", "webpush")
+    val SHARE_PUSH_PLATFORMS: List<String> = listOf("apns", "fcm", "webpush", "unifiedpush")
 
     private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L
     private val HEX32 = Regex("[0-9a-f]{32}")
@@ -675,7 +675,7 @@ object ServerShare {
             checkShareId(shareId)
             checkHex64("memberPubHex", memberPubHex)
             require(op == OP_PUT || op == OP_DELETE) { "server-share: push op must be put or delete" }
-            require(platform in SHARE_PUSH_PLATFORMS) { "server-share: push platform must be apns, fcm or webpush" }
+            require(platform in SHARE_PUSH_PLATFORMS) { "server-share: push platform must be apns, fcm, webpush or unifiedpush" }
             checkHex64("tokenSha256", tokenSha256)
             checkTime("issuedAt", issuedAt)
             return join(TAG_SERVER_SHARE_PUSH, serverDomain, shareId, memberPubHex, op, platform, tokenSha256, issuedAt.toString())

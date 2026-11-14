@@ -3637,4 +3637,9 @@
     <string name="voici_reply_footer">Vos conversations avec d’autres pages sont sur voi.ci.</string>
     <string name="voici_segment_conversations">Conversations</string>
     <string name="voici_empty_messages_options">Pas encore de messages. Activez Accepter les messages dans Options de la page pour en recevoir.</string>
+    <string name="push_service">Service de notifications push</string>
+    <string name="push_service_unifiedpush">UnifiedPush</string>
+    <string name="push_service_unifiedpush_through">UnifiedPush, via %1$s</string>
+    <string name="push_service_fcm">Google (Firebase Cloud Messaging)</string>
+    <string name="push_service_none">Aucun : ce téléphone n’a pas de service de notifications push. Installez une application UnifiedPush, comme ntfy, pour recevoir les notifications.</string>
 </resources>

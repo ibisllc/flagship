@@ -3642,4 +3642,9 @@
     <string name="voici_reply_footer">Your conversations with other pages are on voi.ci.</string>
     <string name="voici_segment_conversations">Conversations</string>
     <string name="voici_empty_messages_options">No messages yet. Turn on Accept messages in Page options to get them.</string>
+    <string name="push_service">Push service</string>
+    <string name="push_service_unifiedpush">UnifiedPush</string>
+    <string name="push_service_unifiedpush_through">UnifiedPush, through %1$s</string>
+    <string name="push_service_fcm">Google (Firebase Cloud Messaging)</string>
+    <string name="push_service_none">None: this phone has no push service. Install a UnifiedPush app, such as ntfy, to get notifications.</string>
 </resources>

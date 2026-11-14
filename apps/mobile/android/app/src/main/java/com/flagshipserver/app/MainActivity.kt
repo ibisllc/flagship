@@ -423,11 +423,33 @@ class MainActivity : FragmentActivity() {
         // Push-token registration is inherently a real-backend operation
         // (registering an FCM token + X25519 push key against .com), so it
         // always uses the live client; without a session it no-ops.
+        val pushTransports = com.flagshipserver.app.push.PushTransportStore.from(this)
         val registrar = PushRegistrar(
             appState, liveFlagshipServer,
             isEnabled = { privacy.pushNotificationsEnabled.value },
+            transports = pushTransports,
+            requestUnifiedPushEndpoint = {
+                val vapid = runCatching { liveFlagshipServer.vapidPublicKey() }.getOrNull()
+                    ?.also { pushTransports.vapidPublicKey = it }
+                    ?: pushTransports.vapidPublicKey
+                com.flagshipserver.app.push.UnifiedPushTransport.register(this, vapid)
+            },
+            dropUnifiedPush = { com.flagshipserver.app.push.UnifiedPushTransport.unregister(this) },
         )
         PushHolder.registrar = registrar
+        com.flagshipserver.app.push.UnifiedPushTransport.resolve(this, this) { transport, distributor ->
+            val previous = pushTransports.transport
+            pushTransports.setTransport(transport, distributor)
+            if (previous == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH && transport != previous) {
+                pushTransports.unifiedPushToken = null
+                com.flagshipserver.app.push.UnifiedPushTransport.unregister(this)
+            }
+            if (privacy.pushNotificationsEnabled.value &&
+                (transport != previous || transport == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH)
+            ) {
+                registrar.registerCurrentTokenAsync()
+            }
+        }
 
         // Boot-secret RELAY: a `secret-request` push routes into the approval
         // list. The FCM service also synthesizes the deep link for the tap;

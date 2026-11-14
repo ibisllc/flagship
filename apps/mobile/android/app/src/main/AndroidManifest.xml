@@ -195,6 +195,15 @@
             </intent-filter>
         </service>
 
+        <!-- UnifiedPush (phones without Google Play Services) -->
+        <service
+            android:name=".push.FlagshipUnifiedPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Home-screen server status widget (Glance). -->
         <receiver
             android:name=".companion.PodStatusWidgetReceiver"

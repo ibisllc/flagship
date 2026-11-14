@@ -239,6 +239,14 @@ dependencies {
     // extensions inline (release notes: 2024-12-09 BoM 33.7+).
     implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // UnifiedPush for phones without Google Play Services (push/UnifiedPushTransport.kt).
+    // 3.0.10 is the newest connector built for Kotlin 2.0 (3.1+ needs a 2.2 stdlib). It
+    // asks for the JVM `tink`, which clashes with tink-android's identical classes; it only
+    // needs tink's subtle primitives, which tink-android carries (it bundles its own
+    // fixed_webpush decrypter).
+    implementation("org.unifiedpush.android:connector:3.0.10") {
+        exclude(group = "com.google.crypto.tink", module = "tink")
+    }
 
     // Block Store (for cloud-recovery wrapped UMK)
     implementation("com.google.android.gms:play-services-auth-blockstore:16.4.0")
