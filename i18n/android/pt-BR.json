@@ -3715,5 +3715,8 @@
   "da_probe_reachable": "Acessível de fora.",
   "da_probe_unreachable": "Não acessível de fora.",
   "da_probe_nothing": "Ainda não publicado, então não há nada para verificar.",
-  "da_state_certificate_ready": "Certificado pronto. Aguardando o caminho direto."
+  "da_state_certificate_ready": "Certificado pronto. Aguardando o caminho direto.",
+  "activity_retail_reset_window_opened": "Alguém apertou o botão de redefinição deste servidor",
+  "activity_retail_reset_window_closed": "A janela de redefinição foi fechada. Nada mudou.",
+  "activity_retail_wipe_started": "Este servidor está sendo apagado para um novo proprietário"
 }

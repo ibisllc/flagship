@@ -3715,5 +3715,8 @@
   "da_probe_reachable": "Joignable depuis l’extérieur.",
   "da_probe_unreachable": "Injoignable depuis l’extérieur.",
   "da_probe_nothing": "Pas encore publié : il n’y a donc rien à vérifier.",
-  "da_state_certificate_ready": "Certificat prêt. En attente de la connexion directe."
+  "da_state_certificate_ready": "Certificat prêt. En attente de la connexion directe.",
+  "activity_retail_reset_window_opened": "Quelqu’un a appuyé sur le bouton de réinitialisation de ce serveur",
+  "activity_retail_reset_window_closed": "La fenêtre de réinitialisation s’est fermée. Rien n’a changé.",
+  "activity_retail_wipe_started": "Ce serveur est en cours d’effacement pour un nouveau propriétaire"
 }

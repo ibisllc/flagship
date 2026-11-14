@@ -183,6 +183,9 @@ public enum BoxEventLabels {
         "server.bootchain.refreshed": String(localized: "Updated how this server unlocks at start-up"),
         "server.bootchain.rolled-back": String(localized: "Kept the previous start-up unlock"),
         "server.sandbox.removed": String(localized: "Turned off this server's extra sandbox after it kept failing to start"),
+        "server.retail.reset-window-opened": String(localized: "Someone pressed the reset button on this server"),
+        "server.retail.reset-window-closed": String(localized: "The reset window closed. Nothing changed."),
+        "server.retail.wipe-started": String(localized: "This server is being wiped for a new owner"),
         // The relay mesh (relay-mesh.md §9.3, §9.4): the detail is the box's own sentence.
         "server.relay.moved": String(localized: "Moved to another Flagship relay"),
         "server.relay.move-refused": String(localized: "Stayed on its current relay"),

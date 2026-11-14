@@ -3718,4 +3718,7 @@
     <string name="da_probe_unreachable">外部からアクセスできません。</string>
     <string name="da_probe_nothing">まだ公開されていないため、確認するものがありません。</string>
     <string name="da_state_certificate_ready">証明書の準備ができました。直接接続を待っています。</string>
+    <string name="activity_retail_reset_window_opened">誰かがこのサーバーのリセットボタンを押しました</string>
+    <string name="activity_retail_reset_window_closed">リセットの受付時間が終わりました。何も変わっていません。</string>
+    <string name="activity_retail_wipe_started">新しい所有者のためにこのサーバーを消去しています</string>
 </resources>

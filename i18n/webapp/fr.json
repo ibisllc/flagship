@@ -3516,5 +3516,8 @@
   "Through the relay": "Via le relais",
   "Certificate ready. Waiting for the direct path.": "Certificat prêt. En attente de la connexion directe.",
   "Set up a box from a store": "Configurer un boîtier acheté en magasin",
-  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "Utilisez l'app Flagship sur votre téléphone pour configurer ce boîtier. Elle le trouve en Bluetooth, ce qu'un navigateur ne peut pas utiliser."
+  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "Utilisez l'app Flagship sur votre téléphone pour configurer ce boîtier. Elle le trouve en Bluetooth, ce qu'un navigateur ne peut pas utiliser.",
+  "Someone pressed the reset button on this server": "Quelqu’un a appuyé sur le bouton de réinitialisation de ce serveur",
+  "The reset window closed. Nothing changed.": "La fenêtre de réinitialisation s’est fermée. Rien n’a changé.",
+  "This server is being wiped for a new owner": "Ce serveur est en cours d’effacement pour un nouveau propriétaire"
 }

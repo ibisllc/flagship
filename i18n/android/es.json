@@ -3715,5 +3715,8 @@
   "da_probe_reachable": "Accesible desde fuera.",
   "da_probe_unreachable": "No accesible desde fuera.",
   "da_probe_nothing": "Todavía no está publicado, así que no hay nada que comprobar.",
-  "da_state_certificate_ready": "Certificado listo. Esperando la ruta directa."
+  "da_state_certificate_ready": "Certificado listo. Esperando la ruta directa.",
+  "activity_retail_reset_window_opened": "Alguien pulsó el botón de reinicio de este servidor",
+  "activity_retail_reset_window_closed": "La ventana de reinicio se cerró. No cambió nada.",
+  "activity_retail_wipe_started": "Este servidor se está borrando para un nuevo propietario"
 }

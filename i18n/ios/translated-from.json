@@ -3518,5 +3518,8 @@
   "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": "876681cd1ebc",
   "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": "b3f3acaa9449",
   "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": "14096a64288f",
-  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "163456dfd834"
+  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "163456dfd834",
+  "Someone pressed the reset button on this server": "d8f4f43dcd47",
+  "The reset window closed. Nothing changed.": "6f2d1764e185",
+  "This server is being wiped for a new owner": "1ae677a0fd60"
 }

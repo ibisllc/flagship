@@ -3715,5 +3715,8 @@
   "da_probe_reachable": "外部からアクセスできます。",
   "da_probe_unreachable": "外部からアクセスできません。",
   "da_probe_nothing": "まだ公開されていないため、確認するものがありません。",
-  "da_state_certificate_ready": "証明書の準備ができました。直接接続を待っています。"
+  "da_state_certificate_ready": "証明書の準備ができました。直接接続を待っています。",
+  "activity_retail_reset_window_opened": "誰かがこのサーバーのリセットボタンを押しました",
+  "activity_retail_reset_window_closed": "リセットの受付時間が終わりました。何も変わっていません。",
+  "activity_retail_wipe_started": "新しい所有者のためにこのサーバーを消去しています"
 }

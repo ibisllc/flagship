@@ -15336,5 +15336,17 @@
   "da_state_certificate_ready": {
     "en": "Certificate ready. Waiting for the direct path.",
     "ctx": "api/DirectNamesClient.kt (name state)"
+  },
+  "activity_retail_reset_window_opened": {
+    "en": "Someone pressed the reset button on this server",
+    "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "activity_retail_reset_window_closed": {
+    "en": "The reset window closed. Nothing changed.",
+    "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "activity_retail_wipe_started": {
+    "en": "This server is being wiped for a new owner",
+    "ctx": "core/BoxEventLabels.kt (Activity)"
   }
 }

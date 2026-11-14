@@ -3516,5 +3516,8 @@
   "Through the relay": "通过中继",
   "Certificate ready. Waiting for the direct path.": "证书已就绪。正在等待直接连接。",
   "Set up a box from a store": "设置从商店购买的主机",
-  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "请使用手机上的 Flagship 应用设置这台主机。应用通过蓝牙查找主机，而浏览器无法使用蓝牙。"
+  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "请使用手机上的 Flagship 应用设置这台主机。应用通过蓝牙查找主机，而浏览器无法使用蓝牙。",
+  "Someone pressed the reset button on this server": "有人按下了此服务器的重置按钮",
+  "The reset window closed. Nothing changed.": "重置窗口已关闭。没有任何更改。",
+  "This server is being wiped for a new owner": "正在为新所有者清除此服务器"
 }

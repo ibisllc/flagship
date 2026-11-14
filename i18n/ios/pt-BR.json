@@ -3524,5 +3524,8 @@
   "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": "Esta rede pede uma página de login, que a caixa não consegue usar. Use uma rede doméstica ou um cabo.",
   "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": "A caixa está on-line, mas não consegue alcançar a Flagship. Sua rede pode estar bloqueando conexões de saída na porta 443.",
   "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": "Sua senha do Wi-Fi vai para a caixa por Bluetooth. Se alguém por perto estiver interceptando esta configuração, poderá lê-la. Um cabo de rede evita isso.",
-  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "Se esta caixa já foi configurada antes, aperte o botão liga/desliga 5 vezes, rapidamente, e toque em Tentar de novo. Configurá-la apaga tudo o que há nela."
+  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "Se esta caixa já foi configurada antes, aperte o botão liga/desliga 5 vezes, rapidamente, e toque em Tentar de novo. Configurá-la apaga tudo o que há nela.",
+  "Someone pressed the reset button on this server": "Alguém apertou o botão de redefinição deste servidor",
+  "The reset window closed. Nothing changed.": "A janela de redefinição foi fechada. Nada mudou.",
+  "This server is being wiped for a new owner": "Este servidor está sendo apagado para um novo proprietário"
 }

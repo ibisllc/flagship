@@ -3522,5 +3522,8 @@
   "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": "このネットワークはサインインページを要求しますが、ボックスでは使えません。家庭のネットワークかケーブルを使ってください。",
   "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": "ボックスはオンラインですが、Flagship に接続できません。ネットワークがポート 443 の外向き接続をブロックしている可能性があります。",
   "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": "Wi-Fi のパスワードは Bluetooth でボックスに送られます。近くの誰かがこの設定を傍受していると、読み取られるおそれがあります。ネットワークケーブルを使えば防げます。",
-  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "このボックスが以前に設定されていた場合は、電源ボタンをすばやく 5 回押してから、「再試行」をタップしてください。設定するとボックス上のすべてが消去されます。"
+  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "このボックスが以前に設定されていた場合は、電源ボタンをすばやく 5 回押してから、「再試行」をタップしてください。設定するとボックス上のすべてが消去されます。",
+  "Someone pressed the reset button on this server": "誰かがこのサーバーのリセットボタンを押しました",
+  "The reset window closed. Nothing changed.": "リセットの受付時間が終わりました。何も変わっていません。",
+  "This server is being wiped for a new owner": "新しい所有者のためにこのサーバーを消去しています"
 }
