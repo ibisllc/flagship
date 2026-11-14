@@ -59,6 +59,9 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/companion-delegation/v1", //   let one Remote session build or deploy one app
   "flagship/uninstall-service/v1", //      uninstall an app
   "flagship/server-restore/v1", //         a new server waits for one backup (adding a server)
+  "flagship/server-restore-stage/v1", //   open a backup on a running server (changes no app)
+  "flagship/server-restore-merge/v1", //   restore a backup's apps into a running server, per the signed plan
+  "flagship/app-restore-undo/v1", //       put an app's pre-restore copy back, or delete it now
   "flagship/debug-access/v2", //           let an SSH key in as `debug` until a set time
   "flagship/debug-access-revoke/v1", //    turn debug access off at once
   "flagship/chat-approval/v1", //          answer an app chat request (chat/approvals.ts)
