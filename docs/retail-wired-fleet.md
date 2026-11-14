@@ -404,3 +404,19 @@ update bundles, `site-time`, and a gym lane with the uplink cut.
 
 Plan it, do not release it in 0.4. It comes after the Windows certification and after funding. 0.4 builds only the
 connected wired path (if at all), with Studio as the LAN helper.
+
+### Owner note, 2026-11-14: site mode for enterprise subscribers
+
+Site mode could be limited to enterprise subscribers. Why: an air-gapped cluster still checks in with Flagship
+periodically (by sneakernet or a brief controlled link) to refresh its permission from `.com`. In return Flagship:
+
+- sends air-gapped security updates (signed release bundles for sneakernet);
+- keeps a record per cluster that it "has not been hacked" (the check-in carries the cluster's signed state, e.g.
+  release and revocation versions, so Flagship can attest to it);
+- gives a warranty: as long as the site stays subscribed and follows the simple guidelines, it will never lose
+  availability or data to a hack.
+
+To design with it: what the check-in proves and carries (signed by the site's admin root and each box, no user
+content), how long a permission lasts between check-ins and what a lapsed site does (degrade, never wipe), the
+guidelines the warranty depends on, and how the "not hacked" record is evidenced. The warranty wording needs legal
+review before it is offered.
