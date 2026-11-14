@@ -20,6 +20,7 @@
 import os from "node:os";
 import {
   canonicalDirectAccessOrder,
+  canonicalDirectNameOrder,
   canonicalIp,
   directAccessOrderProblem,
   directAccessOrderSha256,
@@ -29,12 +30,14 @@ import {
   signDirectAddressUpdate,
   signLanHintV2,
   verifyDirectAccessOrder,
+  verifyDirectNameOrder,
   DIRECT_MAX_ADDRESSES,
   LAN_HINT_MAX_ENDPOINTS,
   LAN_HINT_MAX_TTL_MS,
   type AdminGrantView,
   type DirectAccessOrder,
   type DirectAddressUpdate,
+  type DirectNameOrder,
   type LanEndpoint,
   type LanHintV2,
 } from "@flagship/protocol";
@@ -246,6 +249,30 @@ export class DirectAccessController {
     return this.authorized(order, saved.signatureHex, saved.pqSignature) ? { ...saved, order } : null;
   }
 
+  /**
+   * Whether the owner's `direct-name/v1` order verifies under today's sensitive-order authority, the rule this box
+   * applies to its direct-access orders. The box serves a direct name only when this holds (directNames.ts).
+   */
+  verifyNameOrder(order: DirectNameOrder, signatureHex: string, pqSignature?: unknown): boolean {
+    if (!HEX_SIG.test(signatureHex) || order.serverDomain.toLowerCase() !== this.opts.serverDomain.toLowerCase()) return false;
+    const a = this.opts.authority();
+    try {
+      return authorizeSensitiveOrder({
+        order,
+        signature: Uint8Array.from(Buffer.from(signatureHex, "hex")),
+        verify: (o: DirectNameOrder, sig: Uint8Array, pub: Uint8Array) => verifyDirectNameOrder(o, sig, pub),
+        ownerIrkPub: a.ownerIrkPub,
+        ...(a.adminRootPub ? { adminRootPub: a.adminRootPub } : {}),
+        username: a.username,
+        ...(a.activeGrants ? { activeGrants: a.activeGrants } : {}),
+        now: this.now(),
+        hybrid: hybridOrderSignature(canonicalDirectNameOrder(order), pqSignature),
+      });
+    } catch {
+      return false;
+    }
+  }
+
   private authorized(order: DirectAccessOrder, signatureHex: string, pqSignature: unknown): boolean {
     const a = this.opts.authority();
     try {
@@ -415,6 +442,8 @@ export function startDirectListener(o: {
   zone: string;
   log?: (m: string) => void;
   rescanMs?: number;
+  /** The box's verified direct names (directNames.ts), admitted at the TLS gate besides its own zone. */
+  directNames?: () => readonly string[];
 }): { close(): Promise<void> } {
   const log = o.log ?? ((m: string) => console.log(`[direct-access] ${m}`));
   let current: LanListener | null = null;
@@ -441,6 +470,7 @@ export function startDirectListener(o: {
           listAddresses: () => o.controller.listenAddresses(),
           maxPerSource: 16,
           ingress: "public",
+          ...(o.directNames ? { extraNames: o.directNames } : {}),
           log: (m) => log(m),
           ...(o.rescanMs ? { rescanMs: o.rescanMs } : {}),
         });

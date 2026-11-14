@@ -348,6 +348,17 @@ entry. A name turned off keeps its certificate until it expires.
 site; the Worker route for its subdomains is gone. Its old proxied `*` and `www` records still need deleting in
 Cloudflare (owner).
 
-**Still open for step 3**: the box does not yet push its address update to `.com` or order direct certificates, and
-its public listener's SNI gate does not admit its direct names; no CT watch for `fshp.app`; no renewal/lapse for
-vanity names (none exist); no abuse route to suspend a name (the storage call exists).
+**The box** (`packages/server-daemon/src/directNames.ts`, `acme/directCertificates.ts`):
+- sends its signed address update with the order to `POST /api/direct-access/address` whenever its addresses or the
+  order change (checked every 5 minutes and at once after a new order);
+- reads its account's names (`GET /api/accounts/<u>/direct-access`, the box's own read token; `.com` now lists each
+  name's signed order) and keeps only those whose owner-signed name order names this box, is on, isn't suspended and
+  verifies on the box under the account's sensitive-order authority. `.com`'s list is a source, never the authority;
+- admits exactly those names at the public listener's TLS gate (`lanSniAllowed` with `extraNames`), routes
+  `<slug>--<creator>.fshp.app` to that app, and orders one `direct` certificate per name (`ServiceIssuer.issueDirect`),
+  stored and reused across restarts, renewed in its last third, backing off per name on a refusal.
+
+**Still open for step 3**: with the TLS key in keyd (arch-v2 boxes) direct names are not served: keyd's frontend
+(flagship-tlsd / flagship-ingress) has only the control and apps slots, so it needs a slot per direct name (keyd,
+Go and Rust). No CT watch for `fshp.app`; no renewal/lapse for vanity names (none exist); no abuse route to suspend a
+name (the storage call exists). Not run on a real box.

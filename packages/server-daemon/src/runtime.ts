@@ -13,6 +13,8 @@ import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
 import { BoxReadToken } from "./boxReadToken.js";
+import { DirectNames, directNameService } from "./directNames.js";
+import { DirectCertificates } from "./acme/directCertificates.js";
 import { prepareAppRequest, type AppAccessMode, type SessionResolver } from "./serviceProxy.js";
 import type { AccessAuthorityHook } from "./accessAuthority.js";
 import { AppConnectionLimiter, handleAppConnection, type AppConnectionOptions } from "./appConnection.js";
@@ -995,6 +997,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // is constructed below (after the cert + tunnel). The ref-cell lets
   // us bind the handler now and populate it later.
   const servicePlatformRef: { current: ServicePlatform | null } = { current: null };
+  const directNamesRef: { current: DirectNames | null } = { current: null };
   let chatHarness: import("./chat/harness.js").ChatHarness | null = null;
   const baseHandleHttp = opts.handleHttp ?? buildDefaultHandler(opts, servicePlatformRef);
   // Mutable handler chain. We push internally-built handlers (live_siblings,
@@ -1067,7 +1070,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       leftmostLabel(sni, opts.serverFqdn) ?? tier2ServiceLabel(sni, opts.serverFqdn);
     const app = leftmost && servicePlatformRef.current
       ? servicePlatformRef.current.byLabel(leftmost)
-      : undefined;
+      : directApp(sni, directNamesRef.current, servicePlatformRef.current);
     if (app) {
       // App traffic streams (SSE, downloads, uploads) and passes WebSocket
       // upgrades through, decided like any request (docs/app-apis.md §1).
@@ -1210,10 +1213,37 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         })
     : null;
 
-  // Direct access needs the owner's signed order; without one it binds nothing.
+  // Direct access needs the owner's signed order; without one it binds nothing. Its names on the direct domain
+  // (directNames.ts) are the ones the owner signed for this box; the box checks each order itself.
+  const directNamesReader = new BoxReadToken({
+    comBaseUrl: opts.controlPlaneBaseUrl,
+    username: opts.serverFqdn.toLowerCase().split(".")[1] ?? "",
+    serverFqdn: opts.serverFqdn,
+    boxPublicKey: () => opts.custodian.boxPublicKey(),
+    signAsBox: (msg) => opts.custodian.signAsBox(msg),
+  });
+  const directNames =
+    opts.directAccess && opts.controlPlaneBaseUrl
+      ? new DirectNames({
+          controller: opts.directAccess,
+          comBaseUrl: opts.controlPlaneBaseUrl,
+          username: opts.serverFqdn.toLowerCase().split(".")[1] ?? "",
+          serverFqdn: opts.serverFqdn,
+          signAsBox: (m) => opts.custodian.signAsBox(m),
+          readFetch: (url, init) => directNamesReader.fetch(url, init),
+        })
+      : null;
+  directNamesRef.current = directNames;
   const directListener = opts.directAccess
-    ? (await import("./directAccess.js")).startDirectListener({ controller: opts.directAccess, backendPort: tlsPort, zone: opts.serverFqdn })
+    ? (await import("./directAccess.js")).startDirectListener({
+        controller: opts.directAccess,
+        backendPort: tlsPort,
+        zone: opts.serverFqdn,
+        // Only where this process terminates TLS: keyd's frontend holds no certificate for them yet.
+        ...(directNames && !opts.opaqueTls ? { directNames: () => directNames.names() } : {}),
+      })
     : null;
+  const stopDirectNames = directNames?.start() ?? null;
 
   // Announce the box on the local network so its owner's phone can find it
   // with no DNS (docs/data-sovereignty.md). A no-op when LAN-direct is off.
@@ -1411,6 +1441,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   await boxCerts.load();
   if (!wantWildcard) boxCerts.onlyControl();
   boxCerts.start(opts.renewalCheckIntervalMs ?? 10 * 60_000);
+  // One certificate per direct name, served by this process's TLS server; keyd's frontend serves only its slots.
+  let directCertsTimer: NodeJS.Timeout | null = null;
+  let stopDirectCerts: (() => void) | null = null;
+  if (directNames && !opts.opaqueTls) {
+    const directCerts = new DirectCertificates({ issuer: serviceIssuer, certManager, store, names: () => directNames.names() });
+    stopDirectCerts = directNames.onChange(() => void directCerts.tick());
+    directCertsTimer = setInterval(() => void directCerts.tick(), opts.renewalCheckIntervalMs ?? 10 * 60_000);
+    directCertsTimer.unref?.();
+  } else if (directNames) {
+    console.log("[runtime] direct names are not served while keyd holds the TLS key (its frontend has no slot for them)");
+  }
   if (opts.servicePlatform?.hostUsername) {
     console.log("[runtime] per-service certificates are retired: app names are served by the box's app certificate");
   }
@@ -1877,6 +1918,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ready: () => Promise.resolve(),
     close: async () => {
       boxCerts.stop();
+      stopDirectNames?.();
+      stopDirectCerts?.();
+      if (directCertsTimer) clearInterval(directCertsTimer);
       appQuota.stop();
       relayLockdown.stop();
       aliasReconciler?.stop();
@@ -2620,6 +2664,17 @@ export function boxCertSans(serverFqdn: string, wantWildcard: boolean, accountWi
  */
 export function tunnelDomainsFor(serverFqdn: string, wantWildcard: boolean): string[] {
   return wantWildcard ? [serverFqdn, `*.${serverFqdn}`] : [serverFqdn];
+}
+
+/** The app a verified direct name (`<slug>--<creator>.<direct apex>`) routes to, when the box holds that name. */
+export function directApp(
+  sni: string,
+  names: Pick<DirectNames, "has"> | null,
+  platform: Pick<ServicePlatform, "byServiceId"> | null,
+): InstalledService | undefined {
+  if (!names || !platform || !names.has(sni)) return undefined;
+  const svc = directNameService(sni);
+  return svc ? platform.byServiceId(ServicePlatform.serviceId(svc.creator, svc.slug)) : undefined;
 }
 
 function leftmostLabel(sni: string, serverFqdn: string): string | null {
