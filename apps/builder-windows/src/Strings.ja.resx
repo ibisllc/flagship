@@ -748,4 +748,7 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="tryAgain" xml:space="preserve">
     <value>もう一度試す</value>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>これは Flagship のレシピではありません。</value>
+  </data>
 </root>

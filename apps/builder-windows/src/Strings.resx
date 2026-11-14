@@ -994,4 +994,8 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Try again</value>
     <comment>MainWindow.xaml (pairing refused)</comment>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>This isn't a Flagship recipe.</value>
+    <comment>Recipe.cs Parse (prose; the JSON parser's detail goes to the log)</comment>
+  </data>
 </root>

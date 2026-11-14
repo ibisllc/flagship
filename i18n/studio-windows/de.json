@@ -244,5 +244,6 @@
   "studioOutOfDateDownloadTheNew": "Diese Version von Flagship Studio ist veraltet. Lade die neue von flagshipserver.com/studio herunter und kopple dann erneut.",
   "downloadTheNewStudio": "Neues Studio herunterladen",
   "flagshipCouldntStartPairingDetailsInLog": "Flagship konnte die Kopplung nicht starten. Details stehen im Protokoll.",
-  "tryAgain": "Erneut versuchen"
+  "tryAgain": "Erneut versuchen",
+  "thisIsntAFlagshipRecipe": "Das ist kein Flagship-Rezept."
 }

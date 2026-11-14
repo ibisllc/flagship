@@ -748,4 +748,7 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="tryAgain" xml:space="preserve">
     <value>Reintentar</value>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>Esto no es una receta de Flagship.</value>
+  </data>
 </root>

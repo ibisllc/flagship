@@ -748,4 +748,7 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="tryAgain" xml:space="preserve">
     <value>Tentar de novo</value>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>Isto não é uma receita do Flagship.</value>
+  </data>
 </root>

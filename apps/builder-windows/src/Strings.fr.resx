@@ -748,4 +748,7 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="tryAgain" xml:space="preserve">
     <value>Réessayer</value>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>Ce n’est pas une recette Flagship.</value>
+  </data>
 </root>

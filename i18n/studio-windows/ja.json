@@ -244,5 +244,6 @@
   "studioOutOfDateDownloadTheNew": "このバージョンの Flagship Studio は古くなっています。flagshipserver.com/studio から新しいバージョンをダウンロードして、もう一度ペアリングしてください。",
   "downloadTheNewStudio": "新しい Studio をダウンロード",
   "flagshipCouldntStartPairingDetailsInLog": "Flagship はペアリングを開始できませんでした。詳細はログにあります。",
-  "tryAgain": "もう一度試す"
+  "tryAgain": "もう一度試す",
+  "thisIsntAFlagshipRecipe": "これは Flagship のレシピではありません。"
 }

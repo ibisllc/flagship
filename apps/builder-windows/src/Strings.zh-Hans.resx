@@ -748,4 +748,7 @@ https://flagshipserver.com</value>
   <data name="tryAgain" xml:space="preserve">
     <value>重试</value>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>这不是 Flagship 配方。</value>
+  </data>
 </root>

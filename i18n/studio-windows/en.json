@@ -987,5 +987,9 @@
   "tryAgain": {
     "en": "Try again",
     "ctx": "MainWindow.xaml (pairing refused)"
+  },
+  "thisIsntAFlagshipRecipe": {
+    "en": "This isn't a Flagship recipe.",
+    "ctx": "Recipe.cs Parse (prose; the JSON parser's detail goes to the log)"
   }
 }

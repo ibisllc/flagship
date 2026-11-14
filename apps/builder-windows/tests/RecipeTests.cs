@@ -97,6 +97,15 @@ public class RecipeTests
         Assert.Equal("01GOLDENTEST", r.AuthCode.Serial);
     }
 
+    /// <summary>A file that isn't JSON says so in one translated sentence; the parser's English goes to the log.</summary>
+    [Fact]
+    public void NotJsonIsNotAFlagshipRecipe()
+    {
+        var ex = Assert.Throws<RecipeException>(() => RecipeLoader.Load(D("hello, not a recipe")));
+        Assert.Equal("This isn't a Flagship recipe.", ex.Message);
+        Assert.StartsWith("recipe JSON: ", ex.Detail);
+    }
+
     [Fact]
     public void RejectsTamperedSignature()
     {
