@@ -146,7 +146,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [x] U4 (merged 2026-11-14: sidebar >=700px, list/detail >=1100px, phone unchanged; store tablet captures need re-rendering) (reviewer via owner, 2026-11-14) The webapp is phone-style only: make it responsive, iPad-like on desktop
       (sidebar instead of the tab bar, list/detail panes). Agent on `0.4/webapp-responsive`.
 - [ ] U1 Write each note as an item here with the screen and platform; iOS first, then port (memory rule).
-- [~] U3 (iOS merged 2026-11-14 with today's features, `docs/social-tab.md`; guests/comments/audience/calls need the protocol answers; Android + webapp ports next) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
+- [~] U3 (iOS + Android + webapp merged 2026-11-14 with today's features; Android gym tests not run on a device; `docs/social-tab.md`; guests/comments/audience/calls need the protocol answers; Android + webapp ports next) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
       the page previews itself (minus voi.ci's footer); title row "Your page" + Public switch + options menu (theme,
       share/copy link, accept messages); profile fields read as the live page with a pencil each; the unpublished bar
       only when something changed, spinning while it publishes; Profile / Messages tabs; Messages: who can reach you
@@ -156,7 +156,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       2026-11-14: iOS built on branch `0.4/social-ios` (not merged): Social tab, editor as the tab, Page options, the
       publish bar; GymMessagesTests 18/18. Spec and the protocol sketch for guests, comments, reach and calls:
       `docs/social-tab.md`. Android and the webapp next.
-- [x] U2 (iOS merged 2026-11-14; Android + webapp ports next) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
+- [x] U2 (iOS, Android and webapp merged 2026-11-14; webapp shell bump at release) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
       bubble in a green circle reads oddly), and simplify the page (details in the owner's next messages). All apps,
       all languages.
 
@@ -245,6 +245,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   40/week cap after LE's increase; vanity names wait for paid names?; revoke certs of suspended names?; delete the old
   mirror `*`/`www` records at go-live; a real bare-fshp.app page. Deploy needs secrets CLOUDFLARE_DIRECT_DNS_API_TOKEN +
   CLOUDFLARE_DIRECT_ZONE_ID.
+- 2026-11-14 Merged the Social tab ports (Android + webapp, fitted to the responsive layout; 18 old webapp keys pruned).
+  Fixed a missing brace in GymOctoberTest.kt from the fold (Android gym tests compile again). Parity red left:
+  `pq-authority` vectors have no Swift/Kotlin/web reader yet (the PQ agent is porting them).
 
 ## Resume point
 
