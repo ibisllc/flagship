@@ -450,6 +450,10 @@ function nameView(row: DirectNameRecord, apex: string) {
     publishedAt: row.publishedAt ?? null,
     suspended: row.suspendedAt ? { at: row.suspendedAt, reason: row.suspendedReason ?? null } : null,
     probe: row.probeJson ? { at: row.probeAt ?? null, ...(safeJson(row.probeJson) as object) } : null,
+    // The signed order itself, so a box (and an app) checks the owner's signature instead of trusting this list.
+    order,
+    signatureHex: row.signatureHex,
+    ...(row.pqSignatureJson ? { pqSignature: safeJson(row.pqSignatureJson) } : {}),
   };
 }
 
