@@ -63,5 +63,12 @@
   "Request access · Flagship": "申请访问 · Flagship",
   "{0} is private": "{0} 是私有的",
   "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "此 Flagship 应用已受限。请让主人邀请你，然后在你的 Flagship 应用中接受邀请。",
-  "URL:": "URL："
+  "URL:": "URL：",
+  "That direct access order can't be read.": "无法读取这条直接访问指令。",
+  "Direct access takes only public addresses. Private, local and reserved addresses can't be used.": "直接访问只接受公网地址。不能使用私有、本地或保留地址。",
+  "That direct access order isn't valid ({0}).": "这条直接访问指令无效（{0}）。",
+  "That direct access order is for another server.": "这条直接访问指令是给另一台服务器的。",
+  "This server takes direct access orders only from an admin device of this account.": "这台服务器只接受本账户管理员设备发出的直接访问指令。",
+  "That direct access order is older than the last change. Try again.": "这条直接访问指令早于上一次更改。请重试。",
+  "This device's clock is too far from the server's. Check the time and try again.": "这台设备的时钟与服务器相差太多。请检查时间后重试。"
 }

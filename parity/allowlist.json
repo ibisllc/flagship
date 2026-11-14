@@ -3,6 +3,11 @@
   "entries": [
     {
       "check": "test-vectors",
+      "key": "web:direct-access",
+      "reason": "Direct access is native only so far (docs/direct-access-and-domains.md §6): a browser can't choose a route, and the owner's screens (step 5) aren't built on any surface yet."
+    },
+    {
+      "check": "test-vectors",
       "key": "kotlin:language-negotiation",
       "reason": "Android never picks a language itself: the OS chooses among the app's values-<lang> resources (per-app language in system settings). The vectors are the rule for the webapp, the box pages and the website."
     },

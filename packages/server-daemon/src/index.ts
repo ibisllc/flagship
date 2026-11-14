@@ -37,6 +37,7 @@ import {
 import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { Doorbell, type DoorbellLane } from "./doorbell.js";
 import { buildSignedLanHint, hostAddresses, lanPortFromEnv, leafCertSha256 } from "./lanDirect.js";
+import { buildSignedLanHintV2, DirectAccessController } from "./directAccess.js";
 import { buildRescue } from "./rescue/rescue.js";
 import { buildRescueAuthorize } from "./rescue/authority.js";
 import { exportNotice } from "./rescue/exportNotice.js";
@@ -1713,6 +1714,23 @@ async function main(): Promise<void> {
   // Who a signing key is on this box (account devices, co-managers): the
   // device book is wired by wireOwnerHandlers, the shares by wireRuntimeSurfaces.
   const accessPrincipals = new AccessPrincipals(cfg?.ownerAidPub ? bytesToHexStr(cfg.ownerAidPub) : null);
+  // Direct access (docs/direct-access-and-domains.md): the owner's admin-signed order lets the box be reached at
+  // its own public addresses; without one nothing binds. FLAGSHIP_DIRECT_ACCESS=0 keeps the box relay-only.
+  const directAccess =
+    cfg && env.serverFqdn && process.env.FLAGSHIP_DIRECT_ACCESS !== "0"
+      ? new DirectAccessController({
+          serverDomain: env.serverFqdn,
+          authority: () => ({
+            ownerIrkPub: cfg!.irkPublicKey,
+            ...(cfg!.adminRootPub ? { adminRootPub: cfg!.adminRootPub } : {}),
+            username: cfg!.userId,
+            activeGrants: accessPrincipals.book?.adminGrants() ?? [],
+          }),
+          statePath: join(dataDir, "direct-access.json"),
+          activity: (kind, detail) => activityLog.note(kind, detail),
+          log: (m) => console.log(m),
+        })
+      : null;
   // Device revocations the admin root delivered straight to this box: they apply at once and `.com`
   // cannot bring a revoked device back by listing it again (docs/data-sovereignty.md).
   if (cfg) {
@@ -2084,6 +2102,7 @@ async function main(): Promise<void> {
       setTimeout(() => process.exit(0), 1000);
     });
     runtime = await startDaemonRuntime({
+      ...(directAccess ? { directAccess } : {}),
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
       custodian,
@@ -2358,6 +2377,7 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      directAccess,
       servingStore,
       wildcardGrants,
       publisherPins,
@@ -3424,6 +3444,7 @@ async function archiveKeyCustody(): Promise<KeydArchiveCustody | null> {
 }
 
 async function wireRuntimeSurfaces(deps: {
+  directAccess: DirectAccessController | null;
   servingStore: ServingStore | null;
   wildcardGrants: ServerWildcardGrantStore | null;
   frontPage: FrontPageStore;
@@ -4815,6 +4836,22 @@ async function wireRuntimeSurfaces(deps: {
         endpoints: runtime.lan?.endpoints() ?? [],
         sign: (msg) => custodian.signAsBox(msg),
       }),
+    ...(deps.directAccess
+      ? {
+          directAccess: {
+            controller: deps.directAccess,
+            sign: (msg: Uint8Array) => custodian.signAsBox(msg),
+            lanHintV2: () =>
+              buildSignedLanHintV2({
+                serverDomain: env.serverFqdn!,
+                certPem: liveCertPemRef.current,
+                lan: runtime.lan?.endpoints() ?? [],
+                direct: deps.directAccess,
+                sign: (msg) => custodian.signAsBox(msg),
+              }),
+          },
+        }
+      : {}),
     tabRegistry: browserBundle?.tabRegistry ?? null,
     appBackup: runtime.appBackup,
     urlController: runtime.urlController,

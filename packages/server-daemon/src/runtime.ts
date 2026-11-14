@@ -295,6 +295,11 @@ export interface DaemonRuntimeOptions {
    */
   lanDirect?: { port: number };
   /**
+   * Direct access (docs/direct-access-and-domains.md): also accept connections on the box's public addresses that
+   * the owner's signed order allows, forwarded into the same loopback TLS server. Omit to stay relay-only.
+   */
+  directAccess?: import("./directAccess.js").DirectAccessController;
+  /**
    * Run every app and staging container in gVisor (docs/app-runtimes.md §5.1):
    * set it up at boot, keep retrying, and start no app without it. The
    * production entry turns it on; tools and demos that run the runtime don't.
@@ -1203,6 +1208,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         })
     : null;
 
+  // Direct access needs the owner's signed order; without one it binds nothing.
+  const directListener = opts.directAccess
+    ? (await import("./directAccess.js")).startDirectListener({ controller: opts.directAccess, backendPort: tlsPort, zone: opts.serverFqdn })
+    : null;
+
   // Announce the box on the local network so its owner's phone can find it
   // with no DNS (docs/data-sovereignty.md). A no-op when LAN-direct is off.
   const lanDiscovery =
@@ -1872,6 +1882,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       await tunnel.close();
       lanDiscovery?.close();
       await lan?.close();
+      await directListener?.close();
       tls.close();
     },
     certManager,

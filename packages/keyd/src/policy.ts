@@ -24,6 +24,10 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/pb-manifest/v1",
   "flagship/mint-reservation/v1",
   "flagship/lan-hint/v1",
+  // Direct access (docs/direct-access-and-domains.md): the hint with public endpoints, and the box naming its
+  // own public addresses inside the owner's order. A verifier checks both against that owner-signed order.
+  "flagship/lan-hint/v2",
+  "flagship/direct-address/v1",
   // The box answering its owner's phone on the LAN with .com gone (docs/data-sovereignty.md):
   // names the phone's nonce and the certificate on the wire; classical and hybrid.
   "flagship/rescue-hello/v1",
