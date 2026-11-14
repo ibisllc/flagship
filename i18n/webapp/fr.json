@@ -3514,5 +3514,7 @@
   "Goes through the Flagship relay. It works even when your server can't be reached from outside.": "Passe par le relais Flagship. Fonctionne même quand votre serveur n’est pas joignable depuis l’extérieur.",
   "Link to share": "Lien à partager",
   "Through the relay": "Via le relais",
-  "Certificate ready. Waiting for the direct path.": "Certificat prêt. En attente de la connexion directe."
+  "Certificate ready. Waiting for the direct path.": "Certificat prêt. En attente de la connexion directe.",
+  "Set up a box from a store": "Configurer un boîtier acheté en magasin",
+  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "Utilisez l'app Flagship sur votre téléphone pour configurer ce boîtier. Elle le trouve en Bluetooth, ce qu'un navigateur ne peut pas utiliser."
 }
