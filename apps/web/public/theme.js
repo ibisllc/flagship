@@ -68,14 +68,14 @@
 })();
 
 /*
- * Mirror domains (fshp.tech, fshp.app). Most public pages are answered straight
+ * Mirror domain (fshp.tech; fshp.app is the direct domain, not a mirror). Most public pages are answered straight
  * from the assets layer without running the Worker (run_worker_first in
  * apps/com/wrangler.toml), so the Worker's mirror pass (apps/com/src/mirrorDomains.ts)
  * never sees them. This repeats it in the page; keep the two in step.
  */
 (function () {
   "use strict";
-  var MIRRORS = ["fshp.tech", "fshp.app"];
+  var MIRRORS = ["fshp.tech"];
   var CONTROL = "flagshipserver.com";
   var SERVICES = "flagship.services";
   var CONTROL_SUBHOSTS = { webapp: 1, remote: 1, recovery: 1, boot: 1, web: 1 };

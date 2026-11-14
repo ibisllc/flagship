@@ -62,6 +62,14 @@ function run(hostname: string, nodes: FakeNode[] = []) {
 }
 
 describe("theme.js mirror-domain pass", () => {
+  it("does nothing on the direct domain (fshp.app is not a mirror)", () => {
+    const p = el("P");
+    const t = text(p, "Open flagshipserver.com");
+    expect(run("fshp.app", [p, t])).toBeNull();
+    expect(run("game--alice.fshp.app", [p, t])).toBeNull();
+    expect(t.nodeValue).toBe("Open flagshipserver.com");
+  });
+
   it("does nothing on the real apex", () => {
     const p = el("P");
     const t = text(p, "Open flagshipserver.com");
@@ -76,16 +84,16 @@ describe("theme.js mirror-domain pass", () => {
     const t = text(p, "Your box at home.alice.flagship.services; mail support@flagshipserver.com");
     const s = el("SCRIPT");
     const code = text(s, 'fetch("https://flagshipserver.com/api")');
-    expect(run("fshp.app", [a, mail, p, t, s, code])).toBeNull();
-    expect(a.attributes[0]!.value).toBe("https://webapp.fshp.app/x");
+    expect(run("fshp.tech", [a, mail, p, t, s, code])).toBeNull();
+    expect(a.attributes[0]!.value).toBe("https://webapp.fshp.tech/x");
     expect(mail.attributes[0]!.value).toBe("mailto:support@flagshipserver.com");
-    expect(t.nodeValue).toBe("Your box at home.alice.fshp.app; mail support@flagshipserver.com");
+    expect(t.nodeValue).toBe("Your box at home.alice.fshp.tech; mail support@flagshipserver.com");
     expect(code.nodeValue).toBe('fetch("https://flagshipserver.com/api")');
   });
 
   it("redirects www, Cloudflare subhosts and every other name", () => {
     expect(run("www.fshp.tech")).toBe("https://fshp.tech/faq?a=1#x");
-    expect(run("webapp.fshp.app")).toBe("https://webapp.flagshipserver.com/faq?a=1#x");
+    expect(run("webapp.fshp.tech")).toBe("https://webapp.flagshipserver.com/faq?a=1#x");
     expect(run("home.alice.fshp.tech")).toBe("https://home.alice.flagship.services/faq?a=1#x");
   });
 });

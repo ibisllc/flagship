@@ -21,14 +21,15 @@
  *      from the owner webapp.
  *  10a. www.flagshipserver.com — 308 to the bare apex, path+query kept.
  *  11. Anything else — static assets.
- *  12. fshp.tech / fshp.app — mirror domains (see mirrorDomains.ts).
+ *  12. fshp.tech — mirror domain (see mirrorDomains.ts); the bare fshp.app (the direct domain) → the site.
  */
 
 import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
 import { localisedAssetPath, pickWebLocale } from "./localeRedirect.js";
 import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
-import { applyMirror, matchMirror, mirrorRedirect } from "./mirrorDomains.js";
+import { applyMirror, directApexRedirect, matchMirror, mirrorRedirect } from "./mirrorDomains.js";
+import { DIRECT_APEX } from "@flagship/protocol";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse, buildOptionalPushForwarder } from "./controlPlaneRoutes.js";
 import { handleAbuseRoute, isAbusePath, suspensionGuard } from "./abuseCases.js";
 import { mayCommitRevocation, pokeServingFeed, type ServingFeedNamespace } from "./servingAuthority.js";
@@ -285,6 +286,8 @@ const CORS_ALLOWED_ORIGINS = new Set<string>([
 
 export interface RouteEnv extends OhttpEnv {
   SERVICES_BASE_URL: string;
+  /** The direct domain (docs/direct-access-and-domains.md §2). Default `fshp.app`. */
+  DIRECT_APEX?: string;
   /** The Worker assets binding. Tests pass a stub. */
   ASSETS: { fetch(req: Request): Promise<Response> };
   /**
@@ -538,7 +541,11 @@ export async function route(
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
 
-  // ---- fshp.tech / fshp.app mirror domains ----
+  // ---- fshp.app: the direct domain's bare apex only points at the site ----
+  const directApex = directApexRedirect(requestUrl.hostname, env.DIRECT_APEX ?? DIRECT_APEX, apexHost(env));
+  if (directApex) return directApex;
+
+  // ---- fshp.tech mirror domain ----
   // The bare mirror apex is served exactly as the control apex, then
   // re-skinned to name the mirror; every other mirror host redirects.
   const mirror = matchMirror(requestUrl.hostname);

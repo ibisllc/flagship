@@ -31,10 +31,12 @@ function makeEnv(): RouteEnv {
   } as RouteEnv;
 }
 
-describe("mirror domains (fshp.tech / fshp.app)", () => {
-  it("matches only the mirror zones", () => {
+describe("mirror domain (fshp.tech)", () => {
+  it("matches only the mirror zone: fshp.app is the direct domain, not a mirror", () => {
     expect(matchMirror("fshp.tech")).toEqual({ apex: "fshp.tech", sub: "" });
-    expect(matchMirror("A.B.FSHP.APP")).toEqual({ apex: "fshp.app", sub: "a.b" });
+    expect(matchMirror("A.B.FSHP.TECH")).toEqual({ apex: "fshp.tech", sub: "a.b" });
+    expect(matchMirror("fshp.app")).toBeNull();
+    expect(matchMirror("game--alice.fshp.app")).toBeNull();
     expect(matchMirror("notfshp.tech")).toBeNull();
     expect(matchMirror("flagshipserver.com")).toBeNull();
   });
@@ -50,7 +52,7 @@ describe("mirror domains (fshp.tech / fshp.app)", () => {
     expect(out).toContain("notflagshipserver.com nor flagship.services-like");
   });
 
-  for (const apex of ["fshp.tech", "fshp.app"]) {
+  for (const apex of ["fshp.tech"]) {
     it(`serves ${apex} as the apex, re-skinned`, async () => {
       const res = await route(new Request(`https://${apex}/faq.html`), makeEnv());
       expect(res.status).toBe(200);
@@ -66,7 +68,7 @@ describe("mirror domains (fshp.tech / fshp.app)", () => {
   });
 
   it("keeps apex redirects on the mirror", async () => {
-    const res = await route(new Request("https://fshp.app/build"), makeEnv());
+    const res = await route(new Request("https://fshp.tech/build"), makeEnv());
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe("/studio");
   });
@@ -78,9 +80,19 @@ describe("mirror domains (fshp.tech / fshp.app)", () => {
   });
 
   it("Cloudflare-served subhosts redirect to their control-apex twin", async () => {
-    const res = await route(new Request("https://webapp.fshp.app/foo?a=b"), makeEnv());
+    const res = await route(new Request("https://webapp.fshp.tech/foo?a=b"), makeEnv());
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe("https://webapp.flagshipserver.com/foo?a=b");
+  });
+
+  it("the direct domain's bare apex only points at the site; its names never mirror", async () => {
+    for (const host of ["fshp.app", "www.fshp.app"]) {
+      const res = await route(new Request(`https://${host}/faq.html`), makeEnv());
+      expect(res.status).toBe(308);
+      expect(res.headers.get("location")).toBe("https://flagshipserver.com/");
+    }
+    const name = await route(new Request("https://game--alice.fshp.app/"), makeEnv());
+    expect(name.headers.get("location") ?? "").not.toContain("flagship.services");
   });
 
   it("every other host redirects to flagship.services", async () => {

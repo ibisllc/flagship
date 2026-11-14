@@ -1,5 +1,7 @@
 /**
- * Mirror domains — fshp.tech and fshp.app.
+ * Mirror domain — fshp.tech. (`fshp.app` is the direct domain, not a mirror: docs/direct-access-and-domains.md §2.
+ * Its names are DNS-only records of the owners' own boxes; a blocklisting caused by user content there must never
+ * take the site's mirror with it. Its bare apex only points at the site: `directApexRedirect`.)
  *
  * Short alias zones that present the same public site as the control apex,
  * but speak in their own name: every *visible* mention of the control apex
@@ -19,7 +21,14 @@
  * addresses are left alone too: the mirror zones have no mail routing.
  */
 
-export const MIRROR_APEXES: readonly string[] = ["fshp.tech", "fshp.app"];
+export const MIRROR_APEXES: readonly string[] = ["fshp.tech"];
+
+/** The direct domain's bare apex (and `www`): a redirect to the site, nothing else. Names below it never reach the Worker. */
+export function directApexRedirect(hostname: string, directApex: string, controlApex: string): Response | null {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  if (host !== directApex && host !== `www.${directApex}`) return null;
+  return new Response(null, { status: 308, headers: { location: `https://${controlApex}/` } });
+}
 
 /** Subhosts of the control apex that Cloudflare serves (rather than the
  *  user-content passthrough on flagship.services). */
