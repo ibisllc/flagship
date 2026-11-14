@@ -183,10 +183,29 @@ export function homeServerSource(sessionId, profile, now = Date.now(), { usernam
     };
   }
   if (sessionId) return { kind: "paired", sessionId };
+  // A keyless remote browser never reads the account's servers: it lists the
+  // one server the phone connected it to (W19: it showed the empty Home).
+  if (companion) {
+    const host = remoteServerHost(profile?.podBaseUrl);
+    if (!host) return { kind: "empty" };
+    return {
+      kind: "companion",
+      server: { serverId: host, revoked: null },
+      fallbackPod: { serverDomain: host, liveness: "live", lastReported: now },
+    };
+  }
   // An open account lists its servers from `.com`'s /pods, as iOS and
-  // Android do. A keyless remote browser never reads the account's servers.
-  if (username && !companion) return { kind: "account" };
+  // Android do.
+  if (username) return { kind: "account" };
   return { kind: "empty" };
+}
+
+function remoteServerHost(podBaseUrl) {
+  try {
+    return new URL(String(podBaseUrl ?? "")).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 /** The account's servers as the list rows `.com`'s /pods names (revocations
@@ -1672,6 +1691,9 @@ export async function renderHome() {
     if (serverSource.kind === "demo") {
       body = { servers: [serverSource.server] };
       sessionStatusEl.textContent = tr("Demo");
+    } else if (serverSource.kind === "companion") {
+      body = { servers: [serverSource.server] };
+      sessionStatusEl.textContent = tr("Remote");
     } else if (serverSource.kind === "account") {
       inventory = await fetchPodInventory(session.username);
       if (inventory.status === "refused" && inventory.statusByDomain.size === 0 && inventory.pending.length === 0) {
@@ -1701,10 +1723,10 @@ export async function renderHome() {
     // Failures here are non-fatal: registered cards fall back to the bare
     // label + active/revoked pill and pending simply doesn't surface.
     let { statusByDomain: podStatusByDomain, pending } = inventory ?? await fetchPodInventory(
-      session.username,
+      serverSource.kind === "companion" ? "" : session.username,
     );
     if (
-      serverSource.kind === "demo" &&
+      (serverSource.kind === "demo" || serverSource.kind === "companion") &&
       !podStatusByDomain.has(serverSource.server.serverId)
     ) {
       podStatusByDomain.set(serverSource.server.serverId, serverSource.fallbackPod);
