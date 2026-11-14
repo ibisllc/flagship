@@ -114,6 +114,8 @@ interface FlagshipServerClient {
     /** Register an FCM device token with .com so the Worker can relay
      *  encrypted push payloads. Returns a handle to later revoke. */
     suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse
+    /** `.com`'s VAPID public key (base64url), handed to a UnifiedPush distributor at registration. */
+    suspend fun vapidPublicKey(): String = error("vapid key unavailable")
     /** Drop a previously-registered push token. Revoke is IRK-signed
      *  (SEC): the caller signs a `flagship/push-token-revoke/v1` envelope
      *  behind the biometric (deriveIRK) and `.com` verifies it against the
@@ -1421,12 +1423,15 @@ data class PushTokenRegisterRequest(
     data class Inner(
         val username: String,
         val deviceId: String,
-        val platform: String,        // "apns" | "fcm" | "webpush"
-        val providerToken: String,   // FCM token (verbatim) / APNs hex (lowercased)
+        val platform: String,        // "apns" | "fcm" | "webpush" | "unifiedpush"
+        val providerToken: String,   // FCM token (verbatim) / APNs hex (lowercased) / Web Push subscription JSON
         val pushX25519Pub: String,   // hex
         val issuedAt: Long,
     )
 }
+
+@Serializable
+data class VapidPublicKeyResponse(val key: String)
 
 @Serializable
 data class PushTokenRegisterResponse(
@@ -1668,6 +1673,9 @@ class LiveFlagshipServerClient(
             serializer = PushTokenRegisterRequest.serializer(),
             responseSerializer = PushTokenRegisterResponse.serializer(),
         )
+
+    override suspend fun vapidPublicKey(): String =
+        transport.getJson("$base/api/push/vapid-public-key", responseSerializer = VapidPublicKeyResponse.serializer()).key
 
     override suspend fun revokePushToken(req: PushTokenRevokeRequest) {
         val encoded = java.net.URLEncoder.encode(req.request.tokenId, "UTF-8")

@@ -1,6 +1,7 @@
-// Pairs the OS-supplied FCM device token with the user's IRK + a
-// per-device X25519 push key and POSTs the result to .com so the
-// Worker has somewhere to relay encrypted push payloads.
+// Pairs this phone's push token (FCM, or a UnifiedPush endpoint; see
+// PushTransport.kt) with the user's IRK + a per-device X25519 push key
+// and POSTs the result to .com so the Worker has somewhere to relay
+// encrypted push payloads.
 //
 // MIRRORS: apps/mobile/ios/Sources/FlagshipUI/Push/PushRegistrar.swift
 // Canonical-bytes layout is identical to the verifier in
@@ -42,6 +43,12 @@ class PushRegistrar(
     private val deleteToken: suspend () -> Unit = {
         com.google.firebase.messaging.FirebaseMessaging.getInstance().deleteToken().await()
     },
+    /** This phone's transport and UnifiedPush state; null keeps the FCM-only behaviour. */
+    private val transports: PushTransportStore? = null,
+    /** Ask the UnifiedPush distributor for an endpoint (answered via [syncUnifiedPush]). */
+    private val requestUnifiedPushEndpoint: suspend () -> Unit = {},
+    /** Drop this phone's UnifiedPush registration with its distributor. */
+    private val dropUnifiedPush: () -> Unit = {},
 ) {
     private val _lastRegisteredTokenId = MutableStateFlow<String?>(Keystore.pushTokenId())
     val lastRegisteredTokenId: StateFlow<String?> = _lastRegisteredTokenId.asStateFlow()
@@ -54,16 +61,44 @@ class PushRegistrar(
      *  reported via lastError so the OS callback never blocks. */
     fun onNewToken(fcmToken: String?): Job = scope.launch {
         if (!isEnabled()) return@launch
-        register(fcmToken)
+        if (transport() != PushTransport.FCM) return@launch
+        register("fcm", fcmToken)
     }
 
-    /** Settings → Push notifications turned on: register this device's
-     *  current FCM token. False when nothing was registered. */
-    suspend fun registerCurrentToken(): Boolean =
-        register(runCatching { fetchToken() }.getOrNull())
+    private fun transport(): PushTransport = transports?.transport ?: PushTransport.FCM
 
-    private suspend fun register(fcmToken: String?): Boolean {
-        if (fcmToken.isNullOrEmpty()) return false  // OS revoked — leave the prior tokenId
+    /** Settings → Push notifications turned on (or the transport changed):
+     *  register this device's current token. For UnifiedPush that is the
+     *  endpoint held, after asking the distributor for a fresh one. False
+     *  when nothing was registered. */
+    suspend fun registerCurrentToken(): Boolean = when (transport()) {
+        PushTransport.FCM -> register("fcm", runCatching { fetchToken() }.getOrNull())
+        PushTransport.UNIFIEDPUSH -> {
+            runCatching { requestUnifiedPushEndpoint() }
+            val token = transports?.unifiedPushToken
+            if (token != null && transports.lastRegistered == "unifiedpush|$token" && !Keystore.pushTokenId().isNullOrEmpty()) {
+                true
+            } else {
+                register("unifiedpush", token)
+            }
+        }
+        PushTransport.NONE -> false
+    }
+
+    fun registerCurrentTokenAsync(): Job = scope.launch {
+        if (isEnabled()) registerCurrentToken()
+    }
+
+    /** A UnifiedPush endpoint arrived (or the app started): register it unless `.com` already has it. */
+    fun syncUnifiedPush(): Job = scope.launch {
+        if (!isEnabled() || transport() != PushTransport.UNIFIEDPUSH) return@launch
+        val token = transports?.unifiedPushToken ?: return@launch
+        if (transports.lastRegistered == "unifiedpush|$token" && !Keystore.pushTokenId().isNullOrEmpty()) return@launch
+        register("unifiedpush", token)
+    }
+
+    private suspend fun register(platform: String, token: String?): Boolean {
+        if (token.isNullOrEmpty()) return false  // OS revoked — leave the prior tokenId
         val username = appState.currentUser.value
         if (username.isNullOrEmpty()) return false  // pre-pairing
         return try {
@@ -77,8 +112,8 @@ class PushRegistrar(
             val canonical = PushTokenRegister.canonicalBytes(
                 username = username,
                 deviceId = deviceId,
-                platform = "fcm",
-                providerToken = fcmToken,
+                platform = platform,
+                providerToken = token,
                 pushX25519PubHex = pushPubHex,
                 issuedAt = issuedAt,
             )
@@ -87,8 +122,8 @@ class PushRegistrar(
                 request = PushTokenRegisterRequest.Inner(
                     username = username,
                     deviceId = deviceId,
-                    platform = "fcm",
-                    providerToken = fcmToken,
+                    platform = platform,
+                    providerToken = token,
                     pushX25519Pub = pushPubHex,
                     issuedAt = issuedAt,
                 ),
@@ -96,6 +131,7 @@ class PushRegistrar(
             )
             val resp = client.registerPushToken(req)
             Keystore.setPushTokenId(resp.tokenId)
+            transports?.lastRegistered = "$platform|$token"
             _lastRegisteredTokenId.value = resp.tokenId
             _lastError.value = null
             true
@@ -111,7 +147,9 @@ class PushRegistrar(
      *  token with Google, so nothing can be delivered even while the .com
      *  registration lingers. [registerCurrentToken] fetches a fresh one. */
     suspend fun deleteProviderToken() {
-        deleteToken()
+        dropUnifiedPush()
+        transports?.unifiedPushToken = null
+        if (transport() == PushTransport.FCM) deleteToken() else runCatching { deleteToken() }
     }
 
     /** Drop the last-registered push token on .com + wipe the persisted
@@ -142,6 +180,7 @@ class PushRegistrar(
             if (!forgetOnFailure) return false
         }
         Keystore.setPushTokenId(null)
+        transports?.lastRegistered = null
         _lastRegisteredTokenId.value = null
         return true
     }

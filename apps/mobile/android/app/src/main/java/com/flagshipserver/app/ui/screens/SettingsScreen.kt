@@ -793,5 +793,28 @@ private fun PushNotificationsCard() {
                 )
             },
         )
+        if (on) PushServiceRow()
     }
+}
+
+/** Which service carries this phone's pushes (push/PushTransport.kt). */
+@Composable
+private fun PushServiceRow() {
+    val context = LocalContext.current
+    val status by remember { com.flagshipserver.app.push.PushTransportStore.from(context) }.status.collectAsState()
+    val subtitle = when (status.transport) {
+        com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH -> {
+            val label = com.flagshipserver.app.push.UnifiedPushTransport.distributorLabel(context, status.distributor)
+            if (label != null) fsString(R.string.push_service_unifiedpush_through, label) else stringResource(R.string.push_service_unifiedpush)
+        }
+        com.flagshipserver.app.push.PushTransport.FCM -> stringResource(R.string.push_service_fcm)
+        com.flagshipserver.app.push.PushTransport.NONE -> stringResource(R.string.push_service_none)
+        null -> return
+    }
+    FSRow(
+        title = stringResource(R.string.push_service),
+        subtitle = subtitle,
+        icon = Icons.Outlined.Notifications,
+        modifier = Modifier.testTag("settings-push-service"),
+    )
 }

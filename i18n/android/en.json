@@ -15007,5 +15007,25 @@
   "voici_empty_messages_options": {
     "en": "No messages yet. Turn on Accept messages in Page options to get them.",
     "ctx": "Social tab Messages: empty list"
+  },
+  "push_service": {
+    "en": "Push service",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes)"
+  },
+  "push_service_unifiedpush": {
+    "en": "UnifiedPush",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes); product name"
+  },
+  "push_service_unifiedpush_through": {
+    "en": "UnifiedPush, through %1$s",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes); %1$s is the distributor app's name, e.g. ntfy"
+  },
+  "push_service_fcm": {
+    "en": "Google (Firebase Cloud Messaging)",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes); product name"
+  },
+  "push_service_none": {
+    "en": "None: this phone has no push service. Install a UnifiedPush app, such as ntfy, to get notifications.",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes)"
   }
 }

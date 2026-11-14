@@ -76,9 +76,14 @@ class ServerShareRuntime(
                     if (!com.flagshipserver.app.core.PrivacySettings.fromContext(context).pushNotificationsEnabled.value) {
                         null
                     } else {
-                        runCatching {
-                            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
-                        }.getOrNull()?.let { "fcm" to it }
+                        val transports = com.flagshipserver.app.push.PushTransportStore.from(context)
+                        if (transports.transport == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH) {
+                            transports.unifiedPushToken?.let { "unifiedpush" to it }
+                        } else {
+                            runCatching {
+                                com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                            }.getOrNull()?.let { "fcm" to it }
+                        }
                     }
                 },
             )

@@ -3634,5 +3634,10 @@
   "voici_publishing_page": "Publication de votre page…",
   "voici_reply_footer": "Vos conversations avec d’autres pages sont sur voi.ci.",
   "voici_segment_conversations": "Conversations",
-  "voici_empty_messages_options": "Pas encore de messages. Activez Accepter les messages dans Options de la page pour en recevoir."
+  "voici_empty_messages_options": "Pas encore de messages. Activez Accepter les messages dans Options de la page pour en recevoir.",
+  "push_service": "Service de notifications push",
+  "push_service_unifiedpush": "UnifiedPush",
+  "push_service_unifiedpush_through": "UnifiedPush, via %1$s",
+  "push_service_fcm": "Google (Firebase Cloud Messaging)",
+  "push_service_none": "Aucun : ce téléphone n’a pas de service de notifications push. Installez une application UnifiedPush, comme ntfy, pour recevoir les notifications."
 }
