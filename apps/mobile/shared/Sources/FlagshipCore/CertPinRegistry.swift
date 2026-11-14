@@ -38,10 +38,13 @@ public final class CertPinRegistry: @unchecked Sendable {
     private var reports: [String: DaemonStatusReport] = [:]
     /// The server keys this device pinned at first blessing: the only STK source.
     public let serverKeys: ServerKeyPins
+    /// Servers this device stopped trusting: never connected to, whatever pin they have.
+    public let untrusted: UntrustedServers
 
     /// `defaults == nil` ⇒ the key pins live only in memory (tests / previews).
-    public init(persistingIn defaults: UserDefaults? = .standard, serverKeys: ServerKeyPins? = nil) {
+    public init(persistingIn defaults: UserDefaults? = .standard, serverKeys: ServerKeyPins? = nil, untrusted: UntrustedServers? = nil) {
         self.serverKeys = serverKeys ?? defaults.map { ServerKeyPins(defaults: $0) } ?? ServerKeyPins.volatile()
+        self.untrusted = untrusted ?? defaults.map { UntrustedServers(defaults: $0) } ?? UntrustedServers.volatile()
         UserDefaults.standard.removeObject(forKey: "flagship.certpin.boxStkPubs.v1")
     }
 
@@ -140,6 +143,7 @@ public final class CertPinRegistry: @unchecked Sendable {
     public func isKnownBox(host: String) -> Bool {
         let h = Self.normalize(host)
         guard !h.isEmpty else { return false }
+        if untrusted.contains(host: h) { return true }
         lock.lock()
         defer { lock.unlock() }
         if now() < enrollmentAllowedUntil[h] ?? 0 { return false }
@@ -165,7 +169,7 @@ public final class CertPinRegistry: @unchecked Sendable {
     /// host under it (`<service>.<server>.<user>` rides the box wildcard).
     public func pinFor(host: String) -> String? {
         let h = Self.normalize(host)
-        guard !h.isEmpty else { return nil }
+        guard !h.isEmpty, !untrusted.contains(host: h) else { return nil }
         lock.lock()
         defer { lock.unlock() }
         if let exact = pins[h] { return exact }
@@ -202,6 +206,7 @@ public final class CertPinRegistry: @unchecked Sendable {
         reports.removeAll()
         lock.unlock()
         serverKeys.clear()
+        untrusted.clear()
     }
 
     // MARK: - Helpers

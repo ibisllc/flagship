@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import FlagshipCore
 
 /// The retail claim flow against the scripted box: every stop the screens show, the receipt pin,
@@ -11,30 +12,50 @@ final class RetailClaimFlowTests: XCTestCase {
         var claimed: [String] = []
         var comStk: String? = MockBoxClaimRadio.stkPubHex
         var tls: Bool? = true
+        /// `tlsCheck` answers nil (no certificate yet) this many times before `tls`.
+        var noCertificateFor = 0
+        var tlsChecks = 0
+        var untrusted: [String] = []
+        var signatures: [[UInt8]] = []
+        var signer: RetailClaimSigner?
+        let adminKey = Curve25519.Signing.PrivateKey()
     }
 
     private func recipe(_ domain: String = "home.alice.flagship.services", serial: String = "retail-serial-0001") -> String {
         #"{"blob":{"serverDomain":"\#(domain)","authCode":{"serial":"\#(serial)"}},"blobSignature":"00"}"#
     }
 
-    private func make(_ scenario: MockBoxClaimRadio.Scenario, world: World = World()) -> (RetailClaimViewModel, MockBoxClaimRadio, World) {
+    private func make(_ scenario: MockBoxClaimRadio.Scenario, world: World = World(),
+                      _ tweak: (inout RetailClaimDeps) -> Void = { _ in }) -> (RetailClaimViewModel, MockBoxClaimRadio, World) {
         let radio = MockBoxClaimRadio(scenario: scenario, appearAfterMs: 150, pressAfterArmMs: 400)
         var deps = RetailClaimDeps(
             username: "alice",
             radio: radio,
             mailboxLink: { _ in fatalError("no mailbox in these tests") },
-            mintRecipe: { [r = recipe()] in (r, "home.alice.flagship.services", "retail-serial-0001") },
-            registerKey: { k in world.registered.append(k) },
+            mintRecipe: { [r = recipe()] in
+                let key = world.adminKey
+                let signer = RetailClaimSigner { Array(try key.signature(for: $0)) }
+                world.signer = signer
+                return RetailClaimRecipe(json: r, serverDomain: "home.alice.flagship.services", serial: "retail-serial-0001", signer: signer)
+            },
+            registerKey: { k, sig in world.registered.append(k); world.signatures.append(sig) },
             pinStk: { d, k in world.pinned[d] = k },
             registeredStk: { _ in world.comStk },
-            tlsCheck: { _ in world.tls },
+            tlsCheck: { _ in
+                world.tlsChecks += 1
+                return world.tlsChecks <= world.noCertificateFor ? nil : world.tls
+            },
             onClaimed: { d, _ in world.claimed.append(d) },
+            markUntrusted: { world.untrusted.append($0) },
             region: "DE",
             pauseMs: { scenario == .earlyPress ? 1_500 : 200 }
         )
         deps.baselineMs = 80
         deps.pollMs = 20
         deps.onlineTimeoutMs = 300
+        deps.certificateSlowMs = 200
+        deps.certificateGiveUpMs = 400
+        tweak(&deps)
         return (RetailClaimViewModel(deps: deps), radio, world)
     }
 
@@ -54,6 +75,10 @@ final class RetailClaimFlowTests: XCTestCase {
         XCTAssertEqual(world.registered.first?.stkPubHex, MockBoxClaimRadio.stkPubHex)
         XCTAssertEqual(world.pinned["home.alice.flagship.services"], MockBoxClaimRadio.stkPubHex)
         XCTAssertEqual(world.claimed, ["home.alice.flagship.services"])
+        let key = try? XCTUnwrap(world.registered.first)
+        XCTAssertTrue(key?.verify(signature: world.signatures.first ?? [], publicKey: Array(world.adminKey.publicKey.rawRepresentation)) == true,
+                      "The key the recipe was signed with signs the box key: no second prompt.")
+        XCTAssertEqual(world.signer?.isHeld, false, "The admin key is dropped right after the registration.")
         vm.useCable()
         await until(vm, "done") { $0 == .done(serverDomain: "home.alice.flagship.services") }
         XCTAssertEqual(radio.sentNetwork, .some(nil))
@@ -106,6 +131,44 @@ final class RetailClaimFlowTests: XCTestCase {
         await until(vm, "network step") { $0 == .chooseNetwork }
         vm.useCable()
         await until(vm, "alarm") { $0 == .alarm(.keyMismatch, serverDomain: "home.alice.flagship.services") }
+        XCTAssertEqual(w.untrusted, ["home.alice.flagship.services"], "The mismatch marks the server untrusted.")
+        XCTAssertEqual(vm.alarmStk, String(repeating: "ee", count: 32))
+    }
+
+    func testDoneWaitsForTheCertificate() async {
+        let w = World()
+        w.noCertificateFor = 3
+        let (vm, _, _) = make(.normal, world: w)
+        vm.startBluetooth()
+        await until(vm, "network step") { $0 == .chooseNetwork }
+        vm.useCable()
+        await until(vm, "certificate") { $0 == .gettingCertificate(serverDomain: "home.alice.flagship.services") }
+        await until(vm, "done") { $0 == .done(serverDomain: "home.alice.flagship.services") }
+        XCTAssertEqual(w.tlsChecks, 4)
+    }
+
+    func testNoCertificateIsNeverDone() async {
+        let w = World()
+        w.tls = nil
+        let (vm, _, _) = make(.normal, world: w)
+        vm.startBluetooth()
+        await until(vm, "network step") { $0 == .chooseNetwork }
+        vm.useCable()
+        await until(vm, "slow") { $0 == .certificateSlow(serverDomain: "home.alice.flagship.services") }
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertEqual(vm.phase, .certificateSlow(serverDomain: "home.alice.flagship.services"), "Without the TLS check it never says done.")
+        XCTAssertTrue(w.untrusted.isEmpty)
+        w.tls = true
+        vm.checkCertificateAgain()
+        await until(vm, "done") { $0 == .done(serverDomain: "home.alice.flagship.services") }
+    }
+
+    func testAStopDropsTheAdminKey() async {
+        let (vm, _, w) = make(.relayReceipt)
+        vm.startBluetooth()
+        await until(vm, "stop") { $0 == .stopped(.badReceipt) }
+        XCTAssertEqual(w.signer?.isHeld, false)
+        XCTAssertTrue(w.signatures.isEmpty)
     }
 
     func testAlarmWhenTheBoxNeverRegisters() async {

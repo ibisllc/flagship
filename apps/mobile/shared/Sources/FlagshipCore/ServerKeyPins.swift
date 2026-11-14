@@ -80,9 +80,11 @@ public struct ServerKeyPins: @unchecked Sendable {
         return d
     }
 
-    /// The pinned key for a server, or nil when this device has not blessed it yet.
+    /// The pinned key for a server, or nil when this device has not blessed it yet or stopped
+    /// trusting it (`UntrustedServers`): nothing is sealed to an untrusted server.
     public func pinnedStk(_ serverDomain: String) -> Data? {
-        record(serverDomain)?.stk
+        if UntrustedServers(defaults: defaults).contains(host: serverDomain) { return nil }
+        return record(serverDomain)?.stk
     }
 
     /// The whole pin for a server, or nil when this device has not blessed it yet.
@@ -117,8 +119,8 @@ public struct ServerKeyPins: @unchecked Sendable {
     public func pin(_ stk: Data, for serverDomain: String) -> Bool {
         guard stk.count == 32 else { return false }
         let d = Self.normalize(serverDomain)
-        guard !d.isEmpty else { return false }
-        if let pinned = pinnedStk(d) { return pinned == stk }
+        guard !d.isEmpty, !UntrustedServers(defaults: defaults).contains(host: d) else { return false }
+        if let pinned = record(d)?.stk { return pinned == stk }
         var m = all
         m[d] = HexUtil.encode(stk)
         all = m

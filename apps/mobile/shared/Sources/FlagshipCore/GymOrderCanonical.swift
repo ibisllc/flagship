@@ -7,6 +7,11 @@ import FlagshipAPI
 /// them as the real ones do. Called by the `-smoke-mode` seam.
 public enum GymOrderCanonical {
     public static func install(on signers: MockOrderSigners = .shared) {
+        signers.registerCanonical("box-claim-key") { p in
+            guard let r = p as? BoxClaimKeyRequest else { return nil }
+            return Data(BoxClaim.ClaimKey(username: r.key.username, serial: r.key.serial, serverDomain: r.key.serverDomain,
+                                          stkPubHex: r.key.stkPubHex, issuedAt: r.key.issuedAt).canonical)
+        }
         signers.registerCanonical("server-order") { p in
             guard let w = p as? SignedServerOrderWire else { return nil }
             return try? ServerOrder(user: w.order.user, stks: w.order.stks, issuedAt: w.order.issuedAt,

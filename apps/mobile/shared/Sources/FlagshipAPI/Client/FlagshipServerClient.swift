@@ -2654,6 +2654,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func registerBoxClaimKey(_ req: BoxClaimKeyRequest) async throws {
         try await tick()
+        try MockOrderSigners.shared.require(.sensitive, kind: "box-claim-key", signatureHex: req.signature, payload: req)
         if let held = boxClaimKeys[req.key.serial], held.key.stkPubHex != req.key.stkPubHex {
             throw ScreensClientError.http(status: 409, message: #"{"error":"another box key is already registered for this server","code":"box-key-already-registered"}"#)
         }
