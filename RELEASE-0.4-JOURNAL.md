@@ -106,7 +106,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] S2 Group by priority (security first, then W14 and W19, then the rest) and show the owner before building.
 
 ### F. 0.4 features and fixes (order after S2; security items from S1 go first)
-- [~] F1 (steps 1-2 merged 2026-11-13: `flagship/direct-access/v1` order, `direct-address/v1` box update, `lan-hint/v2`, box public listener, iOS/Android probe; vectors TS/Swift/Kotlin; also fixed: the LAN listener counted forwarded public IPv4 as LAN, exposing rescue routes. NEXT: step 3 `.com` registry + fshp.app records + issuance; step 5 screens. Owner Qs: non-admin devices using the public path; forwarded IPv4 changes) Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
+- [~] F1 (step 3 + 6 + box side merged 2026-11-14: .com registry, direct-name/v1, D1 0133, publisher, direct certs, box sync/gate/routing; keyd boxes need per-name TLS slots; screens (step 5) next. Steps 1-2 merged 2026-11-13: `flagship/direct-access/v1` order, `direct-address/v1` box update, `lan-hint/v2`, box public listener, iOS/Android probe; vectors TS/Swift/Kotlin; also fixed: the LAN listener counted forwarded public IPv4 as LAN, exposing rescue routes. NEXT: step 3 `.com` registry + fshp.app records + issuance; step 5 screens. Owner Qs: non-admin devices using the public path; forwarded IPv4 changes) Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
       direct-access order + vectors (TS/Swift/Kotlin), `.com` direct-name registry + prober + `fshp.app` records +
       issuance, clients' opt-in and name screens, take `fshp.app` off the website mirror, tests.
 - [~] F2 (fold MERGED 2026-11-14: marketplace, Pro payments + vouchers, custom names, custom domains, outbound proxy on release/0.4; shell v208; migrations 0090/0091/0093/0094/0099; parity green; no iOS Xcode build since; new dep undici: run npm ci) Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
@@ -124,8 +124,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       strict check green); hybrid channel on by default with classical fallback and a fallback count; strict default
       for new accounts after the external review. Also the hybrid release catalog and the boot client's ML-DSA key.
 - [ ] F6 Take the zone-wide DNS token off `.com` (challenge TXT through the broker; release step 20 skips when unset).
-- [ ] F7 UnifiedPush for de-Googled Android.
-- [ ] F8 Human `voi.ci` service names (`docs/voici-service-names-todo.md`).
+- [x] F7 (merged 2026-11-14: Web Push to UnifiedPush endpoints from .com with an SSRF guard, Android distributor-first transport, Settings row; D1 0136; needs WEBPUSH_VAPID_* secrets, an Android store build, a real ntfy test) UnifiedPush for de-Googled Android.
+- [x] F8 (merged 2026-11-14: correction window, weekly cooldown, account claim budget, 30-day custom-domain lapse grace; D1 0137; owner Qs in named-links §8.5) Human `voi.ci` service names (`docs/voici-service-names-todo.md`).
 - [~] F9 (merged 2026-11-13: Android stale recovery banner, "another account" backup refusal, W3 hint, W10, W26, raw recipe error, remaster temp folders, sealing stall at 12 min. LEFT: W14, W19, silent second boot approval, first-boot restarts, lingering Unlocking, window close, keep-awake log, MessageBox Pane) Windows acceptance findings (0.4 list section): W14, the silent second boot approval, first-boot daemon
       restarts restarting the certificate order, W19 empty Home, Android stale recovery banner and "another account"
       backup refusal, the Studio for Windows items, W3 Continue hint.
@@ -248,6 +248,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-14 Merged the Social tab ports (Android + webapp, fitted to the responsive layout; 18 old webapp keys pruned).
   Fixed a missing brace in GymOctoberTest.kt from the fold (Android gym tests compile again). Parity red left:
   `pq-authority` vectors have no Swift/Kotlin/web reader yet (the PQ agent is porting them).
+- 2026-11-14 Merged F8 voi.ci names (0137), F7 UnifiedPush (0136), F1 step 3 + box side (0133). Migrations on
+  release/0.4 now: ...0132, 0133, 0136, 0137, 0138 (0134-0135 reserved for retail). Boot fixes (W19, second boot
+  approval, first-boot restarts, Unlocking lingering, W14 partly) sent back for a semantic rebase over direct certs.
+  Owner Qs: voi.ci name caps 5/25/100 vs 5/50/250, liveness 60 d, keep D7, 30-day domain cooldown; W14: may a device
+  under review unlock boots?
 
 ## Resume point
 
