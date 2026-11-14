@@ -17,6 +17,13 @@
  *                       `--` splits creator from slug, as in service ids:
  *                       neither may contain one.
  *
+ * Store generations (docs/restore-into-server.md §3.3): a prod app's stores
+ * can be rebuilt beside the live ones under generation N > 0 and swapped in.
+ * Generation 0 keeps exactly the names above, so every app made before
+ * generations keeps its stores. Generation N adds `|g<N>` to the HMAC input
+ * and `--g<N>` to the volume (unambiguous: a slug never holds `--`). The dev
+ * dataspace has only generation 0.
+ *
  * The names are stable for a box: the same identity and key always give the
  * same name, so the box can recompute a dev store a crashed daemon left. Prod
  * names are also kept in the app's credentials, which is what uninstall
@@ -65,6 +72,22 @@ export interface AppDataIdentity {
    * synthetic dataspace a staging copy runs against, disjoint from prod.
    */
   space?: "dev" | "prod";
+  /** Prod only: the store generation (absent / 0 = the original names). */
+  generation?: number;
+}
+
+/** The highest store generation (each restore that replaces an app's data takes the next). */
+export const MAX_DATA_GENERATION = 999_999;
+
+export function isDataGeneration(g: unknown): g is number {
+  return typeof g === "number" && Number.isSafeInteger(g) && g >= 0 && g <= MAX_DATA_GENERATION;
+}
+
+function generationOf(id: AppDataIdentity): number {
+  const g = id.generation ?? 0;
+  if (!isDataGeneration(g)) throw new Error(`store generation ${JSON.stringify(id.generation)} must be 0–${MAX_DATA_GENERATION}`);
+  if (g > 0 && isDev(id)) throw new Error("the dev dataspace has no store generations");
+  return g;
 }
 
 /** The implicit single-store name (a manifest's `postgres: true`). */
@@ -121,8 +144,9 @@ export function pgDatabase(id: AppDataIdentity, nameKey: string): string {
   assertStoreName(id.storeName);
   assertNameKey(nameKey);
   const space = isDev(id) ? "dev" : "prod";
+  const g = generationOf(id);
   const digest = createHmac("sha256", nameKey)
-    .update(`flagship/pg-name/v1|${space}|${id.creator}|${id.slug}|${effectiveStoreName(id.storeName)}`)
+    .update(`flagship/pg-name/v1|${space}|${id.creator}|${id.slug}|${effectiveStoreName(id.storeName)}${g > 0 ? `|g${g}` : ""}`)
     .digest("hex")
     .slice(0, 24);
   return `${isDev(id) ? DEV_PG_PREFIX : PROD_PG_PREFIX}${digest}`;
@@ -137,11 +161,12 @@ export function pgRole(id: AppDataIdentity, nameKey: string): string {
 export function filesVolume(id: AppDataIdentity): string {
   assertCreator(id.creator);
   assertSlug(id.slug);
-  return `flagship-${isDev(id) ? "devfiles" : "files"}-${id.creator}--${id.slug}`;
+  const g = generationOf(id);
+  return `flagship-${isDev(id) ? "devfiles" : "files"}-${id.creator}--${id.slug}${g > 0 ? `--g${g}` : ""}`;
 }
 
 const LABEL = "[a-z0-9](?:-?[a-z0-9]){0,31}";
-const PROD_FILES_VOLUME_RE = new RegExp(`^flagship-files-${LABEL}--${LABEL}$`);
+const PROD_FILES_VOLUME_RE = new RegExp(`^flagship-files-(${LABEL})--(${LABEL})(?:--g([1-9][0-9]{0,5}))?$`);
 const DEV_FILES_VOLUME_RE = new RegExp(`^flagship-devfiles-${LABEL}--${LABEL}$`);
 
 /** True for a name `filesVolume` could have made (prod or dev). */
@@ -152,6 +177,16 @@ export function isFilesVolume(name: string): boolean {
 /** True for a prod files volume (what backups carry; dev ones never are). */
 export function isProdFilesVolume(name: string): boolean {
   return PROD_FILES_VOLUME_RE.test(name);
+}
+
+/**
+ * A prod files volume's app and generation: what the broker is told
+ * (`installation` + `generation`) instead of the volume name.
+ */
+export function parseProdFilesVolume(name: string): { creator: string; slug: string; installation: string; generation: number } | null {
+  const m = PROD_FILES_VOLUME_RE.exec(name);
+  if (!m) return null;
+  return { creator: m[1]!, slug: m[2]!, installation: `${m[1]}--${m[2]}`, generation: m[3] ? Number(m[3]) : 0 };
 }
 
 /**

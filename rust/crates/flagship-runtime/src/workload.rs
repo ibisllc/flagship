@@ -35,6 +35,22 @@ fn is_label32(s: &str) -> bool {
         && !s.contains("--")
 }
 
+/// `<slug>` or, for a prod store generation N > 0 (dataLayer/naming.ts), `<slug>--g<N>`.
+fn slug_and_generation(s: &str, prod: bool) -> bool {
+    match s.split_once("--") {
+        None => is_label32(s),
+        Some((slug, g)) => {
+            prod && is_label32(slug)
+                && g.strip_prefix('g').is_some_and(|n| {
+                    !n.is_empty()
+                        && n.len() <= 6
+                        && !n.starts_with('0')
+                        && n.bytes().all(|c| c.is_ascii_digit())
+                })
+        }
+    }
+}
+
 /// A files volume name exactly as `isFilesVolume` accepts it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FilesVolumeName(String);
@@ -44,9 +60,10 @@ impl FilesVolumeName {
         let rest = s
             .strip_prefix("flagship-files-")
             .or_else(|| s.strip_prefix("flagship-devfiles-"));
+        let prod = s.starts_with("flagship-files-");
         let ok = rest
             .and_then(|r| r.split_once("--"))
-            .is_some_and(|(a, b)| is_label32(a) && is_label32(b));
+            .is_some_and(|(a, b)| is_label32(a) && slug_and_generation(b, prod));
         if ok {
             Ok(Self(s.to_owned()))
         } else {

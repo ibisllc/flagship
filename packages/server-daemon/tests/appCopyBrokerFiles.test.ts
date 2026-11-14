@@ -56,6 +56,13 @@ describe("appdata.files through the broker", () => {
     expect(archiveIsolationStats.brokerFiles - before).toBe(2);
   });
 
+  it("names a store generation as a number, never inside the app's name", async () => {
+    const b = await fakeBroker(() => ({ ok: true, result: { stdout: "", stderr: "" } }));
+    await brokerFiles("restore", "flagship-files-alice--chess--g3", "/var/flagship/r/files.tar", b.sock);
+    expect(b.seen).toEqual([{ op: "appdata.files", args: { action: "restore", installation: "alice--chess", generation: 3, path: "/var/flagship/r/files.tar" } }]);
+    await expect(brokerFiles("size", "flagship-files-alice--chess--g0", undefined, b.sock)).rejects.toThrow(/not an app's files volume/);
+  });
+
   it("refuses a dev or foreign volume before asking, and passes the broker's refusal on", async () => {
     const b = await fakeBroker(() => ({ ok: false, code: "failed", message: "exited with code null: the files archive was refused: a link in the archive points outside its folder (symlink-escape)" }));
     await expect(brokerFiles("restore", "flagship-devfiles-alice--chess", "/var/flagship/x", b.sock)).rejects.toThrow(/not an app's files volume/);

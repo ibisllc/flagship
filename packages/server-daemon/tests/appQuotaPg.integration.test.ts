@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { APP_ROLE_LIMITS, AppQuotaManager, RealPgQuota, emptyRevocation } from "../src/appQuota/index.js";
 import { runAppSql } from "../src/runtime.js";
 import { RealPostgresAdmin } from "../src/dataLayer/realAdmins.js";
+import { pgDatabase } from "../src/dataLayer/naming.js";
 
 const ADMIN_URL = process.env.FLAGSHIP_TEST_PG_URL;
 const MiB = 1024 * 1024;
@@ -227,5 +228,31 @@ describe.skipIf(!ADMIN_URL)("database size limits on a real Postgres", () => {
     await asApp(appUrl(), async (c) => {
       await c.query("INSERT INTO notes (body) VALUES ('allowed')");
     });
+  });
+});
+
+describe.skipIf(!ADMIN_URL)("store generations on a real Postgres", () => {
+  const admin = new RealPostgresAdmin({ adminUrl: ADMIN_URL ?? "" });
+  const nameKey = randomBytes(24).toString("hex");
+  const creator = `g${randomBytes(4).toString("hex")}`;
+  const g0 = pgDatabase({ creator, slug: "notes" }, nameKey);
+  const g1 = pgDatabase({ creator, slug: "notes", generation: 1 }, nameKey);
+  const pw0 = randomBytes(16).toString("hex");
+  const pw1 = randomBytes(16).toString("hex");
+
+  afterAll(async () => {
+    for (const n of [g0, g1]) await admin.dropRoleAndDb({ db: n, role: n }).catch(() => {});
+  });
+
+  it("each generation's role reaches only its own database, and dropping one leaves the other", async () => {
+    await admin.createRoleAndDb({ db: g0, role: g0, password: pw0 });
+    await admin.createRoleAndDb({ db: g1, role: g1, password: pw1 });
+    await asApp(urlFor(g0, pw0, g0), (c) => c.query("CREATE TABLE t (v int); INSERT INTO t VALUES (0)"));
+    await asApp(urlFor(g1, pw1, g1), (c) => c.query("CREATE TABLE t (v int); INSERT INTO t VALUES (1)"));
+    await expect(asApp(urlFor(g1, pw1, g0), (c) => c.query("SELECT 1"))).rejects.toThrow(/permission denied|not permitted/);
+    await expect(asApp(urlFor(g0, pw0, g1), (c) => c.query("SELECT 1"))).rejects.toThrow(/permission denied|not permitted/);
+    await admin.dropRoleAndDb({ db: g1, role: g1 });
+    const r = await asApp(urlFor(g0, pw0, g0), (c) => c.query<{ v: number }>("SELECT v FROM t"));
+    expect(r.rows).toEqual([{ v: 0 }]);
   });
 });

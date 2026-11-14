@@ -51,6 +51,7 @@ import {
   wantsAnyStore,
   type AppDataCredentials,
 } from "./dataLayer/index.js";
+import { MAX_DATA_GENERATION, isDataGeneration } from "./dataLayer/naming.js";
 import type { AppAuthTokens } from "./serviceAuthToken.js";
 import { whileDeploying, type DeployingTracker } from "./serviceActivity.js";
 import type { DomainGate } from "./browser/domainGate.js";
@@ -93,6 +94,35 @@ export interface InstalledService {
   app?: NormalizedApp;
   /** Manifest schema 2: the manifest as signed, kept so a restart restores it whole. */
   manifestSource?: string;
+  /** The generation of its stores (dataLayer/naming.ts); absent = 0, the names every app started with. */
+  dataGeneration?: number;
+  /**
+   * Earlier generations kept beside the live one (docs/restore-into-server.md
+   * §6.6): what a replace swapped out, the undo point. Never mounted or given
+   * to the app; dropped by undo/discard/expiry and by uninstall.
+   */
+  retainedData?: RetainedGeneration[];
+}
+
+/** An app as it was before a swap: its stores, code and schema, held until `expiresAt`. */
+export interface RetainedGeneration {
+  /** Who kept it (a restore's id): undo and discard name it. */
+  ref: string;
+  generation: number;
+  data: AppDataCredentials | null;
+  manifestJson: string;
+  appliedMigrations: string[];
+  keptAt: number;
+  expiresAt: number;
+}
+
+/** What a swap puts live: the stores of a prepared generation, and (a replace) new code. */
+export interface DataSwap {
+  generation: number;
+  data: AppDataCredentials | null;
+  /** The code to run with them; absent keeps the app's own (replace-data). */
+  manifestJson?: string;
+  appliedMigrations: string[];
 }
 
 /** A schema migration shipped with a version of an app (`migrations/*.sql`). */
@@ -266,6 +296,20 @@ export class ServicePlatform {
   private admitNewApp: (() => string | null) | null = null;
 
   private readonly envNonces: UsedNonceStore;
+  /** One install, redeploy, uninstall or store swap of an app at a time. */
+  private readonly appLocks = new Map<string, Promise<unknown>>();
+
+  private withAppLock<T>(serviceId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.appLocks.get(serviceId) ?? Promise.resolve();
+    const run = prev.then(fn, fn);
+    const tail = run.catch(() => {});
+    this.appLocks.set(serviceId, tail);
+    void tail.then(() => {
+      if (this.appLocks.get(serviceId) === tail) this.appLocks.delete(serviceId);
+    });
+    return run;
+  }
+
 
   private parse(json: string, restoring = false): ParsedApp {
     return parseAppManifest(json, restoring ? RESTORE_CAPABILITIES : this.deps.runtimeCapabilities?.());
@@ -372,11 +416,11 @@ export class ServicePlatform {
   install(args: ServiceInstallArgs): Promise<InstallResult> {
     const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
     const existed = this.apps.has(id);
-    return whileDeploying(this.deps.activity, id, async () => {
+    return whileDeploying(this.deps.activity, id, () => this.withAppLock(id, async () => {
       const res = await this.installNow(args);
       if (res.ok) this.notifyApp(existed ? "app.updated" : "app.installed", id);
       return res;
-    });
+    }));
   }
 
   private notifyApp(kind: "app.installed" | "app.updated" | "app.removed", serviceId: string): void {
@@ -658,7 +702,7 @@ export class ServicePlatform {
 
   redeploy(args: ServiceRedeployArgs): Promise<RedeployResult> {
     const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
-    return whileDeploying(this.deps.activity, id, () => this.redeployNow(args));
+    return whileDeploying(this.deps.activity, id, () => this.withAppLock(id, () => this.redeployNow(args)));
   }
 
   /**
@@ -735,6 +779,7 @@ export class ServicePlatform {
           creator: r.creator,
           slug: r.slug,
           stores: added,
+          ...(old.dataGeneration ? { generation: old.dataGeneration } : {}),
           ...(parsed.app.resources?.diskMiB !== undefined ? { dedicatedDiskBytes: parsed.app.resources.diskMiB * 1024 * 1024 } : {}),
         });
       } catch (e) {
@@ -799,6 +844,218 @@ export class ServicePlatform {
     this.persist();
     await this.notifyInstalled(updated);
     return { ok: true, app: updated, addedStores: addedNames };
+  }
+
+  /** The generations an app holds (live and retained); a new one takes the next free number. */
+  private nextGeneration(app: InstalledService): number {
+    const used = [app.dataGeneration ?? 0, ...(app.retainedData ?? []).map((r) => r.generation)];
+    const next = Math.max(...used) + 1;
+    if (next > MAX_DATA_GENERATION) throw new Error("this app has used every store generation");
+    return next;
+  }
+
+  /**
+   * Make the next generation of an app's stores beside the live ones
+   * (docs/restore-into-server.md §3.3): what `stores` asks for (default:
+   * the stores the app holds now), empty, in the same profile. The live app
+   * is untouched and keeps running. Whatever an interrupted attempt left
+   * under that generation's names is cleared first.
+   */
+  prepareDataGeneration(serviceId: string, opts: { stores?: AppDataStores } = {}): Promise<{ generation: number; data: AppDataCredentials | null }> {
+    return this.withAppLock(serviceId, async () => {
+      const app = this.apps.get(serviceId);
+      if (!app) throw new Error(`app ${serviceId} is not installed`);
+      const stores: AppDataStores = opts.stores ?? storesOf(app.data);
+      const generation = this.nextGeneration(app);
+      if (!wantsAnyStore(stores)) return { generation, data: null };
+      const dp = this.deps.dataProvisioner;
+      if (!dp) throw new Error("this server has no data layer");
+      const dedicated = Object.values(app.data?.postgres ?? {}).some((p) => p.profile === "dedicated");
+      await dp.clearGeneration({ creator: app.creator, slug: app.slug, stores, generation, dedicated });
+      const diskMiB = app.app?.resources?.diskMiB;
+      const data = await dp.provisionApp({
+        creator: app.creator,
+        slug: app.slug,
+        stores,
+        generation,
+        ...(diskMiB !== undefined ? { dedicatedDiskBytes: diskMiB * 1024 * 1024 } : {}),
+      });
+      return { generation, data };
+    });
+  }
+
+  /** Drop a prepared generation that never went live (a failed or refused restore line). */
+  async dropPreparedGeneration(serviceId: string, data: AppDataCredentials | null): Promise<void> {
+    if (!data || !this.deps.dataProvisioner) return;
+    const app = this.apps.get(serviceId);
+    if (app && sameStores(app.data, data)) throw new Error("refusing to drop the live stores");
+    if (app?.retainedData?.some((r) => sameStores(r.data, data))) throw new Error("refusing to drop a kept generation");
+    await this.deps.dataProvisioner.dropGeneration(data);
+  }
+
+  /**
+   * Put a prepared generation live: stop the app, start it on the new
+   * stores (and, for a replace, the new code), check it answers. The old
+   * generation, code and schema are kept as `retain.ref` until
+   * `retain.expiresAt`. On any failure the app is started again exactly as
+   * it was and nothing is kept; the caller drops the prepared stores.
+   * `guard` re-reads the live app just before the stop: a non-null answer
+   * refuses the swap with that reason (the app changed since the owner chose).
+   */
+  swapDataGeneration(
+    serviceId: string,
+    next: DataSwap,
+    retain: { ref: string; expiresAt: number },
+    guard?: (app: InstalledService) => string | null,
+  ): Promise<{ ok: true; app: InstalledService } | { ok: false; reason: string; changed?: boolean }> {
+    return whileDeploying(this.deps.activity, serviceId, () => this.withAppLock(serviceId, async () => {
+      const old = this.apps.get(serviceId);
+      if (!old) return { ok: false as const, reason: "not installed" };
+      if (!isDataGeneration(next.generation) || next.generation <= (old.dataGeneration ?? 0)) return { ok: false as const, reason: "not a newer store generation" };
+      if (old.retainedData?.some((r) => r.ref === retain.ref)) return { ok: false as const, reason: "this restore already kept an earlier copy of the app" };
+      const refused = guard?.(old) ?? null;
+      if (refused) return { ok: false as const, reason: refused, changed: true };
+      const parsed = next.manifestJson !== undefined ? this.parse(next.manifestJson) : null;
+      if (parsed && !parsed.ok) return { ok: false as const, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
+      const manifest = parsed?.ok ? parsed.manifest : old.manifest;
+      const v2 = parsed?.ok ? ServicePlatform.v2Fields(parsed) : { ...(old.app ? { app: old.app } : {}), ...(old.manifestSource ? { manifestSource: old.manifestSource } : {}) };
+      const apiToken = this.deps.appAuthTokens ? await this.deps.appAuthTokens.tokenForApp(serviceId).catch(() => null) : null;
+      const base = { serviceId, creator: old.creator, slug: old.slug, apiToken, hostPort: old.containerPort };
+      const spec = await this.containerSpec({ ...base, manifest, app: v2.app, data: next.data });
+      try {
+        await this.deps.appRunner.restart(spec);
+        await this.assertStarted(spec);
+      } catch (e) {
+        try {
+          await this.deps.appRunner.restart(await this.containerSpec({ ...base, manifest: old.manifest, app: old.app, data: old.data }));
+        } catch (back) {
+          this.deps.onLog?.(`[service-platform] ${serviceId}: the restored copy didn't start and the earlier one didn't come back: ${(back as Error).message}`);
+          return { ok: false as const, reason: `it didn't start (${(e as Error).message}), and the earlier copy didn't come back: ${(back as Error).message}` };
+        }
+        return { ok: false as const, reason: `it didn't start: ${(e as Error).message}` };
+      }
+      const kept: RetainedGeneration = {
+        ref: retain.ref,
+        generation: old.dataGeneration ?? 0,
+        data: old.data,
+        manifestJson: old.manifestSource ?? JSON.stringify(old.manifest),
+        appliedMigrations: old.appliedMigrations ?? [],
+        keptAt: this.now(),
+        expiresAt: retain.expiresAt,
+      };
+      const { app: _a, manifestSource: _m, ...oldBase } = old;
+      void _a;
+      void _m;
+      const updated: InstalledService = {
+        ...oldBase,
+        manifest,
+        ...v2,
+        data: next.data,
+        dataGeneration: next.generation,
+        appliedMigrations: next.appliedMigrations,
+        retainedData: [...(old.retainedData ?? []), kept],
+      };
+      this.apps.set(serviceId, updated);
+      this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
+      if (this.deps.domainGate && parsed?.ok) {
+        if (manifest.browser?.domains) this.deps.domainGate.setGrant(serviceId, manifest.browser.domains);
+        else if (old.manifest.browser?.domains) this.deps.domainGate.revoke(serviceId);
+      }
+      this.persist();
+      await this.notifyInstalled(updated);
+      this.notifyApp("app.updated", serviceId);
+      return { ok: true as const, app: updated };
+    }));
+  }
+
+  /**
+   * Undo: put a kept generation back live (the same swap, start check and
+   * fall-back), then drop the generation it replaces. Every change made
+   * since the swap is lost; the caller has the owner's signed order for it.
+   */
+  revertDataGeneration(serviceId: string, ref: string): Promise<{ ok: true; app: InstalledService } | { ok: false; reason: string }> {
+    return whileDeploying(this.deps.activity, serviceId, () => this.withAppLock(serviceId, async () => {
+      const cur = this.apps.get(serviceId);
+      if (!cur) return { ok: false as const, reason: "not installed" };
+      const kept = cur.retainedData?.find((r) => r.ref === ref);
+      if (!kept) return { ok: false as const, reason: "there is no earlier copy to put back" };
+      const parsed = this.parse(kept.manifestJson, true);
+      if (!parsed.ok) return { ok: false as const, reason: `the earlier copy's manifest is no longer valid: ${parsed.errors.join("; ")}` };
+      const apiToken = this.deps.appAuthTokens ? await this.deps.appAuthTokens.tokenForApp(serviceId).catch(() => null) : null;
+      const base = { serviceId, creator: cur.creator, slug: cur.slug, apiToken, hostPort: cur.containerPort };
+      const spec = await this.containerSpec({ ...base, manifest: parsed.manifest, app: parsed.app, data: kept.data });
+      try {
+        await this.deps.appRunner.restart(spec);
+        await this.assertStarted(spec);
+      } catch (e) {
+        await this.deps.appRunner.restart(await this.containerSpec({ ...base, manifest: cur.manifest, app: cur.app, data: cur.data })).catch((back: Error) =>
+          this.deps.onLog?.(`[service-platform] ${serviceId}: the earlier copy didn't start and the restored one didn't come back: ${back.message}`),
+        );
+        return { ok: false as const, reason: `the earlier copy didn't start: ${(e as Error).message}` };
+      }
+      const replaced = cur.data;
+      const { app: _a, manifestSource: _m, ...curBase } = cur;
+      void _a;
+      void _m;
+      const rest = (cur.retainedData ?? []).filter((r) => r.ref !== ref);
+      const { dataGeneration: _g, retainedData: _r, ...plain } = curBase;
+      void _g;
+      void _r;
+      const updated: InstalledService = {
+        ...plain,
+        manifest: parsed.manifest,
+        ...ServicePlatform.v2Fields(parsed),
+        data: kept.data,
+        appliedMigrations: kept.appliedMigrations,
+        ...(kept.generation > 0 ? { dataGeneration: kept.generation } : {}),
+        ...(rest.length > 0 ? { retainedData: rest } : {}),
+      };
+      this.apps.set(serviceId, updated);
+      this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
+      if (this.deps.domainGate) {
+        if (parsed.manifest.browser?.domains) this.deps.domainGate.setGrant(serviceId, parsed.manifest.browser.domains);
+        else if (cur.manifest.browser?.domains) this.deps.domainGate.revoke(serviceId);
+      }
+      this.persist();
+      if (replaced && this.deps.dataProvisioner) {
+        await this.deps.dataProvisioner.dropGeneration(replaced).catch((e: Error) =>
+          this.deps.onLog?.(`[service-platform] ${serviceId}: couldn't drop the restored copy's stores after the undo: ${e.message}`),
+        );
+      }
+      this.notifyApp("app.updated", serviceId);
+      return { ok: true as const, app: updated };
+    }));
+  }
+
+  /** Drop a kept generation now (discard, or its time is up). The live app is not touched. */
+  discardRetainedGeneration(serviceId: string, ref: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    return this.withAppLock(serviceId, async () => {
+      const cur = this.apps.get(serviceId);
+      const kept = cur?.retainedData?.find((r) => r.ref === ref);
+      if (!cur || !kept) return { ok: false as const, reason: "there is no earlier copy to delete" };
+      if (kept.data && this.deps.dataProvisioner) {
+        if (sameStores(cur.data, kept.data)) return { ok: false as const, reason: "refusing to drop the live stores" };
+        await this.deps.dataProvisioner.dropGeneration(kept.data);
+      }
+      const rest = (cur.retainedData ?? []).filter((r) => r.ref !== ref);
+      const { retainedData: _r, ...plain } = cur;
+      void _r;
+      const updated: InstalledService = { ...plain, ...(rest.length > 0 ? { retainedData: rest } : {}) };
+      this.apps.set(serviceId, updated);
+      this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
+      this.persist();
+      return { ok: true as const };
+    });
+  }
+
+  /** Every kept generation whose time is up, for the expiry sweep. */
+  expiredRetained(now = this.now()): Array<{ serviceId: string; ref: string }> {
+    return [...this.apps.values()].flatMap((a) => (a.retainedData ?? []).filter((r) => r.expiresAt <= now).map((r) => ({ serviceId: a.serviceId, ref: r.ref })));
+  }
+
+  /** Files volumes of kept generations: never set aside by the orphan sweep. */
+  retainedVolumes(): string[] {
+    return [...this.apps.values()].flatMap((a) => (a.retainedData ?? []).flatMap((r) => (r.data?.files ? [r.data.files.volume] : [])));
   }
 
   /**
@@ -928,6 +1185,8 @@ export class ServicePlatform {
       installedAt: a.installedAt,
       appliedMigrations: a.appliedMigrations ?? [],
       membership: a.membership.snapshot(),
+      ...(a.dataGeneration ? { dataGeneration: a.dataGeneration } : {}),
+      ...(a.retainedData?.length ? { retainedData: a.retainedData } : {}),
     }));
     this.persistChain = this.persistChain
       .then(() => registry.save(services))
@@ -998,6 +1257,8 @@ export class ServicePlatform {
         installedAt: p.installedAt,
         appliedMigrations: p.appliedMigrations ?? [],
         ...ServicePlatform.v2Fields(parsed),
+        ...(isDataGeneration(p.dataGeneration) && p.dataGeneration > 0 ? { dataGeneration: p.dataGeneration } : {}),
+        ...(Array.isArray(p.retainedData) && p.retainedData.length > 0 ? { retainedData: p.retainedData } : {}),
       };
       this.apps.set(app.serviceId, app);
       this.byUrlLabel.set(app.urlLabel.toLowerCase(), app);
@@ -1078,7 +1339,7 @@ export class ServicePlatform {
     signature: Bytes;
     verify: (req: UninstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
   }): Promise<UninstallResult> {
-    const res = await this.uninstallNow(args);
+    const res = await this.withAppLock(ServicePlatform.serviceId(args.request.creator, args.request.slug), () => this.uninstallNow(args));
     if (res.ok && !res.alreadyGone) {
       const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
       this.notifyApp("app.removed", id);
@@ -1155,6 +1416,11 @@ export class ServicePlatform {
     // Drop data stores: every one it holds (its databases and its files
     // folder), including any a later version's manifest stopped declaring
     // (redeploy keeps those rather than lose data).
+    if (this.deps.dataProvisioner) {
+      for (const r of app.retainedData ?? []) {
+        if (r.data) await this.deps.dataProvisioner.dropGeneration(r.data).catch(() => {});
+      }
+    }
     if (app.data && this.deps.dataProvisioner) {
       try {
         await this.deps.dataProvisioner.dropCredentials(app.data);
@@ -1574,4 +1840,22 @@ function hexToBytes(hex: string): Uint8Array {
     out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
+}
+
+/** The store set a set of credentials holds, as a manifest would ask for it. */
+export function storesOf(data: AppDataCredentials | null): AppDataStores {
+  const names = Object.keys(data?.postgres ?? {});
+  const out: AppDataStores = {};
+  if (names.length > 0) out.postgres = data?.postgresSingleton ? true : names;
+  if (data?.files) out.files = true;
+  return out;
+}
+
+/** Whether two sets of credentials share any database or folder. */
+function sameStores(a: AppDataCredentials | null, b: AppDataCredentials | null): boolean {
+  if (!a || !b) return false;
+  const names = (c: AppDataCredentials) => new Set([...Object.values(c.postgres ?? {}).map((p) => `pg:${p.database}`), ...(c.files ? [`f:${c.files.volume}`] : [])]);
+  const x = names(a);
+  for (const n of names(b)) if (x.has(n)) return true;
+  return false;
 }

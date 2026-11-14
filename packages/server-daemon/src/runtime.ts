@@ -1734,6 +1734,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       if (loopVolumes) {
         const sweep = () => {
           const keep = new Set((servicePlatformRef.current?.list() ?? []).flatMap((a) => (a.data?.files ? [a.data.files.volume] : [])));
+          // A restore's undo point keeps the app's earlier folder (docs/restore-into-server.md §6.6).
+          for (const v of servicePlatformRef.current?.retainedVolumes() ?? []) keep.add(v);
           // Dedicated databases' images are theirs too (dataLayer/dedicated.ts).
           void (appRuntimes.dedicated?.volumes() ?? Promise.resolve([]))
             .then((vs) => {

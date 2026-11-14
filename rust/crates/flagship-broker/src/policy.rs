@@ -2398,7 +2398,10 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
 static INSTALLATION_RE: LazyLock<Regex> =
     LazyLock::new(|| re(r"^[a-z0-9](?:-?[a-z0-9]){0,31}--[a-z0-9](?:-?[a-z0-9]){0,31}$"));
 
-/// `appdata.files {action, installation, path?}` (plan G6): an app's files folder read for a backup
+/// The highest store generation (server-daemon dataLayer/naming.ts MAX_DATA_GENERATION).
+pub const MAX_DATA_GENERATION: u64 = 999_999;
+
+/// `appdata.files {action, installation, generation?, path?}` (plan G6): an app's files folder read for a backup
 /// (`dump`, into the daemon's transfer file `path`), written on a restore (`restore`, from `path`,
 /// which the runner checks as a tar and copies before the helper sees it) or measured (`size`).
 /// The caller names the app; the broker derives the volume from it and requires that volume's
@@ -2409,7 +2412,7 @@ pub fn appdata_files_exec(
     engine: EngineKind,
     mounts: MountsReader<'_>,
 ) -> Result<PrivExec, PrivdError> {
-    no_extra(args, &["action", "installation", "path"])?;
+    no_extra(args, &["action", "installation", "generation", "path"])?;
     let action = match args.get("action").and_then(Value::as_str) {
         Some(a @ ("dump" | "restore" | "size")) => a,
         _ => return Err(bad("action is dump, restore or size")),
@@ -2418,7 +2421,15 @@ pub fn appdata_files_exec(
         Some(i) if INSTALLATION_RE.is_match(i) => i,
         _ => return Err(bad("installation must be <creator>--<slug>")),
     };
-    let volume = format!("flagship-files-{installation}");
+    // A restore builds an app's next store generation beside the live one
+    // (server-daemon dataLayer/naming.ts): generation N > 0 is `--g<N>`.
+    let volume = match args.get("generation") {
+        None => format!("flagship-files-{installation}"),
+        Some(g) => match g.as_u64() {
+            Some(n @ 1..=MAX_DATA_GENERATION) => format!("flagship-files-{installation}--g{n}"),
+            _ => return Err(bad("generation must be 1-999999")),
+        },
+    };
     let mount_point = format!("{FILES_IMAGE_ROOT}/{volume}");
     let mounted = mounts()
         .lines()
