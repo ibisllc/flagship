@@ -1,0 +1,32 @@
+# The only public door to Pebble. Fly ends TLS for flagship-acme-gym.fly.dev (publicly trusted, so the gym Worker can
+# fetch it) and hands plain HTTP to :8080. The Host header passes through, so Pebble's directory names this host.
+{
+	auto_https off
+	admin off
+}
+
+:8080 {
+	# The current root and intermediate, for the harness and gym boxes to trust. Nothing else of the management API is
+	# reachable: /root-keys and /intermediate-keys would hand out the CA's private keys.
+	@roots path /roots/0 /intermediates/0
+	handle @roots {
+		reverse_proxy https://127.0.0.1:15000 {
+			transport http {
+				tls_trust_pool file /pebble/certs/pebble.minica.pem
+				tls_server_name localhost
+			}
+		}
+	}
+	@acme path /dir /nonce-plz /sign-me-up /order-plz /revoke-cert /rollover-account-key /my-account/* /my-order/* /finalize-order/* /authZ/* /chalZ/* /certZ/* /list-orderz/* /draft-ietf-acme-ari-03/renewalInfo/*
+	handle @acme {
+		reverse_proxy https://127.0.0.1:14000 {
+			transport http {
+				tls_trust_pool file /pebble/certs/pebble.minica.pem
+				tls_server_name localhost
+			}
+		}
+	}
+	handle {
+		respond 404
+	}
+}

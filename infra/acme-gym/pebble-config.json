@@ -1,0 +1,18 @@
+{
+  "pebble": {
+    "listenAddress": "127.0.0.1:14000",
+    "managementListenAddress": "127.0.0.1:15000",
+    "certificate": "/pebble/certs/localhost/cert.pem",
+    "privateKey": "/pebble/certs/localhost/key.pem",
+    "httpPort": 5002,
+    "tlsPort": 5001,
+    "ocspResponderURL": "",
+    "externalAccountBindingRequired": false,
+    "domainBlocklist": [],
+    "retryAfter": { "authz": 3, "order": 5 },
+    "keyAlgorithm": "ecdsa",
+    "profiles": {
+      "default": { "description": "90 days, like Let's Encrypt's default", "validityPeriod": 7776000 }
+    }
+  }
+}
