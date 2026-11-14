@@ -271,7 +271,7 @@ public struct HomeTab: View {
                         recoveryBannerStore.dismissed = true
                     },
                     showPageWelcome: pagePointer == .welcome,
-                    onSetUpPage: { linker.pending = .messages },
+                    onSetUpPage: { linker.pending = .pageEditor },
                     onDismissPageWelcome: { pageWelcome.dismiss(username: app.currentUser) },
                     pageRowPublic: { if case .row(let on) = pagePointer { return on } else { return nil } }(),
                     dibsNoticeClosesAt: (!app.isDemoAccount && NameDibsViewModel.shouldShowBanner(window: dibsWindow, dismissed: dibsDismissed))

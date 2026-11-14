@@ -1,7 +1,7 @@
 import XCTest
 import CryptoKit
 
-/// GYM iOS mock tier for voi.ci pages and Messages (docs/voici-and-messages.md, release 0.3 H11): the Messages tab,
+/// GYM iOS mock tier for voi.ci pages and Messages (docs/voici-and-messages.md, docs/social-tab.md): the Social tab,
 /// a thread with reply, rename, block and report, the page editor on an admin and a non-admin device, an admin device
 /// publishing another device's draft, and "Sign in with Flagship" approval. The mock `.com` signs and seals for real.
 /// Seams: GymSweepSeams+Messages.swift.
@@ -9,8 +9,16 @@ final class GymMessagesTests: GymSweepCase {
 
     private func openMessages(_ extra: [String], admin: Bool = true) -> XCUIApplication {
         let app = launch(tab: "messages", admin: admin, extra)
-        XCTAssertTrue(any(app, "messages-your-page").waitForExistence(timeout: 20), "The Messages tab shows the page row.")
+        XCTAssertTrue(any(app, "social-header").waitForExistence(timeout: 20), "The Social tab shows the page's title row.")
         return app
+    }
+
+    /// The Messages side of the Social tab (Conversations / Requests).
+    private func showMessages(_ app: XCUIApplication) {
+        let tab = any(app, "social-tab-messages")
+        XCTAssertTrue(tab.waitForExistence(timeout: 15))
+        tab.tap()
+        XCTAssertTrue(any(app, "messages-segment").waitForExistence(timeout: 10))
     }
 
     private func rows(_ app: XCUIApplication) -> XCUIElementQuery {
@@ -22,6 +30,7 @@ final class GymMessagesTests: GymSweepCase {
     }
 
     private func openFirstRequest(_ app: XCUIApplication) {
+        showMessages(app)
         let seg = requestsSegment(app)
         XCTAssertTrue(seg.waitForExistence(timeout: 15))
         seg.tap()
@@ -44,8 +53,9 @@ final class GymMessagesTests: GymSweepCase {
 
     func test_tabListsAnsweredConversationsAndRequests() throws {
         let app = openMessages(["-smoke-messages"])
-        wait(any(app, "messages-page-status"), "label == 'Published'", timeout: 20)
-        XCTAssertTrue(rows(app).firstMatch.waitForExistence(timeout: 20), "The answered conversation is under Messages.")
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        showMessages(app)
+        XCTAssertTrue(rows(app).firstMatch.waitForExistence(timeout: 20), "The answered conversation is under Conversations.")
         XCTAssertEqual(rows(app).count, 1)
         XCTAssertTrue(requestsSegment(app).label.contains("1"), "One request waits: \(requestsSegment(app).label)")
         requestsSegment(app).tap()
@@ -56,6 +66,7 @@ final class GymMessagesTests: GymSweepCase {
 
     func test_emptyAccountInvitesToTurnOnMessages() throws {
         let app = openMessages(["-smoke-messages-empty"])
+        showMessages(app)
         let empty = any(app, "messages-empty")
         XCTAssertTrue(empty.waitForExistence(timeout: 15))
         XCTAssertTrue(empty.label.contains("Accept messages"))
@@ -82,6 +93,7 @@ final class GymMessagesTests: GymSweepCase {
 
     func test_renameShowsTheNickname() throws {
         let app = openMessages(["-smoke-messages"])
+        showMessages(app)
         XCTAssertTrue(rows(app).firstMatch.waitForExistence(timeout: 20))
         rows(app).firstMatch.tap()
         menu(app, "Rename")
@@ -119,6 +131,7 @@ final class GymMessagesTests: GymSweepCase {
 
     func test_aLinkAsksBeforeLeavingTheApp() throws {
         let app = openMessages(["-smoke-messages"])
+        showMessages(app)
         XCTAssertTrue(rows(app).firstMatch.waitForExistence(timeout: 20))
         rows(app).firstMatch.tap()
         let link = app.links.matching(NSPredicate(format: "label CONTAINS 'example.org'")).firstMatch
@@ -132,10 +145,10 @@ final class GymMessagesTests: GymSweepCase {
 
     // MARK: - The page
 
-    /// The Public switch (a SwiftUI Toggle row): tap the switch itself, at the row's trailing edge.
+    /// The Public switch in the title row: tap the switch itself.
     private func flip(_ app: XCUIApplication) {
         let sw = app.switches["page-public-switch"].firstMatch
-        XCTAssertTrue(sw.waitForExistence(timeout: 15), "The Public switch is in the header.")
+        XCTAssertTrue(sw.waitForExistence(timeout: 15), "The Public switch is in the title row.")
         sw.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
     }
 
@@ -150,7 +163,7 @@ final class GymMessagesTests: GymSweepCase {
         XCTAssertTrue(warning.waitForExistence(timeout: 5), "The one-time warning comes before anything is published.")
         XCTAssertTrue(warning.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Everything you put on your page is public'")).firstMatch.exists)
         warning.buttons["Make it public"].firstMatch.tap()
-        wait(any(app, "messages-page-status"), "label == 'Published'", timeout: 20)
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
 
         flip(app)
         let remove = app.alerts["Remove your page from voi.ci?"]
@@ -159,20 +172,20 @@ final class GymMessagesTests: GymSweepCase {
         wait(any(app, "messages-page-status"), "label == 'Not public'", timeout: 20)
 
         flip(app)
-        wait(any(app, "messages-page-status"), "label == 'Published'", timeout: 20)
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
         XCTAssertFalse(app.alerts["Make your page public?"].exists, "The warning is shown once per account.")
     }
 
     func test_editorChangesWaitInOneBarUntilPublish() throws {
         let app = openMessages(["-smoke-messages"])
-        wait(any(app, "messages-page-status"), "label == 'Published'", timeout: 20)
-        any(app, "messages-edit-page").tap()
-        XCTAssertTrue(any(app, "page-warning").waitForExistence(timeout: 10), "The warning sits under the Public switch.")
-        XCTAssertFalse(any(app, "page-save-profile").exists, "No separate Save profile.")
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        XCTAssertFalse(any(app, "page-publish-bar").exists, "Nothing changed: no bar.")
+        XCTAssertFalse(app.textFields["page-display-name"].exists, "The name is text until its pencil is tapped.")
+        any(app, "page-edit-name").tap()
         let name = app.textFields["page-display-name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         replaceText(name, with: "Bright Maple")
-        dismissKeyboard(app)
+        any(app, "page-edit-done").tap()
         wait(any(app, "page-pending-count"), "label == '1 change not published'", timeout: 10)
         let publish = any(app, "page-publish")
         XCTAssertTrue(publish.waitForExistence(timeout: 5))
@@ -183,9 +196,11 @@ final class GymMessagesTests: GymSweepCase {
     func test_nonAdminPostWaitsForAnAdminDevice() throws {
         let app = openMessages(["-smoke-messages"], admin: false)
         XCTAssertTrue(any(app, "page-admin-only").waitForExistence(timeout: 10), "The switch says why it is off.")
-        any(app, "messages-edit-page").tap()
+        let open = any(app, "page-new-post-open")
+        XCTAssertTrue(reveal(app, open))
+        open.tap()
         let post = app.textFields["page-new-post"].firstMatch
-        XCTAssertTrue(reveal(app, post))
+        XCTAssertTrue(post.waitForExistence(timeout: 5))
         post.tap()
         post.typeText("Written on this phone.")
         any(app, "page-add-post").tap()
@@ -198,13 +213,31 @@ final class GymMessagesTests: GymSweepCase {
 
     func test_adminPublishesAnotherDevicesDraft() throws {
         let app = openMessages(["-smoke-messages", "-smoke-messages-lane"])
-        wait(any(app, "messages-page-status"), "label == 'Published · 1 change not published'", timeout: 30)
-        any(app, "messages-edit-page").tap()
+        wait(any(app, "page-pending-count"), "label == '1 change not published'", timeout: 30)
         let written = text(app, containing: "Written on my iPad.")
-        XCTAssertTrue(reveal(app, written), "The other device's post is in the editor.")
+        XCTAssertTrue(reveal(app, written), "The other device's post is on the page.")
         XCTAssertTrue(any(app, "page-post-pending").exists, "It waits for Publish here.")
         any(app, "page-publish").tap()
         XCTAssertTrue(any(app, "page-post-pending").waitForNonExistence(timeout: 20), "Published, no longer grayed.")
+        XCTAssertTrue(any(app, "page-publish-bar").waitForNonExistence(timeout: 20), "Published: the bar goes.")
+    }
+
+    func test_pageOptionsHoldTheThemeAndTheMessagesSettings() throws {
+        let app = openMessages(["-smoke-messages"])
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        any(app, "page-options").tap()
+        let ink = any(app, "page-theme-ink")
+        XCTAssertTrue(ink.waitForExistence(timeout: 5))
+        for id in ["page-copy-link", "page-accept-messages", "messages-settings-sites", "messages-settings-rotate",
+                   "messages-settings-rules", "page-remove"] {
+            XCTAssertTrue(reveal(app, any(app, id)), "\(id) is in Page options.")
+        }
+        app.swipeDown(velocity: .slow)
+        let theme = any(app, "page-theme-ink")
+        if !theme.isHittable { app.swipeDown() }
+        theme.tap()
+        any(app, "page-options-done").tap()
+        wait(any(app, "page-pending-count"), "label == '1 change not published'", timeout: 10)
     }
 
     /// The recovery cards come before the page card on Home: dismiss them (bounded).
@@ -224,10 +257,10 @@ final class GymMessagesTests: GymSweepCase {
         XCTAssertTrue(card.waitForExistence(timeout: 20), "A new account sees the welcome card.")
         XCTAssertTrue(text(app, containing: "Your public page").exists)
         app.buttons["Set up your page"].firstMatch.tap()
-        XCTAssertTrue(any(app, "page-public-switch").waitForExistence(timeout: 10), "It opens the page at the top of Messages.")
+        XCTAssertTrue(any(app, "page-public-switch").waitForExistence(timeout: 10), "It opens the page in the Social tab.")
     }
 
-    /// Opt-in screenshots of the page's controls (skipped unless PAGE_SHOT_DIR is set):
+    /// Opt-in screenshots of the Social tab (skipped unless PAGE_SHOT_DIR is set):
     ///   TEST_RUNNER_PAGE_SHOT_DIR=/abs/out xcodebuild test ... -only-testing:FlagshipAppUITests/GymMessagesTests/test_pageScreenshots
     func test_pageScreenshots() throws {
         guard let dir = ProcessInfo.processInfo.environment["PAGE_SHOT_DIR"], !dir.isEmpty else {
@@ -246,40 +279,72 @@ final class GymMessagesTests: GymSweepCase {
         save(app, "home-welcome-card")
         app.buttons["Set up your page"].firstMatch.tap()
         wait(any(app, "messages-page-status"), "label == 'Not public'", timeout: 15)
-        save(app, "messages-header-off")
+        save(app, "social-new-page")
         flip(app)
         any(app, "rules-agree").tap()
         XCTAssertTrue(app.alerts["Make your page public?"].waitForExistence(timeout: 5))
         save(app, "public-warning")
         app.alerts.buttons["Make it public"].firstMatch.tap()
-        wait(any(app, "messages-page-status"), "label == 'Published'", timeout: 20)
-        save(app, "messages-header-on")
-        flip(app)
-        XCTAssertTrue(app.alerts["Remove your page from voi.ci?"].waitForExistence(timeout: 5))
-        save(app, "remove-confirm")
-        app.alerts.buttons["Cancel"].firstMatch.tap()
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        save(app, "social-new-page-public")
 
         app = launch(tab: "messages", admin: true, ["-smoke-messages"])
-        wait(any(app, "messages-page-status"), "label == 'Published'", timeout: 20)
-        // The fixture's list is too short to scroll the header away on a tall phone; shoot the bar when it shows.
-        app.swipeUp()
-        if any(app, "page-header-bar").waitForExistence(timeout: 3) { save(app, "messages-header-collapsed") }
-        app.tabBars.buttons["Home"].tap()
-        XCTAssertTrue(any(app, "home-page-row").waitForExistence(timeout: 10))
-        save(app, "home-row-public")
-        app.tabBars.buttons["Messages"].tap()
-        if !any(app, "messages-edit-page").isHittable { app.swipeDown() }
-        any(app, "messages-edit-page").tap()
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        save(app, "social-profile")
+        any(app, "page-edit-name").tap()
         let name = app.textFields["page-display-name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         replaceText(name, with: "Bright Maple")
-        dismissKeyboard(app)
+        save(app, "social-edit-name")
+        any(app, "page-edit-done").tap()
         XCTAssertTrue(any(app, "page-publish-bar").waitForExistence(timeout: 10))
-        save(app, "editor-bar")
+        save(app, "social-unpublished-bar")
+        any(app, "page-publish").tap()
+        let progress = any(app, "page-pending-count")
+        if progress.exists, progress.label.hasPrefix("Publishing") { save(app, "social-publishing") }
+        XCTAssertTrue(any(app, "page-publish-bar").waitForNonExistence(timeout: 20))
+        save(app, "social-published")
+        let menu = any(app, "page-post-menu")
+        XCTAssertTrue(reveal(app, menu))
+        menu.tap()
+        save(app, "social-post-menu")
+        app.buttons["Edit"].firstMatch.tap()
+        save(app, "social-edit-post")
+        app.buttons["Cancel"].firstMatch.tap()
+        app.swipeDown()
+        any(app, "page-options").tap()
+        XCTAssertTrue(any(app, "page-theme-ink").waitForExistence(timeout: 5))
+        save(app, "social-page-options")
+        app.swipeUp()
+        save(app, "social-page-options-lower")
+        any(app, "page-options-done").tap()
+        any(app, "page-new-post-open").tap()
+        XCTAssertTrue(app.textFields["page-new-post"].waitForExistence(timeout: 5))
+        save(app, "social-new-post")
+        app.buttons["Cancel"].firstMatch.tap()
+        any(app, "page-edit-links").tap()
+        XCTAssertTrue(any(app, "page-add-link").waitForExistence(timeout: 5))
+        save(app, "social-edit-links")
+        any(app, "page-links-done").tap()
+        showMessages(app)
+        save(app, "social-conversations")
+        requestsSegment(app).tap()
+        save(app, "social-requests")
+
+        app = launch(tab: "messages", admin: true, ["-smoke-voici-page", "-smoke-voici-reply"])
+        showMessages(app)
+        XCTAssertTrue(any(app, "messages-reply-notice").waitForExistence(timeout: 30))
+        save(app, "social-reply-notice")
 
         app = launch(tab: "messages", admin: false, ["-smoke-messages"])
         XCTAssertTrue(any(app, "page-admin-only").waitForExistence(timeout: 15))
-        save(app, "messages-header-non-admin")
+        any(app, "page-edit-bio").tap()
+        let bio = app.textFields["page-bio"].firstMatch
+        XCTAssertTrue(bio.waitForExistence(timeout: 5))
+        replaceText(bio, with: "Written on this phone.")
+        any(app, "page-edit-done").tap()
+        XCTAssertTrue(any(app, "page-waiting-admin").waitForExistence(timeout: 10))
+        save(app, "social-non-admin-waiting")
     }
 
     func test_homeRowOncePublished() throws {
@@ -319,9 +384,9 @@ final class GymMessagesTests: GymSweepCase {
         agree.tap()
         XCTAssertTrue(any(app, "voici-signin-done").waitForExistence(timeout: 20), "Signed in.")
         app.buttons["Done"].tap()
-        app.tabBars.buttons["Settings"].tap()
-        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS 'inbox key'")).firstMatch
-        XCTAssertTrue(reveal(app, row))
+        any(app, "page-options").tap()
+        let row = any(app, "messages-settings-sites")
+        XCTAssertTrue(reveal(app, row), "Websites you're signed in to sits in Page options.")
         row.tap()
         let signOut = any(app, "messages-settings-sign-out")
         XCTAssertTrue(signOut.waitForExistence(timeout: 10), "The website is listed.")
@@ -347,6 +412,7 @@ final class GymMessagesTests: GymSweepCase {
 
     func test_aReplyOnAnotherPageShowsANotice() throws {
         let app = openMessages(["-smoke-voici-page", "-smoke-voici-reply"])
+        showMessages(app)
         let notice = any(app, "messages-reply-notice")
         XCTAssertTrue(notice.waitForExistence(timeout: 30), "The owner's reply shows as a notice.")
         XCTAssertTrue(notice.label.contains("You have a reply on voi.ci/river-otter"), notice.label)

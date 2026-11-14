@@ -2,14 +2,12 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Settings → Messages (docs/voici-and-messages.md §11.3): the websites this account is signed in to as a visitor (sign
-/// one out: its browser key is refused from then on), rotating the page's inbox key, and the rules.
-struct MessagesSettingsScreen: View {
+/// The websites this account is signed in to as a visitor (docs/voici-and-messages.md §11.3), from the Social tab's Page
+/// options: sign one out and its browser key is refused from then on.
+struct SignedInSitesScreen: View {
     @Environment(AppState.self) private var app
     @Environment(\.voiciComClient) private var client
     private let store = MessagesStore.shared
-    @State private var confirmRotate = false
-    @State private var showRules = false
     @State private var signingOut: String?
 
     var body: some View {
@@ -39,35 +37,17 @@ struct MessagesSettingsScreen: View {
                         .accessibilityIdentifier("messages-settings-sign-out")
                     }
                 }
-            } header: {
-                Text("Websites you're signed in to")
             }
-            if store.isAdmin, store.index != nil {
-                Section {
-                    Button("Rotate inbox key") { confirmRotate = true }
-                        .accessibilityIdentifier("messages-settings-rotate")
-                } footer: {
-                    Text("New messages are sealed to a new key. This device keeps reading the old ones.")
-                }
-            }
-            Section {
-                Button("Page and message rules") { showRules = true }
-            }
-            if let e = store.lastError ?? store.publishError {
+            if let e = store.lastError {
                 Section { Text(verbatim: e).font(.footnote).foregroundStyle(.secondary) }
             }
         }
-        .navigationTitle(Text("Messages"))
+        .navigationTitle(Text("Websites you're signed in to"))
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             if let client { store.configure(client: client, username: app.currentUser, deviceId: app.activeProfile?.deviceId, isDemo: app.isDemoAccount) }
             await store.refresh()
         }
-        .confirmationDialog("Rotate your inbox key?", isPresented: $confirmRotate, titleVisibility: .visible) {
-            Button("Rotate") { Task { await store.rotateInbox() } }
-        } message: {
-            Text("Your page is published again with the new key.")
-        }
-        .sheet(isPresented: $showRules) { VoiciRulesSheet {} }
     }
 }
 

@@ -202,8 +202,7 @@ public struct SettingsTab: View {
                     pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
                     onOpenPrivacy: { path.append(.privacy) },
-                    onOpenMessages: isDemoSession && !MessagesStore.shared.hasAccount && !MessagesStore.shared.isSampleReadOnly ? nil : { path.append(.messages) },
-                    onOpenYourPage: MessagesStore.shared.hasAccount || MessagesStore.shared.isSampleReadOnly ? { linker.pending = .messages } : nil,
+                    onOpenYourPage: MessagesStore.shared.hasAccount || MessagesStore.shared.isSampleReadOnly ? { linker.pending = .pageEditor } : nil,
                     onRefresh: { await vm.load() },
                     onRemoveFromAccount: {
                         // Recovery gate (mirrors onSignOut): removing this
@@ -441,8 +440,6 @@ public struct SettingsTab: View {
                     toasts.info(String(localized: "To keep a server, open it from Home and choose Transfer to another account before you delete."), duration: 6)
                 }
             )
-        case .messages:
-            MessagesSettingsScreen()
         case .aiKeys:
             AiKeysScreen(
                 vm: AiKeysViewModel(),

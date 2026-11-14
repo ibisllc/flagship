@@ -136,9 +136,7 @@ public struct SettingsScreen: View {
     var pendingCompanionWritesCount: Int = 0
     var onOpenAbout: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
-    /// Settings → Messages (docs/voici-and-messages.md §11.3).
-    var onOpenMessages: (() -> Void)?
-    /// "Your page": points to the page at the top of the Messages tab (nil for a sample account, which has none).
+    /// "Your page": opens the page in the Social tab (nil for a sample account, which has none).
     var onOpenYourPage: (() -> Void)?
     var onRefresh: () async -> Void = {}
     /// B6a — fired after the user confirms in the Remove sheet. The
@@ -237,7 +235,6 @@ public struct SettingsScreen: View {
         pendingCompanionWritesCount: Int = 0,
         onOpenAbout: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
-        onOpenMessages: (() -> Void)? = nil,
         onOpenYourPage: (() -> Void)? = nil,
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
@@ -295,7 +292,6 @@ public struct SettingsScreen: View {
         self.pendingCompanionWritesCount = pendingCompanionWritesCount
         self.onOpenAbout = onOpenAbout
         self.onOpenPrivacy = onOpenPrivacy
-        self.onOpenMessages = onOpenMessages
         self.onOpenYourPage = onOpenYourPage
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
@@ -1082,9 +1078,6 @@ public struct SettingsScreen: View {
     private var appRows: some View {
         FSSettingsListSection(rows: [
             FSSettingsRow(icon: "lock.shield.fill", title: String(localized: "Privacy"), subtitle: String(localized: "App lock, push notifications"), action: onOpenPrivacy),
-        ] + (onOpenMessages.map { open in
-            [FSSettingsRow(icon: "bubble.left", title: String(localized: "Messages"), subtitle: String(localized: "Websites you're signed in to, inbox key, rules"), action: open)]
-        } ?? []) + [
             FSSettingsRow(icon: "info.circle.fill", title: String(localized: "About Flagship"), subtitle: String(localized: "Version, license, source"), action: onOpenAbout),
         ])
     }
