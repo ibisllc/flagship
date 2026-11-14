@@ -112,6 +112,7 @@ interface Ask {
   issuedAt?: number;
   requestId?: string;
   extraIp?: string;
+  directName?: string;
 }
 
 async function ask(w: World, a: Ask) {
@@ -140,6 +141,7 @@ async function ask(w: World, a: Ask) {
     signature: hex(signServingRecord("certificate-order", order, (m) => ed.sign(m, key))),
     csr: Buffer.from(csr.der).toString("base64url"),
     ...(grant ? { serverWildcardGrant: grant } : {}),
+    ...(a.directName !== undefined ? { directName: a.directName } : {}),
   };
   const res = (await tryIssuanceRoute(
     new Request(`${ORIGIN}/api/certificates/orders`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
@@ -923,6 +925,87 @@ describe("the serving policy's signed scope bounds the apps certificate", () => 
       await w.db.prepare("DELETE FROM certificate_orders").run();
       await putPolicy(w, nameListSha256(boxNameList("home", "alice", APEX)));
       expect((await ask(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`], grant: true })).res.status).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+describe("issuance: direct names on the direct domain", () => {
+  const LABEL = "game--alice";
+  const NAME = `${LABEL}.fshp.app`;
+  async function withName(w: World, over: Partial<{ server: string; enabled: boolean; reason: string | null; user: string }> = {}) {
+    await w.storage.directAccess.putNameIfNewer({
+      name: LABEL,
+      username: over.user ?? "alice",
+      kind: "derived",
+      serverDomain: over.server ?? SERVER,
+      enabled: over.enabled ?? true,
+      orderJson: "{}",
+      signatureHex: "ab".repeat(64),
+      issuedAt: 1,
+      now: 1,
+    });
+    if (over.reason !== undefined) {
+      const row = (await w.storage.directAccess.getName(LABEL))!;
+      await w.storage.directAccess.setPublished(LABEL, row.updatedAt, { publishedJson: "[]", state: "empty", reason: over.reason, error: null, now: 2 });
+    }
+  }
+  function directZone(w: World) {
+    const written: string[] = [];
+    w.deps.directDns = {
+      createTxt: async (o) => {
+        written.push(o.name);
+        return w.dns.createTxt(o);
+      },
+      deleteById: (id) => w.dns.deleteById(id),
+    };
+    return written;
+  }
+
+  it("issues one certificate for exactly the name the box holds, with its challenge in the direct zone", async () => {
+    const w = await setup();
+    try {
+      const written = directZone(w);
+      await withName(w);
+      const { done } = await issue(w, { cls: "direct", names: [NAME], directName: NAME });
+      expect(done).toMatchObject({ status: "issued", class: "direct", names: [NAME] });
+      expect(written).toEqual([`_acme-challenge.${NAME}`]);
+      const row = await w.db.prepare("SELECT zone FROM certificate_orders WHERE class = 'direct'").first<{ zone: string }>();
+      expect(row?.zone).toBe("fshp.app");
+    } finally {
+      w.close();
+    }
+  });
+
+  it("refuses a name the box doesn't hold, a name turned off, one whose order no longer verifies, and a missing selector", async () => {
+    const w = await setup();
+    try {
+      directZone(w);
+      expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).json.code).toBe("issuance-direct-name");
+      await withName(w, { server: `home.bob.${APEX}`, user: "alice" });
+      expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).json.code).toBe("issuance-direct-name");
+      await w.storage.directAccess.delete(LABEL);
+      await withName(w, { enabled: false });
+      expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).json.code).toBe("issuance-direct-name");
+      await w.storage.directAccess.delete(LABEL);
+      await withName(w, { reason: "order-unverified" });
+      expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).json.code).toBe("issuance-direct-name");
+      expect((await ask(w, { cls: "direct", names: [NAME] })).json.code).toBe("issuance-malformed");
+      expect((await ask(w, { cls: "control", names: [SERVER], directName: LABEL })).json.code).toBe("issuance-malformed");
+    } finally {
+      w.close();
+    }
+  });
+
+  it("asks only for the held name, and refuses when the direct zone isn't configured", async () => {
+    const w = await setup();
+    try {
+      await withName(w, { reason: "direct-access-off" });
+      expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).json.code).toBe("issuance-not-configured");
+      directZone(w);
+      expect((await ask(w, { cls: "direct", names: [NAME, "other--alice.fshp.app"], directName: LABEL })).json.code).toBe("issuance-csr-names");
+      expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).res.status).toBe(202);
     } finally {
       w.close();
     }

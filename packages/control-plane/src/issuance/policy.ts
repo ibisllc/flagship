@@ -36,7 +36,8 @@ export type IssuanceRefusal =
   | "issuance-timeout"
   | "issuance-revoked-during-order"
   | "issuance-chain-mismatch"
-  | "issuance-superseded";
+  | "issuance-superseded"
+  | "issuance-direct-name";
 
 /** The names of a class, sorted. `server` is the box's leftmost label; `accountWildcard` adds `*.<user>`. */
 export function issuanceNames(o: { class: CertificateClass; account: string; apex: string; server?: string; accountWildcard?: boolean }): string[] {
