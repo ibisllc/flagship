@@ -469,3 +469,9 @@ change and no D1 migration.
     one restore flow.
 11. The journal records you want any device to order restores eventually: restore-into stays admin-only
     with the rest until you decide; the stage step is the natural one to open first.
+
+## Owner decision, 2026-11-14
+
+The defaults in this doc are accepted as proposed (Keep for apps already on the server, Skip for apps running on
+another server, Copy on a name clash, Install for new apps, a 7-day undo point, stage then plan as two signed steps,
+admin-only). Keywords for the build: **security and smooth UX**.
