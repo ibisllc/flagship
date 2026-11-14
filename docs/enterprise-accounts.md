@@ -528,3 +528,39 @@ server names and breaks every link.
   admins, or named board members). A frozen-out member taps "Restore my access"; the app shows who must approve and
   collects their approvals online; boxes check the bylaws themselves. Changing the bylaws needs the strictest
   ceremony of all.
+
+## Implementation status (branch `0.4/enterprise-build`, 2026-11-14)
+
+How the binding decisions were built, and what is still open. Not deployed, not run on a real box or phone.
+
+- **Protocol (E1):** `packages/protocol/src/orgAuthority.ts`, vectors `test-vectors/org-authority/`
+  (`tools/org-authority-vectors.ts`), ports `apps/mobile/shared/Sources/FlagshipCore/OrgAuthority*.swift` and
+  `apps/mobile/android/.../core/pq/OrgAuthority.kt`. The OAR lists `admin`, `board` (counts only for overturns and
+  vetoes: the "named board members" of the bylaws) and `recovery` seats, the founder seat and the bylaws
+  (`overturnSeats` named or `*`, `overturnK`, 0 = majority, `vetoK`). Transitions: `direct` (k_gov; the strictest
+  threshold, max(k_gov, k_destroy, k_site, overturn k, ⌈2n/3⌉), to change the bylaws or move the founder role, plus the
+  new founder's own approval), `founder-removal` (the founder's notice, exactly 7 days, removes one admin, thresholds
+  clamped; vetoed by `vetoK` other admins or by the bylaws' overturn set), `recovery` (k_gov counting a recovery seat,
+  14 days, any other admin vetoes) and `overturn` (the bylaws' set restores an admin a founder-removal took out). Every
+  new or re-keyed admin approves the record with its new key (consent). Freezes: one admin, at most 72 h, the second
+  freeze by the same admin within 7 days is void, overturned by the bylaws' set ("Restore my access"; the frozen seat may
+  open that one ceremony). Seats: invite (pseudonym digest mandatory) → accept (seat member key, UMK-derived per org) →
+  grant (k_grant; 2 org admins to raise to server/app admin). Q-E3: a server admin of S and an app admin of R authorize
+  app orders on S / in R alone; org admins are master everywhere.
+- **`.com` (E2):** `packages/control-plane/src/orgs.ts`, D1 **0141**, routes under `/api/orgs`, rate budgets
+  `org-write` / `org-read`. Every write re-verifies the chain from the genesis hash recorded at creation; a new seat
+  needs an invite and the person's accept; plan hook = `seat_limit` / `paid_until` on the org row (lapse stops new
+  seats and admin raises, never revokes). `authorizeOrgComOp` is the gate for routes `.com` serves for an org.
+- **Box (E3):** `packages/server-daemon/src/orgAuthorityPin.ts`; config `orgId` + `orgGenesisHash`; sync every
+  5 minutes into `org-authority-pin.json`, refusing a shorter or forked chain and merging freezes/revokes so `.com`
+  cannot drop one; `authorizeSensitiveOrder({ org })` decides by org approvals only. Offboarding closes the seat's
+  sessions and lists the rotations it leaves (CGK, directory key, archive keys, the disk key where it had unlock at
+  boot) as pending in Activity.
+- **iOS (E4, first cut):** Settings → Organizations: create (founder alone), approvals inbox, admins with Freeze,
+  Restore my access with who must approve, Invite (pseudonym first, then role, then QR and link).
+
+Open: the join screen that opens an `org-join` link (accept + SAS), org server creation (AuthCode/registration and
+the install blob carrying the genesis), passing org approvals at each box order call site, the org directory key and
+every E5 rotation (nothing rotates yet; the box only records them as pending), the Rust port, Android and web UI, the
+audit export CLI (E7), co-manager caps (E6) and conversion (§17), a per-isolate cache of the verified chain on `.com`
+(each request re-verifies every ML-DSA signature).
