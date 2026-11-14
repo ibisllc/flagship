@@ -66,6 +66,11 @@ export class BoxReleaseConsumer {
     return Number.MAX_SAFE_INTEGER;
   }
 
+  /** What server-detail says about a retail box: the key a release order must name. */
+  view(): { stkPubHex: string } {
+    return { stkPubHex: this.d.stkPubHex().toLowerCase() };
+  }
+
   async take(body: unknown): Promise<BoxReleaseResult> {
     const c = (body ?? {}) as { order?: unknown; signatureHex?: unknown; pqSignature?: unknown };
     const order: BoxReleaseOrder | null = parseBoxRelease(c.order);
