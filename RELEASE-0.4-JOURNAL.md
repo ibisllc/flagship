@@ -312,6 +312,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   when the app exists): design agent `0.4/restore-merge` -> docs/restore-into-server.md. Wired fleet: routing setup
   through .com is backwards; a small local helper on the laptop (LAN direct, needed for air-gapped) is fine: design
   agent revising docs/retail-wired-fleet.md (Studio as the helper?, air-gapped dependency list).
+- 2026-11-14 Merged wired fleet design v2: Studio is the LAN helper with one shared Rust crate `flagship-fleet`
+  (discovery via DNS-SD, framed TCP 4433 claim links, serial/BMC consoles); it holds no keys, the handshake runs
+  webapp<->tray; browser<->helper via the Firefox extension's native messaging (fallback: hardened loopback port);
+  .com lobby dropped, code mailbox kept as remote fallback. Air-gapped "site mode" mapped (17 .com functions, each with a
+  substitute; reopens D1 in bounded form); recommended: connected wired path in 0.4, site mode later. Owner Qs Q-W1..14
+  (site mode when, site-only accounts, Studio+Rust, port 4433, sign Windows Studio, helper-read codes default).
 
 ## Resume point
 
