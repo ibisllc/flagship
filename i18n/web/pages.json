@@ -17,7 +17,9 @@
     { "src": "open/index.html" },
     { "src": "disambiguate.html" },
     { "src": "studio/index.html" },
-    { "src": "status/index.html" }
+    { "src": "status/index.html" },
+    { "src": "pro.html" },
+    { "src": "marketplace/index.html" }
   ],
   "englishOnly": [
     { "src": "privacy.html", "why": "legal text: a machine translation of a legal text is worse than the original" },
