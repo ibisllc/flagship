@@ -134,7 +134,11 @@ public struct CompanionDockScreen: View {
             FSCard {
                 HStack(spacing: FS.space.s2) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
-                    Text("Browser connected to \(serverName)").font(FS.font.bodySm()).foregroundColor(c.text)
+                    if vm.mode == .browserExtension {
+                        Text("Firefox extension paired with \(serverName)").font(FS.font.bodySm()).foregroundColor(c.text)
+                    } else {
+                        Text("Browser connected to \(serverName)").font(FS.font.bodySm()).foregroundColor(c.text)
+                    }
                 }
             }
             .accessibilityIdentifier("companion-dock-connected")
@@ -149,7 +153,7 @@ public struct CompanionDockScreen: View {
     private func matchingCard(code: String?, gateExpired: Bool, approving: Bool, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Let this browser in?")
+                Text(vm.mode == .browserExtension ? String(localized: "Pair this Firefox extension?") : String(localized: "Let this browser in?"))
                     .font(FS.font.scaled(15, weight: .semibold))
                     .foregroundColor(c.text)
                 if let code {
@@ -185,7 +189,9 @@ public struct CompanionDockScreen: View {
                         .foregroundColor(c.danger)
                         .accessibilityIdentifier("companion-dock-no-server")
                 }
-                Text("It gets a keyless, read-only session for four hours. Protected actions still need this phone.")
+                Text(vm.mode == .browserExtension
+                     ? String(localized: "It can only read your server's signed certificate fingerprint, for 30 days. Nothing else on the server opens to it.")
+                     : String(localized: "It gets a keyless, read-only session for four hours. Protected actions still need this phone."))
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
                 FSPrimaryButton(approving ? String(localized: "Approving…") : String(localized: "Approve"),
@@ -244,7 +250,7 @@ public struct CompanionDockScreen: View {
         let pending = vm.revokePending.contains(companion.tokenPrefix)
         return FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
-                Image(systemName: "laptopcomputer")
+                Image(systemName: companion.isExtension ? "puzzlepiece.extension" : "laptopcomputer")
                     .foregroundColor(c.accent)
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
@@ -278,7 +284,7 @@ public struct CompanionDockScreen: View {
     }
 
     private func displayLabel(for c: CompanionSummary) -> String {
-        return String(localized: "Session \(c.tokenPrefix)")
+        CompanionDockViewModel.label(for: c)
     }
 
     private func expiresLabel(for c: CompanionSummary) -> String {
@@ -313,7 +319,7 @@ private struct CompanionDockScannerSheet: View {
                 QRScannerView(
                     onScan: onScan,
                     onError: onError,
-                    validate: { CompanionDockViewModel.isRemoteLink($0) }
+                    validate: { CompanionDockViewModel.isApprovalLink($0) }
                 )
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 Button("Paste link instead") {

@@ -611,7 +611,7 @@ public struct PairedSessionSummary: Codable, Equatable, Sendable {
     /// Settings → Browser sessions lists Remote browsers only. On a box that
     /// doesn't say, this device's own session is still never a browser.
     public var isBrowserSession: Bool {
-        if let kind { return kind == "remote" }
+        if let kind { return kind == "remote" || kind == "extension" }
         return !current
     }
 }
@@ -822,27 +822,48 @@ public struct CompanionMintTicketResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// `POST /api/screens/companion/mint-extension-ticket`: a single-use ticket that
+/// redeems into the browser extension's session. `scope` is "extension"; a box
+/// that doesn't know the route answers 404.
+public struct CompanionMintExtensionTicketResponse: Codable, Equatable, Sendable {
+    public let ticketId: String
+    public let ticketSecret: String
+    public let expiresAt: Int64
+    public let scope: String?
+    public init(ticketId: String, ticketSecret: String, expiresAt: Int64, scope: String?) {
+        self.ticketId = ticketId
+        self.ticketSecret = ticketSecret
+        self.expiresAt = expiresAt
+        self.scope = scope
+    }
+}
+
 public struct CompanionSummary: Codable, Equatable, Sendable, Identifiable {
     public let tokenPrefix: String
     public let redeemedAt: Int64
     public let lastSeenMs: Int64
     public let expiresAt: Int64
     public let userAgent: String?
+    /// "remote" or "extension"; older boxes send none (a Remote browser).
+    public let kind: String?
 
     public var id: String { tokenPrefix }
+    public var isExtension: Bool { kind == "extension" }
 
     public init(
         tokenPrefix: String,
         redeemedAt: Int64,
         lastSeenMs: Int64,
         expiresAt: Int64,
-        userAgent: String? = nil
+        userAgent: String? = nil,
+        kind: String? = nil
     ) {
         self.tokenPrefix = tokenPrefix
         self.redeemedAt = redeemedAt
         self.lastSeenMs = lastSeenMs
         self.expiresAt = expiresAt
         self.userAgent = userAgent
+        self.kind = kind
     }
 }
 

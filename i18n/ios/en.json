@@ -3491,6 +3491,34 @@
     "en": "Let this browser into your Flagship server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/CompanionDockViewModel.swift:139"
   },
+  "Firefox extension": {
+    "en": "Firefox extension",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/CompanionDockViewModel.swift:106"
+  },
+  "Let this browser extension check your server's certificate": {
+    "en": "Let this browser extension check your server's certificate",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/CompanionDockViewModel.swift:217"
+  },
+  "This phone hasn't checked this server's code yet. Approve the server on this phone first.": {
+    "en": "This phone hasn't checked this server's code yet. Approve the server on this phone first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/CompanionDockViewModel.swift:220"
+  },
+  "This server needs an update before it can pair a browser extension.": {
+    "en": "This server needs an update before it can pair a browser extension.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/CompanionDockViewModel.swift:222"
+  },
+  "Firefox extension paired with %@": {
+    "en": "Firefox extension paired with %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:138"
+  },
+  "Pair this Firefox extension?": {
+    "en": "Pair this Firefox extension?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:156"
+  },
+  "It can only read your server's signed certificate fingerprint, for 30 days. Nothing else on the server opens to it.": {
+    "en": "It can only read your server's signed certificate fingerprint, for 30 days. Nothing else on the server opens to it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:193"
+  },
   "Companion requests": {
     "en": "Companion requests",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:35"

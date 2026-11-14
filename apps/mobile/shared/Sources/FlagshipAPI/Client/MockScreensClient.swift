@@ -2206,6 +2206,27 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         )
     }
 
+    /// Counts `companionMintExtensionTicket()` calls. `companionExtensionMintError`
+    /// makes it throw (e.g. a 404 from an older box); `companionExtensionScope`
+    /// is the `scope` it answers with.
+    public private(set) var companionExtensionMintCalls = 0
+    public var companionExtensionMintError: Error?
+    public var companionExtensionScope: String? = "extension"
+
+    public func companionMintExtensionTicket() async throws -> CompanionMintExtensionTicketResponse {
+        try await tick()
+        if let companionExtensionMintError { throw companionExtensionMintError }
+        companionExtensionMintCalls += 1
+        GymProbe.note("minted extension ticket")
+        let hex: (Int) -> String = { n in (0..<n).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined() }
+        return CompanionMintExtensionTicketResponse(
+            ticketId: hex(16),
+            ticketSecret: hex(32),
+            expiresAt: Int64(Date().timeIntervalSince1970 * 1000) + 60 * 1000,
+            scope: companionExtensionScope
+        )
+    }
+
     public func companionList() async throws -> CompanionListResponse {
         try await tick()
         if let fixture = companionListFixture { return fixture }

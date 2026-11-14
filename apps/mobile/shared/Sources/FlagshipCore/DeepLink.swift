@@ -57,7 +57,9 @@ public enum DeepLink: Equatable, Sendable {
 
     /// The remote page's QR, `https://flagshipserver.com/remote?s=<sid>&k=<browser key>`
     /// (older pages: `flagship://remote?s=&k=`): a QR-relay session the phone
-    /// joins to seal a ticket to that browser.
+    /// joins to seal a ticket to that browser. The browser extension's
+    /// `https://flagshipserver.com/pair-extension?s=&k=` (`flagship://pair-extension?s=&k=`)
+    /// opens the same screen, which tells the two apart by path.
     case companionDockApproval(link: String)
 
     /// Flagship Studio's pairing QR, `https://flagshipserver.com/builder?c=<code>&k=<pk>`
@@ -215,6 +217,7 @@ public enum DeepLink: Equatable, Sendable {
         if isControlHostLink(url) {
             switch trimmedPath(url) {
             case "/remote":   return remoteLink(url)
+            case "/pair-extension": return extensionPairLink(url)
             case "/builder":  return builderLink(url)
             case "/access":   return accessLink(fragmentOrQueryParams(url))
             case "/invite-accept": return inviteAcceptLink(fragmentOrQueryParams(url))
@@ -326,6 +329,8 @@ public enum DeepLink: Equatable, Sendable {
             return nil
         case "remote":
             return remoteLink(url)
+        case "pair-extension":
+            return extensionPairLink(url)
         case "builder":
             return builderLink(url)
         case "transfer":
@@ -436,6 +441,11 @@ public enum DeepLink: Equatable, Sendable {
 
     private static func remoteLink(_ url: URL) -> DeepLink? {
         RemoteApprovalLink.parse(url.absoluteString) != nil
+            ? .companionDockApproval(link: url.absoluteString) : nil
+    }
+
+    private static func extensionPairLink(_ url: URL) -> DeepLink? {
+        ExtensionPairLink.parse(url.absoluteString) != nil
             ? .companionDockApproval(link: url.absoluteString) : nil
     }
 

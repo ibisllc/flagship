@@ -571,6 +571,7 @@ public struct CreateServerStubScreen: View {
                         // QR is a relay URL too, but never a recipe target.
                         (try? QrRelay.parseQrUrl(payload)) != nil
                             && RemoteApprovalLink.parse(payload) == nil
+                            && ExtensionPairLink.parse(payload) == nil
                     }
                 )
                 .frame(height: 300)
