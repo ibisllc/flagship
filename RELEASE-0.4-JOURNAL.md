@@ -278,9 +278,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   each passes alone). Owner Qs: name orders ask for biometrics each time (voi.ci names use the unlocked session)?;
   direct orders carry no PQ half yet (strict would refuse). Running: retail-apps (ports + iOS claim screens + keyd
   box-claim-receipt purpose).
-- 2026-11-14 Owner: (1) direct app access is brokered through the existing forwarder (relay) and the fshp.app certificate
-  is issued even before the direct IPv6 path is live: this REVERSES the locked "no relay fallback" rule in
-  direct-access-and-domains.md; agent `0.4/direct-via-relay`. (2) Design agent: transport adapters, so a box can go
+- 2026-11-14 Owner: (1) [CORRECTED below: fshp.app is never served through the relay; the locked rule stays] the
+  fshp.app certificate is issued even before the direct IPv6 path is live; agent `0.4/direct-via-relay`. (2) Design agent: transport adapters, so a box can go
   online over any network its host has (mesh, LAN-only, radio, overlay), with what it means for encryption, sessions
   and HTTPS, and owner-responsibility warnings for exotic channels: `docs/transport-adapters.md`. (3) Retail: Wi-Fi
   stack waits for hardware; release = wipe; wired data-centre claim path wanted (webapp in Firefox on a rugged laptop,
@@ -326,6 +325,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Owner Qs in its §10.
 - 2026-11-14 Merged the Add a device note "Only an admin device can manage backups and restore servers." (iOS, Android,
   webapp, six languages). Note: `i18n-pwa.mjs extract` wraps brand labels in webapp/lib/voiciText.js; revert when it does.
+- 2026-11-14 Merged `0.4/direct-via-relay` (now: no relay for fshp.app): issuance already waited only for the signed
+  name order; `/direct-access` view lists each name's certificate; "Certificate ready. Waiting for the direct path."
+  in all apps; closed a real gap: fshp.app/fshp.tech were not in `isOwnZone`, so a custom-domain order could have
+  mapped a fshp.app name to a tunnel; the box also refuses fshp.app SNIs on relay streams. Owner Q: allow turning a
+  name on (to fetch its certificate) while direct access on its box is still off?
 
 ## Resume point
 
