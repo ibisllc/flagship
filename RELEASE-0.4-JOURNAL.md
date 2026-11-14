@@ -112,7 +112,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F2 Subscriptions (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
       children Q3 names onto `release/0.4`; Pro payments + anonymous vouchers end to end on all three apps.
 - [ ] F3 Calls: build `docs/voici-calls.md` after the owner settles D1-D4 (plus its three voi.ci page fixes in the 0.4 list).
-- [ ] F4 Preinstalled ISO (Q2): design doc first, owner review, then build.
+- [ ] F4 Retail box setup (Q2): design `docs/retail-box-setup.md` (`6507a9c17`): printed 100-bit claim code (QR + 20 chars)
+      keys a local-only X-Wing handshake (`flagship/box-claim/v1`), recipe as consent, box-signed receipt pins the
+      server key, 5-press reset window; no NFC/first-come in v1; drop `box_serials`. Owner answers its Q1-Q10, then build
+      (phase 1 software, testable on a VM; doubles as a preinstalled image for DIY metal).
 - [ ] F5 Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
       strict check green); hybrid channel on by default with classical fallback and a fallback count; strict default
       for new accounts after the external review. Also the hybrid release catalog and the boot client's ML-DSA key.
@@ -166,6 +169,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   clean; P1 needs the YubiKey, waits for the owner), Q2 = retail box setup, Q3 = everything launches, D1-D4 next,
   cleanup OK (P9, P10 done), first UX note (U2: Messages -> Social). P4 rate-limit check run (F15). Design agents
   started: retail box setup, payments rails.
+- 2026-11-13 Retail design merged (`6507a9c17`); owner questions Q1-Q10 in the doc §end.
 
 ## Resume point
 
