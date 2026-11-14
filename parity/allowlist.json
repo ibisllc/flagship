@@ -53,6 +53,11 @@
     },
     {
       "check": "signed-tags",
+      "key": "web:flagship/admin-root-rotation/v2",
+      "reason": "The hybrid companion of an admin-root rotation is signed with the old root's ML-DSA half, which the webapp never holds (keyless-web rule), so a rotation it signs stays v1 and a phone adds the companion; it never reads a rotation chain to verify one (the box, .com and the phones do). Its verify side of the pq-authority vectors (grants, the new root's binding) is apps/web/tests/webappPqAuthorityVectors.test.ts."
+    },
+    {
+      "check": "signed-tags",
       "key": "web:flagship/umk-wrap/v1",
       "reason": "iOS Secure Enclave keystore wrapping, local storage only; the webapp wraps with its PIN (pin-wrap/v1)."
     },
