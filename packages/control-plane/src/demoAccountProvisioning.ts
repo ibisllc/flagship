@@ -2,14 +2,15 @@ import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   deriveAccountProfileKey, deriveDeviceDirectoryKey, encryptAccountProfile, encryptDeviceProfile,
-  signAccountProfile, signAuthCode, signDeviceCapabilityGrant, signDeviceSelfProfile, signInstallBlob,
+  canonicalPqKeyBinding, hybridSign, mldsa65PublicKey, signAccountProfile, signAuthCode, signDeviceCapabilityGrant,
+  signDeviceGrantPq, signDeviceSelfProfile, signInstallBlob, TAG_PQ_KEY_BINDING,
   validateProfileDisplayName, type AuthCode, type DeviceCapabilityGrant, type DeviceScope, type InstallBlob,
 } from "@flagship/protocol";
-import type { AuthCodeStorage, DemoAccountProvisioningStorage, DemoUsersStorage } from "@flagship/storage";
+import type { AuthCodeStorage, DemoAccountProvisioningStorage, DemoUsersStorage, PqTrustStorage } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
 import {
-  deriveDemoAdminRoot, deriveDemoDelegatedKey, deriveDemoPrimaryDeviceId, deriveDemoPrimaryDeviceKey,
+  deriveDemoAdminRoot, deriveDemoAdminRootMldsaSeed, deriveDemoDelegatedKey, deriveDemoPrimaryDeviceId, deriveDemoPrimaryDeviceKey,
   deriveDemoRckKey, deriveDemoUmk, deriveDemoUserAid, deriveDemoUserIrk,
 } from "./demoIdentity.js";
 import { buildCloudConfigUserData, installBlobJsonShortString } from "./demoCloudConfig.js";
@@ -56,6 +57,8 @@ export interface DemoAccountProvisioningDeps {
     findServerByName(name: string): Promise<{ serverId: string; ipv4: string | null } | null>;
   };
   demoIrkKek: Uint8Array;
+  /** Where the demo admin root's binding goes, so boxes can check its hybrid grant companions. */
+  pqTrust?: PqTrustStorage;
   defaultRegion: string;
   defaultSize: string;
   fallbackServerTypes?: readonly string[];
@@ -127,6 +130,8 @@ export async function handleCreateDemoAccount(
     issuedAt, expiresAt: issuedAt + 90 * 24 * 3_600_000,
   };
   const grantSignature = signDeviceCapabilityGrant(grant, admin);
+  const adminHybrid = new Uint8Array([...admin.privateKey, ...deriveDemoAdminRootMldsaSeed(deps.demoIrkKek, username)]);
+  const grantPq = signDeviceGrantPq(grant, adminHybrid);
   const accountEncrypted = encryptAccountProfile(accountName, deriveAccountProfileKey(umk), {
     accountId: username, revision: 1, keyVersion: 1, nonce: rand(12),
   });
@@ -151,6 +156,7 @@ export async function handleCreateDemoAccount(
       grantId, username, deviceId, devicePubHex: bytesToHex(primaryDevice.publicKey),
       scopesJson: JSON.stringify(grant.scopes), issuedAt: grant.issuedAt, expiresAt: grant.expiresAt,
       signatureHex: bytesToHex(grantSignature), revokedAt: null, signerRoot: "admin-root",
+      pqSignatureJson: JSON.stringify(grantPq),
     },
     accountProfile: {
       ...accountUnsigned, signatureHex: signAccountProfile(accountUnsigned, admin), updatedAt: issuedAt,
@@ -175,6 +181,15 @@ export async function handleCreateDemoAccount(
   });
   if (!initialized.ok) {
     return conflict(initialized.reason === "username-unavailable" ? "username unavailable" : "idempotency conflict");
+  }
+  if (deps.pqTrust) {
+    const st = {
+      role: "admin-root" as const, subjectId: username, ed25519PubHex: bytesToHex(admin.publicKey),
+      mldsaPubHex: bytesToHex(mldsa65PublicKey(adminHybrid.subarray(32))), issuedAt,
+    };
+    await deps.pqTrust.putBinding({
+      ...st, signatureHex: bytesToHex(hybridSign(adminHybrid, TAG_PQ_KEY_BINDING, canonicalPqKeyBinding(st))), storedAt: issuedAt,
+    });
   }
   let row = initialized.record;
   if (row.state === "ready") {

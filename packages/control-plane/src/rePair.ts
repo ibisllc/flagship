@@ -22,6 +22,7 @@ import type {
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
+import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { hexToBytes } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
@@ -1118,6 +1119,8 @@ export interface CompleteRePairBody {
     issuedAt: number;
     expiresAt: number;
     signature: string;
+    /** The new IRK's hybrid companion over the grant (pq-suites.md §20); boxes verify it. */
+    pqSignature?: unknown;
   }>;
 }
 
@@ -1252,6 +1255,8 @@ async function validateRefreshedGrants(
         error: "refreshedGrant signature does not verify under the new IRK",
       };
     }
+    const pq = grantPqSignatureJson(rg.pqSignature);
+    if (pq === null) return { ok: false, status: 400, error: "refreshedGrant pqSignature must be { suite, signature }" };
     const next: DeviceCapabilityGrantRecord = {
       grantId: rg.grantId,
       username: username.toLowerCase(),
@@ -1262,6 +1267,7 @@ async function validateRefreshedGrants(
       expiresAt: rg.expiresAt,
       signatureHex: rg.signature.toLowerCase(),
       revokedAt: null,
+      ...(pq ? { pqSignatureJson: pq } : {}),
     };
     pairs.push({ next, old });
   }

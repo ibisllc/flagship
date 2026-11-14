@@ -4293,6 +4293,7 @@ export async function tryControlPlane(
         authCodes: storage.authCodes,
         hetzner: demoCloud.client,
         demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
+        pqTrust: storage.pqTrust,
         defaultRegion: demoCloud.defaultRegion,
         defaultSize: demoCloud.defaultSize,
         ...(demoCloud.fallbackServerTypes ? { fallbackServerTypes: demoCloud.fallbackServerTypes } : {}),
