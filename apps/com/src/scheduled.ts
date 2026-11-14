@@ -52,9 +52,10 @@ import type { AdapterBucketLike } from "./adapterIndex.js";
 import { runVoiciGcCron } from "./voiciRoutes.js";
 import { runIssuanceSweep, type IssuanceEnv } from "./certificateIssuance.js";
 import { pruneUpdateReceipts } from "./updateReceipts.js";
+import { runDirectNamesCron, type DirectNamesEnv } from "./directNames.js";
 import type { VoiciBucket } from "@flagship/control-plane";
 
-export interface ScheduledEnv extends IssuanceEnv, OhttpEnv {
+export interface ScheduledEnv extends IssuanceEnv, OhttpEnv, DirectNamesEnv {
   CONTROL_APEX?: string;
   DB?: D1Database;
   /** .services :8443 base (wrangler.toml) — custom-domain verifier
@@ -182,6 +183,8 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return env.DB ? pruneUpdateReceipts(env.DB, now) : null;
     case "relay-probe":
       return runRelayProbeCron(env, now, { apex: env.CONTROL_APEX ?? "flagshipserver.com" });
+    case "direct-names":
+      return env.DB ? runDirectNamesCron(env, new D1Storage(env.DB)) : null;
   }
 }
 

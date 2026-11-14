@@ -30,7 +30,9 @@
  * custom voi.ci name upkeep, the voi.ci pages and mailbox collection and the stale ACME TXT sweep run every hour instead of every ten (their thresholds are hours or days; the
  * TXT sweep only removes records older than an hour). The issuance sweep (certificateIssuance.ts
  * runIssuanceSweep: abandoned orders, CA revocation of certificates whose holder lost its authority, a
- * window of issued certificates re-authorized per run) runs hourly with the suggestion group.
+ * window of issued certificates re-authorized per run) runs hourly with the suggestion group. The direct-name
+ * publisher (directNames.ts: a few fshp.app names reconciled, pending ones first, then any not checked for a day)
+ * runs hourly with the re-pair group; an order or a box's address update also publishes its account's names at once.
  */
 
 export type CronJobId =
@@ -53,7 +55,8 @@ export type CronJobId =
   | "names"
   | "issuance-sweep"
   | "prune-update-receipts"
-  | "relay-probe";
+  | "relay-probe"
+  | "direct-names";
 
 export interface CronPlan {
   jobs: CronJobId[];
@@ -76,7 +79,8 @@ export const VOICI_NAMES_PER_RUN = 10;
 const TEN_MIN_MS = 10 * 60_000;
 
 const MINOR_GROUPS: CronJobId[][] = [
-  ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep"],
+  // direct-names: DIRECT_NAMES_PER_RUN names of the fshp.app zone reconciled (one list and a few writes each).
+  ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep", "direct-names"],
   // issuance-sweep: a few D1 reads per certificate it re-checks, and CA calls only for one it revokes (capped per run).
   ["suggestions", "eviction-gc", "issuance-sweep"],
   // voici-names reads each name's account servers and their heartbeats; voici-gc is one D1 batch and one R2 delete:

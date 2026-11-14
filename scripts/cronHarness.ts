@@ -13,6 +13,7 @@
 
 import { createSqliteD1 } from "../packages/storage/tests/support/sqliteD1.js";
 import { D1Storage, type D1Database } from "@flagship/storage";
+import { directAccessOrderSha256, ed, signDirectAccessOrder, signDirectNameOrder } from "@flagship/protocol";
 import { scheduled, type ScheduledEnv } from "../apps/com/src/scheduled.js";
 import { cpuNowMs, DB_CALL_OVERHEAD_MS, DB_BATCHED_STATEMENT_MS } from "./cpuHarness.js";
 import type { DbMeter } from "./cpuHarness.js";
@@ -83,6 +84,12 @@ export function fakeOpenRouterCatalog(n = 350): string {
   return JSON.stringify({ data });
 }
 
+const DIRECT_NAME_ACCOUNTS = 8;
+function directAdmin(i: number) {
+  const privateKey = new Uint8Array(32).fill(i + 1);
+  return { privateKey, publicKey: ed.getPublicKey(privateKey) };
+}
+
 export interface CronWorldOptions {
   accounts?: number;
 }
@@ -110,7 +117,7 @@ export async function buildCronWorld(opts: CronWorldOptions = {}): Promise<CronW
     await seed.usernames.put({
       username,
       irkPubHex: hex(i + 1, 64),
-      adminRootPubHex: hex(i + 1000, 64),
+      adminRootPubHex: i < DIRECT_NAME_ACCOUNTS ? Buffer.from(directAdmin(i).publicKey).toString("hex") : hex(i + 1000, 64),
       claimedAt: now - 86_400_000,
     });
     const domain = `home.${username}.flagship.services`;
@@ -119,6 +126,36 @@ export async function buildCronWorld(opts: CronWorldOptions = {}): Promise<CronW
       username,
       identityPubKeyHex: hex(i + 5000, 64),
       registeredAt: now - 50_000_000,
+    });
+  }
+  // Direct names waiting for the zone, more than one run takes, each under a real admin root (the worst case:
+  // every order verifies, so every name reaches the zone).
+  for (let i = 0; i < DIRECT_NAME_ACCOUNTS; i++) {
+    const username = `account-${hex(i, 3)}`;
+    const domain = `home.${username}.flagship.services`;
+    const admin = directAdmin(i);
+    const access = { serverDomain: domain, enabled: true, addresses: ["81.2.69.142"], prefixes: [], port: 443, issuedAt: now - 1000 };
+    await seed.directAccess.putOrderIfNewer({
+      serverDomain: domain,
+      username,
+      orderJson: JSON.stringify(access),
+      signatureHex: Buffer.from(signDirectAccessOrder(access, admin)).toString("hex"),
+      orderSha256: directAccessOrderSha256(access),
+      enabled: true,
+      issuedAt: access.issuedAt,
+      updatedAt: now - 1000,
+    });
+    const name = { name: `app--${username}.fshp.app`, serverDomain: domain, enabled: true, addresses: [], caa: "pin" as const, issuedAt: now - 1000 };
+    await seed.directAccess.putNameIfNewer({
+      name: `app--${username}`,
+      username,
+      kind: "derived",
+      serverDomain: domain,
+      enabled: true,
+      orderJson: JSON.stringify(name),
+      signatureHex: Buffer.from(signDirectNameOrder(name, admin)).toString("hex"),
+      issuedAt: name.issuedAt,
+      now: now - 1000,
     });
   }
   // A full voi.ci collection run: more unreferenced pieces than one run takes.
@@ -158,6 +195,9 @@ export async function buildCronWorld(opts: CronWorldOptions = {}): Promise<CronW
     UPCLOUD_TOKEN: "cron-harness-upcloud",
     CLOUDFLARE_DNS_API_TOKEN: "cron-harness-cf",
     CLOUDFLARE_SERVICES_ZONE_ID: "zone",
+    CLOUDFLARE_DIRECT_DNS_API_TOKEN: "cron-harness-cf-direct",
+    CLOUDFLARE_DIRECT_ZONE_ID: "direct-zone",
+    DIRECT_CAA_ACCOUNT_URI: "https://acme-v02.api.letsencrypt.org/acme/acct/1",
     ADAPTERS_GITHUB_TOKEN: "cron-harness-gh",
     ADAPTERS_REPO: "ibisllc/flagship-adapters",
     ADAPTERS_BUCKET: { get: async () => null, put: async () => undefined, delete: async () => undefined, list: async () => ({ objects: [], truncated: false }) } as never,
