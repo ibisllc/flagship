@@ -106,7 +106,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] S2 Group by priority (security first, then W14 and W19, then the rest) and show the owner before building.
 
 ### F. 0.4 features and fixes (order after S2; security items from S1 go first)
-- [ ] F1 Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
+- [~] F1 (steps 1-2 merged 2026-11-13: `flagship/direct-access/v1` order, `direct-address/v1` box update, `lan-hint/v2`, box public listener, iOS/Android probe; vectors TS/Swift/Kotlin; also fixed: the LAN listener counted forwarded public IPv4 as LAN, exposing rescue routes. NEXT: step 3 `.com` registry + fshp.app records + issuance; step 5 screens. Owner Qs: non-admin devices using the public path; forwarded IPv4 changes) Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
       direct-access order + vectors (TS/Swift/Kotlin), `.com` direct-name registry + prober + `fshp.app` records +
       issuance, clients' opt-in and name screens, take `fshp.app` off the website mirror, tests.
 - [ ] F2 Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
@@ -197,6 +197,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-13 Merged `0.4/small-fixes` (10 commits, F12, F10, F9 part): tsc clean, builder + rules tests 358/358.
   Not built here: the Windows WPF app (needs Windows CI); no device runs. Webapp translations changed: bump the
   shell at the next webapp release.
+- 2026-11-13 Merged `0.4/direct-access` (F1 steps 1-2): tsc clean, direct-access tests + vectors check pass.
+  Owner leaning: per-service certificates on `fshp.app` (asked to confirm).
 
 ## Resume point
 
