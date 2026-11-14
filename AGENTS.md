@@ -317,7 +317,7 @@ to run `npm run rate-limits` (needs `FLAGSHIP_ADMIN_SECRET`; `-- --days 30`
 for a month) and decide whether any budget in `apps/com/src/rateLimit.ts`
 needs moving: many distinct sources refused means real people hit it;
 many near passes with no refusals means little headroom. Record the date
-of the last check here: **not yet checked**.
+of the last check here: **2026-11-13** (30 days: builder-pipe-upgrade and account-resolve flagged, 0.4 journal F15).
 
 ### Urgent
 
