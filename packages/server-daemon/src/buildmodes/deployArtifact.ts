@@ -17,6 +17,7 @@
  * an image built earlier, so what goes live is exactly what was tested.
  */
 
+import { treeDigest, writtenTreeDigest } from "../appLineage.js";
 import { join } from "node:path";
 import {
   verifyInstallService,
@@ -276,8 +277,9 @@ export function buildArtifactPipeline(deps: DeployArtifactDeps) {
     };
     const signature = deps.signer.signInstallService(request);
     const migrations = migrationFiles(files);
+    const codeDigest = (await writtenTreeDigest(deps.workingDir, serviceId)) ?? treeDigest(files, args.binaries ?? {});
     if (target.edit) {
-      const r = await deps.servicePlatform.redeploy({ request, signature, verify: verifyInstallService, migrations });
+      const r = await deps.servicePlatform.redeploy({ request, signature, verify: verifyInstallService, migrations, codeDigest });
       if (!r.ok) {
         await note(buildId, mode, "error", r.reason);
         return { ok: false, reason: r.reason };
@@ -286,7 +288,7 @@ export function buildArtifactPipeline(deps: DeployArtifactDeps) {
       await note(buildId, mode, "deployed", `updated at ${url}`, serviceId);
       return { ok: true, serviceId, url, image };
     }
-    const installResult = await deps.servicePlatform.install({ request, signature, verify: verifyInstallService, migrations });
+    const installResult = await deps.servicePlatform.install({ request, signature, verify: verifyInstallService, migrations, codeDigest });
     if (!installResult.ok) {
       await note(buildId, mode, "error", `install rejected: ${installResult.reason}`);
       return { ok: false, reason: `install rejected: ${installResult.reason}` };

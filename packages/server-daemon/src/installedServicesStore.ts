@@ -15,6 +15,7 @@ import type { SwkOps } from "./keyCustodian.js";
 import type { AppDataCredentials } from "./dataLayer/provisioner.js";
 import type { AppMembershipSnapshot } from "./membership.js";
 import type { RetainedGeneration } from "./servicePlatform.js";
+import type { CodeHistoryEntry } from "./appLineage.js";
 
 export interface PersistedService {
   creator: string;
@@ -30,6 +31,9 @@ export interface PersistedService {
   membership: AppMembershipSnapshot;
   dataGeneration?: number;
   retainedData?: RetainedGeneration[];
+  origin?: string;
+  forkedFrom?: string;
+  codeHistory?: CodeHistoryEntry[];
 }
 
 export interface InstalledServicesStore {

@@ -42,6 +42,7 @@ import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ServicePlatform } from "../servicePlatform.js";
+import { carriedLineage, parseLineage } from "../appLineage.js";
 import type { AppDataCredentials } from "../dataLayer/provisioner.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
@@ -257,6 +258,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
     if (!Array.isArray(m!.appliedMigrations) || m!.appliedMigrations!.some((x) => typeof x !== "string")) bad("migrations");
     if (!m!.env || !Array.isArray(m!.env.names) || m!.env.names.some((x) => typeof x !== "string")) bad("env");
     if (m!.accessList !== null && typeof m!.accessList !== "string") bad("access list");
+    if (m!.lineage !== undefined && !parseLineage(m!.lineage)) bad("lineage");
     return m as CopyMeta;
   }
 
@@ -403,6 +405,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
         verify: verifyInstallService,
         appliedMigrations: meta.appliedMigrations,
         ...(meta.membership ? { membership: meta.membership } : {}),
+        ...carriedLineage(meta.lineage, grant.serviceId),
         prepareData: async (data) => {
           held.postgres = Object.fromEntries(
             Object.entries(data?.postgres ?? {}).map(([k, v]) => [k, { database: v.database, role: v.role }]),

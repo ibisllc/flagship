@@ -97,6 +97,8 @@ export interface CopyAccessEntry {
   roles?: MemberRoles;
 }
 
+import type { AppLineage } from "../appLineage.js";
+
 export interface SealedEnv {
   nonce: string;
   ciphertext: string;
@@ -120,6 +122,8 @@ export interface CopyMeta {
   accessList: string | null;
   /** Where the target may fetch the parts without the relay (the source's LAN listener). */
   lan?: LanEndpoint[];
+  /** Which app this is and the code it has run (appLineage.ts); absent from older sources. */
+  lineage?: AppLineage;
 }
 
 export interface EnvContext {

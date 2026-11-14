@@ -26,7 +26,7 @@ import { ed, parseAppCopyGrant, verifyAppCopyGrant, type AppCopyGrant, type Byte
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import type { InstalledService } from "../servicePlatform.js";
+import { lineageOf, type InstalledService } from "../servicePlatform.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import { readCarriedBinaries, readServiceSource } from "../llm/serviceSource.js";
 import type { AppCopyOps } from "./ops.js";
@@ -159,6 +159,7 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
       // Schema 2 as signed (an app group's members come along).
       manifestJson: app.manifestSource ?? JSON.stringify(app.manifest),
       appliedMigrations: [...(app.appliedMigrations ?? [])],
+      lineage: lineageOf(app),
       parts,
       access: opts.access?.exportEntry(app.serviceId) ?? null,
       membership: app.membership.snapshot(),
