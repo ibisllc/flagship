@@ -20,6 +20,7 @@ export * from "./daemonStatus.js";
 export * from "./boxKeyPin.js";
 export * from "./lanHint.js";
 export * from "./directAccess.js";
+export * from "./directName.js";
 export * from "./boxTrustStatus.js";
 export * from "./pushRelay.js";
 export * from "./serviceCert.js";

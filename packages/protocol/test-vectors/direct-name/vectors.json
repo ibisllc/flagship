@@ -1,0 +1,216 @@
+{
+  "about": "Direct names (docs/direct-access-and-domains.md §7). Build `canonical` from `fields` byte for byte; each pinned signature verifies under `keys.adminRootPubHex` and NOT under `keys.irkPubHex`. `refused` entries carry the reason code `problem` and never verify. `kinds` pins what a label is (derived `<slug>--<creator>`, vanity, or null = not allowed).",
+  "keys": {
+    "adminRootSeedHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "adminRootPubHex": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+    "irkPubHex": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4"
+  },
+  "follow": {
+    "fields": {
+      "name": "game--plucky-avocet.fshp.app",
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "enabled": true,
+      "addresses": [],
+      "caa": "pin",
+      "issuedAt": 1790000000000
+    },
+    "canonical": "flagship/direct-name/v1|game--plucky-avocet.fshp.app|home.plucky-avocet.flagship.services|on||pin|1790000000000",
+    "signatureHex": "736b3409d284a4d4dacc9f31df9e91f24cce30cb00db6c976aa958f4a23732732399d78af809c8329df84a590c1db0d892160df7346e14cce5538d50984a8709"
+  },
+  "owned": {
+    "fields": {
+      "name": "game--plucky-avocet.fshp.app",
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "enabled": true,
+      "addresses": [
+        "81.2.69.142",
+        "2a02:8010:6400:1::10"
+      ],
+      "caa": "off",
+      "issuedAt": 1790000000001
+    },
+    "canonical": "flagship/direct-name/v1|game--plucky-avocet.fshp.app|home.plucky-avocet.flagship.services|on|2a02:8010:6400:1::10,81.2.69.142|off|1790000000001",
+    "signatureHex": "8201af26ea3e1bbc4fc573880e16a356626cadb5bc6c1b9fac8275d1ea7de28ffa113ffce6436844e73c08fde5e43e0108f4a5d1a8c5522d0136289fcdb2c00b"
+  },
+  "off": {
+    "fields": {
+      "name": "game--plucky-avocet.fshp.app",
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "enabled": false,
+      "addresses": [],
+      "caa": "pin",
+      "issuedAt": 1790000060000
+    },
+    "canonical": "flagship/direct-name/v1|game--plucky-avocet.fshp.app|home.plucky-avocet.flagship.services|off||pin|1790000060000",
+    "signatureHex": "1ea9753b32b3691e9ed7ebac7f09038566d2152358ac49550d9c9576643d60b82810b94c749cc762fa6bfa3bbaad0c8a00c20145020464b4abc1e5659ff12c04"
+  },
+  "refused": [
+    {
+      "name": "another apex",
+      "fields": {
+        "name": "game--plucky-avocet.flagship.services",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
+      "name": "two labels deep",
+      "fields": {
+        "name": "a.game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
+      "name": "uppercase",
+      "fields": {
+        "name": "Game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
+      "name": "reserved word",
+      "fields": {
+        "name": "www.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
+      "name": "punycode",
+      "fields": {
+        "name": "xn--80ak6aa92e.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
+      "name": "two double dashes",
+      "fields": {
+        "name": "a--b--c.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
+      "name": "private address",
+      "fields": {
+        "name": "game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [
+          "192.168.1.20"
+        ],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "private-address"
+    },
+    {
+      "name": "non-canonical address",
+      "fields": {
+        "name": "game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [
+          "2A02:8010:6400:1::10"
+        ],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "non-canonical-address"
+    },
+    {
+      "name": "off with addresses",
+      "fields": {
+        "name": "game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": false,
+        "addresses": [
+          "81.2.69.142"
+        ],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "off-with-addresses"
+    },
+    {
+      "name": "bad caa",
+      "fields": {
+        "name": "game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "maybe",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-caa"
+    },
+    {
+      "name": "duplicate",
+      "fields": {
+        "name": "game--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [
+          "81.2.69.142",
+          "81.2.69.142"
+        ],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "duplicate"
+    }
+  ],
+  "kinds": [
+    {
+      "label": "game--plucky-avocet",
+      "kind": "derived"
+    },
+    {
+      "label": "johngame",
+      "kind": "vanity"
+    },
+    {
+      "label": "a--b--c",
+      "kind": null
+    },
+    {
+      "label": "www",
+      "kind": null
+    },
+    {
+      "label": "xn--80ak6aa92e",
+      "kind": null
+    },
+    {
+      "label": "game--x",
+      "kind": null
+    }
+  ]
+}
