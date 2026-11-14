@@ -211,6 +211,8 @@ public protocol ScreensClient: Sendable {
     func rejectPublisher(serviceId: String) async throws
     /// `POST /api/screens/debug-access/revoke {revoke, signatureHex}`.
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange
+    /// `POST /api/screens/box-release {order, signatureHex, pqSignature?}`: wipes a retail box.
+    func releaseBox(body: Data) async throws
     /// `GET /api/screens/direct-access` (docs/direct-access-and-domains.md §7).
     func directAccess() async throws -> DirectAccess.View
     /// `POST /api/screens/direct-access` with the owner's signed order.
@@ -585,6 +587,7 @@ public extension ScreensClient {
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
         throw ScreensClientError.notImplemented("debug access")
     }
+    func releaseBox(body: Data) async throws { throw ScreensClientError.notImplemented("release this box") }
     func directAccess() async throws -> DirectAccess.View { throw ScreensClientError.notImplemented("direct access") }
     func setDirectAccess(_ signed: DirectAccess.SignedOrder) async throws -> DirectAccess.Change {
         throw ScreensClientError.notImplemented("direct access")

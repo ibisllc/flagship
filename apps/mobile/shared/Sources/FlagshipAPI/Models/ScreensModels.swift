@@ -103,6 +103,14 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     /// The box's outbound proxy and whether it works (docs/outbound-proxy.md).
     /// Absent from older daemons: the page then hides the section.
     public var outboundProxy: OutboundProxySummary? = nil
+    /// A retail box (docs/retail-box-setup.md §8.2): the server key a "Release this box" order
+    /// must name. Absent on every other box.
+    public var retail: RetailBoxView? = nil
+}
+
+public struct RetailBoxView: Codable, Equatable, Sendable {
+    public let stkPubHex: String
+    public init(stkPubHex: String) { self.stkPubHex = stkPubHex }
 }
 
 /// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md

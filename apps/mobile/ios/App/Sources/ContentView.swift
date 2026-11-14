@@ -446,6 +446,11 @@ struct ContentView: View {
                     guard let delegate = UIApplication.shared.delegate as? AppDelegate,
                           let push = delegate.push else { return }
                     push.notifyAppStorageFull(serviceId: serviceId, server: server)
+                },
+                notifyResetWindow: { server, at in
+                    guard let delegate = UIApplication.shared.delegate as? AppDelegate,
+                          let push = delegate.push else { return }
+                    push.notifyResetWindowOpened(server: server, at: at)
                 }
             )
             aiChatPoller = poller

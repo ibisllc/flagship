@@ -580,6 +580,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
         try await request("/api/screens/debug-access/revoke", method: "POST", body: Data(body.utf8))
     }
+    public func releaseBox(body: Data) async throws {
+        _ = try await requestData("/api/screens/box-release", method: "POST", body: body)
+    }
     // MARK: Container stack (packages/server-daemon/src/archV2Switch.ts)
     public func stackStatus() async throws -> StackStatus {
         try await request("/api/stack")

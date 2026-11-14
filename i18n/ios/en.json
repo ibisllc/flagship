@@ -15667,5 +15667,77 @@
   "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": {
     "en": "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/UntrustedServers.swift:67"
+  },
+  "Someone pressed the reset button on %@. If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10 minutes.": {
+    "en": "Someone pressed the reset button on %@. If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10 minutes.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift"
+  },
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": {
+    "en": "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": {
+    "en": "To keep your data, make a backup first, or transfer the server to its new owner instead.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Only an admin device of this account can release this box.": {
+    "en": "Only an admin device of this account can release this box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Release %@": {
+    "en": "Release %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "The box wasn't released.": {
+    "en": "The box wasn't released.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Only this account's admin key can release this box.": {
+    "en": "Only this account's admin key can release this box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.": {
+    "en": "This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "That order is for another server. Refresh this page and try again.": {
+    "en": "That order is for another server. Refresh this page and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "This device's clock is too far from the server's. Check the time and try again.": {
+    "en": "This device's clock is too far from the server's. Check the time and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "That order was already used. Try again.": {
+    "en": "That order was already used. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "This box is already released.": {
+    "en": "This box is already released.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "The box couldn't be released. Try again in a moment.": {
+    "en": "The box couldn't be released. Try again in a moment.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Release this box": {
+    "en": "Release this box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "The box is being wiped. It restarts as a new box.": {
+    "en": "The box is being wiped. It restarts as a new box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Releasing…": {
+    "en": "Releasing…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Release this box?": {
+    "en": "Release this box?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
+  },
+  "Wipe and release": {
+    "en": "Wipe and release",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
   }
 }

@@ -330,6 +330,9 @@ public struct ServerDetailScreen: View {
                         DebugAccessCard(serverDomain: d.serverFqdn, view: d.debugAccess, onChanged: onRefreshDetail)
                     }
                     DirectAccessCard(serverDomain: d.serverFqdn)
+                    if let retail = d.retail {
+                        ReleaseThisBoxCard(serverDomain: d.serverFqdn, username: d.username, retail: retail)
+                    }
                     if let rt = d.runtime, rt.isUsable {
                         RuntimeCard(view: rt)
                     }
