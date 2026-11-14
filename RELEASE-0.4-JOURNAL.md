@@ -324,6 +324,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   stage + plan orders (admin root); access lists never overwritten. Riskiest piece: store generations (Rust broker
   too). Found: server-backup-and-clone.md says API keys come back on restore, restore.ts never restores one.
   Owner Qs in its §10.
+- 2026-11-14 Merged the Add a device note "Only an admin device can manage backups and restore servers." (iOS, Android,
+  webapp, six languages). Note: `i18n-pwa.mjs extract` wraps brand labels in webapp/lib/voiciText.js; revert when it does.
 
 ## Resume point
 
