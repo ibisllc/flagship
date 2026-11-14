@@ -258,6 +258,10 @@ final class GymFeatureMirrorTests: XCTestCase {
         let promote = app.switches["add-device-promote-admin-toggle"]
         XCTAssertTrue(promote.waitForExistence(timeout: 15), "An admin device should offer promote-to-admin.")
         XCTAssertEqual(promote.switchValue, "0", "Promote-to-admin must default OFF.")
+        XCTAssertTrue(
+            app.staticTexts["add-device-admin-backups-note"].waitForExistence(timeout: 5),
+            "Add a device should say only an admin device manages backups and restores."
+        )
         gymShot(app, "promote-toggle-admin")
     }
 

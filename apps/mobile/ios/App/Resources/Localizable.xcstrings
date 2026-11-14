@@ -137789,6 +137789,47 @@
         }
       }
     },
+    "Only an admin device can manage backups and restore servers.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador puede gestionar las copias de seguridad y restaurar servidores."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut gérer les sauvegardes et restaurer des serveurs."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann Backups verwalten und Server wiederherstellen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador pode gerenciar backups e restaurar servidores."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップの管理とサーバーの復元ができるのは管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备才能管理备份和恢复服务器。"
+          }
+        }
+      }
+    },
     "Turn off direct access?": {
       "extractionState": "manual",
       "localizations": {

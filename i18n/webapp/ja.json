@@ -3445,6 +3445,7 @@
   "Another approval is still running. Wait for it to finish, then try again.": "別の承認がまだ実行中です。完了するまで待ってから、もう一度お試しください。",
   "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "{0} の承認に時間がかかりすぎたため中止しました。もう一度お試しいただくか、スマートフォンから承認してください。",
   "During its first 14 days it is under review and acts as a non-admin device.": "最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。",
+  "Only an admin device can manage backups and restore servers.": "バックアップの管理とサーバーの復元ができるのは管理者デバイスだけです。",
   "That change couldn't be read. Try again.": "その変更を読み取れませんでした。もう一度お試しください。",
   "Only public addresses can be used. Private, local and reserved addresses can't.": "使えるのは公開アドレスだけです。プライベート、ローカル、予約済みのアドレスは使えません。",
   "One of the addresses isn't an IP address.": "アドレスの1つが IP アドレスではありません。",

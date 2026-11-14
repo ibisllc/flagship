@@ -113,6 +113,10 @@ public struct AddDeviceScreen: View {
                     Text("During its first 14 days it is under review and acts as a non-admin device.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
+                    Text("Only an admin device can manage backups and restore servers.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("add-device-admin-backups-note")
                 }
             }
         }

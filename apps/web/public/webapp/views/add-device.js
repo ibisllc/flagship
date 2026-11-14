@@ -186,6 +186,7 @@ export function renderAddDevice() {
         ⚠️ ${escapeHtml(PROMOTE_ADMIN_WARNING)}
       </p>
       <p class="note small" data-section="promote-admin-review">${tr("During its first 14 days it is under review and acts as a non-admin device.")}</p>
+      <p class="note small" data-section="promote-admin-backups">${tr("Only an admin device can manage backups and restore servers.")}</p>
     </div>`
     : "";
   root.innerHTML = `

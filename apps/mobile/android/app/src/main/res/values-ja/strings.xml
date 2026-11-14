@@ -3644,6 +3644,7 @@
     <string name="push_service_none">なし：このスマートフォンにはプッシュサービスがありません。通知を受け取るには、ntfy などの UnifiedPush アプリをインストールしてください。</string>
     <string name="second_approval_waiting">%1$s の承認があと1つあります: クラウドへの参加を許可してください。</string>
     <string name="admin_promotion_under_review">最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。</string>
+    <string name="admin_only_backups_note">バックアップの管理とサーバーの復元ができるのは管理者デバイスだけです。</string>
     <string name="da_title">ダイレクトアクセス</string>
     <string name="da_on_line">オン。訪問者はリレーを通さず、このサーバーのアプリに直接アクセスできます。</string>
     <string name="da_off_line">オフ。訪問者はリレー経由でこのサーバーのアプリにアクセスします。</string>

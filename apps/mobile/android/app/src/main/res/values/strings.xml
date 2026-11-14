@@ -3649,6 +3649,7 @@
     <string name="push_service_none">None: this phone has no push service. Install a UnifiedPush app, such as ntfy, to get notifications.</string>
     <string name="second_approval_waiting">One more approval for %1$s: authorize it to join your cloud.</string>
     <string name="admin_promotion_under_review">During its first 14 days it is under review and acts as a non-admin device.</string>
+    <string name="admin_only_backups_note">Only an admin device can manage backups and restore servers.</string>
     <string name="da_title">Direct access</string>
     <string name="da_on_line">On. Visitors can reach this server\'s apps directly, without the relay.</string>
     <string name="da_off_line">Off. Visitors reach this server\'s apps through the relay.</string>

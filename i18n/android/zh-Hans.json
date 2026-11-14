@@ -3642,6 +3642,7 @@
   "push_service_none": "无：这部手机没有推送服务。请安装 UnifiedPush 应用（例如 ntfy）以接收通知。",
   "second_approval_waiting": "%1$s 还需要一次批准：授权它加入你的云。",
   "admin_promotion_under_review": "在最初 14 天内，它处于审核期，按非管理员设备运行。",
+  "admin_only_backups_note": "只有管理员设备才能管理备份和恢复服务器。",
   "da_title": "直接访问",
   "da_on_line": "已开启。访客可以不经中继，直接访问此服务器上的应用。",
   "da_off_line": "已关闭。访客通过中继访问此服务器上的应用。",

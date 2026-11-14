@@ -15036,6 +15036,10 @@
     "en": "During its first 14 days it is under review and acts as a non-admin device.",
     "ctx": "ui/screens/AddDeviceScreen.kt (under the \"Also make this device an admin\" switch; Windows acceptance W14)"
   },
+  "admin_only_backups_note": {
+    "en": "Only an admin device can manage backups and restore servers.",
+    "ctx": "ui/screens/AddDeviceScreen.kt (under the \"Also make this device an admin\" switch, after the 14-day review line)"
+  },
   "da_title": {
     "en": "Direct access",
     "ctx": "ui/screens/DirectAccessCard.kt (section title)"
