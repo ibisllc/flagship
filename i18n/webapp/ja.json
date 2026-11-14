@@ -3516,5 +3516,8 @@
   "Through the relay": "リレー経由",
   "Certificate ready. Waiting for the direct path.": "証明書の準備ができました。直接接続を待っています。",
   "Set up a box from a store": "店舗で購入したボックスを設定",
-  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "このボックスの設定には、電話の Flagship アプリを使ってください。アプリは Bluetooth でボックスを見つけますが、ブラウザでは Bluetooth を使えません。"
+  "Use the Flagship app on your phone to set up this box. It finds the box over Bluetooth, which a browser can't use.": "このボックスの設定には、電話の Flagship アプリを使ってください。アプリは Bluetooth でボックスを見つけますが、ブラウザでは Bluetooth を使えません。",
+  "Someone pressed the reset button on this server": "誰かがこのサーバーのリセットボタンを押しました",
+  "The reset window closed. Nothing changed.": "リセットの受付時間が終わりました。何も変わっていません。",
+  "This server is being wiped for a new owner": "新しい所有者のためにこのサーバーを消去しています"
 }

@@ -3524,5 +3524,8 @@
   "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": "Ce réseau demande une page de connexion, que le boîtier ne peut pas utiliser. Utilisez un réseau domestique ou un câble.",
   "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": "Le boîtier est en ligne mais n'arrive pas à joindre Flagship. Votre réseau bloque peut-être les connexions sortantes sur le port 443.",
   "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": "Votre mot de passe Wi-Fi est envoyé au boîtier en Bluetooth. Si quelqu'un à proximité intercepte cette configuration, il pourrait le lire. Un câble réseau l'évite.",
-  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "Si ce boîtier a déjà été configuré, appuyez 5 fois rapidement sur son bouton d'alimentation, puis touchez Réessayer. Le configurer efface tout ce qu'il contient."
+  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "Si ce boîtier a déjà été configuré, appuyez 5 fois rapidement sur son bouton d'alimentation, puis touchez Réessayer. Le configurer efface tout ce qu'il contient.",
+  "Someone pressed the reset button on this server": "Quelqu’un a appuyé sur le bouton de réinitialisation de ce serveur",
+  "The reset window closed. Nothing changed.": "La fenêtre de réinitialisation s’est fermée. Rien n’a changé.",
+  "This server is being wiped for a new owner": "Ce serveur est en cours d’effacement pour un nouveau propriétaire"
 }

@@ -3522,5 +3522,8 @@
   "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": "此网络需要登录页面，主机无法使用。请使用家庭网络或网线。",
   "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": "主机已联网，但无法连接 Flagship。你的网络可能阻止了 443 端口的出站连接。",
   "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": "你的 Wi-Fi 密码会通过蓝牙发送给主机。如果附近有人拦截此次设置，可能会读到它。使用网线可以避免这种情况。",
-  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "如果这台主机之前设置过，请快速按电源键 5 次，然后点按“重试”。设置会抹掉主机上的所有内容。"
+  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": "如果这台主机之前设置过，请快速按电源键 5 次，然后点按“重试”。设置会抹掉主机上的所有内容。",
+  "Someone pressed the reset button on this server": "有人按下了此服务器的重置按钮",
+  "The reset window closed. Nothing changed.": "重置窗口已关闭。没有任何更改。",
+  "This server is being wiped for a new owner": "正在为新所有者清除此服务器"
 }

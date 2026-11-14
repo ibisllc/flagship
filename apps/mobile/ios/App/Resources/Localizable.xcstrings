@@ -144512,6 +144512,129 @@
           }
         }
       }
+    },
+    "Someone pressed the reset button on this server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alguien pulsó el botón de reinicio de este servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelqu’un a appuyé sur le bouton de réinitialisation de ce serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jemand hat die Reset-Taste dieses Servers gedrückt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alguém apertou o botão de redefinição deste servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "誰かがこのサーバーのリセットボタンを押しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有人按下了此服务器的重置按钮"
+          }
+        }
+      }
+    },
+    "The reset window closed. Nothing changed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La ventana de reinicio se cerró. No cambió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La fenêtre de réinitialisation s’est fermée. Rien n’a changé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Reset-Fenster ist abgelaufen. Nichts hat sich geändert."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A janela de redefinição foi fechada. Nada mudou."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リセットの受付時間が終わりました。何も変わっていません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置窗口已关闭。没有任何更改。"
+          }
+        }
+      }
+    },
+    "This server is being wiped for a new owner": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor se está borrando para un nuevo propietario"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur est en cours d’effacement pour un nouveau propriétaire"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Server wird für einen neuen Besitzer gelöscht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor está sendo apagado para um novo proprietário"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい所有者のためにこのサーバーを消去しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在为新所有者清除此服务器"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -3718,4 +3718,7 @@
     <string name="da_probe_unreachable">无法从外部访问。</string>
     <string name="da_probe_nothing">尚未发布，因此没有可检查的内容。</string>
     <string name="da_state_certificate_ready">证书已就绪。正在等待直接连接。</string>
+    <string name="activity_retail_reset_window_opened">有人按下了此服务器的重置按钮</string>
+    <string name="activity_retail_reset_window_closed">重置窗口已关闭。没有任何更改。</string>
+    <string name="activity_retail_wipe_started">正在为新所有者清除此服务器</string>
 </resources>

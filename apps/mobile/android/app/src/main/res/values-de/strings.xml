@@ -3718,4 +3718,7 @@
     <string name="da_probe_unreachable">Von außen nicht erreichbar.</string>
     <string name="da_probe_nothing">Noch nicht veröffentlicht, daher gibt es nichts zu prüfen.</string>
     <string name="da_state_certificate_ready">Zertifikat bereit. Wartet auf den direkten Weg.</string>
+    <string name="activity_retail_reset_window_opened">Jemand hat die Reset-Taste dieses Servers gedrückt</string>
+    <string name="activity_retail_reset_window_closed">Das Reset-Fenster ist abgelaufen. Nichts hat sich geändert.</string>
+    <string name="activity_retail_wipe_started">Dieser Server wird für einen neuen Besitzer gelöscht</string>
 </resources>

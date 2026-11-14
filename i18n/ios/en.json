@@ -15119,5 +15119,17 @@
   "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": {
     "en": "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:127"
+  },
+  "Someone pressed the reset button on this server": {
+    "en": "Someone pressed the reset button on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
+  },
+  "The reset window closed. Nothing changed.": {
+    "en": "The reset window closed. Nothing changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
+  },
+  "This server is being wiped for a new owner": {
+    "en": "This server is being wiped for a new owner",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
   }
 }
