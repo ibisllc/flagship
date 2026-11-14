@@ -35,13 +35,14 @@ nobody carries their OS around.
 Database dumps are `pg_dump -Fc`, which every newer Postgres restores; files
 folders are plain tar.
 
-**Saved config comes along:** each app's secrets (env), members and access,
-its internet access list (as a draft for the owner to approve on the new
-server), its API keys (the grant and the secret's hash, never the secret, so
-clients keep working; an imported key is bound to the server it was restored
-on and its owner signature is checked at every load), the server's front
+**Saved config comes along:** each app's secrets (env), members and access
+(held as a draft until an admin approves it, N09), its internet access list
+(as a draft for the owner to approve on the new server), the server's front
 page, and how the server was made (its name, whether it asks the phone at
 every boot, whether its disk is encrypted), which the restore form copies.
+The backup lists each app's API keys (the grant and the secret's hash, never
+the secret), but **a restore never brings a working key back**: the restore
+summary says how many there were and to create them again.
 
 **Not included, on purpose:**
 - the server's own keys, certificate and address: the new server gets its own
@@ -382,8 +383,8 @@ are ever forced to cut you off"):
   the install is not cross-creator and no auto-update pull is recorded from
   `<slug>.<oldname>`, a name that is freed when an account is deleted and can
   be claimed by anyone. A same-account clone is unchanged.
-- Members' access and invite links belong to the old account, API keys no
-  longer verify, and every address changes (new server, new account): people
+- Members' access and invite links belong to the old account, API keys are
+  created again (as on any restore), and every address changes (new server, new account): people
   are invited again and shared links are new.
 - A phone copy and a picked file arrive as the same chunked upload, so the box
   cannot tell them apart.
