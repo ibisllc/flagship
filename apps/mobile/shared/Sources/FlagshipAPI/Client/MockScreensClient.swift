@@ -167,6 +167,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// What the mock box lets in, per server; refusals use the box's sentences.
     public private(set) var debugAccessByPod: [String: DebugAccessView] = [:]
     public private(set) var debugAccessBodies: [String] = []
+    public private(set) var releaseBodies: [Data] = []
+    /// A refusal code the next release answers with (403 `{error, code}`), for the gym.
+    public var releaseRefusal: String?
 
     var mockFqdn: String {
         let podName = podContext.hasPrefix("demo-")
@@ -309,6 +312,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let v = DebugAccessView(on: true, expiresAt: expires, keyFingerprint: fp, grantedBy: "admin")
         debugAccessByPod[podContext] = v
         return DebugAccessChange(ok: true, change: wasOn ? "renewed" : "granted", debugAccess: v)
+    }
+
+    public func releaseBox(body: Data) async throws {
+        releaseBodies.append(body)
+        if let code = releaseRefusal {
+            throw ScreensClientError.http(status: 403, message: "{\"error\":\"\(code)\",\"code\":\"\(code)\"}")
+        }
     }
 
     public func debugAccessRevoke(body: String) async throws -> DebugAccessChange {

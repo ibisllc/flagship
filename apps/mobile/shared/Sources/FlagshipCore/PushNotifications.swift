@@ -90,6 +90,8 @@ public final class PushNotifications: NSObject {
     /// `kind` of the local notice raised when an app on a server ran out of
     /// its disk limit (docs/app-runtimes.md 5.3); a tap opens the app's page.
     public nonisolated static let appStorageFullKind = "app-storage-full"
+    /// A retail box's reset window opened (local notification from the alert outbox).
+    public nonisolated static let resetWindowKind = "reset-window-opened"
     /// Pro ended, so apps that kept a separate access list on each server use
     /// one list again (content-free; the app's lead server sends it). A tap
     /// opens the activity, where the box's row says what happened.
@@ -129,6 +131,9 @@ public final class PushNotifications: NSObject {
                 return .appDetailOnServer(serviceId: serviceId, serverFqdn: server)
             }
             return .appDetail(serviceId: serviceId)
+        }
+        if kind == resetWindowKind, let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {
+            return .serverDetail(podId: server)
         }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
             if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {
@@ -171,6 +176,24 @@ public final class PushNotifications: NSObject {
             content: content,
             trigger: nil
         )
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    /// The owner's sentence (docs/retail-box-setup.md §7.5) when someone opens a box's reset window.
+    public nonisolated static func resetWindowText(server: String) -> String {
+        let name = server.split(separator: ".").first.map(String.init) ?? server
+        return String(localized: "Someone pressed the reset button on \(name). If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10 minutes.")
+    }
+
+    public func notifyResetWindowOpened(server: String?, at: Int64) {
+        let content = UNMutableNotificationContent()
+        content.title = "Flagship"
+        content.body = Self.resetWindowText(server: server ?? "")
+        content.sound = .default
+        var info: [String: String] = ["kind": Self.resetWindowKind]
+        if let server, !server.isEmpty { info["server"] = server }
+        content.userInfo = info
+        let request = UNNotificationRequest(identifier: "flagship-reset-window-\(server ?? "")-\(at)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 

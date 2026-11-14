@@ -150129,6 +150129,744 @@
           }
         }
       }
+    },
+    "Someone pressed the reset button on %@. If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10 minutes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alguien pulsó el botón de reinicio de %@. Si no fuiste tú, el servidor no ha cambiado y sigue siendo tuyo, salvo que alguien lo configure en los próximos 10 minutos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelqu’un a appuyé sur le bouton de réinitialisation de %@. Si ce n’était pas vous, le serveur n’a pas changé et reste à vous, sauf si quelqu’un le configure dans les 10 prochaines minutes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jemand hat die Reset-Taste von %@ gedrückt. Wenn du das nicht warst: Der Server ist unverändert und bleibt deiner, außer jemand richtet ihn in den nächsten 10 Minuten ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alguém apertou o botão de redefinição de %@. Se não foi você, o servidor não mudou e continua seu, a menos que alguém o configure nos próximos 10 minutos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "誰かが %@ のリセットボタンを押しました。心当たりがない場合でも、今後 10 分以内に誰かが設定しない限り、サーバーは変わらずあなたのものです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有人按下了 %@ 的重置按钮。如果不是你，服务器没有变化，仍归你所有，除非有人在接下来的 10 分钟内设置它。"
+          }
+        }
+      }
+    },
+    "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar borra todo lo que hay en este equipo: sus apps, sus datos y sus claves. No se puede deshacer. El equipo vuelve a estar como nuevo, listo para su próximo propietario."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libérer efface tout sur ce boîtier : ses apps, leurs données et ses clés. C’est irréversible. Le boîtier redevient neuf, prêt pour son prochain propriétaire."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigeben löscht alles auf dieser Box: ihre Apps, deren Daten und ihre Schlüssel. Das lässt sich nicht rückgängig machen. Die Box ist danach wie neu, bereit für den nächsten Besitzer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar apaga tudo nesta caixa: os apps, os dados deles e as chaves. Não dá para desfazer. A caixa volta a ficar como nova, pronta para o próximo proprietário."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解放すると、このボックスのアプリ、そのデータ、鍵がすべて消去されます。元に戻せません。ボックスは新品の状態に戻り、次の所有者を待ちます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "释放会清除此主机上的所有内容：应用、应用数据和密钥。无法撤销。主机会恢复为全新状态，等待下一位所有者。"
+          }
+        }
+      }
+    },
+    "To keep your data, make a backup first, or transfer the server to its new owner instead.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para conservar tus datos, haz primero una copia de seguridad o transfiere el servidor a su nuevo propietario."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour garder vos données, faites d’abord une sauvegarde, ou transférez plutôt le serveur à son nouveau propriétaire."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um deine Daten zu behalten, erstelle zuerst ein Backup oder übertrage den Server stattdessen an den neuen Besitzer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para manter seus dados, faça um backup antes ou transfira o servidor para o novo proprietário."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "データを残すには、先にバックアップを作成するか、代わりにサーバーを新しい所有者に移管してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如需保留数据，请先进行备份，或改为将服务器转移给新所有者。"
+          }
+        }
+      }
+    },
+    "Only an admin device of this account can release this box.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador de esta cuenta puede liberar este equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur de ce compte peut libérer ce boîtier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät dieses Kontos kann diese Box freigeben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só um dispositivo administrador desta conta pode liberar esta caixa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスを解放できるのは、このアカウントの管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有此账户的管理员设备可以释放此主机。"
+          }
+        }
+      }
+    },
+    "Release %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libérer %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ freigeben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を解放"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "释放 %@"
+          }
+        }
+      }
+    },
+    "The box wasn't released.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no se liberó."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n’a pas été libéré."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box wurde nicht freigegeben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não foi liberada."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスは解放されませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机未被释放。"
+          }
+        }
+      }
+    },
+    "Only this account's admin key can release this box.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo la clave de administrador de esta cuenta puede liberar este equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seule la clé administrateur de ce compte peut libérer ce boîtier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur der Admin-Schlüssel dieses Kontos kann diese Box freigeben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só a chave de administrador desta conta pode liberar esta caixa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスを解放できるのは、このアカウントの管理者キーだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有此账户的管理员密钥可以释放此主机。"
+          }
+        }
+      }
+    },
+    "This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor necesita una firma resistente a la computación cuántica. Activa la protección resistente a la computación cuántica en este dispositivo y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur exige une signature résistante au quantique. Activez la protection résistante au quantique sur cet appareil et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Server braucht eine quantensichere Signatur. Schalte den quantensicheren Schutz auf diesem Gerät ein und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor precisa de uma assinatura resistente à computação quântica. Ative a proteção resistente à computação quântica neste dispositivo e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーには耐量子署名が必要です。このデバイスで耐量子保護をオンにして、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器需要抗量子签名。请在此设备上开启抗量子保护后重试。"
+          }
+        }
+      }
+    },
+    "That order is for another server. Refresh this page and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esa orden es para otro servidor. Actualiza esta página y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet ordre concerne un autre serveur. Actualisez cette page et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Auftrag gilt für einen anderen Server. Lade diese Seite neu und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Essa ordem é para outro servidor. Atualize esta página e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "その指示は別のサーバー向けです。このページを更新して、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该指令针对的是另一台服务器。请刷新此页面后重试。"
+          }
+        }
+      }
+    },
+    "This device's clock is too far from the server's. Check the time and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El reloj de este dispositivo difiere demasiado del del servidor. Revisa la hora y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’horloge de cet appareil est trop éloignée de celle du serveur. Vérifiez l’heure et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Uhr dieses Geräts weicht zu stark von der des Servers ab. Prüfe die Uhrzeit und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O relógio deste dispositivo está muito diferente do relógio do servidor. Confira a hora e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスの時計がサーバーと大きくずれています。時刻を確認して、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备的时钟与服务器相差太大。请检查时间后重试。"
+          }
+        }
+      }
+    },
+    "That order was already used. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esa orden ya se usó. Vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet ordre a déjà été utilisé. Réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Auftrag wurde schon verwendet. Versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Essa ordem já foi usada. Tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "その指示はすでに使われています。もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该指令已被使用。请重试。"
+          }
+        }
+      }
+    },
+    "This box is already released.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este equipo ya está liberado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce boîtier est déjà libéré."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Box ist bereits freigegeben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta caixa já está liberada."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスはすでに解放されています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此主机已被释放。"
+          }
+        }
+      }
+    },
+    "The box couldn't be released. Try again in a moment.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo liberar el equipo. Vuelve a intentarlo en un momento."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n’a pas pu être libéré. Réessayez dans un instant."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box konnte nicht freigegeben werden. Versuche es gleich noch einmal."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível liberar a caixa. Tente de novo daqui a pouco."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスを解放できませんでした。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法释放主机。请稍后重试。"
+          }
+        }
+      }
+    },
+    "Release this box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar este equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libérer ce boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Box freigeben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar esta caixa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスを解放"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "释放此主机"
+          }
+        }
+      }
+    },
+    "The box is being wiped. It restarts as a new box.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo se está borrando. Se reiniciará como un equipo nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier est en cours d’effacement. Il redémarrera comme un boîtier neuf."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box wird gelöscht. Sie startet als neue Box neu."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está sendo apagada. Ela reinicia como uma caixa nova."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスを消去しています。新しいボックスとして再起動します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在清除主机。它将以全新主机的状态重启。"
+          }
+        }
+      }
+    },
+    "Releasing…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberando…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libération…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird freigegeben …"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberando…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解放しています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在释放…"
+          }
+        }
+      }
+    },
+    "Release this box?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Liberar este equipo?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libérer ce boîtier ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Box freigeben?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar esta caixa?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスを解放しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要释放此主机吗？"
+          }
+        }
+      }
+    },
+    "Wipe and release": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar y liberar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer et libérer"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen und freigeben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apagar e liberar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "消去して解放"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除并释放"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

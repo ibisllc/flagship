@@ -22,6 +22,9 @@ public enum PhoneAlert: Sendable, Equatable {
     /// An app reached its disk limit (docs/app-runtimes.md 5.3): value-free,
     /// the app's service id and which store ("files" or "postgres").
     case appStorageFull(serviceId: String, store: String)
+    /// Someone pressed a retail box's power button 5 times (docs/retail-box-setup.md §7.5): the
+    /// reset window is open until `until`. Value-free: the phone words it.
+    case resetWindowOpened(at: Int64, until: Int64)
     /// Any other daemon alert kind — surfaced by its own feature, not here.
     case other(kind: String)
 
@@ -67,7 +70,7 @@ public struct PhoneAlertsResponse: Sendable, Equatable {
 
 extension PhoneAlert: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case kind, serviceId, request, toolUseId, store
+        case kind, serviceId, request, toolUseId, store, at, until
     }
 
     public init(from decoder: Decoder) throws {
@@ -84,6 +87,9 @@ extension PhoneAlert: Decodable {
             let serviceId = try c.decodeIfPresent(String.self, forKey: .serviceId) ?? ""
             if serviceId.isEmpty { self = .other(kind: kind); return }
             self = .appStorageFull(serviceId: serviceId, store: try c.decodeIfPresent(String.self, forKey: .store) ?? "")
+        case "reset-window-opened":
+            let at = try c.decodeIfPresent(Int64.self, forKey: .at) ?? 0
+            self = .resetWindowOpened(at: at, until: try c.decodeIfPresent(Int64.self, forKey: .until) ?? at)
         default:
             self = .other(kind: kind)
         }

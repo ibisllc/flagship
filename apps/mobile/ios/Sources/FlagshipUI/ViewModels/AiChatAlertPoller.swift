@@ -41,6 +41,9 @@ public final class AiChatAlertPoller {
     /// An app on `server` reached its disk limit: say so once per app.
     private let notifyStorageFull: @MainActor (_ serviceId: String, _ server: String?) -> Void
     private var storageNotified: Set<String> = []
+    /// A retail box's reset window opened on `server`: tell the owner once per opening.
+    private let notifyResetWindow: @MainActor (_ server: String?, _ at: Int64) -> Void
+    private var resetNotified: Set<String> = []
     private let pollIntervalNanos: UInt64
 
     private var task: Task<Void, Never>?
@@ -60,9 +63,11 @@ public final class AiChatAlertPoller {
         isActive: @escaping @MainActor () -> Bool,
         notify: @escaping @MainActor (_ sessionId: String, _ request: PhoneAlert.AiChatRequest, _ server: String?) -> Void,
         notifyStorageFull: @escaping @MainActor (_ serviceId: String, _ server: String?) -> Void = { _, _ in },
+        notifyResetWindow: @escaping @MainActor (_ server: String?, _ at: Int64) -> Void = { _, _ in },
         pollIntervalNanos: UInt64 = AiChatAlertPoller.pollInterval
     ) {
         self.notifyStorageFull = notifyStorageFull
+        self.notifyResetWindow = notifyResetWindow
         self.operations = operations
         self.client = client
         self.isActive = isActive
@@ -133,6 +138,10 @@ public final class AiChatAlertPoller {
             if case .other(let kind) = env.alert,
                kind == AppAccessEvents.socketEvent || kind == AppAccessEvents.pushCategory {
                 AppAccessEvents.post()
+                continue
+            }
+            if case .resetWindowOpened(let at, _) = env.alert {
+                if resetNotified.insert("\(key)|\(at)").inserted { notifyResetWindow(server, at) }
                 continue
             }
             if case .appStorageFull(let serviceId, _) = env.alert {
