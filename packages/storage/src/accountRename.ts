@@ -81,6 +81,8 @@ export const NOT_RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string,
   ["server_shares", "owner_username", "server-scoped — rename refused while servers exist"],
   ["server_orders", "username", "names the account's servers — rename refused while servers exist"],
   ["service_aliases", "username", "server-scoped — rename refused while servers exist"],
+  ["direct_access_orders", "username", "server-scoped, and the owner's signed order names the box — rename refused while servers exist"],
+  ["direct_names", "username", "a derived direct name carries the account name in its label and its signed order; a rename is refused while servers exist, and without a server a name publishes nothing"],
   // Quantum-safe trust signs the account name into its bytes; a rename is refused
   // while the account holds an account-irk / admin-root binding or a policy change.
   ["pq_key_bindings", "subject_id", "signed — names the account; rename refused while it holds a binding"],
