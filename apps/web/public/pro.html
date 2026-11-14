@@ -163,6 +163,18 @@
         </div>
       </div>
 
+      <div id="pro-messages" hidden>
+        <p data-msg="bad-username">Enter your username (3–30 lowercase letters or digits).</p>
+        <p data-msg="redeeming">Redeeming…</p>
+        <p data-msg="redeemed-pro">Redeemed — Pro is now active on “<span data-arg></span>”. Your higher allowance applies within a few minutes.</p>
+        <p data-msg="redeemed-max">Redeemed — Pro Max (500 GB) is now active on “<span data-arg></span>”. Your higher allowance applies within a few minutes.</p>
+        <p data-msg="redeem-failed">That code couldn't be redeemed.</p>
+        <p data-msg="network">Network error — please try again.</p>
+        <p data-msg="checkout-starting">Starting checkout…</p>
+        <p data-msg="checkout-off">Card checkout isn't switched on yet — use cash, Monero, or a voucher above.</p>
+        <p data-msg="checkout-failed">Couldn't start checkout.</p>
+      </div>
+
       <h3>3 · We turn on Pro</h3>
       <p>Once the money lands, we set your account to Pro for the period you paid. Your higher allowance applies within a few minutes of the change. If anything's unclear, write to <code class="addr">harry@flagship.services</code>.</p>
     </section>
@@ -228,6 +240,14 @@
 </footer>
 
 <script>
+// The sentences live in #pro-messages so the page's translations reach them (docs/i18n.md "Website pages").
+function proMsg(key, arg) {
+  var c = document.querySelector('#pro-messages [data-msg="' + key + '"]').cloneNode(true);
+  var slot = c.querySelector("[data-arg]");
+  if (slot) slot.textContent = String(arg == null ? "" : arg);
+  return c.textContent.replace(/\s+/g, " ").trim();
+}
+
 (function () {
   var form = document.getElementById("voucher-form");
   if (!form) return;
@@ -241,12 +261,12 @@
     msg.textContent = "";
     if (!/^[a-z0-9]{3,30}$/.test(username)) {
       msg.className = "voucher-msg err";
-      msg.textContent = "Enter your username (3–30 lowercase letters or digits).";
+      msg.textContent = proMsg("bad-username");
       return;
     }
     btn.disabled = true;
     var prev = btn.textContent;
-    btn.textContent = "Redeeming…";
+    btn.textContent = proMsg("redeeming");
     fetch("/api/voucher/redeem", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -255,18 +275,17 @@
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
         if (res.ok && res.body && res.body.ok) {
-          var tier = res.body.tier === "maker" ? "Pro Max (500 GB)" : "Pro";
           msg.className = "voucher-msg ok";
-          msg.textContent = "Redeemed — " + tier + " is now active on “" + username + "”. Your higher allowance applies within a few minutes.";
+          msg.textContent = proMsg(res.body.tier === "maker" ? "redeemed-max" : "redeemed-pro", username);
           form.code.value = "";
         } else {
           msg.className = "voucher-msg err";
-          msg.textContent = (res.body && res.body.error) || "That code couldn't be redeemed.";
+          msg.textContent = (res.body && res.body.error) || proMsg("redeem-failed");
         }
       })
       .catch(function () {
         msg.className = "voucher-msg err";
-        msg.textContent = "Network error — please try again.";
+        msg.textContent = proMsg("network");
       })
       .finally(function () { btn.disabled = false; btn.textContent = prev; });
   });
@@ -285,12 +304,12 @@
     msg.textContent = "";
     if (!/^[a-z0-9]{3,30}$/.test(username)) {
       msg.className = "voucher-msg err";
-      msg.textContent = "Enter your username (3–30 lowercase letters or digits).";
+      msg.textContent = proMsg("bad-username");
       return;
     }
     btn.disabled = true;
     var prev = btn.textContent;
-    btn.textContent = "Starting checkout…";
+    btn.textContent = proMsg("checkout-starting");
     fetch("/api/stripe/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -304,14 +323,14 @@
         }
         msg.className = "voucher-msg err";
         msg.textContent = res.status === 503
-          ? "Card checkout isn't switched on yet — use cash, Monero, or a voucher above."
-          : (res.body && res.body.error) || "Couldn't start checkout.";
+          ? proMsg("checkout-off")
+          : (res.body && res.body.error) || proMsg("checkout-failed");
         btn.disabled = false;
         btn.textContent = prev;
       })
       .catch(function () {
         msg.className = "voucher-msg err";
-        msg.textContent = "Network error — please try again.";
+        msg.textContent = proMsg("network");
         btn.disabled = false;
         btn.textContent = prev;
       });
