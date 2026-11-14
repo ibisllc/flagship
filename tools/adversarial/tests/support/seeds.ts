@@ -9,6 +9,21 @@ const h = (bytes: number, c = "07") => c.repeat(bytes);
 const b = (n: number, fill = 7) => new Uint8Array(n).fill(fill);
 
 export const SEEDS: Record<string, Record<string, unknown>> = {
+  MarketplaceList: {
+    creator: "alice",
+    slug: "notes",
+    name: "Notes",
+    tagline: "Plain notes",
+    descriptionMd: "A notes app.",
+    category: "productivity",
+    tagsCsv: "notes,text",
+    canonicalUrl: "notes.alice.flagship.services",
+    manifestHashHex: h(32),
+    screenshotKeys: ["shots/alice/notes/1.png"],
+    publicDistribution: true,
+    status: "listed",
+    issuedAt: NOW,
+  },
   AccountDirectoryKeyGrant: {
     accountId: "alice",
     recipientDeviceId: h(16),
