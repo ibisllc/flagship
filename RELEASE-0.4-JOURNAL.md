@@ -239,6 +239,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   social-ports, boot-remote, pq-stage1, direct-access-com. Worktree `~/flagship-0.4-fold` and branch
   `0.4/fold-features` (local + origin) are merged and can be removed (my deletion was blocked by the permission gate).
 - 2026-11-14 Merged F5 stage-1 part (hybrid admin root, D1 **0138**). Started its client port (Swift + Kotlin).
+- 2026-11-14 F1 step 3 (.com registry, `flagship/direct-name/v1`, D1 0133, publisher, `direct` cert class, daily
+  recheck, prober) + step 6 (fshp.app off the mirror) built on `0.4/direct-access-com`; sent back to rebase over the
+  fold + 0138, then the box side of step 3. Owner Qs (direct): CAA "off" = permissive record or none at apex; raise the
+  40/week cap after LE's increase; vanity names wait for paid names?; revoke certs of suspended names?; delete the old
+  mirror `*`/`www` records at go-live; a real bare-fshp.app page. Deploy needs secrets CLOUDFLARE_DIRECT_DNS_API_TOKEN +
+  CLOUDFLARE_DIRECT_ZONE_ID.
 
 ## Resume point
 
