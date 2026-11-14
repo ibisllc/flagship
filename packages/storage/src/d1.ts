@@ -5627,6 +5627,15 @@ export class D1NameChangeStorage implements NameChangeStorage {
     ) {
       return { ok: false, reason: "renaming an account with quantum-safe protection isn't available yet" };
     }
+    // A voi.ci page lives at voi.ci/<name> under a signed index, and Messages names the page; moving the account
+    // would strand both, so a rename waits until the page and Messages can move with it.
+    if (
+      (tables.has("voici_pages") && (await pqHeld("SELECT 1 AS hit FROM voici_pages WHERE username = ?1 LIMIT 1"))) ||
+      (tables.has("voici_drafts") && (await pqHeld("SELECT 1 AS hit FROM voici_drafts WHERE username = ?1 LIMIT 1"))) ||
+      (tables.has("messages_state") && (await pqHeld("SELECT 1 AS hit FROM messages_state WHERE username = ?1 LIMIT 1")))
+    ) {
+      return { ok: false, reason: "renaming an account with a voi.ci page or Messages isn't available yet" };
+    }
     const others = cols.filter((c) => c !== "username");
     const present = RENAMED_ACCOUNT_COLUMNS.filter(([t]) => tables.has(t));
 

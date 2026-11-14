@@ -133,6 +133,23 @@ describe("D1NameChangeStorage.renameAccount", () => {
     expect((await new D1NameChangeStorage(db).renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acme", at: 9 })).ok).toBe(true);
   });
 
+  it("refuses while the account has a voi.ci page or Messages, changing nothing", async () => {
+    for (const insert of [
+      `INSERT INTO voici_pages (username, page_id, seq, issued_at, accepts_messages, inbox_epoch, owner_sign_pub, index_json, published_at) VALUES ('fresh-poppy', 'p1', 1, 1, 0, 1, 'aa', '{}', 1)`,
+      `INSERT INTO messages_state (username, version, blob, updated_at) VALUES ('fresh-poppy', 1, 'x', 1)`,
+    ]) {
+      db = createSqliteD1();
+      seed(db, "fresh-poppy");
+      db.raw.exec(insert);
+      const s = new D1NameChangeStorage(db);
+      expect(await s.renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acme", at: 9 })).toEqual({
+        ok: false,
+        reason: "renaming an account with a voi.ci page or Messages isn't available yet",
+      });
+      expect(await s.history(AID)).toEqual([]);
+    }
+  });
+
   it("refuses an unknown account", async () => {
     db = createSqliteD1();
     const s = new D1NameChangeStorage(db);
