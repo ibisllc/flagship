@@ -411,8 +411,12 @@ Site mode could be limited to enterprise subscribers. Why: an air-gapped cluster
 periodically (by sneakernet or a brief controlled link) to refresh its permission from `.com`. In return Flagship:
 
 - sends air-gapped security updates (signed release bundles for sneakernet);
-- keeps a record per cluster that it "has not been hacked" (the check-in carries the cluster's signed state, e.g.
-  release and revocation versions, so Flagship can attest to it);
+- keeps a record per cluster that it "has not been hacked". Owner clarification (2026-11-14): this is primarily an
+  attestation ceremony. The site's admin (the person who set up the cluster) goes online and signs, with the site's
+  admin root, "I still run this cluster and all is fine". The record is that signed, dated statement (plus the
+  cluster's signed state such as release and revocation versions). Optionally, the site may also upload statistics
+  that let `.com` detect patterns and attacks across clusters (opt-in; aggregate counters only, no user content,
+  under the AI-privacy and identity rules);
 - gives a warranty: as long as the site stays subscribed and follows the simple guidelines, it will never lose
   availability or data to a hack.
 
