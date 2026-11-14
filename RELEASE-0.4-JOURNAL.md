@@ -374,6 +374,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   proof of work / Private Access Tokens, no phone/email checks); paid calls phase 1 via the org's own Stripe Connect
   (Flagship fee, never holds money), vouchers only after counsel; adult content: facts (stores, card networks, Stripe,
   2257, FOSTA-SESTA, REPORT Act, DSA) and a recommended "not allowed". Owner Qs V-1..2, A-1..3, P-1..4, AD-1.
+- 2026-11-14 Merged restore-into-server decisions + iOS screens (calm page, Activity code+params, kept images deleted,
+  tree-move crash window closed, box refusals now in the catalog, iOS entries/choice sheet/progress/undo list). LEFT:
+  Android + webapp screens, gym UI scenarios, Home entry, pull/peer sources, hybrid signature on these orders from iOS
+  (strict boxes refuse). Machine load ~40: full suites unreliable; fewer parallel agents from now on.
 
 ## Resume point
 
