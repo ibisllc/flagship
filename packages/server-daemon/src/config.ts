@@ -24,6 +24,13 @@ export interface ServerConfig {
    * malformed value is ignored, never blocking config load).
    */
   adminRootPub?: Bytes;
+  /**
+   * Enterprise orgs (docs/enterprise-accounts.md §6): an org server pins its org's id and the
+   * genesis hash of the org authority record in place of an admin root, and replays the chain
+   * from `.com` itself (orgAuthorityPin.ts). Both or neither; a malformed pair is dropped.
+   */
+  orgId?: string;
+  orgGenesisHash?: string;
 }
 
 export async function loadConfig(path: string): Promise<ServerConfig> {
@@ -56,6 +63,10 @@ export function parseConfig(data: unknown): ServerConfig {
     typeof d.adminRootPubHex === "string" && /^[0-9a-f]{64}$/.test(d.adminRootPubHex)
       ? hexToBytes(d.adminRootPubHex)
       : undefined;
+  const org =
+    typeof d.orgId === "string" && /^[0-9a-f]{32}$/.test(d.orgId) && typeof d.orgGenesisHash === "string" && /^[0-9a-f]{64}$/.test(d.orgGenesisHash)
+      ? { orgId: d.orgId, orgGenesisHash: d.orgGenesisHash }
+      : {};
   return {
     serverId: d.serverId,
     userId: d.userId,
@@ -63,6 +74,7 @@ export function parseConfig(data: unknown): ServerConfig {
     irkPublicKey: hexToBytes(d.irkPublicKey),
     ...(ownerAidPub ? { ownerAidPub } : {}),
     ...(adminRootPub ? { adminRootPub } : {}),
+    ...org,
   };
 }
 
