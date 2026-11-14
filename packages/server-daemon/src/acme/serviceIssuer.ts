@@ -1,6 +1,7 @@
 import acme from "acme-client";
 import { createHash, createPrivateKey, randomBytes, X509Certificate } from "node:crypto";
 import { serverWildcardGrantInDate, signServingRecord, type CertificateOrder } from "@flagship/protocol";
+import { readStateFile, removeDurable, writeFileDurable } from "../durableFile.js";
 
 /**
  * The box's side of `.com`'s certificate issuance service (docs/architecture-v2/issuance-service.md). The box makes
@@ -79,11 +80,17 @@ export class IssuanceUnreachable extends IssuanceRefused {
 const CALL_TIMEOUT_MS = 30_000;
 const POST_ATTEMPTS = 3;
 
+/** Past `.com`'s own order timeout (15 min) with room: an older saved order is not resumed. */
+const RESUME_MAX_AGE_MS = 60 * 60_000;
+/** A saved direct name's key: `direct:` and a lowercase DNS name. */
+const DIRECT_KEY = /^direct:((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)$/;
+
 interface PendingOrder {
   orderId: string;
   names: string[];
   privateKeyPem: string;
   handle: string | null;
+  placedAt: number;
   /** The answer the POST gave, followed first. */
   view: Record<string, unknown> | null;
 }
@@ -118,6 +125,9 @@ export interface ServiceIssuerOptions {
   pollIntervalMs?: number;
   timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** Where the orders in flight are kept (mode 0600), so a daemon restart follows them up instead of placing new ones:
+   *  a new box restarts several times on first boot, and each new order replaced the one `.com` was working on. */
+  pendingPath?: string;
 }
 
 /** The names a box class asks for, sorted the way `.com` derives them. */
@@ -132,8 +142,58 @@ export class ServiceIssuer {
   private readonly f: typeof fetch;
   /** By class, or `direct:<name>` for a direct name. */
   private readonly pending = new Map<string, PendingOrder>();
+  private restored: Promise<void> | null = null;
   constructor(private readonly o: ServiceIssuerOptions) {
     this.f = o.fetchImpl ?? fetch;
+  }
+
+  /** Reads the orders a previous run left in flight (once). An unreadable or stale file is dropped: the worst case is
+   *  one new order, as before. */
+  restore(): Promise<void> {
+    this.restored ??= (async () => {
+      if (!this.o.pendingPath) return;
+      const r = await readStateFile(this.o.pendingPath);
+      if (r.kind !== "ok") return;
+      const now = (this.o.now ?? Date.now)();
+      try {
+        const saved = JSON.parse(r.text) as Record<string, Partial<PendingOrder>>;
+        for (const [key, e] of Object.entries(saved)) {
+          const direct = DIRECT_KEY.exec(key)?.[1];
+          if (key !== "control" && key !== "apps" && !direct) continue;
+          if (!e || typeof e.orderId !== "string" || !/^[0-9a-f]{32}$/.test(e.orderId) || !Array.isArray(e.names)) continue;
+          if (direct && !(e.names.length === 1 && e.names[0] === direct)) continue;
+          if (typeof e.placedAt !== "number" || now - e.placedAt > RESUME_MAX_AGE_MS || e.placedAt > now + 60_000) continue;
+          if (this.pending.has(key)) continue;
+          this.pending.set(key, {
+            orderId: e.orderId,
+            names: e.names.map(String),
+            privateKeyPem: typeof e.privateKeyPem === "string" ? e.privateKeyPem : "",
+            handle: typeof e.handle === "string" ? e.handle : null,
+            placedAt: e.placedAt,
+            view: null,
+          });
+        }
+      } catch {
+        /* unreadable: nothing to resume */
+      }
+    })();
+    return this.restored;
+  }
+
+  private async savePending(): Promise<void> {
+    if (!this.o.pendingPath) return;
+    try {
+      if (this.pending.size === 0) return await removeDurable(this.o.pendingPath);
+      const out: Record<string, Omit<PendingOrder, "view">> = {};
+      for (const [key, p] of this.pending) out[key] = { orderId: p.orderId, names: p.names, privateKeyPem: p.privateKeyPem, handle: p.handle, placedAt: p.placedAt };
+      await writeFileDurable(this.o.pendingPath, JSON.stringify(out), 0o600);
+    } catch (e) {
+      console.warn(`[issuance] could not save the order in flight (${e instanceof Error ? e.message : String(e)}); a restart places a new one`);
+    }
+  }
+
+  private async dropPending(key: string): Promise<void> {
+    if (this.pending.delete(key)) await this.savePending();
   }
 
   names(cls: BoxCertClass): string[] {
@@ -172,10 +232,11 @@ export class ServiceIssuer {
    * an order abandoned after `.com` issued it left the box refused (`issuance-not-due`) for weeks (stack switch, gym 24).
    */
   async issue(cls: BoxCertClass): Promise<IssuedCertificate> {
+    await this.restore();
     const names = this.names(cls);
     let p = this.pending.get(cls);
     if (p && !sameNames(p.names, names)) {
-      this.pending.delete(cls);
+      await this.dropPending(cls);
       p = undefined;
     }
     if (!p) p = await this.place(cls, names);
@@ -186,6 +247,7 @@ export class ServiceIssuer {
   async issueDirect(name: string): Promise<IssuedCertificate<"direct">> {
     const fqdn = name.toLowerCase();
     const key = `direct:${fqdn}`;
+    await this.restore();
     const p = this.pending.get(key) ?? (await this.place("direct", [fqdn], key));
     return { ...(await this.follow(key, p)), cls: "direct" };
   }
@@ -228,8 +290,9 @@ export class ServiceIssuer {
     }
     const orderId = String(posted?.orderId ?? "");
     if (!/^[0-9a-f]{32}$/.test(orderId)) throw new IssuanceRefused("issuance-malformed", ".com answered without an order id", 502);
-    const p: PendingOrder = { orderId, names, privateKeyPem, handle, view: posted };
+    const p: PendingOrder = { orderId, names, privateKeyPem, handle, placedAt: now(), view: posted };
     this.pending.set(key, p);
+    await this.savePending();
     return p;
   }
 
@@ -249,14 +312,14 @@ export class ServiceIssuer {
       } catch (e) {
         // A poll that got no answer (or a busy answer) leaves the order where it was: ask again.
         if (!(e instanceof IssuanceUnreachable) && !(e instanceof IssuanceDeferred)) {
-          this.pending.delete(cls);
+          await this.dropPending(cls);
           throw e;
         }
         lastError = e.message;
         view = { status: "pending", pollAfterMs: Math.min(30_000, Math.max(5000, (this.o.pollIntervalMs ?? 5000) * 2)) };
       }
     }
-    this.pending.delete(cls);
+    await this.dropPending(cls);
     if (view.status !== "issued" || typeof view.chainPem !== "string") {
       throw new IssuanceRefused(String(view.code ?? "issuance-acme-failed"), String(view.error ?? "the certificate order failed"), 200);
     }

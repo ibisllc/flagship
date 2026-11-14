@@ -238,11 +238,14 @@ describe("one certificate per direct name through .com", () => {
       const env = { DB: db, ISSUANCE_ACME_ACCOUNT_KEY: await accountKeyPem(), ISSUANCE_ACME_DIRECTORY: ca.directory, SERVICES_APEX: "flagship.services" };
       const deps = { usernames: storage.usernames, grants: storage.deviceCapabilityGrants, dns, directDns: dns, fetchImpl: ca.fetch as typeof fetch, now: () => clock.t, propagationMs: 0, challengeQuietMs: 0 };
       const bodies: Array<Record<string, unknown>> = [];
+      let dropPolls = true;
       const comFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (dropPolls && init?.method !== "POST") throw new TypeError("network down");
         if (init?.method === "POST" && String(input).endsWith("/api/certificates/orders")) bodies.push(JSON.parse(String(init.body)));
         return (await tryIssuanceRoute(new Request(String(input), init), env, deps)) ?? new Response("{}", { status: 404 });
       }) as typeof fetch;
-      const issuer = new ServiceIssuer({
+      const pendingPath = join(dir, "issuance-pending.json");
+      const mkIssuer = (timeoutMs?: number) => new ServiceIssuer({
         controlPlaneBaseUrl: "https://flagshipserver.com",
         serverFqdn: SERVER,
         boxPubHex: hex(stk.publicKey),
@@ -255,7 +258,15 @@ describe("one certificate per direct name through .com", () => {
         sleep: async (ms) => {
           clock.t += ms;
         },
+        pendingPath,
+        ...(timeoutMs ? { timeoutMs } : {}),
       });
+      // The order is placed, its answer is lost, and the daemon restarts: the next process follows the same order.
+      const first = mkIssuer(60_000);
+      await expect(first.issueDirect(NAME)).rejects.toThrow();
+      expect(first.hasPendingDirect(NAME)).toBe(true);
+      dropPolls = false;
+      const issuer = mkIssuer();
       const certManager = new CertManager();
       const store = new PersistentAcmeStore(dir);
       const certs = new DirectCertificates({ issuer, certManager, store, names: () => [NAME], now: () => clock.t, log: () => {} });

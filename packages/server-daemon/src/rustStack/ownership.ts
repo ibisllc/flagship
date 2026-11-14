@@ -299,6 +299,9 @@ export async function autoCutover(o: {
   save: (next: RustOwnership) => Promise<void>;
   now?: () => number;
   log?: (m: string) => void;
+  /** Until then one owner is not taken alone while the other still waits: each move restarts the daemon, and a new
+   *  box took the proxy and then the reconciler minutes apart (two of its first-boot restarts). */
+  holdOneUntil?: number;
 }): Promise<boolean> {
   const cur = o.current();
   if (cur.chosenBy !== "default") return false;
@@ -307,6 +310,7 @@ export async function autoCutover(o: {
   const reconciler = cur.reconciler === "rust" || cutoverBlockers({ reconciler: "rust", proxy: cur.proxy }, cur, f).length === 0 ? "rust" : "shadow";
   const proxy = cur.proxy === "rust" || cutoverBlockers({ reconciler: cur.reconciler, proxy: "rust" }, cur, f).length === 0 ? "rust" : "ts";
   if (reconciler === cur.reconciler && proxy === cur.proxy) return false;
+  if (o.holdOneUntil !== undefined && (o.now ?? Date.now)() < o.holdOneUntil && (reconciler !== "rust" || proxy !== "rust")) return false;
   const next: RustOwnership = {
     ...cur,
     reconciler,

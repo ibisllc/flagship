@@ -96,6 +96,18 @@ describe("the arch-v2 default (owner, 2026-11-02): Rust owners once they qualify
     const again = await run(r.saved!, facts());
     expect(again.saved).toMatchObject({ reconciler: "rust", proxy: "rust", proxyAllow: ["10.89.0.0/24"] });
   });
+  it("in the first half hour waits to take both together, so a new box restarts once for them", async () => {
+    const waiting = facts({ core: { ok: true, mode: "serve", live: false, agreePasses: 1, lastShadow: "agree", at: 1 } });
+    let saved: RustOwnership | null = null;
+    const save = async (n: RustOwnership) => void (saved = n);
+    expect(await autoCutover({ current: () => DEFAULT_OWNERSHIP, facts: async () => waiting, save, now: () => 7, holdOneUntil: 100 })).toBe(false);
+    expect(saved).toBeNull();
+    expect(await autoCutover({ current: () => DEFAULT_OWNERSHIP, facts: async () => facts(), save, now: () => 8, holdOneUntil: 100 })).toBe(true);
+    expect(saved).toMatchObject({ reconciler: "rust", proxy: "rust" });
+    // After the hold, the proxy goes alone as before.
+    expect(await autoCutover({ current: () => DEFAULT_OWNERSHIP, facts: async () => waiting, save, now: () => 101, holdOneUntil: 100 })).toBe(true);
+    expect(saved).toMatchObject({ reconciler: "shadow", proxy: "rust" });
+  });
   it("does nothing on classic, nothing unqualified, and never overrides an owner's order (a rollback included)", async () => {
     expect((await run(DEFAULT_OWNERSHIP, facts({ stack: "classic", engine: "docker" }))).changed).toBe(false);
     expect((await run(DEFAULT_OWNERSHIP, facts({ coreChoice: "ts", ingressPinned: false }))).changed).toBe(false);

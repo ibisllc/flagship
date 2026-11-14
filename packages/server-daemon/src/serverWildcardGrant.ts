@@ -129,6 +129,6 @@ export function buildServerWildcardGrantHttp(o: { store: ServerWildcardGrantStor
       return { status: 403, headers: J, body: JSON.stringify({ error: "that grant was not signed by the account's admin, has expired, or is older than the one held" }) };
     }
     if (first) o.onFirstGrant();
-    return { status: 200, headers: J, body: JSON.stringify({ ok: true, restarting: first }) };
+    return { status: 200, headers: J, body: JSON.stringify({ ok: true, restarting: false }) };
   };
 }

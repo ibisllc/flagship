@@ -387,6 +387,7 @@ import { bootPqPaths, ensureBootPqMaterial, syncBootUnlockFiles } from "./bootPq
 import { ensureStkPqBinding } from "./pqKeyBinding.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
+import { installHostComponents } from "./hostComponents.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
@@ -822,25 +823,26 @@ async function main(): Promise<void> {
   // the keys load in-process as before, and says so; FLAGSHIP_KEYD_REQUIRED=1 refuses that.
   const keydSocket = process.env.FLAGSHIP_KEYD_SOCKET;
   const keyd: KeydCustodian | null = keydSocket && existsSync(keydSocket) ? new KeydCustodian({ socketPath: keydSocket, component: "daemon" }) : null;
-  if (!keyd && process.env.FLAGSHIP_KEYD_REQUIRED !== "1") {
-    // A box without keyd gets it now (root, systemd, keyd in this release). Its first start moves
-    // the keys in and removes the readable copies; this process then restarts to use it.
-    const outcome = await installKeyd({
-      repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
-      run: (cmd, args) => realUpdateCommandRunner(cmd, args),
-      onLog: (m) => console.log(m),
-    });
-    if (outcome === "installed") process.exit(0);
-  }
-  if (!keyd) {
-    if (process.env.FLAGSHIP_KEYD_REQUIRED === "1") {
-      console.error("[daemon] FLAGSHIP_KEYD_REQUIRED is set but flagship-keyd is not answering; refusing to hold keys in this process.");
-      process.exit(2);
+  // A box without keyd gets it now (root, systemd, keyd in this release); its first start moves the keys in and
+  // removes the readable copies. The TLS frontend and privd follow in the same start (hostComponents.ts), and the
+  // daemon restarts once into all of them.
+  const hostComponents = {
+    keydRunning: keyd !== null,
+    keydRequired: process.env.FLAGSHIP_KEYD_REQUIRED === "1",
+    tlsUpstreamSet: !!process.env.FLAGSHIP_TLS_UPSTREAM,
+    root: !runsUnprivileged() && process.getuid?.() === 0,
+  };
+  const reportKeyd = (keydUp: boolean) => {
+    if (!keyd) {
+      if (process.env.FLAGSHIP_KEYD_REQUIRED === "1") {
+        console.error("[daemon] FLAGSHIP_KEYD_REQUIRED is set but flagship-keyd is not answering; refusing to hold keys in this process.");
+        process.exit(2);
+      }
+      if (!keydUp) console.warn("[daemon] flagship-keyd is not running: the box keys are held in this process (weaker isolation).");
+    } else {
+      console.log(`[daemon] keys are held by flagship-keyd (box key ${Buffer.from(keyd.boxPublicKey()).toString("hex").slice(0, 16)}…)`);
     }
-    console.warn("[daemon] flagship-keyd is not running: the box keys are held in this process (weaker isolation).");
-  } else {
-    console.log(`[daemon] keys are held by flagship-keyd (box key ${Buffer.from(keyd.boxPublicKey()).toString("hex").slice(0, 16)}…)`);
-  }
+  };
 
   // ---- Architecture v2 path (engine-and-rust-path.md): engine, then the Rust units ----
   // Before anything starts a container: the engine is chosen (and Docker moved to Podman once,
@@ -881,46 +883,56 @@ async function main(): Promise<void> {
     note: (kind, detail, ok) => archV2SwitchHooks.note(kind, detail, ok),
     log: (m) => console.log(m),
   });
-  const archV2 = await bootArchV2({
-    repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
-    cmd: realCommandRunnerStatic,
-    run: (cmd, args) => realUpdateCommandRunner(cmd, args),
-    log: (m) => console.log(m),
-    switcher: archV2Switcher,
-  });
-
-  // GPUs (gpu/wire.ts): the pinned flagship-gpud on a box that has one; no-op without a GPU.
-  if (runsUnprivileged()) await installGpudAsRoot((m) => console.log(m));
-  else if (process.getuid?.() === 0) {
-    await installGpudFromRelease(process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship", archV2.engine, (m) => console.log(m));
-  }
-
-  // The TLS frontend goes in once keyd is answering and this release carries it.
-  if (keyd && !process.env.FLAGSHIP_TLS_UPSTREAM) {
-    const t = await installTlsd({
-      repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
-      run: (cmd, args) => realUpdateCommandRunner(cmd, args),
-      onLog: (m) => console.log(m),
-    });
-    if (t === "installed") process.exit(0);
-  }
-
-  // ---- flagship-privd (SEC-DAEMON-001) ----
-  // Once keyd holds the keys this process gives up root: flagship-privd does the few host operations
-  // it needs, and the daemon runs as `flagship`. Until privd answers it runs as root, as before.
-  if (runsUnprivileged()) {
-    const viaBroker = process.env.FLAGSHIP_PRIVD_SOCKET === BROKER_V1_SOCKET;
-    console.log(`[daemon] running as flagship; host operations go through flagship-privd${viaBroker ? `'s contract on ${BROKER_V1_SOCKET} (the Rust broker, TS privd as its fallback)` : ""}`);
-  } else if (process.getuid?.() === 0) {
-    if (keyd) {
-      const p = await installPrivd({
+  let archV2!: Awaited<ReturnType<typeof bootArchV2>>;
+  const installed = await installHostComponents({
+    ...hostComponents,
+    installKeyd: () =>
+      installKeyd({
+        repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+        run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+        onLog: (m) => console.log(m),
+      }),
+    afterKeyd: async (keydUp) => {
+      reportKeyd(keydUp);
+      archV2 = await bootArchV2({
+        repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+        cmd: realCommandRunnerStatic,
+        run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+        log: (m) => console.log(m),
+        switcher: archV2Switcher,
+      });
+      // GPUs (gpu/wire.ts): the pinned flagship-gpud on a box that has one; no-op without a GPU.
+      if (runsUnprivileged()) await installGpudAsRoot((m) => console.log(m));
+      else if (process.getuid?.() === 0) {
+        await installGpudFromRelease(process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship", archV2.engine, (m) => console.log(m));
+      }
+    },
+    // The TLS frontend goes in once keyd is answering and this release carries it.
+    installTlsd: () =>
+      installTlsd({
+        repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+        run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+        onLog: (m) => console.log(m),
+      }),
+    // ---- flagship-privd (SEC-DAEMON-001) ----
+    // Once keyd holds the keys this process gives up root: flagship-privd does the few host operations
+    // it needs, and the daemon runs as `flagship`. Until privd answers it runs as root, as before.
+    installPrivd: () =>
+      installPrivd({
         repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
         helper: privilegedHelperFor(archV2),
         run: (cmd, args) => realUpdateCommandRunner(cmd, args),
         onLog: (m) => console.log(m),
-      });
-      if (p === "switched") process.exit(0);
-    }
+      }),
+  });
+  if (installed.restartFor.length > 0) {
+    console.log(`[daemon] restarting once into: ${installed.restartFor.join("; ")}`);
+    process.exit(0);
+  }
+  if (runsUnprivileged()) {
+    const viaBroker = process.env.FLAGSHIP_PRIVD_SOCKET === BROKER_V1_SOCKET;
+    console.log(`[daemon] running as flagship; host operations go through flagship-privd${viaBroker ? `'s contract on ${BROKER_V1_SOCKET} (the Rust broker, TS privd as its fallback)` : ""}`);
+  } else if (process.getuid?.() === 0) {
     console.warn("[daemon] running as root: flagship-privd is not in yet (weaker isolation).");
   }
 
@@ -1556,6 +1568,7 @@ async function main(): Promise<void> {
       onLog: (m) => console.log(m),
     });
     swkPoller.start();
+    restarts.settle(() => swkPoller.pollOnce());
     onRing("swk", () => swkPoller.pollOnce());
     process.once("SIGTERM", () => swkPoller.stop());
     process.once("SIGINT", () => swkPoller.stop());
@@ -1590,6 +1603,7 @@ async function main(): Promise<void> {
       onLog: (m) => console.log(m),
     });
     cgkPoller.start();
+    restarts.settle(() => cgkPoller.pollOnce());
     onRing("cgk", () => cgkPoller.pollOnce());
     process.once("SIGTERM", () => cgkPoller.stop());
     process.once("SIGINT", () => cgkPoller.stop());
@@ -2567,12 +2581,12 @@ async function main(): Promise<void> {
     // The arch-v2 default is Rust (owner, 2026-11-02): with no order ever sent, each Rust owner is taken
     // once the cut-over rule clears it (core's agreeing passes, the pinned ingress), then the daemon restarts.
     if (rustOnBox && rustOwnership.chosenBy === "default") {
+      const holdOneUntil = Date.now() + 30 * 60_000;
       const tryCutover = () =>
-        void autoCutover({ current: () => rustOwnership, facts: ownershipFacts, save: (o) => saveOwnership(o), log: (m) => console.log(m) })
+        void autoCutover({ current: () => rustOwnership, facts: ownershipFacts, save: (o) => saveOwnership(o), log: (m) => console.log(m), holdOneUntil })
           .then((changed) => {
             if (!changed) return;
-            console.log("[rust-ownership] restarting so every component starts under the new setting");
-            process.exit(0);
+            restarts.request("[rust-ownership] every component starts under the new setting");
           })
           .catch((e: Error) => console.warn(`[rust-ownership] arch-v2 default not taken yet: ${e.message}`));
       const t = setInterval(tryCutover, 60_000);
@@ -4712,7 +4726,9 @@ async function wireRuntimeSurfaces(deps: {
     serverWildcardGrant: deps.wildcardGrants
       ? buildServerWildcardGrantHttp({
           store: deps.wildcardGrants,
-          onFirstGrant: () => restarts.request("the admin granted this server the account's app names; restarting to request the wider certificate"),
+          // The issuer reads the grant live, so the wider certificate is ordered in this run: a restart here dropped
+          // the order in flight on a new box's first boot.
+          onFirstGrant: () => runtime.renewCertificates?.(),
         })
       : null,
     chatApprovals: runtime.chat && cfg
