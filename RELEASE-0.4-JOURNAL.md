@@ -39,12 +39,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - Q1 **Calls:** ANSWERED by the plan found on branch `claude/sleepy-archimedes-pme2jy` (now on `release/0.4`):
   `docs/voici-calls.md` (a visitor calls the page owner's phone, audio only, WebRTC over TURNS to the phone's bare
   name) and the spike `docs/voici-calls-spike.md`. Its open decisions D1-D4 still need the owner.
-- Q2 **Preinstalled ISO:** an ISO/appliance with Flagship already installed that only needs pairing (no install
+- Q2 ANSWERED (owner 2026-11-13): it means RETAIL BOX SETUP: NFC tag in the box, or first-come BLE beam to nearby apps on plug-in (booklet: install the app first, return the box if someone raced you), and how to avoid MITM. Design agent writing `docs/retail-box-setup.md`. Old text: **Preinstalled ISO:** an ISO/appliance with Flagship already installed that only needs pairing (no install
   step)? For USB on metal, VMs, or retail boxes (`feat/retail`)? No design doc exists yet.
-- Q3 **Subscriptions:** = the Pro / Pro Max plans with anonymous vouchers from `feat/marketplace`
+- Q3 ANSWERED (owner 2026-11-13): EVERYTHING launches in 0.4 (marketplace, Pro/Pro Max, custom domains, custom names, outbound proxy); weigh privacy vs convenience of mixing Apple/Google/Stripe with vouchers/crypto. Design agent writing `docs/payments-privacy-and-rails.md`. Old text: **Subscriptions:** = the Pro / Pro Max plans with anonymous vouchers from `feat/marketplace`
   (`docs/anonymous-vouchers.md`, pricing in AGENTS.md)? Does the marketplace itself, custom domains, custom names and
   the outbound proxy launch in 0.4 too?
-- Q4 **UX feedback:** the owner's notes (paste them; they become lane U).
+- Q4 UX feedback arriving in messages (lane U).
 
 ## Plan
 
@@ -53,9 +53,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       1,000,011 (owner, 2026-11-08).
 - [ ] P1 OWNER: `release.sh --only 45`, the update-required notice for 0.2 apps (YubiKey; event = Play approval time;
       advisory id FSA-2026-001 proposed). Run from the Mac main checkout.
-- [ ] P2 OWNER (+ me watching): `release.sh --only 36`, the skipped reap + zone-health + gym sweep (the script now
+- [x] P2 OWNER (+ me watching): (DONE 2026-11-13 with the owner's verbal OK: reap dry run 40/40 kept, 0 orphaned, 1 UpCloud demo kept; gym sweep 0 servers/0 DNS; zone-health OK; the demo's 12 legacy records stay until P6) `release.sh --only 36`, the skipped reap + zone-health + gym sweep (the script now
       loads `GYM_ADMIN_SECRET` itself, `c3f3cbb71`; needs `FLAGSHIP_ADMIN_SECRET` too).
-- [ ] P3 F6b: the gym on a private test CA (`docs/gym-test-acme.md`, Pebble by default plus one real-LE lane per
+- [~] P3 (code merged on release/0.4 `8fd9b5552`; box seam on branch `0.4/gym-test-ca-gym-seam` for `gym`; NOT deployed: needs the Fly app `flagship-acme-gym` (~$2/mo), then the gym rollout in docs/gym-test-acme.md "As built") F6b: the gym on a private test CA (`docs/gym-test-acme.md`, Pebble by default plus one real-LE lane per
       release candidate). Code on `release/0.4`; the gym Worker and gym branch follow `gym-refresh.sh`.
       2026-11-13: code built on `0.4/gym-test-ca` (items 1-5, 8, release guard) and the box seam (item 7) on
       `0.4/gym-test-ca-gym-seam` (off `gym`); not merged, nothing deployed. Doc "As built" has the deviations.
@@ -76,11 +76,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       apps, Studios and servers until 0.3 ships". Keep the update-required sentences and `STUDIO_PIPE_MIN`.
 - [x] P8 (`1d6eceb57`) Delete `apps/com/src/legacyLateLogs.ts`, its cron call in `scheduled.ts` and its test (due "on or after
       2026-10-31", AGENTS.md GA close-out 5).
-- [ ] P9 Branches and tags: delete `hof-jay` (cherry-picked onto main 2026-11-06); look at and archive
+- [x] P9 (DONE 2026-11-13, owner OK: 5 branches archived under refs/archive/2026-11-13/ and deleted; stale harrywinner2 ref dropped; tags kept) Branches and tags: delete `hof-jay` (cherry-picked onto main 2026-11-06); look at and archive
       `claude/sleepy-archimedes-pme2jy`, `wip/coordination-2026-10-16`, `device-results/windows-2026-10-17` (and
       `-2026-11-05` once S1 has read it) under `refs/archive/2026-11-13/` with a list in `docs/archive/`; review the
       15 tags and the `harrywinner2` remote. Nothing deleted that is not on main by content or archived.
-- [ ] P10 The main checkout's leftovers: `gym-results-from-0.3/`, `dns-ent-experiment*.jsonl` (archive the useful
+- [x] P10 (DONE 2026-11-13, owner OK: moved to ~/flagship-local-backup-2026-11-07/main-checkout-leftovers-2026-11-13/; *.pem ignored `.gitignore`) The main checkout's leftovers: `gym-results-from-0.3/`, `dns-ent-experiment*.jsonl` (archive the useful
       results, then remove), `apps/mobile/android/keystore/upload_certificate.pem` (keep out of git: add it to the
       keystore's ignore). OWNER confirms before anything is deleted.
 - [ ] P11 Production leftovers, one at a time (never a bulk wipe): throwaway prod accounts from testing (e.g.
@@ -127,11 +127,17 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [ ] F12 The Studio pairing refusal must be visible: a 0.2 Studio refused by `STUDIO_PIPE_MIN` loops on new QR codes
       (found 2026-11-13 on the owner's Mac); the current Studios must show the relay's `error` reason and stop.
 - [ ] F13 Repo housekeeping: rebase the remaining feature branches and `gym` (0.4 list), smallest first.
+- [ ] F15 Rate limits (first check, 2026-11-13, 30 days): `builder-pipe-upgrade` refused 2,685 from 339 sources (likely 0.2
+      Studios looping on the STUDIO_PIPE_MIN refusal, see F12); `account-resolve` refused 6,019 across 1,224 usernames
+      with 23 accounts in D1 (enumeration, or a client looping on unknown names?): find the callers' pattern, fix.
 - [ ] F14 The parked "after launch" work (from P14): second relay by DNS round-robin, Rust production
       qualification (G10), removal of old implementations once proven (G8), gym IPv6-only, `VOICI_CANONICAL`.
 
 ### U. UX feedback lane (parallel; owner's notes, Q4)
 - [ ] U1 Write each note as an item here with the screen and platform; iOS first, then port (memory rule).
+- [ ] U2 (owner 2026-11-13) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
+      bubble in a green circle reads oddly), and simplify the page (details in the owner's next messages). All apps,
+      all languages.
 
 ### R. Release
 - [ ] R1 Gym on the test CA, full run green (one green run per group is enough; LE failures are logged, not rerun).
@@ -155,6 +161,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   under root dockerd, never-reviewed flagship-wasi/runtime/crypto/typed.rs, strict servers refuse their own Ed25519
   health reports, gpud residuals, no external review of the new crypto. Found: runtime manifest expires ~2026-12-20
   (P1b); owner decision on translating `.com` refusal sentences. Next: S2, show the owner the grouped list.
+
+- 2026-11-13 Merged P3 code (gym test CA, 7 commits). Owner answers: P1/P2 with verbal permission (P2 done, all
+  clean; P1 needs the YubiKey, waits for the owner), Q2 = retail box setup, Q3 = everything launches, D1-D4 next,
+  cleanup OK (P9, P10 done), first UX note (U2: Messages -> Social). P4 rate-limit check run (F15). Design agents
+  started: retail box setup, payments rails.
 
 ## Resume point
 
