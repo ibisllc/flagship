@@ -339,6 +339,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   points to the phone (shell **v210**). LEFT: Android screens, Rust port, BlueZ GATT peripheral, real radio run.
   Owner Qs: one Face ID instead of two (reuse the create flow's unsealed admin key)?; alarm "untrusted" state;
   matching key but no cert yet = done or wait?; hide the retail entry on store builds until hardware?
+- 2026-11-14 Owner (retail): ONE Face ID for the claim; HTTPS everywhere + smooth UX, so the claim waits for the
+  box's certificate before "done"; the alarm gets a real "untrusted" state; the retail entry SHOWS on store builds:
+  an online sales channel starts with 0.4 (so the box-side BlueZ GATT peripheral and Android screens are 0.4 work).
+  Agents: `0.4/retail-apps-2` (iOS fixes + Android screens), `0.4/retail-bluez` (box GATT peripheral + daemon wiring).
 
 ## Resume point
 
