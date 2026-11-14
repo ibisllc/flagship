@@ -10,3 +10,5 @@ export * from "./setupCode.js";
 export * from "./transport.js";
 export * from "./wipeVerifier.js";
 export * from "./keydIdentity.js";
+export * from "./bluez.js";
+export * from "./dbus.js";
