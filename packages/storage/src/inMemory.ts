@@ -117,6 +117,7 @@ import type {
   VoiciNameRecord,
   VoiciNameReleaseReason,
   VoiciNameStorage,
+  VoiciNameChangeKind,
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
@@ -2119,7 +2120,7 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
 
 /** Custom link names: `link` rows of the shared names registry; the change log is kept here. */
 export class InMemoryVoiciNameStorage implements VoiciNameStorage {
-  private changes: Array<{ username: string; serviceId: string; at: number; nonce: string }> = [];
+  private changes: Array<{ username: string; serviceId: string; at: number; nonce: string; op: "set" | "clear"; counted: boolean }> = [];
   constructor(readonly names: InMemoryNameRegistryStorage = new InMemoryNameRegistryStorage()) {}
   private static rec(r: NameRecord): VoiciNameRecord {
     return {
@@ -2203,15 +2204,28 @@ export class InMemoryVoiciNameStorage implements VoiciNameStorage {
     const r = this.liveRows().find((x) => x.name === key);
     if (r) r.warned = warned;
   }
-  async recordChange(username: string, serviceId: string, at: number, nonce: string) {
-    this.changes.push({ username: username.toLowerCase(), serviceId, at, nonce });
+  async recordChange(username: string, serviceId: string, at: number, nonce: string, kind: VoiciNameChangeKind = { op: "set", counted: true }) {
+    this.changes.push({ username: username.toLowerCase(), serviceId, at, nonce, op: kind.op, counted: kind.counted });
   }
   async nonceUsed(nonce: string) {
     return this.changes.some((c) => c.nonce === nonce);
   }
   async changesForService(username: string, serviceId: string, since: number) {
     const u = username.toLowerCase();
-    return this.changes.filter((c) => c.username === u && c.serviceId === serviceId && c.at >= since).map((c) => c.at).sort((a, b) => a - b);
+    return this.changes
+      .filter((c) => c.username === u && c.serviceId === serviceId && c.at >= since && c.counted)
+      .map((c) => c.at)
+      .sort((a, b) => a - b);
+  }
+  async lastChangeForService(username: string, serviceId: string) {
+    const u = username.toLowerCase();
+    let last: (typeof this.changes)[number] | undefined;
+    for (const c of this.changes) if (c.username === u && c.serviceId === serviceId && (!last || c.at >= last.at)) last = c;
+    return last ? { at: last.at, op: last.op, counted: last.counted } : undefined;
+  }
+  async claimsForUser(username: string, since: number) {
+    const u = username.toLowerCase();
+    return this.changes.filter((c) => c.username === u && c.op === "set" && c.at >= since).map((c) => c.at).sort((a, b) => a - b);
   }
   async countChangesForUser(username: string, since: number) {
     const u = username.toLowerCase();

@@ -3,6 +3,8 @@ import { deriveIRK, ed, signVoiciNameOrder, type Keypair, type VoiciNameOrder } 
 import { InMemoryStorage } from "@flagship/storage";
 import {
   VOICI_CHANGES_PER_ACCOUNT_DAY,
+  VOICI_CLAIM_BUDGETS,
+  VOICI_CORRECTION_MS,
   VOICI_NAME_INACTIVE_MS,
   VOICI_NAME_LIMITS,
   checkVoiciName,
@@ -179,7 +181,8 @@ describe("handleVoiciNameSet", () => {
     expect((await clear(deps)).status).toBe(200);
     expect((await s.voiciNames.get("mynotes"))?.releaseReason).toBe("cleared");
     expect((await clear(deps)).status).toBe(200);
-    expect(await s.voiciNames.changesForService("alice", SVC, 0)).toHaveLength(2);
+    // The clear came within the correction window, so only the set counts; clearing nothing records nothing.
+    expect(await s.voiciNames.changesForService("alice", SVC, 0)).toHaveLength(1);
   });
 
   it("setting the same name again changes nothing and counts nothing; a look-alike of it is taken", async () => {
@@ -249,7 +252,7 @@ describe("handleVoiciNameSet", () => {
       expect((await set(deps, `held${"abcdefg"[i]}name`, `alice--app${i}`)).status).toBe(200);
     }
     await s.tiers.put({ username: "alice", tier: "free", updatedAt: 2 });
-    clock.t += 2 * DAY; // past the daily brake the seven sets used up
+    clock.t += 8 * DAY; // past the daily brake the seven sets used up, and each service's weekly cooldown
     expect(code(await set(deps, "brandnew", "alice--fresh"))).toBe("name-limit");
     expect(code(await set(deps, "swapped-it", "alice--app0"))).toBe("name-limit");
     expect((await clear(deps, "alice--app0")).status).toBe(200);
@@ -261,14 +264,18 @@ describe("handleVoiciNameSet", () => {
     expect((await set(deps, "brandnew", "alice--fresh")).status).toBe(200);
   });
 
-  it("allows three changes to a service in 30 days, then says when the next one is allowed", async () => {
+  it("allows one change to a service a week and three in 30 days, then says when the next one is allowed", async () => {
     const { deps, clock } = await setup();
-    await set(deps, "namea1x");
+    expect((await set(deps, "namea1x")).status).toBe(200);
     clock.t += DAY;
-    await set(deps, "nameb2x");
-    clock.t += DAY;
-    await set(deps, "namec3x");
-    clock.t += DAY;
+    const soon = await set(deps, "nameb2x");
+    expect(soon.status).toBe(429);
+    expect(soon.body).toMatchObject({ code: "change-limit", nextChangeAt: NOW + 7 * DAY });
+    clock.t = NOW + 8 * DAY;
+    expect((await set(deps, "nameb2x")).status).toBe(200);
+    clock.t = NOW + 16 * DAY;
+    expect((await set(deps, "namec3x")).status).toBe(200);
+    clock.t = NOW + 24 * DAY;
     const r = await set(deps, "named4x");
     expect(r.status).toBe(429);
     expect(r.body).toMatchObject({ code: "change-limit", nextChangeAt: NOW + 30 * DAY });
@@ -278,7 +285,66 @@ describe("handleVoiciNameSet", () => {
     expect((await set(deps, "named4x")).status).toBe(200);
   });
 
-  it("the live gym's sequence (named-links): refusals count nothing, a 3-character name is valid, and set + replace + clear use all three changes", async () => {
+  it("a change within 15 minutes of a set corrects it without counting, once", async () => {
+    const { deps, s, clock } = await setup();
+    expect((await set(deps, "hallowenparty")).status).toBe(200);
+    expect((await voiciLinkState(deps, "alice", SVC)).correctionUntil).toBe(NOW + VOICI_CORRECTION_MS);
+    clock.t += 5 * 60_000;
+    expect((await set(deps, "halloweenparty")).status).toBe(200);
+    // The typo is retired like any given-up name (D7).
+    expect((await s.voiciNames.get("hallowenparty"))?.state).toBe("retired");
+    expect(await s.voiciNames.changesForService("alice", SVC, 0)).toEqual([NOW]);
+    const st = await voiciLinkState(deps, "alice", SVC);
+    expect(st).toMatchObject({ name: "halloweenparty", correctionUntil: null, changesLeft: 0, nextChangeAt: NOW + 7 * DAY });
+    clock.t += 60_000;
+    expect(await set(deps, "halloween-bash")).toMatchObject({ status: 429, body: { code: "change-limit", nextChangeAt: NOW + 7 * DAY } });
+  });
+
+  it("after the correction window a change counts", async () => {
+    const { deps, clock } = await setup();
+    await set(deps, "mynotes");
+    clock.t += VOICI_CORRECTION_MS;
+    expect(await voiciLinkState(deps, "alice", SVC)).toMatchObject({ correctionUntil: null, changesLeft: 0, nextChangeAt: NOW + 7 * DAY });
+    expect(code(await set(deps, "othernotes"))).toBe("change-limit");
+  });
+
+  it("giving up the name of an app no server runs any more is never limited", async () => {
+    const { deps, s, clock } = await setup();
+    let running = true;
+    const d: VoiciNamesDeps = { ...deps, appRunning: async () => running };
+    await set(d, "mynotes");
+    clock.t += DAY;
+    expect(code(await clear(d))).toBe("change-limit");
+    running = false;
+    expect((await clear(d)).status).toBe(200);
+    expect((await s.voiciNames.get("mynotes"))?.state).toBe("retired");
+    expect(await s.voiciNames.changesForService("alice", SVC, 0)).toEqual([NOW]);
+  });
+
+  it("holds the account to its plan's claims in 30 days, corrections included, and says when the next is allowed", async () => {
+    const { deps, s, clock } = await setup();
+    const budget = VOICI_CLAIM_BUDGETS.free;
+    let n = 0;
+    for (let i = 0; n < budget; i++) {
+      // Two claims a day (a set and its correction) keep under the daily brake.
+      clock.t = NOW + i * DAY;
+      expect((await set(deps, `claimed${i}a`, `alice--c${i}`)).status).toBe(200);
+      expect((await set(deps, `claimed${i}b`, `alice--c${i}`)).status).toBe(200);
+      n += 2;
+    }
+    expect(await s.voiciNames.countLive("alice")).toBe(budget / 2);
+    clock.t += 8 * DAY; // past every service's weekly cooldown: only the account's budget is left in the way
+    const r = await set(deps, "onemoreclaim", "alice--c0");
+    expect(r.status).toBe(429);
+    expect(r.body).toMatchObject({ code: "change-limit", nextChangeAt: NOW + 30 * DAY, scope: "account" });
+    expect((await voiciLinkState(deps, "alice", "alice--c0"))).toMatchObject({ claimsLeft: 0, claimBudget: budget, changesLeft: 0 });
+    // A clear is not a claim.
+    expect((await clear(deps, "alice--c1")).status).toBe(200);
+    clock.t = NOW + 30 * DAY + 1;
+    expect((await set(deps, "onemoreclaim", "alice--c0")).status).toBe(200);
+  });
+
+  it("the live gym's sequence (named-links): refusals count nothing, a 3-character name is valid, a quick replace is a correction, then the week's cooldown", async () => {
     const { deps } = await setup();
     expect((await set(deps, "gym-d6a338-link")).status).toBe(200);
     expect(code(await set(deps, "admin"))).toBe("taken");
@@ -288,13 +354,13 @@ describe("handleVoiciNameSet", () => {
     expect(await checkVoiciName(deps, "alice", SVC, "gymd6a338link")).toEqual({ status: "taken" });
     // "abc" is a valid name (3 to 30): setting it is a real change, which is what run 32's group did by mistake.
     expect(await checkVoiciName(deps, "alice", SVC, "abc")).toEqual({ status: "available" });
-    expect((await set(deps, "gym-d6a338-link-two")).status).toBe(200);
-    const cleared = await clear(deps);
-    expect(cleared.status).toBe(200);
-    expect((cleared.body as { link: { name: string | null; changesLeft: number } }).link).toMatchObject({ name: null, changesLeft: 0 });
-    const fourth = await set(deps, "gym-d6a338-link-three");
-    expect(fourth.status).toBe(429);
-    expect(fourth.body).toMatchObject({ code: "change-limit", nextChangeAt: NOW + 30 * DAY });
+    const corrected = await set(deps, "gym-d6a338-link-two");
+    expect(corrected.status).toBe(200);
+    expect((corrected.body as { link: { name: string | null; changesLeft: number } }).link).toMatchObject({ name: "gym-d6a338-link-two", changesLeft: 0 });
+    const third = await set(deps, "gym-d6a338-link-three");
+    expect(third.status).toBe(429);
+    expect(third.body).toMatchObject({ code: "change-limit", nextChangeAt: NOW + 7 * DAY });
+    expect(code(await clear(deps))).toBe("change-limit");
   });
 
   it("applies a brake of ten changes a day to the whole account", async () => {
@@ -321,15 +387,18 @@ describe("handleVoiciNameSet", () => {
 describe("voiciLinkState and the names list", () => {
   it("reports the name, the slots and the changes left", async () => {
     const { deps, clock } = await setup();
-    expect(await voiciLinkState(deps, "alice", SVC)).toMatchObject({ name: null, held: 0, limit: 5, changesLeft: 3, nextChangeAt: null, releasesAt: null });
+    expect(await voiciLinkState(deps, "alice", SVC)).toMatchObject({
+      name: null, held: 0, limit: 5, changesLeft: 3, nextChangeAt: null, releasesAt: null, correctionUntil: null, claimsLeft: 10, claimBudget: 10,
+    });
     await set(deps, "mynotes");
-    clock.t += DAY;
+    clock.t += 8 * DAY;
     await set(deps, "othername");
-    clock.t += DAY;
+    clock.t += 8 * DAY;
     await set(deps, "thirdname");
+    clock.t += 8 * DAY;
     const st = await voiciLinkState(deps, "alice", SVC);
-    expect(st).toMatchObject({ name: "thirdname", held: 1, changesLeft: 0, nextChangeAt: NOW + 30 * DAY });
-    expect(st.releasesAt).toBe(NOW + 2 * DAY + VOICI_NAME_INACTIVE_MS);
+    expect(st).toMatchObject({ name: "thirdname", held: 1, changesLeft: 0, nextChangeAt: NOW + 30 * DAY, claimsLeft: 7 });
+    expect(st.releasesAt).toBe(NOW + 16 * DAY + VOICI_NAME_INACTIVE_MS);
   });
 
   it("lists the account's live names", async () => {

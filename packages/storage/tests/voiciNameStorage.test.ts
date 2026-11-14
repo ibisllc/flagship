@@ -111,6 +111,21 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
       expect(await s.pruneChanges(250)).toBe(2);
       expect(await s.countChangesForUser("fresh-poppy", 0)).toBe(1);
     });
+
+    it("corrections are left out of the service's count; claims are sets only (migration 0137)", async () => {
+      const s = make();
+      await s.recordChange("fresh-poppy", "fresh-poppy--a", 100, "n1");
+      await s.recordChange("fresh-poppy", "fresh-poppy--a", 200, "n2", { op: "set", counted: false });
+      await s.recordChange("fresh-poppy", "fresh-poppy--b", 300, "n3", { op: "clear", counted: true });
+      await s.recordChange("rapid-bison", "rapid-bison--a", 400, "n4");
+      expect(await s.changesForService("fresh-poppy", "fresh-poppy--a", 0)).toEqual([100]);
+      expect(await s.lastChangeForService("fresh-poppy", "fresh-poppy--a")).toEqual({ at: 200, op: "set", counted: false });
+      expect(await s.lastChangeForService("fresh-poppy", "fresh-poppy--b")).toEqual({ at: 300, op: "clear", counted: true });
+      expect(await s.lastChangeForService("fresh-poppy", "fresh-poppy--c")).toBeUndefined();
+      expect(await s.claimsForUser("fresh-poppy", 0)).toEqual([100, 200]);
+      expect(await s.claimsForUser("fresh-poppy", 150)).toEqual([200]);
+      expect(await s.nonceUsed("n2")).toBe(true);
+    });
   });
 }
 

@@ -103,15 +103,16 @@ export const namedLinks: Group = {
       assert(r.json?.status === "taken", `look-alike ${short(r.text)}`);
       return `current, ${r.json?.status}`;
     });
-    await rec.check("a replace and a clear use the other two changes; the fourth is refused with a date", async () => {
+    // A change within 15 minutes of a set is a free correction; after it the service waits out the weekly cooldown.
+    await rec.check("a replace within 15 minutes is a free correction; the next change and a clear are refused with a date", async () => {
       const rep = await setName(`${name}-two`);
-      assert(rep.status === 200, `replace refused ${rep.status}: ${short(rep.text)}`);
-      const clr = await setName("");
-      assert(clr.status === 200 && clr.json?.link?.name === null, `clear refused ${clr.status}: ${short(clr.text)}`);
+      assert(rep.status === 200 && rep.json?.link?.name === `${name}-two`, `correction refused ${rep.status}: ${short(rep.text)}`);
       const r = await setName(`${name}-three`);
-      assert(r.status === 429, `fourth change got ${r.status}`);
-      assert(r.json?.code === "change-limit" && Number(r.json?.nextChangeAt) > Date.now(), `body ${short(r.text)}`);
-      return "change-limit";
+      assert(r.status === 429, `third change got ${r.status}`);
+      assert(r.json?.code === "change-limit" && Number(r.json?.nextChangeAt) > Date.now() + 6 * 86_400_000, `body ${short(r.text)}`);
+      const clr = await setName("");
+      assert(clr.status === 429 && clr.json?.code === "change-limit", `clear got ${clr.status}: ${short(clr.text)}`);
+      return "correction, then change-limit";
     });
 
     // ---- the canonical address ----
