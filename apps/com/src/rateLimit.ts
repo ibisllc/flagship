@@ -68,6 +68,11 @@ export type RateLimitEndpoint =
   | "voici-name-set"
   | "auth-code-issue"
   | "server-register"
+  // Retail box claims (docs/retail-box-setup.md): the phone's box-key pre-registration, and the remote-claim
+  // mailbox. A box with a live setup code polls its mailbox (slowly when idle), so reads get a wide budget.
+  | "box-claim-key"
+  | "box-claim-mailbox-post"
+  | "box-claim-mailbox-read"
   | "recovery-by-username"
   // SEC-REPAIR-001: the challenge a recovery passkey signs. Its own budget, so asking for one never
   // spends the 3-per-15-minutes passphrase attempts; tight enough that it is no free oracle.
@@ -304,6 +309,15 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "server-register": [
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "irk", limit: 5, windowSec: 3600 },
+  ],
+  "box-claim-key": [{ axis: "ip", limit: 20, windowSec: 3600 }],
+  "box-claim-mailbox-post": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+  ],
+  "box-claim-mailbox-read": [
+    { axis: "ip", limit: 120, windowSec: 60 },
+    { axis: "ip", limit: 1500, windowSec: 3600 },
   ],
   "recovery-by-username": [
     { axis: "ip", limit: 10, windowSec: 3600 },
@@ -764,6 +778,11 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && (pathname === "/api/account/name-change" || pathname === "/api/account/name-change/quote")) return "name-dibs";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
+  if (m === "POST" && pathname === "/api/box-claim/key") return "box-claim-key";
+  if (/^\/api\/box-claim\/mailbox\/[0-9a-f]{64}\/(?:to-box|to-phone)$/.test(pathname)) {
+    if (m === "POST") return "box-claim-mailbox-post";
+    if (m === "GET") return "box-claim-mailbox-read";
+  }
   // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:
   // both are bounded by the single pending row they act on, and rate-
   // limiting a finalization would strand a legitimate recovery.

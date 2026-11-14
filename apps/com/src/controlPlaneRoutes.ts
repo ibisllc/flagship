@@ -139,6 +139,9 @@ import {
   handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
+  handleBoxClaimKey,
+  handleBoxClaimMailboxPost,
+  handleBoxClaimMailboxRead,
   handleRevokeServer,
   handleUnrevokeServer,
   handleServerReleaseName,
@@ -680,6 +683,8 @@ const ROUTE_RE = {
   AUTH_CODE_REVOKE: /^\/api\/auth-code\/([^/]+)\/revoke$/,
   AUTH_CODE_LOOKUP: /^\/api\/auth-code\/([^/]+)$/,
   SERVER_REGISTER: /^\/api\/server\/register$/,
+  BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
+  BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
   SERVER_RELEASE: /^\/api\/server\/release$/,
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
   SERVER_REVOKE_BY_SELF: /^\/api\/server\/by-domain\/([^/]+)\/revoke$/,
@@ -1426,6 +1431,7 @@ export async function tryControlPlane(
         {
           authCodes: storage.authCodes,
           servers: storage.servers,
+          boxClaims: storage.boxClaims,
           usernames: storage.usernames,
           routing: storage.routing,
           dns,
@@ -1440,6 +1446,20 @@ export async function tryControlPlane(
         await readJson(request),
       ),
     );
+  }
+  // Retail box claims (docs/retail-box-setup.md §4 step 8, §15.1): the admin device's box-key
+  // pre-registration, and the blind mailbox of a remote claim by setup code.
+  if (method === "POST" && ROUTE_RE.BOX_CLAIM_KEY.test(path)) {
+    return finish(
+      await handleBoxClaimKey(
+        { boxClaims: storage.boxClaims, authCodes: storage.authCodes, usernames: storage.usernames, grants: storage.deviceCapabilityGrants },
+        await readJson(request),
+      ),
+    );
+  }
+  if ((m = path.match(ROUTE_RE.BOX_CLAIM_MAILBOX))) {
+    if (method === "POST") return finish(await handleBoxClaimMailboxPost({ boxClaims: storage.boxClaims }, m[1]!, m[2]!, await readJson(request)));
+    if (method === "GET") return finish(await handleBoxClaimMailboxRead({ boxClaims: storage.boxClaims }, m[1]!, m[2]!, url.searchParams.get("after")));
   }
   if (method === "POST" && ROUTE_RE.SERVER_RELEASE.test(path)) {
     // Owner-signed "cancel the server / free the name". Releases the RCK
