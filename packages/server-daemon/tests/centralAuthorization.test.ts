@@ -100,7 +100,9 @@ describe("route family inventory", () => {
     }
     // /api/... prefixes that belong to other hosts or are only mentioned in text.
     // Calls this box makes to Flagship, text in prompts/comments, and paths served by the apps themselves.
-    const ignore = new Set(["/api/adapters", "/api/boot", "/api/inference", "/api/items", "/api/public", "/api/publicity", "/api/v", "/api/health", "/api/server", "/api/order", "/api/users", "/api/username", "/api/screens-events", "/api/free-ai", "/api/leads", "/api/releases", "/api/notices", "/api/accounts", "/api/dev", "/api/stats", "/api/services-zone", "/api/dns-01", "/api/admin", "/api/directory", "/api/data", "/api/config", "/api/lists", "/api/devices", "/api/auth", "/api/orders", "/api/sample", "/api/register", "/api/route", "/api/routing", "/api/dns", "/api/runtime"]);
+    // /api/box-claim is .com's blind claim mailbox, which a retail box polls; the box serves no claim route (the claim
+    // reaches it over Bluetooth or through that mailbox, authenticated by the box-claim handshake).
+    const ignore = new Set(["/api/adapters", "/api/boot", "/api/inference", "/api/items", "/api/public", "/api/publicity", "/api/v", "/api/health", "/api/server", "/api/order", "/api/users", "/api/username", "/api/screens-events", "/api/free-ai", "/api/leads", "/api/releases", "/api/notices", "/api/accounts", "/api/dev", "/api/stats", "/api/services-zone", "/api/dns-01", "/api/admin", "/api/directory", "/api/data", "/api/config", "/api/lists", "/api/devices", "/api/auth", "/api/orders", "/api/sample", "/api/register", "/api/route", "/api/routing", "/api/dns", "/api/runtime", "/api/box-claim"]);
     const missing = [...found].filter((p) => !(p in ROUTE_FAMILIES) && !ignore.has(p)).sort();
     expect(missing, `classify these route families in ROUTE_FAMILIES: ${missing.join(", ")}`).toEqual([]);
   });
@@ -113,5 +115,13 @@ describe("N06/N11/N14 routes", () => {
     expect(authorizeRoute("companion", "POST", "/api/screens/services/chess/publisher/trust")).toMatchObject({ allow: false });
     expect(authorizeRoute("companion", "POST", "/api/screens/services/chess/publisher/reject")).toMatchObject({ allow: false });
     expect(authorizeRoute("share", "POST", "/api/screens/ws-ticket")).toMatchObject({ allow: false });
+  });
+});
+
+describe("retail box routes", () => {
+  it("a Remote or co-manager session never reaches Release this box (the order itself needs the admin root)", () => {
+    expect(authorizeRoute("owner", "POST", "/api/screens/box-release")).toEqual({ allow: true });
+    expect(authorizeRoute("companion", "POST", "/api/screens/box-release")).toMatchObject({ allow: false });
+    expect(authorizeRoute("share", "POST", "/api/screens/box-release")).toMatchObject({ allow: false });
   });
 });
