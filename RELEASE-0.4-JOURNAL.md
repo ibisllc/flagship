@@ -294,6 +294,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `flagship/transport-consent/v1` (adapter hash, risk class, scopes, warning-text hash, expiry) enforced by the box.
   0.4 candidate: `host-ip` adapter (WireGuard/Tailscale/ZeroTier/Yggdrasil/meshes as host interfaces), 3-5 weeks;
   Tor 0.5; message adapters 0.5-0.6. Owner Qs in its §9 (8).
+- 2026-11-14 Merged design `docs/retail-wired-fleet.md` (wired data-centre trays): the webapp never talks to a tray on
+  the LAN; it reaches unclaimed trays only via .com's blind mailbox. Default proof = setup code on VGA/KVM/serial/BMC
+  SOL (3 presses; BMC soft-power counts); no-console trays: a .com claim lobby (same public IP) + arm-all + one press.
+  Batch claims, rack-position names, hot-replace via wipe-now + restore from peers, decommission = release wipe;
+  restricted egress yes, air-gapped no. Limits found: AuthCode 10/h, SERVER_ORDER_MAX 64, webapp classical-only.
+  Owner Qs Q-W1..Q-W11 in the doc.
 
 ## Resume point
 
