@@ -71,6 +71,10 @@ export type RateLimitEndpoint =
   // Retail box claims (docs/retail-box-setup.md): the phone's box-key pre-registration, and the remote-claim
   // mailbox. A box with a live setup code polls its mailbox (slowly when idle), so reads get a wide budget.
   | "box-claim-key"
+  // Enterprise orgs (docs/enterprise-accounts.md): every write verifies a chain of hybrid signatures,
+  // so writes are bounded per source and per org; reads are cheaper but re-verify the chain too.
+  | "org-write"
+  | "org-read"
   | "box-claim-mailbox-post"
   | "box-claim-mailbox-read"
   | "recovery-by-username"
@@ -311,6 +315,14 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "irk", limit: 5, windowSec: 3600 },
   ],
   "box-claim-key": [{ axis: "ip", limit: 20, windowSec: 3600 }],
+  "org-write": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+  ],
+  "org-read": [
+    { axis: "ip", limit: 60, windowSec: 60 },
+    { axis: "ip", limit: 1200, windowSec: 3600 },
+  ],
   "box-claim-mailbox-post": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 300, windowSec: 3600 },
@@ -758,6 +770,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/serving-leases$/.test(pathname)) return "serving-lease";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/(?:serving-policy|renewal-delegations)$/.test(pathname)) return "serving-signed";
+  if (/^\/api\/orgs(?:\/|$)/.test(pathname)) return m === "GET" ? "org-read" : "org-write";
   if (m === "POST" && pathname === "/api/certificates/orders") return "issuance-order";
   if (m === "GET" && /^\/api\/certificates\/orders\/[0-9a-f]{32}$/.test(pathname)) return "issuance-poll";
   if (m === "POST" && pathname === "/api/certificates/revoked") return "issuance-revoked";

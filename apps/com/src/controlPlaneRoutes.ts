@@ -283,6 +283,22 @@ import {
   type HandlerResponse,
   type HandlerResponseWithHeaders,
   type IsoManifest,
+  handleOrgAuthorityAppend,
+  handleOrgAuthorityGet,
+  handleOrgCeremonies,
+  handleOrgCeremonyApprove,
+  handleOrgCeremonyOpen,
+  handleOrgCreate,
+  handleOrgFreeze,
+  handleOrgInviteAccept,
+  handleOrgInviteCreate,
+  handleOrgInviteGet,
+  handleOrgLog,
+  handleOrgOverturn,
+  handleOrgRevoke,
+  handleOrgSeatGrant,
+  handleOrgSeatsGet,
+  handleOrgVeto,
 } from "@flagship/control-plane";
 import { D1Storage, D1DemoUsersStorage, D1MeterStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, RequestD1, type D1Database } from "@flagship/storage";
 import {
@@ -684,6 +700,10 @@ const ROUTE_RE = {
   AUTH_CODE_LOOKUP: /^\/api\/auth-code\/([^/]+)$/,
   SERVER_REGISTER: /^\/api\/server\/register$/,
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
+  ORGS: /^\/api\/orgs$/,
+  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log)$/,
+  ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
+  ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
   SERVER_RELEASE: /^\/api\/server\/release$/,
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
@@ -1446,6 +1466,38 @@ export async function tryControlPlane(
         await readJson(request),
       ),
     );
+  }
+  // Enterprise orgs (docs/enterprise-accounts.md): every object verified against the org's chain.
+  if (path.startsWith("/api/orgs")) {
+    const od = { orgs: storage.orgs, usernames: storage.usernames };
+    if (method === "POST" && ROUTE_RE.ORGS.test(path)) return finish(await handleOrgCreate(od, await readJson(request)));
+    if ((m = path.match(ROUTE_RE.ORG_CEREMONY_APPROVE)) && method === "POST") {
+      return finish(await handleOrgCeremonyApprove(od, m[1]!, m[2]!, await readJson(request)));
+    }
+    if ((m = path.match(ROUTE_RE.ORG_INVITE))) {
+      if (m[3] && method === "POST") return finish(await handleOrgInviteAccept(od, m[1]!, m[2]!, await readJson(request)));
+      if (!m[3] && method === "GET") return finish(await handleOrgInviteGet(od, m[1]!, m[2]!));
+    }
+    if ((m = path.match(ROUTE_RE.ORG_SUB))) {
+      const [, orgId, sub] = m as unknown as [string, string, string];
+      if (method === "GET") {
+        if (sub === "authority") return finish(await handleOrgAuthorityGet(od, orgId));
+        if (sub === "seats") return finish(await handleOrgSeatsGet(od, orgId));
+        if (sub === "ceremonies") return finish(await handleOrgCeremonies(od, orgId));
+        if (sub === "log") return finish(await handleOrgLog(od, orgId, Number(url.searchParams.get("after") ?? "0")));
+      }
+      if (method === "POST") {
+        const body = await readJson(request);
+        if (sub === "authority") return finish(await handleOrgAuthorityAppend(od, orgId, body));
+        if (sub === "invites") return finish(await handleOrgInviteCreate(od, orgId, body));
+        if (sub === "seats") return finish(await handleOrgSeatGrant(od, orgId, body));
+        if (sub === "revokes") return finish(await handleOrgRevoke(od, orgId, body));
+        if (sub === "freezes") return finish(await handleOrgFreeze(od, orgId, body));
+        if (sub === "overturns") return finish(await handleOrgOverturn(od, orgId, body));
+        if (sub === "vetoes") return finish(await handleOrgVeto(od, orgId, body));
+        if (sub === "ceremonies") return finish(await handleOrgCeremonyOpen(od, orgId, body));
+      }
+    }
   }
   // Retail box claims (docs/retail-box-setup.md §4 step 8, §15.1): the admin device's box-key
   // pre-registration, and the blind mailbox of a remote claim by setup code.

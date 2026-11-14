@@ -1160,6 +1160,7 @@ export function deriveOrgSeatMemberSeeds(umk: Bytes, orgId: string): { edSeed: B
 // ── the authority predicate ─────────────────────────────────────────────
 
 export type OrgAction =
+  | { kind: "seat-invite" }
   | { kind: "seat-grant"; roles: OrgSeatRole[] }
   | { kind: "seat-revoke" }
   | { kind: "freeze" }
@@ -1232,6 +1233,7 @@ export function authorizeOrgOrder(input: OrgAuthorizeInput): OrgAuthorizeResult 
   switch (action.kind) {
     case "seat-grant":
       return need(orgGrantThreshold(at, action.roles));
+    case "seat-invite":
     case "seat-revoke":
     case "freeze":
       return need(1);
@@ -1252,6 +1254,29 @@ export function authorizeOrgOrder(input: OrgAuthorizeInput): OrgAuthorizeResult 
     default:
       return fail("malformed", "action");
   }
+}
+
+/**
+ * The seats whose approvals of `order` verify: anyone in the current record (any kind) or a seat with
+ * an admin key, not frozen now, under the current record (or the previous one within 24 h). Counts
+ * nothing: for collecting a ceremony and for vetoes, whose weight the chain decides.
+ */
+export function verifyOrgApprovers(state: OrgAuthorityState, book: OrgSeatBook, order: Bytes, approvals: readonly OrgApproval[], now: number): string[] {
+  const cur = state.current;
+  if (approvals.length === 0) fail("threshold", "no approvals");
+  const prev = state.records.find((r) => r.version === cur.version - 1);
+  const version = approvals[0]!.oarVersion;
+  if (version !== cur.version && !(prev && version === prev.version && now - cur.issuedAt <= ORG_PREVIOUS_OAR_GRACE_MS)) fail("stale-oar");
+  const at = version === cur.version ? cur : prev!;
+  for (const a of approvals) if (a.notAfter < now) fail("expired", a.seatId);
+  const keyOf = (s: string) => {
+    const here = at.admins.find((a) => a.seatId === s);
+    if (here) return cur.admins.some((a) => a.seatId === s && sameAdmin(a, here)) ? state.bindings.get(bindingKey(at.version, s)) : undefined;
+    if (book.revoked.has(s)) return undefined;
+    return book.seats.get(s)?.admin ?? undefined;
+  };
+  const frozenNow = (s: string) => book.freezes.some((f) => f.seatId === s && f.issuedAt <= now && now < f.untilMs);
+  return checkApprovals(approvals, { orgId: state.orgId, oarVersion: version, order, now }, keyOf, (s) => frozenNow(s));
 }
 
 /** The seat a sign-in key belongs to (member or admin key), for the box's sign-in classes. */
