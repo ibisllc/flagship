@@ -79,6 +79,20 @@ export const POWER_KEY_BURST_RESET = 5;
 export const BOX_SETUP_CODE_TTL_MS = 24 * 3600_000;
 export const BOX_SETUP_CODE_CHARS = 20;
 
+/**
+ * GATT layout of the box's claim peripheral (§7.2, §11.1). The advert carries the service UUID; the
+ * scan response carries service data under it (10 bytes: version 1, state 1 unclaimed or 2
+ * reset-window, then the first 8 bytes of the random per-boot advert id). Both fit a legacy advert.
+ */
+export const BOX_CLAIM_BLE_SERVICE_UUID = "6f3c1a00-5e1b-4f0a-9c55-f1a95e5b0c01";
+/** Phone to box frames (write without response). */
+export const BOX_CLAIM_BLE_INBOX_UUID = "6f3c1a01-5e1b-4f0a-9c55-f1a95e5b0c01";
+/** Box to phone frames (notify). */
+export const BOX_CLAIM_BLE_OUTBOX_UUID = "6f3c1a02-5e1b-4f0a-9c55-f1a95e5b0c01";
+export const BOX_CLAIM_ADVERT_VERSION = 1;
+export const BOX_CLAIM_ADVERT_ID_BYTES = 8;
+export const BOX_CLAIM_ADVERT_STATE_BYTE: Record<BoxClaimAdvertState, number> = { unclaimed: 1, "reset-window": 2 };
+
 export const BOX_CLAIM_MAX_RECORD = 64 * 1024;
 export const BOX_CLAIM_DIR_PHONE = 1;
 export const BOX_CLAIM_DIR_BOX = 2;

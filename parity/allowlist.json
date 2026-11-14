@@ -598,11 +598,6 @@
     },
     {
       "check": "test-vectors",
-      "key": "swift:box-claim",
-      "reason": "Retail box claim (docs/retail-box-setup.md): phase 1 built the TS reference and the box; the iOS claim screens and their Swift port of flagship/box-claim/v1 come in the phone run (journal F4)."
-    },
-    {
-      "check": "test-vectors",
       "key": "kotlin:box-claim",
       "reason": "Retail box claim (docs/retail-box-setup.md): phase 1 built the TS reference and the box; the Android port follows the iOS screens (journal F4)."
     },
