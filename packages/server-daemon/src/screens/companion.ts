@@ -39,6 +39,22 @@ const J = { "content-type": "application/json" } as const;
 const DEFAULT_TICKET_TTL_MS = 60_000;
 /** Default companion-session TTL (4 hours). */
 const DEFAULT_COMPANION_TTL_MS = 4 * 60 * 60_000;
+/** The browser extension's session lasts 30 days, then the owner pairs it again (docs/browser-extension.md). */
+export const EXTENSION_SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
+
+/** A fresh STK-signed daemon-status report for the certificate this box serves now, or null with none. */
+export interface SignedCertStatus {
+  report: {
+    serverDomain: string;
+    certSha256: string | null;
+    certValidUntil: number | null;
+    certIssuer: string | null;
+    appsServed: string[];
+    nonce: string;
+    issuedAt: number;
+  };
+  signatureHex: string;
+}
 
 export interface CompanionBffDeps {
   /** Required. The ticket ledger. */
@@ -70,6 +86,8 @@ export interface CompanionBffDeps {
   writeRequestStore?: CompanionWriteRequestStore;
   /** Override write-request TTL. Default 10 minutes. */
   writeRequestTtlMs?: number;
+  /** The box's signed certificate fingerprint for the browser extension (`GET /api/companion/cert-pin`). */
+  certPin?: () => SignedCertStatus | null;
 }
 
 export interface MintTicketRequest {}
@@ -90,6 +108,8 @@ export interface RedeemTicketResponse {
   expiresAt: number;
   podBaseUrl: string;
   username: string;
+  /** "extension" when the ticket was an extension ticket; absent for Remote. */
+  scope?: "extension";
 }
 
 export interface CompanionSummary {
@@ -98,6 +118,8 @@ export interface CompanionSummary {
   lastSeenMs: number;
   expiresAt: number;
   userAgent?: string;
+  /** "extension" for the browser extension's session; Remote browsers say "remote". */
+  kind: "remote" | "extension";
 }
 
 export interface CompanionListResponse {
@@ -119,6 +141,7 @@ export interface RevokeCompanionRequest {
 export async function handleMintTicket(
   deps: CompanionBffDeps,
   req: HttpRequest,
+  scope?: "extension",
 ): Promise<HttpResponse> {
   const now = deps.now ?? (() => Date.now());
   const rand = deps.randomBytes ?? ((n: number) => new Uint8Array(randomBytes(n)));
@@ -138,15 +161,49 @@ export async function handleMintTicket(
     issuedAt,
     expiresAt,
     status: "pending",
+    ...(scope ? { scope } : {}),
   };
   await deps.ticketStore.insert(row);
 
-  const out: MintTicketResponse = {
+  const out: MintTicketResponse & { scope?: "extension" } = {
     ticketId,
     ticketSecret: secret,
     expiresAt,
+    ...(scope ? { scope } : {}),
   };
   return jok(out);
+}
+
+/**
+ * POST /api/screens/companion/mint-extension-ticket — owner-gated.
+ *
+ * The phone's half of pairing the browser extension (docs/browser-extension.md): a single-use
+ * ticket that redeems into an extension session, which opens no paired-session API and reads only
+ * this box's signed certificate fingerprint. A box without this route answers 404, so a phone
+ * never hands an older box's full Remote ticket to an extension.
+ */
+export async function handleMintExtensionTicket(
+  deps: CompanionBffDeps,
+  req: HttpRequest,
+): Promise<HttpResponse> {
+  return handleMintTicket(deps, req, "extension");
+}
+
+/**
+ * GET /api/companion/cert-pin — extension session only.
+ *
+ * A fresh STK-signed `flagship/daemon-status/v1` report naming the certificate this box serves.
+ * The extension verifies it under the server key the owner's phone pinned and compares its
+ * fingerprint with the leaf of the connection that carried it. The report is the box's own word;
+ * whoever relays it can drop it but not forge it.
+ */
+export function handleCertPin(deps: CompanionBffDeps, req: HttpRequest): HttpResponse {
+  if (req.method.toUpperCase() !== "GET") return jerr(405, "method not allowed");
+  const denied = deps.pairedSessions.checkExtension(req);
+  if (denied) return denied;
+  const signed = deps.certPin?.() ?? null;
+  if (!signed || !signed.report.certSha256) return jerr(503, "no certificate yet");
+  return { status: 200, headers: { ...J, "cache-control": "no-store" }, body: JSON.stringify(signed) };
 }
 
 /**
@@ -198,18 +255,25 @@ export async function handleRedeemTicket(
   const ua = req.headers["user-agent"] ?? req.headers["User-Agent"];
   const userAgent = typeof ua === "string" && ua.length > 0 ? ua.slice(0, 256) : null;
 
-  await deps.pairedSessions.addCompanion({
-    token: sessionToken,
-    addedAt: redeemedAt,
-    expiresAt,
-    userAgent,
-  });
+  const extension = result.row.scope === "extension";
+  const sessionExpiresAt = extension ? redeemedAt + EXTENSION_SESSION_TTL_MS : expiresAt;
+  if (extension) {
+    await deps.pairedSessions.addExtension({ token: sessionToken, addedAt: redeemedAt, expiresAt: sessionExpiresAt, userAgent });
+  } else {
+    await deps.pairedSessions.addCompanion({
+      token: sessionToken,
+      addedAt: redeemedAt,
+      expiresAt,
+      userAgent,
+    });
+  }
 
   const out: RedeemTicketResponse = {
     companionSessionToken: sessionToken,
-    expiresAt,
+    expiresAt: sessionExpiresAt,
     podBaseUrl: `https://${deps.serverFqdn}`,
     username: deps.username,
+    ...(extension ? { scope: "extension" as const } : {}),
   };
   return jok(out);
 }
@@ -234,6 +298,7 @@ export async function handleListCompanions(
       // wire it into the gate so we can show "active 30s ago".
       lastSeenMs: r.addedAt,
       expiresAt: r.expiresAt,
+      kind: r.extension ? "extension" : "remote",
     };
     if (r.userAgent) out.userAgent = r.userAgent;
     return out;

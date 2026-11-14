@@ -105,6 +105,8 @@ import {
   denyCompanionWrite,
   handleListCompanions,
   handleMintTicket,
+  handleMintExtensionTicket,
+  handleCertPin,
   handleRedeemTicket,
   handleRevokeCompanion,
   type CompanionBffDeps,
@@ -566,6 +568,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       return await handleRedeemTicket(deps.companion, req);
     }
 
+    // The browser extension's one route (docs/browser-extension.md): its own session, nothing else.
+    if (rawPath === "/api/companion/cert-pin") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return handleCertPin(deps.companion, req);
+    }
+
     // ---- P14 Phase 2 — companion-side write-relay endpoints ----
     //
     // These live OUTSIDE /api/screens/ (the companion's webapp/SDK
@@ -753,6 +761,10 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/companion/mint-ticket" && method === "POST") {
       if (!deps.companion) return jerr(503, "companion dock not configured");
       return await handleMintTicket(deps.companion, req);
+    }
+    if (path === "/api/screens/companion/mint-extension-ticket" && method === "POST") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleMintExtensionTicket(deps.companion, req);
     }
     if (path === "/api/screens/companion/list" && method === "GET") {
       if (!deps.companion) return jerr(503, "companion dock not configured");
@@ -1061,7 +1073,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           tokenPrefix: s.id,
           addedAt: s.addedAt,
           current: callerToken !== null && pairedSessionId(callerToken).startsWith(s.id),
-          kind: s.companion ? "remote" : "device",
+          kind: s.extension ? "extension" : s.companion ? "remote" : "device",
           ...(s.companion && typeof s.expiresAt === "number" ? { expiresAt: s.expiresAt } : {}),
         }));
       const body: PairedSessionsListResponse = { sessions };
@@ -2014,6 +2026,7 @@ function isWriteScopedPath(path: string): boolean {
   // (the dispatcher above handles this before reaching here, but in
   // case the order ever changes).
   if (path === "/api/screens/companion/mint-ticket") return true;
+  if (path === "/api/screens/companion/mint-extension-ticket") return true;
   if (path === "/api/screens/companion/revoke") return true;
   // P14 Phase 2 — resolve-pending is owner-only by definition (a
   // companion approving its own queued write would defeat the whole

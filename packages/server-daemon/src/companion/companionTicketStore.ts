@@ -27,6 +27,8 @@ export interface CompanionTicketRow {
   /** Set when redeemed; "consumed" tickets must NEVER redeem again. */
   status: "pending" | "consumed";
   consumedAt?: number;
+  /** "extension": redeems into the browser extension's session (docs/browser-extension.md), not a Remote one. */
+  scope?: "extension";
 }
 
 export interface CompanionTicketStore {

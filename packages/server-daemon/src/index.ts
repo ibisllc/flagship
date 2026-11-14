@@ -34,7 +34,7 @@ import { InMemoryAlertInbox } from "./alertInbox.js";
 import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
-import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
+import { buildSignedCertStatus, startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { Doorbell, type DoorbellLane } from "./doorbell.js";
 import { buildSignedLanHint, hostAddresses, lanPortFromEnv, leafCertSha256 } from "./lanDirect.js";
 import { buildSignedLanHintV2, DirectAccessController } from "./directAccess.js";
@@ -4923,6 +4923,16 @@ async function wireRuntimeSurfaces(deps: {
       username,
       // P14 Phase 2 — write-relay queue.
       writeRequestStore: companionWriteRequestStore,
+      // The browser extension's signed certificate fingerprint (docs/browser-extension.md).
+      certPin: () =>
+        liveCertPemRef.current
+          ? buildSignedCertStatus({
+              serverDomain: env.serverFqdn!,
+              certPem: liveCertPemRef.current,
+              certValidUntil: liveCertInfoRef.current?.notAfter ?? null,
+              sign: (msg) => custodian.signAsBox(msg),
+            })
+          : null,
     },
     postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
     installEventLog: {

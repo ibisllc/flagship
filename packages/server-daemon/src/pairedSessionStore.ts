@@ -41,6 +41,13 @@ export interface PairedSession {
   expiresAt?: number;
   /** Best-effort User-Agent at redeem time, for the owner's list view. */
   companionUserAgent?: string;
+  /**
+   * The browser extension's session (docs/browser-extension.md): a companion row that opens no
+   * paired-session API at all. `check()` refuses it everywhere; only the routes that ask
+   * {@link FilePairedSessionStore.checkExtension} take it (today: the box's signed certificate
+   * fingerprint). Listed to the owner as "extension", revoked like a Remote session.
+   */
+  extension?: boolean;
 }
 
 /** The opaque id a bearer token is known by: its SHA-256. The token itself is never stored or listed. */
@@ -115,6 +122,7 @@ export class FilePairedSessionStore implements PairedSessionGate {
           if (typeof info.companionUserAgent === "string") {
             row.companionUserAgent = info.companionUserAgent;
           }
+          if (info.extension === true && row.companion === true) row.extension = true;
           // A file from before kept the bearer itself as the key: hash it now and rewrite.
           this.byToken.set(legacy ? FilePairedSessionStore.idOf(key) : key, row);
         }
@@ -157,6 +165,41 @@ export class FilePairedSessionStore implements PairedSessionGate {
     await this.flush();
   }
 
+  /**
+   * The browser extension's session: a companion row flagged `extension`, so the gate refuses it
+   * on every paired-session route. Same expiry, authority family and revocation as Remote.
+   */
+  async addExtension(args: {
+    token: string;
+    addedAt: number;
+    expiresAt: number;
+    userAgent?: string | null;
+  }): Promise<void> {
+    if (!args.token || args.token.length < 16) throw new Error("token too short");
+    const row: PairedSession = { addedAt: args.addedAt, companion: true, extension: true, expiresAt: args.expiresAt };
+    if (args.userAgent) row.companionUserAgent = args.userAgent;
+    const id = FilePairedSessionStore.idOf(args.token);
+    this.byToken.set(id, row);
+    await this.issueGrant(id, row);
+    await this.flush();
+  }
+
+  /**
+   * The gate for routes an extension session may use: null when `req` carries a live, unexpired
+   * extension token; otherwise the refusal. Owner and Remote sessions are refused here too, so an
+   * extension route never widens what either can do.
+   */
+  checkExtension(req: HttpRequest): HttpResponse | null {
+    const token = extractPairedSessionToken(req);
+    if (!token) return jerr(401, "missing extension session token");
+    const id = FilePairedSessionStore.idOf(token);
+    const row = this.byToken.get(id);
+    if (!row || row.extension !== true) return jerr(401, "invalid extension session token");
+    if (this.authority && !this.authority.companion.isLive(id.slice(0, 32))) return jerr(401, "extension session revoked");
+    if (typeof row.expiresAt !== "number" || row.expiresAt <= this.now()) return jerr(401, "extension session expired");
+    return null;
+  }
+
   /** P14 — fetch the row for a token, including companion fields. */
   get(token: string): PairedSession | null {
     const r = this.byToken.get(FilePairedSessionStore.idOf(token));
@@ -175,12 +218,14 @@ export class FilePairedSessionStore implements PairedSessionGate {
     addedAt: number;
     expiresAt: number;
     userAgent?: string;
+    extension?: true;
   }> {
     const out: Array<{
       id: string;
       addedAt: number;
       expiresAt: number;
       userAgent?: string;
+      extension?: true;
     }> = [];
     for (const [id, info] of this.byToken) {
       if (!info.companion) continue;
@@ -191,12 +236,14 @@ export class FilePairedSessionStore implements PairedSessionGate {
         addedAt: number;
         expiresAt: number;
         userAgent?: string;
+        extension?: true;
       } = {
         id: id.slice(0, 16),
         addedAt: info.addedAt,
         expiresAt: info.expiresAt,
       };
       if (info.companionUserAgent) row.userAgent = info.companionUserAgent;
+      if (info.extension) row.extension = true;
       out.push(row);
     }
     // Newest companions first; the owner mostly cares about recent docks.
@@ -269,11 +316,12 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return n;
   }
 
-  list(): Array<{ id: string; addedAt: number; companion?: true; expiresAt?: number }> {
+  list(): Array<{ id: string; addedAt: number; companion?: true; extension?: true; expiresAt?: number }> {
     return [...this.byToken.entries()].map(([id, info]) => ({
       id: id.slice(0, 16),
       addedAt: info.addedAt,
       ...(info.companion ? { companion: true as const } : {}),
+      ...(info.extension ? { extension: true as const } : {}),
       ...(typeof info.expiresAt === "number" ? { expiresAt: info.expiresAt } : {}),
     }));
   }
@@ -297,6 +345,8 @@ export class FilePairedSessionStore implements PairedSessionGate {
     const id = FilePairedSessionStore.idOf(token);
     const row = this.byToken.get(id);
     if (!row) return jerr(401, "invalid paired-session token");
+    // The extension's session opens nothing a paired session can reach (docs/browser-extension.md).
+    if (row.extension === true) return jerr(403, "extension session can't use this API");
     if (this.authority) {
       const fam = row.companion ? this.authority.companion : this.authority.owner;
       if (!fam.isLive(id.slice(0, 32))) return jerr(401, "paired-session token revoked");
