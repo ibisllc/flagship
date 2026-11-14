@@ -124,7 +124,7 @@ class GymOctoberTest : GymBase() {
      *  app's page offers the direct link beside the relay one. */
     @Test
     fun directAccessOnNameProbeAndShareChoice() {
-        launch(tab = "home", adminRoot = true)
+        launch(tab = "home", adminRoot = true, username = "bright-maple")
         waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
         composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
         composeRule.waitForIdle()
