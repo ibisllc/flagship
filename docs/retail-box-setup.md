@@ -84,11 +84,14 @@ The box is headless. No monitor, no keyboard.
 6. The phone and box open an encrypted Bluetooth session. After a short random pause, the app says "Press the power
    button now". The box reports one short press within a few seconds. Too early, too late, more than one, or another
    phone trying at the same moment: the app stops and explains.
-7. No cable: the app asks which Wi-Fi to join. Before it sends the password it warns (section 7.6).
-8. Name the server. Face ID or fingerprint to sign the recipe. The box receives it, answers with a receipt signed by
-   its new server key, and sets itself up. The app shows the usual timeline and asks for the first unlock approval.
-9. Once the box is online, the app checks the key it registered at `.com` against the receipt. A match shows the
-   server on Home with a padlock. A mismatch shows an alarm (section 7.7).
+7. Name the server. Face ID or fingerprint to sign the recipe. The box receives it and answers with a receipt signed
+   by its new server key: the phone now has the box's public key.
+8. The phone registers that key at `.com` under the recipe's AuthCode (it has internet; the box may not yet). From
+   then on `.com` accepts this server only from that key.
+9. No cable: the app asks which Wi-Fi to join, warns (section 7.6), then hands the password to the box. The box sets
+   itself up; the app shows the usual timeline and asks for the first unlock approval.
+10. Once the box is online, the app checks that the box that came online holds the key it registered. A match shows
+   the server on Home with a padlock. A mismatch, or a box that never comes online, shows an alarm (section 7.7).
 
 If the box never appears: it may already be claimed (by a shop employee, a previous owner, or someone who raced). The
 app says: "No new box appeared. If this box was set up before, press its power button five times, quickly, then tap
@@ -284,6 +287,8 @@ admin device of this account can set up a server."
   password, change it." The phone marks the server untrusted and offers Delete (the existing signed revoke).
 - The AuthCode must be single use at `.com`, so one claim yields at most one registered server. Check this in
   `handleServerRegister`; make it so if not.
+- Because the phone registers the box's key at `.com` before the box goes online (section 4 step 8), a "pass it on"
+  relay's real box is refused at registration and never comes online: the same alarm, earlier.
 - Honest limit: this catches the "pass it on" relay, not the "keep it" relay (section 6.1).
 
 ### 7.8 Box states
