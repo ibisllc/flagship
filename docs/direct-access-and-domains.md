@@ -3,7 +3,8 @@
 Status: LOCKED IN for 0.4 (owner, 2026-11-08). Steps 1-2 of §6 are built (§7), step 3 and step 6 on
 branch `0.4/direct-access-com` (§8); the screens (step 5) are not. Owner, 2026-11-14: per-service (direct) names
 live on `fshp.app`, one name and one certificate per service; relayed names on `flagship.services` keep their own
-granularity. Planned for 0.4
+granularity. Owner, 2026-11-14: a direct name is never served through the relay; its certificate is issued before
+the direct path is live (§1, §8). Planned for 0.4
 (`docs/release-0.4-list.md`, item "Direct access"). Every choice below is decided; the
 owner may reopen any of them, and the price is set at launch.
 
@@ -37,6 +38,15 @@ traffic, so it is free of relay quota.
   can point names at its own addresses (this is aimed at corporate users building
   their infrastructure on Flagship). If a direct name doesn't answer, that is the
   owner's to fix; the relay names keep working regardless.
+- **Owner, 2026-11-14 (clarification; the rule above stands).** A direct name is never served through the relay
+  for visitors: no relay records for a `fshp.app` name, no relay routing of one, no fallback. Central help is
+  acceptable only for the first setup, and only if it makes that setup easier without exposing anything new to us.
+  The one piece that qualifies is the certificate: it is issued as soon as the owner's name order verifies, before
+  the box's direct path (its public IPv6, the router's firewall) is live. DNS-01 in the `fshp.app` zone needs no
+  inbound connection to the box, and `.com` already holds the name and its box in the registry, so nothing new is
+  learnt. An earlier proposal the same day to broker direct names through the relay was dropped. The owner's
+  relayed `flagship.services` link for the same app stays what it was: a different name, the share screen's other
+  choice.
 
 Two layers, built in this order:
 1. **App-side direct path (no DNS).** Extend LAN-direct (`docs/lan-direct.md`) to
@@ -343,6 +353,19 @@ name order names this box, is on, and its last check verified), the CSR must nam
 the DNS-01 records go into the direct zone. One certificate per name; Let's Encrypt's per-domain budget is counted
 for all of `fshp.app` (40 a week, our margin under LE's 50) until the rate-limit increase (journal F17) or a PSL
 entry. A name turned off keeps its certificate until it expires.
+
+**Issuance never waits for the direct path (owner, 2026-11-14).** The registry's check is the owner's signed name
+order alone: direct access off on the box, no address reported yet (`direct-access-off`, `no-addresses`) and an
+unknown CAA account don't hold a certificate back, and nothing is probed. The box orders the certificate as soon as it
+verifies the name order (`directNames.ts`); `GET /api/accounts/<u>/direct-access` lists it per name as `certificate:
+{notAfter}` (read from the issuance service's own `certificate_orders`), and the apps say "Certificate ready. Waiting
+for the direct path." while the name has no record. When the box's address arrives, the records follow and the name
+works at once.
+
+**The relay never carries a direct name.** The relay routes only names under `flagship.services`; `fshp.app` (and
+`fshp.tech`) are refused as custom domains (`isOwnZone`), so no redirection can map one to a box; and the box itself
+refuses any relay stream whose SNI is under the direct apex (`boxStreamGate` `directApex`), so even a misrouting relay
+gets nothing served.
 
 **Step 6**: `fshp.app` is off the website mirror (`mirrorDomains.ts`, `theme.js`): its bare apex (and `www`) 308 to the
 site; the Worker route for its subdomains is gone. Its old proxied `*` and `www` records still need deleting in
