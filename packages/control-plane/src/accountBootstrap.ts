@@ -15,6 +15,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { bytesToHex, HEX128, HEX64, hexToBytes } from "./hex.js";
+import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { isReservedName } from "./labels.js";
 import { conflict, forbidden, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 import { USERNAME_TAKEN } from "./usernameClaim.js";
@@ -94,6 +95,8 @@ export async function handleAccountBootstrap(
   if (!verifyDeviceCapabilityGrant(grant, hexToBytes((body.grant as Record<string, unknown>).signatureHex as string), adminRootPub)) {
     return forbidden("invalid grant signature");
   }
+  const grantPq = grantPqSignatureJson((body.grant as Record<string, unknown>).pqSignature);
+  if (grantPq === null) return malformed("grant.pqSignature must be { suite, signature }");
   if (accountProfile.accountId !== username || accountProfile.revision !== 1 ||
       accountProfile.signerPubHex !== body.adminRootPub || accountProfile.issuedAt !== request.issuedAt ||
       !verifyAccountProfile(accountProfile, adminRootPub)) {
@@ -148,6 +151,7 @@ export async function handleAccountBootstrap(
       signatureHex: (body.grant as Record<string, unknown>).signatureHex as string,
       revokedAt: null,
       signerRoot: "admin-root",
+      ...(grantPq ? { pqSignatureJson: grantPq } : {}),
     },
     accountProfile: { ...accountProfile, updatedAt: request.issuedAt },
     primaryDeviceProfile: { ...deviceProfile, updatedAt: request.issuedAt },

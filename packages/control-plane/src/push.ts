@@ -43,6 +43,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
+import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { hexToBytes, bytesToHex } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 
@@ -251,6 +252,8 @@ interface AdmitBody {
     signerRoot?: "membership" | "admin-root";
   };
   grantSignature?: string;
+  /** The signing root's hybrid companion over the grant (pq-suites.md §20). */
+  grantPqSignature?: unknown;
   profile?: DeviceSelfProfileEnvelope;
   request?: RegisterBody["request"];
   signature?: string;
@@ -308,6 +311,8 @@ export async function handleVouchedDeviceAdmit(
     typeof g.expiresAt !== "number" || typeof g.signerRoot !== "string" ||
     typeof body.grantSignature !== "string" || !profile
   ) return malformed("missing device bootstrap");
+  const grantPq = grantPqSignatureJson(body.grantPqSignature);
+  if (grantPq === null) return malformed("grantPqSignature must be { suite, signature }");
   if (
     g.username.toLowerCase() !== a.username.toLowerCase() || g.deviceId !== deviceId ||
     g.devicePubHex.toLowerCase() !== newDevicePubHex || !g.scopes.includes("view-directory") ||
@@ -396,6 +401,7 @@ export async function handleVouchedDeviceAdmit(
     signatureHex: body.grantSignature,
     revokedAt: null,
     signerRoot: g.signerRoot,
+    ...(grantPq ? { pqSignatureJson: grantPq } : {}),
   };
   const existingGrant = await deps.deviceCapabilityGrants.get(grant.grantId);
   if (existingGrant) {

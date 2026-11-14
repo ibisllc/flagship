@@ -473,6 +473,7 @@ export async function handleListAccountDeviceGrants(
       signatureHex: g.signatureHex.toLowerCase(),
       signerRoot: g.signerRoot,
       ...(pq?.devices.get(g.deviceId) ? { pqKeyBinding: pq.devices.get(g.deviceId) } : {}),
+      ...(g.pqSignatureJson ? { pqSignature: parseJsonOrNull(g.pqSignatureJson) } : {}),
     });
   }
   const pqBody = pq ? { pqKeyBindings: { accountIrk: pq.accountIrk, adminRoot: pq.adminRoot } } : {};
@@ -495,4 +496,25 @@ export async function handleListAccountDeviceGrants(
       }
     : {};
   return ok({ username: userNorm, grants: out, ...pqBody, ...listBody }, { "cache-control": "private, no-store" });
+}
+
+function parseJsonOrNull(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A grant's hybrid companion as a client sends it (`{ suite, signature }`, pq-suites.md §20), as
+ * the JSON `.com` stores and relays; boxes verify it. `undefined` when none was sent, `null` when
+ * the field is not that shape.
+ */
+export function grantPqSignatureJson(raw: unknown): string | undefined | null {
+  if (raw === undefined || raw === null) return undefined;
+  const o = raw as { suite?: unknown; signature?: unknown };
+  if (typeof o !== "object" || typeof o.suite !== "string" || typeof o.signature !== "string") return null;
+  if (o.suite.length > 64 || !/^[0-9a-f]{2,8192}$/.test(o.signature)) return null;
+  return JSON.stringify({ suite: o.suite, signature: o.signature });
 }

@@ -1519,6 +1519,8 @@ export interface AdminRootRotationRecord {
   newAdminRootPubHex: string;    // the root adopted, hex lowercased
   issuedAt: number;              // ms since epoch, from the signed proof
   signatureHex: string;          // OLD-root Ed25519 sig over canonical bytes, hex lowercased
+  /** The hybrid companion (`{ signature, newRootBinding }`, pq-suites.md §20) as JSON, relayed to boxes unread. */
+  pqJson?: string;
 }
 
 export interface AdminRootRotationStorage {
@@ -2961,6 +2963,8 @@ export interface DeviceCapabilityGrantRecord {
    * treated as `'membership'`.
    */
   signerRoot?: "membership" | "admin-root";
+  /** The signing root's hybrid companion over the grant (`{ suite, signature }`, pq-suites.md §20) as JSON; boxes verify it. */
+  pqSignatureJson?: string;
 }
 
 /**

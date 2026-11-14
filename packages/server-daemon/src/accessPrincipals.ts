@@ -25,8 +25,12 @@ import {
   canonicalDeviceCapabilityGrant,
   DEVICE_SCOPES,
   PqTrustError,
+  legacyPolicyState,
+  strictInForce,
   verifyDeviceCapabilityGrant,
+  verifyDeviceGrantPq,
   verifyPqKeyBinding,
+  type PolicyState,
   type AdminGrantView,
   type PqBindingRole,
   type VerifiedPqKeyBinding,
@@ -73,6 +77,8 @@ export interface ListedGrant {
   signerRoot?: string;
   /** Architecture v2: the device key's ML-DSA binding as `.com` relays it (verified here). */
   pqKeyBinding?: unknown;
+  /** Quantum-safe stage 1: the signing root's hybrid signature over the grant (pq-suites.md §20). */
+  pqSignature?: unknown;
 }
 
 /** The account-level bindings the book carries beside the grants. */
@@ -92,6 +98,10 @@ interface BookDevice {
   pub: string;
   tier: DeviceTier;
   grant: ListedGrant;
+  /** The root the grant's classical signature verified under (hex). */
+  signer: string;
+  /** The signing root's hybrid companion verified under its binding: the device counts under strict. */
+  pqGranted: boolean;
 }
 
 export interface AccountDeviceBookOptions {
@@ -112,6 +122,10 @@ export interface AccountDeviceBookOptions {
   /** `.com`'s signed revocation list beside the grants (deviceRevocationList.ts), for keyd; passed on unread. */
   onRevocationList?: (list: unknown) => void;
   now?: () => number;
+  /** The installation's policy in force (pqAuthority.ts); while strict, a device counts only with a hybrid grant. */
+  policy?: () => PolicyState | null;
+  /** The admin root's binding as the hybrid rotation that pinned it named it (admin-root-pin.json); wins over `.com`'s. */
+  adminRootPqBinding?: () => unknown;
   /** Least time between two refreshes asked for by an unknown key. Default 30 s. */
   minRefreshMs?: number;
   log?: (m: string) => void;
@@ -203,13 +217,13 @@ export class AccountDeviceBook {
 
   /** The grant (id, device id, when it was issued) behind a device key, for the admin gate and the rescue log. */
   grantOf(pubHex: string): { grantId: string; deviceId: string; issuedAt: number; tier: DeviceTier } | null {
-    const d = this.byPub.get(pubHex.toLowerCase());
+    const d = this.live(pubHex);
     return d ? { grantId: d.grant.grantId, deviceId: d.deviceId, issuedAt: d.grant.issuedAt, tier: d.tier } : null;
   }
 
   classify(pubHex: string): Extract<Principal, { kind: "device" }> | null {
     const pub = pubHex.toLowerCase();
-    const d = this.byPub.get(pub);
+    const d = this.live(pub);
     if (d) return { kind: "device", pub, deviceId: d.deviceId, tier: d.tier, legacy: false };
     if (this.opts.ownerAidHex && pub === this.opts.ownerAidHex.toLowerCase()) {
       return { kind: "device", pub, deviceId: null, tier: this.pinned() ? "member" : "admin", legacy: true };
@@ -222,7 +236,7 @@ export class AccountDeviceBook {
    * for that key (identityAssertion.ts checkMasterEvidence); null when the book holds none.
    */
   grantStatementFor(pubHex: string): { statement: string; signatureHex: string } | null {
-    const d = this.byPub.get(pubHex.toLowerCase());
+    const d = this.live(pubHex);
     const g = d ? toGrant(d.grant) : null;
     if (!d || !g) return null;
     try {
@@ -239,7 +253,7 @@ export class AccountDeviceBook {
   }
 
   devices(): Extract<Principal, { kind: "device" }>[] {
-    return [...this.byPub.values()].map((d) => ({
+    return this.liveDevices().map((d) => ({
       kind: "device" as const,
       pub: d.pub,
       deviceId: d.deviceId,
@@ -251,7 +265,7 @@ export class AccountDeviceBook {
   /** The admin devices' grants, for the sensitive-order gate (`authorizeSensitiveOrder`). */
   adminGrants(): AdminGrantView[] {
     const out: AdminGrantView[] = [];
-    for (const d of this.byPub.values()) {
+    for (const d of this.liveDevices()) {
       if (d.tier !== "admin" || !this.pinned()) continue;
       const g = toGrant(d.grant);
       if (g) out.push({ grant: g, signatureHex: d.grant.signatureHex, signerRoot: "admin-root", revokedAt: null });
@@ -265,17 +279,35 @@ export class AccountDeviceBook {
    * binding naming another one is ignored, so `.com` cannot swap a device's PQ half.
    */
   pqBindingFor(pubHex: string): VerifiedPqKeyBinding | null {
-    return this.pqByPub.get(pubHex.toLowerCase()) ?? null;
+    const pub = pubHex.toLowerCase();
+    if (this.byPub.has(pub) && !this.live(pub)) return null;
+    return this.pqByPub.get(pub) ?? null;
   }
 
   /** A live device's verified binding by device id and hybrid key id (the PQ session's initiator lookup). */
   pqBindingForDevice(deviceId: string, keyIdHex: string): VerifiedPqKeyBinding | null {
-    for (const d of this.byPub.values()) {
+    for (const d of this.liveDevices()) {
       if (d.deviceId !== deviceId) continue;
       const b = this.pqByPub.get(d.pub);
       if (b && b.role === "device" && b.keyIdHex === keyIdHex) return b;
     }
     return null;
+  }
+
+  private strict(): boolean {
+    const p = this.opts.policy?.();
+    return !!p && strictInForce(p);
+  }
+
+  /** A device in the book that counts now: under strict, only one whose grant carries a verified hybrid companion. */
+  private live(pubHex: string): BookDevice | null {
+    const d = this.byPub.get(pubHex.toLowerCase());
+    return d && (d.pqGranted || !this.strict()) ? d : null;
+  }
+
+  private liveDevices(): BookDevice[] {
+    const strict = this.strict();
+    return [...this.byPub.values()].filter((d) => d.pqGranted || !strict);
   }
 
   private pinned(): boolean {
@@ -290,15 +322,39 @@ export class AccountDeviceBook {
         const listed = parseListed(r);
         if (!listed || listed.username.toLowerCase() !== this.opts.username.toLowerCase()) continue;
         if (this.opts.isRevoked?.(listed.grantId)) continue;
-        const tier = this.verify(listed);
-        if (!tier) continue;
+        const signed = this.verify(listed);
+        if (!signed) continue;
+        const { tier, signer } = signed;
         const prev = next.get(listed.devicePubHex);
         if (prev && (prev.tier === "admin" || tier === "member")) continue;
-        next.set(listed.devicePubHex, { deviceId: listed.deviceId, pub: listed.devicePubHex, tier, grant: listed });
+        next.set(listed.devicePubHex, { deviceId: listed.deviceId, pub: listed.devicePubHex, tier, grant: listed, pqGranted: false, signer });
       }
     }
     this.byPub = next;
     this.adoptPq(pq);
+    for (const [pub, d] of this.byPub) {
+      const verdict = this.grantCompanion(d);
+      if (verdict === "refused") this.byPub.delete(pub);
+      else d.pqGranted = verdict === "hybrid";
+    }
+  }
+
+  /**
+   * The grant's hybrid companion under the signing root's binding: "hybrid" when it verifies,
+   * "absent" when none was sent or the root has no binding here yet, "refused" when one was sent
+   * and does not verify (an offered hybrid signature never falls back to the classical one).
+   */
+  private grantCompanion(d: BookDevice): "hybrid" | "absent" | "refused" {
+    if (d.grant.pqSignature === undefined || d.grant.pqSignature === null) return "absent";
+    const g = toGrant(d.grant);
+    const signer = d.signer;
+    if (!g) return "refused";
+    try {
+      verifyDeviceGrantPq({ grant: g, pq: d.grant.pqSignature, signerPubHex: signer, signerBinding: this.pqByPub.get(signer) ?? null, policy: legacyPolicyState({ kind: "installation", id: "device-book" }) });
+      return "hybrid";
+    } catch (e) {
+      return e instanceof PqTrustError && e.code === "no-binding" ? "absent" : "refused";
+    }
   }
 
   private adoptPq(raw: unknown): void {
@@ -327,22 +383,44 @@ export class AccountDeviceBook {
     const user = this.opts.username.toLowerCase();
     take(listed.accountIrk, "account-irk", user, toHex(this.opts.ownerIrkPub()));
     const root = this.opts.adminRootPub();
-    if (root && root.length === 32) take(listed.adminRoot, "admin-root", user, toHex(root));
+    if (root && root.length === 32) {
+      const rootHex = toHex(root);
+      const named = this.rotationNamedRootBinding(user, rootHex);
+      if (named) {
+        next.set(rootHex, named);
+        this.pqPins.set(rootHex, { mldsa: named.mldsaPubHex, issuedAt: named.issuedAt });
+      } else take(listed.adminRoot, "admin-root", user, rootHex);
+    }
     for (const d of this.byPub.values()) take(d.grant.pqKeyBinding, "device", d.deviceId, d.pub);
     this.pqByPub = next;
   }
 
-  private verify(l: ListedGrant): DeviceTier | null {
+  /**
+   * The pinned root's binding as the hybrid rotation that pinned it named it: the old root's PQ
+   * half vouched for it, so it replaces whatever ML-DSA key was first seen for this key.
+   */
+  private rotationNamedRootBinding(user: string, rootHex: string): VerifiedPqKeyBinding | null {
+    const wire = this.opts.adminRootPqBinding?.();
+    if (!wire) return null;
+    try {
+      return verifyPqKeyBinding(wire, { role: "admin-root", subjectId: user, ed25519PubHex: rootHex, now: this.now() });
+    } catch {
+      return null;
+    }
+  }
+
+  private verify(l: ListedGrant): { tier: DeviceTier; signer: string } | null {
     const g = toGrant(l);
     if (!g) return null;
     const sig = fromHex(l.signatureHex);
     if (!sig) return null;
     const root = this.opts.adminRootPub();
+    const irk = this.opts.ownerIrkPub();
     if (root && root.length === 32) {
-      if (verifyDeviceCapabilityGrant(g, sig, root)) return g.scopes.includes("admin") ? "admin" : "member";
-      return verifyDeviceCapabilityGrant(g, sig, this.opts.ownerIrkPub()) ? "member" : null;
+      if (verifyDeviceCapabilityGrant(g, sig, root)) return { tier: g.scopes.includes("admin") ? "admin" : "member", signer: toHex(root) };
+      return verifyDeviceCapabilityGrant(g, sig, irk) ? { tier: "member", signer: toHex(irk) } : null;
     }
-    return verifyDeviceCapabilityGrant(g, sig, this.opts.ownerIrkPub()) ? "admin" : null;
+    return verifyDeviceCapabilityGrant(g, sig, irk) ? { tier: "admin", signer: toHex(irk) } : null;
   }
 
   private async persist(): Promise<void> {
@@ -441,6 +519,7 @@ function parseListed(r: unknown): ListedGrant | null {
     signatureHex: g.signatureHex.toLowerCase(),
     ...(typeof g.signerRoot === "string" ? { signerRoot: g.signerRoot } : {}),
     ...(g.pqKeyBinding && typeof g.pqKeyBinding === "object" ? { pqKeyBinding: g.pqKeyBinding } : {}),
+    ...(g.pqSignature !== undefined && g.pqSignature !== null ? { pqSignature: g.pqSignature } : {}),
   };
 }
 

@@ -139,6 +139,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0131",
   // Messages: a second account on a device this month enrolls on the slow tier for good (slow_tier).
   "0132",
+  // Quantum-safe stage 1: hybrid companions of admin-root rotations and device grants (pq_json, pq_signature_json).
+  "0138",
 ];
 
 export interface SchemaStatusDeps {

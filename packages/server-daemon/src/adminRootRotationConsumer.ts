@@ -1,7 +1,13 @@
 import { keepCorruptAside, readStateFile, writeFileDurable } from "./durableFile.js";
 import {
+  PqTrustError,
+  strictInForce,
   verifyAdminRootRotation,
+  verifyAdminRootRotationPq,
   type AdminRootRotation,
+  type PolicyState,
+  type PqKeyBindingWire,
+  type VerifiedPqKeyBinding,
 } from "@flagship/protocol";
 
 /**
@@ -61,6 +67,12 @@ export interface RotationChainEntry {
   newAdminRootPub: string;
   issuedAt: number;
   signatureHex: string;
+  /**
+   * Quantum-safe stage 1 (pq-suites.md §20): the old root's hybrid signature over
+   * `flagship/admin-root-rotation/v2` and the new root's binding. Required while strict is in
+   * force; verified whenever present.
+   */
+  pq?: unknown;
 }
 
 /** The persisted box-local re-pin. */
@@ -69,6 +81,16 @@ export interface AdminRootPin {
   /** seq of the last applied rotation (observability + progress). */
   seq: number;
   updatedAt: number;
+  /** The pinned root's `admin-root` binding as the hybrid rotation named it (overrides `.com`'s first-come one). */
+  pqBinding?: PqKeyBindingWire;
+}
+
+/** What a hybrid hop is checked against: the policy in force and the box's own bindings. */
+export interface RotationPq {
+  policy: PolicyState;
+  /** The box's verified binding for a root it pins (the device book), or null. */
+  bindingFor: (pubHex: string) => VerifiedPqKeyBinding | null;
+  now: number;
 }
 
 export interface AdminRootPinStore {
@@ -123,6 +145,7 @@ export function fileAdminRootPinStore(pinPath: string, now: () => number = () =>
         adminRootPubHex: p.adminRootPubHex.toLowerCase(),
         seq: typeof p.seq === "number" ? p.seq : 0,
         updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
+        ...(p.pqBinding && typeof p.pqBinding === "object" ? { pqBinding: p.pqBinding } : {}),
       };
     },
     async write(pin) {
@@ -165,18 +188,16 @@ export async function recoverLostAdminRootPin(opts: {
   fetchImpl?: typeof fetch;
   now?: () => number;
   onLog?: (m: string) => void;
+  pq?: () => RotationPq | null;
 }): Promise<string | null> {
   const log = opts.onLog ?? (() => {});
   const seed = opts.seedAdminRootHex.toLowerCase();
   const chain = await fetchRotationChainOrNull(opts.controlPlaneBaseUrl, opts.username, opts.fetchImpl ?? fetch, log);
   if (chain === null) return null;
-  const result = applyRotationChain({ pinnedHex: seed, username: opts.username.toLowerCase(), chain });
+  const pq = opts.pq?.() ?? undefined;
+  const result = applyRotationChain({ pinnedHex: seed, username: opts.username.toLowerCase(), chain, ...(pq ? { pq } : {}) });
   try {
-    await opts.pinStore.write({
-      adminRootPubHex: result.pinnedHex,
-      seq: result.lastSeq,
-      updatedAt: (opts.now ?? (() => Date.now()))(),
-    });
+    await opts.pinStore.write(pinOf(result, (opts.now ?? (() => Date.now()))()));
   } catch (e) {
     log(`[admin-root-rotation] couldn't write the recovered pin (${(e as Error).message})`);
     return null;
@@ -195,6 +216,10 @@ export interface ApplyChainResult {
   applied: number;
   /** seq of the last applied hop (0 if none applied). */
   lastSeq: number;
+  /** The pinned root's binding when the last applied hop was hybrid (pin it over `.com`'s). */
+  pqBinding?: PqKeyBindingWire;
+  /** A hop that departed from the held root was refused (bad signature, or classical under strict). */
+  stoppedEarly: boolean;
 }
 
 /**
@@ -203,16 +228,25 @@ export interface ApplyChainResult {
  * a proof that (a) chains from the held root and (b) verifies under it; the
  * first hop that fails to chain/verify STOPS the replay (we never adopt a root
  * we can't prove). Already-applied leading hops are skipped.
+ *
+ * With `pq` (quantum-safe stage 1): a hop that carries a hybrid companion must verify it under the
+ * held root's binding (the box's own for the first hop, the one the previous hop named after
+ * that); while strict is in force a hop without one stops the replay.
  */
 export function applyRotationChain(args: {
   pinnedHex: string;
   username: string;
   chain: readonly RotationChainEntry[];
+  pq?: RotationPq;
 }): ApplyChainResult {
   let currentHex = args.pinnedHex.toLowerCase();
   let applied = 0;
   let lastSeq = 0;
   let started = false;
+  let stoppedEarly = false;
+  let currentBinding: VerifiedPqKeyBinding | null = args.pq ? args.pq.bindingFor(currentHex) : null;
+  let currentWire: PqKeyBindingWire | undefined;
+  const strict = args.pq ? strictInForce(args.pq.policy) : false;
 
   for (const entry of args.chain) {
     const oldHex = String(entry.oldAdminRootPub ?? "").toLowerCase();
@@ -229,7 +263,10 @@ export function applyRotationChain(args: {
     // Once we've started, every subsequent hop MUST depart from where we are;
     // a gap/fork stops the replay.
     if (oldHex !== currentHex) break;
-    if (!HEX64.test(newHex) || !HEX128.test(sigHex) || newHex === currentHex) break;
+    if (!HEX64.test(newHex) || !HEX128.test(sigHex) || newHex === currentHex) {
+      stoppedEarly = true;
+      break;
+    }
 
     const rotation: AdminRootRotation = {
       username: args.username,
@@ -239,14 +276,48 @@ export function applyRotationChain(args: {
     };
     // Verify against the PINNED root (== this hop's declared old). A proof not
     // signed by the current root does not re-pin.
-    if (!verifyAdminRootRotation(rotation, hexToBytes(sigHex), hexToBytes(currentHex))) break;
+    if (!verifyAdminRootRotation(rotation, hexToBytes(sigHex), hexToBytes(currentHex))) {
+      stoppedEarly = true;
+      break;
+    }
+    let nextBinding: VerifiedPqKeyBinding | null = null;
+    let nextWire: PqKeyBindingWire | undefined;
+    if (entry.pq !== undefined && entry.pq !== null) {
+      if (!args.pq) {
+        stoppedEarly = true;
+        break;
+      }
+      try {
+        nextBinding = verifyAdminRootRotationPq({ rotation, pq: entry.pq, oldRootBinding: currentBinding, policy: args.pq.policy, now: args.pq.now });
+        nextWire = (entry.pq as { newRootBinding: PqKeyBindingWire }).newRootBinding;
+      } catch (e) {
+        if (!(e instanceof PqTrustError)) throw e;
+        stoppedEarly = true;
+        break;
+      }
+    } else if (strict) {
+      stoppedEarly = true;
+      break;
+    }
 
     currentHex = newHex;
+    currentBinding = nextBinding;
+    currentWire = nextWire;
     applied += 1;
     lastSeq = typeof entry.seq === "number" ? entry.seq : lastSeq;
   }
 
-  return { pinnedHex: currentHex, applied, lastSeq };
+  return { pinnedHex: currentHex, applied, lastSeq, ...(applied > 0 && currentWire ? { pqBinding: currentWire } : {}), stoppedEarly };
+}
+
+/** The pin to write after a replay: the binding is kept only while it names the pinned root. */
+function pinOf(result: ApplyChainResult, updatedAt: number): AdminRootPin {
+  return {
+    adminRootPubHex: result.pinnedHex,
+    seq: result.lastSeq,
+    updatedAt,
+    ...(result.pqBinding && result.pqBinding.ed25519PubHex === result.pinnedHex ? { pqBinding: result.pqBinding } : {}),
+  };
 }
 
 export interface ClaimAdminRootRotationOptions {
@@ -274,6 +345,8 @@ export interface ClaimAdminRootRotationOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
   onLog?: (m: string) => void;
+  /** The policy and bindings hybrid hops are checked against (pqAuthority.ts); null before they are wired. */
+  pq?: () => RotationPq | null;
 }
 
 export type AdminRootRotationOutcome =
@@ -324,6 +397,7 @@ async function fetchRotationChainOrNull(
           newAdminRootPub: r.newAdminRootPub,
           issuedAt: r.issuedAt,
           signatureHex: r.signatureHex,
+          ...(r.pq !== undefined && r.pq !== null ? { pq: r.pq } : {}),
         });
       }
     }
@@ -351,6 +425,7 @@ export async function applyDeliveredRotations(opts: {
   restart: () => void;
   now?: () => number;
   onLog?: (m: string) => void;
+  pq?: () => RotationPq | null;
 }): Promise<AdminRootRotationOutcome> {
   const log = opts.onLog ?? (() => {});
   let current: string | null;
@@ -361,10 +436,11 @@ export async function applyDeliveredRotations(opts: {
   }
   if (!current) return { rotated: false, reason: "no-admin-root" };
   const chain = [...opts.entries].sort((a, b) => a.seq - b.seq);
-  const result = applyRotationChain({ pinnedHex: current, username: opts.username.toLowerCase(), chain });
+  const pq = opts.pq?.() ?? undefined;
+  const result = applyRotationChain({ pinnedHex: current, username: opts.username.toLowerCase(), chain, ...(pq ? { pq } : {}) });
   if (result.applied === 0 || result.pinnedHex === current) return { rotated: false, reason: "no-rotation" };
   try {
-    await opts.pinStore.write({ adminRootPubHex: result.pinnedHex, seq: result.lastSeq, updatedAt: (opts.now ?? (() => Date.now()))() });
+    await opts.pinStore.write(pinOf(result, (opts.now ?? (() => Date.now()))()));
   } catch (e) {
     log(`[admin-root-rotation] persist failed (${(e as Error).message})`);
     return { rotated: false, reason: "error" };
@@ -407,21 +483,19 @@ export async function claimAdminRootRotations(
   const chain = await fetchRotationChain(opts.controlPlaneBaseUrl, opts.username, fetchImpl, log);
   if (chain.length === 0) return { rotated: false, reason: "no-rotation" };
 
+  const pq = opts.pq?.() ?? undefined;
   const result = applyRotationChain({
     pinnedHex: current,
     username: opts.username.toLowerCase(),
     chain,
+    ...(pq ? { pq } : {}),
   });
   if (result.applied === 0 || result.pinnedHex === current) {
     return { rotated: false, reason: "no-rotation" };
   }
 
   try {
-    await opts.pinStore.write({
-      adminRootPubHex: result.pinnedHex,
-      seq: result.lastSeq,
-      updatedAt: now,
-    });
+    await opts.pinStore.write(pinOf(result, now));
   } catch (e) {
     // Do NOT restart if we couldn't persist — a restart would re-read the old
     // seed and re-apply, never converging. Surface + keep polling.

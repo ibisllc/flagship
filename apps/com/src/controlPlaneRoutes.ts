@@ -2932,6 +2932,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           rotations: storage.adminRootRotations,
+          pqTrust: storage.pqTrust,
         },
         decodeURIComponent(m[1]!),
         await readJson(request),

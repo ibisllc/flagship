@@ -21,6 +21,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/release-endorsement/v2": "bespoke AT-ENV-23; vectors releaseEndorsementPqVectors.test.ts (22 refusal cases)",
   "flagship/box-artifact/v2": "bespoke AT-ENV-24; vectors boxArtifactPq.test.ts",
   "flagship/signed-time/v1": "bespoke AT-ENV-25; signedTime.test.ts",
+  "flagship/admin-root-rotation/v2": "bespoke: test-vectors/pq-authority (another signer, swapped new-root binding, bit flip, classical suite, no or wrong old-root binding; TS + Rust); pqAuthorityRecordsBox.test.ts, adminRootRotationPq.test.ts",
   "flagship/device-revocation-list/v1": "bespoke: test-vectors/device-revocation-list (tampered ids, other account, unpinned key, window, future); keyd tests (TS + Rust)",
   "flagship/auth-time/v1": "bespoke AT-ENV-25; authTime.test.ts",
   "flagship/account-key-attestation/v1": "bespoke AT-ENV-26; serverShareAcceptAdmin.test.ts",
