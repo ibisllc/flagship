@@ -132,7 +132,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // Storage: encrypted (LVM-on-LUKS) is the locked default; the unencrypted
   // escape hatch reproduces a plain regular install for bisecting a boot
   // failure (NOT exposed in CLI/GUI), mirroring userdata.ts encryptRoot:false.
-  const chooseDisk = resolveTargetDisk(beaconSerial, opts.targetDisk);
+  const chooseDisk = resolveTargetDisk(beaconSerial, opts.targetDisk, quiet);
   const storageBlock = encryptRoot
     ? debianCryptoStorageBlock(partitionBeacon, installingDrop, chooseDisk)
     : debianPlainStorageBlock(partitionBeacon, installingDrop, chooseDisk);
@@ -519,7 +519,7 @@ export const TARGET_DISK_PATTERN = /^(by-id:[A-Za-z0-9._:+@-]{1,200}|serial:[A-Z
 /** 8 GiB in 512-byte sectors: smaller disks are never chosen without being named. */
 export const TARGET_DISK_MIN_SECTORS = 16777216;
 
-function resolveTargetDisk(serial: string, targetDisk: string | undefined): string {
+function resolveTargetDisk(serial: string, targetDisk: string | undefined, quiet = false): string {
   if (targetDisk !== undefined && !TARGET_DISK_PATTERN.test(targetDisk)) {
     throw new Error(`targetDisk must be by-id:<name>, serial:<serial> or size:<bytes>, not ${JSON.stringify(targetDisk)}`);
   }
@@ -555,8 +555,11 @@ function resolveTargetDisk(serial: string, targetDisk: string | undefined): stri
     `if [ "$_nc" != 1 ]; then ` +
     `_why=${why}; ` +
     `echo "*** FLAGSHIP INSTALL STOPPED: $_why ***" >> /dev/console 2>&1; ` +
-    `( printf '{"phase":"error","detail":"%s"}' "$_why" > /tmp/flagship-beacon.json; ` +
-    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 https://flagshipserver.com/api/order/${serial}/status ) >/dev/null 2>&1 || true; ` +
+    // A proxy recipe's installer stays silent toward .com (see `quiet` in buildPreseed).
+    (quiet
+      ? ""
+      : `( printf '{"phase":"error","detail":"%s"}' "$_why" > /tmp/flagship-beacon.json; ` +
+        `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 https://flagshipserver.com/api/order/${serial}/status ) >/dev/null 2>&1 || true; `) +
     `while :; do sleep 3600; done; ` +
     `fi`
   );

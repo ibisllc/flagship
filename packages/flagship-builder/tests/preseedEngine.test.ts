@@ -229,7 +229,7 @@ describe("preseed engine bundle", () => {
     expect(JSON.parse(seeded.outboundProxyCredentials)).toEqual(creds);
     const preseed = engine.buildPreseed(buildSignedRecipe({ outboundProxy: JSON.stringify(order) }), "{}");
     const embedded = JSON.parse(
-      Buffer.from(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/.exec(preseed)![1]!, "base64").toString("utf8"),
+      Buffer.from(/^d-i flagship\/install-blob string ([A-Za-z0-9+/=]+)$/m.exec(preseed)![1]!, "base64").toString("utf8"),
     );
     expect(JSON.parse(embedded.outboundProxy)).toEqual(order);
     expect(embedded.outboundProxyCredentials).toBeUndefined();
