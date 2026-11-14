@@ -502,6 +502,7 @@ const ESSENTIAL_PATHS = [
   "/icon.svg",
   "/keystore.js",
   "/lib/router.js",
+  "/lib/layout.js",
   "/lib/state.js",
   "/lib/api.js",
   "/lib/toast.js",
