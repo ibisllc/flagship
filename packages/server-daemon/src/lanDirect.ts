@@ -93,13 +93,14 @@ export function parseConnectRequest(
   return { ok: true, host };
 }
 
-/** Whether a TLS client asked for the box's own name or one under it: anything else (no SNI, an IP, a guess) is
- *  refused before the box presents a certificate, so a stranger on the LAN never reads the box's names from it. */
-export function lanSniAllowed(sni: string | null, zone: string): boolean {
+/** Whether a TLS client asked for the box's own name or one under it, or exactly one of `extra` (the box's direct
+ *  names, directNames.ts): anything else (no SNI, an IP, a guess) is refused before the box presents a certificate,
+ *  so a stranger never reads the box's names from it. */
+export function lanSniAllowed(sni: string | null, zone: string, extra: readonly string[] = []): boolean {
   if (!sni) return false;
   const h = sni.toLowerCase();
   const z = zone.toLowerCase();
-  return h === z || h.endsWith(`.${z}`);
+  return h === z || h.endsWith(`.${z}`) || extra.some((n) => n.toLowerCase() === h);
 }
 
 /** `FLAGSHIP_LAN_PORT`, or 443 when unset or not a usable port. */
@@ -135,6 +136,8 @@ export interface LanListenerOptions {
    * never recorded as LAN. Default `lan`.
    */
   ingress?: "lan" | "public";
+  /** Exact names admitted at the TLS gate besides `zone` (the public listener: the box's verified direct names). */
+  extraNames?: () => readonly string[];
 }
 
 /**
@@ -202,7 +205,7 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
         if (hello.length > DEFAULT_SNI_LIMITS.maxRawBytes) client.destroy();
         return;
       }
-      if (r.kind === "error" || !lanSniAllowed(r.sni, o.zone)) {
+      if (r.kind === "error" || !lanSniAllowed(r.sni, o.zone, o.extraNames?.() ?? [])) {
         client.destroy();
         return;
       }
