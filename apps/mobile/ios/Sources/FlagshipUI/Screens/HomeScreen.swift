@@ -91,6 +91,8 @@ public struct HomeScreen: View {
     /// Servers that run a release this `.com` no longer fully serves (a 0.2
     /// box under 0.3), lowercased fqdn → what `/pods` says; their row says so.
     var updateRequired: [String: UpdateRequiredWire] = [:]
+    /// Servers this phone stopped trusting (lowercase FQDNs), shown with a red badge.
+    var untrustedServers: Set<String> = []
     /// Move a server to the top of the owner's order (docs/server-order.md).
     var onMakeLeader: (PodInfo) -> Void = { _ in }
     /// The owner dropped a server elsewhere in the list: the new order, by pod id.
@@ -866,6 +868,13 @@ public struct HomeScreen: View {
         return s
     }
 
+    /// Home with the servers this phone stopped trusting marked in red.
+    public func untrusted(_ servers: Set<String>) -> HomeScreen {
+        var s = self
+        s.untrustedServers = servers
+        return s
+    }
+
     /// Home with the servers that need an update marked (`/pods` `updateRequired`).
     public func updatesRequired(_ outdated: [String: UpdateRequiredWire]) -> HomeScreen {
         var s = self
@@ -927,6 +936,9 @@ public struct HomeScreen: View {
                                         .accessibilityIdentifier("home-standing-in")
                                 }
                             }
+                            if untrustedServers.contains(pod.fqdn.lowercased()) {
+                                UntrustedBadge()
+                            }
                             if let backupWait {
                                 FSPill(backupWait.state == "restoring" ? String(localized: "Restoring its backup") : String(localized: "Waiting for its backup"), kind: .provisioning)
                                     .accessibilityIdentifier("pod-card-awaiting-backup")
@@ -972,7 +984,7 @@ public struct HomeScreen: View {
     private func serverMenu(pod: PodInfo) -> some View {
         // Leader = the daemon the screens point at; only a
         // server that came online can be one.
-        if canChangeServers && pod.status != .pending && !pod.isRevoked
+        if canChangeServers && pod.status != .pending && !pod.isRevoked && !untrustedServers.contains(pod.fqdn.lowercased())
             && pods.first(where: { $0.status != .pending && !$0.isRevoked })?.podId != pod.podId {
             Button {
                 onMakeLeader(pod)
@@ -1288,6 +1300,28 @@ private struct OptionalAccessibilityId: ViewModifier {
     let id: String?
     func body(content: Content) -> some View {
         if let id { content.accessibilityIdentifier(id) } else { content }
+    }
+}
+
+/// A server this phone stopped trusting: the box that came online was not the one it set up.
+public struct UntrustedBadge: View {
+    @Environment(\.colorScheme) private var scheme
+    public init() {}
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        HStack(spacing: 4) {
+            Image(systemName: "exclamationmark.octagon.fill").font(FS.font.scaled(10, weight: .bold))
+            Text("Untrusted").font(FS.font.scaled(11, weight: .semibold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
+        .frame(minHeight: 22)
+        .background(c.danger)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Untrusted: this phone won't connect to this server"))
+        .accessibilityIdentifier("pod-card-untrusted")
     }
 }
 

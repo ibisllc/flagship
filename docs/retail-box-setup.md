@@ -284,10 +284,18 @@ admin device of this account can set up a server."
 - When the server first shows on `/pods`, the phone compares `.com`'s STK and boot key binding with the receipt. It
   also opens the box over the relay path (`<server>.<user>.flagship.services`, TLS ends on the box) and checks the
   certificate chains to the pinned STK.
-- Match: done. Mismatch, or the box never registers while another server under this AuthCode does: a full-screen
+- Match: the app waits for the box's certificate ("Getting its security certificate…") and is done only once the TLS
+  check holds; after five minutes without one it says it is taking longer than usual, keeps checking for 30 minutes
+  and offers Check again. It never ends on done without the TLS check (owner, 2026-11-14). Mismatch, or the box never
+  registers while another server under this AuthCode does: a full-screen
   alarm. "The server that came online is not the box you paired with. Someone may have intercepted the setup. Don't
   use it. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi
   password, change it." The phone marks the server untrusted and offers Delete (the existing signed revoke).
+  Untrusted is a real, persisted state on the phone (owner, 2026-11-14): no connection to the server or its apps (a known
+  box without a pin), nothing sealed to it and no re-pin, a red "Untrusted" badge on Home, until the server is
+  deleted. The alarm also gives the 5-press reset instructions.
+- One Face ID for the whole claim (owner, 2026-11-14): the admin key the create flow unseals to sign the recipe also
+  signs `flagship/box-claim-key/v1`, and is dropped right after that registration (or on any stop).
 - The AuthCode must be single use at `.com`, so one claim yields at most one registered server. Check this in
   `handleServerRegister`; make it so if not.
 - Because the phone registers the box's key at `.com` before the box goes online (section 4 step 8), a "pass it on"

@@ -3435,7 +3435,6 @@
   "Certificate ready. Waiting for the direct path.": "Certificat prêt. En attente de la connexion directe.",
   "Set up a box from a store": "Configurer un boîtier acheté en magasin",
   "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": "Un boîtier Flagship sans rien à installer. Ce téléphone le trouve en Bluetooth quand vous le branchez.",
-  "Register your new box": "Enregistrer votre nouveau boîtier",
   "Keep the box unplugged for now": "Laissez le boîtier débranché pour l'instant",
   "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": "Ce téléphone cherche le boîtier en Bluetooth. Commencez ici et ne branchez le boîtier que lorsque l'app vous le demande.",
   "I have a setup code from the box's screen": "J'ai un code de configuration affiché par le boîtier",
@@ -3483,7 +3482,6 @@
   "No new box appeared": "Aucun nouveau boîtier n'est apparu",
   "Not supported": "Non pris en charge",
   "Don't use this server": "N'utilisez pas ce serveur",
-  "Open the server to delete it": "Ouvrir le serveur pour le supprimer",
   "More than one box nearby": "Plusieurs boîtiers à proximité",
   "Don't continue": "Ne continuez pas",
   "Someone else tried at the same moment": "Quelqu'un d'autre a essayé au même moment",
@@ -3653,5 +3651,15 @@
   "Admin": "Administrateur",
   "Board member: lifts freezes": "Membre du conseil : lève les gels",
   "Recovery key": "Clé de récupération",
-  "Run servers together, with signed approvals": "Gérez des serveurs à plusieurs, avec des approbations signées"
+  "Run servers together, with signed approvals": "Gérez des serveurs à plusieurs, avec des approbations signées",
+  "Untrusted: this phone won't connect to this server": "Non fiable : ce téléphone ne se connectera pas à ce serveur",
+  "Untrusted": "Non fiable",
+  "Getting its security certificate…": "Obtention de son certificat de sécurité…",
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": "Le boîtier que vous avez appairé est en ligne. Il obtient le certificat qui garde chaque connexion avec lui privée, et ce téléphone le vérifie avec la clé du boîtier. Cela prend en général une minute ou deux.",
+  "This is taking longer than usual": "Cela prend plus de temps que d'habitude",
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": "Ce téléphone ne fait plus confiance à ce serveur : il ne s'y connectera pas et ne lui enverra rien.",
+  "Delete this server": "Supprimer ce serveur",
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": "Pour configurer à nouveau le boîtier : appuyez 5 fois rapidement sur son bouton d'alimentation et attendez qu'il redémarre. Recommencez ensuite depuis Ajouter / Restaurer un serveur, avec un câble réseau.",
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": "Le boîtier est en ligne mais n'a pas encore de certificat de sécurité. Cela prend en général quelques minutes. Laissez-le branché et connecté ; vous pouvez fermer ceci, le serveur reste sur l'Accueil comme en cours de configuration.",
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": "Ce téléphone ne fait pas confiance à ce serveur : ce n'est pas le boîtier que vous avez configuré. Supprimez-le depuis l'Accueil."
 }

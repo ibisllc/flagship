@@ -3435,7 +3435,6 @@
   "Certificate ready. Waiting for the direct path.": "Zertifikat bereit. Wartet auf den direkten Weg.",
   "Set up a box from a store": "Box aus dem Handel einrichten",
   "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": "Eine Flagship-Box, auf der nichts installiert werden muss. Dieses Telefon findet sie über Bluetooth, sobald du sie einsteckst.",
-  "Register your new box": "Neue Box registrieren",
   "Keep the box unplugged for now": "Lass die Box vorerst ausgesteckt",
   "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": "Dieses Telefon sucht die Box über Bluetooth. Beginne hier und stecke die Box erst ein, wenn die App dich darum bittet.",
   "I have a setup code from the box's screen": "Ich habe einen Einrichtungscode vom Bildschirm der Box",
@@ -3483,7 +3482,6 @@
   "No new box appeared": "Keine neue Box erschienen",
   "Not supported": "Nicht unterstützt",
   "Don't use this server": "Verwende diesen Server nicht",
-  "Open the server to delete it": "Server öffnen, um ihn zu löschen",
   "More than one box nearby": "Mehr als eine Box in der Nähe",
   "Don't continue": "Nicht fortfahren",
   "Someone else tried at the same moment": "Jemand anderes hat es gleichzeitig versucht",
@@ -3653,5 +3651,15 @@
   "Admin": "Admin",
   "Board member: lifts freezes": "Vorstandsmitglied: hebt Sperren auf",
   "Recovery key": "Wiederherstellungsschlüssel",
-  "Run servers together, with signed approvals": "Server gemeinsam betreiben, mit signierten Zustimmungen"
+  "Run servers together, with signed approvals": "Server gemeinsam betreiben, mit signierten Zustimmungen",
+  "Untrusted: this phone won't connect to this server": "Nicht vertrauenswürdig: Dieses Telefon verbindet sich nicht mit diesem Server",
+  "Untrusted": "Nicht vertrauenswürdig",
+  "Getting its security certificate…": "Sicherheitszertifikat wird geholt…",
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": "Die Box, mit der du dich gekoppelt hast, ist online. Sie holt das Zertifikat, das jede Verbindung zu ihr privat hält, und dieses Telefon prüft es gegen den Schlüssel der Box. Das dauert meist ein bis zwei Minuten.",
+  "This is taking longer than usual": "Das dauert länger als üblich",
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": "Dieses Telefon vertraut diesem Server nicht mehr: Es verbindet sich nicht mit ihm und sendet ihm nichts.",
+  "Delete this server": "Diesen Server löschen",
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": "So richtest du die Box neu ein: Drücke ihren Einschaltknopf 5-mal schnell hintereinander und warte, bis sie neu startet. Beginne dann erneut unter Server hinzufügen / wiederherstellen, mit einem Netzwerkkabel.",
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": "Die Box ist online, hat aber noch kein Sicherheitszertifikat. Das dauert meist ein paar Minuten. Lass sie eingesteckt und verbunden; du kannst das hier schließen, der Server bleibt auf der Startseite als „wird eingerichtet“.",
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": "Dieses Telefon vertraut diesem Server nicht: Es ist nicht die Box, die du eingerichtet hast. Lösche ihn auf der Startseite."
 }

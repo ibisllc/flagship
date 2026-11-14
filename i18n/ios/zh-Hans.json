@@ -3433,7 +3433,6 @@
   "Certificate ready. Waiting for the direct path.": "证书已就绪。正在等待直接连接。",
   "Set up a box from a store": "设置从商店购买的主机",
   "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": "无需安装任何内容的 Flagship 主机。插上电源后，这部手机会通过蓝牙找到它。",
-  "Register your new box": "登记你的新主机",
   "Keep the box unplugged for now": "暂时不要给主机通电",
   "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": "这部手机通过蓝牙查找主机。请从这里开始，只在应用提示时再给主机通电。",
   "I have a setup code from the box's screen": "我有主机屏幕上的设置码",
@@ -3481,7 +3480,6 @@
   "No new box appeared": "没有出现新主机",
   "Not supported": "不支持",
   "Don't use this server": "不要使用此服务器",
-  "Open the server to delete it": "打开服务器以删除它",
   "More than one box nearby": "附近有不止一台主机",
   "Don't continue": "请勿继续",
   "Someone else tried at the same moment": "有人同时在尝试",
@@ -3651,5 +3649,15 @@
   "Admin": "管理员",
   "Board member: lifts freezes": "董事会成员：可解除冻结",
   "Recovery key": "恢复密钥",
-  "Run servers together, with signed approvals": "多人共同管理服务器，审批均有签名"
+  "Run servers together, with signed approvals": "多人共同管理服务器，审批均有签名",
+  "Untrusted: this phone won't connect to this server": "不受信任：此手机不会连接这台服务器",
+  "Untrusted": "不受信任",
+  "Getting its security certificate…": "正在获取安全证书…",
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": "你配对的主机已联网。它正在获取让每个连接保持私密的证书，此手机会用主机的密钥核对它。这通常需要一两分钟。",
+  "This is taking longer than usual": "这比平时用的时间长",
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": "此手机不再信任这台服务器：不会连接它，也不会向它发送任何内容。",
+  "Delete this server": "删除此服务器",
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": "要重新设置这台主机：快速按电源键 5 次，等它重新启动。然后接上网线，从“添加 / 恢复服务器”重新开始。",
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": "主机已联网，但还没有安全证书。这通常需要几分钟。请保持通电和联网；你可以关闭此页面，服务器会以“正在设置”显示在主页上。",
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": "此手机不信任这台服务器：它不是你设置的那台主机。请在主页上删除它。"
 }

@@ -1798,10 +1798,11 @@ struct DeleteServerSheet: View {
             serverFqdn: serverDomain,
             identityPubKeyHex: identityPubKeyHex,
             username: { appState.currentUser },
-            onDeleted: {
+            onDeleted: { [serverDomain] in
                 if let user = appState.currentUser {
                     PendingServerStore().remove(username: user, podId: podId)
                 }
+                UntrustedServers.shared.forget(serverDomain)
                 appState.removePod(podId)
             }
         )

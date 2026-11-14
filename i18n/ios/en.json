@@ -14760,10 +14760,6 @@
     "en": "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:187"
   },
-  "Register your new box": {
-    "en": "Register your new box",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimContainer.swift:57"
-  },
   "Keep the box unplugged for now": {
     "en": "Keep the box unplugged for now",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:63"
@@ -14951,10 +14947,6 @@
   "Don't use this server": {
     "en": "Don't use this server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:211"
-  },
-  "Open the server to delete it": {
-    "en": "Open the server to delete it",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:216"
   },
   "More than one box nearby": {
     "en": "More than one box nearby",
@@ -15635,5 +15627,45 @@
   "Run servers together, with signed approvals": {
     "en": "Run servers together, with signed approvals",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Untrusted: this phone won't connect to this server": {
+    "en": "Untrusted: this phone won't connect to this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1323"
+  },
+  "Untrusted": {
+    "en": "Untrusted",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1314"
+  },
+  "Getting its security certificate…": {
+    "en": "Getting its security certificate…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:192"
+  },
+  "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": {
+    "en": "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:193"
+  },
+  "This is taking longer than usual": {
+    "en": "This is taking longer than usual",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:197"
+  },
+  "This phone no longer trusts this server: it won't connect to it or send it anything.": {
+    "en": "This phone no longer trusts this server: it won't connect to it or send it anything.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:229"
+  },
+  "Delete this server": {
+    "en": "Delete this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:237"
+  },
+  "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": {
+    "en": "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:128"
+  },
+  "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": {
+    "en": "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:129"
+  },
+  "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": {
+    "en": "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/UntrustedServers.swift:67"
   }
 }

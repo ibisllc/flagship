@@ -140823,47 +140823,6 @@
         }
       }
     },
-    "Register your new box": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Registrar tu nuevo equipo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enregistrer votre nouveau boîtier"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neue Box registrieren"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Registrar sua nova caixa"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新しいボックスを登録"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登记你的新主机"
-          }
-        }
-      }
-    },
     "Keep the box unplugged for now": {
       "extractionState": "manual",
       "localizations": {
@@ -142787,47 +142746,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "不要使用此服务器"
-          }
-        }
-      }
-    },
-    "Open the server to delete it": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Abrir el servidor para eliminarlo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir le serveur pour le supprimer"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Server öffnen, um ihn zu löschen"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Abrir o servidor para excluí-lo"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "サーバーを開いて削除する"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开服务器以删除它"
           }
         }
       }
@@ -149798,6 +149716,416 @@
           "stringUnit": {
             "state": "translated",
             "value": "多人共同管理服务器，审批均有签名"
+          }
+        }
+      }
+    },
+    "Untrusted: this phone won't connect to this server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No fiable: este teléfono no se conectará a este servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non fiable : ce téléphone ne se connectera pas à ce serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht vertrauenswürdig: Dieses Telefon verbindet sich nicht mit diesem Server"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não confiável: este telefone não vai se conectar a este servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "信頼できません：この電話はこのサーバーに接続しません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不受信任：此手机不会连接这台服务器"
+          }
+        }
+      }
+    },
+    "Untrusted": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No fiable"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non fiable"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht vertrauenswürdig"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não confiável"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "信頼できません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不受信任"
+          }
+        }
+      }
+    },
+    "Getting its security certificate…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obteniendo su certificado de seguridad…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtention de son certificat de sécurité…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sicherheitszertifikat wird geholt…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtendo o certificado de segurança…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セキュリティ証明書を取得しています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在获取安全证书…"
+          }
+        }
+      }
+    },
+    "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo que emparejaste está en línea. Está obteniendo el certificado que mantiene privada cada conexión con él, y este teléfono lo comprueba con la clave del equipo. Suele tardar uno o dos minutos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier que vous avez appairé est en ligne. Il obtient le certificat qui garde chaque connexion avec lui privée, et ce téléphone le vérifie avec la clé du boîtier. Cela prend en général une minute ou deux."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box, mit der du dich gekoppelt hast, ist online. Sie holt das Zertifikat, das jede Verbindung zu ihr privat hält, und dieses Telefon prüft es gegen den Schlüssel der Box. Das dauert meist ein bis zwei Minuten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa que você pareou está on-line. Ela está obtendo o certificado que mantém privada cada conexão com ela, e este telefone o confere com a chave da caixa. Isso costuma levar um ou dois minutos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペアリングしたボックスはオンラインです。ボックスとのすべての接続を非公開に保つ証明書を取得しており、この電話がボックスの鍵と照合します。通常は 1〜2 分かかります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你配对的主机已联网。它正在获取让每个连接保持私密的证书，此手机会用主机的密钥核对它。这通常需要一两分钟。"
+          }
+        }
+      }
+    },
+    "This is taking longer than usual": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Está tardando más de lo habitual"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cela prend plus de temps que d'habitude"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das dauert länger als üblich"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Está demorando mais que o normal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通常より時間がかかっています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这比平时用的时间长"
+          }
+        }
+      }
+    },
+    "This phone no longer trusts this server: it won't connect to it or send it anything.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono ya no confía en este servidor: no se conectará a él ni le enviará nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone ne fait plus confiance à ce serveur : il ne s'y connectera pas et ne lui enverra rien."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon vertraut diesem Server nicht mehr: Es verbindet sich nicht mit ihm und sendet ihm nichts."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este telefone não confia mais neste servidor: não vai se conectar a ele nem enviar nada a ele."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この電話はもうこのサーバーを信頼していません。接続も送信も行いません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此手机不再信任这台服务器：不会连接它，也不会向它发送任何内容。"
+          }
+        }
+      }
+    },
+    "Delete this server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar este servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer ce serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Server löschen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluir este servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーを削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除此服务器"
+          }
+        }
+      }
+    },
+    "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para volver a configurar el equipo: pulsa su botón de encendido 5 veces, rápido, y espera a que se reinicie. Luego empieza de nuevo desde Añadir / Restaurar un servidor, con un cable de red."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour configurer à nouveau le boîtier : appuyez 5 fois rapidement sur son bouton d'alimentation et attendez qu'il redémarre. Recommencez ensuite depuis Ajouter / Restaurer un serveur, avec un câble réseau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "So richtest du die Box neu ein: Drücke ihren Einschaltknopf 5-mal schnell hintereinander und warte, bis sie neu startet. Beginne dann erneut unter Server hinzufügen / wiederherstellen, mit einem Netzwerkkabel."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para configurar a caixa de novo: aperte o botão liga/desliga 5 vezes, rapidamente, e espere ela reiniciar. Depois comece de novo em Adicionar / Restaurar um servidor, com um cabo de rede."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスを設定し直すには、電源ボタンをすばやく 5 回押して、再起動するまで待ちます。その後、ネットワークケーブルをつないで「サーバーを追加 / 復元」から始め直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要重新设置这台主机：快速按电源键 5 次，等它重新启动。然后接上网线，从“添加 / 恢复服务器”重新开始。"
+          }
+        }
+      }
+    },
+    "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo está en línea, pero todavía no tiene certificado de seguridad. Suele tardar unos minutos. Déjalo enchufado y conectado; puedes cerrar esto y el servidor seguirá en Inicio como en configuración."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier est en ligne mais n'a pas encore de certificat de sécurité. Cela prend en général quelques minutes. Laissez-le branché et connecté ; vous pouvez fermer ceci, le serveur reste sur l'Accueil comme en cours de configuration."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box ist online, hat aber noch kein Sicherheitszertifikat. Das dauert meist ein paar Minuten. Lass sie eingesteckt und verbunden; du kannst das hier schließen, der Server bleibt auf der Startseite als „wird eingerichtet“."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está on-line, mas ainda não tem certificado de segurança. Isso costuma levar alguns minutos. Deixe-a ligada e conectada; você pode fechar isto e o servidor continua no Início como em configuração."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはオンラインですが、まだセキュリティ証明書がありません。通常は数分かかります。電源とネットワークをつないだままにしてください。この画面を閉じても、サーバーはホームに設定中として残ります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机已联网，但还没有安全证书。这通常需要几分钟。请保持通电和联网；你可以关闭此页面，服务器会以“正在设置”显示在主页上。"
+          }
+        }
+      }
+    },
+    "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono no confía en este servidor: no es el equipo que configuraste. Elimínalo desde Inicio."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone ne fait pas confiance à ce serveur : ce n'est pas le boîtier que vous avez configuré. Supprimez-le depuis l'Accueil."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon vertraut diesem Server nicht: Es ist nicht die Box, die du eingerichtet hast. Lösche ihn auf der Startseite."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este telefone não confia neste servidor: não é a caixa que você configurou. Exclua-o no Início."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この電話はこのサーバーを信頼していません。設定したボックスではありません。ホームから削除してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此手机不信任这台服务器：它不是你设置的那台主机。请在主页上删除它。"
           }
         }
       }

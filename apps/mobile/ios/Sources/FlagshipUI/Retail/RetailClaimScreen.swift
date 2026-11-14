@@ -10,6 +10,7 @@ public struct RetailClaimScreen: View {
     @State private var password = ""
     @State private var passwordRefused = false
     @State private var pasted = ""
+    @State private var deleting: String?
 
     public init(vm: RetailClaimViewModel, onClose: @escaping () -> Void, onOpenServer: @escaping (String) -> Void = { _ in }) {
         self.vm = vm
@@ -187,6 +188,18 @@ public struct RetailClaimScreen: View {
             header(String(localized: "Checking the box online"),
                    String(localized: "Making sure the server that comes online is the box you paired with. This can take a few minutes."), c: c)
             spinner(c)
+        case .gettingCertificate:
+            header(String(localized: "Getting its security certificate…"),
+                   String(localized: "The box you paired with is online. It is getting the certificate that keeps every connection to it private, and this phone checks it against the box's key. This usually takes a minute or two."), c: c)
+                .accessibilityIdentifier("rc-certificate")
+            spinner(c)
+        case .certificateSlow:
+            header(String(localized: "This is taking longer than usual"), RetailClaimCopy.certificateSlow, c: c)
+                .accessibilityIdentifier("rc-certificate-slow")
+            spinner(c)
+            FSPrimaryButton(String(localized: "Check again"), block: true) { vm.checkCertificateAgain() }
+                .accessibilityIdentifier("rc-certificate-again")
+            FSGhostButton(String(localized: "Close"), block: true) { onClose() }
         case .done(let domain):
             header(String(localized: "Your box is set up"), String(localized: "The server that came online is the box you paired with."), c: c)
             Label(domain, systemImage: "lock.fill").font(FS.font.body()).foregroundColor(c.text)
@@ -212,12 +225,41 @@ public struct RetailClaimScreen: View {
             Text(alarm.message).font(FS.font.body()).foregroundColor(.white)
                 .accessibilityIdentifier("rc-alarm")
             Text(domain).font(FS.font.bodySm()).foregroundColor(.white.opacity(0.85))
+            if alarm == .keyMismatch {
+                Text("This phone no longer trusts this server: it won't connect to it or send it anything.")
+                    .font(FS.font.bodySm()).foregroundColor(.white)
+                    .accessibilityIdentifier("rc-alarm-untrusted")
+            }
+            Text(RetailClaimCopy.alarmResetInstructions).font(FS.font.bodySm()).foregroundColor(.white)
+                .accessibilityIdentifier("rc-alarm-reset")
             Spacer()
-            FSDangerButton(String(localized: "Open the server to delete it"), block: true, large: true) { onOpenServer(domain) }
-            FSGhostButton(String(localized: "Close"), block: true) { onClose() }
+            Button { deleting = domain } label: {
+                Text("Delete this server")
+                    .font(FS.font.scaled(17, weight: .semibold))
+                    .foregroundColor(c.danger)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+            }
+            .accessibilityIdentifier("rc-alarm-delete")
+            Button { onClose() } label: {
+                Text("Close").font(FS.font.body()).foregroundColor(.white).frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .accessibilityIdentifier("rc-alarm-close")
         }
         .padding(FS.space.s6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c.danger.ignoresSafeArea())
+        .sheet(isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            DeleteServerSheet(
+                serverDomain: domain,
+                displayName: DeleteServerViewModel.serverLabel(forFqdn: domain),
+                identityPubKeyHex: vm.alarmStk ?? "",
+                onCompleted: { _ in
+                    deleting = nil
+                    onClose()
+                }
+            )
+        }
     }
 }
