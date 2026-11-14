@@ -428,6 +428,39 @@ describe("hybrid signing (architecture v2)", () => {
     }
   });
 
+  it("signs a claim receipt only for its own two keys, in the receipt's shape", () => {
+    const pub = "ab".repeat(32);
+    const ml = "cd".repeat(1952);
+    const m = (s: string) => new TextEncoder().encode(s);
+    const receipt = (o: { mode?: string; stk?: string; bkb?: string; transcript?: string; extra?: string } = {}) =>
+      m(
+        [
+          "flagship/box-claim-receipt/v1",
+          o.mode ?? "open",
+          "home.alice.flagship.services",
+          "retail-serial-0001",
+          o.stk ?? pub + ml,
+          o.bkb ?? "",
+          "Mini PC N100",
+          "0.4.0",
+          o.transcript ?? "0f".repeat(64),
+          "1790000000000",
+        ].join("|") + (o.extra ?? ""),
+      );
+    expect(checkSign(receipt(), pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toBe("flagship/box-claim-receipt/v1");
+    expect(checkSign(receipt({ mode: "code", bkb: "11".repeat(32) }), pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toBe("flagship/box-claim-receipt/v1");
+    expect(() => checkSign(receipt(), pub, BOX_SIGN_PURPOSES)).toThrow(/both of its keys/);
+    for (const bad of [
+      receipt({ stk: "ef".repeat(32) + ml }),
+      receipt({ mode: "other" }),
+      receipt({ transcript: "0f".repeat(63) }),
+      receipt({ bkb: "11" }),
+      receipt({ extra: "|more" }),
+    ]) {
+      expect(() => checkSign(bad, pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toThrow(KeydError);
+    }
+  });
+
   it("answers not-provisioned without an ML-DSA seed", async () => {
     const k = await startInProcess();
     try {

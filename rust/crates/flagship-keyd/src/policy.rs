@@ -58,6 +58,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/chat-wire/v1",
     "flagship/certificate-order/v1",
     "flagship/relay-attachment/v1",
+    "flagship/box-claim-receipt/v1",
     "pb-put",
     "pb-resp",
     "pb/request-peers/v1",
@@ -150,7 +151,45 @@ pub const HYBRID_ONLY_PURPOSES: &[&str] = &[
     "flagship/boot-key-binding/v3",
     "flagship/pq-session-accept/v1",
     "flagship/pq-session-finish/v1",
+    "flagship/box-claim-receipt/v1",
 ];
+
+fn receipt_text_ok(s: &str) -> bool {
+    (1..=64).contains(&s.len())
+        && s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'+' | b' ' | b'-'))
+}
+
+fn lower_hex_len(s: &str, n: usize) -> bool {
+    s.len() == n && s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// The claim receipt's fixed shape: the box's own two keys and one claim transcript.
+fn claim_receipt_ok(msg: &[u8], public_key_hex: &str, mldsa_pub_hex: Option<&str>) -> bool {
+    let Ok(text) = std::str::from_utf8(msg) else {
+        return false;
+    };
+    let p: Vec<&str> = text.split('|').collect();
+    if p.len() != 10 {
+        return false;
+    }
+    let own = format!("{public_key_hex}{}", mldsa_pub_hex.unwrap_or(""));
+    let serial_ok = (8..=64).contains(&p[3].len())
+        && p[3].bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-');
+    let issued_ok = !p[9].is_empty()
+        && p[9].len() <= 16
+        && p[9].bytes().all(|c| c.is_ascii_digit())
+        && (p[9] == "0" || !p[9].starts_with('0'));
+    (p[1] == "open" || p[1] == "code")
+        && session_domain_ok(p[2])
+        && serial_ok
+        && p[4] == own
+        && (p[5].is_empty() || lower_hex_len(p[5], 64))
+        && receipt_text_ok(p[6])
+        && receipt_text_ok(p[7])
+        && lower_hex_len(p[8], 128)
+        && issued_ok
+}
 
 fn session_domain_ok(s: &str) -> bool {
     let b = s.as_bytes();
@@ -228,6 +267,11 @@ fn check_sign_inner(
                 "a session signature names a server and one transcript digest",
             ));
         }
+    }
+    if purpose == "flagship/box-claim-receipt/v1" && !claim_receipt_ok(msg, public_key_hex, mldsa_pub_hex) {
+        return Err(KeydError::forbidden(
+            "a claim receipt names the box's own two keys and one claim transcript",
+        ));
     }
     if purpose == "flagship/inject/v1" || purpose == "flagship/identity-header/v1" {
         // The identity the box asserts to an app (protocol identityAssertion.ts): a member's
@@ -823,6 +867,34 @@ mod tests {
             "{:?}",
             String::from_utf8_lossy(m)
         );
+    }
+
+    #[test]
+    fn claim_receipts_name_the_box_and_one_transcript() {
+        let ml = "cd".repeat(1952);
+        let receipt = |mode: &str, stk: &str, transcript: &str, extra: &str| {
+            format!(
+                "flagship/box-claim-receipt/v1|{mode}|home.alice.flagship.services|retail-serial-0001|{stk}||Mini PC N100|0.4.0|{transcript}|1790000000000{extra}"
+            )
+        };
+        let own = format!("{PUB}{ml}");
+        let good = receipt("open", &own, &"0f".repeat(64), "");
+        assert_eq!(
+            check_sign_with(good.as_bytes(), PUB, BOX_SIGN_PURPOSES, Some(&ml)).unwrap(),
+            "flagship/box-claim-receipt/v1"
+        );
+        assert!(check_sign(good.as_bytes(), PUB, BOX_SIGN_PURPOSES).is_err());
+        for bad in [
+            receipt("open", &format!("{}{ml}", "ef".repeat(32)), &"0f".repeat(64), ""),
+            receipt("other", &own, &"0f".repeat(64), ""),
+            receipt("open", &own, &"0f".repeat(63), ""),
+            receipt("open", &own, &"0f".repeat(64), "|more"),
+        ] {
+            assert!(
+                check_sign_with(bad.as_bytes(), PUB, BOX_SIGN_PURPOSES, Some(&ml)).is_err(),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

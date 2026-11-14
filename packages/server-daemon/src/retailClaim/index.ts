@@ -9,3 +9,4 @@ export * from "./rngGate.js";
 export * from "./setupCode.js";
 export * from "./transport.js";
 export * from "./wipeVerifier.js";
+export * from "./keydIdentity.js";

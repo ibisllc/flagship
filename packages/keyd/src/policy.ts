@@ -76,6 +76,9 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   // The box naming the relay that holds its tunnel (docs/architecture-v2/relay-mesh.md §5.1), signed through
   // signRelayMeshRecord. Only for this box's own key and at most ATTACH_TTL_MS (30 min) long.
   "flagship/relay-attachment/v1",
+  // A retail box's claim receipt (docs/retail-box-setup.md §7.6): its own two keys, bound to one claim
+  // transcript. Hybrid only.
+  "flagship/box-claim-receipt/v1",
   // Older peer-backup messages that predate the tag convention.
   "pb-put",
   "pb-resp",
@@ -89,6 +92,7 @@ export const HYBRID_ONLY_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/boot-key-binding/v3",
   "flagship/pq-session-accept/v1",
   "flagship/pq-session-finish/v1",
+  "flagship/box-claim-receipt/v1",
 ]);
 
 /** The only workload-key derivations keyd hands to the daemon (both unsalted). */
@@ -184,6 +188,24 @@ export function checkSign(
     const parts = new TextDecoder().decode(msg).split("|");
     if (parts.length !== 3 || !/^[a-z0-9][a-z0-9.-]{0,252}$/.test(parts[1]!) || !/^[0-9a-f]{128}$/.test(parts[2]!)) {
       throw new KeydError("forbidden", "a session signature names a server and one transcript digest");
+    }
+  }
+  if (purpose === "flagship/box-claim-receipt/v1") {
+    // tag|mode|serverDomain|serial|stkHybridPub|bootKeyBindingSha256|model|imageVersion|transcript|issuedAt
+    const parts = new TextDecoder().decode(msg).split("|");
+    if (
+      parts.length !== 10 ||
+      (parts[1] !== "open" && parts[1] !== "code") ||
+      !/^[a-z0-9][a-z0-9.-]{0,252}$/.test(parts[2]!) ||
+      !/^[A-Za-z0-9_-]{8,64}$/.test(parts[3]!) ||
+      parts[4] !== publicKeyHex + (hybrid?.mldsaPubHex ?? "") ||
+      !/^(?:[0-9a-f]{64})?$/.test(parts[5]!) ||
+      !/^[A-Za-z0-9._+ -]{1,64}$/.test(parts[6]!) ||
+      !/^[A-Za-z0-9._+ -]{1,64}$/.test(parts[7]!) ||
+      !/^[0-9a-f]{128}$/.test(parts[8]!) ||
+      !/^(?:0|[1-9][0-9]{0,15})$/.test(parts[9]!)
+    ) {
+      throw new KeydError("forbidden", "a claim receipt names the box's own two keys and one claim transcript");
     }
   }
   if (purpose === TAG_INJECT || purpose === TAG_IDENTITY_HEADER) {
