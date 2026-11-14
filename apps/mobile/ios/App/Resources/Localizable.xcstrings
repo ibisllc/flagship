@@ -35070,6 +35070,293 @@
         }
       }
     },
+    "Firefox extension": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensión de Firefox"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extension Firefox"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firefox-Erweiterung"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensão do Firefox"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firefox 拡張機能"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firefox 扩展"
+          }
+        }
+      }
+    },
+    "Let this browser extension check your server's certificate": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir que esta extensión del navegador compruebe el certificado de tu servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser cette extension de navigateur à vérifier le certificat de votre serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Browsererweiterung erlauben, das Zertifikat deines Servers zu prüfen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir que esta extensão do navegador verifique o certificado do seu servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このブラウザー拡張機能にサーバーの証明書の確認を許可"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许此浏览器扩展检查你的服务器证书"
+          }
+        }
+      }
+    },
+    "This phone hasn't checked this server's code yet. Approve the server on this phone first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono aún no ha comprobado el código de este servidor. Aprueba primero el servidor en este teléfono."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone n’a pas encore vérifié le code de ce serveur. Approuvez d’abord le serveur sur ce téléphone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon hat den Code dieses Servers noch nicht geprüft. Gib den Server zuerst auf diesem Telefon frei."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este celular ainda não verificou o código deste servidor. Aprove o servidor neste celular primeiro."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このスマートフォンはまだこのサーバーのコードを確認していません。先にこのスマートフォンでサーバーを承認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机尚未核验此服务器的代码。请先在这部手机上批准该服务器。"
+          }
+        }
+      }
+    },
+    "This server needs an update before it can pair a browser extension.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor necesita una actualización antes de poder vincular una extensión del navegador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur doit être mis à jour avant de pouvoir associer une extension de navigateur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Server braucht ein Update, bevor er eine Browsererweiterung koppeln kann."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor precisa de uma atualização antes de poder parear uma extensão do navegador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザー拡張機能をペアリングするには、このサーバーのアップデートが必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器需要更新后才能配对浏览器扩展。"
+          }
+        }
+      }
+    },
+    "Firefox extension paired with %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensión de Firefox vinculada con %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extension Firefox associée à %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firefox-Erweiterung mit %@ gekoppelt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensão do Firefox pareada com %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firefox 拡張機能を %@ とペアリングしました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firefox 扩展已与 %@ 配对"
+          }
+        }
+      }
+    },
+    "Pair this Firefox extension?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Vincular esta extensión de Firefox?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Associer cette extension Firefox ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Firefox-Erweiterung koppeln?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parear esta extensão do Firefox?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Firefox 拡張機能をペアリングしますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配对此 Firefox 扩展？"
+          }
+        }
+      }
+    },
+    "It can only read your server's signed certificate fingerprint, for 30 days. Nothing else on the server opens to it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo puede leer la huella firmada del certificado de tu servidor, durante 30 días. Nada más del servidor queda abierto para ella."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elle peut seulement lire l’empreinte signée du certificat de votre serveur, pendant 30 jours. Rien d’autre sur le serveur ne lui est accessible."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie kann 30 Tage lang nur den signierten Zertifikat-Fingerabdruck deines Servers lesen. Sonst ist ihr nichts auf dem Server zugänglich."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ela só pode ler a impressão digital assinada do certificado do seu servidor, por 30 dias. Nada mais no servidor fica aberto para ela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 日間、サーバーの署名付き証明書フィンガープリントの読み取りだけができます。サーバー上のほかのものには一切アクセスできません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它只能读取你的服务器的已签名证书指纹，期限 30 天。服务器上的其他内容都不会向它开放。"
+          }
+        }
+      }
+    },
     "Companion requests": {
       "extractionState": "manual",
       "localizations": {

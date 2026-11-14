@@ -140,4 +140,58 @@ final class CompanionTicketURLTests: XCTestCase {
         let obj = try JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: String]
         XCTAssertEqual(obj, ["kind": "flagship/remote-ticket/v1", "ticketId": "a", "ticketSecret": "b", "podBaseUrl": "https://h", "username": "u"])
     }
+
+    // MARK: - browser extension pairing link
+
+    func test_extensionPairLink_parsesBothForms() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let key = Data(repeating: 9, count: 32)
+        let k = Base64URL.encode(key)
+        for link in [
+            "https://flagshipserver.com/pair-extension?s=\(sid)&k=\(k)",
+            "https://www.flagshipserver.com/pair-extension/?s=\(sid)&k=\(k)",
+            "flagship://pair-extension?s=\(sid)&k=\(k)",
+        ] {
+            let parsed = ExtensionPairLink.parse(link)
+            XCTAssertEqual(parsed?.sid, sid, link)
+            XCTAssertEqual(parsed?.browserPublicKey, key, link)
+        }
+    }
+
+    func test_extensionAndRemoteLinks_neverCross() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let k = Base64URL.encode(Data(repeating: 9, count: 32))
+        for remote in ["https://flagshipserver.com/remote?s=\(sid)&k=\(k)", "flagship://remote?s=\(sid)&k=\(k)"] {
+            XCTAssertNotNil(RemoteApprovalLink.parse(remote))
+            XCTAssertNil(ExtensionPairLink.parse(remote), remote)
+        }
+        for ext in ["https://flagshipserver.com/pair-extension?s=\(sid)&k=\(k)", "flagship://pair-extension?s=\(sid)&k=\(k)"] {
+            XCTAssertNotNil(ExtensionPairLink.parse(ext))
+            XCTAssertNil(RemoteApprovalLink.parse(ext), ext)
+        }
+    }
+
+    func test_extensionPairLink_refusesOtherHostsAndShapes() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let k = Base64URL.encode(Data(repeating: 9, count: 32))
+        XCTAssertNil(ExtensionPairLink.parse("https://evil.example/pair-extension?s=\(sid)&k=\(k)"))
+        XCTAssertNil(ExtensionPairLink.parse("http://flagshipserver.com/pair-extension?s=\(sid)&k=\(k)"))
+        XCTAssertNil(ExtensionPairLink.parse("https://remote.flagshipserver.com/pair-extension?s=\(sid)&k=\(k)"))
+        XCTAssertNil(ExtensionPairLink.parse("https://flagshipserver.com/pair-extension/x?s=\(sid)&k=\(k)"))
+        XCTAssertNil(ExtensionPairLink.parse("https://flagshipserver.com/qr?s=\(sid)&k=\(k)"))
+        XCTAssertNil(ExtensionPairLink.parse("flagship://pair-extension?s=short&k=\(k)"))
+        XCTAssertNil(ExtensionPairLink.parse("flagship://pair-extension?s=\(sid)&k=\(Base64URL.encode(Data(repeating: 9, count: 31)))"))
+    }
+
+    func test_extensionPairPayload_wireShape() throws {
+        let payload = ExtensionPairPayload(
+            serverDomain: "Home.Alice.flagship.services",
+            stkPub: Data(repeating: 0xab, count: 32),
+            ticketId: "t", ticketSecret: "s", username: "alice"
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let json = String(decoding: try encoder.encode(payload), as: UTF8.self)
+        XCTAssertEqual(json, #"{"kind":"flagship/extension-pair/v1","podBaseUrl":"https://home.alice.flagship.services","serverDomain":"home.alice.flagship.services","stkPubHex":"\#(String(repeating: "ab", count: 32))","ticketId":"t","ticketSecret":"s","username":"alice"}"#)
+    }
 }

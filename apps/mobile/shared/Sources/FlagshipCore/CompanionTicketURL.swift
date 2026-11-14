@@ -114,3 +114,48 @@ public struct RemoteTicketPayload: Codable, Equatable, Sendable {
         self.username = username
     }
 }
+
+/// The QR the Flagship browser extension shows:
+/// `https://flagshipserver.com/pair-extension?s=<sid>&k=<browser X25519 key>` (also
+/// `flagship://pair-extension?s=&k=`). Same relay session shape as `RemoteApprovalLink`,
+/// on its own path so a remote code is never read as an extension code or the reverse.
+public enum ExtensionPairLink {
+    public static func parse(_ raw: String) -> QrRelay.QrSession? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: text), isExtensionUrl(url),
+              let session = try? QrRelay.parseQrUrl(text),
+              let sid = Base64URL.decode(session.sid), sid.count == 16
+        else { return nil }
+        return session
+    }
+
+    private static func isExtensionUrl(_ url: URL) -> Bool {
+        if url.scheme == "flagship" { return url.host == "pair-extension" && (url.path.isEmpty || url.path == "/") }
+        return DeepLink.isControlHostLink(url) && DeepLink.trimmedPath(url) == "/pair-extension"
+    }
+}
+
+/// The payload the phone seals to the browser extension: a single-use extension ticket
+/// plus the server key THIS phone pinned, which the extension verifies the box's signed
+/// certificate fingerprint under. Sorted-key JSON.
+public struct ExtensionPairPayload: Codable, Equatable, Sendable {
+    public static let kindTag = "flagship/extension-pair/v1"
+    public let kind: String
+    public let podBaseUrl: String
+    public let serverDomain: String
+    public let stkPubHex: String
+    public let ticketId: String
+    public let ticketSecret: String
+    public let username: String
+
+    public init(serverDomain: String, stkPub: Data, ticketId: String, ticketSecret: String, username: String) {
+        let domain = serverDomain.trimmingCharacters(in: .whitespaces).lowercased()
+        self.kind = Self.kindTag
+        self.podBaseUrl = CompanionTicketURL.podBaseUrl(forFqdn: domain)
+        self.serverDomain = domain
+        self.stkPubHex = stkPub.map { String(format: "%02x", $0) }.joined()
+        self.ticketId = ticketId
+        self.ticketSecret = ticketSecret
+        self.username = username
+    }
+}

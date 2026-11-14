@@ -69,6 +69,19 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/qr?s=\(sid)&k=\(k)")!))
     }
 
+    func test_extensionPairLink_routesToTheSameApprovalScreen() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let k = Base64URL.encode(Data(repeating: 9, count: 32))
+        for link in [
+            "https://flagshipserver.com/pair-extension?s=\(sid)&k=\(k)",
+            "flagship://pair-extension?s=\(sid)&k=\(k)",
+        ] {
+            XCTAssertEqual(DeepLink.parse(URL(string: link)!), .companionDockApproval(link: link), link)
+            XCTAssertEqual(DeepLink.parsePastedString(link), .companionDockApproval(link: link), link)
+        }
+        XCTAssertNil(DeepLink.parse(URL(string: "https://example.com/pair-extension?s=\(sid)&k=\(k)")!))
+    }
+
     func test_builderLink_bothForms_routeToBuilderPair() {
         let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
         for link in [

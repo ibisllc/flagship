@@ -206,6 +206,140 @@ final class CompanionDockViewModelTests: XCTestCase {
         XCTAssertEqual(vm.selectedFqdn, lab.fqdn)
     }
 
+    // MARK: - browser extension pairing
+
+    private let pinnedHomeStk = Data((0..<32).map { UInt8($0) })
+
+    private func extensionLink(browserKey: Curve25519.KeyAgreement.PrivateKey = .init()) -> String {
+        let sid = Base64URL.encode(Data((0..<16).map { _ in UInt8.random(in: 0...255) }))
+        return "https://flagshipserver.com/pair-extension?s=\(sid)&k=\(Base64URL.encode(browserKey.publicKey.rawRepresentation))"
+    }
+
+    private func extensionVM(
+        _ client: MockScreensClient,
+        relay: MockQrRelayClient,
+        reasons: @escaping @MainActor @Sendable (String) -> Void = { _ in },
+        pinned: Data?
+    ) -> CompanionDockViewModel {
+        CompanionDockViewModel(
+            clients: .shared(client),
+            relay: relay,
+            servers: [home],
+            defaultFqdn: home.fqdn,
+            username: "alice",
+            authenticate: { reasons($0) },
+            confirmGateNanos: 0,
+            pinnedStk: { domain in domain == "home.alice.flagship.services" ? pinned : nil }
+        )
+    }
+
+    private func openDelivered(_ relay: MockQrRelayClient, browser: Curve25519.KeyAgreement.PrivateKey) throws -> Data {
+        let phonePk = try XCTUnwrap(Base64URL.decode(try XCTUnwrap(relay.lastHello).phonePk))
+        let key = try QrRelay.deriveMaterial(phonePrivateKey: browser, browserPublicKey: phonePk).aeadKey
+        let deliver = try XCTUnwrap(relay.lastDeliver)
+        let ct = try XCTUnwrap(Base64URL.decode(deliver.ciphertext))
+        let box = try AES.GCM.SealedBox(
+            nonce: AES.GCM.Nonce(data: try XCTUnwrap(Base64URL.decode(deliver.nonce))),
+            ciphertext: ct.dropLast(16),
+            tag: ct.suffix(16)
+        )
+        return try AES.GCM.open(box, using: key)
+    }
+
+    func test_isApprovalLink_takesBothCodes() {
+        XCTAssertTrue(CompanionDockViewModel.isApprovalLink(extensionLink()))
+        XCTAssertTrue(CompanionDockViewModel.isApprovalLink(remoteLink()))
+        XCTAssertFalse(CompanionDockViewModel.isRemoteLink(extensionLink()))
+        XCTAssertFalse(CompanionDockViewModel.isExtensionLink(remoteLink()))
+    }
+
+    func test_extension_approve_sealsTicketWithThePinnedKey() async throws {
+        let relay = MockQrRelayClient()
+        let client = makeClient()
+        let browser = Curve25519.KeyAgreement.PrivateKey()
+        var reasons: [String] = []
+        let vm = extensionVM(client, relay: relay, reasons: { reasons.append($0) }, pinned: pinnedHomeStk)
+        await vm.begin(link: extensionLink(browserKey: browser))
+        XCTAssertEqual(vm.mode, .browserExtension)
+        await vm.approve()
+
+        XCTAssertEqual(vm.phase, .connected(serverName: "home"))
+        XCTAssertEqual(reasons, ["Let this browser extension check your server's certificate"])
+        XCTAssertEqual(client.companionExtensionMintCalls, 1)
+        XCTAssertTrue(client.companionMintCalls.isEmpty, "never a full Remote ticket")
+
+        let plain = try openDelivered(relay, browser: browser)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: plain) as? [String: String])
+        XCTAssertEqual(Set(obj.keys), ["kind", "podBaseUrl", "serverDomain", "stkPubHex", "ticketId", "ticketSecret", "username"])
+        XCTAssertEqual(obj["kind"], "flagship/extension-pair/v1")
+        XCTAssertEqual(obj["podBaseUrl"], "https://home.alice.flagship.services")
+        XCTAssertEqual(obj["serverDomain"], "home.alice.flagship.services")
+        XCTAssertEqual(obj["stkPubHex"], pinnedHomeStk.map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(obj["username"], "alice")
+        XCTAssertNotNil(obj["ticketId"]?.range(of: "^[0-9a-f]{32}$", options: .regularExpression))
+        XCTAssertNotNil(obj["ticketSecret"]?.range(of: "^[0-9a-f]{64}$", options: .regularExpression))
+        let text = String(decoding: plain, as: UTF8.self)
+        XCTAssertTrue(text.hasPrefix(#"{"kind":"#), "sorted keys")
+    }
+
+    func test_extension_unpinnedServer_isRefusedBeforeMinting() async {
+        let relay = MockQrRelayClient()
+        let client = makeClient()
+        let vm = extensionVM(client, relay: relay, pinned: nil)
+        await vm.begin(link: extensionLink())
+        await vm.approve()
+        XCTAssertEqual(vm.phase, .failed("This phone hasn't checked this server's code yet. Approve the server on this phone first."))
+        XCTAssertEqual(client.companionExtensionMintCalls, 0)
+        XCTAssertNil(relay.lastDeliver)
+    }
+
+    func test_extension_olderBox404_asksForAnUpdate() async {
+        let relay = MockQrRelayClient()
+        let client = makeClient()
+        client.companionExtensionMintError = ScreensClientError.http(status: 404, message: "not found")
+        let vm = extensionVM(client, relay: relay, pinned: pinnedHomeStk)
+        await vm.begin(link: extensionLink())
+        await vm.approve()
+        XCTAssertEqual(vm.phase, .failed("This server needs an update before it can pair a browser extension."))
+        XCTAssertNil(relay.lastDeliver)
+        XCTAssertTrue(client.companionMintCalls.isEmpty)
+    }
+
+    func test_extension_replyWithoutExtensionScope_asksForAnUpdate() async {
+        let relay = MockQrRelayClient()
+        let client = makeClient()
+        client.companionExtensionScope = nil
+        let vm = extensionVM(client, relay: relay, pinned: pinnedHomeStk)
+        await vm.begin(link: extensionLink())
+        await vm.approve()
+        XCTAssertEqual(vm.phase, .failed("This server needs an update before it can pair a browser extension."))
+        XCTAssertNil(relay.lastDeliver)
+    }
+
+    func test_remoteLink_afterExtension_goesBackToRemoteMode() async {
+        let vm = extensionVM(makeClient(), relay: MockQrRelayClient(), pinned: pinnedHomeStk)
+        await vm.begin(link: extensionLink())
+        XCTAssertEqual(vm.mode, .browserExtension)
+        await vm.begin(link: remoteLink())
+        XCTAssertEqual(vm.mode, .remote)
+    }
+
+    func test_listLabel_namesTheExtension() throws {
+        let ext = CompanionSummary(tokenPrefix: "abc123", redeemedAt: 1, lastSeenMs: 2, expiresAt: 3, kind: "extension")
+        let remote = CompanionSummary(tokenPrefix: "def456", redeemedAt: 1, lastSeenMs: 2, expiresAt: 3, kind: "remote")
+        let old = CompanionSummary(tokenPrefix: "0a0b0c", redeemedAt: 1, lastSeenMs: 2, expiresAt: 3)
+        XCTAssertEqual(CompanionDockViewModel.label(for: ext), "Firefox extension")
+        XCTAssertEqual(CompanionDockViewModel.label(for: remote), "Session def456")
+        XCTAssertEqual(CompanionDockViewModel.label(for: old), "Session 0a0b0c")
+        let decoded = try JSONDecoder().decode(CompanionListResponse.self, from: Data(#"""
+        {"companions":[{"tokenPrefix":"abc123","redeemedAt":1,"lastSeenMs":2,"expiresAt":3,"kind":"extension"},
+                       {"tokenPrefix":"def456","redeemedAt":1,"lastSeenMs":2,"expiresAt":3}]}
+        """#.utf8))
+        XCTAssertTrue(decoded.companions[0].isExtension)
+        XCTAssertNil(decoded.companions[1].kind)
+        XCTAssertFalse(decoded.companions[1].isExtension)
+    }
+
     // MARK: - revoke()
 
     func test_revoke_recordsCall_andClearsPending() async {

@@ -327,6 +327,8 @@ public protocol ScreensClient: Sendable {
     // browser scans → 4-hour read-only companion session. iOS owns
     // mint / list / revoke; the browser hits a separate `/redeem`.
     func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse
+    /// `POST /api/screens/companion/mint-extension-ticket` (body `{}`); 404 on an older box.
+    func companionMintExtensionTicket() async throws -> CompanionMintExtensionTicketResponse
     func companionList() async throws -> CompanionListResponse
     func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse
 
@@ -487,6 +489,9 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
 }
 
 public extension ScreensClient {
+    func companionMintExtensionTicket() async throws -> CompanionMintExtensionTicketResponse {
+        throw ScreensClientError.notImplemented("extension tickets")
+    }
     func securitySliver() async throws -> SecuritySliverResponse { SecuritySliverResponse(lines: []) }
     func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
         throw ScreensClientError.notImplemented("publisher keys")
