@@ -3,6 +3,10 @@
     "en": "Flagship uses the camera to scan a pairing QR shown by your server.",
     "ctx": "App/project.yml INFOPLIST_KEY_NSCameraUsageDescription"
   },
+  "NSBluetoothAlwaysUsageDescription": {
+    "en": "Flagship uses Bluetooth to find a Flagship box you bought and set it up. It looks only while you set up a box.",
+    "ctx": "App/project.yml INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription"
+  },
   "NSFaceIDUsageDescription": {
     "en": "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.",
     "ctx": "App/project.yml INFOPLIST_KEY_NSFaceIDUsageDescription"

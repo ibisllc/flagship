@@ -142,6 +142,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSCameraUsageDescription: "Flagship uses the camera to scan a pairing QR shown by your server."
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Flagship uses Bluetooth to find a Flagship box you bought and set it up. It looks only while you set up a box."
         # Biometric gate for sensitive actions (approve unlock, revoke
         # server, wipe & restart). Without this key iOS still falls back
         # to passcode, but the prompt looks stock — TF3 ASC review-bot

@@ -16,6 +16,9 @@ public enum HomeRoute: Hashable, Sendable {
     /// The create flow opened by Studio's pairing link: once the server is
     /// designed it pairs with that Studio instead of scanning its QR.
     case provisionServerForBuilder(link: String)
+    /// "Set up a box from a store" (docs/retail-box-setup.md §4): the create flow, then the box is
+    /// claimed over Bluetooth instead of handing the recipe to a builder.
+    case provisionRetailBox
     case installProgress(serial: String, name: String, description: String)
     /// Slice C — take over a transferred box, reached from a scanned/deep-linked
     /// (IRK-signed) transfer offer. Carries the offer JSON (`offerText`) so the
@@ -55,7 +58,7 @@ public enum HomeRoute: Hashable, Sendable {
     /// open them.
     public var addsServerToAccount: Bool {
         switch self {
-        case .provisionServer, .provisionServerForBuilder, .transferAcquirer, .acceptShare, .importBackup, .restoreFromPeers,
+        case .provisionServer, .provisionServerForBuilder, .provisionRetailBox, .transferAcquirer, .acceptShare, .importBackup, .restoreFromPeers,
              .restoreFromBackup, .restoreFromPhone, .importPhoneCopy: return true
         case .serverDetail, .nameDibs, .installProgress, .sharedServer, .sharedApp: return false
         }

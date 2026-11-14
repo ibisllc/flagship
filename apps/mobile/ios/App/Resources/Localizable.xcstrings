@@ -140740,6 +140740,3778 @@
           }
         }
       }
+    },
+    "Set up a box from a store": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar un equipo comprado en una tienda"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurer un boîtier acheté en magasin"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Box aus dem Handel einrichten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar uma caixa comprada na loja"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "店舗で購入したボックスを設定"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置从商店购买的主机"
+          }
+        }
+      }
+    },
+    "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un equipo Flagship sin nada que instalar. Este teléfono lo encuentra por Bluetooth cuando lo enchufas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un boîtier Flagship sans rien à installer. Ce téléphone le trouve en Bluetooth quand vous le branchez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Flagship-Box, auf der nichts installiert werden muss. Dieses Telefon findet sie über Bluetooth, sobald du sie einsteckst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma caixa Flagship sem nada para instalar. Este telefone a encontra por Bluetooth quando você a liga na tomada."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インストール不要の Flagship ボックスです。電源を入れると、この電話が Bluetooth で見つけます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无需安装任何内容的 Flagship 主机。插上电源后，这部手机会通过蓝牙找到它。"
+          }
+        }
+      }
+    },
+    "Register your new box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrar tu nuevo equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer votre nouveau boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Box registrieren"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrar sua nova caixa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいボックスを登録"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登记你的新主机"
+          }
+        }
+      }
+    },
+    "Keep the box unplugged for now": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deja el equipo desenchufado por ahora"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez le boîtier débranché pour l'instant"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lass die Box vorerst ausgesteckt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixe a caixa desligada da tomada por enquanto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはまだ電源につながないでください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂时不要给主机通电"
+          }
+        }
+      }
+    },
+    "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono busca el equipo por Bluetooth. Empieza aquí y enchufa el equipo solo cuando la app te lo pida."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone cherche le boîtier en Bluetooth. Commencez ici et ne branchez le boîtier que lorsque l'app vous le demande."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon sucht die Box über Bluetooth. Beginne hier und stecke die Box erst ein, wenn die App dich darum bittet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este telefone procura a caixa por Bluetooth. Comece aqui e ligue a caixa na tomada só quando o app pedir."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この電話は Bluetooth でボックスを探します。ここから始めて、アプリに求められたときだけボックスの電源をつないでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机通过蓝牙查找主机。请从这里开始，只在应用提示时再给主机通电。"
+          }
+        }
+      }
+    },
+    "I have a setup code from the box's screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tengo un código de configuración de la pantalla del equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'ai un code de configuration affiché par le boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ich habe einen Einrichtungscode vom Bildschirm der Box"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tenho um código de configuração da tela da caixa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの画面に表示された設定コードがあります"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我有主机屏幕上的设置码"
+          }
+        }
+      }
+    },
+    "Scan the setup code": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear el código de configuración"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner le code de configuration"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einrichtungscode scannen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear o código de configuração"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定コードをスキャン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描设置码"
+          }
+        }
+      }
+    },
+    "Scan the QR code the box shows on its screen, or the photo someone sent you. The box must be on a network cable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanea el código QR que muestra el equipo en su pantalla o la foto que alguien te envió. El equipo debe estar conectado con un cable de red."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez le code QR affiché par le boîtier sur son écran, ou la photo qu'on vous a envoyée. Le boîtier doit être relié par un câble réseau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanne den QR-Code, den die Box auf ihrem Bildschirm zeigt, oder das Foto, das dir jemand geschickt hat. Die Box muss per Netzwerkkabel verbunden sein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escaneie o código QR que a caixa mostra na tela, ou a foto que alguém enviou para você. A caixa precisa estar ligada por cabo de rede."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの画面に表示された QR コード、または送ってもらった写真をスキャンしてください。ボックスはネットワークケーブルでつながっている必要があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描主机屏幕上显示的二维码，或别人发给你的照片。主机必须连接网线。"
+          }
+        }
+      }
+    },
+    "Or type the 20-character code": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O escribe el código de 20 caracteres"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ou saisissez le code de 20 caractères"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oder gib den 20-stelligen Code ein"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ou digite o código de 20 caracteres"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "または 20 文字のコードを入力"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "或输入 20 位设置码"
+          }
+        }
+      }
+    },
+    "Checking for other boxes": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando otros equipos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche d'autres boîtiers"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche nach anderen Boxen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Procurando outras caixas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほかのボックスを確認しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查附近的其他主机"
+          }
+        }
+      }
+    },
+    "Keep the box unplugged for a moment.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deja el equipo desenchufado un momento más."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez le boîtier débranché encore un instant."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lass die Box noch einen Moment ausgesteckt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixe a caixa fora da tomada por mais um momento."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "もう少しボックスの電源はつながないでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请再等一下，先不要给主机通电。"
+          }
+        }
+      }
+    },
+    "Plug in the box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enchufa el equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branchez le boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Box einstecken"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligue a caixa na tomada"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの電源をつなぐ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "给主机通电"
+          }
+        }
+      }
+    },
+    "Plug the network cable into your router if you can. Then plug in the power. The box starts by itself.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si puedes, conecta el cable de red a tu router. Después enchufa la corriente. El equipo se enciende solo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si possible, branchez le câble réseau sur votre box internet. Branchez ensuite l'alimentation. Le boîtier démarre tout seul."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stecke wenn möglich das Netzwerkkabel in deinen Router. Stecke dann den Strom ein. Die Box startet von selbst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se puder, conecte o cabo de rede ao seu roteador. Depois ligue a energia. A caixa liga sozinha."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "できればネットワークケーブルをルーターにつないでください。それから電源をつなぎます。ボックスは自動的に起動します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果可以，请先把网线插到路由器上，然后接通电源。主机会自动启动。"
+          }
+        }
+      }
+    },
+    "If the box stays off, press the power button once.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si el equipo sigue apagado, pulsa el botón de encendido una vez."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si le boîtier reste éteint, appuyez une fois sur le bouton d'alimentation."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn die Box aus bleibt, drücke einmal den Einschaltknopf."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se a caixa continuar desligada, aperte o botão liga/desliga uma vez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの電源が入らない場合は、電源ボタンを 1 回押してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果主机没有启动，请按一下电源键。"
+          }
+        }
+      }
+    },
+    "Found your box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hemos encontrado tu equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre boîtier a été trouvé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Box wurde gefunden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua caixa foi encontrada"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスが見つかりました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已找到你的主机"
+          }
+        }
+      }
+    },
+    "Opening an encrypted connection…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abriendo una conexión cifrada…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouverture d'une connexion chiffrée…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschlüsselte Verbindung wird geöffnet…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrindo uma conexão criptografada…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暗号化された接続を開いています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在建立加密连接…"
+          }
+        }
+      }
+    },
+    "Get ready": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepárate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparez-vous"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mach dich bereit"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare-se"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備してください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请准备"
+          }
+        }
+      }
+    },
+    "Put your finger near the box's power button. Don't press it yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pon el dedo cerca del botón de encendido del equipo. No lo pulses todavía."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placez votre doigt près du bouton d'alimentation du boîtier. N'appuyez pas encore."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lege den Finger in die Nähe des Einschaltknopfs der Box. Drücke ihn noch nicht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coloque o dedo perto do botão liga/desliga da caixa. Não aperte ainda."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの電源ボタンの近くに指を置いてください。まだ押さないでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把手指放在主机电源键旁边，先不要按。"
+          }
+        }
+      }
+    },
+    "Press the power button now": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsa ahora el botón de encendido"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appuyez maintenant sur le bouton d'alimentation"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drücke jetzt den Einschaltknopf"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperte o botão liga/desliga agora"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今すぐ電源ボタンを押してください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "现在按电源键"
+          }
+        }
+      }
+    },
+    "Once, briefly. A short press does not switch the box off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una vez, brevemente. Una pulsación corta no apaga el equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une fois, brièvement. Un appui court n'éteint pas le boîtier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal, kurz. Ein kurzer Druck schaltet die Box nicht aus."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma vez, rapidamente. Um toque curto não desliga a caixa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 回、短く押してください。短く押してもボックスの電源は切れません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "短按一次。短按不会关闭主机。"
+          }
+        }
+      }
+    },
+    "Approve the new server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprueba el nuevo servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuvez le nouveau serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuen Server bestätigen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprove o novo servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいサーバーを承認"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批准新服务器"
+          }
+        }
+      }
+    },
+    "Confirm with Face ID or your passcode to sign this server's recipe.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirma con Face ID o tu código para firmar la receta de este servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirmez avec Face ID ou votre code pour signer la recette de ce serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestätige mit Face ID oder deinem Code, um das Rezept dieses Servers zu signieren."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirme com o Face ID ou seu código para assinar a receita deste servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face ID またはパスコードで確認して、このサーバーのレシピに署名します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Face ID 或密码确认，以签署此服务器的配方。"
+          }
+        }
+      }
+    },
+    "Registering the box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrando el equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrement du boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Box wird registriert"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrando a caixa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスを登録しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在登记主机"
+          }
+        }
+      }
+    },
+    "Telling Flagship which box this server is…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indicando a Flagship qué equipo es este servidor…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship apprend quel boîtier est ce serveur…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship erfährt, welche Box dieser Server ist…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informando à Flagship qual caixa é este servidor…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーがどのボックスかを Flagship に伝えています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在告诉 Flagship 这个服务器对应哪台主机…"
+          }
+        }
+      }
+    },
+    "How does the box reach the internet?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Cómo se conecta el equipo a internet?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment le boîtier accède-t-il à internet ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie kommt die Box ins Internet?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Como a caixa se conecta à internet?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはどうやってインターネットにつながりますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机如何连接互联网？"
+          }
+        }
+      }
+    },
+    "It's on a network cable": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Está conectado con un cable de red"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il est relié par un câble réseau"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie hängt an einem Netzwerkkabel"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Está ligada por cabo de rede"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネットワークケーブルでつながっています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接网线"
+          }
+        }
+      }
+    },
+    "Use Wi-Fi": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar Wi-Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser le Wi-Fi"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WLAN verwenden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar Wi-Fi"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi を使う"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Wi-Fi"
+          }
+        }
+      }
+    },
+    "Looking for Wi-Fi networks": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando redes Wi-Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche de réseaux Wi-Fi"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche nach WLAN-Netzen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Procurando redes Wi-Fi"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi ネットワークを探しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在查找 Wi-Fi 网络"
+          }
+        }
+      }
+    },
+    "The box is listing the networks it can see…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo está listando las redes que ve…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier liste les réseaux qu'il voit…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box listet die Netze auf, die sie sieht…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está listando as redes que consegue ver…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスが見えるネットワークを一覧にしています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机正在列出它能看到的网络…"
+          }
+        }
+      }
+    },
+    "Choose your Wi-Fi": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige tu Wi-Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez votre Wi-Fi"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle dein WLAN"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha seu Wi-Fi"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi を選択"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择你的 Wi-Fi"
+          }
+        }
+      }
+    },
+    "The box sees no Wi-Fi networks. Use a network cable instead.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no ve ninguna red Wi-Fi. Usa un cable de red."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier ne voit aucun réseau Wi-Fi. Utilisez plutôt un câble réseau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box sieht keine WLAN-Netze. Verwende stattdessen ein Netzwerkkabel."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não vê nenhuma rede Wi-Fi. Use um cabo de rede."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスから Wi-Fi ネットワークが見えません。代わりにネットワークケーブルを使ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机看不到任何 Wi-Fi 网络。请改用网线。"
+          }
+        }
+      }
+    },
+    "Use a cable instead": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar un cable"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser plutôt un câble"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stattdessen ein Kabel verwenden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar um cabo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代わりにケーブルを使う"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改用网线"
+          }
+        }
+      }
+    },
+    "Wi-Fi password": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña del Wi-Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe Wi-Fi"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WLAN-Passwort"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senha do Wi-Fi"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi のパスワード"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 密码"
+          }
+        }
+      }
+    },
+    "Password": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senha"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パスワード"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密码"
+          }
+        }
+      }
+    },
+    "A Wi-Fi password has 8 to 63 characters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una contraseña de Wi-Fi tiene entre 8 y 63 caracteres."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un mot de passe Wi-Fi compte de 8 à 63 caractères."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein WLAN-Passwort hat 8 bis 63 Zeichen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma senha de Wi-Fi tem de 8 a 63 caracteres."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi のパスワードは 8〜63 文字です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 密码为 8 到 63 个字符。"
+          }
+        }
+      }
+    },
+    "Before you send it": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antes de enviarla"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant de l'envoyer"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bevor du es sendest"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antes de enviar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信する前に"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送之前"
+          }
+        }
+      }
+    },
+    "Send it": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviarla"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'envoyer"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信する"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送"
+          }
+        }
+      }
+    },
+    "Connecting the box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando el equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion du boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Box wird verbunden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando a caixa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスを接続しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在连接主机"
+          }
+        }
+      }
+    },
+    "The box is joining the network…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo se está uniendo a la red…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier rejoint le réseau…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box verbindet sich mit dem Netz…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está entrando na rede…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスがネットワークに参加しています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机正在加入网络…"
+          }
+        }
+      }
+    },
+    "The box couldn't get online": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no pudo conectarse"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n'a pas pu se connecter"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box konnte nicht online gehen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não conseguiu ficar on-line"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスをオンラインにできませんでした"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机无法联网"
+          }
+        }
+      }
+    },
+    "Checking the box online": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobando el equipo en línea"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification du boîtier en ligne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Box wird online geprüft"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando a caixa on-line"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンラインでボックスを確認しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在在线核对主机"
+          }
+        }
+      }
+    },
+    "Making sure the server that comes online is the box you paired with. This can take a few minutes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobando que el servidor que se conecta es el equipo que emparejaste. Puede tardar unos minutos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nous vérifions que le serveur qui se connecte est bien le boîtier que vous avez associé. Cela peut prendre quelques minutes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wird geprüft, ob der Server, der online geht, die Box ist, mit der du dich gekoppelt hast. Das kann ein paar Minuten dauern."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando se o servidor que fica on-line é a caixa que você pareou. Isso pode levar alguns minutos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンラインになるサーバーが、ペアリングしたボックスであることを確認しています。数分かかることがあります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在确认上线的服务器就是你配对的主机。这可能需要几分钟。"
+          }
+        }
+      }
+    },
+    "Your box is set up": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu equipo está configurado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre boîtier est configuré"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Box ist eingerichtet"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua caixa está configurada"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの設定が完了しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的主机已设置完成"
+          }
+        }
+      }
+    },
+    "The server that came online is the box you paired with.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor que se conectó es el equipo que emparejaste."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur qui s'est connecté est bien le boîtier que vous avez associé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server, der online gegangen ist, ist die Box, mit der du dich gekoppelt hast."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor que ficou on-line é a caixa que você pareou."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンラインになったサーバーは、ペアリングしたボックスです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上线的服务器就是你配对的主机。"
+          }
+        }
+      }
+    },
+    "Open the server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir el servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server öffnen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir o servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーを開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开服务器"
+          }
+        }
+      }
+    },
+    "Use the network cable if you can": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa el cable de red si puedes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisez le câble réseau si vous le pouvez"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwende wenn möglich das Netzwerkkabel"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use o cabo de rede se puder"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "できればネットワークケーブルを使ってください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尽量使用网线"
+          }
+        }
+      }
+    },
+    "Plug it into your router before the power. Then your Wi-Fi password never has to travel over the air.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conéctalo a tu router antes de la corriente. Así tu contraseña de Wi-Fi nunca tiene que viajar por el aire."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branchez-le sur votre box internet avant l'alimentation. Votre mot de passe Wi-Fi n'aura alors jamais à passer par les ondes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stecke es vor dem Strom in deinen Router. Dann muss dein WLAN-Passwort nie über Funk übertragen werden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecte-o ao roteador antes da energia. Assim sua senha do Wi-Fi nunca precisa passar pelo ar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "電源より先にルーターにつないでください。そうすれば Wi-Fi のパスワードを無線で送る必要がありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先把网线插到路由器上，再接通电源。这样你的 Wi-Fi 密码就无需通过无线传输。"
+          }
+        }
+      }
+    },
+    "No new box appeared": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No apareció ningún equipo nuevo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun nouveau boîtier n'est apparu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine neue Box erschienen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma caixa nova apareceu"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいボックスが見つかりませんでした"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有出现新主机"
+          }
+        }
+      }
+    },
+    "Not supported": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No compatible"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non pris en charge"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht unterstützt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não compatível"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "非対応"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支持"
+          }
+        }
+      }
+    },
+    "Don't use this server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No uses este servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "N'utilisez pas ce serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwende diesen Server nicht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não use este servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーを使わないでください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不要使用此服务器"
+          }
+        }
+      }
+    },
+    "Open the server to delete it": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir el servidor para eliminarlo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le serveur pour le supprimer"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server öffnen, um ihn zu löschen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir o servidor para excluí-lo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーを開いて削除する"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开服务器以删除它"
+          }
+        }
+      }
+    },
+    "More than one box nearby": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hay más de un equipo cerca"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plusieurs boîtiers à proximité"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr als eine Box in der Nähe"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mais de uma caixa por perto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "近くに複数のボックスがあります"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附近有不止一台主机"
+          }
+        }
+      }
+    },
+    "Don't continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No continúes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne continuez pas"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht fortfahren"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não continue"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "続行しないでください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请勿继续"
+          }
+        }
+      }
+    },
+    "Someone else tried at the same moment": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otra persona lo intentó al mismo tiempo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelqu'un d'autre a essayé au même moment"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jemand anderes hat es gleichzeitig versucht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outra pessoa tentou ao mesmo tempo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほかの人が同時に試しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有人同时在尝试"
+          }
+        }
+      }
+    },
+    "Bluetooth is needed": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se necesita Bluetooth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le Bluetooth est nécessaire"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth wird benötigt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Bluetooth é necessário"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth が必要です"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要蓝牙"
+          }
+        }
+      }
+    },
+    "This server already has a box": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor ya tiene un equipo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur a déjà un boîtier"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Server hat bereits eine Box"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor já tem uma caixa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーにはすでにボックスがあります"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器已有主机"
+          }
+        }
+      }
+    },
+    "Only an admin device can do this": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador puede hacer esto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut faire cela"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann das"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só um dispositivo administrador pode fazer isso"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これは管理者デバイスだけが行えます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备可以执行此操作"
+          }
+        }
+      }
+    },
+    "Another Flagship box nearby is waiting to be set up. If it is yours, unplug it and start again. If not, set this box up somewhere else or use a network cable and a screen.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otro equipo Flagship cercano está esperando a ser configurado. Si es tuyo, desenchúfalo y empieza de nuevo. Si no, configura este equipo en otro lugar o usa un cable de red y una pantalla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre boîtier Flagship à proximité attend d'être configuré. S'il est à vous, débranchez-le et recommencez. Sinon, configurez ce boîtier ailleurs ou utilisez un câble réseau et un écran."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine andere Flagship-Box in der Nähe wartet auf ihre Einrichtung. Wenn es deine ist, stecke sie aus und beginne von vorn. Wenn nicht, richte diese Box woanders ein oder verwende ein Netzwerkkabel und einen Bildschirm."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outra caixa Flagship por perto está esperando para ser configurada. Se for sua, tire-a da tomada e comece de novo. Se não for, configure esta caixa em outro lugar ou use um cabo de rede e uma tela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "近くに設定待ちのほかの Flagship ボックスがあります。あなたのものなら電源を抜いてやり直してください。そうでなければ、別の場所で設定するか、ネットワークケーブルと画面を使ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附近有另一台 Flagship 主机正在等待设置。如果是你的，请拔掉电源后重新开始。如果不是，请换个地方设置这台主机，或使用网线和显示器。"
+          }
+        }
+      }
+    },
+    "A second Flagship box appeared during setup. Make sure only your box is switched on nearby, unplug it, and start again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apareció un segundo equipo Flagship durante la configuración. Asegúrate de que solo tu equipo esté encendido cerca, desenchúfalo y empieza de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un second boîtier Flagship est apparu pendant la configuration. Assurez-vous que seul votre boîtier est allumé à proximité, débranchez-le et recommencez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Während der Einrichtung ist eine zweite Flagship-Box aufgetaucht. Sorge dafür, dass in der Nähe nur deine Box eingeschaltet ist, stecke sie aus und beginne von vorn."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma segunda caixa Flagship apareceu durante a configuração. Verifique se só a sua caixa está ligada por perto, tire-a da tomada e comece de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定中に 2 台目の Flagship ボックスが現れました。近くで電源が入っているのがあなたのボックスだけであることを確認し、電源を抜いてやり直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置过程中出现了第二台 Flagship 主机。请确保附近只有你的主机开着，拔掉电源后重新开始。"
+          }
+        }
+      }
+    },
+    "This box reported a press before you were asked. Don't continue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este equipo informó de una pulsación antes de que se te pidiera. No continúes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce boîtier a signalé un appui avant qu'on vous le demande. Ne continuez pas."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Box hat einen Tastendruck gemeldet, bevor du dazu aufgefordert wurdest. Fahre nicht fort."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta caixa informou um toque antes de você ser solicitado. Não continue."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスは、押すよう求められる前にボタンが押されたと報告しました。続行しないでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台主机在提示你之前就报告了按键。请勿继续。"
+          }
+        }
+      }
+    },
+    "The press came too late. Tap Try again and press the power button as soon as you are asked.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La pulsación llegó demasiado tarde. Toca Reintentar y pulsa el botón de encendido en cuanto se te pida."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'appui est arrivé trop tard. Touchez Réessayer et appuyez sur le bouton d'alimentation dès qu'on vous le demande."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Tastendruck kam zu spät. Tippe auf Erneut versuchen und drücke den Einschaltknopf, sobald du dazu aufgefordert wirst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O toque chegou tarde demais. Toque em Tentar de novo e aperte o botão liga/desliga assim que for solicitado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "押すのが遅すぎました。「再試行」をタップし、求められたらすぐに電源ボタンを押してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按键太晚了。请点按“重试”，并在提示后立即按电源键。"
+          }
+        }
+      }
+    },
+    "The box saw more than one press, or a long one. Press the power button once, briefly, when you are asked.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo detectó más de una pulsación, o una larga. Pulsa el botón de encendido una vez, brevemente, cuando se te pida."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier a vu plus d'un appui, ou un appui long. Appuyez une fois, brièvement, sur le bouton d'alimentation quand on vous le demande."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hat mehr als einen oder einen langen Tastendruck gesehen. Drücke den Einschaltknopf einmal kurz, wenn du dazu aufgefordert wirst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa detectou mais de um toque, ou um toque longo. Aperte o botão liga/desliga uma vez, rapidamente, quando for solicitado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスが複数回の押下、または長押しを検出しました。求められたら電源ボタンを 1 回短く押してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机检测到多次按键或长按。请在提示时短按一次电源键。"
+          }
+        }
+      }
+    },
+    "Another phone tried to set up this box at the same moment. Make sure nobody nearby is setting up a Flagship box, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otro teléfono intentó configurar este equipo al mismo tiempo. Asegúrate de que nadie cerca esté configurando un equipo Flagship y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre téléphone a essayé de configurer ce boîtier au même moment. Assurez-vous que personne à proximité ne configure un boîtier Flagship, puis réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderes Telefon hat gleichzeitig versucht, diese Box einzurichten. Sorge dafür, dass niemand in der Nähe eine Flagship-Box einrichtet, und versuche es dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro telefone tentou configurar esta caixa ao mesmo tempo. Verifique se ninguém por perto está configurando uma caixa Flagship e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別の電話が同時にこのボックスを設定しようとしました。近くで誰も Flagship ボックスを設定していないことを確認してから、もう一度試してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一部手机同时尝试设置这台主机。请确保附近没有人在设置 Flagship 主机，然后重试。"
+          }
+        }
+      }
+    },
+    "The box saw no press. Tap Try again and press the power button once when you are asked.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no detectó ninguna pulsación. Toca Reintentar y pulsa el botón de encendido una vez cuando se te pida."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n'a vu aucun appui. Touchez Réessayer et appuyez une fois sur le bouton d'alimentation quand on vous le demande."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hat keinen Tastendruck gesehen. Tippe auf Erneut versuchen und drücke den Einschaltknopf einmal, wenn du dazu aufgefordert wirst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não detectou nenhum toque. Toque em Tentar de novo e aperte o botão liga/desliga uma vez quando for solicitado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはボタンの押下を検出しませんでした。「再試行」をタップし、求められたら電源ボタンを 1 回押してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机没有检测到按键。请点按“重试”，并在提示时按一次电源键。"
+          }
+        }
+      }
+    },
+    "The box is busy with another setup. Wait a minute and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo está ocupado con otra configuración. Espera un minuto y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier est occupé par une autre configuration. Patientez une minute et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box ist mit einer anderen Einrichtung beschäftigt. Warte eine Minute und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está ocupada com outra configuração. Espere um minuto e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスは別の設定を処理中です。1 分待ってからもう一度試してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机正在处理另一个设置。请等一分钟后重试。"
+          }
+        }
+      }
+    },
+    "The box stopped listening. Unplug it, plug it back in and start again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo dejó de escuchar. Desenchúfalo, vuelve a enchufarlo y empieza de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n'écoute plus. Débranchez-le, rebranchez-le et recommencez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hört nicht mehr zu. Stecke sie aus, wieder ein und beginne von vorn."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa parou de escutar. Tire-a da tomada, ligue de novo e comece outra vez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスが待ち受けを終了しました。電源を抜いて差し直し、やり直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机已停止等待连接。请拔掉电源再插上，然后重新开始。"
+          }
+        }
+      }
+    },
+    "This box is already set up. Press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este equipo ya está configurado. Pulsa su botón de encendido 5 veces, rápido, y luego toca Reintentar. Configurarlo borra todo lo que contiene."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce boîtier est déjà configuré. Appuyez 5 fois rapidement sur son bouton d'alimentation, puis touchez Réessayer. Le configurer efface tout ce qu'il contient."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Box ist bereits eingerichtet. Drücke ihren Einschaltknopf 5-mal schnell hintereinander und tippe dann auf Erneut versuchen. Beim Einrichten wird alles auf ihr gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta caixa já está configurada. Aperte o botão liga/desliga 5 vezes, rapidamente, e toque em Tentar de novo. Configurá-la apaga tudo o que há nela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスはすでに設定されています。電源ボタンをすばやく 5 回押してから、「再試行」をタップしてください。設定するとボックス上のすべてが消去されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台主机已经设置过。请快速按电源键 5 次，然后点按“重试”。设置会抹掉主机上的所有内容。"
+          }
+        }
+      }
+    },
+    "The box refused this server's recipe. Start again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo rechazó la receta de este servidor. Empieza de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier a refusé la recette de ce serveur. Recommencez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hat das Rezept dieses Servers abgelehnt. Beginne von vorn."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa recusou a receita deste servidor. Comece de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスがこのサーバーのレシピを拒否しました。やり直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机拒绝了此服务器的配方。请重新开始。"
+          }
+        }
+      }
+    },
+    "The box and this phone got out of step. Start again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo y este teléfono se desincronizaron. Empieza de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier et ce téléphone se sont désynchronisés. Recommencez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box und dieses Telefon sind aus dem Takt geraten. Beginne von vorn."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa e este telefone perderam a sincronia. Comece de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスとこの電話の手順がずれました。やり直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机与这部手机的步骤不一致。请重新开始。"
+          }
+        }
+      }
+    },
+    "The box can't make safe keys yet. Leave it switched on for a minute and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo aún no puede crear claves seguras. Déjalo encendido un minuto y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier ne peut pas encore créer de clés sûres. Laissez-le allumé une minute et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box kann noch keine sicheren Schlüssel erzeugen. Lass sie eine Minute eingeschaltet und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa ainda não consegue criar chaves seguras. Deixe-a ligada por um minuto e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはまだ安全な鍵を作成できません。1 分間電源を入れたままにしてから、もう一度試してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机暂时无法生成安全的密钥。请让它保持开机一分钟后重试。"
+          }
+        }
+      }
+    },
+    "The box's answer did not belong to this setup. Someone nearby may be intercepting it. Unplug the box and set it up with a screen instead.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La respuesta del equipo no correspondía a esta configuración. Puede que alguien cerca la esté interceptando. Desenchufa el equipo y configúralo con una pantalla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réponse du boîtier ne correspondait pas à cette configuration. Quelqu'un à proximité l'intercepte peut-être. Débranchez le boîtier et configurez-le plutôt avec un écran."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort der Box gehörte nicht zu dieser Einrichtung. Möglicherweise fängt jemand in der Nähe sie ab. Stecke die Box aus und richte sie stattdessen mit einem Bildschirm ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A resposta da caixa não pertencia a esta configuração. Alguém por perto pode estar interceptando. Tire a caixa da tomada e configure-a com uma tela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスの応答はこの設定のものではありませんでした。近くの誰かが傍受している可能性があります。ボックスの電源を抜き、代わりに画面を使って設定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机的应答不属于本次设置。附近可能有人在拦截。请拔掉主机电源，改用显示器进行设置。"
+          }
+        }
+      }
+    },
+    "Another box is already registered for this server. Delete this server and set the box up again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay otro equipo registrado para este servidor. Elimina este servidor y vuelve a configurar el equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre boîtier est déjà enregistré pour ce serveur. Supprimez ce serveur et configurez de nouveau le boîtier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für diesen Server ist bereits eine andere Box registriert. Lösche diesen Server und richte die Box erneut ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outra caixa já está registrada para este servidor. Exclua este servidor e configure a caixa de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーにはすでに別のボックスが登録されています。このサーバーを削除して、ボックスを設定し直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器已登记了另一台主机。请删除此服务器，然后重新设置主机。"
+          }
+        }
+      }
+    },
+    "Only an admin device of this account can set up a server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador de esta cuenta puede configurar un servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur de ce compte peut configurer un serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät dieses Kontos kann einen Server einrichten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só um dispositivo administrador desta conta pode configurar um servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーを設定できるのは、このアカウントの管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有此账户的管理员设备才能设置服务器。"
+          }
+        }
+      }
+    },
+    "Turn on Bluetooth to find the box, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activa el Bluetooth para encontrar el equipo y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activez le Bluetooth pour trouver le boîtier, puis réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte Bluetooth ein, um die Box zu finden, und versuche es dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ative o Bluetooth para encontrar a caixa e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスを見つけるには Bluetooth をオンにしてから、もう一度試してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请打开蓝牙以查找主机，然后重试。"
+          }
+        }
+      }
+    },
+    "Flagship needs Bluetooth to find the box. Allow it in Settings, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship necesita Bluetooth para encontrar el equipo. Permítelo en Ajustes y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship a besoin du Bluetooth pour trouver le boîtier. Autorisez-le dans Réglages, puis réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship braucht Bluetooth, um die Box zu finden. Erlaube es in den Einstellungen und versuche es dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship precisa do Bluetooth para encontrar a caixa. Permita nos Ajustes e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship がボックスを見つけるには Bluetooth が必要です。設定で許可してから、もう一度試してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 需要蓝牙才能找到主机。请在“设置”中允许，然后重试。"
+          }
+        }
+      }
+    },
+    "This device can't use Bluetooth to set up a box.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo no puede usar Bluetooth para configurar un equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil ne peut pas utiliser le Bluetooth pour configurer un boîtier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät kann Bluetooth nicht zum Einrichten einer Box verwenden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo não pode usar Bluetooth para configurar uma caixa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスでは Bluetooth を使ってボックスを設定できません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备无法使用蓝牙设置主机。"
+          }
+        }
+      }
+    },
+    "The connection to the box was lost. Start again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se perdió la conexión con el equipo. Empieza de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion au boîtier a été perdue. Recommencez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Verbindung zur Box ist abgebrochen. Beginne von vorn."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conexão com a caixa foi perdida. Comece de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスとの接続が切れました。やり直してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "与主机的连接已断开。请重新开始。"
+          }
+        }
+      }
+    },
+    "The box did not accept this setup code. Ask for a new one: press the box's power button 3 times with the screen attached.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no aceptó este código de configuración. Pide uno nuevo: pulsa 3 veces el botón de encendido del equipo con la pantalla conectada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n'a pas accepté ce code de configuration. Demandez-en un nouveau : appuyez 3 fois sur le bouton d'alimentation du boîtier, écran branché."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hat diesen Einrichtungscode nicht angenommen. Lass dir einen neuen geben: Drücke den Einschaltknopf der Box 3-mal, während ein Bildschirm angeschlossen ist."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não aceitou este código de configuração. Peça um novo: aperte o botão liga/desliga da caixa 3 vezes com a tela conectada."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはこの設定コードを受け付けませんでした。新しいコードを表示してもらってください。画面をつないだ状態でボックスの電源ボタンを 3 回押します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机不接受此设置码。请获取新的设置码：在连接显示器的情况下按主机电源键 3 次。"
+          }
+        }
+      }
+    },
+    "No box answered this setup code. It may have expired or been used. Ask for a new one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ningún equipo respondió a este código de configuración. Puede que haya caducado o ya se haya usado. Pide uno nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun boîtier n'a répondu à ce code de configuration. Il a peut-être expiré ou déjà servi. Demandez-en un nouveau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Box hat auf diesen Einrichtungscode geantwortet. Er ist vielleicht abgelaufen oder wurde schon benutzt. Lass dir einen neuen geben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma caixa respondeu a este código de configuração. Ele pode ter expirado ou já ter sido usado. Peça um novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この設定コードに応答したボックスはありません。期限切れか、すでに使用された可能性があります。新しいコードを用意してもらってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有主机响应此设置码。它可能已过期或已被使用。请获取新的设置码。"
+          }
+        }
+      }
+    },
+    "This isn't a Flagship setup code.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esto no es un código de configuración de Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce n'est pas un code de configuration Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das ist kein Flagship-Einrichtungscode."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este não é um código de configuração do Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これは Flagship の設定コードではありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这不是 Flagship 设置码。"
+          }
+        }
+      }
+    },
+    "The server that came online is not the box you paired with. Someone may have intercepted the setup. Don't use it. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor que se conectó no es el equipo que emparejaste. Puede que alguien haya interceptado la configuración. No lo uses. Pulsa 5 veces el botón de encendido del equipo y configúralo de nuevo, con un cable de red. Si enviaste tu contraseña de Wi-Fi, cámbiala."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur qui s'est connecté n'est pas le boîtier que vous avez associé. Quelqu'un a peut-être intercepté la configuration. Ne l'utilisez pas. Appuyez 5 fois sur le bouton d'alimentation du boîtier et configurez-le de nouveau, avec un câble réseau. Si vous avez envoyé votre mot de passe Wi-Fi, changez-le."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server, der online gegangen ist, ist nicht die Box, mit der du dich gekoppelt hast. Möglicherweise hat jemand die Einrichtung abgefangen. Verwende ihn nicht. Drücke den Einschaltknopf der Box 5-mal und richte sie erneut ein, mit einem Netzwerkkabel. Wenn du dein WLAN-Passwort gesendet hast, ändere es."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor que ficou on-line não é a caixa que você pareou. Alguém pode ter interceptado a configuração. Não o use. Aperte o botão liga/desliga da caixa 5 vezes e configure-a de novo, com um cabo de rede. Se você enviou sua senha do Wi-Fi, troque-a."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンラインになったサーバーは、ペアリングしたボックスではありません。誰かが設定を傍受した可能性があります。使わないでください。ボックスの電源ボタンを 5 回押し、ネットワークケーブルを使って設定し直してください。Wi-Fi のパスワードを送信した場合は変更してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上线的服务器不是你配对的主机。可能有人拦截了设置。请勿使用它。请按主机电源键 5 次，然后使用网线重新设置。如果你发送过 Wi-Fi 密码，请修改它。"
+          }
+        }
+      }
+    },
+    "The box you paired with never came online. Someone may have intercepted the setup. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo que emparejaste nunca se conectó. Puede que alguien haya interceptado la configuración. Pulsa 5 veces el botón de encendido del equipo y configúralo de nuevo, con un cable de red. Si enviaste tu contraseña de Wi-Fi, cámbiala."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier que vous avez associé ne s'est jamais connecté. Quelqu'un a peut-être intercepté la configuration. Appuyez 5 fois sur le bouton d'alimentation du boîtier et configurez-le de nouveau, avec un câble réseau. Si vous avez envoyé votre mot de passe Wi-Fi, changez-le."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box, mit der du dich gekoppelt hast, ist nie online gegangen. Möglicherweise hat jemand die Einrichtung abgefangen. Drücke den Einschaltknopf der Box 5-mal und richte sie erneut ein, mit einem Netzwerkkabel. Wenn du dein WLAN-Passwort gesendet hast, ändere es."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa que você pareou nunca ficou on-line. Alguém pode ter interceptado a configuração. Aperte o botão liga/desliga da caixa 5 vezes e configure-a de novo, com um cabo de rede. Se você enviou sua senha do Wi-Fi, troque-a."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペアリングしたボックスはオンラインになりませんでした。誰かが設定を傍受した可能性があります。ボックスの電源ボタンを 5 回押し、ネットワークケーブルを使って設定し直してください。Wi-Fi のパスワードを送信した場合は変更してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你配对的主机一直没有上线。可能有人拦截了设置。请按主机电源键 5 次，然后使用网线重新设置。如果你发送过 Wi-Fi 密码，请修改它。"
+          }
+        }
+      }
+    },
+    "The box has no network. Plug the cable into your router, or choose Wi-Fi.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no tiene red. Conecta el cable a tu router o elige Wi-Fi."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier n'a pas de réseau. Branchez le câble sur votre box internet ou choisissez le Wi-Fi."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hat kein Netz. Stecke das Kabel in deinen Router oder wähle WLAN."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está sem rede. Conecte o cabo ao roteador ou escolha Wi-Fi."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはネットワークにつながっていません。ケーブルをルーターにつなぐか、Wi-Fi を選んでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机没有网络。请把网线插到路由器上，或选择 Wi-Fi。"
+          }
+        }
+      }
+    },
+    "The box can't see that Wi-Fi network. Move the box closer to the router, or use a cable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no ve esa red Wi-Fi. Acerca el equipo al router o usa un cable."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier ne voit pas ce réseau Wi-Fi. Rapprochez le boîtier de la box internet ou utilisez un câble."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box sieht dieses WLAN nicht. Stelle die Box näher an den Router oder verwende ein Kabel."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não vê essa rede Wi-Fi. Aproxime a caixa do roteador ou use um cabo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスからその Wi-Fi ネットワークが見えません。ボックスをルーターに近づけるか、ケーブルを使ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机看不到该 Wi-Fi 网络。请把主机移近路由器，或使用网线。"
+          }
+        }
+      }
+    },
+    "The Wi-Fi password was wrong. Check it and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La contraseña del Wi-Fi era incorrecta. Revísala y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le mot de passe Wi-Fi était incorrect. Vérifiez-le et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das WLAN-Passwort war falsch. Prüfe es und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A senha do Wi-Fi estava errada. Verifique e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi のパスワードが違います。確認してもう一度試してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 密码错误。请检查后重试。"
+          }
+        }
+      }
+    },
+    "The box can't join this kind of Wi-Fi. It needs WPA2 or WPA3 with a password. Use a cable instead.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo no puede unirse a este tipo de Wi-Fi. Necesita WPA2 o WPA3 con contraseña. Usa un cable."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier ne peut pas rejoindre ce type de Wi-Fi. Il lui faut du WPA2 ou du WPA3 avec mot de passe. Utilisez plutôt un câble."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box kann sich mit dieser Art WLAN nicht verbinden. Sie braucht WPA2 oder WPA3 mit Passwort. Verwende stattdessen ein Kabel."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa não consegue entrar neste tipo de Wi-Fi. Ela precisa de WPA2 ou WPA3 com senha. Use um cabo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはこの種類の Wi-Fi に参加できません。パスワード付きの WPA2 または WPA3 が必要です。代わりにケーブルを使ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机无法加入此类 Wi-Fi。它需要带密码的 WPA2 或 WPA3。请改用网线。"
+          }
+        }
+      }
+    },
+    "The network gave the box no address. Check that your router hands out addresses (DHCP).": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La red no le dio una dirección al equipo. Comprueba que tu router asigna direcciones (DHCP)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le réseau n'a donné aucune adresse au boîtier. Vérifiez que votre box internet distribue des adresses (DHCP)."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Netz hat der Box keine Adresse gegeben. Prüfe, ob dein Router Adressen vergibt (DHCP)."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A rede não deu um endereço à caixa. Verifique se o roteador distribui endereços (DHCP)."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネットワークがボックスにアドレスを割り当てませんでした。ルーターがアドレスを配布しているか (DHCP) 確認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网络没有给主机分配地址。请检查路由器是否会分配地址 (DHCP)。"
+          }
+        }
+      }
+    },
+    "The box got an address but can't look up names. Check your router's internet connection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo obtuvo una dirección, pero no puede resolver nombres. Comprueba la conexión a internet de tu router."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier a une adresse mais ne peut pas résoudre les noms. Vérifiez la connexion internet de votre box internet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box hat eine Adresse, kann aber keine Namen auflösen. Prüfe die Internetverbindung deines Routers."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa recebeu um endereço, mas não consegue resolver nomes. Verifique a conexão de internet do roteador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはアドレスを取得しましたが、名前を解決できません。ルーターのインターネット接続を確認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机已获得地址，但无法解析域名。请检查路由器的互联网连接。"
+          }
+        }
+      }
+    },
+    "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta red pide una página de inicio de sesión, que el equipo no puede usar. Usa una red doméstica o un cable."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce réseau demande une page de connexion, que le boîtier ne peut pas utiliser. Utilisez un réseau domestique ou un câble."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Netz verlangt eine Anmeldeseite, die die Box nicht nutzen kann. Verwende ein Heimnetz oder ein Kabel."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta rede pede uma página de login, que a caixa não consegue usar. Use uma rede doméstica ou um cabo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このネットワークはサインインページを要求しますが、ボックスでは使えません。家庭のネットワークかケーブルを使ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此网络需要登录页面，主机无法使用。请使用家庭网络或网线。"
+          }
+        }
+      }
+    },
+    "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo está conectado, pero no puede llegar a Flagship. Puede que tu red bloquee las conexiones salientes en el puerto 443."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le boîtier est en ligne mais n'arrive pas à joindre Flagship. Votre réseau bloque peut-être les connexions sortantes sur le port 443."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Box ist online, erreicht Flagship aber nicht. Dein Netz blockiert vielleicht ausgehende Verbindungen auf Port 443."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A caixa está on-line, mas não consegue alcançar a Flagship. Sua rede pode estar bloqueando conexões de saída na porta 443."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボックスはオンラインですが、Flagship に接続できません。ネットワークがポート 443 の外向き接続をブロックしている可能性があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机已联网，但无法连接 Flagship。你的网络可能阻止了 443 端口的出站连接。"
+          }
+        }
+      }
+    },
+    "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu contraseña de Wi-Fi llega al equipo por Bluetooth. Si alguien cerca está interceptando esta configuración, podría leerla. Un cable de red lo evita."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre mot de passe Wi-Fi est envoyé au boîtier en Bluetooth. Si quelqu'un à proximité intercepte cette configuration, il pourrait le lire. Un câble réseau l'évite."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein WLAN-Passwort wird per Bluetooth an die Box gesendet. Wenn jemand in der Nähe diese Einrichtung abfängt, könnte er es lesen. Mit einem Netzwerkkabel passiert das nicht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua senha do Wi-Fi vai para a caixa por Bluetooth. Se alguém por perto estiver interceptando esta configuração, poderá lê-la. Um cabo de rede evita isso."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi のパスワードは Bluetooth でボックスに送られます。近くの誰かがこの設定を傍受していると、読み取られるおそれがあります。ネットワークケーブルを使えば防げます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的 Wi-Fi 密码会通过蓝牙发送给主机。如果附近有人拦截此次设置，可能会读到它。使用网线可以避免这种情况。"
+          }
+        }
+      }
+    },
+    "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si este equipo ya se configuró antes, pulsa su botón de encendido 5 veces, rápido, y luego toca Reintentar. Configurarlo borra todo lo que contiene."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si ce boîtier a déjà été configuré, appuyez 5 fois rapidement sur son bouton d'alimentation, puis touchez Réessayer. Le configurer efface tout ce qu'il contient."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn diese Box schon einmal eingerichtet war, drücke ihren Einschaltknopf 5-mal schnell hintereinander und tippe dann auf Erneut versuchen. Beim Einrichten wird alles auf ihr gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se esta caixa já foi configurada antes, aperte o botão liga/desliga 5 vezes, rapidamente, e toque em Tentar de novo. Configurá-la apaga tudo o que há nela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このボックスが以前に設定されていた場合は、電源ボタンをすばやく 5 回押してから、「再試行」をタップしてください。設定するとボックス上のすべてが消去されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果这台主机之前设置过，请快速按电源键 5 次，然后点按“重试”。设置会抹掉主机上的所有内容。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

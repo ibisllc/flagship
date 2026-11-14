@@ -79,6 +79,8 @@ public struct HomeScreen: View {
     /// "Co-manage a running server": accept a server another account shares
     /// (docs/share-a-server.md), from the Add/Import chooser.
     var onCoManage: () -> Void = {}
+    /// "Set up a box from a store": a preinstalled box claimed over Bluetooth.
+    var onRetailBox: () -> Void = {}
     @State private var showAddOrImport = false
     /// Add/Restore takes no tap just after Home's layout moves (see TapSettle).
     @State private var addSettle = TapSettle()
@@ -165,6 +167,7 @@ public struct HomeScreen: View {
         onAddServer: @escaping () -> Void = {},
         onRestoreFromBackup: @escaping () -> Void = {},
         onCoManage: @escaping () -> Void = {},
+        onRetailBox: @escaping () -> Void = {},
         onMakeLeader: @escaping (PodInfo) -> Void = { _ in },
         onReorder: @escaping ([String]) -> Void = { _ in },
         onShowMyServers: @escaping () async -> Void = {},
@@ -207,6 +210,7 @@ public struct HomeScreen: View {
         self.onAddServer = onAddServer
         self.onRestoreFromBackup = onRestoreFromBackup
         self.onCoManage = onCoManage
+        self.onRetailBox = onRetailBox
         self.onMakeLeader = onMakeLeader
         self.onReorder = onReorder
         self.onShowMyServers = onShowMyServers
@@ -791,6 +795,8 @@ public struct HomeScreen: View {
         .confirmationDialog("Add / Restore a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
             Button("Create a server") { onAddServer() }
                 .accessibilityIdentifier("home-add-new-server")
+            Button("Set up a box from a store") { onRetailBox() }
+                .accessibilityIdentifier("home-retail-box")
             Button("Co-manage a running server") { onCoManage() }
                 .accessibilityIdentifier("home-co-manage")
             Button("Restore from backup") { onRestoreFromBackup() }
