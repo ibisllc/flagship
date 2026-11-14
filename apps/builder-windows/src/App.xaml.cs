@@ -11,10 +11,19 @@ namespace Flagship.Builder;
 /// </summary>
 public partial class App : Application
 {
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        var window = new MainWindow();
+        // Started by "Restart as administrator": the copy that asked is still shutting its servers down, and their
+        // disks are in use until it exits (W10).
+        var handoff = ElevationHandoff.Parse(e.Args);
+        if (handoff is not null)
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            await ElevationHandoff.WaitForExitAsync(handoff.Pid, ElevationHandoff.WaitForOldCopy);
+            ShutdownMode = ShutdownMode.OnLastWindowClose;
+        }
+        var window = new MainWindow(handoff?.Resume);
         MainWindow = window;
         window.Show();
     }

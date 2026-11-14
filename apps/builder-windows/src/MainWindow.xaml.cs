@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -32,7 +33,11 @@ public partial class MainWindow : Window
     private readonly TrayIcon _trayIcon;
     private readonly QuitGate _quitGate;
 
-    public MainWindow()
+    public MainWindow() : this(null) { }
+
+    /// <param name="resume">Servers to start again once the window is up: the ones that ran in the copy that
+    /// restarted as administrator (W10).</param>
+    public MainWindow(IReadOnlyList<string>? resume)
     {
         _wizard = new Wizard();
         DataContext = _wizard;
@@ -60,6 +65,9 @@ public partial class MainWindow : Window
         {
             _wizard.LaunchPairing();
             _ = _wizard.RefreshDisksAsync();
+            foreach (var name in resume ?? Array.Empty<string>())
+                if (_wizard.Vm.Server(name) is { CanStart: true })
+                    _ = _wizard.Vm.PowerOnAsync(name);
         };
         // Auto-scroll the log when new lines arrive.
         _wizard.LogLines.CollectionChanged += (_, _) =>
@@ -110,8 +118,10 @@ public partial class MainWindow : Window
                 Strings.T("startThemAgainAfterTheRestart"),
                 Strings.T("restartAsAdministrator"), MessageBoxButton.OKCancel, MessageBoxImage.Warning);
             if (answer != MessageBoxResult.OK) return;
-            await ShutDownServersAsync();
         }
+        // W10: start the elevated copy FIRST. A No at the UAC prompt, or a timeout, must leave every server running;
+        // only once the elevated copy exists do the servers shut down, and it starts again the ones that ran.
+        var resume = _wizard.Vm.Servers.Where(s => s.CanStop).Select(s => s.Name).ToArray();
         try
         {
             var executable = Environment.ProcessPath
@@ -121,29 +131,24 @@ public partial class MainWindow : Window
                 UseShellExecute = true,
                 Verb = "runas",
                 WorkingDirectory = AppContext.BaseDirectory,
+                Arguments = ElevationHandoff.Arguments(Environment.ProcessId, resume),
             });
-            Close();
         }
         catch (System.ComponentModel.Win32Exception error) when (error.NativeErrorCode == 1223)
         {
-            // UAC was cancelled; leave this normal-permission window open.
-            RestoreAfterShutdown();
+            // UAC was cancelled; nothing was stopped, so this window simply stays.
+            return;
         }
         catch (Exception error)
         {
-            RestoreAfterShutdown();
             MessageBox.Show(this, error.Message, Strings.T("couldNotRestartAsAdministrator"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
         }
+        if (live > 0) await ShutDownServersAsync();
+        Close();
     }
 
-    private void RestoreAfterShutdown()
-    {
-        _wizard.Vm.CancelQuit();
-        Title = StudioVersion.WindowTitle();
-        IsEnabled = true;
-        _trayIcon.SetStatus(null);
-    }
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
 
     private async Task ShutDownServersAsync()
