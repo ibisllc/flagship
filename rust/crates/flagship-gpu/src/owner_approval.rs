@@ -22,7 +22,12 @@
 //! |<issuedAt>` signed by the same key, raises a floor gpud keeps in its own root-owned state
 //! ([`ApprovalFloors`]): from then on no approval of that installation signed at or before the
 //! withdrawal is admitted, whichever generation it names and whatever the daemon re-presents. The
-//! floor only rises. There is no maximum age: an app's approval is used at every start.
+//! floor only rises.
+//!
+//! An approval also has a maximum age ([`DEFAULT_APPROVAL_MAX_AGE_MS`], 90 days; root sets another
+//! with `--approval-max-age-days`) and may not be dated ahead of gpud's clock: a withdrawal the
+//! daemon withholds (gpud learns of withdrawals only through it) stops counting once the approval
+//! it should have ended runs out, and the daemon then asks the owner again.
 //!
 //! The one unsigned shape is the box's own local AI (`flagship-local-ai`, installation `box`):
 //! one device, compute only, exclusive and secret, in a `flagship-localai-`/`flagship-aitrain-`
@@ -31,8 +36,15 @@
 //!
 //! This is the minimal verifiable form of the "signed GPU capability" the plan gives the core's
 //! capability issuer (R02, not built): when that exists, its short-lived capability replaces this.
-//! Not covered here: the strict-mode PQ half (the gate runs under the legacy policy, as keyd's
-//! master evidence does).
+//!
+//! Strict mode ([`BootPqState`], from `/boot/flagship-unlock-policy`): an approval also needs the
+//! owner's hybrid signature (`approvalProof.pqSignature`, `flagship/hybrid-sig/ed25519-mldsa65/v1`
+//! over the same text) under the hybrid key in `/boot/flagship-owner-pq.pub`, whose Ed25519 half
+//! must be the key keyd pins. That file holds the IRK's hybrid key, so a box whose approvals are
+//! signed by an admin root refuses every approval while strict (no admin-root hybrid key is
+//! written root-side yet). The daemon writes both /boot files; it can lie that the box is not
+//! strict, which leaves the classical check, and cannot make an approval without the owner's
+//! Ed25519 signature.
 
 use std::collections::BTreeMap;
 use std::io::Write as _;
@@ -48,6 +60,11 @@ use crate::request::{AppInstallation, GpuApproval};
 
 pub const GPU_APPROVAL_TAG: &str = "flagship/gpu-approval/v2";
 pub const GPU_APPROVAL_WITHDRAW_TAG: &str = "flagship/gpu-approval-withdraw/v1";
+/// The longest an approval is used for (the daemon's `GPU_APPROVAL_MAX_AGE_MS` asks again then).
+pub const DEFAULT_APPROVAL_MAX_AGE_MS: u64 = 90 * 24 * 60 * 60_000;
+/// How far ahead of gpud's clock an approval may be dated.
+pub const APPROVAL_FUTURE_SKEW_MS: u64 = 5 * 60_000;
+const HYBRID_SUITE: &str = "hybrid-ed25519-mldsa65/v1";
 /// How the daemon's local AI appears to gpud (`localAi/devices.ts` `LOCAL_AI_APP`).
 pub const LOCAL_AI_APP: &str = "flagship-local-ai";
 pub const LOCAL_AI_INSTALLATION: &str = "box";
@@ -60,6 +77,9 @@ pub struct ApprovalProof {
     pub issued_at: u64,
     /// Ed25519, 128 lowercase hex.
     pub signature: String,
+    /// The owner's hybrid signature over the same text (lowercase hex), required while strict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pq_signature: Option<String>,
 }
 
 /// Who must have signed, and for which box.
@@ -416,6 +436,92 @@ impl ApprovalFloors {
 pub fn verify(anchor: &OwnerAnchor, a: &GpuApproval, proof: &ApprovalProof) -> Result<(), String> {
     let msg = canonical(&anchor.server, a, proof.issued_at)?;
     verify_signed(anchor, &msg, GPU_APPROVAL_TAG, &proof.signature)
+}
+
+/// Whether the box is strict, and the owner's hybrid key, as /boot holds them.
+#[derive(Clone, Debug, Default)]
+pub struct BootPqState {
+    pub strict: bool,
+    /// `ed25519_pk || mldsa65_pk` (1984 bytes), when the box has written one.
+    pub owner_hybrid: Option<Vec<u8>>,
+}
+
+impl BootPqState {
+    /// `flagship-unlock-policy` (no file: not strict; `strict` or `compat`; anything else counts
+    /// as strict, so a damaged file never weakens the check) and `flagship-owner-pq.pub` (hex).
+    pub fn from_boot_dir(dir: &Path) -> Self {
+        let strict = match std::fs::read_to_string(dir.join("flagship-unlock-policy")) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Ok(t) if t.trim() == "compat" => false,
+            _ => true,
+        };
+        let owner_hybrid = std::fs::read_to_string(dir.join("flagship-owner-pq.pub"))
+            .ok()
+            .and_then(|t| decode_hex(t.trim()))
+            .filter(|b| b.len() == flagship_crypto::sig::PUBLIC_KEY_LEN);
+        Self {
+            strict,
+            owner_hybrid,
+        }
+    }
+}
+
+fn decode_hex(s: &str) -> Option<Vec<u8>> {
+    let b = s.as_bytes();
+    if !b.len().is_multiple_of(2) {
+        return None;
+    }
+    let nib = |c: u8| match c {
+        b'0'..=b'9' => Some(c.wrapping_sub(b'0')),
+        b'a'..=b'f' => Some(c.wrapping_sub(b'a').wrapping_add(10)),
+        _ => None,
+    };
+    b.as_chunks::<2>()
+        .0
+        .iter()
+        .map(|[h, l]| Some((nib(*h)? << 4) | nib(*l)?))
+        .collect()
+}
+
+/// [`verify`], plus what gpud's own state adds: the approval is not older than `max_age_ms` nor
+/// dated ahead of `now_ms`, and, while strict, the owner's hybrid signature checks too.
+pub fn verify_admission(
+    anchor: &OwnerAnchor,
+    a: &GpuApproval,
+    proof: &ApprovalProof,
+    pq: &BootPqState,
+    now_ms: u64,
+    max_age_ms: u64,
+) -> Result<(), String> {
+    verify(anchor, a, proof)?;
+    if proof.issued_at > now_ms.saturating_add(APPROVAL_FUTURE_SKEW_MS) {
+        return Err("the approval is dated ahead of this server's clock".into());
+    }
+    if now_ms.saturating_sub(proof.issued_at) > max_age_ms {
+        return Err("the approval has expired; the owner needs to approve again".into());
+    }
+    let key = pq.owner_hybrid.as_deref().filter(|k| {
+        k.get(..32)
+            .is_some_and(|ed| flagship_crypto::trust::hex(ed) == anchor.signer_hex)
+    });
+    match (&proof.pq_signature, key) {
+        (None, _) if pq.strict => Err(
+            "this server is quantum-safe: the approval needs the owner's hybrid signature".into(),
+        ),
+        (Some(_), None) if pq.strict => Err(
+            "this server is quantum-safe and holds no hybrid key for the key that signs approvals"
+                .into(),
+        ),
+        (Some(sig), Some(k)) => {
+            let msg = canonical(&anchor.server, a, proof.issued_at)?;
+            let vk = flagship_crypto::HybridVerifyingKey::from_bytes(k)
+                .map_err(|_| "the owner's hybrid key is damaged".to_owned())?;
+            let sig = decode_hex(sig).ok_or("the hybrid signature is not hex")?;
+            vk.verify(GPU_APPROVAL_TAG, msg.as_bytes(), &sig)
+                .map_err(|_| format!("the owner's {HYBRID_SUITE} signature does not verify"))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn local_ai_container(c: &str) -> bool {

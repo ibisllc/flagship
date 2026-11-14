@@ -20,7 +20,7 @@ import {
   type NormalizedApp,
 } from "@flagship/protocol";
 import { onCorruptState } from "../src/durableFile.js";
-import { GpuApprovalStore, NEEDS_GPU_APPROVAL, acceleratorRequestFor, setGpuApprovals, type GpuApprovalRequestEvent, type PendingGpuApproval } from "../src/gpu/approvals.js";
+import { GPU_APPROVAL_MAX_AGE_MS, GpuApprovalStore, NEEDS_GPU_APPROVAL, acceleratorRequestFor, setGpuApprovals, type GpuApprovalRequestEvent, type PendingGpuApproval } from "../src/gpu/approvals.js";
 import { AcceleratorBroker, AppAccelerators } from "../src/gpu/broker.js";
 import { buildAcceleratorsHttp } from "../src/gpu/http.js";
 
@@ -369,6 +369,41 @@ describe("an app that asks for a GPU", () => {
     expect(req?.pendingReason).toMatch(/dedicated VM/);
     expect((await s.lists()).pendingApprovals).toEqual([]);
     expect(events).toEqual([]);
+  });
+});
+
+describe("an approval's lifetime and its hybrid signature (gpud's own checks)", () => {
+  it("runs out after the maximum age: the app is pending again and the owner is asked again", async () => {
+    const s = store();
+    const p = await pendingOf(s);
+    expect((await s.grant(grantBody(p))).ok).toBe(true);
+    expect((await s.requestFor("alice-render", app()))?.approvalProof).toBeDefined();
+    const asked = pushes;
+    t = NOW + GPU_APPROVAL_MAX_AGE_MS + 1;
+    const req = (await s.requestFor("alice-render", app()))!;
+    expect(req.approvalProof).toBeUndefined();
+    expect(req.pendingReason).toBe(NEEDS_GPU_APPROVAL);
+    expect(pushes).toBe(asked + 1);
+    expect(notes.filter((n) => n === "gpu.approval.pending")).toHaveLength(2);
+    const lists = await s.lists();
+    expect(lists.approvals).toEqual([]);
+    expect(lists.pendingApprovals.map((x) => x.appId)).toEqual(["alice-render"]);
+    // The owner approves again.
+    const again = (await s.lists()).pendingApprovals[0]!;
+    expect((await s.grant(grantBody(again))).ok).toBe(true);
+    expect((await s.requestFor("alice-render", app()))?.approvalProof?.issuedAt).toBe(t);
+  });
+
+  it("passes the owner's hybrid signature to gpud, and refuses a malformed one", async () => {
+    const s = store();
+    const p = await pendingOf(s);
+    const hybrid = "ab".repeat(3373);
+    expect((await s.grant({ ...grantBody(p), pqSignature: { suite: "ed25519/v1", signature: hybrid } })).ok).toBe(false);
+    expect((await s.grant({ ...grantBody(p), pqSignature: { suite: "hybrid-ed25519-mldsa65/v1", signature: "ab" } })).ok).toBe(false);
+    expect((await s.grant({ ...grantBody(p), pqSignature: { suite: "hybrid-ed25519-mldsa65/v1", signature: hybrid } })).ok).toBe(true);
+    expect((await s.requestFor("alice-render", app()))?.approvalProof).toMatchObject({ issuedAt: NOW, pqSignature: hybrid });
+    const reread = new GpuApprovalStore({ path: join(dir, "gpu-approvals.json"), serverDomain: () => SERVER, keys: () => ({ irkPub: IRK.publicKey, adminRootPub: ADMIN.publicKey }), now: () => t });
+    expect((await reread.requestFor("alice-render", app()))?.approvalProof?.pqSignature).toBe(hybrid);
   });
 });
 

@@ -68,6 +68,8 @@ export interface GpuApprovalWire {
 export interface GpuApprovalProof {
   issuedAt: number;
   signature: string;
+  /** The owner's hybrid signature over the same text (hex); gpud requires it on a strict box. */
+  pqSignature?: string;
 }
 
 export interface ShareLimits {

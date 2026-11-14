@@ -17,6 +17,10 @@
  *   raises its own floor (no approval signed before it counts again, whatever this daemon presents)
  *   and stops the app's GPU work. One gpud missed (not running) is handed over before the next claim.
  *
+ * - An approval lasts GPU_APPROVAL_MAX_AGE_MS (gpud's own limit, `owner_approval.rs`): then the app is pending
+ *   again and the owner is asked again, so a withdrawal this daemon never handed over stops mattering.
+ * - A grant may carry the owner's hybrid signature (`pqSignature`), passed to gpud, which needs it while strict.
+ *
  * Kept in `<dataDir>/gpu-approvals.json` (durable writes). An unreadable file is set aside and the
  * box starts with no approvals: every GPU app waits for the owner again.
  */
@@ -35,6 +39,10 @@ import { gpuIsolationFor, requirementFromManifest, type AppAcceleratorRequest, t
 
 /** How old a signed grant or withdrawal may be when it reaches the box. */
 export const GPU_APPROVAL_FRESH_MS = 10 * 60_000;
+/** How long an approval is used (flagship-gpud's DEFAULT_APPROVAL_MAX_AGE_MS refuses it after that). */
+export const GPU_APPROVAL_MAX_AGE_MS = 90 * 24 * 60 * 60_000;
+const HYBRID_SUITE = "hybrid-ed25519-mldsa65/v1";
+const HYBRID_SIG = /^[0-9a-f]{6746}$/;
 export const NEEDS_GPU_APPROVAL = "This app needs your approval to use a GPU. Approve it on this server's page, then start the app again.";
 const NO_SAFE_ISOLATION = "AMD and Intel GPUs run only in a dedicated VM; this app asks for the container sandbox.";
 const PUSHES_PER_HOUR = 5;
@@ -90,6 +98,8 @@ interface Stored {
   terms: GpuApprovalTerms;
   issuedAt: number;
   signature: string;
+  /** The owner's hybrid signature (hex), when the grant carried one. */
+  pqSignature?: string;
 }
 
 export type SignedGpuApprovalWithdraw = GpuApprovalWithdraw & { signature: string };
@@ -149,6 +159,7 @@ function wellFormed(v: unknown): v is State {
   }
   for (const a of Object.values(v.approvals)) {
     if (!isObj(a) || !isObj(a.terms) || typeof a.terms.container !== "string" || !intAt(a.issuedAt) || typeof a.signature !== "string" || !SIG.test(a.signature)) return false;
+    if (a.pqSignature !== undefined && (typeof a.pqSignature !== "string" || !HYBRID_SIG.test(a.pqSignature))) return false;
   }
   return Object.values(v.floors).every(intAt);
 }
@@ -242,9 +253,13 @@ export class GpuApprovalStore {
 
   private valid(appId: string, i: Installation): Stored | null {
     const s = this.state.approvals[appId];
-    if (!s) return null;
+    if (!s || this.expired(s)) return null;
     const a = s.terms.app;
     return a.appId === appId && a.installationId === i.installationId && a.generation === i.generation ? s : null;
+  }
+
+  private expired(s: Stored): boolean {
+    return this.now() - s.issuedAt > GPU_APPROVAL_MAX_AGE_MS;
   }
 
   private pendingTerms(appId: string, i: Installation): GpuApprovalTerms | null {
@@ -333,10 +348,21 @@ export class GpuApprovalStore {
       else delete this.state.approvals[serviceId];
       await this.save();
     }
+    const stale = this.state.approvals[serviceId];
+    if (stale && this.expired(stale)) {
+      // Ran out: drop it and tell the owner again, as for a new generation.
+      delete this.state.approvals[serviceId];
+      i = { ...i, alerted: 0 };
+      this.state.installations[serviceId] = i;
+      await this.save();
+    }
     const installation = { appId: serviceId, installationId: i.installationId, generation: i.generation };
     const requirement = requirementFromManifest(acc);
     const s = this.valid(serviceId, i);
-    if (s) return { installation, requirement, approval: s.terms as GpuApprovalWire, approvalProof: { issuedAt: s.issuedAt, signature: s.signature } };
+    if (s) {
+      const approvalProof = { issuedAt: s.issuedAt, signature: s.signature, ...(s.pqSignature ? { pqSignature: s.pqSignature } : {}) };
+      return { installation, requirement, approval: s.terms as GpuApprovalWire, approvalProof };
+    }
     const t = this.pendingTerms(serviceId, i);
     this.announce(serviceId, i, false);
     return {
@@ -386,7 +412,7 @@ export class GpuApprovalStore {
   /** `POST …/approvals`: the owner's signed grant for one app installation and generation. */
   async grant(body: unknown): Promise<GpuApprovalResult> {
     await this.ready;
-    const keys = ["server", "appId", "installationId", "generation", "backend", "maxCount", "caps", "policies", "isolation", "secrecy", "trustDomain", "ownerConsent", "container", "userspace", "maxRuntimeMs", "share", "issuedAt", "signature"] as const;
+    const keys = ["server", "appId", "installationId", "generation", "backend", "maxCount", "caps", "policies", "isolation", "secrecy", "trustDomain", "ownerConsent", "container", "userspace", "maxRuntimeMs", "share", "issuedAt", "signature", "pqSignature"] as const;
     if (!isObj(body) || !onlyKeys(body, keys)) return refuse(400, "bad-request", "The approval has missing or unknown fields.");
     const shareOk = (v: unknown) => v === null || (isObj(v) && onlyKeys(v, ["computePercent", "memoryMib"]) && intAt(v.computePercent) && intAt(v.memoryMib));
     const b = body;
@@ -396,7 +422,9 @@ export class GpuApprovalStore {
       !Array.isArray(b.policies) || !b.policies.every((x) => typeof x === "string") || typeof b.isolation !== "string" ||
       typeof b.secrecy !== "boolean" || !strOrNull(b.trustDomain) || !strOrNull(b.ownerConsent) || typeof b.container !== "string" ||
       !strOrNull(b.userspace) || !(b.maxRuntimeMs === null || intAt(b.maxRuntimeMs)) || !shareOk(b.share) || !intAt(b.issuedAt) ||
-      typeof b.signature !== "string" || !SIG.test(b.signature)
+      typeof b.signature !== "string" || !SIG.test(b.signature) ||
+      (b.pqSignature !== undefined &&
+        !(isObj(b.pqSignature) && onlyKeys(b.pqSignature, ["suite", "signature"]) && b.pqSignature.suite === HYBRID_SUITE && typeof b.pqSignature.signature === "string" && HYBRID_SIG.test(b.pqSignature.signature)))
     ) {
       return refuse(400, "bad-request", "The approval has missing or unknown fields.");
     }
@@ -446,7 +474,9 @@ export class GpuApprovalStore {
       }
       return refuse(403, "bad-signature", "The approval's signature doesn't check out.");
     }
-    this.state.approvals[b.appId] = { terms, issuedAt: b.issuedAt, signature: b.signature };
+    // gpud checks the hybrid signature itself against the owner's key (and needs it while strict).
+    const pq = isObj(b.pqSignature) ? (b.pqSignature.signature as string) : undefined;
+    this.state.approvals[b.appId] = { terms, issuedAt: b.issuedAt, signature: b.signature, ...(pq ? { pqSignature: pq } : {}) };
     await this.save();
     this.d.note?.("gpu.approval.granted", "You approved an app's use of a GPU.", { ok: true, target: b.appId });
     try {

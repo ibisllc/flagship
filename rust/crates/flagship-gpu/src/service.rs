@@ -54,8 +54,8 @@ use crate::mig::{apply as mig_apply, parse_lgip, plan as mig_plan};
 use crate::numerics::{VectorAddReport, verify_vector_add};
 use crate::observe::ObserverRoots;
 use crate::owner_approval::{
-    ApprovalFloors, ApprovalProof, OwnerAnchorSource, Withdrawal, box_local,
-    verify as verify_approval, verify_withdrawal,
+    ApprovalFloors, ApprovalProof, BootPqState, DEFAULT_APPROVAL_MAX_AGE_MS, OwnerAnchorSource,
+    Withdrawal, box_local, verify_admission, verify_withdrawal,
 };
 use crate::policy::{AllocationId, PolicyKind};
 use crate::provider::{DeviceProvider, IsolationProfile, Tool, ToolRunner};
@@ -119,6 +119,22 @@ pub struct ServiceConfig {
     pub publish_claims: bool,
     /// Whose signature an app's GPU approval needs (`owner_approval.rs`).
     pub owner_anchor: OwnerAnchorSource,
+    /// Where `flagship-unlock-policy` and `flagship-owner-pq.pub` say whether approvals need the
+    /// owner's hybrid signature; `None` reads nothing (never strict).
+    pub boot_dir: Option<PathBuf>,
+    /// The longest an owner's approval is used for.
+    pub approval_max_age_ms: u64,
+    /// gpud's clock for approval ages.
+    pub now_ms: fn() -> u64,
+    /// Driver maintenance, MIG layout changes and quarantine clears on the daemon's word. Off:
+    /// there is no owner-signed maintenance order yet, and nothing on the box sends these.
+    pub daemon_maintenance: bool,
+}
+
+fn system_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
 impl ServiceConfig {
@@ -147,6 +163,10 @@ impl ServiceConfig {
             run_claims_path: "/run/flagship-gpu/run-claims.json".into(),
             publish_claims: true,
             owner_anchor: OwnerAnchorSource::KeydState("/var/lib/flagship-keyd".into()),
+            boot_dir: Some("/boot".into()),
+            approval_max_age_ms: DEFAULT_APPROVAL_MAX_AGE_MS,
+            now_ms: system_now_ms,
+            daemon_maintenance: false,
         }
     }
 }
@@ -368,9 +388,7 @@ impl GpuService {
             Arc::clone(&parts.sysfs_writer),
         );
         let ledger = CoopLedger::new(config.coop_window_ms);
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+        let now_ms = (config.now_ms)();
         let floors = ApprovalFloors::open(config.state_dir.join("approval-floors.json"), now_ms)?;
         let maintenance = match &parts.packages {
             Some(p) => Some(DriverMaintenance::new(
@@ -633,6 +651,16 @@ impl GpuService {
         struct Dev {
             device: String,
         }
+        if matches!(
+            op,
+            "gpu.quarantine.clear" | "gpu.mig.apply" | "gpu.maintenance.propose"
+        ) && !self.config.daemon_maintenance
+        {
+            return Err(err(
+                "forbidden",
+                "GPU maintenance needs the owner's signed order, which this release does not take yet",
+            ));
+        }
         match op {
             "gpu.inventory" => Ok(self.inventory()),
             "gpu.status" => self.status(),
@@ -884,7 +912,21 @@ impl GpuService {
                     format!("there is no owner key to check a GPU approval against: {why}"),
                 )
             })?;
-            verify_approval(&anchor, &x.approval, proof).map_err(|why| {
+            let pq = self
+                .config
+                .boot_dir
+                .as_deref()
+                .map(BootPqState::from_boot_dir)
+                .unwrap_or_default();
+            verify_admission(
+                &anchor,
+                &x.approval,
+                proof,
+                &pq,
+                (self.config.now_ms)(),
+                self.config.approval_max_age_ms,
+            )
+            .map_err(|why| {
                 err(
                     "forbidden",
                     format!("the owner's GPU approval does not verify: {why}"),

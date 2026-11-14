@@ -142,6 +142,7 @@ fn rig(dir: &Path, gpus: Vec<SimGpu>, catalog: Option<VerifiedCatalog>) -> Resul
     cfg.level_zero_version = Some(d.level_zero.clone());
     cfg.coop_window_ms = 1_000;
     cfg.owner_anchor = OwnerAnchorSource::Fixed(TestOwner::new(OWNER_SEED).anchor());
+    crate::testkit::test_config(&mut cfg);
     let svc = GpuService::new(cfg, parts)?;
     Ok(Rig { host, rt, svc })
 }
@@ -172,6 +173,7 @@ fn reopen(dir: &Path, r: Rig) -> Result<Rig, String> {
     cfg.rocm_version = Some(d.rocm.clone());
     cfg.level_zero_version = Some(d.level_zero.clone());
     cfg.owner_anchor = OwnerAnchorSource::Fixed(TestOwner::new(OWNER_SEED).anchor());
+    crate::testkit::test_config(&mut cfg);
     let svc = GpuService::new(cfg, parts)?;
     Ok(Rig { host, rt, svc })
 }
