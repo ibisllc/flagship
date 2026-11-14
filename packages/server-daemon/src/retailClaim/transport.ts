@@ -32,7 +32,7 @@ export interface ClaimAdvert {
 export interface ClaimPeripheral {
   /** Starts or updates the advert. */
   advertise(adv: ClaimAdvert): Promise<void>;
-  /** Stops the advert and drops every link. */
+  /** Stops the advert. Links already open stay; the service closes the ones it no longer wants. */
   stop(): Promise<void>;
   onLink(cb: (link: ClaimLink) => void): void;
 }
@@ -127,8 +127,6 @@ export class InMemoryBleRadio {
       },
       stop: async () => {
         this.advert = null;
-        for (const l of this.links) l.close();
-        this.links = [];
       },
       onLink: (cb) => {
         this.linkCb = cb;

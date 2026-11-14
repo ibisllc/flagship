@@ -77,7 +77,9 @@ export interface ClaimServiceDeps {
   /** After a receipt, a box whose phone went away provisions on its own after this long (Ethernet). */
   provisionFallbackMs?: number;
   codeDisplayMs?: number;
-  mailboxPollMs?: number;
+  /** Mailbox polling: slow while nobody is claiming, fast for two minutes after a message arrived. */
+  mailboxIdlePollMs?: number;
+  mailboxActivePollMs?: number;
   log?: (m: string) => void;
 }
 
@@ -103,6 +105,7 @@ export class RetailClaimService {
   private readonly advertId: string;
   private mailboxLink: MailboxLink | null = null;
   private lastMailboxPoll = 0;
+  private lastMailboxMessage = 0;
   private displayUntil: number | null = null;
   private provisioned = false;
   private claimedSession: Session | null = null;
@@ -188,11 +191,23 @@ export class RetailClaimService {
 
   private async pollMailbox(now: number): Promise<void> {
     if (!this.d.mailbox) return;
+    const c = this.claimedSession;
+    if (c && c.link === this.mailboxLink) {
+      if (c.online) {
+        this.mailboxLink.close();
+        return;
+      }
+      if (now - this.lastMailboxPoll < (this.d.mailboxActivePollMs ?? 1_000)) return;
+      this.lastMailboxPoll = now;
+      await this.mailboxLink.poll().catch((e) => this.log(`[retail] mailbox: ${(e as Error).message}`));
+      return;
+    }
     if (!this.machine.claimable(now, true)) {
       this.mailboxLink?.close();
       return;
     }
-    if (now - this.lastMailboxPoll < (this.d.mailboxPollMs ?? 2_000)) return;
+    const active = now - this.lastMailboxMessage < 120_000;
+    if (now - this.lastMailboxPoll < (active ? (this.d.mailboxActivePollMs ?? 1_000) : (this.d.mailboxIdlePollMs ?? 15_000))) return;
     this.lastMailboxPoll = now;
     const live = await this.d.codes.current(now);
     if (!live) {
@@ -208,7 +223,11 @@ export class RetailClaimService {
       });
       this.attach(link);
     }
-    await this.mailboxLink.poll().catch((e) => this.log(`[retail] mailbox: ${(e as Error).message}`));
+    const got = await this.mailboxLink.poll().catch((e) => {
+      this.log(`[retail] mailbox: ${(e as Error).message}`);
+      return 0;
+    });
+    if (got > 0) this.lastMailboxMessage = now;
   }
 
   private attach(link: ClaimLink): void {
@@ -395,7 +414,7 @@ export class RetailClaimService {
         case "radio-closed":
           this.advertising = null;
           await this.d.peripheral.stop();
-          this.mailboxLink?.close();
+          for (const s of [...this.sessions.values()]) if (s !== this.claimedSession) s.link.close();
           this.d.notify?.("radio-closed");
           break;
       }
