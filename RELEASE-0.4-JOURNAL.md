@@ -333,6 +333,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-14 Owner: air-gapped site mode is planned, NOT released in 0.4 (after Windows certification and funding).
   Restore-into-server defaults accepted as proposed; keywords security + smooth UX. Build started on
   `0.4/restore-merge-build`, store generations first.
+- 2026-11-14 Merged `0.4/retail-apps`: box-claim/v1 in Swift + Kotlin (vectors), keyd signs `box-claim-receipt/v1`
+  (hybrid, fixed shape; boxPurposes green), iOS "Set up a box from a store" (Core Bluetooth, press screen, recipe,
+  key registration, Wi-Fi step, internet check + alarms, code/mailbox path, 7 mock-gym scenarios green), webapp
+  points to the phone (shell **v210**). LEFT: Android screens, Rust port, BlueZ GATT peripheral, real radio run.
+  Owner Qs: one Face ID instead of two (reuse the create flow's unsealed admin key)?; alarm "untrusted" state;
+  matching key but no cert yet = done or wait?; hide the retail entry on store builds until hardware?
 
 ## Resume point
 
