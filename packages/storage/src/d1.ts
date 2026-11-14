@@ -7,6 +7,7 @@ import {
 } from "@flagship/protocol";
 import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
 import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
+import { D1DirectAccessStorage, type DirectAccessStorage } from "./directAccess.js";
 import { D1VoiciStorage, type VoiciStorage } from "./voici.js";
 import { D1ServerBootKeyStorage, type ServerBootKeyStorage } from "./serverBootKeys.js";
 import { D1PqTrustStorage, type PqTrustStorage } from "./pqTrust.js";
@@ -5404,6 +5405,7 @@ export class D1Storage implements Storage {
   pqTrust: PqTrustStorage;
   voici: VoiciStorage;
   relayHealth: RelayHealthStorage;
+  directAccess: DirectAccessStorage;
   constructor(db: D1Database) {
     this.names = new D1NameRegistryStorage(db);
     this.usernames = new D1UsernameStorage(db);
@@ -5470,6 +5472,7 @@ export class D1Storage implements Storage {
     this.pqTrust = new D1PqTrustStorage(db);
     this.voici = new D1VoiciStorage(db);
     this.relayHealth = new D1RelayHealthStorage(db);
+    this.directAccess = new D1DirectAccessStorage(db);
   }
 }
 

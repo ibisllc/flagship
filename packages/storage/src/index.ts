@@ -4,6 +4,7 @@ export * from "./d1.js";
 export * from "./schema.js";
 export * from "./serverShares.js";
 export * from "./serverOrders.js";
+export * from "./directAccess.js";
 export * from "./requestD1.js";
 export * from "./serverBootKeys.js";
 export * from "./pqTrust.js";
