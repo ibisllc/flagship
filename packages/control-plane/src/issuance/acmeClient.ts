@@ -92,6 +92,11 @@ export class AcmeClient {
       kid?: string | null;
       contact?: string | null;
       fetchImpl?: typeof fetch;
+      /**
+       * Called after the CA said a stored account URL does not exist (a test CA such as Pebble forgets every account
+       * on restart) and the client registered the key again, so the caller can replace what it stored.
+       */
+      onAccountReplaced?: (kid: string, staleKid: string) => Promise<void>;
     },
   ) {
     this.f = o.fetchImpl ?? ((input, init) => fetch(input, init));
@@ -136,6 +141,7 @@ export class AcmeClient {
   /** A signed POST; `payload` undefined is POST-as-GET. Retries a badNonce twice, as the protocol expects. */
   async post<T = unknown>(url: string, payload: unknown | undefined, opts: { useJwk?: boolean; accept?: string } = {}): Promise<AcmeResponse<T>> {
     if (!opts.useJwk && !this.o.kid) await this.ensureAccount();
+    let reRegistered = false;
     for (let attempt = 0; ; attempt++) {
       const body = await this.jws(url, payload, await this.freshNonce(), opts.useJwk === true);
       const res = await this.f(url, {
@@ -154,6 +160,14 @@ export class AcmeClient {
       if (res.ok) return { status: res.status, location: res.headers.get("location"), body: parsed as T, text };
       const p = (parsed ?? {}) as { type?: string; detail?: string };
       if (p.type === "urn:ietf:params:acme:error:badNonce" && attempt < 2) continue;
+      if (p.type === "urn:ietf:params:acme:error:accountDoesNotExist" && !opts.useJwk && !reRegistered && this.o.kid) {
+        reRegistered = true;
+        const stale = this.o.kid;
+        this.o.kid = null;
+        const kid = await this.ensureAccount();
+        if (this.o.onAccountReplaced) await this.o.onAccountReplaced(kid, stale);
+        continue;
+      }
       throw new AcmeError(res.status, p.type ?? "unknown", p.detail ?? text.slice(0, 200), retryAfterMs(res));
     }
   }
