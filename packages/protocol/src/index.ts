@@ -127,3 +127,4 @@ export * from "./appListScope.js";
 export * from "./planAttestation.js";
 export * from "./boxClaim.js";
 export * from "./boxRelease.js";
+export * from "./orgAuthority.js";
