@@ -15,7 +15,7 @@ const at = (h: number, m: number, day = 0) => MONDAY + day * 86_400_000 + (h * 6
 describe("cronPlan — who runs when", () => {
   it("the six-hourly cron runs the cheap constant jobs, and no backup", () => {
     const { jobs } = cronPlan(SIX_HOURLY_CRON, at(6, 0));
-    expect([...jobs].sort()).toEqual(["ca-lease-warning", "custom-domain-verify", "names", "prune-late-logs", "prune-rate-limit-log", "prune-update-receipts", "relay-directory"]);
+    expect([...jobs].sort()).toEqual(["ca-lease-warning", "custom-domain-verify", "names", "prune-rate-limit-log", "prune-update-receipts", "relay-directory"]);
   });
 
   it("an unknown cron string runs nothing", () => {

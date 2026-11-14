@@ -48,7 +48,6 @@ import { pruneRateLimitLog } from "./rateLimitLog.js";
 import { pruneOutboundDaily } from "./outboundHosts.js";
 import { protectedAccountsFrom } from "./prodReap.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
-import { pruneLateLogs, type LateLogBucket } from "./legacyLateLogs.js";
 import { runVoiciGcCron } from "./voiciRoutes.js";
 import { runIssuanceSweep, type IssuanceEnv } from "./certificateIssuance.js";
 import { pruneUpdateReceipts } from "./updateReceipts.js";
@@ -110,8 +109,6 @@ export interface ScheduledEnv extends IssuanceEnv {
   /** The adapter attestation key (adapterVetting.ts); unset, nothing is vetted or indexed. */
   ADAPTER_ATTESTATION_SIGNING_KEY?: string;
   ADAPTER_COMPLAINT_SALT?: string;
-  /** Holds leftover installer log tails (legacyLateLogs.ts), pruned to their TTL here. */
-  ISO_TEMP_BUCKET?: LateLogBucket;
   /** voi.ci pieces (flagship-voici), collected by the voici-gc step. */
   VOICI?: VoiciBucket;
 }
@@ -146,8 +143,6 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runCaLeaseWarning(env, now);
     case "prune-rate-limit-log":
       return env.DB ? Promise.all([pruneRateLimitLog(env.DB, now), pruneOutboundDaily(env.DB, now)]) : null;
-    case "prune-late-logs":
-      return env.ISO_TEMP_BUCKET ? pruneLateLogs(env.ISO_TEMP_BUCKET, now) : null;
     case "demo":
       return runDemoCron(env, now);
     case "ct-scan":
