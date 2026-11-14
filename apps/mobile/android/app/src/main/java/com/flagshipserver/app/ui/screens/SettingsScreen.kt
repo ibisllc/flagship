@@ -257,7 +257,7 @@ fun SettingsScreen(nav: NavController) {
                     icon = Icons.Outlined.Public,
                     title = stringResource(R.string.voici_your_page),
                     subtitle = "voi.ci/${voiciPage.username}",
-                    onClick = { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.Messages()) },
+                    onClick = { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.PageEditor) },
                     testTag = "settings-your-page",
                 ),
             ) else emptyList()) + listOf(
@@ -274,13 +274,6 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = stringResource(R.string.offline_settings_subtitle),
                     onClick = { nav.navigate("offline-control") },
                     testTag = "settings-open-offline-control",
-                ),
-                FSSettingsRowData(
-                    icon = Icons.Outlined.ChatBubbleOutline,
-                    title = stringResource(R.string.voici_settings_title),
-                    subtitle = stringResource(R.string.voici_settings_row_subtitle),
-                    onClick = { nav.navigate("messages-settings") },
-                    testTag = "settings-open-messages",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.AutoAwesome,

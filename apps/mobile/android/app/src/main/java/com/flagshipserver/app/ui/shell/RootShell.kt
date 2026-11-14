@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timeline
@@ -247,34 +245,18 @@ private fun TabContent(selected: RootDestination, padding: PaddingValues) {
     }
 }
 
-/** A tab's icon; Messages carries the unread count (§11.1). */
+/** A tab's icon; Social carries the unread count (docs/social-tab.md). */
 @Composable
 private fun TabIcon(dest: RootDestination) {
     val center = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
     val unread = if (dest == RootDestination.MESSAGES && center != null) center.messages.collectAsState().value.unreadCount else 0
     val glyph: @Composable () -> Unit = {
-        if (dest == RootDestination.MESSAGES) MessagesDisc(labelFor(dest)) else Icon(iconFor(dest), contentDescription = labelFor(dest))
+        Icon(iconFor(dest), contentDescription = labelFor(dest))
     }
     if (unread > 0) {
         androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text(unread.toString()) } }) { glyph() }
     } else {
         glyph()
-    }
-}
-
-/**
- * Messages stands out in the bar: its glyph sits on a teal disc, a little larger and bolder than the other icons,
- * selected or not. The disc is decoration; the item keeps its label. Teal fill with dark ink (design-system §2.1).
- */
-@Composable
-private fun MessagesDisc(label: String) {
-    Box(
-        Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(com.flagshipserver.app.ui.theme.FS.colors.fill)
-            // A ring in the bar's colour keeps the disc visible on the selected item's teal indicator.
-            .border(2.dp, MaterialTheme.colorScheme.surfaceContainer, androidx.compose.foundation.shape.CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(androidx.compose.material.icons.Icons.Filled.ChatBubble, contentDescription = label, tint = com.flagshipserver.app.ui.theme.FS.colors.onAccent, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -292,7 +274,7 @@ private fun labelFor(dest: RootDestination) = stringResource(
 private fun iconFor(dest: RootDestination) = when (dest) {
     RootDestination.HOME -> Icons.Outlined.Home
     RootDestination.APPS -> Icons.Outlined.Apps
-    RootDestination.MESSAGES -> Icons.Outlined.ChatBubbleOutline
+    RootDestination.MESSAGES -> com.flagshipserver.app.ui.screens.SocialTabIcon
     RootDestination.ACTIVITY -> Icons.Outlined.Timeline
     RootDestination.SETTINGS -> Icons.Outlined.Settings
 }

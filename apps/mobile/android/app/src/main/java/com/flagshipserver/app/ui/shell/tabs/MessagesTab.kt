@@ -1,4 +1,5 @@
-// Messages tab (docs/voici-and-messages.md §11.1): your voi.ci page and the conversations people start on it.
+// The Social tab (docs/social-tab.md): your voi.ci page, edited in place, and the conversations people start on it.
+// The destination keeps its internal id `messages` (deep links `messages` and `page-editor`, push routing, the gym).
 
 package com.flagshipserver.app.ui.shell.tabs
 
@@ -13,11 +14,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
-import com.flagshipserver.app.ui.screens.MessagesScreen
-import com.flagshipserver.app.ui.screens.MessagesSettingsScreen
-import com.flagshipserver.app.ui.screens.PageEditorScreen
-import com.flagshipserver.app.ui.screens.PagePreviewScreen
 import com.flagshipserver.app.ui.screens.PostEditorScreen
+import com.flagshipserver.app.ui.screens.SignedInSitesScreen
+import com.flagshipserver.app.ui.screens.SocialScreen
+import com.flagshipserver.app.ui.screens.SocialSection
 import com.flagshipserver.app.ui.screens.ThreadScreen
 
 @Composable
@@ -30,12 +30,13 @@ fun MessagesTab() {
             is DeepLink.Messages -> {
                 deepLinker.consume()
                 nav.popBackStack("messages", inclusive = false)
-                link.conv?.let { nav.navigate("thread/$it") } ?: run { com.flagshipserver.app.ui.screens.MessagesScroll.toTop.value += 1 }
+                SocialSection.current.value = SocialSection.MESSAGES
+                link.conv?.let { nav.navigate("thread/$it") }
             }
             DeepLink.PageEditor -> {
                 deepLinker.consume()
                 nav.popBackStack("messages", inclusive = false)
-                nav.navigate("page-editor")
+                SocialSection.current.value = SocialSection.PROFILE
             }
             else -> { /* not for this tab */ }
         }
@@ -46,15 +47,13 @@ fun MessagesTab() {
         popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
         popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
     ) {
-        composable("messages") { MessagesScreen(nav) }
+        composable("messages") { SocialScreen(nav) }
         composable("thread/{conv}", arguments = listOf(navArgument("conv") { type = NavType.StringType })) { e ->
             ThreadScreen(nav, e.arguments?.getString("conv").orEmpty())
         }
-        composable("page-editor") { PageEditorScreen(nav) }
-        composable("page-preview") { PagePreviewScreen(nav) }
         composable("post/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
             PostEditorScreen(nav, e.arguments?.getString("id").orEmpty())
         }
-        composable("messages-settings") { MessagesSettingsScreen(nav) }
+        composable("signed-in-sites") { SignedInSitesScreen(nav) }
     }
 }

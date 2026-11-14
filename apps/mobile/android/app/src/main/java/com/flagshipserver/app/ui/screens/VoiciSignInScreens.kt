@@ -133,17 +133,16 @@ private fun Busy(text: String) {
     }
 }
 
+/** Page options → Websites you're signed in to: each voi.ci page this account signed in to, with Sign out. */
 @Composable
-fun MessagesSettingsScreen(nav: NavController) {
+fun SignedInSitesScreen(nav: NavController) {
     val center = LocalVoiciCenter.current ?: return
     val ui by center.messages.collectAsState()
-    val page by center.page.collectAsState()
     val scope = rememberCoroutineScope()
     val toasts = LocalToastCenter.current
-    var rules by remember { mutableStateOf(false) }
     LaunchedEffect(center) { runCatching { center.syncState() } }
-    FSScreen(title = stringResource(R.string.voici_settings_title), onBack = { nav.popBackStack() }, titleTag = "messages-settings-title") {
-        FSGroup(header = stringResource(R.string.voici_sites)) {
+    FSScreen(title = stringResource(R.string.voici_sites), onBack = { nav.popBackStack() }, titleTag = "messages-sites-title") {
+        FSGroup {
             if (ui.state.signedInSites.isEmpty()) {
                 FSRow(title = stringResource(R.string.voici_sites_none), modifier = Modifier.testTag("messages-sites-none"))
             }
@@ -160,20 +159,5 @@ fun MessagesSettingsScreen(nav: NavController) {
                 )
             }
         }
-        if (page.canPublish && page.publishedSeq > 0) {
-            FSCard {
-                Text(stringResource(R.string.voici_rotate_body), style = MaterialTheme.typography.bodyMedium)
-                FSSecondaryButton(stringResource(R.string.voici_rotate), {
-                    scope.launch {
-                        if (center.rotateInbox(FSStrings.get(R.string.voici_publish_reason))) toasts.success(FSStrings.get(R.string.voici_rotate_done))
-                        else center.page.value.error?.let { toasts.error(VoiciCopy.publishError(it)) }
-                    }
-                }, modifier = Modifier.testTag("messages-rotate"))
-            }
-        }
-        FSGroup {
-            FSRow(title = stringResource(R.string.voici_rules_open), onClick = { rules = true }, modifier = Modifier.testTag("messages-rules"))
-        }
     }
-    if (rules) VoiciRulesDialog(onAgree = { rules = false; scope.launch { center.acceptRules() } }, onDismiss = { rules = false })
 }
