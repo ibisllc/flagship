@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import FlagshipAPI
 import FlagshipCore
 import Flagship
@@ -106,13 +107,19 @@ struct ServerBackupsSection: View {
 
     let serverDomain: String
     @State private var vm: ServerBackupsViewModel?
+    @State private var restoreVm: RestoreMergeViewModel?
+    @State private var restoring: RestoreMergeViewModel.Source?
+    @State private var pickingFile = false
 
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
             FSSectionLabel(String(localized: "Backups"))
             if let vm {
-                ServerBackupsCard(vm: vm)
+                ServerBackupsCard(vm: vm, onRestore: { b in restoring = .saved(b) })
+            }
+            if let restoreVm, !restoreVm.undoPoints.isEmpty {
+                FSCard { RestoreUndoPointsList(vm: restoreVm) }
             }
             // One-off backup and Migrate are admin orders: another device
             // doesn't get buttons the box would refuse (the card above says why).
@@ -121,15 +128,35 @@ struct ServerBackupsSection: View {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         ServerBackupButton(serverDomain: serverDomain)
                         MigrateServerButton(serverDomain: serverDomain)
+                        FSSecondaryButton(String(localized: "Restore apps from a backup file…"), block: true) { pickingFile = true }
+                            .accessibilityIdentifier("sd-restore-merge-file")
                     }
                 }
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sd-backups-section")
+        .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.data], allowsMultipleSelection: false) { r in
+            if case .success(let urls) = r, let u = urls.first { restoring = .file(u) }
+        }
+        .sheet(isPresented: Binding(get: { restoring != nil }, set: { if !$0 { restoring = nil } }), onDismiss: {
+            Task { await restoreVm?.loadUndoPoints() }
+        }) {
+            if let source = restoring {
+                NavigationStack {
+                    RestoreMergeScreen(
+                        vm: RestoreMergeViewModel(serverFqdn: serverDomain, isAdminDevice: AddServerGate.allows(app), clients: clients),
+                        source: source
+                    )
+                }
+            }
+        }
         .task(id: serverDomain) {
             let m = vm ?? ServerBackupsViewModel(serverFqdn: serverDomain, isAdminDevice: AddServerGate.allows(app), clients: clients)
             vm = m
+            let r = restoreVm ?? RestoreMergeViewModel(serverFqdn: serverDomain, isAdminDevice: AddServerGate.allows(app), clients: clients)
+            restoreVm = r
+            await r.loadUndoPoints()
             await m.start()
         }
         .onDisappear { vm?.stop() }
@@ -139,6 +166,7 @@ struct ServerBackupsSection: View {
 struct ServerBackupsCard: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: ServerBackupsViewModel
+    var onRestore: (SavedBackup) -> Void = { _ in }
     @State private var editingSchedule = false
     @State private var editingPolicy = false
     @State private var deleting: SavedBackup?
@@ -336,6 +364,10 @@ struct ServerBackupsCard: View {
                         .accessibilityIdentifier("sd-backup-download-\(b.archiveId)")
                 }
                 Spacer()
+                Button { onRestore(b) } label: { Label("Restore into this server…", systemImage: "arrow.uturn.backward.circle") }
+                    .font(FS.font.bodySm())
+                    .disabled(!vm.isAdminDevice)
+                    .accessibilityIdentifier("sd-backup-restore-\(b.archiveId)")
                 Button(role: .destructive) { deleting = b } label: { Label("Delete", systemImage: "trash") }
                     .font(FS.font.bodySm())
                     .disabled(!vm.isAdminDevice)

@@ -728,6 +728,31 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
         _ = try await requestData("/api/screens/server-restore/commit", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
     }
+    public func restoreMergeStatus() async throws -> RestoreMergeView {
+        try await request("/api/screens/server-restore-merge")
+    }
+    public func restoreMergeStage(_ req: RestoreMergeSigned<RestoreMergeStageOrder>) async throws -> RestoreMergeStarted {
+        try await request("/api/screens/server-restore-merge/stage", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
+    }
+    public func restoreMergeChunk(offset: Int64, data: Data) async throws {
+        _ = try await requestData("/api/screens/server-restore-merge/chunk?offset=\(offset)", method: "POST", body: data, timeout: 300,
+                                  contentType: "application/octet-stream")
+    }
+    public func restoreMergeCommit(keyHex: String) async throws {
+        _ = try await requestData("/api/screens/server-restore-merge/commit", method: "POST", body: try JSONEncoder().encode(["key": keyHex]), timeout: 60)
+    }
+    public func restoreMergePlan(_ req: RestoreMergeSigned<RestoreMergePlanOrder>) async throws {
+        _ = try await requestData("/api/screens/server-restore-merge/plan", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
+    }
+    public func restoreMergeCancel() async throws {
+        _ = try await requestData("/api/screens/server-restore-merge/cancel", method: "POST", body: Data("{}".utf8), timeout: 30)
+    }
+    public func restoreMergeUndo(_ req: RestoreMergeSigned<RestoreMergeUndoOrder>) async throws {
+        _ = try await requestData("/api/screens/server-restore-merge/undo", method: "POST", body: try JSONEncoder().encode(req), timeout: 120)
+    }
+    public func savedBackupFile(archiveId: String) async throws -> Data {
+        try await requestData("/api/screens/server-archive/backups/\(archiveId)/backup-file", timeout: 60)
+    }
     public func serverRestoreStatus() async throws -> ServerRestoreStatusResponse {
         try await request("/api/screens/server-restore")
     }
