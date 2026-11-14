@@ -13,6 +13,7 @@ import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from
 import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
+import type { DirectAccessStorage } from "./directAccess.js";
 import type { VoiciStorage } from "./voici.js";
 import type { ServerBootKeyStorage } from "./serverBootKeys.js";
 import type { PqTrustStorage } from "./pqTrust.js";
@@ -1967,6 +1968,8 @@ export interface Storage {
   voici: VoiciStorage;
   /** How proxy boxes' setup calls arrived: private relay or direct fallback (docs/outbound-proxy.md). */
   relayHealth: RelayHealthStorage;
+  /** Direct access orders, box address updates and the direct-name registry (migration 0133). */
+  directAccess: DirectAccessStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
