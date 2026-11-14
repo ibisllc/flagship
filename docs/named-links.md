@@ -78,18 +78,26 @@ Admin devices only: the order is signed with the sensitive-order key (admin
 root, else IRK on accounts without one), like the server order. Other devices
 and co-managers see the field read-only. (Open decision 1.)
 
-### 2.5 Every change counts
+### 2.5 Every change counts, except a quick correction
 
 - **The link is first shown on the service's page, after the service is
   created.** The create flow has no link field.
-- Every set, replace or clear of a custom name is a change. There is no free
-  first naming, and no undo.
+- Every set, replace or clear of a custom name is a change, with two exceptions
+  (0.4, from the 2026-10-21 service-names plan, journal F8):
+  - **Correction window:** a replace or clear within **15 minutes** of a counted
+    set fixes it (a typo) without counting against the service's limits. One
+    correction per counted set: correcting the correction counts. The mistyped
+    name is still retired for good (D7), and the correction still counts toward
+    the account's claim budget and daily brake.
+  - **A deleted app:** clearing the name of an app no server of the account
+    runs any more is never limited (the apps send it when an app is deleted).
 
 ### 2.6 Limits
 
 | Limit | Value | Notes |
 |---|---|---|
-| **N**: changes per service | 3 in any rolling 30 days | Counts set, replace and clear. |
+| **N**: changes per service | 3 in any rolling 30 days, and at most 1 in any 7 days | Counts set, replace and clear; corrections (2.5) skipped. |
+| **C**: claims per account | Free 10, Pro 100, Pro Max 500 in any rolling 30 days | Every set or replace, corrections included; clears are not claims. Refused as `change-limit` with `scope: "account"` and the date, so the apps show the same "Next change" line. |
 | **X**: custom names held per account | Free 5, Pro 25, Pro Max 100 | Live names only; names in their wait don't count. Per tier, in `packages/control-plane/src/meter.ts`'s plan table. |
 | Account brake | 10 changes per day | A `rateLimit.ts` bucket (`voici-name-set`), not a product rule. |
 | Availability checks | per IP and per account | Bucket `voici-name-check`. |
@@ -192,7 +200,7 @@ appears once the typed name is `Available`.
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET /api/voici/names/:name` | none, rate-limited | `{status: available\|taken\|reserved\|invalid\|dibs, domain?, until?, unchecked?}` |
-| `GET /api/users/:u/apps/:id/links` | read token (as today) | gains `link: {name\|null, code, changesLeft, nextChangeAt\|null, held, limit, releasesAt\|null, canEdit}` |
+| `GET /api/users/:u/apps/:id/links` | read token (as today) | gains `link: {name\|null, code, changesLeft, nextChangeAt\|null, held, limit, releasesAt\|null, canEdit, correctionUntil\|null, claimsLeft, claimBudget}` (`changesLeft` / `nextChangeAt` already fold in the weekly cooldown, an open correction and the claim budget) |
 | `GET /api/users/:u/voici-names` | read token | the Free one up list: `[{serviceId, name, setAt}]` |
 | `POST /api/users/:u/apps/:id/voici-name` | signed order | set / replace / clear |
 | `GET /api/name-dibs/window` | none | moved |
@@ -393,6 +401,30 @@ iOS and Android files will conflict, and its own strings need wrapping and
 4. No endorsed box release, unless phase 11 needs a box-side route fix.
 5. Announce the dibs window and the rules (FAQ).
 
+## 7a. The 2026-10-21 service-names plan, reconciled (0.4, journal F8)
+
+`docs/voici-service-names-todo.md` (the "human voi.ci service names" plan from the same day's discussion) is folded
+in here and deleted. Most of it was already built by this feature; where it differed from a later binding decision,
+the later decision stands. Point by point:
+
+| Plan item | 0.4 outcome |
+|---|---|
+| One free user-chosen `voi.ci/<name>` per service, a 302 to the service's `flagship.services` address, following the service between boxes; never a `<name>.voi.ci` origin | Already built (§2.2, §2.3; codes stay too). |
+| Globally unique, case-insensitive, `[a-z0-9-]`, reserved and impersonation words | Already built, stricter: the safety key (D9) and 3 to 30 characters (D12, clarification 4). |
+| Free to choose; no per-name or dibs fee | Already so. |
+| Exposure cap per plan (working Free 5 / Pro 50 / Pro Max 250); decide whether it covers all exposed services | **Names only**, so the promise that an account may install and run any number of apps holds. Values stay **5 / 25 / 100** (the lower, already shipped numbers). Owner question 1. |
+| `.com` dibs for service slugs in the shared window, IRK-bound proof valid for both pools, no charge | Already built (§2.7). |
+| Lease held by a live service: Flagship-side liveness, never visitor traffic; warn at 21 days, expire at 30 | Liveness is the boxes' own `runsServices` report (daemon service state; visitor traffic never renews it), not an HTTP probe from `.com` (no Worker subrequests to boxes). Timing stays **60 days, warnings 30 and 7 days before** (the translated copy says 60). Owner question 2. |
+| After expiry or a change: 30-day 410 quarantine, then claimable again, the old owner included with no priority | **Not built**: D7 of the namespace spec (owner-approved 2026-11-02, later than the plan) retires a given-up link name for good. Owner question 3. |
+| Delete or rename ends the claim at once | A rename never touched the name (it follows the service id). `.com` still has no delete signal, but clearing the name of an app no server runs any more is now **never limited**, so "Free one up" releases a deleted app's name at once. |
+| 15-minute correction window after a selection | **Built** (§2.5): once per counted set; the typo is still retired (D7) and still counts toward the account's claim budget. |
+| One finalized change per service per 7 days | **Built**, on top of the existing 3 in 30 days (both apply). |
+| Account claim budget (Free 10 / Pro 100 / Pro Max 500 per 30 days); checks and failed claims don't consume it | **Built** (§2.6 C). Refusals and checks never record a change; the existing check rate limits stay. |
+| Custom domains: Pro subscription only, included verification, no dibs fee | Already so (`customDomainEntitlement.ts`). |
+| On subscription lapse: 30-day grace, then fail closed; canonical and voi.ci addresses unaffected; resubscription restores after reverification | **Built**: the verifier marks an active domain outside the plan (`custom_domain_orders.lapsed_at`, migration 0137), keeps serving it (and the hub lookups answer for it) for 30 days, then suspends it; back within the plan clears the mark; a suspended domain is reactivated only after its CNAME checks again. |
+| Custom-domain replacement cooldown (one per 30 days) | **Not built**: today's refusal is an English sentence in seconds ("Too soon — try again in Ns.") shown verbatim by all three apps; a 30-day wait needs a coded, localized refusal in each app first. Owner question 4. |
+| Tests for races, rename/delete, offline recovery, reassignment, downgrade, lapse, abuse limits | `packages/control-plane/tests/voiciNames.test.ts`, `customDomainTier.test.ts`, the storage parity tests; the live gym group `named-links` checks the correction and the weekly cooldown. |
+
 ## 8. Open decisions
 
 1. **Who can change a link**: admin devices only (proposed) or any device.
@@ -403,3 +435,7 @@ iOS and Android files will conflict, and its own strings need wrapping and
    `main` (proposed) or on this branch.
 4. **Re-parenting timing**: do §6.3 as the last phase here (proposed), or wait
    until `feat/multilingual` merges into `main`.
+5. **Service-names plan (0.4, §7a), owner to confirm:** (1) name caps 5 / 25 / 100 or the plan's 5 / 50 / 250;
+   (2) liveness 60 days with warnings 30 and 7 days before, or the plan's 30 days with a warning at 21; (3) keep D7
+   (a given-up link name is retired for good) or the plan's 30-day quarantine and reclaim; (4) a 30-day
+   custom-domain replacement cooldown (needs a localized refusal in the three apps).

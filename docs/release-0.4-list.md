@@ -357,9 +357,9 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
 ## Product plans carried over
 
 - **Human `voi.ci` service names** (owner discussion 2026-10-21): one free, user-chosen `voi.ci/<name>` per public
-  service, a 302 to its `flagship.services` address, following the service between boxes. Plan:
-  `docs/voici-service-names-todo.md` (found untracked in the main checkout on 2026-11-07; reconcile with the naming
-  and monetization docs when it lands).
+  service, a 302 to its `flagship.services` address, following the service between boxes. Reconciled into
+  `docs/named-links.md` §7a (built on `0.4/voici-names`: correction window, weekly cooldown, account claim budget,
+  custom-domain lapse grace; D1 0137; four owner questions in §8.5).
 
 - **Direct access: skip the relay, and what each domain is for (LOCKED IN, owner 2026-11-08).** Full design,
   decisions and edge cases in `docs/direct-access-and-domains.md`. In short: when a box can be reached from the
