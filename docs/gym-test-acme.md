@@ -4,6 +4,29 @@
 
 Owner request: gym servers run the real Let's Encrypt (LE) code without real certificates. The gym used 384 certificates in 7 days under `flagship.services`, production's registered domain, all in public Certificate Transparency (CT) logs. Design only.
 
+## As built (2026-11-13, branch `0.4/gym-test-ca`; seam on `0.4/gym-test-ca-gym-seam`)
+
+Option D, code side; nothing deployed. Where the build differs from the plan below:
+
+- **Item 1** lives in the ACME client (`acmeClient.ts`): on `accountDoesNotExist` for a stored `kid` it registers the
+  same key again, once per request, retries, and `.com` replaces the stored row. Against Let's Encrypt the same key maps
+  to the same account URL, so the apex CAA pin is unaffected; a changed URL is logged (`issuance-acme-account-replaced`).
+- **Item 2** (`tools/live-e2e/lib/acmeCa.ts`, `acmeTrust.ts`): the runner also sets `GYM_ISSUANCE_CA=test|letsencrypt`
+  for every group, a `--reuse` run carries the earlier run's roots, and a leaf served where a root should be is refused.
+- **Item 3** also covers the issuer checks in `core` and `appNames` (they expect "Pebble" only when the runner says so;
+  unset means Let's Encrypt).
+- **Item 4**: `ignoreHTTPSErrors` in the three `apps/web/e2e/live` configs only when `GYM_ISSUANCE_CA=test`.
+- **Item 5** (`infra/acme-gym/`): Caddy serves only the ACME paths and `/roots/0` and `/intermediates/0`. Pebble's
+  management API also serves `/root-keys/*` and `/intermediate-keys/*`, the CA's private keys: exposing it whole would let
+  anyone mint certificates gym clients trust. Validity stays at Pebble's 90-day default: 7-day certificates would expire
+  before a box renews (renewal at two thirds of the lifetime plus up to 3 days of box jitter). Not run locally.
+- **Item 7** cannot be a drop-in: every Flagship unit unsets `NODE_EXTRA_CA_CERTS` on purpose (privd `unit.ts`
+  `UNSAFE_ENV`), which is also why a production box can never pick the root up from the environment. The seam (gym
+  branch only) adds Pebble's root to Node's default CA list from the daemon (`tls.setDefaultCACertificates`, Node 24.5+).
+  `scripts/release-guard.sh` fails a RELEASE build whose box code names `flagship-acme-gym` or calls that function.
+- **Item 8**: `gym-refresh.sh` step 5b restarts Pebble when `wrangler.gym.toml` names it; the D1 row deletion is not
+  needed (item 1).
+
 ## What exists today (and makes this cheap)
 
 - In 0.3 only `.com` talks to the CA. The box makes a key and a CSR and polls `.com` (`packages/server-daemon/src/acme/serviceIssuer.ts:5-11`, `runtime.ts:1343-1363`). The box-side `acmeEnvironment` / `FLAGSHIP_ACME_STAGING` (`index.ts:494`) and the keyd LE host allowlist (`packages/keyd/src/acme.ts:17`, `rust/crates/flagship-keyd/src/acme.rs:22`) belong to the old box-side ACME path, which nothing on that path calls any more. The change therefore sits in one place.
