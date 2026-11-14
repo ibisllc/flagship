@@ -987,6 +987,9 @@ context. The box is not involved at all.
 
 ## 11. App UI (iOS reference, then Android, then the webapp)
 
+0.4 (U2/U3): on iOS this tab is now the **Social** tab, the editor is its main screen and Settings → Messages moved
+into its Page options; `docs/social-tab.md` is the current layout. §11.1-§11.3 still describe Android and the webapp.
+
 ### 11.1 Messages tab
 
 A fifth tab between Apps and Activity: iOS `bubble.left` (`AppDestination.messages`), Android

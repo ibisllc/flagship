@@ -151,6 +151,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       (all / some people), conversations vs requests; guests-only posts; comments and calls fit in without clutter.
       Prototype for critique: https://claude.ai/artifact/ABqoHvYhdTEWaDb7cGMkLt (owner will have other models critique
       it before it is built; then iOS first, Android and webapp after).
+      2026-11-14: iOS built on branch `0.4/social-ios` (not merged): Social tab, editor as the tab, Page options, the
+      publish bar; GymMessagesTests 18/18. Spec and the protocol sketch for guests, comments, reach and calls:
+      `docs/social-tab.md`. Android and the webapp next.
 - [ ] U2 (owner 2026-11-13) The Messages tab is too cumbersome: rename it **Social**, give it a simpler icon (the message
       bubble in a green circle reads oddly), and simplify the page (details in the owner's next messages). All apps,
       all languages.

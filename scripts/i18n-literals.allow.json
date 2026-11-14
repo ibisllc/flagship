@@ -16,7 +16,7 @@
     { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift", "text": "Intel", "why": "vendor name beside NVIDIA and AMD" },
     { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift", "text": "/^(Linux x86-64|Linux ARM64|%@ --version)$/", "why": "platform names and a shell command the owner copies" },
     { "surface": "android", "file": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/RuntimeVerification.kt", "text": "/^(Linux x86-64|Linux ARM64|%s --version)$/", "why": "platform names and a shell command the owner copies" },
-    { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesSettingsScreen.swift", "text": "%@ · voi.ci/%@", "why": "name · URL, no words" },
+    { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SignedInSitesScreen.swift", "text": "%@ · voi.ci/%@", "why": "name · URL, no words" },
     { "surface": "ios", "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift", "text": "voi.ci/%@", "why": "the page's address, no words" },
     { "surface": "android", "file": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciMedia.kt", "text": "Flagship link preview", "why": "HTTP User-Agent header value" },
     { "surface": "android", "file": "/^apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/(ServingAuthority|voici/VoiciMessages|voici/VoiciOwner)\\.kt$/", "text": "/^%s(: (bad input|malformed op|bad field)| must be lowercase hex of the right length)$/", "why": "protocol validation exceptions (developer text; the screens map them to their own sentences)" },

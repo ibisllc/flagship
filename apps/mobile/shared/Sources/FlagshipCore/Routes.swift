@@ -144,8 +144,6 @@ public enum ActivityRoute: Hashable, Sendable {
 }
 
 public enum SettingsRoute: Hashable, Sendable {
-    /// Settings → Messages: websites signed in to, the inbox key, the rules (docs/voici-and-messages.md §11.3).
-    case messages
     /// Settings → AI keys. View saved BYOK keys (masked slugs), add, delete.
     /// Device-local; never shows a full key.
     case aiKeys
@@ -233,7 +231,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
         switch self {
         case .home:     return String(localized: "Home")
         case .apps:     return String(localized: "Services")
-        case .messages: return String(localized: "Messages")
+        case .messages: return String(localized: "Social")
         case .activity: return String(localized: "Activity")
         case .settings: return String(localized: "Settings")
         }
@@ -243,7 +241,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
         switch self {
         case .home:     return "house.fill"
         case .apps:     return "square.grid.2x2.fill"
-        case .messages: return "bubble.left"
+        case .messages: return "person"
         case .activity: return "waveform.path.ecg"
         case .settings: return "gearshape.fill"
         }
