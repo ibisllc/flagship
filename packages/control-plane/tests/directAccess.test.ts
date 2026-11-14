@@ -248,8 +248,10 @@ describe("direct names", () => {
     expect(h.zone.at(NAME)).toEqual(["A 81.2.69.142"]);
 
     await h.storage.usernames.put({ username: U, irkPubHex: hex(h.irk.publicKey), adminRootPubHex: hex(key(99).publicKey), claimedAt: 1 });
-    await h.storage.directAccess.markPending([`game--${U}`], h.tick(1));
     await publishAll(h.deps);
+    expect(h.zone.at(NAME)).toEqual(["A 81.2.69.142"]);
+    h.tick(24 * 3_600_000 + 1);
+    await runDirectNamesPublish(h.deps);
     expect(h.zone.at(NAME)).toEqual([]);
     expect((await h.storage.directAccess.getName(`game--${U}`))?.publishReason).toBe("order-unverified");
   });
