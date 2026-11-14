@@ -8,7 +8,10 @@
 > each store generation has its own role (named like its database, so a role still reaches only its own
 > database; the app always holds only the live generation's credentials); archive meta stays `v: 1` with an
 > optional `lineage` (older boxes still restore newer backups); undo and discard are
-> `POST /api/screens/server-restore-merge/undo`; sources `pull` and `peers` are refused for now
+> `POST /api/screens/server-restore-merge/undo` (owner: the doc follows the built path); the working tree moves
+> into the undo point before the swap (journalled as `tree-moved`, so a restart puts it back); undo, discard and
+> expiry delete the kept copy's image unless something else still runs it (`ServicePlatform.keptImages()` is the
+> list any future image sweep must leave); sources `pull` and `peers` are refused for now
 > (`source-unavailable`). Not built: Swift/Kotlin/webapp ports of the orders, the client screens, the live
 > gym group.
 >
@@ -348,7 +351,8 @@ today), never app names, versions or choices.
    reason}, recommended, guards`.
 4. `POST …/plan {order, signatureHex, lines}` → 202; the run starts.
 5. `POST …/cancel` drops the staging (non-destructive; owner session).
-6. `POST /api/screens/services/:id/restore-undo {order, signatureHex}`.
+6. `POST /api/screens/server-restore-merge/undo {order, signatureHex}` (the order names the app; owner decision
+   2026-11-14: the doc follows the built path).
 
 ### 6.3 Disk and the backup limit, before starting
 
@@ -392,11 +396,15 @@ earlier on their own. At the 90 % disk brake the server page and Activity say an
 
 ### 6.7 Activity
 
+Every entry carries its `kind` and `params` (`app`, `service`, `until`, `count`, `backupAt`, `restored`,
+`kept`, `reason`: `interrupted-twice | failed | unopened`); each app renders its own translated sentence from
+them, and the English `detail` is kept only for older apps (owner decision 2026-11-14).
 `server.restore-merge.started` ("Restoring 5 apps from the backup of 3 Nov"), per app
 `app.restore.installed | replaced | replaced-data | copied | kept | skipped | refused-changed | failed`
 (with "it is back as it was" or, when even the rollback failed, a red "notes is stopped; its earlier copy
 is kept: open the server page"), `server.restore-merge.finished`, `app.restore.undone`,
-`app.restore.undo-expired`. A content-free push when a run finishes. All strings through i18n.
+`app.restore.undo-expired`, `app.restore.discarded`, `server.restore-merge.staged`, `server.restore-merge.failed`.
+A content-free push when a run finishes (not built yet). All strings through i18n.
 
 ## 7. Clients (iOS first, then Android and the webapp)
 

@@ -95,6 +95,8 @@ async function world() {
   const pg = new InMemoryPostgresAdmin();
   const provisioner = new DataProvisioner({ postgres: pg, files, nameKey: "s".repeat(40) });
   let failStart = (_image: string) => false;
+  const seenWhileStarting: boolean[] = [];
+  const mergeRef: { current: { isRestoring(id: string): boolean } | null } = { current: null };
   const cmd: CommandRunner = { run: async () => {}, capture: async () => ({ stdout: "", stderr: "" }) };
   const platform = new ServicePlatform({
     host: { username: "harry", irkPub: owner.publicKey },
@@ -102,12 +104,15 @@ async function world() {
     swk: swkOps(new Uint8Array(32).fill(1)),
     appRunner: new AppRunner(cmd),
     dataProvisioner: provisioner,
-    startCheck: async (spec) => (failStart(spec.image) ? { ok: false, reason: "it never answered" } : { ok: true }),
+    startCheck: async (spec) => {
+      seenWhileStarting.push(mergeRef.current?.isRestoring(spec.serviceId) ?? false);
+      return failStart(spec.image) ? { ok: false, reason: "it never answered" } : { ok: true };
+    },
   });
   const f = fakeOps();
   const env = new InMemoryAppEnvStore();
   const clones = join(dir, "clones");
-  const events: Array<{ kind: string; detail: string }> = [];
+  const events: Array<{ kind: string; detail: string; params?: Record<string, string | number> }> = [];
   const builds: string[] = [];
   const restore = {
     serverFqdn: HOST,
@@ -179,9 +184,10 @@ async function world() {
     addressMoves: () => false,
     savedDataFile: async () => null,
     freeBytes: async () => 1e12,
-    note: (kind, detail) => void events.push({ kind, detail }),
+    note: (kind, detail, _ok, params) => void events.push({ kind, detail, ...(params ? { params } : {}) }),
   });
-  return { dir, platform, provisioner, files, pg, f, env, clones, archive, merge, install, redeploy, events, builds, setFailStart: (fn: (image: string) => boolean) => (failStart = fn) };
+  mergeRef.current = merge;
+  return { seenWhileStarting, dir, platform, provisioner, files, pg, f, env, clones, archive, merge, install, redeploy, events, builds, setFailStart: (fn: (image: string) => boolean) => (failStart = fn) };
 }
 type World = Awaited<ReturnType<typeof world>>;
 
@@ -294,6 +300,12 @@ describe("restore into a running server", () => {
     expect(w.platform.byServiceId("harry--todo")).toBeDefined();
     expect((await callMerge(w, "GET", MERGE_PATH)).json.undo).toEqual([expect.objectContaining({ serviceId: "harry--notes", restoreId })]);
     expect(w.events.map((e) => e.kind)).toEqual(expect.arrayContaining(["server.restore-merge.started", "app.restore.replaced", "app.restore.installed", "server.restore-merge.finished"]));
+    // Each app renders its own sentence from the kind and its parameters.
+    expect(w.events.find((e) => e.kind === "app.restore.replaced")!.params).toMatchObject({ app: "notes", service: "harry--notes", until: expect.any(Number) });
+    expect(w.events.find((e) => e.kind === "server.restore-merge.finished")!.params).toEqual({ restored: 2, kept: 0 });
+    // While the restored copy started, the app's address said it is being restored; not after.
+    expect(w.seenWhileStarting.at(-2)).toBe(true);
+    expect(w.merge.isRestoring("harry--notes")).toBe(false);
 
     // Undo: signed, and the server's copy is back exactly as it was.
     const u = { serverDomain: HOST, restoreId, serviceId: "harry--notes", action: "undo" as const, issuedAt: Date.now() };
@@ -307,6 +319,42 @@ describe("restore into a running server", () => {
     expect(back.dataGeneration).toBeUndefined();
     expect(await readFile(join(w.clones, "harry--notes", "server.js"), "utf8")).toBe("v1.4.0");
     expect(w.files.volumes.has("flagship-files-harry--notes--g1")).toBe(false);
+  });
+
+  it("discarding the kept copy deletes its stores and the image only it ran", async () => {
+    const { w, file } = await setUp();
+    const before = w.platform.byServiceId("harry--notes")!;
+    const { restoreId, apps } = await stageAndPreview(w, file);
+    await callMerge(w, "POST", `${MERGE_PATH}/plan`, planOrder(restoreId, file, [lineFor(app(apps, "harry--notes"), "replace"), lineFor(app(apps, "harry--todo"), "skip")]));
+    await w.merge.settle();
+    expect(w.f.images.has(before.manifest.runtime.image)).toBe(true);
+    const d = { serverDomain: HOST, restoreId, serviceId: "harry--notes", action: "discard" as const, issuedAt: Date.now() };
+    expect((await callMerge(w, "POST", `${MERGE_PATH}/undo`, { order: d, signatureHex: Buffer.from(signAppRestoreUndo(d, owner)).toString("hex") })).status).toBe(200);
+    expect(w.f.images.has(before.manifest.runtime.image)).toBe(false);
+    expect(w.f.images.has(w.platform.byServiceId("harry--notes")!.manifest.runtime.image)).toBe(true);
+    expect(w.files.volumes.has(before.data!.files!.volume)).toBe(false);
+    expect(w.platform.byServiceId("harry--notes")!.retainedData).toBeUndefined();
+  });
+
+  it("a restart after the working tree moved but before the swap puts the tree back", async () => {
+    const { w, file } = await setUp();
+    const { restoreId, apps } = await stageAndPreview(w, file);
+    await callMerge(w, "POST", `${MERGE_PATH}/plan`, planOrder(restoreId, file, [lineFor(app(apps, "harry--notes"), "replace"), lineFor(app(apps, "harry--todo"), "skip")]));
+    await w.merge.settle();
+    // Undo, then stage the state a cut leaves: the tree in the undo point, the backup's in its place, no swap.
+    const u = { serverDomain: HOST, restoreId, serviceId: "harry--notes", action: "undo" as const, issuedAt: Date.now() };
+    await callMerge(w, "POST", `${MERGE_PATH}/undo`, { order: u, signatureHex: Buffer.from(signAppRestoreUndo(u, owner)).toString("hex") });
+    const { mkdir, rename, writeFile: wf } = await import("node:fs/promises");
+    const at = w.merge.undoDirOf(restoreId, "harry--notes");
+    await mkdir(at, { recursive: true });
+    await wf(join(at, "undo.json"), JSON.stringify({ v: 1, restoreId, serviceId: "harry--notes", action: "replace", keptAt: 1, expiresAt: 2, tree: true, envAdded: [] }));
+    await rename(join(w.clones, "harry--notes"), join(at, "tree"));
+    await writeSourceTree(join(w.clones, "harry--notes"), { "server.js": "from-the-backup" });
+    const deps = { restore: { serverFqdn: HOST, platform: w.platform, dataProvisioner: w.provisioner, ops: w.f.ops, signInstall: (r: Parameters<typeof box.signInstallService>[0]) => box.signInstallService(r), envStore: w.env, access: null, egress: null, sourceDir: w.clones, workDir: w.dir, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} }, platform: w.platform, runsDir: join(w.dir, "restore-merge"), undoDir: join(w.dir, "restore-undo"), note: () => {} };
+    const done = (await loadRun(deps, restoreId))!;
+    const cut: MergeRun = { ...done, state: "running", apps: done.apps.map((a) => (a.action === "replace" ? { ...a, step: "tree-moved", attempts: 2 } : a)) };
+    await runPlan(deps, cut, []);
+    expect(await readFile(join(w.clones, "harry--notes", "server.js"), "utf8")).toBe("v1.4.0");
   });
 
   it("replace-data keeps the server's code and runs its newer migrations on the backup's data", async () => {

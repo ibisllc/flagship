@@ -211,6 +211,114 @@
     "en": "This link has expired or was replaced by a newer backup.",
     "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:91"
   },
+  "Restoring from a backup": {
+    "en": "Restoring from a backup",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:52"
+  },
+  "This app is being restored from a backup": {
+    "en": "This app is being restored from a backup",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:56"
+  },
+  "It will be back in a few seconds. This page checks again on its own.": {
+    "en": "It will be back in a few seconds. This page checks again on its own.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:56"
+  },
+  "That restore order can't be read.": {
+    "en": "That restore order can't be read.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:181"
+  },
+  "That restore order is for another server.": {
+    "en": "That restore order is for another server.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:182"
+  },
+  "That restore order is too old. Try again.": {
+    "en": "That restore order is too old. Try again.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:183"
+  },
+  "Only an admin device of this account can restore a backup.": {
+    "en": "Only an admin device of this account can restore a backup.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:184"
+  },
+  "This server can't restore from that place yet. Send the backup file instead.": {
+    "en": "This server can't restore from that place yet. Send the backup file instead.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:185"
+  },
+  "A restore is already running on this server.": {
+    "en": "A restore is already running on this server.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:188"
+  },
+  "Another restore is being checked on this server. Cancel it first.": {
+    "en": "Another restore is being checked on this server. Cancel it first.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:189"
+  },
+  "That backup isn't saved on this server.": {
+    "en": "That backup isn't saved on this server.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:194"
+  },
+  "This server doesn't have enough free disk space for that backup.": {
+    "en": "This server doesn't have enough free disk space for that backup.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:198"
+  },
+  "This server isn't waiting for backup data.": {
+    "en": "This server isn't waiting for backup data.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:207"
+  },
+  "That part of the backup has the wrong size.": {
+    "en": "That part of the backup has the wrong size.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:211"
+  },
+  "Send the whole backup file first.": {
+    "en": "Send the whole backup file first.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:239"
+  },
+  "That backup key can't be read.": {
+    "en": "That backup key can't be read.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:241"
+  },
+  "The backup is already being checked.": {
+    "en": "The backup is already being checked.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:242"
+  },
+  "This restore isn't ready to choose from any more. Start again.": {
+    "en": "This restore isn't ready to choose from any more. Start again.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:341"
+  },
+  "That restore order names a different backup.": {
+    "en": "That restore order names a different backup.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:342"
+  },
+  "That restore plan can't be read.": {
+    "en": "That restore plan can't be read.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:347"
+  },
+  "That restore plan isn't the one you signed.": {
+    "en": "That restore plan isn't the one you signed.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:349"
+  },
+  "An app changed since you chose. Look at the choices again.": {
+    "en": "An app changed since you chose. Look at the choices again.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:359"
+  },
+  "Choose at least one app to restore.": {
+    "en": "Choose at least one app to restore.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:361"
+  },
+  "That restore plan doesn't fit this backup or this server any more. Look at the choices again.": {
+    "en": "That restore plan doesn't fit this backup or this server any more. Look at the choices again.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:362"
+  },
+  "This server doesn't have enough free disk space for that restore.": {
+    "en": "This server doesn't have enough free disk space for that restore.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:368"
+  },
+  "That restore would go over this server's backup limit.": {
+    "en": "That restore would go over this server's backup limit.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:368"
+  },
+  "There is no earlier copy of that app to put back.": {
+    "en": "There is no earlier copy of that app to put back.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts:428"
+  },
   "Moving to a new server": {
     "en": "Moving to a new server",
     "ctx": "packages/server-daemon/src/serverArchive/migratePause.ts:38"

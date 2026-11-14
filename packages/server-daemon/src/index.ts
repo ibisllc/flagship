@@ -296,7 +296,7 @@ import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
-import { buildRestoreMergeService } from "./serverArchive/merge/service.js";
+import { buildRestoreMergeService, restoringPage } from "./serverArchive/merge/service.js";
 import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
 import { legacyOrigin } from "./appLineage.js";
 import { hybridOrderSignature as hybridOrderSignatureForMerge } from "./pqAuthority.js";
@@ -4653,10 +4653,12 @@ async function wireRuntimeSurfaces(deps: {
       },
       freeBytes: (dir) => freeBytesAt(dir),
       ...(backupCap ? { admitIncoming: (bytes: number) => backupCap.admit(bytes) } : {}),
-      note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
+      note: (kind, detail, ok, params) => deps.activityLog.note(kind, detail, { ok: ok ?? true, ...(params ? { params } : {}) }),
       log: (m) => console.log(m),
     });
     serverArchiveService.setOtherJob(() => svc.active());
+    // The seconds an app's restored copy is swapped in: its address says so instead of failing.
+    runtime.addAppGate(async (req, ref) => (ref && svc.isRestoring(ref) ? restoringPage(languageFor(req.headers)) : null));
     await svc.resume().catch((e: Error) => console.warn(`[restore-merge] couldn't resume: ${e.message}`));
     setInterval(() => void svc.expireUndo().catch(() => {}), 60 * 60_000).unref();
     return svc;
