@@ -129,7 +129,7 @@ class LanDirectRegistry(
         val sig = HexUtil.decode(envelope.signatureHex) ?: return "bad-signature".also { forget(box) }
         val order = envelope.directAccess?.takeIf { DirectAccess.verify(it, authorityPubs) }?.order
         if (envelope.directAccess != null && order == null && envelope.hint.direct.isNotEmpty()) {
-            log("$box's direct-access order doesn't verify under the account's key; not using its public addresses")
+            log("not using the public addresses of $box: its direct-access order doesn't verify under the account's key")
         }
         return when (val v = DirectAccess.check(envelope.hint, sig, stkPub, box, pinnedCertSha256, clock(), order)) {
             is DirectAccess.HintVerdict.Refused -> {
