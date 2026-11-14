@@ -9,6 +9,8 @@ import { serverWildcardGrantInDate, signServingRecord, type CertificateOrder } f
  *
  *   control  exactly `<server>.<user>.<apex>`            (also after the app lease lapsed: recovery)
  *   apps     `*.<server>.<user>.<apex>` (+ `*.<user>.<apex>` with the admin's wildcard grant)
+ *   direct   exactly one name on the direct domain (`<label>.fshp.app`) the owner's signed name order gives this box
+ *            (docs/direct-access-and-domains.md §8): `.com`'s registry decides, the box only names which one
  */
 export type BoxCertClass = "control" | "apps";
 
@@ -90,8 +92,8 @@ function sameNames(a: readonly string[], b: readonly string[]): boolean {
   return [...a].map((n) => n.toLowerCase()).sort().join("\n") === [...b].map((n) => n.toLowerCase()).sort().join("\n");
 }
 
-export interface IssuedCertificate {
-  cls: BoxCertClass;
+export interface IssuedCertificate<C extends string = BoxCertClass> {
+  cls: C;
   names: string[];
   chainPem: string;
   privateKeyPem: string;
@@ -128,7 +130,8 @@ export function boxClassNames(serverFqdn: string, cls: BoxCertClass, accountWild
 
 export class ServiceIssuer {
   private readonly f: typeof fetch;
-  private readonly pending = new Map<BoxCertClass, PendingOrder>();
+  /** By class, or `direct:<name>` for a direct name. */
+  private readonly pending = new Map<string, PendingOrder>();
   constructor(private readonly o: ServiceIssuerOptions) {
     this.f = o.fetchImpl ?? fetch;
   }
@@ -176,10 +179,22 @@ export class ServiceIssuer {
       p = undefined;
     }
     if (!p) p = await this.place(cls, names);
-    return await this.follow(cls, p);
+    return { ...(await this.follow(cls, p)), cls };
   }
 
-  private async place(cls: BoxCertClass, names: string[]): Promise<PendingOrder> {
+  /** One direct name's certificate; resumed like `issue` when an earlier order is still unanswered. */
+  async issueDirect(name: string): Promise<IssuedCertificate<"direct">> {
+    const fqdn = name.toLowerCase();
+    const key = `direct:${fqdn}`;
+    const p = this.pending.get(key) ?? (await this.place("direct", [fqdn], key));
+    return { ...(await this.follow(key, p)), cls: "direct" };
+  }
+
+  hasPendingDirect(name: string): boolean {
+    return this.pending.has(`direct:${name.toLowerCase()}`);
+  }
+
+  private async place(cls: CertificateOrder["class"], names: string[], key: string = cls): Promise<PendingOrder> {
     const now = this.o.now ?? Date.now;
     const account = this.o.serverFqdn.toLowerCase().split(".")[1]!;
     const { csrDer, privateKeyPem, handle } = await this.o.csr.create(names);
@@ -199,6 +214,7 @@ export class ServiceIssuer {
       signature: Buffer.from(signServingRecord("certificate-order", order, (m) => this.o.signAsBox(m))).toString("hex"),
       csr: Buffer.from(csrDer).toString("base64url"),
       ...(grant ? { serverWildcardGrant: { issuedAt: grant.issuedAt, signature: grant.signatureHex } } : {}),
+      ...(cls === "direct" ? { directName: names[0] } : {}),
     });
     let posted: Record<string, unknown> | null = null;
     for (let attempt = 1; ; attempt++) {
@@ -213,11 +229,11 @@ export class ServiceIssuer {
     const orderId = String(posted?.orderId ?? "");
     if (!/^[0-9a-f]{32}$/.test(orderId)) throw new IssuanceRefused("issuance-malformed", ".com answered without an order id", 502);
     const p: PendingOrder = { orderId, names, privateKeyPem, handle, view: posted };
-    this.pending.set(cls, p);
+    this.pending.set(key, p);
     return p;
   }
 
-  private async follow(cls: BoxCertClass, p: PendingOrder): Promise<IssuedCertificate> {
+  private async follow(cls: string, p: PendingOrder): Promise<Omit<IssuedCertificate, "cls">> {
     const now = this.o.now ?? Date.now;
     const deadline = now() + (this.o.timeoutMs ?? 20 * 60_000);
     let view = p.view ?? { status: "pending" };
@@ -253,7 +269,7 @@ export class ServiceIssuer {
     if (p.privateKeyPem && !leaf.checkPrivateKey(createPrivateKey(p.privateKeyPem))) {
       throw new IssuanceRefused("issuance-chain-mismatch", "the certificate is not for this key", 200);
     }
-    return { cls, names, chainPem, privateKeyPem: p.privateKeyPem, handle: p.handle, notBefore: Date.parse(leaf.validFrom), notAfter: Date.parse(leaf.validTo) };
+    return { names, chainPem, privateKeyPem: p.privateKeyPem, handle: p.handle, notBefore: Date.parse(leaf.validFrom), notAfter: Date.parse(leaf.validTo) };
   }
 
   private base(): string {
