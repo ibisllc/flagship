@@ -92,6 +92,53 @@ public enum QuantumSafetyService {
     }
 }
 
+extension QuantumSafetyService {
+    /// The hybrid signer of a root this device holds, only when `.com` holds this device's ML-DSA
+    /// key for it: a companion under another device's key would make a box drop what it signed.
+    /// `requireBound: false` is for the account's creation, where this device is the only holder
+    /// and its key becomes the bound one.
+    static func boundSigner(role: PqBindingRole, username: String, edKey: Curve25519.Signing.PrivateKey, requireBound: Bool = true) async
+        -> ((String, [UInt8]) throws -> [UInt8])? {
+        let id = PqIdentity(role: role, subjectId: username, edKey: edKey)
+        guard !requireBound || PqKeyStore.shared.status(for: id) == .bound, let held = await PqKeyStore.shared.key(for: id),
+              let ml = QSHex.unhex(held.mldsaPubHex) else { return nil }
+        let edPub = [UInt8](edKey.publicKey.rawRepresentation)
+        return { purpose, payload in
+            try PqHybrid.hybridSign(edPublicKey: edPub, mldsaPublicKey: ml, purpose: purpose, payload: payload,
+                                    edSign: { [UInt8](try edKey.signature(for: Data($0))) }, mldsaSign: held.sign)
+        }
+    }
+
+    /// A device grant's hybrid companion by the root that signed it (pq-suites.md §20); nil when
+    /// this device holds no bound PQ half for that root.
+    public static func grantCompanion(_ grant: DeviceCapabilityGrantEnvelope, rootKey: Curve25519.Signing.PrivateKey,
+                                      role: PqBindingRole, username: String, requireBound: Bool = true) async -> PqSignatureWire? {
+        guard let sign = await boundSigner(role: role, username: username.lowercased(), edKey: rootKey, requireBound: requireBound),
+              let env = try? PqAuthorityRecords.signGrant(grant, rootSign: sign) else { return nil }
+        return PqSignatureWire(suite: env.suite, signature: env.signature)
+    }
+
+    /// An admin-root rotation's companion (pq-suites.md §20): a fresh ML-DSA key and binding for the
+    /// new root, signed by the old root's PQ half; nil when this device holds no bound PQ half for it.
+    public static func rotationCompanion(_ r: AdminRootRotation, oldRoot: Curve25519.Signing.PrivateKey,
+                                         newRoot: Curve25519.Signing.PrivateKey) async -> AdminRootRotationPqWire? {
+        let user = r.username.lowercased()
+        guard let oldSign = await boundSigner(role: .adminRoot, username: user, edKey: oldRoot) else { return nil }
+        let newId = PqIdentity(role: .adminRoot, subjectId: user, edKey: newRoot)
+        guard let newHeld = await PqKeyStore.shared.key(for: newId), let ml = QSHex.unhex(newHeld.mldsaPubHex) else { return nil }
+        let edPub = [UInt8](newRoot.publicKey.rawRepresentation)
+        let newSign: (String, [UInt8]) throws -> [UInt8] = { purpose, payload in
+            try PqHybrid.hybridSign(edPublicKey: edPub, mldsaPublicKey: ml, purpose: purpose, payload: payload,
+                                    edSign: { [UInt8](try newRoot.signature(for: Data($0))) }, mldsaSign: newHeld.sign)
+        }
+        let st = PqKeyBindingStatement(role: PqBindingRole.adminRoot.rawValue, subjectId: user, ed25519PubHex: QSHex.hex(edPub),
+                                       mldsaPubHex: newHeld.mldsaPubHex, issuedAt: Int64(Date().timeIntervalSince1970 * 1000))
+        guard let binding = try? PqTrust.signPqKeyBinding(st, signer: newSign),
+              let companion = try? PqAuthorityRecords.signRotation(r, newRootBinding: binding, oldRootSign: oldSign) else { return nil }
+        return companion.wire
+    }
+}
+
 /// Lowercase hex, for this module (FlagshipCore's helper is internal).
 enum QSHex {
     static func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02x", $0) }.joined() }

@@ -42,6 +42,9 @@ public struct PairingBundle: Codable, Equatable, Sendable {
     /// from the first device. Absent (nil) ⇒ the new device joins non-admin.
     /// Optional + defaulted so a pre-D bundle decodes byte-identically.
     public let wrappedAdminRoot: String?
+    /// The signing root's hybrid companion over the grant (pq-suites.md §20); absent when the admin
+    /// device holds no bound PQ half for that root. The incoming device passes it to `.com`.
+    public let grantPqSignature: PqSignatureWire?
 
     public struct AdmitFields: Codable, Equatable, Sendable {
         public let username: String
@@ -80,7 +83,8 @@ public struct PairingBundle: Codable, Equatable, Sendable {
         irkPubHex: String,
         grant: GrantFields,
         grantSignature: String,
-        wrappedAdminRoot: String? = nil
+        wrappedAdminRoot: String? = nil,
+        grantPqSignature: PqSignatureWire? = nil
     ) {
         self.umkSeedHex = umkSeedHex
         self.admit = admit
@@ -89,6 +93,7 @@ public struct PairingBundle: Codable, Equatable, Sendable {
         self.grant = grant
         self.grantSignature = grantSignature
         self.wrappedAdminRoot = wrappedAdminRoot
+        self.grantPqSignature = grantPqSignature
     }
 
     public func encoded() throws -> Data {

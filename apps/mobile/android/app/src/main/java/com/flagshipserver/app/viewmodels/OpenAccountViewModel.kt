@@ -185,6 +185,9 @@ class OpenAccountViewModel(
                 grant = AccountBootstrapRequest.Grant(
                     grantId, username, deviceId, devicePubHex, scopes, issuedAt, expiresAt,
                     HexUtil.encode(adminRoot.sign(grantBytes)),
+                    pqSignature = com.flagshipserver.app.keystore.QuantumSafetyService.grantCompanion(
+                        username, "admin-root", grantBytes, adminRoot, adminRootPubHex, requireBound = false,
+                    ),
                 ),
                 accountProfile = AccountBootstrapRequest.Profile(
                     username, revision = 1, keyVersion = 1,

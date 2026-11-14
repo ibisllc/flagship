@@ -87,6 +87,14 @@ class RotateAdminRootViewModel(
     private val reEscrow: suspend (passphrase: String, newSeed: ByteArray) -> Unit = { _, _ ->
         error("re-escrow isn't wired on this surface")
     },
+    /** The old root's hybrid companion and the new root's ML-DSA seed (pq-suites.md §20), or null. */
+    private val rotationCompanion: (AdminRootRotation, Ed25519Sign, ByteArray) -> com.flagshipserver.app.keystore.QuantumSafetyService.RotationDraft? = { r, old, seed ->
+        com.flagshipserver.app.keystore.QuantumSafetyService.rotationCompanion(r, old, seed)
+    },
+    /** Keeps the new root's ML-DSA seed once `.com` accepted the rotation. */
+    private val keepRotatedSeed: (String, com.flagshipserver.app.keystore.QuantumSafetyService.RotationDraft) -> Unit = { pub, draft ->
+        com.flagshipserver.app.keystore.QuantumSafetyService.keepRotatedRootSeed(username, pub, draft)
+    },
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<RotateAdminRootPhase>(RotateAdminRootPhase.Idle)
@@ -130,6 +138,7 @@ class RotateAdminRootViewModel(
                 issuedAt = issuedAt,
             )
             val signatureHex = HexUtil.encode(AdminRootRotationClaim.sign(rotation, oldSigner))
+            val draft = rotationCompanion(rotation, oldSigner, newSeed)
 
             server.rotateAdminRoot(
                 username = username,
@@ -141,11 +150,13 @@ class RotateAdminRootViewModel(
                         issuedAt = issuedAt,
                     ),
                     signatureHex = signatureHex,
+                    pq = draft?.companion,
                 ),
             )
 
             // Re-store the NEW root device-local (the OLD root is now dead).
             storeNewRoot(newSeed)
+            draft?.let { keepRotatedSeed(newPub, it) }
 
             // The rotation is committed from here on — nothing below may fail it.
             // The new admin root gets its own ML-DSA-65 binding.

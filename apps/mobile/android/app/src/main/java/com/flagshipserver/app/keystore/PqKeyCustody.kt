@@ -176,6 +176,22 @@ class PqKeyStore(
         }
     }
 
+    /** Keeps [seed] (made elsewhere, e.g. a rotated admin root's) as this identity's key, replacing any other. */
+    @Synchronized
+    fun importSeed(role: String, subjectId: String, ed25519PubHex: String, seed: ByteArray, now: Long): Entry {
+        val e = Entry(
+            role = role,
+            subjectId = subjectId,
+            ed25519PubHex = ed25519PubHex.lowercase(),
+            mldsaPubHex = PqHex.encode(PqHybrid.mldsa65PublicKey(seed)),
+            wrappedSeedHex = PqHex.encode(wrapper.wrap(seed)),
+            custody = wrapper.label.name,
+            createdAt = now,
+        )
+        persistence.save(key(role, subjectId), json.encodeToString(Entry.serializer(), e))
+        return e
+    }
+
     @Synchronized
     fun setState(role: String, subjectId: String, state: BindingState) {
         val e = entry(role, subjectId) ?: return

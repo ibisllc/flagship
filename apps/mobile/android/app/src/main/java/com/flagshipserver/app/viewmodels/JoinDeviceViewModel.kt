@@ -288,6 +288,7 @@ class JoinDeviceViewModel(
                         signerRoot = grant.signerRoot,
                     ),
                     grantSignature = bundle.grantSignature.lowercase(),
+                    grantPqSignature = bundle.grantPqSignature,
                     profile = com.flagshipserver.app.api.AccountBootstrapRequest.Profile(
                         accountId = cloudName,
                         deviceId = deviceId,

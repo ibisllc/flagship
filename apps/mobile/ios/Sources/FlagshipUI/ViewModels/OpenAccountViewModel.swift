@@ -223,6 +223,7 @@ public final class OpenAccountViewModel {
                 expiresAt: now + 90 * 24 * 3_600_000
             )
             let grantSignature = try adminRoot.signature(for: grant.canonicalBytes())
+            let grantPq = await QuantumSafetyService.grantCompanion(grant, rootKey: adminRoot, role: .adminRoot, username: username, requireBound: false)
             _ = try await server.bootstrapAccount(.init(
                 claim: .init(
                     request: .init(username: username, irkPub: irkPubHex, issuedAt: now),
@@ -234,7 +235,7 @@ public final class OpenAccountViewModel {
                 grant: .init(
                     grantId: grant.grantId, username: username, deviceId: deviceId,
                     devicePubHex: devicePubHex, scopes: scopes, issuedAt: grant.issuedAt,
-                    expiresAt: grant.expiresAt, signatureHex: HexUtil.encode(grantSignature)
+                    expiresAt: grant.expiresAt, signatureHex: HexUtil.encode(grantSignature), pqSignature: grantPq
                 ),
                 accountProfile: .init(
                     accountId: username, revision: 1, keyVersion: 1,
