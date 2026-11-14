@@ -12,6 +12,8 @@
 /** (table, column) pairs rewritten old → new, inside the rename transaction. */
 export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, column: string]> = [
   ["acme_account_key_grants", "username"],
+  ["abuse_notices", "account"],
+  ["account_suspensions", "account"],
   ["admin_root_rotations", "username"],
   ["app_purchases", "username"],
   ["app_sales", "buyer_account"],
@@ -30,6 +32,8 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   ["llm_promo_lifetime", "username"],
   ["llm_promo_usage", "username"],
   ["meter_counters", "account"],
+  ["messages_attest_counters", "username"],
+  ["messages_enrollments", "username"],
   ["mint_reservations", "username"],
   ["name_claims", "username"],
   ["name_dibs_claims", "username"],
@@ -41,6 +45,8 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   ["trust_exceptions", "username"],
   ["usage_counters", "username"],
   ["user_service_aliases", "username"],
+  ["voici_bans", "username"],
+  ["voici_takedowns", "username"],
   ["voici_links", "username"],
   ["voici_name_changes", "username"],
   ["voici_names", "username"],
@@ -78,6 +84,21 @@ export const NOT_RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string,
   // Quantum-safe trust signs the account name into its bytes; a rename is refused
   // while the account holds an account-irk / admin-root binding or a policy change.
   ["pq_key_bindings", "subject_id", "signed — names the account; rename refused while it holds a binding"],
+  // Serving authority and issuance (architecture v2): per box, or signed records naming the account.
+  ["serving_policies", "username", "server-scoped (owner-signed per box) — rename refused while servers exist"],
+  ["serving_leases", "username", "server-scoped (signed per box) — rename refused while servers exist"],
+  ["renewal_delegations", "username", "signed — names the account; serves the account's servers, rename refused while servers exist"],
+  ["certificate_orders", "username", "certificate order history; the zone names the old account"],
+  ["revocation_log", "account", "signed append-only log — history"],
+  ["relay_log", "account", "signed append-only log — history"],
+  // voi.ci pages and Messages: the page's signed index lives at voi.ci/<name>; a rename is refused while the account
+  // has a page, drafts or Messages (D1NameChangeStorage.renameAccount).
+  ["voici_pages", "username", "voi.ci page — rename refused while the account has one"],
+  ["voici_pieces", "username", "pieces of the voi.ci page — rename refused while the account has a page"],
+  ["voici_drafts", "username", "voi.ci page drafts — rename refused while the account has any"],
+  ["messages_state", "username", "Messages — rename refused while the account has set it up"],
+  ["voici_reports", "username", "reports about a page — history"],
+  ["abuse_reports", "account", "the account a report was resolved to at intake — history"],
   ["assurance_policy_changes", "account", "signed — names the account; rename refused while it holds a change"],
   ["assurance_policy_states", "scope_id", "names a server, service or device, never the account"],
   // Demo accounts are operator-managed and can't rename.
