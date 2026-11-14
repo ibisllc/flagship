@@ -136,13 +136,13 @@ const STRUCTURED_MARKERS = [
 ] as const;
 
 /**
- * A two-byte marker turns up somewhere in 4 KiB of random bytes about one time in eight, so a
- * crypto-erased header would fail the check that often. Short markers count in a sample printable
- * well beyond noise (random bytes sit near 38 %), or when there are several of them (four or more
- * happen in noise about once in 100,000 reads).
+ * A two-byte marker turns up somewhere in 4 KiB of random bytes about one time in eight, a
+ * three-byte one about once in 4,000, so a crypto-erased header would fail the check that often.
+ * Markers under four bytes count in a sample printable well beyond noise (random bytes sit near
+ * 38 %), or when there are six or more of them (noise: about once in 200 million reads).
  */
 const SHORT_MARKER_MIN_PRINTABLE = 0.45;
-const SHORT_MARKER_MIN_HITS = 4;
+const SHORT_MARKER_MIN_HITS = 6;
 
 function countSubsequence(haystack: Bytes, needle: Bytes): number {
   let n = 0;
@@ -156,7 +156,7 @@ function countSubsequence(haystack: Bytes, needle: Bytes): number {
 function looksLikeStructuredPlaintext(view: Bytes, printable: number): boolean {
   let shortHits = 0;
   for (const marker of STRUCTURED_MARKERS) {
-    if (marker.length >= 3) {
+    if (marker.length >= 4) {
       if (containsSubsequence(view, marker)) return true;
       continue;
     }

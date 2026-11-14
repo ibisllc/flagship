@@ -74,7 +74,7 @@ describe("wipe verifier (N-BOX-9)", () => {
     // Mostly garbage but with `{"` markers planted (one alone is what noise holds now and then).
     const v = randomGarbage(WIPE_READ_BYTES, 3);
     for (let i = 0; i < v.length; i++) v[i] = (v[i]! & 0x80) | 0x80;
-    for (const at of [500, 900, 1300, 1700]) v.set([0x7b, 0x22], at);
+    for (const at of [500, 900, 1300, 1700, 2100, 2500]) v.set([0x7b, 0x22], at);
     const r = verifyWipe(v);
     expect(r.ok).toBe(false);
     expect(r.reason).toBe("recognizable-plaintext");
@@ -93,7 +93,7 @@ describe("random bytes after a crypto-erase", () => {
   it("pass the check every time (a short marker in noise is not plaintext)", async () => {
     const { randomFillSync } = await import("node:crypto");
     const b = new Uint8Array(4096);
-    for (let i = 0; i < 2000; i++) {
+    for (let i = 0; i < 5000; i++) {
       randomFillSync(b);
       const v = verifyWipe(b);
       if (v.reason !== "luks-header-present") expect(v.ok, `run ${i}: ${v.reason}`).toBe(true);
