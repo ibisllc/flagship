@@ -220,6 +220,7 @@ const SUB_VIEW_TABS = {
   "view-companion-dock": "settings",
   "view-companion-requests": "settings",
   "view-profiles": "settings",
+  "view-tier-status": "settings",
   // Settings sub-screens that previously left the tab bar dark.
   "view-trusted-devices": "settings",
   "view-account-delete": "settings",
