@@ -269,10 +269,10 @@ async function openBackups(page: Page, m: Mock): Promise<void> {
 /** Scroll so `selector` sits just under the sticky app header. */
 async function scrollToTop(page: Page, selector: string): Promise<void> {
   await page.locator(selector).first().evaluate((e) => {
-    // the sticky header, and on a wide screen the tab bar under it
+    // the sticky header (on a wide screen the tab bar is a sidebar beside the page, which covers nothing above it)
     const covers = [document.querySelector("header"), document.getElementById("tab-bar")]
       .map((x) => x?.getBoundingClientRect())
-      .filter((r): r is DOMRect => !!r && r.top < window.innerHeight / 2);
+      .filter((r): r is DOMRect => !!r && r.top < window.innerHeight / 2 && r.width > window.innerWidth / 2);
     const header = Math.max(0, ...covers.map((r) => r.bottom));
     window.scrollTo(0, e.getBoundingClientRect().top + window.scrollY - header - 20);
   });
