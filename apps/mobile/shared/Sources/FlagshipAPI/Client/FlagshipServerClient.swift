@@ -410,9 +410,36 @@ public struct AdminRootRotationRequest: Codable, Equatable, Sendable {
     }
     public let rotation: Rotation
     public let signatureHex: String
-    public init(rotation: Rotation, signatureHex: String) {
+    /// The old root's hybrid companion (pq-suites.md §20), when this device holds its ML-DSA half.
+    public let pq: AdminRootRotationPqWire?
+    public init(rotation: Rotation, signatureHex: String, pq: AdminRootRotationPqWire? = nil) {
         self.rotation = rotation
         self.signatureHex = signatureHex
+        self.pq = pq
+    }
+}
+
+/// A `flagship/pq-key-binding/v1` binding as it travels.
+public struct PqBindingWireJSON: Codable, Equatable, Sendable {
+    public let v: Int
+    public let role: String
+    public let subjectId: String
+    public let ed25519PubHex: String
+    public let mldsaPubHex: String
+    public let issuedAt: Int64
+    public let signature: String
+    public init(v: Int, role: String, subjectId: String, ed25519PubHex: String, mldsaPubHex: String, issuedAt: Int64, signature: String) {
+        self.v = v; self.role = role; self.subjectId = subjectId; self.ed25519PubHex = ed25519PubHex
+        self.mldsaPubHex = mldsaPubHex; self.issuedAt = issuedAt; self.signature = signature
+    }
+}
+
+/// An admin-root rotation's hybrid companion: the old root's signature and the new root's binding.
+public struct AdminRootRotationPqWire: Codable, Equatable, Sendable {
+    public let signature: PqSignatureWire
+    public let newRootBinding: PqBindingWireJSON
+    public init(signature: PqSignatureWire, newRootBinding: PqBindingWireJSON) {
+        self.signature = signature; self.newRootBinding = newRootBinding
     }
 }
 
@@ -1445,6 +1472,8 @@ public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
     public let admitSig: String                    // hex; Ed25519 by account IRK
     public let grant: Grant
     public let grantSignature: String
+    /// The signing root's hybrid companion over the grant (pq-suites.md §20), from the pairing bundle.
+    public let grantPqSignature: PqSignatureWire?
     public let profile: AccountBootstrapRequest.Profile
     public let request: PushTokenRegisterRequest.Inner
     public let signature: String                   // hex; carried, not verified
@@ -1453,6 +1482,7 @@ public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
         admitSig: String,
         grant: Grant,
         grantSignature: String,
+        grantPqSignature: PqSignatureWire? = nil,
         profile: AccountBootstrapRequest.Profile,
         request: PushTokenRegisterRequest.Inner,
         signature: String
@@ -1461,6 +1491,7 @@ public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
         self.admitSig = admitSig
         self.grant = grant
         self.grantSignature = grantSignature
+        self.grantPqSignature = grantPqSignature
         self.profile = profile
         self.request = request
         self.signature = signature
@@ -1778,10 +1809,13 @@ public struct AccountBootstrapRequest: Codable, Equatable, Sendable {
         public let issuedAt: Int64
         public let expiresAt: Int64
         public let signatureHex: String
-        public init(grantId: String, username: String, deviceId: String, devicePubHex: String, scopes: [String], issuedAt: Int64, expiresAt: Int64, signatureHex: String) {
+        /// The admin root's hybrid companion over the grant (pq-suites.md §20).
+        public let pqSignature: PqSignatureWire?
+        public init(grantId: String, username: String, deviceId: String, devicePubHex: String, scopes: [String], issuedAt: Int64, expiresAt: Int64, signatureHex: String,
+                    pqSignature: PqSignatureWire? = nil) {
             self.grantId = grantId; self.username = username; self.deviceId = deviceId
             self.devicePubHex = devicePubHex; self.scopes = scopes; self.issuedAt = issuedAt
-            self.expiresAt = expiresAt; self.signatureHex = signatureHex
+            self.expiresAt = expiresAt; self.signatureHex = signatureHex; self.pqSignature = pqSignature
         }
     }
     public struct Profile: Codable, Equatable, Sendable {

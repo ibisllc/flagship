@@ -94,6 +94,9 @@ public final class RotateAdminRootViewModel {
     /// WebAuthn provider — the passphrase + PRF assert EMIT the wrap key, so
     /// the step is user-driven, not automatic.
     private let reEscrow: @MainActor (String) async throws -> Void
+    /// Seam: the old root's hybrid companion for the rotation (pq-suites.md §20), or nil when this
+    /// device holds no bound PQ half for it. Defaults to `QuantumSafetyService.rotationCompanion`.
+    private let rotationCompanion: @MainActor (AdminRootRotation, Curve25519.Signing.PrivateKey, Curve25519.Signing.PrivateKey) async -> AdminRootRotationPqWire?
 
     private struct NoAccountError: LocalizedError {
         var errorDescription: String? { String(localized: "No active account on this device.") }
@@ -110,8 +113,12 @@ public final class RotateAdminRootViewModel {
             _ = try await Keystore.importAdminRoot(seed: seed, reason: String(localized: "Save your new admin key"))
         },
         recoveryEnrolled: (@MainActor () async throws -> Bool)? = nil,
-        reEscrow: (@MainActor (String) async throws -> Void)? = nil
+        reEscrow: (@MainActor (String) async throws -> Void)? = nil,
+        rotationCompanion: @escaping @MainActor (AdminRootRotation, Curve25519.Signing.PrivateKey, Curve25519.Signing.PrivateKey) async -> AdminRootRotationPqWire? = { r, old, new in
+            await QuantumSafetyService.rotationCompanion(r, oldRoot: old, newRoot: new)
+        }
     ) {
+        self.rotationCompanion = rotationCompanion
         self.server = server
         self.username = username
         self.hasAdminRoot = hasAdminRoot
@@ -189,7 +196,8 @@ public final class RotateAdminRootViewModel {
                         newAdminRootPub: newPubHex,
                         issuedAt: issuedAt
                     ),
-                    signatureHex: signatureHex
+                    signatureHex: signatureHex,
+                    pq: await rotationCompanion(rotation, oldRoot, newRoot)
                 )
             )
         } catch {

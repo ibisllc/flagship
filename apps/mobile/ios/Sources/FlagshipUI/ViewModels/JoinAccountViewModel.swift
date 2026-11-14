@@ -452,6 +452,7 @@ public final class JoinAccountViewModel {
                 signerRoot: bundle.grant.signerRoot
             ),
             grantSignature: bundle.grantSignature,
+            grantPqSignature: bundle.grantPqSignature,
             profile: .init(
                 accountId: account,
                 deviceId: deviceId,

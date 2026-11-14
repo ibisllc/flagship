@@ -136,6 +136,11 @@ data class PairingBundle(
      *  join. The incoming device unwraps it → [Keystore.importAdminRoot] ⇒ it
      *  becomes a bare-root admin. */
     val wrappedAdminRoot: String? = null,
+    /** The signing root's hybrid companion over the grant (pq-suites.md §20); null when the admin
+     *  device holds no bound PQ half for that root. The joining device passes it to `.com`. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val grantPqSignature: com.flagshipserver.app.api.PqSignatureWire? = null,
 ) {
     fun toJsonBytes(): ByteArray = JSON.encodeToString(serializer(), this).toByteArray(Charsets.UTF_8)
 

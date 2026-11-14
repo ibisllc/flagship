@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// Quantum-safe stage 1 (docs/architecture-v2/pq-suites.md §20): the hybrid companions of
 /// admin-root rotations and device capability grants. Swift twin of
@@ -15,6 +16,13 @@ public enum PqAuthorityRecords {
         public var newRootBinding: PqKeyBindingWire
         public init(signature: SignatureEnvelope, newRootBinding: PqKeyBindingWire) {
             self.signature = signature; self.newRootBinding = newRootBinding
+        }
+        public var wire: AdminRootRotationPqWire {
+            let b = newRootBinding
+            return AdminRootRotationPqWire(
+                signature: PqSignatureWire(suite: signature.suite, signature: signature.signature),
+                newRootBinding: PqBindingWireJSON(v: b.v, role: b.role, subjectId: b.subjectId, ed25519PubHex: b.ed25519PubHex,
+                                                  mldsaPubHex: b.mldsaPubHex, issuedAt: b.issuedAt, signature: b.signature))
         }
         public var jsonObject: [String: Any] {
             ["signature": ["suite": signature.suite, "signature": signature.signature], "newRootBinding": newRootBinding.jsonObject]

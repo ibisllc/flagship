@@ -109,6 +109,10 @@ class AddDeviceViewModel(
     /** The account key's public key hex, sent in the bundle so the joining
      *  device can check the admit without asking `.com`. */
     private val irkPubHex: suspend () -> String? = { runCatching { Keystore.irkPubHex() }.getOrNull() },
+    /** The signing root's hybrid companion over the grant (pq-suites.md §20), or null. */
+    private val grantCompanion: (role: String, grantBytes: ByteArray, signer: com.google.crypto.tink.subtle.Ed25519Sign, signerPubHex: String) -> com.flagshipserver.app.api.PqSignatureWire? = { role, bytes, signer, pub ->
+        com.flagshipserver.app.keystore.QuantumSafetyService.grantCompanion(username, role, bytes, signer, pub)
+    },
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<AddDevicePhase>(
@@ -268,6 +272,9 @@ class AddDeviceViewModel(
                 grantSignature = HexUtil.encode(grantSigner.sign(grantBytes)),
                 irkPubHex = irkPubHex(),
                 wrappedAdminRoot = wrappedAdminRoot,
+                grantPqSignature = (if (promoted) Keystore.adminRootPubHex() else irkPubHex())?.let { pub ->
+                    grantCompanion(if (promoted) "admin-root" else "account-irk", grantBytes, grantSigner, pub)
+                },
             )
             val sealed = session.seal(bundle.toJsonBytes())
             relay.deliver(sealed.ciphertextB64u, sealed.nonceB64u)

@@ -310,6 +310,10 @@ data class DeviceAdmitRequest(
     val admitSig: String,
     val grant: Grant,
     val grantSignature: String,
+    /** The signing root's hybrid companion over the grant (pq-suites.md §20), from the pairing bundle. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val grantPqSignature: PqSignatureWire? = null,
     val profile: AccountBootstrapRequest.Profile,
     val request: PushTokenRegisterRequest.Inner,
     /** PushTokenRegister signature, carried for storage. Hex. */
@@ -671,6 +675,8 @@ data class RePairInitiateResponse(
 data class AdminRootRotationRequest(
     val rotation: Rotation,
     val signatureHex: String,
+    /** The old root's hybrid companion (pq-suites.md §20), when this phone holds its bound ML-DSA half. */
+    val pq: kotlinx.serialization.json.JsonObject? = null,
 ) {
     @Serializable
     data class Rotation(
@@ -986,6 +992,8 @@ data class AccountBootstrapRequest(
         val issuedAt: Long,
         val expiresAt: Long,
         val signatureHex: String,
+        /** The admin root's hybrid companion over the grant (pq-suites.md §20). */
+        val pqSignature: PqSignatureWire? = null,
     )
     @Serializable data class Profile(
         val accountId: String,

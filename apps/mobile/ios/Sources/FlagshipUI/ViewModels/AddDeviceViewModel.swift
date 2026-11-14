@@ -230,6 +230,8 @@ public final class AddDeviceViewModel {
                 grantSigner = irk
             }
             let grantSignature = try grantSigner.signature(for: grantEnvelope.canonicalBytes())
+            let grantPq = await QuantumSafetyService.grantCompanion(
+                grantEnvelope, rootKey: grantSigner, role: promoted ? .adminRoot : .accountIrk, username: account)
 
             let bundle = PairingBundle(
                 umkSeedHex: umkHex,
@@ -252,7 +254,8 @@ public final class AddDeviceViewModel {
                     signerRoot: promoted ? "admin-root" : "membership"
                 ),
                 grantSignature: HexUtil.encode(Data(grantSignature)),
-                wrappedAdminRoot: wrappedAdminRoot
+                wrappedAdminRoot: wrappedAdminRoot,
+                grantPqSignature: grantPq
             )
             let payload = try bundle.encoded()
             let sealed = try QrRelay.seal(payload: payload, with: aeadKey)

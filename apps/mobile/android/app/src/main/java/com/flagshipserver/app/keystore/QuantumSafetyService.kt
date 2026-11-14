@@ -103,4 +103,57 @@ object QuantumSafetyService {
         val sig = runCatching { keys.sign(entry, purpose, canonical) { m -> key.sign(m) } }.getOrNull() ?: return null
         return PqSignatureWire(PqTrust.SUITE_HYBRID, PqHex.encode(sig))
     }
+
+    /**
+     * The hybrid signer of a root this phone holds ([role] `admin-root` or `account-irk`), only when
+     * `.com` holds this phone's ML-DSA key for it: a companion under another device's key would make
+     * a box drop what it signed. [requireBound] false is for the account's creation, where this phone
+     * is the only holder and its key becomes the bound one.
+     */
+    fun rootSigner(username: String, role: String, key: Ed25519Sign, keyPubHex: String, requireBound: Boolean = true): ((String, ByteArray) -> ByteArray)? {
+        val keys = pqKeys ?: return null
+        val user = username.lowercase()
+        val pub = keyPubHex.lowercase()
+        val entry = (if (requireBound) keys.entry(role, user) else keys.entry(role, user) ?: runCatching { keys.getOrCreate(role, user, pub, System.currentTimeMillis()) }.getOrNull())
+            ?: return null
+        if (entry.ed25519PubHex != pub || entry.wrappedSeedHex.isEmpty()) return null
+        if (requireBound && entry.bindingState != PqKeyStore.BindingState.BOUND) return null
+        return { purpose, payload -> keys.sign(entry, purpose, payload) { m -> key.sign(m) } }
+    }
+
+    /** A device grant's hybrid companion by the root that signed it (pq-suites.md §20), or null. */
+    fun grantCompanion(username: String, role: String, grantBytes: ByteArray, key: Ed25519Sign, keyPubHex: String, requireBound: Boolean = true): PqSignatureWire? {
+        val sign = rootSigner(username, role, key, keyPubHex, requireBound) ?: return null
+        val env = runCatching { com.flagshipserver.app.core.pq.PqAuthorityRecords.signGrant(grantBytes, sign) }.getOrNull() ?: return null
+        return PqSignatureWire(env.suite, env.signature)
+    }
+
+    /** A rotation's companion and the new root's fresh ML-DSA seed, to keep once `.com` accepts it. */
+    class RotationDraft(val companion: kotlinx.serialization.json.JsonObject, val newMldsaSeed: ByteArray)
+
+    /**
+     * An admin-root rotation's companion (pq-suites.md §20): a fresh ML-DSA seed and binding for the
+     * new root, signed by the old root's PQ half; null when this phone holds no bound PQ half for it.
+     */
+    fun rotationCompanion(rotation: com.flagshipserver.app.core.AdminRootRotation, oldKey: Ed25519Sign, newEdSeed: ByteArray): RotationDraft? {
+        val user = rotation.username.lowercase()
+        val oldSign = rootSigner(user, "admin-root", oldKey, rotation.oldAdminRootPub) ?: return null
+        val newKey = Ed25519Sign(newEdSeed)
+        val newPub = PqHex.decode(rotation.newAdminRootPub.lowercase()) ?: return null
+        val mlSeed = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
+        return runCatching {
+            val st = PqTrust.Statement("admin-root", user, rotation.newAdminRootPub.lowercase(),
+                PqHex.encode(com.flagshipserver.app.core.pq.PqHybrid.mldsa65PublicKey(mlSeed)), System.currentTimeMillis())
+            val binding = PqTrust.signPqKeyBinding(st) { m ->
+                com.flagshipserver.app.core.pq.PqHybrid.hybridSignSplit(newPub, { newKey.sign(it) }, mlSeed, PqTrust.TAG_PQ_KEY_BINDING, m)
+            }
+            RotationDraft(com.flagshipserver.app.core.pq.PqAuthorityRecords.signRotation(rotation, binding, oldSign).toJson(), mlSeed)
+        }.getOrNull()
+    }
+
+    /** After `.com` accepted the rotation: keep the new root's ML-DSA seed as its key. */
+    fun keepRotatedRootSeed(username: String, newRootPubHex: String, draft: RotationDraft) {
+        runCatching { pqKeys?.importSeed("admin-root", username.lowercase(), newRootPubHex, draft.newMldsaSeed, System.currentTimeMillis()) }
+        draft.newMldsaSeed.fill(0)
+    }
 }
