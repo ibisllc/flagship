@@ -144,7 +144,9 @@ export class RetailClaimService {
     this.timer = null;
     await this.d.keys.stop();
     await this.d.peripheral.stop();
-    for (const s of this.sessions.values()) s.link.close();
+    for (const s of [...this.sessions.values()]) s.link.close();
+    this.mailboxLink?.close();
+    await this.d.peripheral.close?.();
   }
 
   /** Waits for every queued step (tests). */

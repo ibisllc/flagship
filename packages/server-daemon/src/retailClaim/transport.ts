@@ -4,8 +4,7 @@
 // `.com` mailbox keyed by a hash of the setup code (§15.1).
 //
 // Built here: the interfaces, an in-memory radio for tests (it runs the real fragmentation at a
-// BLE MTU), and the mailbox link. Still to build: the BlueZ GATT peripheral over D-Bus, testable
-// on Linux with BlueZ's virtual controller (btvirt over vhci).
+// BLE MTU), and the mailbox link. The radio itself is bluez.ts.
 
 import {
   BOX_CLAIM_MAILBOX_ID,
@@ -35,6 +34,8 @@ export interface ClaimPeripheral {
   /** Stops the advert. Links already open stay; the service closes the ones it no longer wants. */
   stop(): Promise<void>;
   onLink(cb: (link: ClaimLink) => void): void;
+  /** Tears the radio side down once the service stops (BlueZ: the GATT application). */
+  close?(): Promise<void>;
 }
 
 /** A default ATT MTU most phones negotiate up from; frames carry one flag byte. */
