@@ -335,6 +335,49 @@ public protocol FlagshipServerClient: Sendable {
     /// The account's plan ("free", "hobby" = Pro, "maker" = Pro Max) from
     /// `GET /api/users/:u/allowance` (account read token); nil when unknown.
     func accountTier(username: String) async throws -> String?
+
+    /// Retail box claim (docs/retail-box-setup.md §4 step 8): registers the box key from the claim
+    /// receipt under the recipe's AuthCode (`POST /api/box-claim/key`), before the Wi-Fi password leaves.
+    func registerBoxClaimKey(_ req: BoxClaimKeyRequest) async throws
+    /// The blind claim mailbox for the remote claim by setup code (`/api/box-claim/mailbox/<id>/<dir>`).
+    func postBoxClaimMailbox(mailboxId: String, dir: String, body: String) async throws
+    func readBoxClaimMailbox(mailboxId: String, dir: String, after: Int) async throws -> [BoxClaimMailboxMessage]
+}
+
+public extension FlagshipServerClient {
+    func registerBoxClaimKey(_ req: BoxClaimKeyRequest) async throws {
+        throw ScreensClientError.notImplemented("box claim key")
+    }
+    func postBoxClaimMailbox(mailboxId: String, dir: String, body: String) async throws {
+        throw ScreensClientError.notImplemented("box claim mailbox")
+    }
+    func readBoxClaimMailbox(mailboxId: String, dir: String, after: Int) async throws -> [BoxClaimMailboxMessage] {
+        throw ScreensClientError.notImplemented("box claim mailbox")
+    }
+}
+
+/// `POST /api/box-claim/key`: the fields of `flagship/box-claim-key/v1` and the admin signature.
+public struct BoxClaimKeyRequest: Codable, Sendable, Equatable {
+    public struct Key: Codable, Sendable, Equatable {
+        public let username: String
+        public let serial: String
+        public let serverDomain: String
+        public let stkPubHex: String
+        public let issuedAt: Int64
+        public init(username: String, serial: String, serverDomain: String, stkPubHex: String, issuedAt: Int64) {
+            self.username = username; self.serial = serial; self.serverDomain = serverDomain
+            self.stkPubHex = stkPubHex; self.issuedAt = issuedAt
+        }
+    }
+    public let key: Key
+    public let signature: String
+    public init(key: Key, signature: String) { self.key = key; self.signature = signature }
+}
+
+public struct BoxClaimMailboxMessage: Codable, Sendable, Equatable {
+    public let seq: Int
+    public let body: String
+    public init(seq: Int, body: String) { self.seq = seq; self.body = body }
 }
 
 public extension FlagshipServerClient {
@@ -2606,6 +2649,17 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return .init(ok: true, username: username, accountId: username, deviceId: req.device.deviceId, created: true)
     }
 
+    /// Box keys registered through `registerBoxClaimKey`, by AuthCode serial (first one wins, as `.com`).
+    public var boxClaimKeys: [String: BoxClaimKeyRequest] = [:]
+
+    public func registerBoxClaimKey(_ req: BoxClaimKeyRequest) async throws {
+        try await tick()
+        if let held = boxClaimKeys[req.key.serial], held.key.stkPubHex != req.key.stkPubHex {
+            throw ScreensClientError.http(status: 409, message: #"{"error":"another box key is already registered for this server","code":"box-key-already-registered"}"#)
+        }
+        if boxClaimKeys[req.key.serial] == nil { boxClaimKeys[req.key.serial] = req }
+    }
+
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
         try await tick()
         // Adding a server is admin-only on an admin-pinned account.
@@ -4638,6 +4692,30 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 }
 
 // MARK: - Abuse notices (docs/abuse-handling.md §4)
+
+extension LiveFlagshipServerClient {
+    public func registerBoxClaimKey(_ req: BoxClaimKeyRequest) async throws {
+        try await postJson("/api/box-claim/key", body: try JSONEncoder().encode(req))
+    }
+
+    public func postBoxClaimMailbox(mailboxId: String, dir: String, body: String) async throws {
+        try await postJson("/api/box-claim/mailbox/\(mailboxId)/\(dir)", body: try JSONEncoder().encode(["body": body]))
+    }
+
+    public func readBoxClaimMailbox(mailboxId: String, dir: String, after: Int) async throws -> [BoxClaimMailboxMessage] {
+        var c = URLComponents(url: baseUrl.appendingPathComponent("/api/box-claim/mailbox/\(mailboxId)/\(dir)"), resolvingAgainstBaseURL: false)!
+        c.queryItems = [URLQueryItem(name: "after", value: String(after))]
+        var req = URLRequest(url: c.url!)
+        req.httpMethod = "GET"
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        struct R: Decodable { let messages: [BoxClaimMailboxMessage]? }
+        return try JSONDecoder().decode(R.self, from: data).messages ?? []
+    }
+}
 
 extension LiveFlagshipServerClient {
     public func abuseNotices(username: String) async throws -> AbuseNoticesResponse {
