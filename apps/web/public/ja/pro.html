@@ -2,7 +2,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pro · Flagship</title>
-  <meta name="description" content="Flagship is free. Pro is the membership for people running real things — more public bandwidth, paid privately with just a username, no identity attached.">
+  <meta name="description" content="Flagship は無料です。Pro は本格的に運用する人のためのメンバーシップです。公開帯域が増え、ユーザー名だけで匿名に支払えます。身元は一切ひも付きません。">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -67,8 +67,7 @@
     <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"></rect><circle class="lg-ring" cx="32" cy="32" r="18"></circle><circle class="lg-core" cx="32" cy="32" r="16"></circle></svg>
     <span class="name">Flagship</span>
   </a>
-  <nav aria-label="メイン"><a href="/ja/">ホーム</a><a href="/privacy.html">Privacy</a>
-    <a href="/ja/security">セキュリティ</a></nav>
+  <nav aria-label="メイン"><a href="/ja/">ホーム</a><a href="/privacy.html">プライバシー</a><a href="/ja/security">セキュリティ</a></nav>
   <button type="button" class="theme-btn" data-theme-toggle="" aria-label="テーマを切り替える"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"></circle><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"></path></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"></path></svg></button>
 </header>
 
@@ -76,109 +75,97 @@
 
   <section class="page-hero">
     <h1>Flagship Pro</h1>
-    <p class="lede">Flagship is free — genuinely, with no nags and nothing held back. Pro is the membership for the few who are running <em>real</em> things: more public bandwidth, your own domain names, and a way to keep the project independent. All we ever need is a username. Not your name.</p>
+    <p class="lede">Flagship は本当に無料です。しつこい勧誘も機能制限もありません。Pro は<em>本格的な</em>運用をしている一部の人のためのメンバーシップです。公開帯域が増え、独自ドメインが使え、プロジェクトの独立を支えられます。必要なのはユーザー名だけ。あなたの名前は要りません。</p>
   </section>
 
   <div class="legal">
 
     <section>
-      <h2>Most people never need this</h2>
-      <p>Everything that runs on your hardware — your apps, data, storage, devices — is free, with no limits we impose. The only thing that costs us money is the shared pipe that carries your <strong>public</strong> traffic to visitors through our relay, so that's the only thing we meter. If your public traffic stays in personal-use range, you'll never see a charge — you may never even notice there's a paid tier at all.</p>
+      <h2>ほとんどの人には必要ありません</h2>
+      <p>あなたのハードウェアで動くもの（アプリ、データ、ストレージ、デバイス）はすべて無料で、私たちが課す制限はありません。費用がかかるのは、<strong>公開</strong>トラフィックをリレー経由で訪問者に届ける共有の回線だけなので、計測するのもそれだけです。公開トラフィックが個人利用の範囲なら料金は発生せず、有料プランがあることに気づかないかもしれません。</p>
       <table class="t">
-        <tbody><tr><th>Tier</th><th>Public bandwidth / month</th><th>Custom domains</th><th>Price</th></tr>
-        <tr><td><strong>Free</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">(plenty for a personal site, an album, a chat for friends)</span></td><td>—</td><td>$0</td></tr>
-        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB, then $0.05/GB</td><td>1</td><td>$10 / month (or buy months at a time)</td></tr>
-        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB, then $0.05/GB</td><td>Unlimited</td><td>$20 / month (or buy months at a time)</td></tr>
+        <tbody><tr><th>プラン</th><th>公開帯域 / 月</th><th>独自ドメイン</th><th>料金</th></tr>
+        <tr><td><strong>無料</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">（個人サイト、アルバム、友人とのチャットには十分）</span></td><td>—</td><td>$0</td></tr>
+        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB、超過分は $0.05/GB</td><td>1</td><td>月額 $10（まとめて数か月分の購入も可）</td></tr>
+        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB、超過分は $0.05/GB</td><td>無制限</td><td>月額 $20（まとめて数か月分の購入も可）</td></tr>
       </tbody></table>
-      <p>Run as many servers, apps, and devices as you like — those are never counted. Pro is for when your public traffic genuinely outgrows personal use, or when you simply want to back the project.</p>
-      <p style="color:var(--text-muted)">One-off apps from the Flagship marketplace are a separate thing — you buy those when you want them, not as a subscription. Pro is about bandwidth headroom, your own domains, and keeping the lights on.</p>
-      <p>A custom domain (<code>www.example.com</code> instead of <code>&lt;server&gt;.&lt;you&gt;.flagship.services</code>) is added from the service page in the app. You prove it's yours by pointing a CNAME record from it to your Flagship address; we route it only while your plan includes it, and your box still holds the certificate, so we still can't read the traffic.</p>
+      <p>サーバー、アプリ、デバイスはいくつでも使えます。数は一切数えません。Pro は公開トラフィックが本当に個人利用を超えたとき、または単にプロジェクトを応援したいときのためのものです。</p>
+      <p style="color:var(--text-muted)">Flagship マーケットプレイスの単品アプリは別物です。必要なときに買うもので、サブスクリプションではありません。Pro は帯域の余裕、独自ドメイン、そしてプロジェクトの運営を支えるためのものです。</p>
+      <p>独自ドメイン（<code>&lt;server&gt;.&lt;you&gt;.flagship.services</code> の代わりに <code>www.example.com</code>）は、アプリのサービスページから追加します。そのドメインから Flagship のアドレスへ CNAME レコードを向けることで所有を証明します。プランに含まれている間だけルーティングし、証明書はあなたのボックスが持ち続けるので、私たちは通信を読めません。</p>
     </section>
 
     <section>
-      <h2 id="privacy">A note on paying privately</h2>
+      <h2 id="privacy">匿名で支払うことについて</h2>
       <div class="callout">
-        <h3>If you pay with a card, you become identifiable.</h3>
-        <p>We never ask your name and never see your card. But your card network and bank <strong>do</strong> keep a record that you paid Flagship — and an adversary who could compel those records could tie your real identity to your account. That's the nature of card rails; it's outside our walls.</p>
-        <p>If that's in your threat model, <strong>pay with Monero instead.</strong> No identity is ever attached — we only learn your username, which you chose, and which says nothing about who you are.</p>
+        <h3>カードで支払うと、身元が特定できるようになります。</h3>
+        <p>私たちは名前を尋ねず、カード情報も見ません。しかしカードネットワークと銀行は、あなたが Flagship に支払った記録を<strong>残します</strong>。その記録を強制的に入手できる相手なら、あなたの実名とアカウントを結び付けられます。カード決済の性質上、これは私たちの手の届かないところです。</p>
+        <p>それが脅威モデルに含まれるなら、<strong>代わりに Monero で支払ってください。</strong>身元は一切ひも付きません。私たちが知るのはあなたが選んだユーザー名だけで、それはあなたが誰かを何も語りません。</p>
       </div>
-      <p>It's the same content-blind promise as the rest of Flagship: your box terminates its own TLS, so we can't read your traffic; and your payment, done right, leaves no trail back to you.</p>
+      <p>Flagship の他の部分と同じ、内容を見ないという約束です。TLS はあなたのボックスで終端するので私たちは通信を読めません。支払いも正しく行えば、あなたにたどり着く痕跡は残りません。</p>
     </section>
 
     <section>
-      <h2>How to go Pro</h2>
-      <p>It's hand-operated for now — on purpose. There's no automated checkout collecting your details. You send money, you tell us your <strong>username</strong>, and we flip your account to Pro by hand.</p>
+      <h2>Pro にするには</h2>
+      <p>今のところ、あえて手作業で行っています。あなたの情報を集める自動決済はありません。お金を送り、<strong>ユーザー名</strong>を伝えてもらえれば、私たちが手作業でアカウントを Pro にします。</p>
 
-      <h3>1 · Tell us your username</h3>
-      <p>The username on your account (the one in <code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code>). That's the only thing we need to find your account. Include it with your payment.</p>
+      <h3>1 · ユーザー名を伝える</h3>
+      <p>アカウントのユーザー名（<code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code> の部分）です。アカウントを見つけるのに必要なのはこれだけです。支払いの際に添えてください。</p>
 
-      <h3>2 · Send the money</h3>
+      <h3>2 · 送金する</h3>
       <div class="pay-grid">
         <div class="pay-card">
-          <h4>Monero (XMR) <span class="priv good">private</span></h4>
-          <p>Send the equivalent of your months to:</p>
-          <p><code class="addr">[ your Monero address — fill in before publishing ]</code></p>
-          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">Then send your username + the transaction key to <code class="addr">harry@flagship.services</code> so we can match it. (Use a throwaway address if you'd rather not link even that.)</p>
+          <h4>Monero (XMR) <span class="priv good">匿名</span></h4>
+          <p>希望の月数に相当する額を次の宛先へ送ってください：</p>
+          <p><code class="addr">[ Monero アドレス：公開前に記入 ]</code></p>
+          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">その後、ユーザー名とトランザクションキーを <code class="addr">harry@flagship.services</code> に送ってください。照合に使います。（それすら結び付けたくない場合は使い捨てのアドレスを使ってください。）</p>
         </div>
         <div class="pay-card">
-          <h4>Card / Stripe <span class="priv meh">convenient, less private</span></h4>
-          <p>One-click card checkout. Convenient — but see the note above: the payment processor will know you're a customer.</p>
-          <form id="checkout-form" class="voucher-form" autocomplete="off">
-            <label for="c-username">Your username</label>
-            <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none">
-            <label for="c-tier">Plan</label>
-            <select id="c-tier" name="tier">
-              <option value="hobby">Pro — 250 GB / month</option>
-              <option value="maker">Pro Max — 500 GB / month</option>
-            </select>
-            <button type="submit" class="btn">Continue to card checkout</button>
-            <p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
+          <h4>カード / Stripe <span class="priv meh">手軽だが匿名性は低い</span></h4>
+          <p>ワンクリックのカード決済。手軽ですが、上の注意をご覧ください。決済代行業者はあなたが顧客だと知ることになります。</p>
+          <form id="checkout-form" class="voucher-form" autocomplete="off"><label for="c-username">ユーザー名</label> <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="c-tier">プラン</label><select id="c-tier" name="tier">
+              <option value="hobby">Pro：250 GB / 月</option>
+              <option value="maker">Pro Max：500 GB / 月</option>
+            </select><button type="submit" class="btn">カード決済へ進む</button><p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
           </form>
         </div>
         <div class="pay-card">
-          <h4>A voucher code <span class="priv good">private</span></h4>
-          <p>If you were handed a Flagship voucher code, redeem it below. A voucher is just prepaid Pro with no identity attached — whoever holds the code redeems it against any username.</p>
-          <form id="voucher-form" class="voucher-form" autocomplete="off">
-            <label for="v-username">Your username</label>
-            <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none">
-            <label for="v-code">Voucher code</label>
-            <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters">
-            <button type="submit" class="btn">Redeem</button>
-            <p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
+          <h4>バウチャーコード <span class="priv good">匿名</span></h4>
+          <p>Flagship のバウチャーコードを受け取ったら、下で引き換えてください。バウチャーは身元のひも付かない前払いの Pro です。コードを持っている人なら誰でも、任意のユーザー名に対して引き換えられます。</p>
+          <form id="voucher-form" class="voucher-form" autocomplete="off"><label for="v-username">ユーザー名</label> <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="v-code">バウチャーコード</label> <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters"> <button type="submit" class="btn">引き換える</button><p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
           </form>
         </div>
       </div>
 
       <div id="pro-messages" hidden="">
-        <p data-msg="bad-username">Enter your username (3–30 lowercase letters or digits).</p>
-        <p data-msg="redeeming">Redeeming…</p>
-        <p data-msg="redeemed-pro">Redeemed — Pro is now active on “<span data-arg=""></span>”. Your higher allowance applies within a few minutes.</p>
-        <p data-msg="redeemed-max">Redeemed — Pro Max (500 GB) is now active on “<span data-arg=""></span>”. Your higher allowance applies within a few minutes.</p>
-        <p data-msg="redeem-failed">That code couldn't be redeemed.</p>
-        <p data-msg="network">Network error — please try again.</p>
-        <p data-msg="checkout-starting">Starting checkout…</p>
-        <p data-msg="checkout-off">Card checkout isn't switched on yet — use Monero or a voucher above.</p>
-        <p data-msg="checkout-failed">Couldn't start checkout.</p>
+        <p data-msg="bad-username">ユーザー名を入力してください（小文字の英字または数字で 3〜30 文字）。</p>
+        <p data-msg="redeeming">引き換え中…</p>
+        <p data-msg="redeemed-pro">引き換え完了：「<span data-arg=""></span>」で Pro が有効になりました。より大きな上限は数分以内に適用されます。</p>
+        <p data-msg="redeemed-max">引き換え完了：「<span data-arg=""></span>」で Pro Max（500 GB）が有効になりました。より大きな上限は数分以内に適用されます。</p>
+        <p data-msg="redeem-failed">そのコードは引き換えられませんでした。</p>
+        <p data-msg="network">ネットワークエラーです。もう一度お試しください。</p>
+        <p data-msg="checkout-starting">決済を開始しています…</p>
+        <p data-msg="checkout-off">カード決済はまだ有効になっていません。上の Monero かバウチャーをお使いください。</p>
+        <p data-msg="checkout-failed">決済を開始できませんでした。</p>
       </div>
 
-      <h3>3 · We turn on Pro</h3>
-      <p>Once the money lands, we set your account to Pro for the period you paid. Your higher allowance applies within a few minutes of the change. If anything's unclear, write to <code class="addr">harry@flagship.services</code>.</p>
+      <h3>3 · Pro を有効にします</h3>
+      <p>入金を確認したら、支払われた期間だけアカウントを Pro にします。より大きな上限は変更から数分以内に適用されます。不明な点があれば <code class="addr">harry@flagship.services</code> までご連絡ください。</p>
     </section>
 
     <section id="names">
-      <h2>Changing your name</h2>
-      <p>Every account starts with a random name. You can switch to a name of your own once, any time, by buying a single-use voucher:</p>
+      <h2>名前を変更する</h2>
+      <p>アカウントは最初、ランダムな名前で始まります。使い切りのバウチャーを買えば、いつでも一度だけ好きな名前に変えられます：</p>
       <table class="t">
-        <tbody><tr><th>Voucher</th><th>What it does</th><th>Price</th></tr>
-        <tr><td><strong>Name change</strong></td><td>Move your account to any free name</td><td>$10, once</td></tr>
-        <tr><td><strong>Dibs claim</strong></td><td>Take the name that matches a <code>.com</code> you've proven you control (<a href="/ja/dibs">how dibs works</a>)</td><td>$20, once</td></tr>
+        <tbody><tr><th>バウチャー</th><th>内容</th><th>料金</th></tr>
+        <tr><td><strong>名前の変更</strong></td><td>アカウントを空いている任意の名前に移します</td><td>$10（1 回）</td></tr>
+        <tr><td><strong>優先権の請求</strong></td><td>管理を証明した <code>.com</code> と一致する名前を取得します（<a href="/ja/dibs">優先権の仕組み</a>）</td><td>$20（1 回）</td></tr>
       </tbody></table>
-      <p>Buy them exactly like Pro — Monero or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.</p>
+      <p>Pro と同じ方法（Monero またはカード）で購入し、ユーザー名の代わりにどのバウチャーが欲しいかを伝えてください。コードをお送りするので、名前を変更するときにアプリで入力します。バウチャーは引き換えるまでどのアカウントにもひも付かず、変更が完了したときにだけ消費されます。名前の変更はアカウントごとに 30 日に 1 回まで。完了した名前の変更は返金されません。</p>
     </section>
 
     <section>
-      <h2>Why pay at all, if you're under the limit?</h2>
-      <p>You don't have to — most people never will. But Flagship runs on no ads, no venture capital, and no selling of your data; the relay, DNS, and certificates cost real money to keep up. A Pro membership (even if you never touch the bandwidth) is the cleanest way to keep the project independent and the free tier free for everyone else. Same price, same privacy options — buy it any time, not just when you hit a cap.</p>
+      <h2>上限以下なら、なぜ払うのですか？</h2>
+      <p>払う必要はありません。ほとんどの人は払わないでしょう。ただ Flagship は広告もベンチャー資金もなく、データを売ることもなく運営しています。リレー、DNS、証明書の維持には実際にお金がかかります。Pro メンバーシップは（帯域を使わなくても）プロジェクトの独立を保ち、無料プランを皆にとって無料のままにする最もすっきりした方法です。同じ料金、同じプライバシーの選択肢で、上限に達したときだけでなくいつでも購入できます。</p>
     </section>
 
   </div>

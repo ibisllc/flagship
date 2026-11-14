@@ -2,7 +2,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pro · Flagship</title>
-  <meta name="description" content="Flagship is free. Pro is the membership for people running real things — more public bandwidth, paid privately with just a username, no identity attached.">
+  <meta name="description" content="Flagship ist kostenlos. Pro ist die Mitgliedschaft für alle, die echte Dinge betreiben: mehr öffentliche Bandbreite, privat bezahlt mit nur einem Benutzernamen, ohne Identität.">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -67,8 +67,7 @@
     <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"></rect><circle class="lg-ring" cx="32" cy="32" r="18"></circle><circle class="lg-core" cx="32" cy="32" r="16"></circle></svg>
     <span class="name">Flagship</span>
   </a>
-  <nav aria-label="Hauptnavigation"><a href="/de/">Start</a><a href="/privacy.html">Privacy</a>
-    <a href="/de/security">Sicherheit</a></nav>
+  <nav aria-label="Hauptnavigation"><a href="/de/">Start</a><a href="/privacy.html">Datenschutz</a><a href="/de/security">Sicherheit</a></nav>
   <button type="button" class="theme-btn" data-theme-toggle="" aria-label="Design wechseln"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"></circle><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"></path></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"></path></svg></button>
 </header>
 
@@ -76,109 +75,97 @@
 
   <section class="page-hero">
     <h1>Flagship Pro</h1>
-    <p class="lede">Flagship is free — genuinely, with no nags and nothing held back. Pro is the membership for the few who are running <em>real</em> things: more public bandwidth, your own domain names, and a way to keep the project independent. All we ever need is a username. Not your name.</p>
+    <p class="lede">Flagship ist kostenlos, wirklich: kein Nerven, nichts zurückgehalten. Pro ist die Mitgliedschaft für die wenigen, die <em>echte</em> Dinge betreiben: mehr öffentliche Bandbreite, eigene Domains und ein Weg, das Projekt unabhängig zu halten. Wir brauchen immer nur einen Benutzernamen. Nicht deinen Namen.</p>
   </section>
 
   <div class="legal">
 
     <section>
-      <h2>Most people never need this</h2>
-      <p>Everything that runs on your hardware — your apps, data, storage, devices — is free, with no limits we impose. The only thing that costs us money is the shared pipe that carries your <strong>public</strong> traffic to visitors through our relay, so that's the only thing we meter. If your public traffic stays in personal-use range, you'll never see a charge — you may never even notice there's a paid tier at all.</p>
+      <h2>Die meisten brauchen das nie</h2>
+      <p>Alles, was auf deiner Hardware läuft (deine Apps, Daten, Speicher, Geräte), ist kostenlos, ohne Grenzen von uns. Das Einzige, was uns Geld kostet, ist die gemeinsame Leitung, die deinen <strong>öffentlichen</strong> Verkehr über unser Relay zu Besuchern bringt, deshalb messen wir nur das. Bleibt dein öffentlicher Verkehr im privaten Rahmen, zahlst du nie etwas und merkst vielleicht nicht einmal, dass es eine kostenpflichtige Stufe gibt.</p>
       <table class="t">
-        <tbody><tr><th>Tier</th><th>Public bandwidth / month</th><th>Custom domains</th><th>Price</th></tr>
-        <tr><td><strong>Free</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">(plenty for a personal site, an album, a chat for friends)</span></td><td>—</td><td>$0</td></tr>
-        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB, then $0.05/GB</td><td>1</td><td>$10 / month (or buy months at a time)</td></tr>
-        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB, then $0.05/GB</td><td>Unlimited</td><td>$20 / month (or buy months at a time)</td></tr>
+        <tbody><tr><th>Stufe</th><th>Öffentliche Bandbreite / Monat</th><th>Eigene Domains</th><th>Preis</th></tr>
+        <tr><td><strong>Kostenlos</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">(reichlich für eine private Website, ein Album, einen Chat mit Freunden)</span></td><td>—</td><td>$0</td></tr>
+        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB, danach 0,05 $/GB</td><td>1</td><td>10 $ / Monat (oder mehrere Monate auf einmal)</td></tr>
+        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB, danach 0,05 $/GB</td><td>Unbegrenzt</td><td>20 $ / Monat (oder mehrere Monate auf einmal)</td></tr>
       </tbody></table>
-      <p>Run as many servers, apps, and devices as you like — those are never counted. Pro is for when your public traffic genuinely outgrows personal use, or when you simply want to back the project.</p>
-      <p style="color:var(--text-muted)">One-off apps from the Flagship marketplace are a separate thing — you buy those when you want them, not as a subscription. Pro is about bandwidth headroom, your own domains, and keeping the lights on.</p>
-      <p>A custom domain (<code>www.example.com</code> instead of <code>&lt;server&gt;.&lt;you&gt;.flagship.services</code>) is added from the service page in the app. You prove it's yours by pointing a CNAME record from it to your Flagship address; we route it only while your plan includes it, and your box still holds the certificate, so we still can't read the traffic.</p>
+      <p>Betreibe so viele Server, Apps und Geräte, wie du willst: Sie werden nie gezählt. Pro ist für den Fall, dass dein öffentlicher Verkehr wirklich über die private Nutzung hinauswächst, oder wenn du das Projekt einfach unterstützen willst.</p>
+      <p style="color:var(--text-muted)">Einzelne Apps aus dem Flagship-Marktplatz sind etwas anderes: Du kaufst sie, wenn du sie willst, nicht im Abo. Bei Pro geht es um Bandbreitenreserve, eigene Domains und darum, das Licht anzulassen.</p>
+      <p>Eine eigene Domain (<code>www.example.com</code> statt <code>&lt;server&gt;.&lt;you&gt;.flagship.services</code>) fügst du auf der Dienstseite in der App hinzu. Du beweist, dass sie dir gehört, indem du einen CNAME-Eintrag von ihr auf deine Flagship-Adresse setzt; wir leiten sie nur weiter, solange dein Tarif sie enthält, und deine Box behält das Zertifikat, also können wir den Verkehr weiterhin nicht lesen.</p>
     </section>
 
     <section>
-      <h2 id="privacy">A note on paying privately</h2>
+      <h2 id="privacy">Ein Hinweis zum privaten Bezahlen</h2>
       <div class="callout">
-        <h3>If you pay with a card, you become identifiable.</h3>
-        <p>We never ask your name and never see your card. But your card network and bank <strong>do</strong> keep a record that you paid Flagship — and an adversary who could compel those records could tie your real identity to your account. That's the nature of card rails; it's outside our walls.</p>
-        <p>If that's in your threat model, <strong>pay with Monero instead.</strong> No identity is ever attached — we only learn your username, which you chose, and which says nothing about who you are.</p>
+        <h3>Wenn du mit Karte zahlst, wirst du identifizierbar.</h3>
+        <p>Wir fragen nie nach deinem Namen und sehen nie deine Karte. Aber dein Kartennetzwerk und deine Bank <strong>speichern</strong>, dass du Flagship bezahlt hast, und ein Gegner, der diese Daten anfordern kann, könnte deine echte Identität mit deinem Konto verknüpfen. So funktionieren Kartenzahlungen; das liegt außerhalb unserer Mauern.</p>
+        <p>Wenn das zu deinem Bedrohungsmodell gehört, <strong>zahl stattdessen mit Monero.</strong> Es wird nie eine Identität verknüpft: Wir kennen nur deinen Benutzernamen, den du gewählt hast und der nichts darüber verrät, wer du bist.</p>
       </div>
-      <p>It's the same content-blind promise as the rest of Flagship: your box terminates its own TLS, so we can't read your traffic; and your payment, done right, leaves no trail back to you.</p>
+      <p>Es ist dasselbe inhaltsblinde Versprechen wie im Rest von Flagship: Deine Box beendet ihr eigenes TLS, also können wir deinen Verkehr nicht lesen; und deine Zahlung hinterlässt, richtig gemacht, keine Spur zu dir.</p>
     </section>
 
     <section>
-      <h2>How to go Pro</h2>
-      <p>It's hand-operated for now — on purpose. There's no automated checkout collecting your details. You send money, you tell us your <strong>username</strong>, and we flip your account to Pro by hand.</p>
+      <h2>So wirst du Pro</h2>
+      <p>Vorerst läuft das von Hand, mit Absicht. Es gibt keinen automatischen Bezahlvorgang, der deine Daten sammelt. Du schickst Geld, nennst uns deinen <strong>Benutzernamen</strong>, und wir stellen dein Konto von Hand auf Pro um.</p>
 
-      <h3>1 · Tell us your username</h3>
-      <p>The username on your account (the one in <code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code>). That's the only thing we need to find your account. Include it with your payment.</p>
+      <h3>1 · Nenn uns deinen Benutzernamen</h3>
+      <p>Der Benutzername deines Kontos (der in <code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code>). Mehr brauchen wir nicht, um dein Konto zu finden. Gib ihn bei der Zahlung an.</p>
 
-      <h3>2 · Send the money</h3>
+      <h3>2 · Schick das Geld</h3>
       <div class="pay-grid">
         <div class="pay-card">
-          <h4>Monero (XMR) <span class="priv good">private</span></h4>
-          <p>Send the equivalent of your months to:</p>
-          <p><code class="addr">[ your Monero address — fill in before publishing ]</code></p>
-          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">Then send your username + the transaction key to <code class="addr">harry@flagship.services</code> so we can match it. (Use a throwaway address if you'd rather not link even that.)</p>
+          <h4>Monero (XMR) <span class="priv good">privat</span></h4>
+          <p>Schick den Gegenwert deiner Monate an:</p>
+          <p><code class="addr">[ deine Monero-Adresse: vor dem Veröffentlichen eintragen ]</code></p>
+          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">Schick danach deinen Benutzernamen und den Transaktionsschlüssel an <code class="addr">harry@flagship.services</code>, damit wir sie zuordnen können. (Nimm eine Wegwerfadresse, wenn du nicht einmal das verknüpfen willst.)</p>
         </div>
         <div class="pay-card">
-          <h4>Card / Stripe <span class="priv meh">convenient, less private</span></h4>
-          <p>One-click card checkout. Convenient — but see the note above: the payment processor will know you're a customer.</p>
-          <form id="checkout-form" class="voucher-form" autocomplete="off">
-            <label for="c-username">Your username</label>
-            <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none">
-            <label for="c-tier">Plan</label>
-            <select id="c-tier" name="tier">
-              <option value="hobby">Pro — 250 GB / month</option>
-              <option value="maker">Pro Max — 500 GB / month</option>
-            </select>
-            <button type="submit" class="btn">Continue to card checkout</button>
-            <p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
+          <h4>Karte / Stripe <span class="priv meh">bequem, weniger privat</span></h4>
+          <p>Kartenzahlung mit einem Klick. Bequem, aber beachte den Hinweis oben: Der Zahlungsdienstleister weiß dann, dass du Kunde bist.</p>
+          <form id="checkout-form" class="voucher-form" autocomplete="off"><label for="c-username">Dein Benutzername</label> <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="c-tier">Tarif</label><select id="c-tier" name="tier">
+              <option value="hobby">Pro: 250 GB / Monat</option>
+              <option value="maker">Pro Max: 500 GB / Monat</option>
+            </select><button type="submit" class="btn">Weiter zur Kartenzahlung</button><p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
           </form>
         </div>
         <div class="pay-card">
-          <h4>A voucher code <span class="priv good">private</span></h4>
-          <p>If you were handed a Flagship voucher code, redeem it below. A voucher is just prepaid Pro with no identity attached — whoever holds the code redeems it against any username.</p>
-          <form id="voucher-form" class="voucher-form" autocomplete="off">
-            <label for="v-username">Your username</label>
-            <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none">
-            <label for="v-code">Voucher code</label>
-            <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters">
-            <button type="submit" class="btn">Redeem</button>
-            <p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
+          <h4>Ein Gutscheincode <span class="priv good">privat</span></h4>
+          <p>Wenn du einen Flagship-Gutscheincode bekommen hast, löse ihn unten ein. Ein Gutschein ist einfach vorausbezahltes Pro ohne Identität: Wer den Code hat, löst ihn für einen beliebigen Benutzernamen ein.</p>
+          <form id="voucher-form" class="voucher-form" autocomplete="off"><label for="v-username">Dein Benutzername</label> <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="v-code">Gutscheincode</label> <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters"> <button type="submit" class="btn">Einlösen</button><p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
           </form>
         </div>
       </div>
 
       <div id="pro-messages" hidden="">
-        <p data-msg="bad-username">Enter your username (3–30 lowercase letters or digits).</p>
-        <p data-msg="redeeming">Redeeming…</p>
-        <p data-msg="redeemed-pro">Redeemed — Pro is now active on “<span data-arg=""></span>”. Your higher allowance applies within a few minutes.</p>
-        <p data-msg="redeemed-max">Redeemed — Pro Max (500 GB) is now active on “<span data-arg=""></span>”. Your higher allowance applies within a few minutes.</p>
-        <p data-msg="redeem-failed">That code couldn't be redeemed.</p>
-        <p data-msg="network">Network error — please try again.</p>
-        <p data-msg="checkout-starting">Starting checkout…</p>
-        <p data-msg="checkout-off">Card checkout isn't switched on yet — use Monero or a voucher above.</p>
-        <p data-msg="checkout-failed">Couldn't start checkout.</p>
+        <p data-msg="bad-username">Gib deinen Benutzernamen ein (3–30 Kleinbuchstaben oder Ziffern).</p>
+        <p data-msg="redeeming">Wird eingelöst…</p>
+        <p data-msg="redeemed-pro">Eingelöst: Pro ist jetzt für „<span data-arg=""></span>“ aktiv. Dein höheres Kontingent gilt in wenigen Minuten.</p>
+        <p data-msg="redeemed-max">Eingelöst: Pro Max (500 GB) ist jetzt für „<span data-arg=""></span>“ aktiv. Dein höheres Kontingent gilt in wenigen Minuten.</p>
+        <p data-msg="redeem-failed">Dieser Code konnte nicht eingelöst werden.</p>
+        <p data-msg="network">Netzwerkfehler – bitte versuch es noch einmal.</p>
+        <p data-msg="checkout-starting">Bezahlvorgang wird gestartet…</p>
+        <p data-msg="checkout-off">Die Kartenzahlung ist noch nicht eingeschaltet – nutze Monero oder einen Gutschein oben.</p>
+        <p data-msg="checkout-failed">Der Bezahlvorgang konnte nicht gestartet werden.</p>
       </div>
 
-      <h3>3 · We turn on Pro</h3>
-      <p>Once the money lands, we set your account to Pro for the period you paid. Your higher allowance applies within a few minutes of the change. If anything's unclear, write to <code class="addr">harry@flagship.services</code>.</p>
+      <h3>3 · Wir schalten Pro ein</h3>
+      <p>Sobald das Geld da ist, stellen wir dein Konto für den bezahlten Zeitraum auf Pro. Dein höheres Kontingent gilt wenige Minuten nach der Umstellung. Wenn etwas unklar ist, schreib an <code class="addr">harry@flagship.services</code>.</p>
     </section>
 
     <section id="names">
-      <h2>Changing your name</h2>
-      <p>Every account starts with a random name. You can switch to a name of your own once, any time, by buying a single-use voucher:</p>
+      <h2>Deinen Namen ändern</h2>
+      <p>Jedes Konto beginnt mit einem zufälligen Namen. Du kannst einmal, jederzeit, zu einem eigenen Namen wechseln, indem du einen Einmalgutschein kaufst:</p>
       <table class="t">
-        <tbody><tr><th>Voucher</th><th>What it does</th><th>Price</th></tr>
-        <tr><td><strong>Name change</strong></td><td>Move your account to any free name</td><td>$10, once</td></tr>
-        <tr><td><strong>Dibs claim</strong></td><td>Take the name that matches a <code>.com</code> you've proven you control (<a href="/de/dibs">how dibs works</a>)</td><td>$20, once</td></tr>
+        <tbody><tr><th>Gutschein</th><th>Was er tut</th><th>Preis</th></tr>
+        <tr><td><strong>Namensänderung</strong></td><td>Zieht dein Konto auf einen beliebigen freien Namen um</td><td>10 $, einmalig</td></tr>
+        <tr><td><strong>Vorrecht-Anspruch</strong></td><td>Nimmt den Namen, der zu einer <code>.com</code> passt, deren Kontrolle du bewiesen hast (<a href="/de/dibs">so funktioniert das Vorrecht</a>)</td><td>20 $, einmalig</td></tr>
       </tbody></table>
-      <p>Buy them exactly like Pro — Monero or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.</p>
+      <p>Kauf sie genau wie Pro (Monero oder Karte) und sag statt eines Benutzernamens, welchen Gutschein du willst. Wir schicken dir einen Code; den gibst du in der App ein, wenn du deinen Namen änderst. Ein Gutschein ist an kein Konto gebunden, bis er eingelöst wird, und wird erst verbraucht, wenn die Änderung durchgeht. Eine Namensänderung pro Konto alle 30 Tage. Erfolgte Namensänderungen werden nicht erstattet.</p>
     </section>
 
     <section>
-      <h2>Why pay at all, if you're under the limit?</h2>
-      <p>You don't have to — most people never will. But Flagship runs on no ads, no venture capital, and no selling of your data; the relay, DNS, and certificates cost real money to keep up. A Pro membership (even if you never touch the bandwidth) is the cleanest way to keep the project independent and the free tier free for everyone else. Same price, same privacy options — buy it any time, not just when you hit a cap.</p>
+      <h2>Warum zahlen, wenn du unter dem Limit bist?</h2>
+      <p>Musst du nicht – die meisten werden es nie tun. Aber Flagship läuft ohne Werbung, ohne Risikokapital und ohne Verkauf deiner Daten; Relay, DNS und Zertifikate kosten echtes Geld. Eine Pro-Mitgliedschaft (auch wenn du die Bandbreite nie brauchst) ist der sauberste Weg, das Projekt unabhängig und die kostenlose Stufe für alle kostenlos zu halten. Gleicher Preis, gleiche Datenschutzoptionen – kauf sie jederzeit, nicht erst, wenn du an eine Grenze stößt.</p>
     </section>
 
   </div>
