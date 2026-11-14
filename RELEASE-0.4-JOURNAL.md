@@ -183,7 +183,15 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-13 Retail design merged (`c69d039aa`); owner questions Q1-Q10 in the doc §end.
 - 2026-11-13 Payments design merged (`8faecc2ec`); owner questions in its §9. Both design agents done.
 - 2026-11-13 Payment decisions: Monero only, no refunds, no cash. Social tab prototype published (U3) for critique.
+- 2026-11-13 Owner: likes the Social prototype; fold the feature branches into 0.4; keep sub-agents building while
+  decisions are discussed. Started 5 agents, each on its own branch off release/0.4: `0.4/fold-features`
+  (marketplace, custom-names, custom-domains, outbound-proxy), `0.4/security-fixes` (health hybrid signing, gpud,
+  keyd revocation freshness, revoked cert), `0.4/social-ios` (U2+U3 with today's features + docs/social-tab.md),
+  `0.4/small-fixes` (F9 client items, F10, F12), `0.4/direct-access` (F1 steps 1-2). Webapp shell bumps happen at
+  merge only.
 
 ## Resume point
 
-Waiting on the owner's answers to Q1-Q4. Meanwhile: S1 (advisor sweep, read-only agent) and P3 (gym test CA) run.
+Merge each agent branch as it reports (rebase onto release/0.4, tsc + touched tests, fast-forward, delete the
+branch). The fold lands first if possible; others rebase after it. Owner open questions: see the list given
+2026-11-13 (calls D1-D4, retail Q1-Q10, payments §9 rest, advisor owner decisions, P1 YubiKey, Fly test-CA app).
