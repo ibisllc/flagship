@@ -8415,5 +8415,96 @@
     "pages": [
       "marketplace/index.html"
     ]
+  },
+  "sd770c11946": {
+    "en": "Changing your name",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "se3bbf45f56": {
+    "en": "Every account starts with a random name. You can switch to a name of your own once, any time, by buying a single-use voucher:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s5e0a186ef5": {
+    "en": "Voucher",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s3a0f257497": {
+    "en": "What it does",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s4d0cde38e4": {
+    "en": "<1>Name change</1>",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s122119fa55": {
+    "en": "Move your account to any free name",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s2e1f1fa62f": {
+    "en": "$10, once",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s9e036c4d79": {
+    "en": "<1>Dibs claim</1>",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s444cabe91c": {
+    "en": "Take the name that matches a <1>.com</1> you've proven you control (<2>how dibs works</2>)",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      ".com"
+    ],
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s3be3110d28": {
+    "en": "$20, once",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s959a6a5cd8": {
+    "en": "Buy them exactly like Pro — cash by mail, Monero, or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
   }
 }
