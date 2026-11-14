@@ -116,7 +116,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       Rest (store drip, iOS in-app vs web, Stripe vs reseller, caps, marketplace cut, prices) to discuss. Then: fold the branches, voucher core + box stash, Stripe, stores, Monero, paid apps. Was: (Q3): fold `feat/marketplace` (62 predicted conflicts; webapp shell above main's) and the
       children Q3 names onto `release/0.4`; Pro payments + anonymous vouchers end to end on all three apps.
 - [ ] F3 Calls: build `docs/voici-calls.md` after the owner settles D1-D4 (plus its three voi.ci page fixes in the 0.4 list).
-- [ ] F4 Retail box setup (Q2): DESIGN v2 merged 2026-11-14 (Bluetooth-first, app opens first, only-one-advert rule, 10-min window, ONE timed power press, Ethernet advised, internet key check, 5-press reset, no hardware ids at .com, printed code = optional Verified tier; partner checklist H1-H7). Superseded v1 text: design `docs/retail-box-setup.md` (`c69d039aa`): printed 100-bit claim code (QR + 20 chars)
+- [~] F4 (PHASE 1 merged 2026-11-14: `flagship/box-claim/v1` + vectors, box claim state machine/button/BLE interface/network diagnosis on fakes, .com key pre-registration + blind mailbox, D1 0134, e2e tests. NOT built: BlueZ GATT, real wipe/recovery partition, Release order, daemon wiring, reset-window push, Swift/Kotlin/Rust ports, phone UI. Owner Qs below.) Retail box setup (Q2): DESIGN v2 merged 2026-11-14 (Bluetooth-first, app opens first, only-one-advert rule, 10-min window, ONE timed power press, Ethernet advised, internet key check, 5-press reset, no hardware ids at .com, printed code = optional Verified tier; partner checklist H1-H7). Superseded v1 text: design `docs/retail-box-setup.md` (`c69d039aa`): printed 100-bit claim code (QR + 20 chars)
       keys a local-only X-Wing handshake (`flagship/box-claim/v1`), recipe as consent, box-signed receipt pins the
       server key, 5-press reset window; no NFC/first-come in v1; drop `box_serials`. Owner answers its Q1-Q10, then build
       (phase 1 software, testable on a VM; doubles as a preinstalled image for DIY metal).
@@ -258,6 +258,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `LiveScreensClient.swift:239`; webapp `webappShareServerFlows` share-notice tests fail. Fix agent started on
   `0.4/fixups` (also the webapp grantPqSignature passthrough, shell v209). Running: retail phase 1, direct-access
   screens.
+- 2026-11-14 Merged retail phase 1 (rebased over direct access/UnifiedPush/voi.ci names; tsc + 5840 tests green).
+  Agent decisions: lock only from the wipe (one-line switch in resetPolicy.ts); logind drop-in on metal images only
+  (VMs keep the ACPI graceful stop); setup code drawn on 3 presses, re-asking draws a new one, expires 24 h after
+  shown, code claim needs no press; 5 presses on an unclaimed box reopen its window; box registers alone 2 min after
+  the receipt if the phone vanishes. Owner Qs: confirm these; Wi-Fi stack on the metal image (NetworkManager/iwd/
+  wpa_supplicant); doc Q3 (release = wipe?) and Q6 (LAN claim path).
 
 ## Resume point
 
