@@ -4,6 +4,7 @@
 // of the account's boxes the relay routes it to. Needs gossip, so the account's gossip key is deposited
 // first (lib/cgk.ts, as on feat/UX).
 import { depositCgk, waitGossiping } from "../../lib/cgk.js";
+import { expectedIssuer } from "../../lib/acmeCa.js";
 import { SERVICES, assert, certInfo, tryHttp } from "../../lib/harness.js";
 import { installWhoami } from "../gating.js";
 import type { Group } from "../types.js";
@@ -26,7 +27,7 @@ export const appNames: Group = {
       await rec.check(`${b.serverName}'s control certificate names exactly ${b.fqdn}`, () => {
         const c = certInfo(b.fqdn);
         assert(c.sans.length === 1 && c.sans[0] === b.fqdn, `sans=${c.sans.join(",")}`);
-        assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer}`);
+        assert(expectedIssuer().test(c.issuer), `issuer=${c.issuer} (expected ${expectedIssuer()})`);
         return c.sans.join(", ");
       });
     }
