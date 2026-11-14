@@ -227,6 +227,7 @@ public struct HomeTab: View {
                     onAddServer: { path.append(.provisionServer) },
                     onRestoreFromBackup: { path.append(.restoreFromBackup) },
                     onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) },
+                    onRetailBox: { path.append(.provisionRetailBox) },
                     onMakeLeader: { pod in
                         Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
                     },
@@ -450,9 +451,10 @@ public struct HomeTab: View {
             } else {
                 ServerDetailContainer(podId: podId, onDeleted: { path.removeAll() })
             }
-        case .provisionServer, .provisionServerForBuilder:
+        case .provisionServer, .provisionServerForBuilder, .provisionRetailBox:
             CreateServerContainer(
                 builderLink: route.builderLink,
+                retailBox: route == .provisionRetailBox,
                 onDeliveredVisible: { serverDomain, serial, name, description in
                     // QR-relay delivered and the "boot disk is on the way"
                     // page is up. Surface the pod on Home RIGHT NOW (no
@@ -768,6 +770,7 @@ struct TransferAcquirerContainer: View {
 
 struct CreateServerContainer: View {
     var builderLink: String?
+    var retailBox = false
     let onDeliveredVisible: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onCancel: () -> Void
@@ -783,11 +786,13 @@ struct CreateServerContainer: View {
 
     init(
         builderLink: String? = nil,
+        retailBox: Bool = false,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void = { _, _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
         self.builderLink = builderLink
+        self.retailBox = retailBox
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
@@ -800,6 +805,9 @@ struct CreateServerContainer: View {
                 CreateServerStubScreen(
                     vm: vm,
                     builderLink: builderLink,
+                    retailBox: retailBox,
+                    username: app.currentUser ?? "you",
+                    isDemoAccount: app.isDemoAccount,
                     onDeliveredVisible: { serverDomain, name, description in
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDeliveredVisible(serverDomain, serial, name, description)

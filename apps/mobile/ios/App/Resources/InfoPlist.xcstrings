@@ -48,6 +48,53 @@
         }
       }
     },
+    "NSBluetoothAlwaysUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship uses Bluetooth to find a Flagship box you bought and set it up. It looks only while you set up a box."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship usa Bluetooth para encontrar un equipo Flagship que has comprado y configurarlo. Solo busca mientras configuras un equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship utilise le Bluetooth pour trouver un boîtier Flagship que vous avez acheté et le configurer. Il ne cherche que pendant la configuration d'un boîtier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship nutzt Bluetooth, um eine gekaufte Flagship-Box zu finden und einzurichten. Es sucht nur, während du eine Box einrichtest."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship usa o Bluetooth para encontrar uma caixa Flagship que você comprou e configurá-la. Ele só procura enquanto você configura uma caixa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は Bluetooth を使って、購入した Flagship ボックスを見つけて設定します。ボックスを設定している間だけ探します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 使用蓝牙查找你购买的 Flagship 主机并进行设置。仅在你设置主机时搜索。"
+          }
+        }
+      }
+    },
     "NSFaceIDUsageDescription": {
       "extractionState": "manual",
       "localizations": {

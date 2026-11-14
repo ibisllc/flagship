@@ -14751,5 +14751,373 @@
   "Certificate ready. Waiting for the direct path.": {
     "en": "Certificate ready. Waiting for the direct path.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DirectNamesClient.swift (name state)"
+  },
+  "Set up a box from a store": {
+    "en": "Set up a box from a store",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:186"
+  },
+  "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.": {
+    "en": "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:187"
+  },
+  "Register your new box": {
+    "en": "Register your new box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimContainer.swift:57"
+  },
+  "Keep the box unplugged for now": {
+    "en": "Keep the box unplugged for now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:63"
+  },
+  "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.": {
+    "en": "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:64"
+  },
+  "I have a setup code from the box's screen": {
+    "en": "I have a setup code from the box's screen",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:74"
+  },
+  "Scan the setup code": {
+    "en": "Scan the setup code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:77"
+  },
+  "Scan the QR code the box shows on its screen, or the photo someone sent you. The box must be on a network cable.": {
+    "en": "Scan the QR code the box shows on its screen, or the photo someone sent you. The box must be on a network cable.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:78"
+  },
+  "Or type the 20-character code": {
+    "en": "Or type the 20-character code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:85"
+  },
+  "Checking for other boxes": {
+    "en": "Checking for other boxes",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:95"
+  },
+  "Keep the box unplugged for a moment.": {
+    "en": "Keep the box unplugged for a moment.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:95"
+  },
+  "Plug in the box": {
+    "en": "Plug in the box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:98"
+  },
+  "Plug the network cable into your router if you can. Then plug in the power. The box starts by itself.": {
+    "en": "Plug the network cable into your router if you can. Then plug in the power. The box starts by itself.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:99"
+  },
+  "If the box stays off, press the power button once.": {
+    "en": "If the box stays off, press the power button once.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:102"
+  },
+  "Found your box": {
+    "en": "Found your box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:116"
+  },
+  "Opening an encrypted connection…": {
+    "en": "Opening an encrypted connection…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:116"
+  },
+  "Get ready": {
+    "en": "Get ready",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:119"
+  },
+  "Put your finger near the box's power button. Don't press it yet.": {
+    "en": "Put your finger near the box's power button. Don't press it yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:119"
+  },
+  "Press the power button now": {
+    "en": "Press the power button now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:122"
+  },
+  "Once, briefly. A short press does not switch the box off.": {
+    "en": "Once, briefly. A short press does not switch the box off.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:123"
+  },
+  "Approve the new server": {
+    "en": "Approve the new server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:129"
+  },
+  "Confirm with Face ID or your passcode to sign this server's recipe.": {
+    "en": "Confirm with Face ID or your passcode to sign this server's recipe.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:129"
+  },
+  "Registering the box": {
+    "en": "Registering the box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:132"
+  },
+  "Telling Flagship which box this server is…": {
+    "en": "Telling Flagship which box this server is…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:132"
+  },
+  "How does the box reach the internet?": {
+    "en": "How does the box reach the internet?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:135"
+  },
+  "It's on a network cable": {
+    "en": "It's on a network cable",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:136"
+  },
+  "Use Wi-Fi": {
+    "en": "Use Wi-Fi",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:138"
+  },
+  "Looking for Wi-Fi networks": {
+    "en": "Looking for Wi-Fi networks",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:141"
+  },
+  "The box is listing the networks it can see…": {
+    "en": "The box is listing the networks it can see…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:141"
+  },
+  "Choose your Wi-Fi": {
+    "en": "Choose your Wi-Fi",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:144"
+  },
+  "The box sees no Wi-Fi networks. Use a network cable instead.": {
+    "en": "The box sees no Wi-Fi networks. Use a network cable instead.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:144"
+  },
+  "Use a cable instead": {
+    "en": "Use a cable instead",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:160"
+  },
+  "Wi-Fi password": {
+    "en": "Wi-Fi password",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:162"
+  },
+  "Password": {
+    "en": "Password",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:163"
+  },
+  "A Wi-Fi password has 8 to 63 characters.": {
+    "en": "A Wi-Fi password has 8 to 63 characters.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:167"
+  },
+  "Before you send it": {
+    "en": "Before you send it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:174"
+  },
+  "Send it": {
+    "en": "Send it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:177"
+  },
+  "Connecting the box": {
+    "en": "Connecting the box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:180"
+  },
+  "The box is joining the network…": {
+    "en": "The box is joining the network…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:180"
+  },
+  "The box couldn't get online": {
+    "en": "The box couldn't get online",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:183"
+  },
+  "Checking the box online": {
+    "en": "Checking the box online",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:187"
+  },
+  "Making sure the server that comes online is the box you paired with. This can take a few minutes.": {
+    "en": "Making sure the server that comes online is the box you paired with. This can take a few minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:188"
+  },
+  "Your box is set up": {
+    "en": "Your box is set up",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:191"
+  },
+  "The server that came online is the box you paired with.": {
+    "en": "The server that came online is the box you paired with.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:191"
+  },
+  "Open the server": {
+    "en": "Open the server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:194"
+  },
+  "Use the network cable if you can": {
+    "en": "Use the network cable if you can",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:67"
+  },
+  "Plug it into your router before the power. Then your Wi-Fi password never has to travel over the air.": {
+    "en": "Plug it into your router before the power. Then your Wi-Fi password never has to travel over the air.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:68"
+  },
+  "No new box appeared": {
+    "en": "No new box appeared",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:108"
+  },
+  "Not supported": {
+    "en": "Not supported",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:152"
+  },
+  "Don't use this server": {
+    "en": "Don't use this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:211"
+  },
+  "Open the server to delete it": {
+    "en": "Open the server to delete it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:216"
+  },
+  "More than one box nearby": {
+    "en": "More than one box nearby",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:34"
+  },
+  "Don't continue": {
+    "en": "Don't continue",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:35"
+  },
+  "Someone else tried at the same moment": {
+    "en": "Someone else tried at the same moment",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:36"
+  },
+  "Bluetooth is needed": {
+    "en": "Bluetooth is needed",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:37"
+  },
+  "This server already has a box": {
+    "en": "This server already has a box",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:38"
+  },
+  "Only an admin device can do this": {
+    "en": "Only an admin device can do this",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:39"
+  },
+  "Another Flagship box nearby is waiting to be set up. If it is yours, unplug it and start again. If not, set this box up somewhere else or use a network cable and a screen.": {
+    "en": "Another Flagship box nearby is waiting to be set up. If it is yours, unplug it and start again. If not, set this box up somewhere else or use a network cable and a screen.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:47"
+  },
+  "A second Flagship box appeared during setup. Make sure only your box is switched on nearby, unplug it, and start again.": {
+    "en": "A second Flagship box appeared during setup. Make sure only your box is switched on nearby, unplug it, and start again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:49"
+  },
+  "This box reported a press before you were asked. Don't continue.": {
+    "en": "This box reported a press before you were asked. Don't continue.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:51"
+  },
+  "The press came too late. Tap Try again and press the power button as soon as you are asked.": {
+    "en": "The press came too late. Tap Try again and press the power button as soon as you are asked.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:53"
+  },
+  "The box saw more than one press, or a long one. Press the power button once, briefly, when you are asked.": {
+    "en": "The box saw more than one press, or a long one. Press the power button once, briefly, when you are asked.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:55"
+  },
+  "Another phone tried to set up this box at the same moment. Make sure nobody nearby is setting up a Flagship box, then try again.": {
+    "en": "Another phone tried to set up this box at the same moment. Make sure nobody nearby is setting up a Flagship box, then try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:57"
+  },
+  "The box saw no press. Tap Try again and press the power button once when you are asked.": {
+    "en": "The box saw no press. Tap Try again and press the power button once when you are asked.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:59"
+  },
+  "The box is busy with another setup. Wait a minute and try again.": {
+    "en": "The box is busy with another setup. Wait a minute and try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:61"
+  },
+  "The box stopped listening. Unplug it, plug it back in and start again.": {
+    "en": "The box stopped listening. Unplug it, plug it back in and start again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:63"
+  },
+  "This box is already set up. Press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": {
+    "en": "This box is already set up. Press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:65"
+  },
+  "The box refused this server's recipe. Start again.": {
+    "en": "The box refused this server's recipe. Start again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:67"
+  },
+  "The box and this phone got out of step. Start again.": {
+    "en": "The box and this phone got out of step. Start again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:69"
+  },
+  "The box can't make safe keys yet. Leave it switched on for a minute and try again.": {
+    "en": "The box can't make safe keys yet. Leave it switched on for a minute and try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:71"
+  },
+  "The box's answer did not belong to this setup. Someone nearby may be intercepting it. Unplug the box and set it up with a screen instead.": {
+    "en": "The box's answer did not belong to this setup. Someone nearby may be intercepting it. Unplug the box and set it up with a screen instead.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:73"
+  },
+  "Another box is already registered for this server. Delete this server and set the box up again.": {
+    "en": "Another box is already registered for this server. Delete this server and set the box up again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:75"
+  },
+  "Only an admin device of this account can set up a server.": {
+    "en": "Only an admin device of this account can set up a server.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:77"
+  },
+  "Turn on Bluetooth to find the box, then try again.": {
+    "en": "Turn on Bluetooth to find the box, then try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:79"
+  },
+  "Flagship needs Bluetooth to find the box. Allow it in Settings, then try again.": {
+    "en": "Flagship needs Bluetooth to find the box. Allow it in Settings, then try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:81"
+  },
+  "This device can't use Bluetooth to set up a box.": {
+    "en": "This device can't use Bluetooth to set up a box.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:83"
+  },
+  "The connection to the box was lost. Start again.": {
+    "en": "The connection to the box was lost. Start again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:85"
+  },
+  "The box did not accept this setup code. Ask for a new one: press the box's power button 3 times with the screen attached.": {
+    "en": "The box did not accept this setup code. Ask for a new one: press the box's power button 3 times with the screen attached.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:87"
+  },
+  "No box answered this setup code. It may have expired or been used. Ask for a new one.": {
+    "en": "No box answered this setup code. It may have expired or been used. Ask for a new one.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:89"
+  },
+  "This isn't a Flagship setup code.": {
+    "en": "This isn't a Flagship setup code.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:91"
+  },
+  "The server that came online is not the box you paired with. Someone may have intercepted the setup. Don't use it. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.": {
+    "en": "The server that came online is not the box you paired with. Someone may have intercepted the setup. Don't use it. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:105"
+  },
+  "The box you paired with never came online. Someone may have intercepted the setup. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.": {
+    "en": "The box you paired with never came online. Someone may have intercepted the setup. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:107"
+  },
+  "The box has no network. Plug the cable into your router, or choose Wi-Fi.": {
+    "en": "The box has no network. Plug the cable into your router, or choose Wi-Fi.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:115"
+  },
+  "The box can't see that Wi-Fi network. Move the box closer to the router, or use a cable.": {
+    "en": "The box can't see that Wi-Fi network. Move the box closer to the router, or use a cable.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:116"
+  },
+  "The Wi-Fi password was wrong. Check it and try again.": {
+    "en": "The Wi-Fi password was wrong. Check it and try again.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:117"
+  },
+  "The box can't join this kind of Wi-Fi. It needs WPA2 or WPA3 with a password. Use a cable instead.": {
+    "en": "The box can't join this kind of Wi-Fi. It needs WPA2 or WPA3 with a password. Use a cable instead.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:118"
+  },
+  "The network gave the box no address. Check that your router hands out addresses (DHCP).": {
+    "en": "The network gave the box no address. Check that your router hands out addresses (DHCP).",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:119"
+  },
+  "The box got an address but can't look up names. Check your router's internet connection.": {
+    "en": "The box got an address but can't look up names. Check your router's internet connection.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:120"
+  },
+  "This network wants a sign-in page, which the box can't use. Use a home network or a cable.": {
+    "en": "This network wants a sign-in page, which the box can't use. Use a home network or a cable.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:121"
+  },
+  "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.": {
+    "en": "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:122"
+  },
+  "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.": {
+    "en": "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:126"
+  },
+  "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.": {
+    "en": "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/RetailClaimFlow.swift:127"
   }
 }

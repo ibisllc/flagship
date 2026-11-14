@@ -32,6 +32,12 @@ public struct CreateServerStubScreen: View {
     @State private var showShare = false
     @State private var deliveryBusy = false
     @State private var copiedToast = false
+    /// "Set up a box from a store": the recipe goes to a retail box over Bluetooth.
+    private let retailBox: Bool
+    private let username: String
+    private let isDemoAccount: Bool
+    @State private var showRetail = false
+    @State private var retailClaimed: (domain: String, serial: String)?
     /// Fires the moment the delivered page APPEARS (vs `onDelivered`,
     /// which waits for the "Done" tap) so the host can surface the new
     /// pending pod on the Home list immediately.
@@ -46,6 +52,9 @@ public struct CreateServerStubScreen: View {
     public init(
         vm: CreateServerViewModel,
         builderLink: String? = nil,
+        retailBox: Bool = false,
+        username: String = "",
+        isDemoAccount: Bool = false,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onCancel: @escaping () -> Void = {},
@@ -56,6 +65,9 @@ public struct CreateServerStubScreen: View {
         self.cancelling = cancelling
         self.vm = vm
         self._builderLink = State(initialValue: builderLink)
+        self.retailBox = retailBox
+        self.username = username
+        self.isDemoAccount = isDemoAccount
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
@@ -117,6 +129,26 @@ public struct CreateServerStubScreen: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
+        .sheet(isPresented: $showRetail, onDismiss: finishRetail) {
+            NavigationStack {
+                RetailClaimContainer(
+                    minter: vm,
+                    username: username,
+                    isDemoAccount: isDemoAccount,
+                    onClaimed: { domain, serial in
+                        vm.lastDeliveredSerial = serial
+                        retailClaimed = (domain, serial)
+                        onDeliveredVisible(domain, vm.name, vm.description)
+                    },
+                    onClose: { showRetail = false },
+                    onOpenServer: { domain in
+                        showRetail = false
+                        onDelivered(domain, vm.name, vm.description)
+                    }
+                )
+            }
+            .interactiveDismissDisabled(true)
+        }
         .sheet(isPresented: $showShare) {
             if let shareURL { ShareSheet(items: [shareURL]) }
         }
@@ -143,8 +175,22 @@ public struct CreateServerStubScreen: View {
 
     // MARK: - Delivery chooser
 
+    private func finishRetail() {
+        if let r = retailClaimed { vm.phase = .delivered(serial: r.serial, serverDomain: r.domain) }
+    }
+
     private func deliveryChooserPage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
+            Button { showRetail = true } label: {
+                deliveryCard(icon: "shippingbox", accent: c.accent,
+                             title: String(localized: "Set up a box from a store"),
+                             body: String(localized: "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in."),
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+            .accessibilityIdentifier("cs-delivery-retail")
+
             Button { startPair() } label: {
                 deliveryCard(icon: "qrcode.viewfinder", accent: c.accent,
                              title: String(localized: "Pair with the builder app"),
@@ -175,7 +221,10 @@ public struct CreateServerStubScreen: View {
 
             if deliveryBusy { spinnerCard(c: c) }
         }
-        .task { pairWithLinkedBuilder() }
+        .task {
+            pairWithLinkedBuilder()
+            if retailBox && retailClaimed == nil { showRetail = true }
+        }
     }
 
     private func deliveryCard(icon: String, accent: Color, title: String, body: String, c: FSColors) -> some View {

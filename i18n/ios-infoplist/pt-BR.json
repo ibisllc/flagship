@@ -1,5 +1,6 @@
 {
   "NSCameraUsageDescription": "O Flagship usa a câmera para escanear um QR de pareamento exibido pelo seu servidor.",
   "NSFaceIDUsageDescription": "O Flagship usa o Face ID para confirmar ações sensíveis, como aprovar um desbloqueio ou revogar um servidor.",
-  "NSLocalNetworkUsageDescription": "O Flagship se comunica diretamente com seu servidor quando ele está na mesma rede, o que é mais rápido do que passar pelo relay, e o encontra lá quando o Flagship não pode ser acessado."
+  "NSLocalNetworkUsageDescription": "O Flagship se comunica diretamente com seu servidor quando ele está na mesma rede, o que é mais rápido do que passar pelo relay, e o encontra lá quando o Flagship não pode ser acessado.",
+  "NSBluetoothAlwaysUsageDescription": "O Flagship usa o Bluetooth para encontrar uma caixa Flagship que você comprou e configurá-la. Ele só procura enquanto você configura uma caixa."
 }

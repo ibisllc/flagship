@@ -1,6 +1,7 @@
 {
   "_about": "Literals the surface wrappers would wrap that are NOT text a person reads in their language, so they stay as written (scripts/i18n-literals.mjs, run by `npm run i18n`). Each entry: surface, file (repo path, or /regex/), optional text (exact, or /regex/; placeholders as the wrapper prints them: %@ Apple, %s Android, {0} elsewhere), and why. Keep it short: user-facing text goes in i18n/<surface>/ instead. An entry that matches nothing fails the check, so the list cannot rot.",
   "allow": [
+    { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipCore/MockBoxClaimRadio.swift", "text": "Mini PC N100", "why": "the scripted retail box's hardware model in its signed receipt (debug-only mock), a product name" },
     { "surface": "ios", "file": "apps/mobile/shared/Sources/FlagshipCore/InstallDiskStop.swift", "text": "/Nothing was erased\\.$/", "why": "the USB installer's English stop sentences, matched to recognise a disk stop; the app shows its own translated sentence instead" },
     { "surface": "webapp", "file": "apps/web/public/webapp/lib/voiciText.js", "text": "/^(?!Email$).+$/", "why": "brand names of the voi.ci link table (GitHub, Mastodon …); the file is byte-identical to packages/flagship-web's protocol copy" },
     { "surface": "webapp", "file": "apps/web/public/webapp/lib/voiciText.js", "text": "Email", "why": "shared protocol table; the page editor shows tr(\"Email\") instead (views/page-editor.js siteLabel)" },

@@ -716,6 +716,98 @@ final class GymSweepServerTests: GymSweepCase {
         expectNoProbe(app, "recipe delivered")
     }
 
+    // ─── Set up a box from a store (docs/retail-box-setup.md §4) ─────────────
+
+    /// Home → Add / Restore → Set up a box from a store → the create wizard → the claim sheet.
+    private func openRetail(_ app: XCUIApplication, name: String) {
+        let add = app.buttons["home-add-server"]
+        XCTAssertTrue(add.waitForExistence(timeout: 15))
+        add.tap()
+        let retail = app.buttons.matching(identifier: "home-retail-box").firstMatch
+        XCTAssertTrue(retail.waitForExistence(timeout: 10), "Add/Restore should offer Set up a box from a store.")
+        retail.tap()
+        let field = app.textFields["cs-name-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 15))
+        replaceText(field, with: name)
+        app.buttons["cs-next-button"].tap()
+        app.buttons["cs-next-button"].tap()
+        app.chooseBackupPolicy()
+        app.buttons["cs-continue-button"].tap()
+        let start = any(app, "rc-start")
+        XCTAssertTrue(start.waitForExistence(timeout: 15), "The claim sheet opens on its intro.")
+        start.tap()
+    }
+
+    /// The normal method on a cable: the box appears after the scan began, the press is timed,
+    /// the receipt's key is registered, and the internet check ends on the padlock.
+    func test_retailBoxOnACableEndsWithThePadlock() throws {
+        let app = launchServer(["-smoke-retail-normal"])
+        openRetail(app, name: "attic")
+        XCTAssertTrue(any(app, "rc-press-now").waitForExistence(timeout: 30), "Press the power button now.")
+        let cable = any(app, "rc-cable")
+        XCTAssertTrue(cable.waitForExistence(timeout: 30), "After the receipt: how the box reaches the internet.")
+        expectProbe(app, "signed auth-code-admin by admin-root")
+        cable.tap()
+        XCTAssertTrue(any(app, "rc-done").waitForExistence(timeout: 30), "The box that came online is the one paired.")
+    }
+
+    /// Wi-Fi: the box's list, the password, the warning before it leaves, then online.
+    func test_retailBoxOverWifiWarnsFirst() throws {
+        let app = launchServer(["-smoke-retail-wrongPassword"])
+        openRetail(app, name: "loft")
+        let wifi = any(app, "rc-wifi")
+        XCTAssertTrue(wifi.waitForExistence(timeout: 40))
+        wifi.tap()
+        let net = any(app, "rc-net-Home Wi-Fi")
+        XCTAssertTrue(net.waitForExistence(timeout: 15))
+        net.tap()
+        let pw = app.secureTextFields["rc-password"]
+        XCTAssertTrue(pw.waitForExistence(timeout: 10))
+        pw.tap()
+        pw.typeText("correct horse")
+        any(app, "rc-password-continue").tap()
+        let send = any(app, "rc-warning-send")
+        XCTAssertTrue(send.waitForExistence(timeout: 10), "The Wi-Fi warning comes before the password leaves.")
+        send.tap()
+        let retry = any(app, "rc-network-retry")
+        XCTAssertTrue(retry.waitForExistence(timeout: 15), "A wrong password gets its own sentence and a retry.")
+        XCTAssertTrue(text(app, containing: "The Wi-Fi password was wrong").exists)
+    }
+
+    /// A stop the box causes shows its sentence and Try again.
+    private func expectRetailStop(_ seam: String, _ sentence: String, file: StaticString = #filePath, line: UInt = #line) {
+        let app = launchServer([seam])
+        openRetail(app, name: "shed")
+        XCTAssertTrue(any(app, "rc-try-again").waitForExistence(timeout: 40), seam, file: file, line: line)
+        XCTAssertTrue(text(app, containing: sentence).exists, seam, file: file, line: line)
+    }
+
+    func test_retailBoxStopsOnAnEarlyPress() throws {
+        expectRetailStop("-smoke-retail-earlyPress", "This box reported a press before you were asked")
+    }
+
+    func test_retailBoxStopsOnASecondBox() throws {
+        expectRetailStop("-smoke-retail-secondBox", "A second Flagship box appeared during setup")
+    }
+
+    func test_retailBoxStopsWhenABoxWasAlreadyNearby() throws {
+        expectRetailStop("-smoke-retail-boxAlreadyNearby", "Another Flagship box nearby is waiting to be set up")
+    }
+
+    func test_retailBoxStopsOnContention() throws {
+        expectRetailStop("-smoke-retail-contention", "Another phone tried to set up this box at the same moment")
+    }
+
+    /// `.com` lists another key for the new server: the full-screen alarm.
+    func test_retailBoxAlarmsOnAnotherKey() throws {
+        let app = launchServer(["-smoke-retail-normal", "-smoke-retail-key-mismatch"])
+        openRetail(app, name: "barn")
+        let cable = any(app, "rc-cable")
+        XCTAssertTrue(cable.waitForExistence(timeout: 40))
+        cable.tap()
+        XCTAssertTrue(any(app, "rc-alarm").waitForExistence(timeout: 30), "The alarm covers the screen.")
+    }
+
     // ─── Backups section, import and restore ────────────────────────────────
 
     private let older = "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"

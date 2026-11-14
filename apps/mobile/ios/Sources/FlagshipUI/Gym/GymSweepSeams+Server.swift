@@ -19,6 +19,10 @@ extension GymSweepSeams {
     /// A scripted builder peer for "Pair with the builder app"
     /// (`-smoke-builder-peer`); nil uses the live relay.
     static var builderPairClient: (any BuilderPairClient)?
+    /// A scripted retail box for "Set up a box from a store" (`-smoke-retail-<scenario>`).
+    static var retailRadio: MockBoxClaimRadio?
+    /// The box key the gym's `.com` lists once the box is online (`-smoke-retail-key-mismatch`: another).
+    static var retailComStk: String?
     static let gymFirewallReason = "its internet firewall isn't running: nftables isn't installed"
     static let gymGvisorReason = "runsc failed its test container"
 
@@ -217,6 +221,9 @@ extension GymSweepSeams {
             }
         }
         builderPairClient = args.contains("-smoke-builder-peer") ? GymBuilderPairClient() : nil
+        let retail = args.first { $0.hasPrefix("-smoke-retail-") }.map { String($0.dropFirst("-smoke-retail-".count)) }
+        retailRadio = retail.map { MockBoxClaimRadio(scenario: MockBoxClaimRadio.Scenario(rawValue: $0) ?? .normal, appearAfterMs: 4_000) }
+        retailComStk = args.contains("-smoke-retail-key-mismatch") ? String(repeating: "ee", count: 32) : MockBoxClaimRadio.stkPubHex
     }
 
     /// A stable fake STK for a server.
