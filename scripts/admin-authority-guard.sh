@@ -66,6 +66,7 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/deviceCapabilityGrants.ts|handleMintDeviceGrant"
   "packages/control-plane/src/routing.ts|handleRegisterRck"
   "packages/control-plane/src/authCode.ts|handleAuthCodeIssue"
+  "packages/control-plane/src/directAccess.ts|authorizeDirectOrder"
 )
 
 # DEVICE-KEY EXCEPTIONS — owner decision 2026-10-15 (docs/service-access-

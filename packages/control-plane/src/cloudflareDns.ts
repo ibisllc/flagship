@@ -199,6 +199,36 @@ export class CloudflareDnsClient {
     throw new Error(`Cloudflare DNS createTxt failed: ${JSON.stringify(body.errors ?? body)}`);
   }
 
+  /**
+   * Plain create of one address or CAA record, DNS only: several A/AAAA records may share a name (a direct name
+   * the owner points at several addresses), so this never dedupes by (name, type) the way `upsert` does.
+   */
+  async createRecord(opts: {
+    name: string;
+    type: "A" | "AAAA" | "CAA";
+    content: string;
+    data?: { flags: number; tag: string; value: string };
+    ttl?: number;
+  }): Promise<CloudflareDnsRecord> {
+    const ttl = opts.ttl ?? 60;
+    const body =
+      opts.type === "CAA"
+        ? { type: "CAA", name: opts.name, data: opts.data, ttl }
+        : { type: opts.type, name: opts.name, content: opts.content, ttl, proxied: false };
+    const resp = await fetch(`${CF_API}/zones/${this.cfg.zoneId}/dns_records`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    const out = (await resp.json()) as { success: boolean; result?: CloudflareDnsRecord; errors?: Array<{ code?: number }> };
+    if (out.success && out.result) return out.result;
+    if ((out.errors ?? []).some((e) => e?.code === 81058)) {
+      const existing = (await this.list(opts.name, opts.type)).find((r) => r.content === opts.content);
+      if (existing) return existing;
+    }
+    throw new Error(`Cloudflare DNS createRecord failed: ${JSON.stringify(out.errors ?? out)}`);
+  }
+
   /** Look up a single record by its CF record id. Returns null on 404. */
   async getById(id: string): Promise<CloudflareDnsRecord | null> {
     const resp = await fetch(
