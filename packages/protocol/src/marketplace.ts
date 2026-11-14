@@ -9,6 +9,7 @@
  * byte-identical.
  */
 import { ed } from "./edSync.js";
+import { integerFieldGuard, validateNoSepCtrl } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
 const TAG_MARKETPLACE_SCAN_RESULT = "flagship/marketplace-scan-result/v1";
@@ -32,6 +33,8 @@ export interface MarketplaceScanResult {
 }
 
 function canonicalMarketplaceScanResult(r: MarketplaceScanResult): Bytes {
+  for (const k of ["creator", "slug", "grade", "reportKey", "imageDigestHex"] as const) validateNoSepCtrl(k, r[k]);
+  integerFieldGuard("scannedAt", r.scannedAt);
   return new TextEncoder().encode(
     [
       TAG_MARKETPLACE_SCAN_RESULT,
@@ -102,6 +105,13 @@ export interface MarketplaceListRequest {
 const TAG_MARKETPLACE_LIST = "flagship/marketplace-list/v1";
 
 function canonicalMarketplaceList(r: MarketplaceListRequest): Bytes {
+  // descriptionMd is markdown (tables use '|', paragraphs newlines); every other field refuses the separator, so
+  // the one free field between them still splits one way only.
+  for (const k of ["creator", "slug", "name", "tagline", "category", "tagsCsv", "canonicalUrl", "manifestHashHex", "status"] as const) {
+    validateNoSepCtrl(k, r[k]);
+  }
+  for (const key of r.screenshotKeys) validateNoSepCtrl("screenshotKeys", key);
+  integerFieldGuard("issuedAt", r.issuedAt);
   return new TextEncoder().encode(
     [
       TAG_MARKETPLACE_LIST,
@@ -156,6 +166,10 @@ export interface SetAppPriceRequest {
 const TAG_MARKETPLACE_SET_PRICE = "flagship/marketplace-set-price/v1";
 
 function canonicalSetAppPrice(r: SetAppPriceRequest): Bytes {
+  validateNoSepCtrl("creator", r.creator);
+  validateNoSepCtrl("slug", r.slug);
+  integerFieldGuard("priceUsdCents", r.priceUsdCents);
+  integerFieldGuard("issuedAt", r.issuedAt);
   return new TextEncoder().encode(
     [
       TAG_MARKETPLACE_SET_PRICE,
@@ -199,6 +213,8 @@ export interface DeveloperSalesReadRequest {
 const TAG_DEVELOPER_SALES_READ = "flagship/developer-sales-read/v1";
 
 function canonicalDeveloperSalesRead(r: DeveloperSalesReadRequest): Bytes {
+  validateNoSepCtrl("creator", r.creator);
+  integerFieldGuard("issuedAt", r.issuedAt);
   return new TextEncoder().encode(
     [TAG_DEVELOPER_SALES_READ, r.creator, r.issuedAt].join("|"),
   );

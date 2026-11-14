@@ -46,6 +46,8 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
 
   // ---- signed families with their own negative vectors, not re-driven by the harness
   "flagship/account-profile/v1": "vectors accountMetadata.test.ts (signed envelope with deviceId binding)",
+  "flagship/app-list-scope/v1": "vectors appListScope.test.ts + test-vectors/app-list-scope (admin-root order; replayed by Swift and Kotlin)",
+  "flagship/plan-attestation/v1": "vectors planAttestation.test.ts + test-vectors/plan-attestation (CA-signed; box accessScope.test.ts refuses a forged or lapsed one)",
   "flagship/device-profile-self/v1": "vectors accountMetadata.test.ts",
   "flagship/device-profile-admin/v1": "vectors accountMetadata.test.ts (DeviceManagedProfile)",
   "flagship/adapter-attestation/v1": "vectors adapterAttestation.test.ts (pinned vetting keys, revocation final)",
