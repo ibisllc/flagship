@@ -143,7 +143,7 @@ final class OutboundProxyTests: XCTestCase {
     // MARK: - Create flow
 
     private func makeCreateVM() -> CreateServerViewModel {
-        CreateServerViewModel(username: "harry", server: MockFlagshipServerClient(), relay: MockQrRelayClient())
+        CreateServerViewModel(username: "harry", server: MockFlagshipServerClient(), relay: MockQrRelayClient(), isDemoAccount: false)
     }
 
     func test_createFlowBlocksABadProxyAndResetsWithAdvanced() {
@@ -164,7 +164,7 @@ final class OutboundProxyTests: XCTestCase {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         server.accountTierAnswer = "free"
-        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient())
+        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient(), isDemoAccount: false)
         vm.name = "home"
         XCTAssertTrue(vm.proxyAllowed, "an unknown plan doesn't block")
         await vm.loadAccountTier()
