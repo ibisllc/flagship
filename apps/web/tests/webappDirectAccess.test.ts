@@ -157,6 +157,10 @@ describe("the .com client and its sentences", () => {
     expect(T.directNameStateText({ state: "pending" })).toBe("Waiting to be published");
     expect(T.directNameStateText({ state: "empty", reason: "direct-access-off" })).toBe("Direct access is off on its server.");
     expect(T.directNameStateText({ state: "empty", reason: "?" })).toBe("Not published");
+    const cert = { notAfter: 1_900_000_000_000 };
+    expect(T.directNameStateText({ state: "empty", reason: "no-addresses", certificate: cert })).toBe("Certificate ready. Waiting for the direct path.");
+    expect(T.directNameStateText({ state: "empty", reason: "direct-access-off", certificate: cert })).toBe("Certificate ready. Waiting for the direct path.");
+    expect(T.directNameStateText({ state: "empty", reason: "off", certificate: cert })).toBe("Turned off.");
     expect(T.directNameStateText({ state: "published", suspended: { at: 1 } })).toBe("Suspended after an abuse report.");
     expect(T.directProbeText({ reachable: true })).toBe("Reachable from outside.");
     expect(T.directProbeText({ reachable: false })).toBe("Not reachable from outside.");

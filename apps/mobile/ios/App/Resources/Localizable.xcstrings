@@ -140699,6 +140699,47 @@
           }
         }
       }
+    },
+    "Certificate ready. Waiting for the direct path.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado listo. Esperando la ruta directa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificat prêt. En attente de la connexion directe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zertifikat bereit. Wartet auf den direkten Weg."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado pronto. Aguardando o caminho direto."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "証明書の準備ができました。直接接続を待っています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "证书已就绪。正在等待直接连接。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

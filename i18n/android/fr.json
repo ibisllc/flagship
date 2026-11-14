@@ -3714,5 +3714,6 @@
   "da_reason_caa_unknown": "En attente du compte de certificats. Le nom sera bientôt publié.",
   "da_probe_reachable": "Joignable depuis l’extérieur.",
   "da_probe_unreachable": "Injoignable depuis l’extérieur.",
-  "da_probe_nothing": "Pas encore publié : il n’y a donc rien à vérifier."
+  "da_probe_nothing": "Pas encore publié : il n’y a donc rien à vérifier.",
+  "da_state_certificate_ready": "Certificat prêt. En attente de la connexion directe."
 }

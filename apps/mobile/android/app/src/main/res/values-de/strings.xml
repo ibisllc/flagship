@@ -3717,4 +3717,5 @@
     <string name="da_probe_reachable">Von außen erreichbar.</string>
     <string name="da_probe_unreachable">Von außen nicht erreichbar.</string>
     <string name="da_probe_nothing">Noch nicht veröffentlicht, daher gibt es nichts zu prüfen.</string>
+    <string name="da_state_certificate_ready">Zertifikat bereit. Wartet auf den direkten Weg.</string>
 </resources>

@@ -3714,5 +3714,6 @@
   "da_reason_caa_unknown": "正在等待证书账户，很快就会发布。",
   "da_probe_reachable": "可从外部访问。",
   "da_probe_unreachable": "无法从外部访问。",
-  "da_probe_nothing": "尚未发布，因此没有可检查的内容。"
+  "da_probe_nothing": "尚未发布，因此没有可检查的内容。",
+  "da_state_certificate_ready": "证书已就绪。正在等待直接连接。"
 }

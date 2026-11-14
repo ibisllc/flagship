@@ -68,9 +68,14 @@ data class DirectNameState(
     val publishedAt: Long? = null,
     val suspended: DirectSuspension? = null,
     val probe: DirectProbe? = null,
+    /** The box's certificate for the name: issued once the owner's order verifies, before the direct path is live. */
+    val certificate: DirectNameCertificate? = null,
 ) {
     val isPublished: Boolean get() = state == "published"
 }
+
+@Serializable
+data class DirectNameCertificate(val notAfter: Long)
 
 @Serializable
 data class DirectSuspension(val at: Long? = null, val reason: String? = null)
@@ -139,7 +144,12 @@ object DirectAccessText {
         return when (n.state) {
             "published" -> FSStrings.get(R.string.da_state_published)
             "pending" -> FSStrings.get(R.string.da_state_pending)
-            else -> reason(n.reason) ?: FSStrings.get(R.string.da_state_not_published)
+            else ->
+                if (n.certificate != null && (n.reason == "direct-access-off" || n.reason == "no-addresses")) {
+                    FSStrings.get(R.string.da_state_certificate_ready)
+                } else {
+                    reason(n.reason) ?: FSStrings.get(R.string.da_state_not_published)
+                }
         }
     }
 

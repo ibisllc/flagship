@@ -3717,4 +3717,5 @@
     <string name="da_probe_reachable">外部からアクセスできます。</string>
     <string name="da_probe_unreachable">外部からアクセスできません。</string>
     <string name="da_probe_nothing">まだ公開されていないため、確認するものがありません。</string>
+    <string name="da_state_certificate_ready">証明書の準備ができました。直接接続を待っています。</string>
 </resources>

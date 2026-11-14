@@ -3717,4 +3717,5 @@
     <string name="da_probe_reachable">Acessível de fora.</string>
     <string name="da_probe_unreachable">Não acessível de fora.</string>
     <string name="da_probe_nothing">Ainda não publicado, então não há nada para verificar.</string>
+    <string name="da_state_certificate_ready">Certificado pronto. Aguardando o caminho direto.</string>
 </resources>

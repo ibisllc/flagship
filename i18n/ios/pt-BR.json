@@ -3431,5 +3431,6 @@
   "Not published": "Não publicado",
   "Reachable from outside.": "Acessível de fora.",
   "Not reachable from outside.": "Não acessível de fora.",
-  "Not published yet, so there is nothing to check.": "Ainda não publicado, então não há nada para verificar."
+  "Not published yet, so there is nothing to check.": "Ainda não publicado, então não há nada para verificar.",
+  "Certificate ready. Waiting for the direct path.": "Certificado pronto. Aguardando o caminho direto."
 }

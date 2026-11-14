@@ -3429,5 +3429,6 @@
   "Not published": "未公開",
   "Reachable from outside.": "外部から到達できます。",
   "Not reachable from outside.": "外部から到達できません。",
-  "Not published yet, so there is nothing to check.": "まだ公開されていないので、確認するものがありません。"
+  "Not published yet, so there is nothing to check.": "まだ公開されていないので、確認するものがありません。",
+  "Certificate ready. Waiting for the direct path.": "証明書の準備ができました。直接接続を待っています。"
 }

@@ -3714,5 +3714,6 @@
   "da_reason_caa_unknown": "Aguardando a conta de certificados. Será publicado em breve.",
   "da_probe_reachable": "Acessível de fora.",
   "da_probe_unreachable": "Não acessível de fora.",
-  "da_probe_nothing": "Ainda não publicado, então não há nada para verificar."
+  "da_probe_nothing": "Ainda não publicado, então não há nada para verificar.",
+  "da_state_certificate_ready": "Certificado pronto. Aguardando o caminho direto."
 }

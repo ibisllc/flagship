@@ -3722,4 +3722,5 @@
     <string name="da_probe_reachable">Reachable from outside.</string>
     <string name="da_probe_unreachable">Not reachable from outside.</string>
     <string name="da_probe_nothing">Not published yet, so there is nothing to check.</string>
+    <string name="da_state_certificate_ready">Certificate ready. Waiting for the direct path.</string>
 </resources>

@@ -15332,5 +15332,9 @@
   "da_probe_nothing": {
     "en": "Not published yet, so there is nothing to check.",
     "ctx": "api/DirectNamesClient.kt (outside check result)"
+  },
+  "da_state_certificate_ready": {
+    "en": "Certificate ready. Waiting for the direct path.",
+    "ctx": "api/DirectNamesClient.kt (name state)"
   }
 }
