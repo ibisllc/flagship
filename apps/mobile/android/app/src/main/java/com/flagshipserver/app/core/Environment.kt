@@ -12,6 +12,7 @@ import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.VoiciNameClient
+import com.flagshipserver.app.api.DirectNamesClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
@@ -45,6 +46,9 @@ val LocalNameDibsClient = staticCompositionLocalOf<NameDibsClient> { Variant.def
 
 /** Custom voi.ci name client (`.com`): availability check, the account's names, and the signed set/clear. */
 val LocalVoiciNameClient = staticCompositionLocalOf<VoiciNameClient> { Variant.defaultVoiciName() }
+
+/** Direct access on `.com` (docs/direct-access-and-domains.md §8): the account's orders, names, zone state and the outside check. */
+val LocalDirectNamesClient = staticCompositionLocalOf<DirectNamesClient> { Variant.defaultDirectNames() }
 
 /** The pod session store backing the BFF (holds podBaseUrl + session token).
  *  Production MainActivity installs the EncryptedSessionStore; previews + tests

@@ -15035,5 +15035,298 @@
   "admin_promotion_under_review": {
     "en": "During its first 14 days it is under review and acts as a non-admin device.",
     "ctx": "ui/screens/AddDeviceScreen.kt (under the \"Also make this device an admin\" switch; Windows acceptance W14)"
+  },
+  "da_title": {
+    "en": "Direct access",
+    "ctx": "ui/screens/DirectAccessCard.kt (section title)"
+  },
+  "da_on_line": {
+    "en": "On. Visitors can reach this server's apps directly, without the relay.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_off_line": {
+    "en": "Off. Visitors reach this server's apps through the relay.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_addresses": {
+    "en": "Addresses: %1$s",
+    "ctx": "ui/screens/DirectAccessCard.kt (list of IP addresses)",
+    "args": 1
+  },
+  "da_ranges": {
+    "en": "Address ranges: %1$s",
+    "ctx": "ui/screens/DirectAccessCard.kt (list of IP prefixes)",
+    "args": 1
+  },
+  "da_reports": {
+    "en": "This server reports: %1$s",
+    "ctx": "ui/screens/DirectAccessCard.kt (addresses the server reports)",
+    "args": 1
+  },
+  "da_warning": {
+    "en": "Turning this on puts this server's home IP address in public DNS. Anyone can look it up, and it stays in public DNS history even after you turn it off. The server then takes connections from the whole internet, attacks land on your home connection, and some internet providers don't allow running a server.",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (privacy warning before opting in)"
+  },
+  "da_admin_only": {
+    "en": "Only an admin device can change direct access. This device can see it.",
+    "ctx": "viewmodels/DirectAccessViewModel.kt"
+  },
+  "da_other_creator": {
+    "en": "This app was made by another account, so it can't have a direct name here.",
+    "ctx": "viewmodels/DirectAccessViewModel.kt"
+  },
+  "da_reason_change": {
+    "en": "Change direct access",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (biometric prompt reason)"
+  },
+  "da_reason_turn_on": {
+    "en": "Turn on direct access",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (biometric prompt reason)"
+  },
+  "da_reason_turn_off": {
+    "en": "Turn off direct access",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (biometric prompt reason)"
+  },
+  "da_reason_change_name": {
+    "en": "Change a direct name",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (biometric prompt reason)"
+  },
+  "da_is_on": {
+    "en": "Direct access is on.",
+    "ctx": "viewmodels/DirectAccessViewModel.kt"
+  },
+  "da_is_off": {
+    "en": "Direct access is off.",
+    "ctx": "viewmodels/DirectAccessViewModel.kt"
+  },
+  "da_not_changed": {
+    "en": "Direct access wasn't changed.",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (biometric prompt cancelled)"
+  },
+  "da_checked_at": {
+    "en": "Checked %1$s: %2$s",
+    "ctx": "viewmodels/DirectAccessViewModel.kt (%1$s = date and time, %2$s = result sentence)",
+    "args": 2
+  },
+  "da_confirm_off_title": {
+    "en": "Turn off direct access?",
+    "ctx": "ui/screens/DirectAccessCard.kt (dialog title)"
+  },
+  "da_confirm_off_body": {
+    "en": "Its names stop pointing at this server. The address stays in public DNS history.",
+    "ctx": "ui/screens/DirectAccessCard.kt (dialog body)"
+  },
+  "da_addresses_label": {
+    "en": "Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line",
+    "ctx": "ui/screens/DirectAccessCard.kt (field label)"
+  },
+  "da_ranges_label": {
+    "en": "Address ranges this server may report its own address in (optional)",
+    "ctx": "ui/screens/DirectAccessCard.kt (field label)"
+  },
+  "da_names_title": {
+    "en": "Direct names",
+    "ctx": "ui/screens/DirectAccessCard.kt (subsection title)"
+  },
+  "da_names_body": {
+    "en": "One name per app on fshp.app. Visitors go straight to this server and the relay never carries it.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_no_apps": {
+    "en": "No apps on this server yet.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_caa_off_line": {
+    "en": "Any host may get a certificate for this name (CAA off).",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_points_at": {
+    "en": "Points at: %1$s",
+    "ctx": "ui/screens/DirectAccessCard.kt (list of IP addresses)",
+    "args": 1
+  },
+  "da_not_turned_on": {
+    "en": "Not turned on",
+    "ctx": "ui/screens/DirectAccessCard.kt (name state)"
+  },
+  "da_check_outside": {
+    "en": "Check from outside",
+    "ctx": "ui/screens/DirectAccessCard.kt (button)"
+  },
+  "da_name_title": {
+    "en": "Direct name",
+    "ctx": "ui/screens/DirectAccessCard.kt (dialog title)"
+  },
+  "da_caa_toggle": {
+    "en": "Only this server can get a certificate (CAA)",
+    "ctx": "ui/screens/DirectAccessCard.kt (switch label)"
+  },
+  "da_caa_note": {
+    "en": "Turn this off only if the name points at a host that gets its own certificate.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_name_addresses_label": {
+    "en": "Point at other addresses (optional). Leave empty to follow this server's addresses.",
+    "ctx": "ui/screens/DirectAccessCard.kt (field label)"
+  },
+  "da_link_to_share": {
+    "en": "Link to share",
+    "ctx": "ui/screens/DirectAccessCard.kt (section title on an app page)"
+  },
+  "da_direct": {
+    "en": "Direct",
+    "ctx": "ui/screens/DirectAccessCard.kt (choice: direct link)"
+  },
+  "da_through_relay": {
+    "en": "Through the relay",
+    "ctx": "ui/screens/DirectAccessCard.kt (choice: relay link)"
+  },
+  "da_direct_note": {
+    "en": "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_relay_note": {
+    "en": "Goes through the Flagship relay. It works even when your server can't be reached from outside.",
+    "ctx": "ui/screens/DirectAccessCard.kt"
+  },
+  "da_refusal_unreadable": {
+    "en": "That change couldn't be read. Try again.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_private_address": {
+    "en": "Only public addresses can be used. Private, local and reserved addresses can't.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_bad_address": {
+    "en": "One of the addresses isn't an IP address.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_bad_prefix": {
+    "en": "One of the address ranges isn't valid.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_prefix_too_wide": {
+    "en": "An address range is too wide. Use an IPv6 /32 or longer, or an IPv4 /24 or longer.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_no_addresses": {
+    "en": "Add at least one public address or address range.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_too_many": {
+    "en": "Too many addresses: at most 8 addresses and 4 ranges.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_duplicate": {
+    "en": "An address is listed twice.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_bad_port": {
+    "en": "The port must be a number from 1 to 65535.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_bad_name": {
+    "en": "That name can't be used on fshp.app.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_clock": {
+    "en": "This device's clock is off. Check the time and try again.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_unknown_account": {
+    "en": "This account wasn't found.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_not_your_server": {
+    "en": "That server isn't one of this account's servers.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_not_admin": {
+    "en": "Only an admin device of this account can change direct access.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_replayed": {
+    "en": "A newer change is already saved. Reload and try again.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_vanity": {
+    "en": "Chosen names on fshp.app aren't available yet.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_not_your_name": {
+    "en": "A direct name must end in this account's own name.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_taken": {
+    "en": "That name belongs to another account.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_unknown_name": {
+    "en": "This name isn't on this account.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_probe_too_soon": {
+    "en": "This name was checked a moment ago. Try again in a minute.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_refusal_generic": {
+    "en": "Direct access couldn't be changed. Try again.",
+    "ctx": "api/DirectNamesClient.kt (refusal)"
+  },
+  "da_state_suspended": {
+    "en": "Suspended after an abuse report.",
+    "ctx": "api/DirectNamesClient.kt (name state)"
+  },
+  "da_state_published": {
+    "en": "Published",
+    "ctx": "api/DirectNamesClient.kt (name state)"
+  },
+  "da_state_pending": {
+    "en": "Waiting to be published",
+    "ctx": "api/DirectNamesClient.kt (name state)"
+  },
+  "da_state_not_published": {
+    "en": "Not published",
+    "ctx": "api/DirectNamesClient.kt (name state)"
+  },
+  "da_reason_off": {
+    "en": "Turned off.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_reason_account_gone": {
+    "en": "The account is gone.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_reason_server_gone": {
+    "en": "Its server is no longer on this account.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_reason_order_unverified": {
+    "en": "Its order no longer checks out under this account's admin key. Turn it on again.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_reason_access_off": {
+    "en": "Direct access is off on its server.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_reason_no_addresses": {
+    "en": "Its server hasn't reported a public address yet.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_reason_caa_unknown": {
+    "en": "Waiting for the certificate account. It will be published soon.",
+    "ctx": "api/DirectNamesClient.kt (why a name has no records)"
+  },
+  "da_probe_reachable": {
+    "en": "Reachable from outside.",
+    "ctx": "api/DirectNamesClient.kt (outside check result)"
+  },
+  "da_probe_unreachable": {
+    "en": "Not reachable from outside.",
+    "ctx": "api/DirectNamesClient.kt (outside check result)"
+  },
+  "da_probe_nothing": {
+    "en": "Not published yet, so there is nothing to check.",
+    "ctx": "api/DirectNamesClient.kt (outside check result)"
   }
 }

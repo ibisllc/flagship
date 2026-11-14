@@ -368,6 +368,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     cooldownUntilMs = renameVm.customDomainCooldownUntilMs.collectAsState().value,
                     onSubmit = { draft -> scope.launch { renameVm.submitCustomDomain(draft) } },
                 )
+                appState.currentUser.collectAsState().value?.let { user ->
+                    DirectLinkShareGroup(username = user, slug = resp.app.slug, creator = resp.app.creator, relayUrl = appLinks?.canonicalUrl)
+                }
 
                 val cdPrompt by renameVm.customDomainPrompt.collectAsState()
                 cdPrompt?.let { p ->

@@ -676,6 +676,35 @@ class MockScreensClient(
         return DebugAccessChangeResponse(ok = true, change = if (wasOn) "revoked" else "unchanged", debugAccess = debugAccessState)
     }
 
+    // ---- Direct access (docs/direct-access-and-domains.md §7) ----
+
+    val directAccessByPod: MutableMap<String, com.flagshipserver.app.core.DirectAccess.View> = mutableMapOf()
+    val directAccessOrders: MutableList<com.flagshipserver.app.core.DirectAccess.SignedOrder> = mutableListOf()
+
+    override suspend fun directAccess(): com.flagshipserver.app.core.DirectAccess.View {
+        tick()
+        return directAccessByPod[podContext] ?: com.flagshipserver.app.core.DirectAccess.View(on = false, addresses = emptyList(), prefixes = emptyList())
+    }
+
+    override suspend fun setDirectAccess(signed: com.flagshipserver.app.core.DirectAccess.SignedOrder): com.flagshipserver.app.core.DirectAccess.Change {
+        tick()
+        val o = signed.order
+        com.flagshipserver.app.core.DirectAccess.problem(o)?.let { throw ScreensError.Http(422, """{"error":"$it","code":"$it"}""") }
+        if (!o.serverDomain.equals(boxFqdn(), ignoreCase = true)) throw ScreensError.Http(422, """{"error":"wrong-server","code":"wrong-server"}""")
+        directAccessOrders += signed
+        val wasOn = directAccessByPod[podContext]?.on ?: false
+        val v = if (o.enabled) {
+            com.flagshipserver.app.core.DirectAccess.View(
+                on = true, addresses = o.addresses, prefixes = o.prefixes, port = o.port, issuedAt = o.issuedAt,
+                endpoints = o.addresses.map { com.flagshipserver.app.core.LanHint.Endpoint(it, o.port) },
+            )
+        } else {
+            com.flagshipserver.app.core.DirectAccess.View(on = false, addresses = emptyList(), prefixes = emptyList())
+        }
+        directAccessByPod[podContext] = v
+        return com.flagshipserver.app.core.DirectAccess.Change(ok = true, change = if (o.enabled) (if (wasOn) "changed" else "on") else "off", directAccess = v)
+    }
+
     // ---- Copies (docs/app-placement.md §5) ----
 
     /** Every copy request this box received, in order. */
