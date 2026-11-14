@@ -214,6 +214,17 @@ for f in "$root"/scripts/wipe-all-users*; do
 done
 wipe_count=$(( ${#findings[@]} - wipe_start ))
 
+# The gym's private test CA (docs/gym-test-acme.md) is trusted only by a seam on the `gym` branch
+# (packages/server-daemon/src/gymAcmeTrust.ts there). Box code that names it, or that extends Node's
+# default CA list at all, could make a production box accept a gym certificate: a release fails on it.
+while IFS= read -r hit; do
+  [ -z "$hit" ] && continue
+  hit_file="${hit%%:*}"
+  case "${hit_file#"$root"/}" in packages/*/src/*) ;; *) continue ;; esac
+  exclude_path "$hit_file" && continue
+  findings+=("gym test-CA trust in box code"$'\t'"$hit")
+done < <(scan_source_files 'flagship-acme-gym|setDefaultCACertificates')
+
 # An inline `debug` user outside the gate is an unconditional bake (header (b)).
 scan "debug console user (useradd)" \
   'useradd([[:space:]].*[[:space:]]debug([^[:alnum:]_-]|$)|.*DEBUG_USER)' allow-debug-gate
