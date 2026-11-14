@@ -100,6 +100,128 @@ rules (main only deploys, feature branches for unlaunched features, i18n for eve
   (`tools/release-catalog/catalog.ts`). A forged catalog can only delay or withhold releases, since every release it
   names also needs the hybrid endorsement and a hybrid-signed artifact, but it belongs with the quantum-safe item.
 
+## Advisor findings still open (swept 2026-11-13)
+
+Plan item S1. Every source the playbook names was read and each finding checked against the code on `release/0.4`
+(the fixing commits are all ancestors of it). Sources: B2 = the 2026-10-25 reviewers' "B2 OPEN" list (numbered #1 to
+#15 in journal order); SR = the 2026-11-02 independent security review; VM = the 2026-11-03 voi.ci + Messages
+review; the other 2026-11-03 B2 reviews (issuance/serving, updater/rescue, mesh); DEF = the 2026-11-02 DEFERRED
+list; SP = `SECURITY-0.3-PROGRESS.md`; REG = `docs/architecture-v2/REGISTER.md`. The Windows branch has nothing after
+`8669e1970`, and that commit's notes are already in `docs/runbooks/device-test-agent.md`.
+
+### Security (highest first)
+
+- **Medium. App image builds run as root and outside gVisor.** `npm ci` and lifecycle scripts run in the engine's
+  build (root dockerd/podman, not rootless, not gVisor), so a hostile dependency's install script runs with the
+  build's privileges. Where: `docs/architecture-v2/execution-surfaces.md` (App image builds row),
+  `release/build-isolation-profile.json`. Source: SP item 9 (N12), REG P02.
+- **Medium (review gap). Four Rust parts were never reviewed:** the WASI worker (`rust/crates/flagship-wasi`, the
+  sandbox for WebAssembly apps), `flagship-runtime`, `flagship-crypto` (the hybrid PQ code every strict check uses) and
+  the v2 `typed.rs` capability path in the broker. No later review entry covers them. Source: B2 "NOT REVIEWED".
+- **Medium. Strict servers refuse their own health reports.** The health timer signs Ed25519 only (an openssl shell
+  line), and `.com` refuses a classical report on a strict installation, so strict mode loses health. Blocks the
+  quantum-safe default (F5). Where: `packages/server-daemon/src/healthReporter.ts`,
+  `packages/control-plane/src/serverHealth.ts` (`strict-requires-hybrid`). Source: B2 #2 residual (3174b2e06 notes).
+- **Medium. gpud approval residuals.** A withdrawal the daemon withholds when it is made is never enforced; an
+  approval has no maximum age (used at every start); the strict PQ half is not required; maintenance orders are the
+  daemon's word. Where: `rust/crates/flagship-gpu/src/owner_approval.rs`, `docs/architecture-v2/gpu.md` (Owner
+  approval). Source: B2 #3/#4 residuals (7c34cd7db).
+- **Medium (design). No external review of the new crypto.** `flagship/pq-session/v1`, the hybrid KEM combiner and
+  signature binding, and boot unlock v2 are unreviewed compositions; the plan says not to rely on them before an
+  external review. Gate for strict-by-default (F5 stage 3). Where: `docs/architecture-v2/pq-suites.md` §15.1. Source:
+  REG Q01/Q07 and blocker 6.
+- **Low/Medium. keyd's master check trusts the daemon to deliver revocations.** keyd refuses revoked or superseded
+  master evidence only after the daemon hands it the owner's revocation (it can withhold, not forge), and manager rank
+  still rests on the daemon's word. Where: `packages/keyd/src/service.ts` (`revocations.json`), REG "Gap closure".
+  Source: B2 #6 residual.
+- **Low. A box keeps serving an app certificate the CA revoked** until its normal renewal: the issuance sweep revokes
+  at the CA, but the box never checks. Where: `packages/server-daemon/src/certManager.ts` (no revocation check),
+  `docs/architecture-v2/issuance-service.md` §6. Source: 3174b2e06 follow-up (SR issuance Lows).
+- **Low. A rogue relay among an account's top 3 ledgers can black-hole its bare phone name** (refuse claims, grant to
+  a relay that does not hold the phone). Hijack is closed (7bd9412bc), but the threat table row still says relays do
+  not check the admin grant chain: fix the text. Where: `docs/architecture-v2/relay-mesh.md` (threat table, "Rogue
+  full relay as phone ledger"). Source: SR M3 residual.
+- **Low. A daemon re-compromised on four starts can revert an arch-v2 switch** (root cannot tell it from a box that
+  keeps dying). Where: `docs/architecture-v2/engine-and-rust-path.md` (Trial). Source: B2 #5 residual.
+- **Low (hardware proof). Android 10 per-use biometric keys** (SR M6, 20fe07600) were proven on the emulator only with
+  SELinux off; needs a real Android 10 phone with a fingerprint. **TPM trial boot:** whether GRUB measures PCR 8/9 is
+  unverified on metal (B2 #7; the 900 s fallback is in `packages/boot-chain/src/unlockPremount.ts`). Source: journal
+  2026-11-02 SeedVault entry, B2 #7.
+
+### Owner decisions
+
+- **Calls D1 to D4** (`docs/voici-calls.md` §13): D1 who may call by default (accepted conversations, recommended, or
+  anyone signed in); D2 do iPads ring too (recommended yes); D3 a maximum call length (recommended 60 minutes); D4
+  calls off in the China mainland storefront, or ship there without CallKit.
+- **Offline USB burn / Save ISO.** The artifact preflight refuses when the control plane can't be reached
+  (`.unreachable`), so an offline burn is impossible. Allow a "burn anyway"? Where:
+  `apps/builder-mac/Sources/FlagshipBuilderCore/VM/ArtifactPreflight.swift` (and the Windows, Linux and Android
+  copies). Source: journal 2026-11-02 (73e0e5fb1).
+- **keyd rank orders have no maximum age** ("latest order wins"). Keep, or add one? Source: journal box-side B2 report
+  2026-11-02.
+- **Runtime manifest:** confirm that an expired or missing manifest is ignored (updates only refuse an unverifiable
+  one) and that there is no check at process start. Where: `packages/server-daemon/src/runtimeVerification.ts`,
+  `rust/crates/flagship-updater`. Source: journal G2 entry 2026-11-02.
+- **`.com` refusal sentences are English** (e.g. `controlPlaneRoutes.ts` "Certificates are issued by Flagship now.
+  Update this server."; no `i18n/com`). DEF says they stay English (2026-11-02); the AGENTS.md i18n rule of the same
+  day names ".com pages and refusal sentences". Pick one and fix the other.
+- **Un-revoke with a time limit:** a box comes back after un-revoke or unsuspend with apps stopped until the owner
+  re-signs a policy (by design). Add an app prompt? Source: journal 2026-11-03 un-revoke entry.
+- **Community adapters stay off** until the owner makes the attestation signing key, complaint salt and review key
+  and pins the public half (`release/adapter-vetting-keys.json` has `keys: []`). Source: SP item 5 (SEC-ADAPTER-002).
+- **R5 per-service certificates** were moved out of 0.3 (owner 2026-10-30): in or out of 0.4? Source: DEF.
+- **Play: the Wear OS open-testing track** got "Wear 9 (0.2) full rollout + resume track" through the Wear opt-in and
+  was submitted with the rest. Halt that track or leave it? Source: Play agent 2026-11-07.
+
+### Other
+
+- **IRK self-heal:** devices that already hold a wrong current IRK (from before `3de59ff78`'s IrkLineage) are not
+  repaired; nothing in the code does it. Source: journal F5a item 3.
+- **Re-sign the runtime manifest before ~2026-12-20** (`release.sh --only 10`; it was signed 2026-11-05 for 45 days).
+  Source: journal phase A entry 2026-11-05.
+- **G9 reproducibility:** the cross-machine comparison (`scripts/repro-compare.sh --second-where vm`, or against the CI
+  artifact) has not been rerun since the lockfile and Node pin fix. Source: journal G9.
+- **Phone route follow-ups:** the mailbox "please release" ask and a presence-list UI (the last-seen list exists, no
+  UI). Source: DEF (6cd99ed7d).
+- **Gym relay-mesh group needs a third relay** again (gym-c removed 2026-11-09): new seed, `gym-relay-c.sh up`,
+  `relays add`. Source: journal 2026-11-09.
+- **Hardware and device evidence still missing:** GPU on real NVIDIA hardware (DEF "gpu-real", REG G02), TPM/UKI/Secure
+  Boot (SP item 3, SEC-MBOOT-001), the incident drills with receipts and the real-box/device runs (SP item 2), the
+  rest of REG's "Blockers that code alone cannot clear".
+- **REG statuses are stale** (recorded 2026-10-23, before milestones shipped in 0.3; e.g. K01 still says the TS keyd
+  exposes a generic `unseal`, which is now scoped to pairing orders). Refresh it or archive it with the 0.3 docs (P13).
+- **If the DNS broker is revived (F6),** its wildcard-grant check lacks the issuance service's 180-day / regGen rule
+  (`apps/dns-broker/src/policy.ts`, `serverWildcardGrantOk`; compare `serverWildcardGrantInDate`).
+
+### Checked and already fixed
+
+- B2 #1 PQ pins: 33537330b (`releasePqPin.ts`, `caLeasePq.ts` name a key).
+- B2 #2 tagged health reports through `gateBoxMessage`, #11 receipt pruning by cron, #13 strict recovery needs the
+  passkey: 3174b2e06.
+- B2 #3/#4 gpu-approval/v2 binds the claim fields, root-held withdrawal floor; #5 root's own switch evidence; #6 keyd
+  revocations; #7 trial boot 900 s fallback; #8 premount pinned to the recorded UUIDs; #9 installer stops on 0 or 2+
+  disks plus the "Disk to install on" UI; #10 model-install digest and size cap; #14 mDNS on-link only; #15 nonces on
+  journal-read/v2 and stack-switch: 7c34cd7db.
+- B2 #12 re-pair veto and voi.ci name rate limits; SR M1 open redirect, M2 reply scoping, M5 leftover demo rows, voi.ci
+  revoke forgery, replay CPU burn, visitor IP in privacy §2.11: 477e41223.
+- SR M3, M4 and the mesh/phone Lows (begin eligibility, grant ids, ClientHello SNI, signer stall, /mesh caps, own
+  devices' hellos): 947b46e0b; phone claim admin-grant check on every relay: 7bd9412bc; mailbox announce relay id and
+  the rest of the mesh review: 4d61f5dc4.
+- SR M6 and the clipboard clear: 20fe07600; Android seed not auth-bound: b2b3faa1e.
+- SR issuance Lows (budget drain, sweep revocation, wildcard grant expiry): 3174b2e06; issuance/serving review
+  (delegation expiry, caps, scope, mesh epoch): a4f49b176.
+- VM 1 to 5 (budget after verification, one page per pseudonym, name reuse cleanup, real sign-out, lasting bans):
+  d092e945a; VM 6 one-off codes: shorten API removed, 20c1078b0; abuse path: df48cdfc9.
+- Updater/rescue review (root-only updater state, rescue flood, LAN name leak, runtime floor): f202215dc; rescue
+  LAN-only: 20c1078b0.
+- DNS-01 grant age/regGen (3174b2e06 follow-up): moot, the routes answer 410 `dns01-retired`
+  (`controlPlaneRoutes.ts`).
+- DEF G7/H10: the Rust relay and the mesh went live with 0.3; DEF G2 runtime pin: wired (`flagship-updater` cli,
+  broker policy).
+- SP item 1 N06 key removal: closed by the owner ("not doing"); SP item 4 watch approval client side: built
+  (`WatchBootKeyFlows.swift`, `WatchBootKey.kt`).
+- Windows branch: no commits after `8669e1970`; its runbook notes are in `device-test-agent.md`.
+
 ## From the Windows Studio 0.3 acceptance (2026-11-05 to 11-07)
 
 Source: branch `device-results/windows-2026-11-05` (`windows-0.3-acceptance-2026-11-05.md`, `WINDOWS-TO-LEAD-2026-11-06.md`,
