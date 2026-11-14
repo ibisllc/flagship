@@ -37,6 +37,7 @@ export function directNameService(fqdn: string, apex = DIRECT_APEX): { creator: 
 
 export class DirectNames {
   private held: string[] = [];
+  private read = false;
   private lastPushed: string | null = null;
   private readonly listeners = new Set<(names: readonly string[]) => void>();
   private timer: NodeJS.Timeout | null = null;
@@ -52,6 +53,11 @@ export class DirectNames {
   /** The box's verified direct names (full names), sorted. */
   names(): readonly string[] {
     return this.held;
+  }
+
+  /** Whether `.com`'s list has been read at least once since start (before it, `names()` is empty, not "none"). */
+  ready(): boolean {
+    return this.read;
   }
 
   has(fqdn: string): boolean {
@@ -113,6 +119,8 @@ export class DirectNames {
       this.log(`could not read the direct names: ${(e as Error).message}`);
       return this.held;
     }
+    const first = !this.read;
+    this.read = true;
     const me = this.o.serverFqdn.toLowerCase();
     const next: string[] = [];
     for (const raw of Array.isArray(body.names) ? body.names : []) {
@@ -127,7 +135,7 @@ export class DirectNames {
       if (!next.includes(order.name)) next.push(order.name);
     }
     next.sort();
-    if (next.join("\n") !== this.held.join("\n")) {
+    if (first || next.join("\n") !== this.held.join("\n")) {
       this.held = next;
       for (const fn of this.listeners) {
         try {

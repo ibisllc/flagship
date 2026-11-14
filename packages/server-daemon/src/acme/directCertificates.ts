@@ -8,14 +8,31 @@ import { IssuanceDeferred, IssuanceRefused, type IssuedCertificate } from "./ser
  * served for exactly that name, and stored so a restart reuses it. A refusal backs off per name; a name the box no
  * longer holds is not renewed, and its certificate runs out (no record points at the box any more).
  *
- * Only where this process terminates TLS (CertManager). With the TLS key in keyd the frontend serves keyd's slots,
- * which hold the control and apps certificates only, so direct names are not served there yet.
+ * Where this process terminates TLS the certificate goes to CertManager (and the store). With the TLS key in keyd
+ * (arch-v2) keyd holds one key and one slot per direct name: the box hands keyd its verified names (keyd drops a gone
+ * name's keys), the issuer's request comes from a key keyd made for that one name, and the chain is installed into
+ * the name's `direct` slot, which flagship-tlsd / flagship-ingress serve for exactly that name.
  */
+export interface DirectKeyd {
+  setNames(names: string[]): Promise<void>;
+  install(handle: string, chainPem: string): Promise<unknown>;
+  activate(handle: string): Promise<void>;
+  serving(): Promise<Array<{ name: string; handle: string; notAfter: number }>>;
+}
+
+/** keyd's bound on direct names (MAX_DIRECT_NAMES in packages/keyd/src/tls.ts). */
+export const KEYD_MAX_DIRECT_NAMES = 16;
+
 export interface DirectCertificatesOptions {
   issuer: { issueDirect(name: string): Promise<IssuedCertificate<"direct">>; hasPendingDirect?(name: string): boolean };
-  certManager: Pick<CertManager, "installCustom">;
+  /** Where this process terminates TLS. */
+  certManager?: Pick<CertManager, "installCustom">;
+  /** Where keyd holds the TLS keys (instead of certManager and the store). */
+  keyd?: DirectKeyd;
   store?: PersistentAcmeStore | null;
   names: () => readonly string[];
+  /** False until the box's names have been read once: keyd is never told "none" before then. */
+  namesReady?: () => boolean;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -37,6 +54,8 @@ export class DirectCertificates {
   private retry = new Map<string, { failures: number; at: number }>();
   private loaded = new Set<string>();
   private running: Promise<void> | null = null;
+  private keydNames: string | null = null;
+  private keydLoaded = false;
 
   constructor(private readonly o: DirectCertificatesOptions) {}
 
@@ -58,7 +77,8 @@ export class DirectCertificates {
   tick(): Promise<void> {
     this.running ??= (async () => {
       try {
-        for (const name of this.o.names()) await this.one(name.toLowerCase());
+        const names = this.o.keyd ? await this.syncKeyd() : this.o.names().map((n) => n.toLowerCase());
+        if (names) for (const name of names) await this.one(name);
       } finally {
         this.running = null;
       }
@@ -66,8 +86,37 @@ export class DirectCertificates {
     return this.running;
   }
 
+  /** Tell keyd the names (when they changed) and read what it serves; null when keyd can't be told yet. */
+  private async syncKeyd(): Promise<string[] | null> {
+    const keyd = this.o.keyd!;
+    if (this.o.namesReady && !this.o.namesReady()) return null;
+    let names = [...new Set(this.o.names().map((n) => n.toLowerCase()))].sort();
+    if (names.length > KEYD_MAX_DIRECT_NAMES) {
+      this.log(`keyd serves at most ${KEYD_MAX_DIRECT_NAMES} direct names; not serving ${names.slice(KEYD_MAX_DIRECT_NAMES).join(", ")}`);
+      names = names.slice(0, KEYD_MAX_DIRECT_NAMES);
+    }
+    const key = names.join("\n");
+    try {
+      if (key !== this.keydNames) {
+        await keyd.setNames(names);
+        this.keydNames = key;
+        for (const n of [...this.held.keys()]) if (!names.includes(n)) this.held.delete(n);
+      }
+      if (!this.keydLoaded) {
+        for (const s of await keyd.serving()) {
+          if (names.includes(s.name) && s.notAfter > this.now()) this.held.set(s.name, { chainPem: "", privateKeyPem: "", notBefore: s.notAfter - 90 * 86_400_000, notAfter: s.notAfter });
+        }
+        this.keydLoaded = true;
+      }
+    } catch (e) {
+      this.log(`keyd did not take the direct names: ${(e as Error).message}`);
+      return null;
+    }
+    return names;
+  }
+
   private async one(name: string): Promise<void> {
-    if (!this.loaded.has(name)) {
+    if (!this.o.keyd && !this.loaded.has(name)) {
       this.loaded.add(name);
       const c = await this.o.store?.loadCert(storeKey(name)).catch(() => null);
       if (c && c.notAfter > this.now()) {
@@ -80,8 +129,15 @@ export class DirectCertificates {
     if ((this.held.has(name) && now < this.dueAt(name)) || now < r.at) return;
     try {
       const c = await this.o.issuer.issueDirect(name);
-      await this.o.store?.saveCert(storeKey(name), { certPem: c.chainPem, privateKeyPem: c.privateKeyPem, names: c.names, notAfter: c.notAfter });
-      this.install(name, { chainPem: c.chainPem, privateKeyPem: c.privateKeyPem, notBefore: c.notBefore, notAfter: c.notAfter });
+      if (this.o.keyd) {
+        if (!c.handle) throw new Error("the certificate's key is not in keyd");
+        await this.o.keyd.install(c.handle, c.chainPem);
+        await this.o.keyd.activate(c.handle);
+        this.held.set(name, { chainPem: c.chainPem, privateKeyPem: "", notBefore: c.notBefore, notAfter: c.notAfter });
+      } else {
+        await this.o.store?.saveCert(storeKey(name), { certPem: c.chainPem, privateKeyPem: c.privateKeyPem, names: c.names, notAfter: c.notAfter });
+        this.install(name, { chainPem: c.chainPem, privateKeyPem: c.privateKeyPem, notBefore: c.notBefore, notAfter: c.notAfter });
+      }
       this.retry.delete(name);
       this.log(`${name}: certificate installed; not after ${new Date(c.notAfter).toISOString()}`);
     } catch (e) {
@@ -97,7 +153,7 @@ export class DirectCertificates {
 
   private install(name: string, h: Held): void {
     this.held.set(name, h);
-    this.o.certManager.installCustom(name, { certPem: h.chainPem, privateKeyPem: h.privateKeyPem }, h.notAfter);
+    this.o.certManager?.installCustom(name, { certPem: h.chainPem, privateKeyPem: h.privateKeyPem }, h.notAfter);
   }
 
   private log(m: string): void {

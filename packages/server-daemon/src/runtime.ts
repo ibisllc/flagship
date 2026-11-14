@@ -1166,7 +1166,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           enabled: decide.enabled,
           appForSni: (sni) => {
             const label = leftmostLabel(sni, opts.serverFqdn) ?? tier2ServiceLabel(sni, opts.serverFqdn);
-            return label && servicePlatformRef.current ? servicePlatformRef.current.byLabel(label) : undefined;
+            return label && servicePlatformRef.current
+              ? servicePlatformRef.current.byLabel(label)
+              : directApp(sni, directNamesRef.current, servicePlatformRef.current);
           },
           // routedHost as on the TS path: the access authority, the origin check and the app's Host follow the SNI.
           options: (app, sni) =>
@@ -1241,8 +1243,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         controller: opts.directAccess,
         backendPort: tlsPort,
         zone: opts.serverFqdn,
-        // Only where this process terminates TLS: keyd's frontend holds no certificate for them yet.
-        ...(directNames && !opts.opaqueTls ? { directNames: () => directNames.names() } : {}),
+        ...(directNames ? { directNames: () => directNames.names() } : {}),
       })
     : null;
   const stopDirectNames = directNames?.start() ?? null;
@@ -1444,16 +1445,31 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   await boxCerts.load();
   if (!wantWildcard) boxCerts.onlyControl();
   boxCerts.start(opts.renewalCheckIntervalMs ?? 10 * 60_000);
-  // One certificate per direct name, served by this process's TLS server; keyd's frontend serves only its slots.
+  // One certificate per direct name: served by this process's TLS server, or from its own slot in keyd, which
+  // flagship-tlsd / flagship-ingress serve for exactly that name.
   let directCertsTimer: NodeJS.Timeout | null = null;
   let stopDirectCerts: (() => void) | null = null;
-  if (directNames && !opts.opaqueTls) {
-    const directCerts = new DirectCertificates({ issuer: serviceIssuer, certManager, store, names: () => directNames.names() });
-    stopDirectCerts = directNames.onChange(() => void directCerts.tick());
-    directCertsTimer = setInterval(() => void directCerts.tick(), opts.renewalCheckIntervalMs ?? 10 * 60_000);
-    directCertsTimer.unref?.();
-  } else if (directNames) {
-    console.log("[runtime] direct names are not served while keyd holds the TLS key (its frontend has no slot for them)");
+  if (directNames) {
+    const directKeyd =
+      keydTls?.directNames && keydTls.directServing
+        ? {
+            setNames: (names: string[]) => keydTls.directNames!(names),
+            install: (h: string, chain: string) => keydTls.acme.tlsInstall(h, chain),
+            activate: (h: string) => keydTls.activate(h, "direct"),
+            serving: () => keydTls.directServing!(),
+          }
+        : null;
+    if (!keydTls || directKeyd) {
+      const directCerts = new DirectCertificates({
+        issuer: serviceIssuer,
+        names: () => directNames.names(),
+        namesReady: () => directNames.ready(),
+        ...(directKeyd ? { keyd: directKeyd } : { certManager, store }),
+      });
+      stopDirectCerts = directNames.onChange(() => void directCerts.tick());
+      directCertsTimer = setInterval(() => void directCerts.tick(), opts.renewalCheckIntervalMs ?? 10 * 60_000);
+      directCertsTimer.unref?.();
+    }
   }
   if (opts.servicePlatform?.hostUsername) {
     console.log("[runtime] per-service certificates are retired: app names are served by the box's app certificate");

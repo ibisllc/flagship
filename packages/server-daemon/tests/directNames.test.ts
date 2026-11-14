@@ -3,6 +3,7 @@
  * names the box serves (only owner-signed ones it verifies itself), the TLS gate and app routing for them, and one
  * certificate per name through the real `.com` issuance route (sqlite D1, fake CA).
  */
+import { X509Certificate } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
@@ -31,7 +32,10 @@ import { directApp } from "../src/runtime.js";
 import { CertManager } from "../src/certManager.js";
 import { PersistentAcmeStore } from "../src/acme/persistentStore.js";
 import { DirectCertificates } from "../src/acme/directCertificates.js";
-import { localCsrSource, ServiceIssuer } from "../src/acme/serviceIssuer.js";
+import { keydCsrSource, localCsrSource, ServiceIssuer } from "../src/acme/serviceIssuer.js";
+import { keydTlsKeyd } from "../src/keydAsync.js";
+import { KeydClient, TlsKeys, namesFor } from "@flagship/keyd";
+import { startInProcess } from "../../keyd/tests/helpers.js";
 import { selfSigned } from "./helpers/selfSignedTls.js";
 
 const SERVER = "home.alice.flagship.services";
@@ -294,6 +298,88 @@ describe("one certificate per direct name through .com", () => {
     } finally {
       sqlite.close();
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("one certificate per direct name with the TLS key in keyd", () => {
+  it("keyd holds one key and one direct slot per verified name, the frontend's list names it, and a gone name's key goes", async () => {
+    const sqlite = createSqliteD1();
+    const db = sqlite as unknown as D1Database;
+    const storage = new D1Storage(db);
+    const k = await startInProcess({ tls: new TlsKeys(new Set(namesFor(SERVER))) }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
+    const client = new KeydClient({ socketPath: k.sock, component: "daemon-tls" });
+    try {
+      await client.connect();
+      const keyd = keydTlsKeyd(client);
+      await storage.usernames.put({ username: "alice", irkPubHex: hex(irk.publicKey), claimedAt: 1, adminRootPubHex: hex(admin.publicKey) });
+      await storage.servers.put({ serverDomain: SERVER, username: "alice", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 });
+      const o = nameOrder();
+      await storage.directAccess.putNameIfNewer({ name: "game--alice", username: "alice", kind: "derived", serverDomain: SERVER, enabled: true, orderJson: JSON.stringify(o), signatureHex: hex(signDirectNameOrder(o, admin)), issuedAt: o.issuedAt, now: 1 });
+      const dns = new FakeDns();
+      const ca = new FakeAcme(dns);
+      const clock = { t: Date.now() };
+      const env = { DB: db, ISSUANCE_ACME_ACCOUNT_KEY: await accountKeyPem(), ISSUANCE_ACME_DIRECTORY: ca.directory, SERVICES_APEX: "flagship.services" };
+      const deps = { usernames: storage.usernames, grants: storage.deviceCapabilityGrants, dns, directDns: dns, fetchImpl: ca.fetch as typeof fetch, now: () => clock.t, propagationMs: 0, challengeQuietMs: 0 };
+      const bodies: Array<Record<string, unknown>> = [];
+      const comFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST" && String(input).endsWith("/api/certificates/orders")) bodies.push(JSON.parse(String(init.body)));
+        return (await tryIssuanceRoute(new Request(String(input), init), env, deps)) ?? new Response("{}", { status: 404 });
+      }) as typeof fetch;
+      const issuer = new ServiceIssuer({
+        controlPlaneBaseUrl: "https://flagshipserver.com",
+        serverFqdn: SERVER,
+        boxPubHex: hex(stk.publicKey),
+        signAsBox: (m) => ed.sign(m, stk.privateKey),
+        regGen: () => 1,
+        wildcardGrant: () => undefined,
+        csr: keydCsrSource({ tlsCreateKey: (n) => keyd.acme.tlsCreateKey(n), tlsCsr: (h) => keyd.csr!(h) }),
+        fetchImpl: comFetch,
+        now: () => clock.t,
+        sleep: async (ms) => {
+          clock.t += ms;
+        },
+      });
+      const directKeyd = {
+        setNames: (n: string[]) => keyd.directNames!(n),
+        install: (h: string, chain: string) => keyd.acme.tlsInstall(h, chain),
+        activate: (h: string) => keyd.activate(h, "direct"),
+        serving: () => keyd.directServing!(),
+      };
+      let names: string[] = [NAME];
+      let ready = false;
+      const certs = new DirectCertificates({ issuer, keyd: directKeyd, names: () => names, namesReady: () => ready, now: () => clock.t, log: () => {} });
+      // Before the box has read its names, keyd is told nothing.
+      await certs.tick();
+      expect(bodies.length).toBe(0);
+      expect((await client.call("tls.list")).directNames).toEqual([]);
+      ready = true;
+      await certs.tick();
+      expect(certs.has(NAME)).toBe(true);
+      expect(bodies[0]).toMatchObject({ directName: NAME, order: { class: "direct" } });
+      const served = (await client.call("tls.active")).serving as Array<{ slot: string; names: string[]; chainPem: string }>;
+      expect(served.map((x) => [x.slot, x.names])).toEqual([["direct", [NAME]]]);
+      expect(new X509Certificate(served[0]!.chainPem).subjectAltName).toBe(`DNS:${NAME}`);
+      const listed = (await client.call("tls.list")).keys as Array<{ names: string[]; active: boolean }>;
+      expect(listed.filter((x) => x.names[0] === NAME && x.active)).toHaveLength(1);
+      expect(JSON.stringify(listed)).not.toMatch(/priv/i);
+      await certs.tick();
+      expect(bodies.length).toBe(1);
+      // A restarted daemon reads what keyd serves and does not order again.
+      const restarted = new DirectCertificates({ issuer, keyd: directKeyd, names: () => names, now: () => clock.t, log: () => {} });
+      await restarted.tick();
+      expect(restarted.has(NAME)).toBe(true);
+      expect(bodies.length).toBe(1);
+      // The name goes: keyd drops its slot and its key.
+      names = [];
+      await restarted.tick();
+      expect(restarted.has(NAME)).toBe(false);
+      expect((await client.call("tls.active")).serving).toEqual([]);
+      expect(((await client.call("tls.list")).keys as unknown[]).length).toBe(0);
+    } finally {
+      client.close();
+      await k.stop();
+      sqlite.close();
     }
   });
 });

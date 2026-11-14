@@ -357,8 +357,12 @@ Cloudflare (owner).
 - admits exactly those names at the public listener's TLS gate (`lanSniAllowed` with `extraNames`), routes
   `<slug>--<creator>.fshp.app` to that app, and orders one `direct` certificate per name (`ServiceIssuer.issueDirect`),
   stored and reused across restarts, renewed in its last third, backing off per name on a refusal.
+- with the TLS key in keyd (arch-v2), hands keyd its verified names (`tls.directNames`, once `.com`'s list has been
+  read; keyd takes only `<slug>--<account>.fshp.app` of its own account, at most 16, and drops a gone name's keys),
+  orders each certificate with a CSR from a key keyd made for that one name, and installs the chain into the name's
+  `direct` slot. flagship-tlsd and flagship-ingress serve a direct slot for exactly its name (exact SNI, never a
+  wildcard or another name); `tls.sign` is unchanged (TLS handshake input only). Wire-compatible TS and Rust keyd
+  (shared differential cases and state files in `packages/keyd/tests/rustBackend.test.ts`).
 
-**Still open for step 3**: with the TLS key in keyd (arch-v2 boxes) direct names are not served: keyd's frontend
-(flagship-tlsd / flagship-ingress) has only the control and apps slots, so it needs a slot per direct name (keyd,
-Go and Rust). No CT watch for `fshp.app`; no renewal/lapse for vanity names (none exist); no abuse route to suspend a
+**Still open for step 3**: No CT watch for `fshp.app`; no renewal/lapse for vanity names (none exist); no abuse route to suspend a
 name (the storage call exists). Not run on a real box.

@@ -12,7 +12,7 @@ export interface OpaqueTlsKeyd {
   acme: KeydAcmeApi;
   active(): Promise<{ handle: string; chainPem: string; notAfter: number; names: string[]; legacy: boolean } | null>;
   /** Without a slot: the one default certificate (clears the slots). With one: that class of names beside it. */
-  activate(handle: string, slot?: "control" | "apps"): Promise<void>;
+  activate(handle: string, slot?: "control" | "apps" | "direct"): Promise<void>;
   /** The certificates in service by slot, or null from a keyd that serves only one. */
   serving?(): Promise<Array<{ slot: string; handle: string }> | null>;
   /** Remove keys that came from the old process's PEM files and are no longer in service. */
@@ -20,6 +20,10 @@ export interface OpaqueTlsKeyd {
   /** PKCS#10 (DER) for a key keyd made, for exactly the names it was made for (the issuance service's request). */
   csr?(handle: string): Promise<Uint8Array>;
   list?(): Promise<Array<{ handle: string; names: string[]; notAfter: number | null; active: boolean; legacy: boolean }>>;
+  /** Hand keyd the box's verified direct names (at most 16); keyd drops the keys of a name that went. */
+  directNames?(names: string[]): Promise<void>;
+  /** The direct names' certificates keyd has in service. */
+  directServing?(): Promise<Array<{ name: string; handle: string; notAfter: number }>>;
 }
 
 /**

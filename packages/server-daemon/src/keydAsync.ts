@@ -55,6 +55,16 @@ export function keydTlsKeyd(client: KeydClient): OpaqueTlsKeyd {
         legacy: k.legacy === true,
       }));
     },
+    async directNames(names) {
+      await client.call("tls.directNames", { names });
+    },
+    async directServing() {
+      const r = (await client.call("tls.active")).serving;
+      if (!Array.isArray(r)) return [];
+      return (r as Array<{ slot: string; handle: string; names?: unknown; notAfter?: unknown }>)
+        .filter((s) => s.slot === "direct" && Array.isArray(s.names) && typeof s.names[0] === "string")
+        .map((s) => ({ name: String((s.names as string[])[0]), handle: String(s.handle), notAfter: Number(s.notAfter) || 0 }));
+    },
     async pruneLegacy() {
       const keys = (await client.call("tls.list")).keys as Array<{ handle: string; legacy: boolean; active: boolean }>;
       for (const k of keys) if (k.legacy && !k.active) await client.call("tls.remove", { handle: k.handle });
