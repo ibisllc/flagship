@@ -244,5 +244,6 @@
   "studioOutOfDateDownloadTheNew": "Esta versão do Flagship Studio está desatualizada. Baixe a nova em flagshipserver.com/studio e pareie de novo.",
   "downloadTheNewStudio": "Baixar o novo Studio",
   "flagshipCouldntStartPairingDetailsInLog": "O Flagship não conseguiu iniciar o pareamento. Os detalhes estão no registro.",
-  "tryAgain": "Tentar de novo"
+  "tryAgain": "Tentar de novo",
+  "thisIsntAFlagshipRecipe": "Isto não é uma receita do Flagship."
 }

@@ -244,5 +244,6 @@
   "studioOutOfDateDownloadTheNew": "此版本的 Flagship Studio 已过时。请从 flagshipserver.com/studio 下载新版本，然后重新配对。",
   "downloadTheNewStudio": "下载新版 Studio",
   "flagshipCouldntStartPairingDetailsInLog": "Flagship 无法开始配对。详细信息见日志。",
-  "tryAgain": "重试"
+  "tryAgain": "重试",
+  "thisIsntAFlagshipRecipe": "这不是 Flagship 配方。"
 }

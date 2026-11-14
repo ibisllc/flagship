@@ -68,7 +68,10 @@ public sealed record Recipe
 
 public sealed class RecipeException : Exception
 {
-    public RecipeException(string message) : base(message) { }
+    public RecipeException(string message, string? detail = null) : base(message) { Detail = detail; }
+
+    /// <summary>Technical detail for the log (e.g. the JSON parser's English message), never shown as the reason.</summary>
+    public string? Detail { get; }
 }
 
 public static class RecipeLoader
@@ -178,7 +181,7 @@ public static class RecipeLoader
     {
         JsonDocument doc;
         try { doc = JsonDocument.Parse(NormalizeEnvelope(data)); }
-        catch (JsonException e) { throw new RecipeException($"Not a valid recipe: {e.Message}"); }
+        catch (JsonException e) { throw new RecipeException(Strings.T("thisIsntAFlagshipRecipe"), $"recipe JSON: {e.Message}"); }
         using (doc)
         {
             var root = doc.RootElement;

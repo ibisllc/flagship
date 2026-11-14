@@ -748,4 +748,7 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="tryAgain" xml:space="preserve">
     <value>Erneut versuchen</value>
   </data>
+  <data name="thisIsntAFlagshipRecipe" xml:space="preserve">
+    <value>Das ist kein Flagship-Rezept.</value>
+  </data>
 </root>

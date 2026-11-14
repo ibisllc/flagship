@@ -1062,7 +1062,12 @@ public sealed class Wizard : INotifyPropertyChanged
         var result = await Task.Run<(Recipe? recipe, string? error)>(() =>
         {
             try { return (RecipeLoader.Load(path), null); }
-            catch (RecipeException e) { return (null, e.Message); }
+            catch (RecipeException e)
+            {
+                // The reason is a translated sentence; the parser's English detail goes to the log only.
+                if (e.Detail is string detail) OnUi(() => AppendLog(LogStream.Stderr, detail));
+                return (null, e.Message);
+            }
             catch (Exception e) { return (null, e.Message); }
         });
         if (result.recipe is Recipe old && OlderAppRecipe.Refusal(old) is string refusal)

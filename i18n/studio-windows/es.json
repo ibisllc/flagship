@@ -244,5 +244,6 @@
   "studioOutOfDateDownloadTheNew": "Esta versión de Flagship Studio está desactualizada. Descarga la nueva desde flagshipserver.com/studio y vuelve a vincular.",
   "downloadTheNewStudio": "Descargar el nuevo Studio",
   "flagshipCouldntStartPairingDetailsInLog": "Flagship no pudo iniciar la vinculación. Los detalles están en el registro.",
-  "tryAgain": "Reintentar"
+  "tryAgain": "Reintentar",
+  "thisIsntAFlagshipRecipe": "Esto no es una receta de Flagship."
 }

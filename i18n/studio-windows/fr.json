@@ -244,5 +244,6 @@
   "studioOutOfDateDownloadTheNew": "Cette version de Flagship Studio n’est plus à jour. Téléchargez la nouvelle sur flagshipserver.com/studio, puis associez à nouveau.",
   "downloadTheNewStudio": "Télécharger le nouveau Studio",
   "flagshipCouldntStartPairingDetailsInLog": "Flagship n’a pas pu démarrer l’association. Les détails sont dans le journal.",
-  "tryAgain": "Réessayer"
+  "tryAgain": "Réessayer",
+  "thisIsntAFlagshipRecipe": "Ce n’est pas une recette Flagship."
 }
