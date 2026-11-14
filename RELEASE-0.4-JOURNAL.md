@@ -109,7 +109,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [~] F1 (steps 1-2 merged 2026-11-13: `flagship/direct-access/v1` order, `direct-address/v1` box update, `lan-hint/v2`, box public listener, iOS/Android probe; vectors TS/Swift/Kotlin; also fixed: the LAN listener counted forwarded public IPv4 as LAN, exposing rescue routes. NEXT: step 3 `.com` registry + fshp.app records + issuance; step 5 screens. Owner Qs: non-admin devices using the public path; forwarded IPv4 changes) Direct access (`docs/direct-access-and-domains.md` §6): app-side direct path to public addresses, the
       direct-access order + vectors (TS/Swift/Kotlin), `.com` direct-name registry + prober + `fshp.app` records +
       issuance, clients' opt-in and name screens, take `fshp.app` off the website mirror, tests.
-- [ ] F2 Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
+- [~] F2 (fold MERGED 2026-11-14: marketplace, Pro payments + vouchers, custom names, custom domains, outbound proxy on release/0.4; shell v208; migrations 0090/0091/0093/0094/0099; parity green; no iOS Xcode build since; new dep undici: run npm ci) Subscriptions + payments: design `docs/payments-privacy-and-rails.md` (`8faecc2ec`): $1 blind-signed vouchers are the only
       currency; Apple IAP / Google Play / Stripe / Monero / Lightning (BTCPay) all sell vouchers; subscriptions as a
       voucher drip to the lead server; the box pays its own bill via OHTTP; plan via `plan-attestation/v1`. Owner
       answers its §9 Q1-Q11. DECIDED 2026-11-13: crypto = Monero only (no Lightning); no refunds; no cash by mail.
@@ -230,6 +230,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   webapp/index.html: sent back to its agent. Fold notes: shell v208, migrations 0090/0091/0093/0094/0099 (no clash),
   parity has two reds from release/0.4 itself (Social tab removed anchored files; device-revocation-list vectors unread).
   Owner's round-3 retail notes recorded in docs/retail-box-setup.md §15 (ratcheting code, locked reset, network).
+- 2026-11-14 Merged the fold (47 commits; fits the responsive layout; parity reds fixed: Social-tab anchors,
+  device-revocation-list keyd-only, extension pairing phone-only). Retail: no printed cards; Bluetooth + press is the
+  normal no-monitor method (phone registers the box key at .com before sending Wi-Fi); monitor + 3 presses shows the
+  sharing QR; one public gestures page. Owner out of office for a few hours: keep building.
 
 ## Resume point
 
