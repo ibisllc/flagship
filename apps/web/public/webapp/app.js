@@ -73,7 +73,6 @@ import {
   downloadIcon,
   scanIcon,
   flagIcon,
-  messageCircleIcon,
 } from "./lib/icons.js";
 import { getSession, unlockSession } from "./lib/state.js";
 import { dispatchInitialView } from "./lib/deepLink.js";
@@ -147,9 +146,8 @@ import { initLocalAiView } from "./views/local-ai.js";
 import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
 import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
-import { initMessagesView, enterMessages, enterMessagesSettings, enterPageHeader } from "./views/messages.js";
+import { initMessagesView, enterMessages, enterYourPage } from "./views/messages.js";
 import { initThreadView } from "./views/thread.js";
-import { initPageEditorView } from "./views/page-editor.js";
 import { initVoiciSignInView } from "./views/voici-sign-in.js";
 import { joinLinkFromLocation } from "./lib/crossDevicePairing.js";
 import {
@@ -202,9 +200,8 @@ const SUB_VIEW_TABS = {
   "view-browser-viewer": "apps",
   "view-messages": "messages",
   "view-thread": "messages",
-  "view-page-editor": "messages",
   "view-voici-sign-in": "messages",
-  "view-messages-settings": "settings",
+  "view-signed-in-sites": "messages",
   "view-install-progress": "activity",
   "view-account-audit": "activity",
   "view-settings": "settings",
@@ -253,7 +250,6 @@ const SETTINGS_ROW_ICONS = {
   requests: usersIcon,
   profiles: userIcon,
   page: userIcon,
-  messages: messageCircleIcon,
   dibs: flagIcon,
   appearance: monitorIcon,
   privacy: shieldIcon,
@@ -302,7 +298,7 @@ function wireTabBar() {
   const map = {
     home: serverIcon,
     apps: packageIcon,
-    messages: messageCircleIcon,
+    messages: userIcon,
     activity: activityIcon,
     settings: settingsIcon,
   };
@@ -363,8 +359,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-companion-dock", enterCompanionDock);
   wire("settings-tab-companion-requests", enterCompanionRequests);
   wire("settings-tab-profiles", enterProfiles);
-  wire("settings-tab-page", enterPageHeader);
-  wire("settings-tab-messages", enterMessagesSettings);
+  wire("settings-tab-page", enterYourPage);
   // App group — static informational sub-screens.
   wire("settings-tab-appearance", () => show("view-appearance"));
   wire("settings-tab-privacy", () => show("view-privacy"));
@@ -624,7 +619,6 @@ async function boot() {
   initProfilesView();
   initMessagesView();
   initThreadView();
-  initPageEditorView();
   initVoiciSignInView();
   // When the user flips profiles, re-render the surfaces that read per-
   // profile state so the new active cloud's view is what they see.

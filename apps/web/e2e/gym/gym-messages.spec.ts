@@ -204,12 +204,17 @@ async function deviceGrant(page: Page) {
   }, ADMIN_SEED_HEX);
 }
 
-async function openMessagesTab(page: Page): Promise<void> {
+/** The Social tab, on its Profile or its Messages side (docs/social-tab.md). */
+async function openSocial(page: Page, side: "profile" | "messages"): Promise<void> {
   await page.click('[data-tab-target="messages"]');
   await expect(page.locator("#view-messages")).toBeVisible();
+  await page.click(`[data-social-side="${side}"]`);
+  await expect(page.locator(side === "profile" ? "#social-profile" : "#social-messages")).toBeVisible();
 }
 
-test.describe("gym webapp voi.ci pages and Messages", () => {
+const openMessagesTab = (page: Page) => openSocial(page, "messages");
+
+test.describe("gym webapp voi.ci pages and the Social tab", () => {
   test("gym messages owner reads a verified message and replies", async ({ page }, testInfo) => {
     const { com } = await messagesWorld(page);
     await publishOwnerPage(page);
@@ -217,7 +222,8 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     // A forged copy (another body under the same signature) never shows.
     com.inbox.push({ envelope: v.envelope, storedAt: Date.now() }, { envelope: { ...v.envelope, msgId: "ee".repeat(16) }, storedAt: Date.now() });
     await openMessagesTab(page);
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=social-title]")).toHaveText("Messages");
     // A first message is a request until the owner replies or accepts.
     await expect(page.locator("#messages-list [data-conv]")).toHaveCount(0);
     await page.click('[data-messages-tab="requests"]');
@@ -265,36 +271,45 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
   test("gym messages page editor publishes after the warning", async ({ page }, testInfo) => {
     const { m, com, keys } = await messagesWorld(page);
     m.get(path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
-    await openMessagesTab(page);
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
-    await expect(page.locator("#ph-name")).toHaveValue("smoketest");
-    await expect(page.locator("[data-testid=ph-url]")).toHaveText("voi.ci/smoketest");
-    await expect(page.locator("[data-testid=messages-empty]")).toHaveText("No messages yet. Turn on Accept messages on your page to get them.");
-    await page.click("[data-testid=messages-edit-page]");
-    await expect(page.locator("#view-page-editor")).toBeVisible();
-    await expect(page.locator("[data-testid=voici-warning]")).toHaveText(
-      "Anyone can see this page. It shares your username with your apps and servers, so people can connect them.",
-    );
-    await page.setInputFiles("#pe-photo", { name: "me.png", mimeType: "image/png", buffer: ONE_PX_PNG });
-    await expect(page.locator("#pe-avatar-img")).toBeVisible();
-    await page.fill("#pe-name", "Smoke Test");
-    await page.fill("#pe-bio", "Builds things.");
-    await page.click("#pe-link-add");
-    await page.fill('[data-link-url="0"]', "https://github.com/smoketest");
-    await expect(page.locator('[data-link-site="0"]')).toHaveText("GitHub");
-    await page.fill('[data-link-label="0"]', "Code");
-    // A field becomes a draft when it is left; there is no Save button any more, and leaving it keeps the focus moving.
-    await page.locator('[data-link-label="0"]').press("Tab");
-    await expect(page.locator('[data-link-remove="0"]')).toBeFocused();
-    await expect(page.locator("#pe-save-profile")).toHaveCount(0);
+    await openSocial(page, "profile");
+    await expect(page.locator("[data-testid=social-title]")).toHaveText("Your page");
+    await expect(page.locator("[data-testid=social-address]")).toHaveText("voi.ci/smoketest");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Not public");
+    await expect(page.locator("[data-testid=page-name-text]")).toHaveText("smoketest");
+    // Nothing waits, so there is no bar.
+    await expect(page.locator("[data-testid=pe-publish-bar]")).toHaveCount(0);
+
+    await page.setInputFiles("#page-photo", { name: "me.png", mimeType: "image/png", buffer: ONE_PX_PNG });
+    await expect(page.locator("#page-avatar-img")).toBeVisible();
+    // The name and the bio read as the page; a pencil opens each, and the open field already counts as a change.
+    await page.click("#page-edit-name");
+    await page.fill("#page-display-name", "Smoke Test");
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("1 change not published");
+    await page.click("#page-edit-done");
+    await expect(page.locator("[data-testid=page-name-text]")).toHaveText("Smoke Test");
+    await page.click("#page-edit-bio");
+    await page.fill("#page-bio", "Builds things.");
+    await page.click("#page-edit-done");
+    await expect(page.locator("[data-testid=page-bio-text]")).toHaveText("Builds things.");
+    await page.click("#page-edit-links");
+    await page.fill("#link-label", "Code");
+    await page.fill("#link-url", "https://github.com/smoketest");
+    await page.click("#link-add");
+    await expect(page.locator("[data-link-row]")).toHaveCount(1);
+    await page.click("[data-sheet-done]");
+    await expect(page.locator("[data-link] [data-link-label]")).toHaveText("Code");
     // Nothing is published yet: the change is grayed, the first publish waits for Publish.
-    await expect(page.locator("[data-testid=profile-pending]")).toHaveText("Not published yet");
-    await page.check("#pe-accepts");
-    await page.fill("#pe-post-text", "Hello from the web.");
-    await page.click("#pe-post-add");
-    await expect(page.locator("#pe-posts [data-post] [data-post-pending]")).toHaveText("Not published yet");
-    await expect(page.locator("[data-testid=preview-name]")).toHaveText("Smoke Test");
-    await expect(page.locator("[data-testid=preview-send]")).toHaveText("Send me a message");
+    await expect(page.locator("[data-testid=page-pending-note]")).toHaveText("Not published yet");
+    await page.click("#page-options");
+    await page.click("#page-accepts");
+    await expect(page.locator("#page-accepts")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=accepts-pending]")).toHaveText("Not published yet");
+    await page.click("[data-sheet-done]");
+    await page.click("#page-new-post-open");
+    await page.fill("#post-text", "Hello from the web.");
+    await page.click("#post-save");
+    await expect(page.locator("[data-testid=page-post-pending] [data-post-pending]")).toHaveText("Not published yet");
     // One bar counts every change: the profile (one change however many fields), Accept messages, the post.
     await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
     // The drafts are in the account's lane (one profile change, the older ones consumed), not only in memory: a
@@ -304,10 +319,9 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
       const W = await import("/lib/voiciWorld.js");
       Object.assign(W.world, { localOps: [], drafts: [], pageLoaded: false });
     });
-    await page.click("#page-editor-back");
-    await page.click("[data-testid=messages-edit-page]");
+    await openSocial(page, "profile");
     await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
-    await expect(page.locator("[data-testid=preview-name]")).toHaveText("Smoke Test");
+    await expect(page.locator("[data-testid=page-name-text]")).toHaveText("Smoke Test");
     expect(com.index).toBeNull();
     await shot(page, testInfo, "page-editor-pending");
 
@@ -319,10 +333,11 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
       "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.",
     );
     await page.click("[data-modal-ok]");
-    await expect(page.locator("#pe-switch")).toHaveAttribute("aria-checked", "true");
-    await expect(page.locator("[data-testid=page-status]")).toHaveText("Anyone with the link can see your page.");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
     await expect(page.locator("[data-testid=pe-publish-bar]")).toHaveCount(0);
-    await expect(page.locator("#pe-posts .is-pending")).toHaveCount(0);
+    await expect(page.locator("[data-testid=page-post-pending]")).toHaveCount(0);
+    await expect(page.locator("[data-testid=page-post]")).toHaveCount(1);
 
     // Signed by the admin root at seq 1; the photo is a clean JPEG within the cap.
     expect(com.index.seq).toBe(1);
@@ -347,18 +362,17 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
   test("gym messages a device without the admin root sends a draft and shows it grayed", async ({ page }, testInfo) => {
     const { m, com, keys } = await messagesWorld(page, "non-admin");
     m.first("GET", path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
-    await openMessagesTab(page);
-    await expect(page.locator("[data-testid=ph-admin-only]")).toHaveText("Only an admin device can publish your page.");
-    await expect(page.locator("#ph-switch")).toBeDisabled();
-    await page.click("[data-testid=messages-edit-page]");
+    await openSocial(page, "profile");
     await expect(page.locator("[data-testid=page-admin-only]")).toHaveText("Only an admin device can publish your page.");
-    await expect(page.locator("#pe-switch")).toBeDisabled();
+    await expect(page.locator("#page-public-switch")).toBeDisabled();
     await expect(page.locator("#pe-publish")).toHaveCount(0);
     const mark = await toastMark(page);
-    await page.fill("#pe-post-text", "Written on a member device.");
-    await page.click("#pe-post-add");
+    await page.click("#page-new-post-open");
+    await page.fill("#post-text", "Written on a member device.");
+    await page.click("#post-save");
     await sawToast(page, "Sent to your admin device to publish.", 15_000, mark);
-    await expect(page.locator("#pe-posts [data-post] [data-post-pending]")).toHaveText("Waiting for an admin device to publish");
+    await expect(page.locator("[data-testid=page-post-pending] [data-post-pending]")).toHaveText("Waiting for an admin device to publish");
+    await expect(page.locator("#pe-publish")).toHaveCount(0);
     await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("Waiting for an admin device to publish");
     expect(com.index).toBeNull();
     expect(com.drafts).toHaveLength(1);
@@ -379,52 +393,61 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await publishOwnerPage(page);
     const pageId = com.index.pageId;
-    await openMessagesTab(page);
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
-    await expect(page.locator("#ph-name")).toHaveValue("Smoke Test");
+    await openSocial(page, "profile");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=page-name-text]")).toHaveText("Smoke Test");
 
-    // The copy button writes the address and says so.
-    await page.click("#ph-copy");
-    await expect(page.locator("#ph-copied")).toHaveText("Copied");
+    // Page options copies the address and says so.
+    const mark = await toastMark(page);
+    await page.click("#page-options");
+    await expect(page.locator("[data-testid=page-options-url]")).toHaveText("voi.ci/smoketest");
+    await page.click("#page-copy-link");
+    await sawToast(page, "Link copied.", 5_000, mark);
     expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/smoketest$/);
+    await page.click("[data-sheet-done]");
 
-    // On a public page the header's name is published at once.
-    await page.fill("#ph-name", "Smoke T.");
-    await page.locator("#ph-name").press("Enter");
+    // On a public page a name change is a draft like any other, published from the bar.
+    await page.click("#page-edit-name");
+    await page.fill("#page-display-name", "Smoke T.");
+    await page.locator("#page-display-name").press("Enter");
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("1 change not published");
+    expect(com.seq).toBe(1);
+    await page.click("#pe-publish");
     await expect.poll(() => com.seq).toBe(2);
+    await expect(page.locator("[data-testid=pe-publish-bar]")).toHaveCount(0);
     const prof = JSON.parse(com.pieces.get(com.index.pieces.find((p: any) => p.role === "profile").sha256)!.toString("utf8"));
     expect(prof.displayName).toBe("Smoke T.");
 
     // Off: a confirm, then a removal signed one step up the ladder.
-    await page.click("#ph-switch");
+    await page.click("#page-public-switch");
     await expect(page.locator(".modal-title")).toHaveText("Remove your page from voi.ci?");
     await expect(page.locator(".modal-message")).toHaveText(
       "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.",
     );
     await shot(page, testInfo, "page-remove-confirm");
     await page.click("[data-modal-ok]");
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "false");
     expect(com.removals).toHaveLength(1);
     expect(com.removals[0]).toMatchObject({ kind: "VoiciPageRemove", version: 1, username: "smoketest", pageId, seq: 3, signerKind: "admin-root", signerPub: keys.adminPubHex });
     // The profile stays on this device.
-    await expect(page.locator("#ph-name")).toHaveValue("Smoke T.");
+    await expect(page.locator("[data-testid=page-name-text]")).toHaveText("Smoke T.");
 
     // On again: the rules and the one-time warning, then the same page one step up, every piece uploaded again.
-    await page.click("#ph-switch");
+    await page.click("#page-public-switch");
     await expect(page.locator(".modal-title")).toHaveText("Page and message rules");
     await page.click("[data-modal-ok]");
     await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
     await page.click("[data-modal-ok]");
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
     expect([com.seq, com.index.pageId, com.removed]).toEqual([4, pageId, false]);
     for (const p of com.index.pieces) expect(com.pieces.has(p.sha256)).toBe(true);
 
     // Off and on once more: the warning isn't asked a second time.
-    await page.click("#ph-switch");
+    await page.click("#page-public-switch");
     await page.click("[data-modal-ok]");
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "false");
-    await page.click("#ph-switch");
-    await expect(page.locator("#ph-switch")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "false");
+    await page.click("#page-public-switch");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
     expect(com.seq).toBe(6);
     await shot(page, testInfo, "page-header-public");
   });
@@ -584,9 +607,9 @@ test.describe("gym webapp voi.ci pages and Messages", () => {
       { answer, request, caPub },
     );
     expect(verdict).toBe("ok");
-    // Settings → Messages lists the website (from the sealed state blob).
+    // Page options → Websites you're signed in to lists the website (from the sealed state blob).
     expect(com.state?.version).toBe(1);
-    await page.evaluate(async () => (await import("/views/messages.js")).enterMessagesSettings());
+    await page.evaluate(async () => (await import("/views/messages.js")).enterSignedInSites());
     await expect(page.locator("[data-site-signout]")).toHaveCount(1);
     await shot(page, testInfo, "messages-settings-signed-in");
   });

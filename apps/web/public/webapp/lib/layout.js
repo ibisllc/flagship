@@ -26,13 +26,13 @@ const APPS = [
   "view-service-detail", "view-service-access", "view-app-access", "view-app-db",
   "view-service-env", "view-edit-service", "view-edit-describe", "view-marketplace", "view-developer",
 ];
-const SOCIAL = ["view-thread", "view-page-editor", "view-voici-sign-in"];
+const SOCIAL = ["view-thread", "view-voici-sign-in", "view-signed-in-sites"];
 const ACTIVITY = ["view-account-audit", "view-audit-log", "view-audit-entry", "view-install-progress"];
 const SETTINGS = [
   "view-settings", "view-account-security", "view-quantum-safety", "view-add-device", "view-recovery",
   "view-paired-sessions", "view-secured-sessions", "view-peer-backup", "view-companion-dock",
   "view-companion-requests", "view-profiles", "view-trusted-devices", "view-account-delete",
-  "view-appearance", "view-privacy", "view-about", "view-messages-settings", "view-tier-status",
+  "view-appearance", "view-privacy", "view-about", "view-tier-status",
 ];
 for (const id of HOME) registerSplit(id, "view-home");
 for (const id of APPS) registerSplit(id, "view-services-list");

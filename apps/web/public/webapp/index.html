@@ -255,19 +255,27 @@
         </div>
       </section>
 
-      <!-- Messages tab (docs/voici-and-messages.md §11): the owner's voi.ci page row, then the conversations
-           (views/messages.js), a thread (views/thread.js), the page editor (views/page-editor.js), Settings →
-           Messages and the voi.ci sign-in approval (views/voici-sign-in.js). Rendered by JS; text only. -->
+      <!-- The Social tab (docs/social-tab.md): the title row (Your page, the Public switch, Page options), Profile /
+           Messages, the page drawn as voi.ci draws it and edited in place (views/page-editor.js), the conversations
+           (views/messages.js), a thread (views/thread.js), the websites this account is signed in to and the voi.ci
+           sign-in approval (views/voici-sign-in.js). Rendered by JS; text only. -->
       <section id="view-messages" class="hidden" data-tab="messages">
-        <div class="ph-bar" id="messages-page-bar" data-ph-bar aria-hidden="true"></div>
-        <div id="messages-page-row"></div>
-        <h2>Messages</h2>
-        <div id="messages-reply-alerts"></div>
-        <div class="fs-segmented mt-3" id="messages-segments" role="radiogroup" aria-label="Messages">
-          <button type="button" role="radio" aria-checked="true" data-messages-tab="messages">Messages</button>
-          <button type="button" role="radio" aria-checked="false" data-messages-tab="requests">Requests <span id="messages-requests-count"></span></button>
+        <div id="social-head" class="social-head"></div>
+        <div class="fs-segmented social-switch" id="social-switch" role="radiogroup" aria-label="Your page">
+          <button type="button" role="radio" aria-checked="true" data-social-side="profile" data-testid="social-tab-profile">Profile</button>
+          <button type="button" role="radio" aria-checked="false" data-social-side="messages" data-testid="social-tab-messages">Messages <span class="social-count" id="social-requests-count"></span></button>
         </div>
-        <div id="messages-list" class="mt-3"></div>
+        <div id="social-notes"></div>
+        <div id="social-profile"></div>
+        <div id="social-messages" class="hidden">
+          <div id="messages-reply-alerts"></div>
+          <div class="fs-segmented mt-3" id="messages-segments" role="radiogroup" aria-label="Messages">
+            <button type="button" role="radio" aria-checked="true" data-messages-tab="messages">Conversations</button>
+            <button type="button" role="radio" aria-checked="false" data-messages-tab="requests">Requests <span id="messages-requests-count"></span></button>
+          </div>
+          <div id="messages-list" class="mt-3"></div>
+        </div>
+        <div id="pe-bar-slot" class="pe-bar-slot"></div>
       </section>
 
       <section id="view-thread" class="hidden">
@@ -281,20 +289,12 @@
         <div id="thread-compose" class="thread-compose"></div>
       </section>
 
-      <section id="view-page-editor" class="hidden">
+      <section id="view-signed-in-sites" class="hidden">
         <div class="thread-head">
-          <button type="button" class="secondary" id="page-editor-back">← Back</button>
-          <h2 class="thread-title">Your page</h2>
+          <button type="button" class="secondary" id="signed-in-sites-back">← Back</button>
+          <h2 class="thread-title">Websites you're signed in to</h2>
         </div>
-        <div id="page-editor-content"></div>
-      </section>
-
-      <section id="view-messages-settings" class="hidden">
-        <h2>Messages</h2>
-        <div id="messages-settings-content"></div>
-        <div class="row-2 mt-2">
-          <button type="button" class="secondary" id="messages-settings-back">← Back</button>
-        </div>
+        <div id="signed-in-sites-content"></div>
       </section>
 
       <section id="view-voici-sign-in" class="hidden">
@@ -327,7 +327,6 @@
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-page"><span class="fs-row-icon icon" data-row-icon="page"></span><span class="fs-row-body"><span class="fs-row-title">Your page</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-messages" data-split-view="view-messages-settings"><span class="fs-row-icon icon" data-row-icon="messages"></span><span class="fs-row-body"><span class="fs-row-title">Messages</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles" data-split-view="view-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
@@ -1285,9 +1284,9 @@
         <span class="icon" data-tab-icon="apps"></span>
         <span class="tab-bar-label">Services</span>
       </button>
-      <button class="tab-bar-btn" data-tab-target="messages" role="tab" aria-label="Messages">
+      <button class="tab-bar-btn" data-tab-target="messages" role="tab" aria-label="Social">
         <span class="icon" data-tab-icon="messages"></span>
-        <span class="tab-bar-label">Messages</span>
+        <span class="tab-bar-label">Social</span>
         <span class="tab-bar-badge hidden" id="messages-tab-badge" aria-hidden="true"></span>
       </button>
       <button class="tab-bar-btn" data-tab-target="activity" role="tab" aria-label="Activity">

@@ -1,7 +1,8 @@
 /**
  * A sample account's voi.ci page in the webapp (docs/sample-users.md "Example voi.ci page"): the operator publishes an
- * example page; the device reads it like any public page and shows it read-only at the top of Messages (no editor,
- * a disabled switch, one sentence and View page), and Home shows its "Your page" row, never the welcome card.
+ * example page; the device reads it like any public page and shows it read-only on the Social tab (no editor, no
+ * Page options, a disabled switch, one sentence and View page), and Home shows its "Your page" row, never the welcome
+ * card.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,7 +58,7 @@ describe("the sample account's page read", () => {
 
 describe("the read-only header", () => {
   it("shows the page, a disabled switch, the sentence and View page; no editor, no photo picker", () => {
-    const sample = HEADER_JS.slice(HEADER_JS.indexOf("function sampleHeaderHtml"), HEADER_JS.indexOf("/** The folded bar's inside"));
+    const sample = HEADER_JS.slice(HEADER_JS.indexOf("function sampleHeaderHtml"), HEADER_JS.indexOf("let copiedTimer"));
     expect(sample).toContain('data-testid="messages-demo-page"');
     expect(sample).toMatch(/data-testid="demo-page-public-switch"[^>]* disabled>/);
     expect(sample).toContain('data-testid="demo-page-note"');
@@ -67,11 +68,13 @@ describe("the read-only header", () => {
     expect(sample).toContain(".textContent = p?.displayName || pageUsername()");
     for (const absent of ['id="ph-edit"', "ph-photo", "enterPageEditor", "addPageOp", "setPagePublic", "wirePublicSwitches"]) expect(sample).not.toContain(absent);
     expect(HEADER_JS).toContain('tr("This is a sample account. Its page is an example, so you can\'t change it.")');
-    expect(HEADER_JS).toMatch(/if \(world\.sample\) return renderSampleHeader\(root\);/);
+    expect(MESSAGES_JS).toMatch(/if \(world\.sample\) \{\s*renderSamplePage\(\$\("social-profile"\)\);/);
   });
 
-  it("hides the conversation list for a sample account", () => {
-    expect(MESSAGES_JS).toMatch(/\["messages-segments", "messages-list", "messages-reply-alerts"\]\) \$\(id\)\?\.classList\.toggle\("hidden", world\.sample\)/);
-    expect(MESSAGES_JS).toMatch(/if \(world\.sample\) return;/);
+  it("hides the conversations, the switch and Page options for a sample account", () => {
+    expect(MESSAGES_JS).toMatch(/\$\("social-switch"\)\?\.classList\.toggle\("hidden", world\.sample\)/);
+    expect(MESSAGES_JS).toMatch(/const profile = side === "profile" \|\| world\.sample;/);
+    const head = MESSAGES_JS.slice(MESSAGES_JS.indexOf("function renderHead"), MESSAGES_JS.indexOf("function renderNotes"));
+    expect(head).toMatch(/world\.sample\s*\? ""/);
   });
 });

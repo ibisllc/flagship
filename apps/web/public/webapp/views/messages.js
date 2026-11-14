@@ -1,45 +1,47 @@
-// The Messages tab (docs/voici-and-messages.md §11.1) and Settings → Messages (§11.3). Text only: every value a
-// visitor wrote reaches the page through textContent (escapeHtml in templates), never as HTML (§12.1).
+// The Social tab (docs/social-tab.md, docs/voici-and-messages.md §11): the title row ("Your page", the Public switch,
+// Page options), Profile / Messages, the conversations, and the websites this account is signed in to (Page options).
+// Text only: every value a visitor wrote reaches the page through textContent (escapeHtml in templates), never as
+// HTML (§12.1).
 
 import { $, registerView, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { formatWhen } from "../lib/dateFormat.js";
-import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
-import { canSignAdminOrders } from "../lib/addServerGate.js";
+import { inlinePrompt } from "../lib/modal.js";
 import { getSession } from "../lib/state.js";
-import { isUnread, publishVoiciPage } from "../lib/voiciOwner.js";
-import { changeState, conversationsIn, emitWorld, onWorldChange, refreshWorld, unreadCount, visitorName, world } from "../lib/voiciWorld.js";
+import { isUnread } from "../lib/voiciOwner.js";
+import { changeState, conversationsIn, onWorldChange, refreshWorld, unreadCount, visitorName, world } from "../lib/voiciWorld.js";
 import { revokeSignedInSite, parseVoiciSignInLink } from "../lib/voiciSignIn.js";
-import { voiciErrorText, VOICI_RULES_TEXT, VOICI_RULES_TITLE } from "../lib/voiciCopy.js";
-import { keepPageHeaderFresh, renderPageHeader } from "./page-header.js";
+import { voiciErrorText, VOICI_PUBLISH_ADMIN_ONLY } from "../lib/voiciCopy.js";
+import { canPublishPage } from "../lib/voiciPageControl.js";
+import { moreHorizontalIcon } from "../lib/icons.js";
+import { displayUrl, publicSwitchHtml, renderSamplePage, wirePublicSwitches } from "./page-header.js";
+import { isEditingField, openPageOptions, renderBar, renderProfile, resetProfileEdit } from "./page-editor.js";
 import { checkReplies, markReplySeen } from "../lib/voiciReplies.js";
 import { voiciWebOrigin } from "../lib/voiciOwner.js";
 
 import { tr } from "../lib/i18n.js";
 
 registerView("view-messages", { tab: "messages" });
-registerView("view-messages-settings", { tab: "settings" });
+registerView("view-signed-in-sites", { tab: "messages" });
 
+/** Which side of the tab shows: "profile" or "messages". */
+let side = "profile";
 let segment = "messages";
 /** Replies waiting on pages this account wrote to from voi.ci: [{pageId, username, at}]. */
 let replyAlerts = [];
-
-const username = () => String(getSession()?.username ?? "").toLowerCase();
-
 
 function lastLine(cv) {
   const m = cv.messages[cv.messages.length - 1];
   return m ? m.text.replace(/\s+/g, " ").slice(0, 140) : "";
 }
 
+const EMPTY_MESSAGES = () => tr("No messages yet. Turn on Accept messages in Page options to get them.");
+
 function listHtml() {
   const list = conversationsIn(segment);
-  if (!world.page && !world.conversations.length) {
-    return `<div class="card placeholder" data-testid="messages-empty">${escapeHtml(tr("No messages yet. Turn on Accept messages on your page to get them."))}</div>`;
-  }
   if (!list.length) {
-    const text = segment === "requests" ? tr("No message requests.") : tr("No messages yet. Turn on Accept messages on your page to get them.");
+    const text = segment === "requests" ? tr("No message requests.") : EMPTY_MESSAGES();
     return `<div class="card placeholder" data-testid="messages-empty">${escapeHtml(text)}</div>`;
   }
   return `<div class="fs-group">${list
@@ -61,12 +63,73 @@ function listHtml() {
     .join("")}</div>`;
 }
 
+/** The title row: "Your page" (or "Messages"), voi.ci/<u>, Public / Not public with the switch, and ⋯. */
+function renderHead() {
+  const root = $("social-head");
+  if (!root) return;
+  const on = Boolean(world.page);
+  root.innerHTML = `
+    <div class="social-title-row">
+      <div class="social-title-text">
+        <h2 id="social-title" data-testid="social-title"></h2>
+        <span class="muted-sm mono" data-testid="social-address"></span>
+      </div>
+      ${
+        world.sample
+          ? ""
+          : `<div class="social-actions">
+        <span class="social-status" id="social-public-label" data-testid="messages-page-status">${escapeHtml(on ? tr("Public") : tr("Not public"))}</span>
+        ${publicSwitchHtml("page-public-switch", { labelledBy: "social-public-label" })}
+        <button type="button" class="social-more" id="page-options" aria-label="${escapeHtml(tr("Page options"))}"><span class="icon" aria-hidden="true">${moreHorizontalIcon}</span></button>
+      </div>`
+      }
+    </div>`;
+  root.querySelector("#social-title").textContent = side === "messages" && !world.sample ? tr("Messages") : tr("Your page");
+  root.querySelector("[data-testid=social-address]").textContent = displayUrl();
+  $("page-options")?.addEventListener("click", () => openPageOptions());
+  wirePublicSwitches(root);
+}
+
+function renderNotes() {
+  const root = $("social-notes");
+  if (!root) return;
+  const lines = [];
+  if (world.sample) {
+    root.replaceChildren();
+    return;
+  }
+  if (world.pageError && !world.page) lines.push(`<p class="note" data-testid="ph-page-error">${escapeHtml(tr("Couldn't check your page."))}</p>`);
+  if (!canPublishPage()) lines.push(`<p class="note" data-testid="page-admin-only">${escapeHtml(VOICI_PUBLISH_ADMIN_ONLY())}</p>`);
+  root.innerHTML = lines.join("");
+}
+
+function renderSides() {
+  const profile = side === "profile" || world.sample;
+  $("social-switch")?.classList.toggle("hidden", world.sample);
+  for (const b of document.querySelectorAll("[data-social-side]")) b.setAttribute("aria-checked", String(b.getAttribute("data-social-side") === (profile ? "profile" : "messages")));
+  $("social-profile")?.classList.toggle("hidden", !profile);
+  $("social-messages")?.classList.toggle("hidden", profile);
+  const requests = world.sample ? 0 : conversationsIn("requests").length;
+  const count = $("social-requests-count");
+  if (count) count.textContent = requests ? String(requests) : "";
+}
+
+/** Draws the whole tab. */
 export function renderMessages() {
-  renderPageHeader($("messages-page-row"));
-  // A sample account has only its example page: no conversations to list (it can't accept messages).
-  for (const id of ["messages-segments", "messages-list", "messages-reply-alerts"]) $(id)?.classList.toggle("hidden", world.sample);
-  document.querySelector("#view-messages > h2")?.classList.toggle("hidden", world.sample);
-  if (world.sample) return;
+  renderHead();
+  renderNotes();
+  renderSides();
+  if (world.sample) {
+    renderSamplePage($("social-profile"));
+    $("pe-bar-slot")?.replaceChildren();
+    return;
+  }
+  if (side === "profile") renderProfile();
+  else renderBar();
+  renderList();
+}
+
+function renderList() {
   const requests = conversationsIn("requests").length;
   const count = $("messages-requests-count");
   if (count) count.textContent = requests ? `(${requests})` : "";
@@ -108,6 +171,12 @@ function renderReplyAlerts() {
     });
     root.appendChild(b);
   }
+  if (replyAlerts.length) {
+    const foot = document.createElement("p");
+    foot.className = "note";
+    foot.textContent = tr("Your conversations with other pages are on voi.ci.");
+    root.appendChild(foot);
+  }
 }
 
 /** On every open of the tab (no push, no background polling): replies on the pages this account wrote to. */
@@ -121,22 +190,30 @@ async function refreshReplyAlerts() {
   updateBadge();
 }
 
-export async function enterMessages() {
+async function enterSocial(which) {
+  if (which) side = which;
+  resetProfileEdit();
   show("view-messages");
   if (!world.pageLoaded) {
+    $("social-profile").innerHTML = skeletonCards(2);
     $("messages-list").innerHTML = skeletonCards(2);
-    $("messages-page-row").innerHTML = "";
+    renderHead();
+    renderSides();
   } else renderMessages();
   void refreshReplyAlerts();
   await refreshWorld();
   renderMessages();
 }
 
-/** Home's and Settings' way to the page: the Messages tab, scrolled to its header (§11.1). */
-export async function enterPageHeader() {
-  await enterMessages();
+/** The tab as the bar opens it (and the `messages` deep link): the side last shown, Messages for a deep link. */
+export async function enterMessages({ side: which } = {}) {
+  await enterSocial(which);
+}
+
+/** Home's and Settings' way to the page: the tab's Profile. */
+export async function enterYourPage() {
+  await enterSocial("profile");
   window.scrollTo({ top: 0 });
-  $("messages-page-header")?.focus({ preventScroll: true });
 }
 
 function updateBadge() {
@@ -147,23 +224,21 @@ function updateBadge() {
   badge.classList.toggle("hidden", n === 0);
 }
 
-// ── Settings → Messages ───────────────────────────────────────────────────
+// ── Page options → Websites you're signed in to ───────────────────────────
 
-export async function enterMessagesSettings() {
-  show("view-messages-settings");
-  const root = $("messages-settings-content");
+export async function enterSignedInSites() {
+  show("view-signed-in-sites");
+  const root = $("signed-in-sites-content");
   root.innerHTML = skeletonCards(2);
   await refreshWorld();
-  renderMessagesSettings();
+  renderSignedInSites();
 }
 
-function renderMessagesSettings() {
-  const root = $("messages-settings-content");
+function renderSignedInSites() {
+  const root = $("signed-in-sites-content");
   if (!root) return;
   const sites = [...world.state.signedInSites].sort((a, b) => b.at - a.at);
-  const admin = canSignAdminOrders();
   root.innerHTML = `
-    <h3 class="mt-2">${escapeHtml(tr("Websites you're signed in to"))}</h3>
     <div class="card stack-sm" data-testid="messages-signed-in-sites">
       ${sites.length
         ? sites
@@ -174,16 +249,7 @@ function renderMessagesSettings() {
             .join("")
         : `<p class="note">${escapeHtml(tr("You aren't signed in to any website."))}</p>`}
       <button type="button" class="secondary full-width" id="messages-approve-sign-in">${escapeHtml(tr("Approve a voi.ci sign-in"))}</button>
-    </div>
-    <h3 class="mt-3">${escapeHtml(tr("Inbox key"))}</h3>
-    <div class="card stack-sm">
-      <p class="note">${escapeHtml(tr("Make a new key for messages people send to your page. Messages you already have stay readable."))}</p>
-      ${admin
-        ? `<button type="button" class="secondary full-width" id="messages-rotate-inbox"${world.page ? "" : " disabled"}>${escapeHtml(tr("Rotate inbox key"))}</button>`
-        : `<p class="note" data-testid="messages-rotate-admin-only">${escapeHtml(tr("Only an admin device can rotate the inbox key."))}</p>`}
-    </div>
-    <h3 class="mt-3">${escapeHtml(VOICI_RULES_TITLE())}</h3>
-    <div class="card"><p class="note">${escapeHtml(VOICI_RULES_TEXT())}</p></div>`;
+    </div>`;
   root.querySelectorAll("[data-site-signout]").forEach((b) =>
     b.addEventListener("click", async () => {
       const site = world.state.signedInSites.find((s) => s.delegatePub === b.getAttribute("data-site-signout"));
@@ -195,7 +261,7 @@ function renderMessagesSettings() {
       } catch (e) {
         toast(voiciErrorText(e), "err");
       }
-      renderMessagesSettings();
+      renderSignedInSites();
     }),
   );
   $("messages-approve-sign-in")?.addEventListener("click", async () => {
@@ -210,37 +276,40 @@ function renderMessagesSettings() {
     const { enterVoiciSignIn } = await import("./voici-sign-in.js");
     await enterVoiciSignIn(parseVoiciSignInLink(text));
   });
-  $("messages-rotate-inbox")?.addEventListener("click", async (ev) => {
-    const ok = await inlineConfirm({
-      title: tr("Rotate inbox key?"),
-      message: tr("New messages will be sealed to a new key. People already writing to you keep their conversations."),
-      okLabel: tr("Rotate"),
-    });
-    if (!ok) return;
-    ev.currentTarget.disabled = true;
-    try {
-      world.page = await publishVoiciPage({ ops: [], rotate: true }, { published: world.page });
-      emitWorld();
-      toast(tr("Inbox key rotated."));
-    } catch (e) {
-      toast(voiciErrorText(e), "err");
-    }
-    renderMessagesSettings();
-  });
 }
 
+const typingInProfile = () => {
+  const a = document.activeElement;
+  return isEditingField() && !!a && !!$("social-profile")?.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName);
+};
+
 export function initMessagesView() {
-  for (const b of document.querySelectorAll("[data-messages-tab]")) {
+  for (const b of document.querySelectorAll("[data-social-side]")) {
     b.addEventListener("click", () => {
-      segment = b.getAttribute("data-messages-tab") === "requests" ? "requests" : "messages";
+      side = b.getAttribute("data-social-side") === "messages" ? "messages" : "profile";
       renderMessages();
     });
   }
-  $("messages-settings-back")?.addEventListener("click", () => show("view-settings-tab"));
+  for (const b of document.querySelectorAll("[data-messages-tab]")) {
+    b.addEventListener("click", () => {
+      segment = b.getAttribute("data-messages-tab") === "requests" ? "requests" : "messages";
+      renderList();
+    });
+  }
+  $("signed-in-sites-back")?.addEventListener("click", () => void enterMessages());
+  // A publish, a draft or a refresh elsewhere: draw again (the field being typed in is kept).
   onWorldChange(() => {
     updateBadge();
+    setTimeout(() => {
+      if ($("view-messages")?.classList.contains("hidden")) return;
+      if (typingInProfile()) {
+        renderHead();
+        renderBar();
+        return;
+      }
+      renderMessages();
+    }, 0);
   });
-  keepPageHeaderFresh(() => $("messages-page-row"));
   // Once per open of the app, after the unlock: the reply check, so the tab's badge shows it.
   let checkedOnOpen = false;
   document.addEventListener("flagship:view-shown", (ev) => {
@@ -251,4 +320,3 @@ export function initMessagesView() {
     void refreshReplyAlerts();
   });
 }
-

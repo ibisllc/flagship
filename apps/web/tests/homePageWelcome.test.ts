@@ -1,8 +1,7 @@
 /**
  * Home's voi.ci page welcome card (the compact row's states are in webappVoiciPageRemove.test.ts). Same truth
  * table as iOS PageWelcomeCardTests and Android PageWelcomeCardStoreTest, plus static-source checks of its wiring
- * (it waits for the backup nudge, points to the page header at the top of Messages, and keeps its dismissal per
- * account).
+ * (it waits for the backup nudge, points to the Social tab's Profile, and keeps its dismissal per account).
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -52,11 +51,11 @@ describe("home page-welcome wiring", () => {
     expect(HOME_JS).toMatch(/document\.getElementById\(RECOVERY_BANNER_ID\)\?\.remove\(\);\s*void renderPageWelcome\(\);/);
   });
 
-  it("points to the page header at the top of Messages, from the card and the compact row", () => {
+  it("points to the Social tab's Profile, from the card and the compact row", () => {
     expect(HOME_JS).toContain('tr("Your public page")');
     expect(HOME_JS).toContain('tr("Set up your page")');
-    expect(HOME_JS).toMatch(/import\("\.\/messages\.js"\)\.then\(\(m\) => m\.enterPageHeader\(\)\)/);
-    expect(MESSAGES_JS).toMatch(/export async function enterPageHeader\(\)/);
+    expect(HOME_JS).toMatch(/import\("\.\/messages\.js"\)\.then\(\(m\) => m\.enterYourPage\(\)\)/);
+    expect(MESSAGES_JS).toMatch(/export async function enterYourPage\(\) \{\s*await enterSocial\("profile"\);/);
   });
 
   it("fills a fixed slot below the servers, so its late arrival never moves Add / Restore a server under a tap", () => {
@@ -67,16 +66,20 @@ describe("home page-welcome wiring", () => {
 
   it("Settings has a Your page entry that opens the same place", () => {
     expect(INDEX).toMatch(/id="settings-tab-page"[^]*?Your page/);
-    expect(APP_JS).toContain('wire("settings-tab-page", enterPageHeader)');
+    expect(APP_JS).toContain('wire("settings-tab-page", enterYourPage)');
+    expect(INDEX).not.toContain('id="settings-tab-messages"');
   });
 
-  it("the Messages tab stands out in the tab bar and keeps its badge and name", () => {
-    expect(INDEX).toMatch(/data-tab-target="messages" role="tab" aria-label="Messages"/);
+  it("the tab is Social, with the plain person glyph and its badge (no disc)", () => {
+    expect(INDEX).toMatch(/data-tab-target="messages" role="tab" aria-label="Social">[^]*?<span class="tab-bar-label">Social<\/span>/);
     expect(INDEX).toContain('id="messages-tab-badge"');
-    expect(STYLE).toMatch(/\.tab-bar-btn\[data-tab-target="messages"\] \.icon \{[^}]*background: var\(--teal\)/);
+    expect(APP_JS).toMatch(/const map = \{[^}]*messages: userIcon,/);
+    expect(STYLE).not.toMatch(/\.tab-bar-btn\[data-tab-target="messages"\] \.icon \{/);
   });
 
-  it("the page header comes first on the Messages tab", () => {
-    expect(INDEX).toMatch(/<div class="ph-bar" id="messages-page-bar"[^>]*><\/div>\s*<div id="messages-page-row"><\/div>\s*<h2>Messages<\/h2>/);
+  it("the tab opens on the title row, then Profile / Messages", () => {
+    expect(INDEX).toMatch(/<section id="view-messages"[^>]*>\s*<div id="social-head"[^>]*><\/div>\s*<div class="fs-segmented social-switch"[^>]*>[^]*?data-social-side="profile"[^]*?data-social-side="messages"/);
+    expect(INDEX).not.toContain('id="view-page-editor"');
+    expect(INDEX).not.toContain('id="view-messages-settings"');
   });
 });
