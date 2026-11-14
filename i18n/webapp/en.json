@@ -13473,5 +13473,9 @@
   "This code ran out before it was approved. Start again, then scan the new code with your phone.": {
     "en": "This code ran out before it was approved. Start again, then scan the new code with your phone.",
     "ctx": "webapp/views/companion-dock-start.js"
+  },
+  "Firefox extension": {
+    "en": "Firefox extension",
+    "ctx": "webapp/views/paired-sessions.js:123"
   }
 }

@@ -16,15 +16,16 @@ import { tr } from "../lib/i18n.js";
 registerView("view-paired-sessions");
 
 /**
- * Browser sessions are browsers docked through Remote (`kind: "remote"`).
- * The box also lists the session each of the account's own devices paired
+ * Browser sessions are browsers docked through Remote (`kind: "remote"`) and
+ * the Flagship Firefox extension (`kind: "extension"`, docs/browser-extension.md),
+ * which reads only the box's signed certificate fingerprint. The box also lists the session each of the account's own devices paired
  * itself with (`kind: "device"`): those are Trusted devices, so they stay
  * out. A box from before `kind` existed lists everything; there, at least
  * this device's own session is never shown as a browser.
  */
 export function browserSessions(sessions) {
   return (Array.isArray(sessions) ? sessions : []).filter((s) =>
-    s?.kind === "remote" || (s?.kind == null && !s?.current),
+    s?.kind === "remote" || s?.kind === "extension" || (s?.kind == null && !s?.current),
   );
 }
 
@@ -120,7 +121,7 @@ export async function renderPairedSessions() {
       <div class="card">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${tr("Session {0} {1}", escapeHtml(s.tokenPrefix), s.current ? `<span class="pill ok">${tr("this device")}</span>` : "")}</div>
+            <div class="weight-600">${s.kind === "extension" ? tr("Firefox extension") : tr("Session {0} {1}", escapeHtml(s.tokenPrefix), s.current ? `<span class="pill ok">${tr("this device")}</span>` : "")}</div>
             <div class="value text-xs">${escapeHtml(s.tokenPrefix)}…</div>
             <div class="faint-sm">${tr("added {0}", escapeHtml(formatWhen(s.addedAt)))}</div>
           </div>
@@ -128,7 +129,7 @@ export async function renderPairedSessions() {
             ? `<button class="secondary" disabled>${tr("can't revoke self")}</button>`
             : `<button class="secondary" data-action="revoke" data-prefix="${escapeHtml(s.tokenPrefix)}">${tr("revoke")}</button>`}
         </div>
-        ${s.current ? "" : `<div class="mt-2" data-delegation-slot="${escapeHtml(s.tokenPrefix)}"></div>`}
+        ${s.current || s.kind === "extension" ? "" : `<div class="mt-2" data-delegation-slot="${escapeHtml(s.tokenPrefix)}"></div>`}
       </div>
     `).join("");
     root.querySelectorAll('[data-action="revoke"]').forEach((b) => {

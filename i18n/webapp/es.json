@@ -3293,5 +3293,6 @@
   "Flagship didn't accept this key file for {0}. Nothing was changed in this browser. Try again in a few minutes.": "Flagship no aceptó este archivo de clave para {0}. No se cambió nada en este navegador. Inténtalo de nuevo en unos minutos.",
   "Couldn't restore this key file. Nothing was changed in this browser. Try again.": "No se pudo restaurar este archivo de clave. No se cambió nada en este navegador. Inténtalo de nuevo.",
   "Couldn't restore this key file": "No se pudo restaurar este archivo de clave",
-  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "Este código caducó antes de que se aprobara. Empieza de nuevo y escanea el código nuevo con tu teléfono."
+  "This code ran out before it was approved. Start again, then scan the new code with your phone.": "Este código caducó antes de que se aprobara. Empieza de nuevo y escanea el código nuevo con tu teléfono.",
+  "Firefox extension": "Extensión de Firefox"
 }
