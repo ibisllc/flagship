@@ -44,6 +44,14 @@
       .status-pill.slow { background: var(--warn-soft); color: var(--warn); }
       .status-pill.down { background: var(--err-soft);  color: var(--err); }
       .status-pill.idle { background: var(--surface-sunken); color: var(--ink-muted); }
+      .relay-warning {
+        margin: 0 0 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        background: var(--warn-soft);
+        color: var(--warn);
+        font-weight: 600;
+      }
       .metric-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -150,6 +158,8 @@
     <main class="status-wrap">
       <h1>状态</h1>
       <p class="lede"><code>flagship.services</code> 的实时健康状况，每隔几秒从 Cloudflare 边缘探测一次。</p>
+
+      <p class="relay-warning" id="relayWarning" role="status" hidden=""></p>
 
       <section class="status-card" id="card">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
@@ -333,6 +343,16 @@
           }
         }
         function render(probe) {
+          // The private relay for servers with an outbound proxy
+          // (docs/outbound-proxy.md): shown only when it isn't carrying them.
+          const relay = probe.privateRelay;
+          const warn = $("relayWarning");
+          if (relay && relay.state === "down") {
+            warn.textContent = relay.message || "Private relay down: servers are reaching Flagship directly";
+            warn.hidden = false;
+          } else {
+            warn.hidden = true;
+          }
           const cls = classify(probe);
           const pill = $("pill");
           pill.className = "status-pill " + cls;
