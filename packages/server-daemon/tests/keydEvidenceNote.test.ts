@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { appRankCanonicalBytes, deriveServiceMemberStableId, deriveServiceSecret, ed, signAppRank, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
+import { appRankCanonicalBytes, deriveServiceMemberStableId, deriveServiceSecret, ed, signAppRank, signDeviceRevocationList, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
 import { AccessJournal, type AccessEntry } from "../src/accessJournal.js";
 import { DeviceRevocations, type SignedRevocation } from "../src/deviceRevocations.js";
 import { KeydCustodian } from "../src/keydCustodian.js";
@@ -31,12 +31,16 @@ let custodian: KeydCustodian;
 const dirs: string[] = [];
 
 beforeAll(async () => {
+  const ca = new Uint8Array(32).fill(0x0c);
   keyd = await startKeydWorker({
     seed: SEED,
     swk: SWK,
     owner: { irkPubHex: hex(IRK_PUB), serverFqdn: "home.alice.flagship.services", adminRootPubHex: hex(ROOT_PUB) } as never,
+    caKeys: { v: 1, keys: [hex(ed.getPublicKey(ca))], validFrom: Date.now() - 86_400_000, validUntil: Date.now() + 86_400_000 },
   });
   custodian = new KeydCustodian({ socketPath: keyd.sock, component: "test" });
+  // keyd signs master only while it holds a recent `.com` revocation list (deviceRevocationList.ts).
+  custodian.noteRevocationList(signDeviceRevocationList({ irkPubHex: hex(IRK_PUB), issuedAt: Date.now() - 1000, grantIds: [] }, ca));
 });
 afterAll(async () => {
   custodian.close();
