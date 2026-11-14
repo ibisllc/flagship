@@ -26,13 +26,21 @@
  */
 
 import {
+  PqTrustError,
+  legacyPolicyState,
   verifyAdminRootRotation,
+  verifyAdminRootRotationPq,
+  verifyPqKeyBinding,
   type AdminRootRotation,
+  type PqKeyBindingWire,
+  type VerifiedPqKeyBinding,
 } from "@flagship/protocol";
 import type {
   AdminRootRotationStorage,
+  PqTrustStorage,
   UsernameStorage,
 } from "@flagship/storage";
+import { bindingWire } from "./accountPqTrust.js";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import {
   conflict,
@@ -46,6 +54,8 @@ import {
 export interface AdminRootRotationDeps {
   usernames: UsernameStorage;
   rotations: AdminRootRotationStorage;
+  /** Where the account's `admin-root` bindings live; the hybrid companion is checked and relayed only with it. */
+  pqTrust?: PqTrustStorage;
   now?: () => number;
 }
 
@@ -57,6 +67,8 @@ interface ApplyBody {
     issuedAt?: number;
   };
   signatureHex?: string;
+  /** The old root's hybrid companion (pq-suites.md §20): `{ signature, newRootBinding }`. */
+  pq?: unknown;
 }
 
 function publicRotation(rec: {
@@ -65,20 +77,40 @@ function publicRotation(rec: {
   newAdminRootPubHex: string;
   issuedAt: number;
   signatureHex: string;
+  pqJson?: string;
 }): {
   seq: number;
   oldAdminRootPub: string;
   newAdminRootPub: string;
   issuedAt: number;
   signatureHex: string;
+  pq?: unknown;
 } {
+  let pq: unknown;
+  try {
+    pq = rec.pqJson ? JSON.parse(rec.pqJson) : undefined;
+  } catch {
+    pq = undefined;
+  }
   return {
     seq: rec.seq,
     oldAdminRootPub: rec.oldAdminRootPubHex,
     newAdminRootPub: rec.newAdminRootPubHex,
     issuedAt: rec.issuedAt,
     signatureHex: rec.signatureHex,
+    ...(pq !== undefined ? { pq } : {}),
   };
+}
+
+/** `.com`'s stored binding for the old root, verified, or null. */
+async function storedRootBinding(store: PqTrustStorage, username: string, rootHex: string, now: number): Promise<VerifiedPqKeyBinding | null> {
+  const rec = await store.getBinding("admin-root", username);
+  if (!rec || rec.ed25519PubHex.toLowerCase() !== rootHex) return null;
+  try {
+    return verifyPqKeyBinding(bindingWire(rec), { role: "admin-root", subjectId: username, ed25519PubHex: rootHex, now: Math.max(now, rec.issuedAt) });
+  } catch {
+    return null;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -172,6 +204,28 @@ export async function handleApplyAdminRootRotation(
     return forbidden("invalid rotation signature");
   }
 
+  // A hybrid companion that is sent must verify under the old root's stored binding: `.com` never
+  // relays one a box would refuse, and it takes the new root's binding the old root named.
+  const now = (deps.now ?? Date.now)();
+  let pqJson: string | undefined;
+  let newRootBinding: PqKeyBindingWire | undefined;
+  if (body?.pq !== undefined && body.pq !== null) {
+    if (!deps.pqTrust) return forbidden("pq-unsupported");
+    try {
+      verifyAdminRootRotationPq({
+        rotation,
+        pq: body.pq,
+        oldRootBinding: await storedRootBinding(deps.pqTrust, usernameNorm, oldHex, now),
+        policy: legacyPolicyState({ kind: "installation", id: "com" }),
+        now,
+      });
+    } catch (e) {
+      return forbidden(e instanceof PqTrustError ? e.code : "bad-signature");
+    }
+    newRootBinding = (body.pq as { newRootBinding: PqKeyBindingWire }).newRootBinding;
+    pqJson = JSON.stringify({ signature: (body.pq as { signature: unknown }).signature, newRootBinding });
+  }
+
   // Atomic-ish apply: CAS the stored root FIRST (guards a concurrent rotation),
   // then append the proof to the served lane. The CAS re-checks `current` so a
   // racing rotation that already moved the root loses here (409).
@@ -186,7 +240,20 @@ export async function handleApplyAdminRootRotation(
     newAdminRootPubHex: newHex,
     issuedAt: r.issuedAt,
     signatureHex: sigHex,
+    ...(pqJson ? { pqJson } : {}),
   });
+
+  if (newRootBinding && deps.pqTrust) {
+    await deps.pqTrust.putBinding({
+      role: "admin-root",
+      subjectId: newRootBinding.subjectId,
+      ed25519PubHex: newRootBinding.ed25519PubHex,
+      mldsaPubHex: newRootBinding.mldsaPubHex,
+      issuedAt: newRootBinding.issuedAt,
+      signatureHex: newRootBinding.signature,
+      storedAt: now,
+    });
+  }
 
   return ok({
     ok: true,

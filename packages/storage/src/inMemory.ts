@@ -1767,6 +1767,7 @@ export class InMemoryAdminRootRotationStorage implements AdminRootRotationStorag
       newAdminRootPubHex: rec.newAdminRootPubHex.toLowerCase(),
       issuedAt: rec.issuedAt,
       signatureHex: rec.signatureHex.toLowerCase(),
+      ...(rec.pqJson ? { pqJson: rec.pqJson } : {}),
     });
     this.byUser.set(u, chain);
     return seq;

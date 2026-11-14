@@ -338,6 +338,7 @@ import {
   applyDeliveredRotations,
   recoverLostAdminRootPin,
   resolvePinnedAdminRoot,
+  type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
@@ -393,7 +394,13 @@ import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { accessAuthorityMode, accessAuthorityStatus, buildAccessAuthority } from "./accessAuthority.js";
 import { AccessWrites, type AccessAnchors } from "./accessWrites.js";
 import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
-import { setPqAuthority } from "./pqAuthority.js";
+import { pqAuthority, setPqAuthority } from "./pqAuthority.js";
+
+/** What a hybrid admin-root rotation hop is checked against, once the policy is wired. */
+function rotationPq(): RotationPq | null {
+  const a = pqAuthority();
+  return a ? { policy: a.policy(), bindingFor: (pub) => a.bindingFor(pub), now: trustedNow() } : null;
+}
 import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard, siblingChainRefusal } from "./pqChannel.js";
 import { AccessJournal, type AccessEntry } from "./accessJournal.js";
 import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
@@ -1603,6 +1610,7 @@ async function main(): Promise<void> {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       ...bellFetch(),
       pinStore: fileAdminRootPinStore(adminRootPinPath),
+      pq: rotationPq,
       restart: () => restarts.request("admin root rotated; restarting to re-bind the authority anchor"),
       onLog: (m) => console.log(m),
     });
@@ -4743,6 +4751,7 @@ async function wireRuntimeSurfaces(deps: {
                 seedAdminRootHex: cfg.adminRootPub ? bytesToHexStr(cfg.adminRootPub) : null,
                 pinStore: fileAdminRootPinStore(`${dataDir}/admin-root-pin.json`),
                 entries,
+                pq: rotationPq,
                 restart: () => restarts.request("admin root rotated by the owner; restarting to re-bind the authority anchor"),
                 onLog: (m) => console.log(m),
               });
@@ -5290,11 +5299,14 @@ async function wireOwnerHandlers(deps: {
     signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
     ...bellFetch(),
   });
+  const adminRootPin = await fileAdminRootPinStore(`${accessDataDir}/admin-root-pin.json`).read().catch(() => null);
   const deviceBook = new AccountDeviceBook({
     path: `${accessDataDir}/account-devices.json`,
     username: cfg.userId,
     ownerIrkPub: () => cfg.irkPublicKey,
     adminRootPub: () => cfg.adminRootPub,
+    policy: () => pqAuthority()?.policy() ?? null,
+    ...(adminRootPin?.pqBinding ? { adminRootPqBinding: () => adminRootPin.pqBinding } : {}),
     isRevoked: (grantId) => deps.accessPrincipals.revocations?.has(grantId) ?? false,
     ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
     // The periodic refresh may be answered by the doorbell; one a person is

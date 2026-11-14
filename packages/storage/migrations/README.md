@@ -53,6 +53,7 @@ Bare `ALTER TABLE ... ADD COLUMN` (apply-once; re-run ⇒ `duplicate column name
 | `0120_serving_authority.sql`      | `servers.reg_gen` (the ALTER is first; the CREATEs and triggers after it are guarded) |
 | `0131_voici_page_removed.sql`     | `voici_pages.removed_at` |
 | `0132_messages_slow_tier.sql`     | `messages_enrollments.slow_tier` |
+| `0138_pq_authority_records.sql`  | `admin_root_rotations.pq_json`, `device_capability_grants.pq_signature_json` |
 
 Apply-once `RENAME COLUMN` (re-run ⇒ `no such column`):
 

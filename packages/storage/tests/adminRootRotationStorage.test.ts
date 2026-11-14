@@ -55,6 +55,18 @@ describe("AdminRootRotationStorage", () => {
     expect(r.mem.chain[1]).toMatchObject({ oldAdminRootPubHex: A1, newAdminRootPubHex: A2 });
   });
 
+  it("keeps a hop's hybrid companion as given", async () => {
+    const pqJson = JSON.stringify({ signature: { suite: "hybrid-ed25519-mldsa65/v1", signature: "ee" }, newRootBinding: { v: 1 } });
+    const r = await bothAdapters(async (s) => {
+      await s.adminRootRotations.append({ username: "alice", oldAdminRootPubHex: A0, newAdminRootPubHex: A1, issuedAt: 1000, signatureHex: "cc".repeat(64), pqJson });
+      await s.adminRootRotations.append({ username: "alice", oldAdminRootPubHex: A1, newAdminRootPubHex: A2, issuedAt: 2000, signatureHex: "dd".repeat(64) });
+      return s.adminRootRotations.list("alice");
+    });
+    expect(r.d1).toEqual(r.mem);
+    expect(r.mem[0]?.pqJson).toBe(pqJson);
+    expect(r.mem[1]?.pqJson).toBeUndefined();
+  });
+
   it("list of an account with no rotations is empty in both", async () => {
     const r = await bothAdapters((s) => s.adminRootRotations.list("nobody"));
     expect(r.d1).toEqual(r.mem);

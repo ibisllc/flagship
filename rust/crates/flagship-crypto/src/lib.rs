@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 pub mod access_orders;
+pub mod authority_records;
 mod ed25519_strict;
 pub mod entitlements;
 pub mod error;

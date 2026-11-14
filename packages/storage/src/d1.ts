@@ -2639,6 +2639,7 @@ interface AdminRootRotationRow {
   new_admin_root_pub_hex: string;
   issued_at: number;
   signature_hex: string;
+  pq_json?: string | null;
 }
 
 function rowToAdminRootRotation(r: AdminRootRotationRow): AdminRootRotationRecord {
@@ -2649,6 +2650,7 @@ function rowToAdminRootRotation(r: AdminRootRotationRow): AdminRootRotationRecor
     newAdminRootPubHex: r.new_admin_root_pub_hex,
     issuedAt: r.issued_at,
     signatureHex: r.signature_hex,
+    ...(r.pq_json ? { pqJson: r.pq_json } : {}),
   };
 }
 
@@ -2668,8 +2670,8 @@ export class D1AdminRootRotationStorage implements AdminRootRotationStorage {
     await this.db
       .prepare(
         `INSERT INTO admin_root_rotations
-           (username, seq, old_admin_root_pub_hex, new_admin_root_pub_hex, issued_at, signature_hex)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+           (username, seq, old_admin_root_pub_hex, new_admin_root_pub_hex, issued_at, signature_hex, pq_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
       )
       .bind(
         username,
@@ -2678,6 +2680,7 @@ export class D1AdminRootRotationStorage implements AdminRootRotationStorage {
         rec.newAdminRootPubHex.toLowerCase(),
         rec.issuedAt,
         rec.signatureHex.toLowerCase(),
+        rec.pqJson ?? null,
       )
       .run();
     return seq;
@@ -4971,11 +4974,11 @@ export class D1AccountProvisioningStorage implements AccountProvisioningStorage 
           ).bind(u, d.deviceId, d.devicePubHex, d.platformClass, d.createdAt, d.lastSeenAt, d.revokedAt),
           this.db.prepare(
             `INSERT OR IGNORE INTO device_capability_grants
-              (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root, pq_signature_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).bind(
             g.grantId, u, g.deviceId, g.devicePubHex, g.scopesJson,
-            g.issuedAt, g.expiresAt, g.signatureHex, g.revokedAt, g.signerRoot,
+            g.issuedAt, g.expiresAt, g.signatureHex, g.revokedAt, g.signerRoot, g.pqSignatureJson ?? null,
           ),
           this.db.prepare(
             `INSERT OR IGNORE INTO account_profiles
@@ -5024,11 +5027,11 @@ export class D1AccountProvisioningStorage implements AccountProvisioningStorage 
         ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
         this.db.prepare(
           `INSERT INTO device_capability_grants
-            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root, pq_signature_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).bind(
           grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
-          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot, grant.pqSignatureJson ?? null,
         ),
         this.db.prepare(
           `INSERT INTO account_profiles
@@ -5094,11 +5097,11 @@ export class D1DemoAccountProvisioningStorage implements DemoAccountProvisioning
         ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
         this.db.prepare(
           `INSERT INTO device_capability_grants
-            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root, pq_signature_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).bind(
           grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
-          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot, grant.pqSignatureJson ?? null,
         ),
         this.db.prepare(
           `INSERT INTO account_profiles
@@ -5181,6 +5184,7 @@ interface DeviceCapabilityGrantRow {
   // SELECT against a DB that hasn't applied 0064 decodes safely; the helper
   // narrows to 'membership' on absence (matching the column DEFAULT).
   signer_root?: string | null;
+  pq_signature_json?: string | null;
 }
 function rowToDeviceCapabilityGrant(
   r: DeviceCapabilityGrantRow,
@@ -5196,6 +5200,7 @@ function rowToDeviceCapabilityGrant(
     signatureHex: r.signature_hex,
     revokedAt: r.revoked_at,
     signerRoot: r.signer_root === "admin-root" ? "admin-root" : "membership",
+    ...(r.pq_signature_json ? { pqSignatureJson: r.pq_signature_json } : {}),
   };
 }
 
@@ -5216,8 +5221,8 @@ export class D1DeviceCapabilityGrantStorage
           `INSERT INTO device_capability_grants
             (grant_id, username, device_id, device_pub_hex,
              scopes_json, issued_at, expires_at, signature_hex, revoked_at,
-             signer_root)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+             signer_root, pq_signature_json)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
         )
         .bind(
           rec.grantId,
@@ -5230,6 +5235,7 @@ export class D1DeviceCapabilityGrantStorage
           rec.signatureHex,
           rec.revokedAt,
           rec.signerRoot ?? "membership",
+          rec.pqSignatureJson ?? null,
         )
         .run();
       return { ok: true as const };
