@@ -33,6 +33,7 @@ import {
   type ServerShareGrant,
   type ServerShareRevoke,
   type ShareLevel,
+  type CoManagerCount,
 } from "@flagship/protocol";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import { extractPairedSessionToken } from "../pairedSessionStore.js";
@@ -166,6 +167,8 @@ export interface SharesDeps {
   serverUpdate?: ShareUpdateOrder | null;
   /** A co-manager's invites to the apps (absent: the routes answer 503). */
   invites?: ShareInvites | null;
+  /** The account's co-managers across its servers and the plan's cap (coManagerCap.ts). */
+  coManagers?: { count(): Promise<CoManagerCount> } | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -319,7 +322,9 @@ export function buildShares(deps: SharesDeps) {
       return json(200, { entries });
     }
     if (path === "/api/screens/shares" && method === "GET") {
+      const coManagers = deps.coManagers ? await deps.coManagers.count().catch(() => null) : null;
       return json(200, {
+        ...(coManagers ? { coManagers } : {}),
         shares: deps.store.list().map((h) => ({
           shareId: h.grant.shareId,
           label: h.grant.label,
@@ -346,7 +351,7 @@ export function buildShares(deps: SharesDeps) {
       if (acceptAdmin === null) return err(400, "malformed admin proof");
       // Sessions look the share up on every request, so a change applies at once.
       const r = await deps.store.put(grant, b.signature, accept ?? undefined, acceptSignature, acceptAdmin);
-      if (!r.ok) return err(r.status, r.error, r.code ? { code: r.code } : {});
+      if (!r.ok) return err(r.status, r.error, { ...(r.code ? { code: r.code } : {}), ...(r.extra ?? {}) });
       deps.activity.record({
         actor: { kind: "owner" },
         action: r.created ? "share.granted" : "share.changed",

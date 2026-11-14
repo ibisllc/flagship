@@ -34,6 +34,7 @@ import {
   type AppListScopeOrder,
   type CaTrustChain,
   type PlanAttestation,
+  type PlanTier,
 } from "@flagship/protocol";
 import type { AccessScope } from "./accessSync.js";
 
@@ -124,6 +125,19 @@ export class PlanCheck {
     if (!a || now < a.issuedAt || now >= a.expiresAt) return "unknown";
     if (!isProTier(a.tier)) return "free";
     return a.paidUntil === 0 || a.paidUntil > now ? "pro" : "unknown";
+  }
+
+  /**
+   * The plan for a limit that defaults to Free (the co-manager cap): the held
+   * attestation's tier while it is in date; Free with none, an expired one,
+   * or a paid period that ended.
+   */
+  tier(): PlanTier {
+    const a = this.held;
+    const now = this.now();
+    if (!a || now < a.issuedAt || now >= a.expiresAt) return "free";
+    if (isProTier(a.tier) && a.paidUntil !== 0 && a.paidUntil <= now) return "free";
+    return a.tier;
   }
 
   onChange(cb: (s: ProState) => void): void {

@@ -282,6 +282,7 @@ import { BoxReleaseConsumer } from "./retailClaim/releaseOrder.js";
 import { withQuotaUsage } from "./appQuota/usage.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
 import { checkShareAcceptAdmin } from "./shares/acceptAdmin.js";
+import { CoManagerCap, type CoManagerCapSource } from "./shares/coManagerCap.js";
 import { caTrustChainFromFolder } from "./releaseVerifier.js";
 import { buildShareUpdate } from "./shares/shareUpdate.js";
 import { ShareInviteStore, buildShareInvites, defaultShareInviteStorePath } from "./shares/shareInvites.js";
@@ -1878,6 +1879,8 @@ async function main(): Promise<void> {
   // once gossip is up (below).
   const accessSyncRef: { current: AccessSync | null } = { current: null };
   const accessPeersRef: { current: AccessPeers | null } = { current: null };
+  // The co-manager cap counts across the account's servers once the hand-over and the plan check are up.
+  const coManagerCapSourceRef: { current: CoManagerCapSource | null } = { current: null };
   // N11: the first publisher key verified per app, kept beside the box's keys so an uninstall or a
   // restore of app data cannot touch it.
   const publisherPins = new PublisherPins(join(dataDir, "publisher-pins.json"));
@@ -2513,6 +2516,7 @@ async function main(): Promise<void> {
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
+      coManagerCapSourceRef,
       accessSyncRef,
       listScopeRef,
       runtime,
@@ -2577,6 +2581,7 @@ async function main(): Promise<void> {
     activityLog,
     serviceAccessRef,
     accessPrincipals,
+    coManagerCapSourceRef,
     accessSyncRef,
     accessPeersRef,
     runtime,
@@ -3593,6 +3598,7 @@ async function wireRuntimeSurfaces(deps: {
   peerCapRef: { current: { reservedForPeersBytes(): number | null } | null };
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
+  coManagerCapSourceRef: { current: CoManagerCapSource | null };
   accessSyncRef: { current: AccessSync | null };
   listScopeRef: ListScopeRef;
   serverOrder: ServerOrderHolder | null;
@@ -4709,7 +4715,7 @@ async function wireRuntimeSurfaces(deps: {
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
     };
-    const store = new ShareStore(defaultShareStorePath(dataDir), {
+    const store: ShareStore = new ShareStore(defaultShareStorePath(dataDir), {
       serverDomain: env.serverFqdn,
       verifyOwnerGrant: (g, sig) =>
         authorizeSensitiveOrder({ ...authority, order: g, signature: sig, verify: verifyServerShareGrant }),
@@ -4724,7 +4730,15 @@ async function wireRuntimeSurfaces(deps: {
         }
         return checkShareAcceptAdmin({ accept, proof, chain, now: trustedNow() });
       },
+      admitNew: () => coManagers.admit(),
     });
+    const coManagers: CoManagerCap = new CoManagerCap({
+      path: join(dataDir, "share-cap-peers.json"),
+      localCount: () => store.list().length,
+      source: () => deps.coManagerCapSourceRef.current,
+      log: (m) => console.log(m),
+    });
+    await coManagers.load();
     const { dropped } = await store.load();
     if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
     // A co-manager's devices are Manager in every app by default.
@@ -4801,6 +4815,7 @@ async function wireRuntimeSurfaces(deps: {
       isCompanion: (req) => pairedSessions.isCompanionRequest(req),
       serverUpdate,
       invites,
+      coManagers,
     });
     runtime.addHandler(shares.handlePublic);
     if (env.controlPlaneBaseUrl) {
@@ -5427,6 +5442,7 @@ async function wireOwnerHandlers(deps: {
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
+  coManagerCapSourceRef: { current: CoManagerCapSource | null };
   accessSyncRef: { current: AccessSync | null };
   accessPeersRef: { current: AccessPeers | null };
   runtime: DaemonRuntime;
@@ -5907,8 +5923,15 @@ async function wireOwnerHandlers(deps: {
       fetchImpl: accessSyncFetch,
       scopes,
       planRefresh: () => void plan.refreshSoon().catch(() => {}),
+      shareCount: () => deps.accessPrincipals.shares?.().length ?? 0,
       log: (m) => console.log(m),
     });
+    deps.coManagerCapSourceRef.current = {
+      tier: () => plan.tier(),
+      refreshPlan: () => plan.refreshSoon(60_000),
+      servers: () => deps.accessPeersRef.current?.servers?.() ?? [],
+      sharesOn: (peer) => sync.sharesOn(peer),
+    };
     scopes.onTransition((ref, change) => sync.onScopeChange(ref, change));
     // Pro ended (verifiably): every app with separate lists goes back to one.
     // The app's lead server tells the owner, with nothing about which app.
