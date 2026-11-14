@@ -349,6 +349,9 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   secret incl. the disk key, offline recovery kit with a 14-day veto window, audit chain, enterprise plan tier.
   Today's limits found: no device cap, 100 co-managers per box, no per-account share cap, 5,000 app visitors per app,
   64 servers. Recommendation: cap 5 co-managers (10 on Pro Max), app visitors unlimited. Owner Qs Q-E1..Q-E15.
+- 2026-11-14 Owner (enterprise): freeze yes; seats unlinkable with a mandatory pseudonym set before the invite;
+  caps debated (5 fine for family, 10 small for business, tiers must differ); founder privileges + bylaws ceremony to
+  overturn a rogue admin proposed. Recorded in docs/enterprise-accounts.md.
 
 ## Resume point
 
