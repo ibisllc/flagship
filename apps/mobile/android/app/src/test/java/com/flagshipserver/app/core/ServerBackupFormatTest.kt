@@ -115,6 +115,27 @@ class ServerBackupFormatTest {
         assertEquals(ServerBackupFormat.FormatException.Kind.NO_PASSCODE, kindOf { ServerBackupFormat.openWithPasscode(accountOnly, b.s("passcode")) })
     }
 
+    /** F9: the account slot is retried once when the key can't be read, and only an absent account slot reads as
+     *  "made on another account". */
+    @Test fun opensWithTheAccountSlotAndSaysWhyNot() = runBlocking {
+        val f = file(b.s("file"))
+        val kek = b.hex("accountKekHex")
+        var calls = 0
+        val flaky = ServerBackupFormat.openWithAccountSlot(f, { calls += 1; if (calls == 1) throw IllegalStateException("prompt failed") else kek }, retryDelayMs = 0)
+        assertTrue(flaky is ServerBackupFormat.AccountOpen.Opened)
+        assertEquals(2, calls)
+        calls = 0
+        assertEquals(
+            ServerBackupFormat.AccountOpen.KeyUnavailable,
+            ServerBackupFormat.openWithAccountSlot(f, { calls += 1; throw IllegalStateException("cancelled") }, retryDelayMs = 0),
+        )
+        assertEquals(2, calls)
+        val other = ServerArchive.deriveKey(b.hex("wrongUmkSeedHex"), b.s("archiveId"))!!
+        assertEquals(ServerBackupFormat.AccountOpen.NotThisAccount, ServerBackupFormat.openWithAccountSlot(f, { other }, retryDelayMs = 0))
+        val passcodeOnly = f.copy(slots = f.slots.filter { it.kind == "passcode" })
+        assertEquals(ServerBackupFormat.AccountOpen.NoAccountSlot, ServerBackupFormat.openWithAccountSlot(passcodeOnly, { kek }, retryDelayMs = 0))
+    }
+
     @Test fun refusesTamperedFiles() {
         val accountKek = b.hex("accountKekHex")
         val passKek = b.hex("passcodeKekHex")

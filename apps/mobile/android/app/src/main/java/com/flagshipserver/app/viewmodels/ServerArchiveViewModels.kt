@@ -424,6 +424,9 @@ class ImportBackupViewModel(
     var fileError by mutableStateOf<String?>(null)
         private set
     var passcode by mutableStateOf("")
+    /** Why the passcode step is up: only an absent account slot reads as "made on another account" (F9). */
+    var passcodeReason by mutableStateOf<ServerBackupFormat.AccountOpen>(ServerBackupFormat.AccountOpen.NoAccountSlot)
+        private set
     var name by mutableStateOf("")
     var createTarget by mutableStateOf<CreateTarget?>(null)
         private set
@@ -549,20 +552,23 @@ class ImportBackupViewModel(
         }
         if (opened == null) {
             _phase.value = Phase.Opening
-            val o = try {
-                ServerBackupFormat.openWithAccountKey(f, accountKek(f.archiveId))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                null
+            when (val r = ServerBackupFormat.openWithAccountSlot(f, { accountKek(f.archiveId) })) {
+                is ServerBackupFormat.AccountOpen.Opened -> opened = r.opened
+                else -> {
+                    passcodeReason = r
+                    _phase.value = Phase.Passcode
+                    return
+                }
             }
-            if (o == null) {
-                _phase.value = Phase.Passcode
-                return
-            }
-            opened = o
         }
         checkData()
+    }
+
+    /** "Try my account key again" on the passcode step, after the account key couldn't be read. */
+    suspend fun retryAccountKey() {
+        if (_phase.value != Phase.Passcode || opened != null) return
+        fileError = null
+        advance()
     }
 
     /** Open with the passcode the user typed. */

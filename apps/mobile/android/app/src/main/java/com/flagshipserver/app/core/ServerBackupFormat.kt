@@ -351,6 +351,43 @@ object ServerBackupFormat {
         return Opened(file, openBody(file, key), key, "account")
     }
 
+    /** How opening with this account's key went: the passcode step says why it is asked (F9). */
+    sealed interface AccountOpen {
+        data class Opened(val opened: ServerBackupFormat.Opened) : AccountOpen
+        /** The backup has no account slot: it was made on another account. */
+        data object NoAccountSlot : AccountOpen
+        /** This account's key doesn't open the slot. */
+        data object NotThisAccount : AccountOpen
+        /** The account key couldn't be read (the prompt failed or was cancelled, e.g. right after the app locked). */
+        data object KeyUnavailable : AccountOpen
+    }
+
+    /**
+     * Open with the account slot, asking [accountKek] again once if it fails: right after the app lock the first
+     * prompt can fail although the account slot is this account's (Windows acceptance F9). Only an absent account
+     * slot reads as "made on another account".
+     */
+    suspend fun openWithAccountSlot(file: File, accountKek: suspend () -> ByteArray, retryDelayMs: Long = 400): AccountOpen {
+        if (file.accountSlot == null) return AccountOpen.NoAccountSlot
+        for (attempt in 0 until 2) {
+            if (attempt > 0) kotlinx.coroutines.delay(retryDelayMs)
+            val kek = try {
+                accountKek()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                continue
+            }
+            val opened = try {
+                openWithAccountKey(file, kek)
+            } catch (_: FormatException) {
+                null
+            }
+            return if (opened != null) AccountOpen.Opened(opened) else AccountOpen.NotThisAccount
+        }
+        return AccountOpen.KeyUnavailable
+    }
+
     /** Open with the passcode slot's key (Argon2id of the passcode under `file.passcodeSlot.kdf`). */
     fun openWithPasscodeKey(file: File, kek: ByteArray): Opened {
         val slot = file.passcodeSlot ?: throw FormatException(FormatException.Kind.NO_PASSCODE)

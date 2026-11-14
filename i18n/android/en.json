@@ -14495,5 +14495,13 @@
   "no_camera_on_the_other_device_send_link": {
     "en": "No camera on the other device? Send it this link and paste it there.",
     "ctx": "ui/screens/AddDeviceScreen.kt"
+  },
+  "backup_account_key_unavailable": {
+    "en": "Couldn't use your account key to open this backup. Try again, or enter its passcode.",
+    "ctx": "ui/screens/ServerArchiveScreens.kt (import backup: the account key prompt failed)"
+  },
+  "backup_account_key_doesnt_open": {
+    "en": "This account's key doesn't open this backup. Enter its passcode to open it.",
+    "ctx": "ui/screens/ServerArchiveScreens.kt (import backup: the account slot is not this account's)"
   }
 }

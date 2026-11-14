@@ -3519,4 +3519,6 @@
     <string name="keyfile_import_unreachable">Couldn\'t reach Flagship to check this key file. Nothing was changed on this device. Check your connection and try again.</string>
     <string name="keyfile_import_refused">Flagship didn\'t accept this key file for %1$s. Nothing was changed on this device. Try again in a few minutes.</string>
     <string name="no_camera_on_the_other_device_send_link">No camera on the other device? Send it this link and paste it there.</string>
+    <string name="backup_account_key_unavailable">Couldn\'t use your account key to open this backup. Try again, or enter its passcode.</string>
+    <string name="backup_account_key_doesnt_open">This account\'s key doesn\'t open this backup. Enter its passcode to open it.</string>
 </resources>
