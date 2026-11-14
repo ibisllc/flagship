@@ -14444,6 +14444,10 @@
     "en": "During its first 14 days it is under review and acts as a non-admin device.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift (under the \"Also make this device an admin\" switch; Windows acceptance W14)"
   },
+  "Only an admin device can manage backups and restore servers.": {
+    "en": "Only an admin device can manage backups and restore servers.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift (under the \"Also make this device an admin\" switch, after the 14-day review line)"
+  },
   "443": {
     "en": "443",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:162",

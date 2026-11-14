@@ -3355,6 +3355,7 @@
   "The username and password can't contain control characters.": "d3908f60cf68",
   "One more approval for %@: authorize it to join your cloud.": "7c13fa13f1b5",
   "During its first 14 days it is under review and acts as a non-admin device.": "276444c2dbf7",
+  "Only an admin device can manage backups and restore servers.": "070f340612af",
   "Turn off direct access?": "1cd2ed003145",
   "Direct access": "290f2b45dce6",
   "Its names stop pointing at this server. The address stays in public DNS history.": "2012fbcd8049",

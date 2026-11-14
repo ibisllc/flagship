@@ -14078,6 +14078,10 @@
     "en": "During its first 14 days it is under review and acts as a non-admin device.",
     "ctx": "webapp/views/add-device.js:188"
   },
+  "Only an admin device can manage backups and restore servers.": {
+    "en": "Only an admin device can manage backups and restore servers.",
+    "ctx": "webapp/views/add-device.js:189"
+  },
   "That change couldn't be read. Try again.": {
     "en": "That change couldn't be read. Try again.",
     "ctx": "webapp/lib/directNames.js:38"

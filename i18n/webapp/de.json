@@ -3445,6 +3445,7 @@
   "Another approval is still running. Wait for it to finish, then try again.": "Eine andere Freigabe läuft noch. Warte, bis sie fertig ist, und versuche es dann erneut.",
   "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "Die Freigabe für {0} hat zu lange gedauert und wurde abgebrochen. Versuche es erneut oder gib ihn auf deinem Telefon frei.",
   "During its first 14 days it is under review and acts as a non-admin device.": "In seinen ersten 14 Tagen wird es überprüft und gilt als Gerät ohne Adminrechte.",
+  "Only an admin device can manage backups and restore servers.": "Nur ein Admin-Gerät kann Backups verwalten und Server wiederherstellen.",
   "That change couldn't be read. Try again.": "Diese Änderung konnte nicht gelesen werden. Versuch es noch einmal.",
   "Only public addresses can be used. Private, local and reserved addresses can't.": "Nur öffentliche Adressen sind möglich. Private, lokale und reservierte Adressen nicht.",
   "One of the addresses isn't an IP address.": "Eine der Adressen ist keine IP-Adresse.",

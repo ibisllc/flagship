@@ -3644,6 +3644,7 @@
     <string name="push_service_none">Aucun : ce téléphone n’a pas de service de notifications push. Installez une application UnifiedPush, comme ntfy, pour recevoir les notifications.</string>
     <string name="second_approval_waiting">Encore une approbation pour %1$s : autorisez-le à rejoindre votre cloud.</string>
     <string name="admin_promotion_under_review">Pendant ses 14 premiers jours, il est en cours de vérification et agit comme un appareil non administrateur.</string>
+    <string name="admin_only_backups_note">Seul un appareil administrateur peut gérer les sauvegardes et restaurer des serveurs.</string>
     <string name="da_title">Accès direct</string>
     <string name="da_on_line">Activé. Les visiteurs peuvent joindre les apps de ce serveur directement, sans le relais.</string>
     <string name="da_off_line">Désactivé. Les visiteurs joignent les apps de ce serveur via le relais.</string>

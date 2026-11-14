@@ -3445,6 +3445,7 @@
   "Another approval is still running. Wait for it to finish, then try again.": "另一项批准仍在进行中。请等它完成后再试。",
   "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "批准 {0} 耗时过长，已停止。请重试，或在手机上批准。",
   "During its first 14 days it is under review and acts as a non-admin device.": "在最初 14 天内，它处于审核期，按非管理员设备运行。",
+  "Only an admin device can manage backups and restore servers.": "只有管理员设备才能管理备份和恢复服务器。",
   "That change couldn't be read. Try again.": "无法读取这项更改。请重试。",
   "Only public addresses can be used. Private, local and reserved addresses can't.": "只能使用公网地址。私有、本地和保留地址都不行。",
   "One of the addresses isn't an IP address.": "其中一个地址不是 IP 地址。",

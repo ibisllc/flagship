@@ -28,3 +28,13 @@ describe("webapp add-device SAS-confirm gate (parity with iOS/Android)", () => {
     expect(body).toContain('$("add-device-confirm") === btn');
   });
 });
+
+describe("webapp add-device admin note", () => {
+  it("says under the admin switch that only an admin device manages backups and restores", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/add-device.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('data-section="promote-admin-backups"');
+    expect(r.body).toContain('tr("Only an admin device can manage backups and restore servers.")');
+  });
+});

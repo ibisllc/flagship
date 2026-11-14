@@ -3642,6 +3642,7 @@
   "push_service_none": "Nenhum: este telefone não tem serviço de notificações push. Instale um app de UnifiedPush, como o ntfy, para receber notificações.",
   "second_approval_waiting": "Mais uma aprovação para %1$s: autorize-o a entrar na sua nuvem.",
   "admin_promotion_under_review": "Nos primeiros 14 dias, ele fica em análise e funciona como um dispositivo sem permissão de administrador.",
+  "admin_only_backups_note": "Somente um dispositivo administrador pode gerenciar backups e restaurar servidores.",
   "da_title": "Acesso direto",
   "da_on_line": "Ativado. Os visitantes acessam os apps deste servidor diretamente, sem o relay.",
   "da_off_line": "Desativado. Os visitantes acessam os apps deste servidor pelo relay.",

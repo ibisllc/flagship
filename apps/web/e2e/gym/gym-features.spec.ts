@@ -590,6 +590,7 @@ test.describe("gym webapp features", () => {
     await expect(toggle).toBeVisible();
     await expect(toggle).not.toBeChecked();
     await expect(page.locator('[data-section="promote-admin-warning"]')).toContainText(/full admin authority/i);
+    await expect(page.locator('[data-section="promote-admin-backups"]')).toContainText(/manage backups and restore servers/i);
     await shot(page, testInfo, "promote-toggle-admin");
   });
 

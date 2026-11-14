@@ -342,6 +342,11 @@ private fun AdminPromoteToggle(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Text(
+                    stringResource(R.string.admin_only_backups_note),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }

@@ -3445,6 +3445,7 @@
   "Another approval is still running. Wait for it to finish, then try again.": "Une autre approbation est encore en cours. Attends qu'elle se termine, puis réessaie.",
   "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "L'approbation de {0} a pris trop de temps et a été arrêtée. Réessaie, ou approuve-le depuis ton téléphone.",
   "During its first 14 days it is under review and acts as a non-admin device.": "Pendant ses 14 premiers jours, il est en cours de vérification et agit comme un appareil non administrateur.",
+  "Only an admin device can manage backups and restore servers.": "Seul un appareil administrateur peut gérer les sauvegardes et restaurer des serveurs.",
   "That change couldn't be read. Try again.": "Cette modification n’a pas pu être lue. Réessayez.",
   "Only public addresses can be used. Private, local and reserved addresses can't.": "Seules les adresses publiques sont acceptées. Les adresses privées, locales et réservées ne le sont pas.",
   "One of the addresses isn't an IP address.": "L’une des adresses n’est pas une adresse IP.",
