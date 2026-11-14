@@ -143,6 +143,8 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       qualification (G10), removal of old implementations once proven (G8), gym IPv6-only, `VOICI_CANONICAL`.
 
 ### U. UX feedback lane (parallel; owner's notes, Q4)
+- [ ] U4 (reviewer via owner, 2026-11-14) The webapp is phone-style only: make it responsive, iPad-like on desktop
+      (sidebar instead of the tab bar, list/detail panes). Agent on `0.4/webapp-responsive`.
 - [ ] U1 Write each note as an item here with the screen and platform; iOS first, then port (memory rule).
 - [~] U3 (iOS merged 2026-11-14 with today's features, `docs/social-tab.md`; guests/comments/audience/calls need the protocol answers; Android + webapp ports next) Social tab layout: the editor becomes the tab (old landing page removed, its features moved);
       the page previews itself (minus voi.ci's footer); title row "Your page" + Public switch + options menu (theme,
