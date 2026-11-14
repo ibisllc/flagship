@@ -3337,7 +3337,7 @@
     <string name="voici_show_older">Show older posts</string>
     <string name="voici_preview_note">Grayed parts aren\'t published yet.</string>
     <string name="voici_rules_title">Page and message rules</string>
-    <string name="voici_rules_body">Don\'t post or send anything illegal, hateful, sexual involving minors, violent threats, harassment, spam or someone else\'s private information. Flagship removes pages and blocks accounts that break these rules. Reports are reviewed by people at Flagship.</string>
+    <string name="voici_rules_body">Don\'t post or send anything illegal or hateful, violent threats, harassment, nudity or sexual content, graphic real-world violence, spam or someone else\'s private information. Flagship removes pages and blocks accounts that break these rules. Reports are reviewed by people at Flagship.</string>
     <string name="voici_rules_agree">I agree</string>
     <string name="voici_settings_title">Messages</string>
     <string name="voici_settings_row_subtitle">Websites you\'re signed in to, inbox key, rules</string>

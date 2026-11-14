@@ -1617,7 +1617,7 @@
   "Use a full https:// address.": "Utilisez une adresse https:// complète.",
   "Edit post": "Modifier la publication",
   "Post": "Publication",
-  "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.": "Votre page et vos messages ne doivent contenir ni contenu illégal, ni harcèlement, ni menaces, ni spam, ni contenu qui se fait passer pour quelqu’un d’autre.",
+  "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.": "Votre page et vos messages ne doivent contenir ni contenu illégal, ni harcèlement, ni menaces, ni nudité ou contenu sexuel, ni violence réelle explicite, ni spam, ni contenu qui se fait passer pour quelqu’un d’autre.",
   "Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.": "Tout le monde peut signaler une page ou un message. Flagship peut retirer une page et empêcher un compte d’envoyer des messages.",
   "Messages are private. If someone reports your message, Flagship can see which account sent it.": "Les messages sont privés. Si quelqu’un signale votre message, Flagship peut voir quel compte l’a envoyé.",
   "The full rules are in the terms at flagshipserver.com/terms.": "Les règles complètes figurent dans les conditions, sur flagshipserver.com/terms.",

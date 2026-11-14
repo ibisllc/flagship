@@ -13763,7 +13763,7 @@
     "ctx": "voi.ci / Messages: sheet title"
   },
   "voici_rules_body": {
-    "en": "Don't post or send anything illegal, hateful, sexual involving minors, violent threats, harassment, spam or someone else's private information. Flagship removes pages and blocks accounts that break these rules. Reports are reviewed by people at Flagship.",
+    "en": "Don't post or send anything illegal or hateful, violent threats, harassment, nudity or sexual content, graphic real-world violence, spam or someone else's private information. Flagship removes pages and blocks accounts that break these rules. Reports are reviewed by people at Flagship.",
     "ctx": "voi.ci / Messages: rules text, needs native review"
   },
   "voici_rules_agree": {

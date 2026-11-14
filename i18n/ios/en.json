@@ -6564,8 +6564,8 @@
     "en": "Post",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:379"
   },
-  "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.": {
-    "en": "Your page and your messages must not contain illegal content, harassment, threats, spam, or content that pretends to be someone else.",
+  "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.": {
+    "en": "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:414"
   },
   "Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.": {
