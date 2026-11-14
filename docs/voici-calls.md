@@ -223,3 +223,14 @@ About 53 days.
 - **D3** A maximum call length (recommended 60 minutes, then "Call again").
 - **D4** Calls are off in the China mainland storefront (Apple doesn't allow CallKit there). Accept, or ship there
   without CallKit (calls only while the app is open)?
+
+## Owner decisions, 2026-11-14
+
+- **D1:** by default only accepted conversations may call. **D2:** iPads ring too. **D3:** 60-minute limit, then
+  "Call again".
+- **D4:** in the China mainland storefront, ship calls without ringing (no CallKit): calls work while the app is
+  open, if that is legal there (legal check needed before release: Apple's China rules and local rules on encrypted
+  voice).
+- Built on `release/0.4` (not a separate `feat/voici-calls` branch): calls launch with 0.4.
+- Later design work (`docs/voici-calls-v2.md`): video calls; enterprise pages taking calls from visitors without a
+  Flagship account (customer support); paid calls for enterprise accounts.
