@@ -476,7 +476,10 @@ export async function handleOrgCeremonyOpen(deps: OrgDeps, orgId: string, body: 
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
     const approvals = b.approvals.map(orgApprovalFromWire);
-    verifyOrgApprovers(v.state, v.book, order, approvals, now);
+    // "Restore my access": the frozen seat itself may open the overturn of its own freeze (§ owner decisions).
+    const parts = b.order.split("|");
+    const own = parts[0] === "flagship/org-overturn/v1" ? v.book.freezes.find((f) => f.sha256 === parts[2])?.seatId : undefined;
+    verifyOrgApprovers(v.state, v.book, order, approvals, now, own ? { allowFrozenSeat: own } : {});
     const sha = orgSha256Hex(order);
     const c: Ceremony = { sha256: sha, order: b.order, payload: b.payload ?? null, approvals, openedAt: now };
     const stored = await deps.orgs.putObject(orgId, { kind: "ceremony", key: sha, bodyJson: JSON.stringify(c), issuedAt: now, storedAt: now });

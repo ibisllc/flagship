@@ -1261,7 +1261,14 @@ export function authorizeOrgOrder(input: OrgAuthorizeInput): OrgAuthorizeResult 
  * an admin key, not frozen now, under the current record (or the previous one within 24 h). Counts
  * nothing: for collecting a ceremony and for vetoes, whose weight the chain decides.
  */
-export function verifyOrgApprovers(state: OrgAuthorityState, book: OrgSeatBook, order: Bytes, approvals: readonly OrgApproval[], now: number): string[] {
+export function verifyOrgApprovers(
+  state: OrgAuthorityState,
+  book: OrgSeatBook,
+  order: Bytes,
+  approvals: readonly OrgApproval[],
+  now: number,
+  opts: { allowFrozenSeat?: string } = {},
+): string[] {
   const cur = state.current;
   if (approvals.length === 0) fail("threshold", "no approvals");
   const prev = state.records.find((r) => r.version === cur.version - 1);
@@ -1275,7 +1282,7 @@ export function verifyOrgApprovers(state: OrgAuthorityState, book: OrgSeatBook, 
     if (book.revoked.has(s)) return undefined;
     return book.seats.get(s)?.admin ?? undefined;
   };
-  const frozenNow = (s: string) => book.freezes.some((f) => f.seatId === s && f.issuedAt <= now && now < f.untilMs);
+  const frozenNow = (s: string) => s !== opts.allowFrozenSeat && book.freezes.some((f) => f.seatId === s && f.issuedAt <= now && now < f.untilMs);
   return checkApprovals(approvals, { orgId: state.orgId, oarVersion: version, order, now }, keyOf, (s) => frozenNow(s));
 }
 
