@@ -618,6 +618,118 @@ test.describe("gym webapp total", () => {
     await shot(page, testInfo, "debug-access-read-only");
   });
 
+  // Direct access (docs/direct-access-and-domains.md §5, §8): the box and `.com`
+  // are route-stubbed; `.com` keeps what it is sent, like the real one.
+  const DA_FQDN = "home.smoketest.flagship.services";
+  const DA_NAME = "notes--smoketest.fshp.app";
+  const DA_APPS = { apps: [{ serviceId: "smoketest--notes", creator: "smoketest", slug: "notes", name: "Notes", urlLabel: "notes", url: "", status: "running", installedAt: 1 }] };
+  type Signed = { order: Record<string, unknown>; signatureHex: string };
+  async function routeDirectAccess(page: Page, { on }: { on: boolean }) {
+    const box: Signed[] = [];
+    const com = { access: [] as Signed[], names: [] as Signed[], probes: 0 };
+    let view: Record<string, unknown> = on
+      ? { on: true, addresses: ["81.2.69.142"], prefixes: [], port: 443, issuedAt: 1, endpoints: [] }
+      : { on: false, addresses: [], prefixes: [], port: null, issuedAt: null, endpoints: [] };
+    const names: Array<Record<string, unknown>> = on
+      ? [{ name: DA_NAME, serverDomain: DA_FQDN, enabled: true, caa: "pin", addresses: [], state: "published" }]
+      : [];
+    await routePodJson(page, "/api/screens/server-detail", serverDetailBody());
+    await routePodJson(page, "/api/screens/apps-list", DA_APPS);
+    await page.route(
+      (url) => url.href.startsWith(POD_BASE) && url.pathname === "/api/screens/direct-access",
+      async (route) => {
+        if (route.request().method() === "POST") {
+          const b = route.request().postDataJSON() as Signed;
+          box.push(b);
+          view = { ...b.order, on: b.order.enabled, endpoints: [] };
+        }
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(route.request().method() === "POST" ? { ok: true, change: "on", directAccess: view } : view) });
+      },
+    );
+    await page.route("https://flagshipserver.com/**", (route) => route.fulfill({ status: 404, contentType: "application/json", body: "{}" }));
+    await page.route(
+      (url) => url.href.startsWith("https://flagshipserver.com/api/accounts/smoketest/direct-"),
+      async (route) => {
+        const req = route.request();
+        const path = new URL(req.url()).pathname;
+        let body: unknown = { ok: true };
+        if (path.endsWith("/probe")) {
+          com.probes++;
+          body = { name: DA_NAME, at: Date.now(), reachable: true, addresses: ["81.2.69.142"] };
+          names[0] = { ...names[0], probe: body };
+        } else if (req.method() === "POST" && path.endsWith("/direct-names")) {
+          const b = req.postDataJSON() as Signed;
+          com.names.push(b);
+          names.splice(0, names.length, { ...b.order, state: b.order.enabled ? "published" : "empty", reason: b.order.enabled ? null : "off" });
+        } else if (req.method() === "POST") {
+          com.access.push(req.postDataJSON() as Signed);
+        } else {
+          const v = view as { on: boolean; addresses?: string[]; prefixes?: string[]; port?: number };
+          body = { apex: "fshp.app", servers: [{ serverDomain: DA_FQDN, on: v.on, addresses: v.addresses ?? [], prefixes: v.prefixes ?? [], port: v.port ?? 443 }], names };
+        }
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      },
+    );
+    return { box, com };
+  }
+
+  async function openServerDetailAs(page: Page) {
+    await page.evaluate(async () => {
+      const { getSession } = await import("/lib/state.js");
+      getSession().username = "smoketest";
+      (await import("/lib/apex.js")).setApexOverride({ control: "https://flagshipserver.com" });
+      const { enterServerDetail } = await import("/views/server-detail.js");
+      await enterServerDetail();
+    });
+  }
+
+  test("gym total webapp server-detail direct access turns on and gives an app its direct name", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await seedPairedPod(page);
+    await setAdminDevice(page, true);
+    const { box, com } = await routeDirectAccess(page, { on: false });
+    await page.evaluate(async (pass) => {
+      const [{ getSession }, ks] = await Promise.all([import("/lib/state.js"), import("/keystore.js")]);
+      await ks.persistSeedForProfile(getSession().umk, "smoketest", pass);
+    }, PASSPHRASE);
+    await openServerDetailAs(page);
+    await expect(page.locator("#sd-direct-access-state")).toContainText("Off. Visitors reach this server", { timeout: 10_000 });
+    await page.click("#sd-direct-access-on");
+    await expect(page.locator("#sd-direct-access-warning")).toContainText("public DNS");
+    await page.fill("#sd-direct-access-addresses-field", "81.2.69.142");
+    await page.click("#sd-direct-access-submit");
+    await expect(page.locator(".modal-message")).toContainText("public DNS");
+    await page.fill(".modal-input", PASSPHRASE);
+    await page.locator("[data-modal-ok]").click();
+    await expect(page.locator("#sd-direct-access-state")).toContainText("On. Visitors can reach", { timeout: 10_000 });
+    expect(box[0]!.order).toMatchObject({ serverDomain: DA_FQDN, enabled: true, addresses: ["81.2.69.142"], port: 443 });
+    expect(box[0]!.signatureHex).toMatch(/^[0-9a-f]{128}$/);
+    expect(com.access[0]).toEqual(box[0]);
+    await shot(page, testInfo, "direct-access-on");
+
+    await page.click("#sd-direct-name-on-smoketest--notes");
+    await page.fill(".modal-input", PASSPHRASE);
+    await page.locator("[data-modal-ok]").click();
+    await expect(page.locator("#sd-direct-name-state-smoketest--notes")).toHaveText("Published", { timeout: 10_000 });
+    expect(com.names[0]!.order).toMatchObject({ name: DA_NAME, serverDomain: DA_FQDN, enabled: true, addresses: [], caa: "pin" });
+    await page.click("#sd-direct-name-probe-btn-smoketest--notes");
+    await expect(page.locator("#sd-direct-name-probe-smoketest--notes")).toContainText("Reachable from outside.", { timeout: 10_000 });
+    await shot(page, testInfo, "direct-name-published");
+  });
+
+  test("gym total webapp server-detail direct access is read-only on a non-admin device", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await seedPairedPod(page);
+    await setAdminDevice(page, false);
+    await routeDirectAccess(page, { on: true });
+    await openServerDetailAs(page);
+    await expect(page.locator("#sd-direct-access-admin-only")).toHaveText("Only an admin device can change direct access. This device can see it.", { timeout: 10_000 });
+    await expect(page.locator("#sd-direct-access-change")).toHaveCount(0);
+    await expect(page.locator("#sd-direct-name-on-smoketest--notes")).toHaveCount(0);
+    await expect(page.locator("#sd-direct-name-probe-btn-smoketest--notes")).toBeVisible();
+    await shot(page, testInfo, "direct-access-read-only");
+  });
+
   // ─── D5 — server-event seed states (server-detail cert) ──────────────────
 
   test("gym total webapp server-detail surfaces a near-expiry certificate", async ({ page }, testInfo) => {

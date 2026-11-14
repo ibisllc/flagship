@@ -74,6 +74,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/arch-v2-switch/v1", //         move a classic box to the new stack (archV2Switch.ts)
   "flagship/app-list-scope/v1", //         a separate access list on each server (Pro, feat/marketplace)
   "flagship/box-proxy/v1", //              a server's outbound proxy
+  "flagship/direct-access/v1", //          reach the server at its own public addresses (directAccess.js)
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion
@@ -87,6 +88,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/abuse-notice-done/v1", //      mark an operator's abuse notice done (docs/abuse-handling.md)
   "flagship/rck-register/v1", //           a new server's routing key (adding a server)
   "flagship/voici-name/v1", //             an app's custom voi.ci name (set / clear)
+  "flagship/direct-name/v1", //            an app's name on the direct domain (directName.js)
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)
   // Share this server (docs/share-a-server.md): who the server is shared with
