@@ -383,7 +383,7 @@ public sealed class Wizard : INotifyPropertyChanged
     public ServerDestination? Destination
     {
         get => _destination;
-        set { if (_destination != value) { _destination = value; FireBag(); } }
+        set { if (_destination != value) { _destination = value; _hostHereError = null; FireBag(); } }
     }
 
     /// <summary>Sidebar selection: the hosted server whose detail fills the
@@ -459,6 +459,25 @@ public sealed class Wizard : INotifyPropertyChanged
     }
 
     public bool HostHereEnabled => HostHereDisabledReason == null;
+
+    /// <summary>Why the last "Create server on this PC" was refused before anything was made (W26).</summary>
+    public string? HostHereError
+    {
+        get => _hostHereError;
+        private set { if (_hostHereError != value) { _hostHereError = value; FireBag(); } }
+    }
+    private string? _hostHereError;
+
+    /// <summary>A start this server can't make (too little free RAM, no QEMU) is refused here, before the disk,
+    /// seed or inventory row exist, so the refusal leaves nothing behind (W26).</summary>
+    private bool RefuseHostHere(VMConfig config)
+    {
+        var refusal = Vm.StartRefusal(config);
+        HostHereError = refusal;
+        if (refusal is null) return false;
+        AppendLog(LogStream.Stderr, refusal);
+        return true;
+    }
     public string HardwareBadgeLabel => ServerTier.Hardware.BadgeLabel();
     public string HostedVmBadgeLabel => ServerTier.HostedVM.BadgeLabel();
 
@@ -562,6 +581,7 @@ public sealed class Wizard : INotifyPropertyChanged
             {
                 var applianceConfig = VMConfig.Plan(parsed, rawRecipe, VM.HostResources.Current(),
                     provisioningMode: VMProvisioningMode.PrebuiltAppliance);
+                if (RefuseHostHere(applianceConfig)) return;
                 Phase = "clone appliance";
                 Progress = null;
                 var img = Vm.Toolchain!.ImgBinary;
@@ -587,6 +607,7 @@ public sealed class Wizard : INotifyPropertyChanged
             if (!await BoxReleaseIsPublishedAsync(ApplianceHosting.Arch, _cts.Token)) return;
             var config = VMConfig.Plan(parsed, rawRecipe, VM.HostResources.Current(),
                                        provisioningMode: VMProvisioningMode.InstallerISO);
+            if (RefuseHostHere(config)) return;
             // Same Simple-mode base ISO fetch as the USB path; Advanced mode
             // may bring its own stock ISO.
             string baseIso;
@@ -1313,7 +1334,7 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(PairRefused), nameof(PairRefusalNeedsUpdate), nameof(ShowPairQrSpinner),
         nameof(ShowPairingConfirm), nameof(ShowAwaitingAuthorization), nameof(AdvancedAllowed),
         nameof(HasHostedServers), nameof(HostHereDisabledReason), nameof(HostHereEnabled),
-        nameof(HostHereSpecSummary), nameof(HardwareBadgeLabel), nameof(HostedVmBadgeLabel),
+        nameof(HostHereSpecSummary), nameof(HardwareBadgeLabel), nameof(HostedVmBadgeLabel), nameof(HostHereError),
     };
 
     private static Brush FindBrush(string key)

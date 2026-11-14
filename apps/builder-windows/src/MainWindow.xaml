@@ -528,6 +528,9 @@
                                    TextWrapping="Wrap"
                                    Text="{local:Str theVmInstallsUnattendedFromThe}"/>
 
+                        <TextBlock Text="{Binding HostHereError}" Foreground="{DynamicResource FB.Danger}" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="0,14,0,0" AutomationProperties.LiveSetting="Assertive"
+                                   Visibility="{Binding HostHereError, Converter={StaticResource NotNullToVisible}}"/>
                         <StackPanel Margin="0,22,0,0" HorizontalAlignment="Center">
                             <Button Style="{StaticResource BakeButton}"
                                     Content="{local:Str createServerOnThisPc}"
