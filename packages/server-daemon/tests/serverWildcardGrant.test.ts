@@ -29,17 +29,20 @@ const grant = (key: Uint8Array, serverDomain = SERVER, issuedAt = T0) => ({
 });
 
 describe("the admin's grant for the account's app names", () => {
-  it("keeps only a grant the admin signed for this server, restarts once for the first, and survives a restart", async () => {
+  it("keeps only a grant the admin signed for this server, renews once for the first (no restart), and survives a restart", async () => {
     const s = store({ adminPinned: true });
-    let restarts = 0;
-    const http = buildServerWildcardGrantHttp({ store: s, onFirstGrant: () => restarts++ });
+    let renewals = 0;
+    const http = buildServerWildcardGrantHttp({ store: s, onFirstGrant: () => renewals++ });
     const post = (g: { issuedAt: number; signatureHex: string }) => http(SERVER_WILDCARD_GRANT_PATH, "POST", { body: Buffer.from(JSON.stringify({ issuedAt: g.issuedAt, signature: g.signatureHex })) } as HttpRequest);
     expect((await post(grant(irk)))?.status).toBe(403); // the IRK is not enough on an admin-pinned box
     expect((await post(grant(admin, "home2.alice.flagship.services")))?.status).toBe(403);
-    expect((await post(grant(admin)))?.status).toBe(200);
-    expect(restarts).toBe(1);
-    expect((await post(grant(admin, SERVER, T0 + 1)))?.status).toBe(200); // a newer one replaces it, no restart
-    expect(restarts).toBe(1);
+    const first = await post(grant(admin));
+    expect(first?.status).toBe(200);
+    // The certificate is ordered in this run: a restart dropped a new box's order in flight (Failure 5).
+    expect(JSON.parse(String(first?.body)).restarting).toBe(false);
+    expect(renewals).toBe(1);
+    expect((await post(grant(admin, SERVER, T0 + 1)))?.status).toBe(200); // a newer one replaces it, nothing to order
+    expect(renewals).toBe(1);
     const again = new ServerWildcardGrantStore({ path: (s as unknown as { o: { path: string } }).o.path, serverDomain: SERVER, stkPubHex: hex(stk.publicKey), authority: () => ({ ownerIrkPub: ed.getPublicKey(irk), adminRootPub: ed.getPublicKey(admin), username: "alice" }) });
     expect((await again.load())?.issuedAt).toBe(T0 + 1);
     // An admin root rotated since: the kept grant no longer verifies and is dropped.

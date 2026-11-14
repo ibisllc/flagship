@@ -568,6 +568,8 @@ export interface DaemonRuntime {
   ready(): Promise<void>;
   close(): Promise<void>;
   certManager: CertManager;
+  /** Order now whatever certificate is missing or names other names (e.g. after the admin's wildcard grant). */
+  renewCertificates?(): void;
   /**
    * App-platform handles. `appRunner` is unconditional (it just shells
    * to docker). `dataProvisioner` is null when the data-services
@@ -1401,6 +1403,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       keydTls?.csr
         ? keydCsrSource({ tlsCreateKey: (n) => keydTls.acme.tlsCreateKey(n), tlsCsr: (h) => keydTls.csr!(h) })
         : localCsrSource(),
+    ...(opts.dataDir ? { pendingPath: `${opts.dataDir}/issuance-pending.json` } : {}),
   });
   const boxCerts = new BoxCertificates({
     issuer: serviceIssuer,
@@ -1932,6 +1935,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       tls.close();
     },
     certManager,
+    renewCertificates: () => void boxCerts.tick(),
     chat: chatHarness,
     appRunner,
     appRuntimes,

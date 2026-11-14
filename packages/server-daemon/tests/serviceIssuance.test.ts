@@ -5,7 +5,7 @@
  * never orders before they are due.
  */
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { X509Certificate } from "node:crypto";
@@ -47,20 +47,20 @@ async function world(o: { grant?: boolean; lose?: (req: { method: string; url: s
     }
     return res ?? new Response("{}", { status: 404 });
   }) as typeof fetch;
-  const grant = o.grant
-    ? (() => {
-        const issuedAt = clock.t - 1000;
-        return { issuedAt, signatureHex: hex(signServerWildcardGrant({ username: "alice", serverDomain: SERVER, stkPubHex: BOX, issuedAt }, (m) => ed.sign(m, ADMIN))) };
-      })()
-    : undefined;
-  const issuer = (csr: CsrSource = localCsrSource()) =>
+  const signGrant = () => {
+    const issuedAt = clock.t - 1000;
+    return { issuedAt, signatureHex: hex(signServerWildcardGrant({ username: "alice", serverDomain: SERVER, stkPubHex: BOX, issuedAt }, (m) => ed.sign(m, ADMIN))) };
+  };
+  const grantRef: { current: { issuedAt: number; signatureHex: string } | undefined } = { current: o.grant ? signGrant() : undefined };
+  const issuer = (csr: CsrSource = localCsrSource(), pendingPath?: string) =>
     new ServiceIssuer({
+      ...(pendingPath ? { pendingPath } : {}),
       controlPlaneBaseUrl: "https://flagshipserver.com",
       serverFqdn: SERVER,
       boxPubHex: BOX,
       signAsBox: (m) => ed.sign(m, BOX_KEY),
       regGen: () => 1,
-      wildcardGrant: () => grant,
+      wildcardGrant: () => grantRef.current,
       csr,
       fetchImpl: comFetch,
       now: () => clock.t,
@@ -70,7 +70,7 @@ async function world(o: { grant?: boolean; lose?: (req: { method: string; url: s
     });
   const orders = async () =>
     (await db.prepare("SELECT class, status, error_code FROM certificate_orders ORDER BY rowid").all<{ class: string; status: string; error_code: string | null }>()).results ?? [];
-  return { sqlite, db, env, deps, ca, dns, clock, issuer, orders, close: () => sqlite.close() };
+  return { sqlite, db, env, deps, ca, dns, clock, issuer, orders, grantRef, signGrant, close: () => sqlite.close() };
 }
 
 /** keyd's real TLS key store behind the daemon's interfaces: keys never leave it, certificates are checked on install. */
@@ -176,6 +176,101 @@ describe("box certificates through the issuance service", () => {
       w.clock.t += 61 * 86_400_000;
       await restarted.tick();
       expect(w.ca.newOrders).toBe(4);
+    } finally {
+      w.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a daemon restart follows up the order in flight instead of replacing it (first-boot restarts, Failure 5)", async () => {
+    let down = true;
+    const w = await world({ lose: ({ method }) => down && method === "GET" });
+    const dir = await mkdtemp(join(tmpdir(), "box-pending-"));
+    const pendingPath = join(dir, "issuance-pending.json");
+    try {
+      const first = w.issuer(localCsrSource(), pendingPath);
+      const failed = await first.issue("control").then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(failed).toBeInstanceOf(Error);
+      expect(first.hasPending("control")).toBe(true);
+      // The daemon exits; a new process with a new issuer comes up.
+      down = false;
+      w.clock.t += 30_000;
+      const restarted = w.issuer(localCsrSource(), pendingPath);
+      const c = await restarted.issue("control");
+      expect(sanOf(c.chainPem)).toBe(`DNS:${SERVER}`);
+      expect(w.ca.newOrders).toBe(1);
+      expect((await w.orders()).map((r) => `${r.class}:${r.status}`)).toEqual(["control:issued"]);
+      expect(restarted.hasPending("control")).toBe(false);
+      // Followed up and done: nothing left for the next start to resume.
+      expect(await import("node:fs").then((fs) => fs.existsSync(pendingPath))).toBe(false);
+    } finally {
+      w.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not resume a saved order older than an hour", async () => {
+    let down = true;
+    const w = await world({ lose: ({ method }) => down && method === "GET" });
+    const dir = await mkdtemp(join(tmpdir(), "box-pending-"));
+    const pendingPath = join(dir, "issuance-pending.json");
+    try {
+      await w.issuer(localCsrSource(), pendingPath).issue("control").catch(() => null);
+      down = false;
+      w.clock.t += 2 * 3_600_000;
+      const restarted = w.issuer(localCsrSource(), pendingPath);
+      await restarted.restore();
+      expect(restarted.hasPending("control")).toBe(false);
+    } finally {
+      w.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("resumes a saved direct name's order, and drops saved keys that are not a class or a direct name", async () => {
+    const w = await world();
+    const dir = await mkdtemp(join(tmpdir(), "box-pending-"));
+    const pendingPath = join(dir, "issuance-pending.json");
+    const t = w.clock.t;
+    const order = (names: string[]) => ({ orderId: "ab".repeat(16), names, privateKeyPem: "", handle: null, placedAt: t });
+    try {
+      await writeFile(
+        pendingPath,
+        JSON.stringify({
+          "direct:game--alice.fshp.app": order(["game--alice.fshp.app"]),
+          "direct:other--alice.fshp.app": order(["game--alice.fshp.app"]),
+          "direct:../x": order(["../x"]),
+          "direct:Upper.fshp.app": order(["Upper.fshp.app"]),
+          bogus: order(["x.fshp.app"]),
+        }),
+      );
+      const restarted = w.issuer(localCsrSource(), pendingPath);
+      await restarted.restore();
+      expect(restarted.hasPendingDirect("game--alice.fshp.app")).toBe(true);
+      expect(restarted.hasPendingDirect("other--alice.fshp.app")).toBe(false);
+      expect(restarted.hasPendingDirect("upper.fshp.app")).toBe(false);
+      expect(restarted.hasPending("control") || restarted.hasPending("apps")).toBe(false);
+    } finally {
+      w.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("orders the wider app certificate in the same run once the admin's grant arrives (no restart)", async () => {
+    const w = await world();
+    const dir = await mkdtemp(join(tmpdir(), "box-certs-"));
+    try {
+      const cm = new CertManager();
+      const certs = new BoxCertificates({ issuer: w.issuer(), serverFqdn: SERVER, certManager: cm, store: new PersistentAcmeStore(dir), now: () => w.clock.t, random: () => 0 });
+      await certs.tick();
+      expect(sanOf(cm.currentCertPem()!)).toBe(`DNS:*.${SERVER}`);
+      w.grantRef.current = w.signGrant();
+      await certs.tick();
+      expect(sanOf(cm.currentCertPem()!)).toBe(`DNS:*.alice.${APEX}, DNS:*.${SERVER}`);
+      expect((await w.orders()).map((r) => `${r.class}:${r.status}`)).toEqual(["control:issued", "apps:issued", "apps:issued"]);
     } finally {
       w.close();
       await rm(dir, { recursive: true, force: true });

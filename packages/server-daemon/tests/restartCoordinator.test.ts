@@ -65,4 +65,39 @@ describe("restart coordinator", () => {
     await expect(failing).rejects.toThrow("network");
     expect(exits).toBe(2);
   });
+
+  it("claims the other deposits that have arrived before restarting, so a new box restarts once for SWK and CGK", async () => {
+    // First boot: the SWK deposit restarted the daemon, and the CGK deposit seconds later cost a second restart
+    // (each one also dropping the certificate order in flight).
+    const events: string[] = [];
+    let cgkOnCom = false;
+    const c = buildRestartCoordinator({ exit: () => events.push("exit"), settleMs: 5000, sleep: async () => { cgkOnCom = true; } });
+    let done!: Promise<unknown>;
+    c.settle(() => {
+      done = c.guard(async () => {
+        if (!cgkOnCom) return;
+        events.push("cgk claimed");
+        c.request("CGK provisioned");
+      });
+      return done;
+    });
+    c.request("SWK provisioned");
+    expect(events).toEqual([]);
+    await new Promise((r) => setTimeout(r, 0));
+    await done;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(events).toEqual(["cgk claimed", "exit"]);
+  });
+
+  it("restarts after the settle checks even when they fail", async () => {
+    let exits = 0;
+    const c = buildRestartCoordinator({ exit: () => exits++ });
+    c.settle(async () => {
+      throw new Error("network");
+    });
+    c.request("SWK provisioned");
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(exits).toBe(1);
+  });
 });
