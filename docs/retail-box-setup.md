@@ -579,3 +579,13 @@ expires a set time after it is first shown. Seeing or keeping a used or expired 
 The button gestures (1 press when the app asks, 3 presses to show the setup code on a monitor, 5 presses to reset)
 live on one public documentation page, the same for every box and every buyer, plus the generic booklet (4.1). Nothing
 unique is printed per box.
+
+### 15.3 Owner, 2026-11-14: answers to the phase-1 questions
+
+- **Wi-Fi stack:** depends on the hardware, which is not chosen. Wait until a partner SKU is picked (doc Q1).
+- **Release this box = wipe.** Releasing a box always wipes it clean. To keep the data, make a backup first or
+  transfer the server to a friend (the transfer-a-box flow). (Old Q3 answered: wipe, never rebind-only.)
+- **Boxes without Bluetooth: the wired / data-centre path (old Q6, answered yes).** The use case is corporate: a
+  rugged laptop as the command centre running the webapp in Firefox, and server trays without Bluetooth hot-plugged
+  into the network. Design the wired claim for that scenario (fleet claims from the webapp over the LAN, many trays
+  at once). "The app is for the cool kids": Bluetooth stays the phone path for homes.
