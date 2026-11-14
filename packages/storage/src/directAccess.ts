@@ -48,6 +48,12 @@ export interface DirectNameRecord {
   updatedAt: number;
 }
 
+export interface DirectCertificate {
+  fqdn: string;
+  serverDomain: string;
+  notAfter: number;
+}
+
 export type PutResult = { ok: true } | { ok: false; reason: "stale" | "taken" };
 
 export interface DirectAccessStorage {
@@ -79,6 +85,11 @@ export interface DirectAccessStorage {
   suspend(name: string, reason: string | null, now: number): Promise<boolean>;
   /** Drops a row whose records are gone (the account or the name was released). */
   delete(name: string): Promise<boolean>;
+  /**
+   * The account's unexpired `direct` certificates the issuance service issued, newest end per (name, box). One may
+   * exist before its name has any record: issuance never waits for the direct path.
+   */
+  directCertificatesForUser(username: string, now: number): Promise<DirectCertificate[]>;
 }
 
 interface OrderRow {
@@ -303,11 +314,40 @@ export class D1DirectAccessStorage implements DirectAccessStorage {
     const r = await this.db.prepare("DELETE FROM direct_names WHERE name = ?1").bind(name.toLowerCase()).run();
     return (r.meta?.changes ?? 0) > 0;
   }
+
+  async directCertificatesForUser(username: string, now: number) {
+    const r = await this.db
+      .prepare(
+        "SELECT names, server_domain, MAX(not_after) AS not_after FROM certificate_orders " +
+          "WHERE username = ?1 AND class = 'direct' AND status = 'issued' AND not_after > ?2 GROUP BY names, server_domain",
+      )
+      .bind(username.toLowerCase(), now)
+      .all<{ names: string; server_domain: string | null; not_after: number }>();
+    return (r.results ?? [])
+      .filter((x) => x.server_domain)
+      .map((x) => ({ fqdn: x.names.toLowerCase(), serverDomain: x.server_domain!.toLowerCase(), notAfter: x.not_after }));
+  }
 }
 
 export class InMemoryDirectAccessStorage implements DirectAccessStorage {
   private orders = new Map<string, DirectAccessRecord>();
   private names = new Map<string, DirectNameRecord>();
+  private certificates: Array<DirectCertificate & { username: string }> = [];
+
+  /** Tests: the issuance service issued a `direct` certificate (the D1 store reads `certificate_orders`). */
+  recordDirectCertificate(username: string, fqdn: string, serverDomain: string, notAfter: number): void {
+    this.certificates.push({ username: username.toLowerCase(), fqdn: fqdn.toLowerCase(), serverDomain: serverDomain.toLowerCase(), notAfter });
+  }
+
+  async directCertificatesForUser(username: string, now: number) {
+    const best = new Map<string, DirectCertificate>();
+    for (const c of this.certificates) {
+      if (c.username !== username.toLowerCase() || c.notAfter <= now) continue;
+      const k = `${c.fqdn} ${c.serverDomain}`;
+      if ((best.get(k)?.notAfter ?? 0) < c.notAfter) best.set(k, { fqdn: c.fqdn, serverDomain: c.serverDomain, notAfter: c.notAfter });
+    }
+    return [...best.values()];
+  }
 
   async getOrder(serverDomain: string) {
     const r = this.orders.get(serverDomain.toLowerCase());

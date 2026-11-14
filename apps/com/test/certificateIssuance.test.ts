@@ -978,6 +978,23 @@ describe("issuance: direct names on the direct domain", () => {
     }
   });
 
+  it("issues before the direct path is live: no published address, direct access off, nothing reachable", async () => {
+    for (const reason of ["no-addresses", "direct-access-off", "caa-account-unknown"]) {
+      const w = await setup();
+      try {
+        directZone(w);
+        await withName(w, { reason });
+        const { done } = await issue(w, { cls: "direct", names: [NAME], directName: LABEL });
+        expect(done).toMatchObject({ status: "issued", class: "direct", names: [NAME] });
+        const certs = await w.storage.directAccess.directCertificatesForUser("alice", 0);
+        expect(certs).toEqual([{ fqdn: NAME, serverDomain: SERVER, notAfter: expect.any(Number) }]);
+        expect(await w.storage.directAccess.directCertificatesForUser("bob", 0)).toEqual([]);
+      } finally {
+        w.close();
+      }
+    }
+  });
+
   it("refuses a name the box doesn't hold, a name turned off, one whose order no longer verifies, and a missing selector", async () => {
     const w = await setup();
     try {
