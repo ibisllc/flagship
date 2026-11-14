@@ -364,7 +364,17 @@ fun HomeTab() {
                 canAddServers = AddServerGate.allows(app),
                 canChangeServers = com.flagshipserver.app.core.AdminOrderGate.allows(app),
                 onOpenPod = { pod ->
-                    nav.navigate("server-detail/${pod.podId}")
+                    // A server waiting for an approval (a fresh order's first boot included) opens the approval,
+                    // not its install screen.
+                    if (com.flagshipserver.app.core.SecondStepWatch.opensApprovals(
+                            pod.fqdn,
+                            neverOnline = pod.status == com.flagshipserver.app.core.PodInfo.Status.PENDING || !pod.cameOnline,
+                            inbox = app.boxRequestInbox.value,
+                        )) {
+                        deepLinker.enqueue(DeepLink.SecretRequests)
+                    } else {
+                        nav.navigate("server-detail/${pod.podId}")
+                    }
                 },
                 // "Create a new server" in the Add/Restore menu provisions a new
                 // box. Pairing an existing box is automatic (Slice B); taking

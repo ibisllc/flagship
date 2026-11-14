@@ -241,17 +241,27 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
   server" works, but Unlock does nothing for 6 minutes (no request, no error); the phone's Approve unlocks in 74 s.
   Decide: let a device under review unlock boots (it's the owner's own new device), or disable Unlock with a sentence.
   Also say on the phone, when the admin switch is on, that the device becomes an admin only after the review.
+  *Partly done on `0.4/boot-remote`:* the likely cause of "nothing" is a first approval that never settled (the pin
+  happened, then a later step hung), which left the webapp's one in-flight slot taken, so every later tap returned
+  silently. A tap during a running approval now says so, and an approval stops after 90 s with "took too long … approve
+  it from your phone". Add a device (iOS, Android, webapp) says under the admin switch that the first 14 days are a
+  review as a non-admin device. Still open: the owner's decision above, and finding the step that hung (a live run
+  with the browser's network log).
 - **The second boot approval arrives silently.** A new box needs "Unlock device" then "Authorize device to join your
   cloud" (~80 s later); the second never prompts or notifies, so Studio sits on "Starting…" / "Taking longer than
   expected" until the owner finds it in Activity → Server approvals. Notify for it, or keep the approval screen open
   for the second step. Also: tapping a fresh order's "Waiting for approval" Home row opens the install screen, not the
-  approval.
+  approval. *Done on `0.4/boot-remote` (iOS, Android, webapp):* after a first-boot unlock is approved the server is
+  watched for 10 minutes (`SecondStepWatch`); when its entitlement request reaches the inbox the app shows "One more
+  approval for <server>…" and opens Server approvals. A never-online server's row with a waiting request opens the
+  approvals.
 - **A new box restarts its daemon 3-5 times on first boot (exit 0)** and each restart starts a new certificate order,
   replacing the one in flight (the root of Failure 5). The box should resume its pending order after a restart, and
-  the first-boot restarts themselves need a look (Studio Health shows "restarted 4x").
+  the first-boot restarts themselves need a look (Studio Health shows "restarted 4x"). *Done on `0.4/boot-remote`
+  (f12d3db7e):* the order in flight is resumed from `issuance-pending.json`; host components go in during one start.
 - **Remote (W19): approving a browser lands on an empty Home.** The browser now shows the comparison code and the phone
   connects it ("Browser connected to <server>", a 4 h session), but the browser shows the keyless "Your first server
-  is one tap away" Home with Session "Unpaired" instead of the server's page.
+  is one tap away" Home with Session "Unpaired" instead of the server's page. *Done on `0.4/boot-remote` (a40d7f5e5).*
 - **Android: the recovery banner stays after a rejected recovery.** After Reject recovery (Activity: "Recovery
   rejected by an admin") the phone's Critical banner still says "Someone is recovering this account… 2 days left" on
   every screen; the browser shows Resolved.
@@ -266,7 +276,9 @@ screen, setup-error handling, the certificate-order cap (3fd80267d), and the pho
     row; a refusal before start should leave nothing.
   - A recipe that doesn't parse shows the raw .NET JSON error ("'…' is an invalid JSON literal…", English only): show
     a translated "This isn't a Flagship recipe" and put the detail in the log.
-  - "Unlocking…" lingers ~50 s after the server already answers HTTPS.
+  - "Unlocking…" lingers ~50 s after the server already answers HTTPS. *Done on `0.4/boot-remote`:* Studio waits for a
+    health report with the tunnel up, sent once a minute; the reporter now waits up to 50 s for the tunnel and reports
+    the moment it is up (box release needed). Studio still polls every 15 s.
   - On the installer-ISO path (W8) Studio shows "No new guest checkpoint for 3 minutes. Last reported: Sealing the
     disk key" for ~7 min before "Starting…", although the install is fine: the guest should report a checkpoint while
     it seals (or the stall warning should wait longer at that step).

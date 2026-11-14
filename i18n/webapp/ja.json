@@ -3440,5 +3440,9 @@
   "Rotate your inbox key?": "受信トレイの鍵を更新しますか？",
   "Your page is published again with the new key.": "ページは新しい鍵で再公開されます。",
   "Conversations": "会話",
-  "Social": "ソーシャル"
+  "Social": "ソーシャル",
+  "One more approval for {0}: authorize it to join your cloud.": "{0} の承認があと1つあります: クラウドへの参加を許可してください。",
+  "Another approval is still running. Wait for it to finish, then try again.": "別の承認がまだ実行中です。完了するまで待ってから、もう一度お試しください。",
+  "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "{0} の承認に時間がかかりすぎたため中止しました。もう一度お試しいただくか、スマートフォンから承認してください。",
+  "During its first 14 days it is under review and acts as a non-admin device.": "最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。"
 }

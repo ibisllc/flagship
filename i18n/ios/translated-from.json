@@ -3352,5 +3352,7 @@
   "Enter a username and password.": "9dba180ec80c",
   "The username and password can be at most 255 bytes each.": "5e06c7109672",
   "The username can't contain a colon.": "e781b9d98a94",
-  "The username and password can't contain control characters.": "d3908f60cf68"
+  "The username and password can't contain control characters.": "d3908f60cf68",
+  "One more approval for %@: authorize it to join your cloud.": "7c13fa13f1b5",
+  "During its first 14 days it is under review and acts as a non-admin device.": "276444c2dbf7"
 }

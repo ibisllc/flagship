@@ -1437,6 +1437,13 @@ function wireHomeListControls(list) {
           return;
         }
       }
+      // A fresh server waiting for an approval opens the approval, not its page.
+      const { opensApprovals } = await import("../lib/secondStepWatch.js");
+      if (opensApprovals(fqdn, liveSync.get?.()?.pods)) {
+        const { enterBootApproval } = await import("./boot-approval.js");
+        await enterBootApproval();
+        return;
+      }
       const { enterServerDetail } = await import("./server-detail.js");
       await enterServerDetail(fqdn);
     });

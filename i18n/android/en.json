@@ -15027,5 +15027,13 @@
   "push_service_none": {
     "en": "None: this phone has no push service. Install a UnifiedPush app, such as ntfy, to get notifications.",
     "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes)"
+  },
+  "second_approval_waiting": {
+    "en": "One more approval for %1$s: authorize it to join your cloud.",
+    "ctx": "toast when a new server asks for its second first-boot approval; %1$s is the server name"
+  },
+  "admin_promotion_under_review": {
+    "en": "During its first 14 days it is under review and acts as a non-admin device.",
+    "ctx": "ui/screens/AddDeviceScreen.kt (under the \"Also make this device an admin\" switch; Windows acceptance W14)"
   }
 }

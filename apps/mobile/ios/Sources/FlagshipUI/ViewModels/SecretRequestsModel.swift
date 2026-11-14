@@ -36,6 +36,7 @@ public final class SecretRequestsModel {
     private let isFirstBootFor: (String) -> Bool
     private let bootUnlock: BootUnlockStore
     private let onRequests: ([Request]) -> Void
+    private let secondStep: SecondStepWatch
 
     /// `source` builds the coordinator for the signed-in account (nil when no
     /// one is signed in); `isFirstBoot` says whether the box behind a request
@@ -44,12 +45,14 @@ public final class SecretRequestsModel {
         source: @escaping () -> (any ApprovalSource)?,
         isFirstBoot: @escaping (String) -> Bool = { _ in true },
         bootUnlock: BootUnlockStore = BootUnlockStore(),
-        onRequests: @escaping ([Request]) -> Void = { _ in }
+        onRequests: @escaping ([Request]) -> Void = { _ in },
+        secondStep: SecondStepWatch = .shared
     ) {
         self.source = source
         self.isFirstBootFor = isFirstBoot
         self.bootUnlock = bootUnlock
         self.onRequests = onRequests
+        self.secondStep = secondStep
     }
 
     /// How many requests wait; 0 until they have loaded.
@@ -93,6 +96,8 @@ public final class SecretRequestsModel {
             let depositLease = bootUnlock.effectiveMode(for: req.serverDomain) == .auto
             let leaseId = try await source.approve(req, depositAutoLease: depositLease)
             if let leaseId { bootUnlock.setLeaseId(leaseId, for: req.serverDomain) }
+            // A new server asks once more ("Authorize device to join your cloud"): watch for it.
+            if req.purpose == .unlockKey && isFirstBootFor(req.serverDomain) { secondStep.arm(req.serverDomain) }
             clear(req)
             await reload()
             return .approved(serverDomain: req.serverDomain)

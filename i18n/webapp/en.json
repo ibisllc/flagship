@@ -14061,5 +14061,21 @@
   "Social": {
     "en": "Social",
     "ctx": "webapp/index.html"
+  },
+  "One more approval for {0}: authorize it to join your cloud.": {
+    "en": "One more approval for {0}: authorize it to join your cloud.",
+    "ctx": "webapp/app.js (a new server asks for its second first-boot approval)"
+  },
+  "Another approval is still running. Wait for it to finish, then try again.": {
+    "en": "Another approval is still running. Wait for it to finish, then try again.",
+    "ctx": "webapp/views/boot-approval.js:201"
+  },
+  "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": {
+    "en": "Approving {0} took too long and was stopped. Try again, or approve it from your phone.",
+    "ctx": "webapp/views/boot-approval.js:218"
+  },
+  "During its first 14 days it is under review and acts as a non-admin device.": {
+    "en": "During its first 14 days it is under review and acts as a non-admin device.",
+    "ctx": "webapp/views/add-device.js:188"
   }
 }

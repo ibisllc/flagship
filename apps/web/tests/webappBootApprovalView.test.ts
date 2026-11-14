@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
@@ -132,5 +134,13 @@ describe("webapp boot-approval relay (parity with iOS SecretRequestsScreen)", ()
     const fn = src.slice(src.indexOf("export async function enterBootApproval"));
     expect(fn.slice(0, fn.indexOf("\n}\n"))).toContain('show("view-activity")');
     expect(fn.slice(0, fn.indexOf("\n}\n"))).toContain('scrollIntoView');
+  });
+
+  it("never ignores a tap: a busy approval says so, and a stuck one stops with a reason (Windows W14)", () => {
+    const src = readFileSync(resolve(__dirname, "..", "public", "webapp", "views", "boot-approval.js"), "utf8");
+    expect(src).not.toContain("if (!req || inFlightId) return;");
+    expect(src).toMatch(/if \(inFlightId\) \{\s*toast\(tr\("Another approval is still running/);
+    expect(src).toContain("await withDeadline(satisfy(req), APPROVE_DEADLINE_MS)");
+    expect(src).toMatch(/e\?\.code === APPROVE_TIMED_OUT\) \{\s*toast\(tr\("Approving \{0\} took too long/);
   });
 });

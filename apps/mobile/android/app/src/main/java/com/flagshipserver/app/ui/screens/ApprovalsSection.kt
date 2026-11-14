@@ -161,8 +161,13 @@ internal fun ApprovalsList(model: ApprovalsModel<SecretRequestCoordinator.Verifi
                                 onApprove = {
                                     model.approve(req) { out ->
                                         when (out) {
-                                            ApprovalsModel.Outcome.Approved ->
+                                            ApprovalsModel.Outcome.Approved -> {
                                                 toasts.success(FSStrings.get(R.string.approved_your_server_will_pick_it, req.serverDomain))
+                                                // A new server asks once more ("Authorize device to join your cloud").
+                                                if (isFirstBoot && req.purpose == SecretPurpose.UNLOCK_KEY) {
+                                                    com.flagshipserver.app.core.SecondStepWatch.shared.arm(req.serverDomain)
+                                                }
+                                            }
                                             // Answered already: the card just goes.
                                             ApprovalsModel.Outcome.AlreadyAnswered -> Unit
                                             is ApprovalsModel.Outcome.Failed -> toasts.error(out.message)

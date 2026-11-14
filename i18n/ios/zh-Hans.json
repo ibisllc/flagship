@@ -3356,5 +3356,7 @@
   "Enter a username and password.": "请输入用户名和密码。",
   "The username and password can be at most 255 bytes each.": "用户名和密码各自最多 255 字节。",
   "The username can't contain a colon.": "用户名不能包含冒号。",
-  "The username and password can't contain control characters.": "用户名和密码不能包含控制字符。"
+  "The username and password can't contain control characters.": "用户名和密码不能包含控制字符。",
+  "One more approval for %@: authorize it to join your cloud.": "%@ 还需要一次批准：授权它加入你的云。",
+  "During its first 14 days it is under review and acts as a non-admin device.": "在最初 14 天内，它处于审核期，按非管理员设备运行。"
 }

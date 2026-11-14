@@ -3440,5 +3440,9 @@
   "Rotate your inbox key?": "要轮换你的收件箱密钥吗？",
   "Your page is published again with the new key.": "你的页面会用新密钥重新发布。",
   "Conversations": "对话",
-  "Social": "社交"
+  "Social": "社交",
+  "One more approval for {0}: authorize it to join your cloud.": "{0} 还需要一次批准：授权它加入你的云。",
+  "Another approval is still running. Wait for it to finish, then try again.": "另一项批准仍在进行中。请等它完成后再试。",
+  "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "批准 {0} 耗时过长，已停止。请重试，或在手机上批准。",
+  "During its first 14 days it is under review and acts as a non-admin device.": "在最初 14 天内，它处于审核期，按非管理员设备运行。"
 }

@@ -337,6 +337,11 @@ private fun AdminPromoteToggle(
                     color = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Text(
+                    stringResource(R.string.admin_promotion_under_review),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }

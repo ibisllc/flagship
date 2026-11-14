@@ -3639,5 +3639,7 @@
   "push_service_unifiedpush": "UnifiedPush",
   "push_service_unifiedpush_through": "UnifiedPush（通过 %1$s）",
   "push_service_fcm": "Google（Firebase Cloud Messaging）",
-  "push_service_none": "无：这部手机没有推送服务。请安装 UnifiedPush 应用（例如 ntfy）以接收通知。"
+  "push_service_none": "无：这部手机没有推送服务。请安装 UnifiedPush 应用（例如 ntfy）以接收通知。",
+  "second_approval_waiting": "%1$s 还需要一次批准：授权它加入你的云。",
+  "admin_promotion_under_review": "在最初 14 天内，它处于审核期，按非管理员设备运行。"
 }

@@ -3440,5 +3440,9 @@
   "Rotate your inbox key?": "Trocar a chave da sua caixa de entrada?",
   "Your page is published again with the new key.": "Sua página é publicada de novo com a nova chave.",
   "Conversations": "Conversas",
-  "Social": "Social"
+  "Social": "Social",
+  "One more approval for {0}: authorize it to join your cloud.": "Mais uma aprovação para {0}: autorize-o a entrar na sua nuvem.",
+  "Another approval is still running. Wait for it to finish, then try again.": "Outra aprovação ainda está em andamento. Espere ela terminar e tente de novo.",
+  "Approving {0} took too long and was stopped. Try again, or approve it from your phone.": "A aprovação de {0} demorou demais e foi interrompida. Tente de novo ou aprove pelo seu celular.",
+  "During its first 14 days it is under review and acts as a non-admin device.": "Nos primeiros 14 dias, ele fica em análise e funciona como um dispositivo sem permissão de administrador."
 }

@@ -137706,6 +137706,88 @@
           }
         }
       }
+    },
+    "One more approval for %@: authorize it to join your cloud.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una aprobación más para %@: autorízalo a unirse a tu nube."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encore une approbation pour %@ : autorisez-le à rejoindre votre cloud."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch eine Freigabe für %@: erlaube ihm, deiner Cloud beizutreten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mais uma aprovação para %@: autorize-o a entrar na sua nuvem."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の承認があと1つあります: クラウドへの参加を許可してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 还需要一次批准：授权它加入你的云。"
+          }
+        }
+      }
+    },
+    "During its first 14 days it is under review and acts as a non-admin device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durante sus primeros 14 días está en revisión y actúa como un dispositivo sin permisos de administrador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendant ses 14 premiers jours, il est en cours de vérification et agit comme un appareil non administrateur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In seinen ersten 14 Tagen wird es überprüft und gilt als Gerät ohne Adminrechte."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nos primeiros 14 dias, ele fica em análise e funciona como um dispositivo sem permissão de administrador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在最初 14 天内，它处于审核期，按非管理员设备运行。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

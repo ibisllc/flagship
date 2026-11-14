@@ -20,6 +20,7 @@ public struct RootShell: View {
     @Environment(DeepLinker.self) private var linker
     @Environment(AppState.self) private var app
     @Environment(PrivacySettings.self) private var privacy
+    @Environment(ToastCenter.self) private var toasts
     // Slice B — auto-pair needs the box-pinned orders client + the per-pod token
     // store to self-provision a session token for every visible pod on unlock.
     @Environment(\.lockPowerClient) private var lockPower
@@ -149,6 +150,14 @@ public struct RootShell: View {
         }
         .onChange(of: linker.pending) { _, link in
             if let link { route(link) }
+        }
+        // A new server's second approval ("Authorize device to join your cloud") comes about 80 s after the first:
+        // when it shows in the inbox, bring the approvals back with a line saying so (SecondStepWatch).
+        .onChange(of: app.boxRequestInbox) { _, _ in
+            for server in SecondStepWatch.shared.arrived(app.serversAwaiting(.entitlement)) {
+                toasts.info(String(localized: "One more approval for \(server): authorize it to join your cloud."), duration: 8)
+                linker.enqueue(.secretRequests)
+            }
         }
         .task(id: linker.pending) {
             if let link = linker.pending { route(link) }

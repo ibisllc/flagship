@@ -185,6 +185,7 @@ export function renderAddDevice() {
       <p class="note small err-text" data-section="promote-admin-warning">
         ⚠️ ${escapeHtml(PROMOTE_ADMIN_WARNING)}
       </p>
+      <p class="note small" data-section="promote-admin-review">${tr("During its first 14 days it is under review and acts as a non-admin device.")}</p>
     </div>`
     : "";
   root.innerHTML = `

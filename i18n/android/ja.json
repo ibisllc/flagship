@@ -3639,5 +3639,7 @@
   "push_service_unifiedpush": "UnifiedPush",
   "push_service_unifiedpush_through": "UnifiedPush（%1$s 経由）",
   "push_service_fcm": "Google（Firebase Cloud Messaging）",
-  "push_service_none": "なし：このスマートフォンにはプッシュサービスがありません。通知を受け取るには、ntfy などの UnifiedPush アプリをインストールしてください。"
+  "push_service_none": "なし：このスマートフォンにはプッシュサービスがありません。通知を受け取るには、ntfy などの UnifiedPush アプリをインストールしてください。",
+  "second_approval_waiting": "%1$s の承認があと1つあります: クラウドへの参加を許可してください。",
+  "admin_promotion_under_review": "最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。"
 }
