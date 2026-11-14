@@ -85,6 +85,29 @@ public sealed class QemuFailureTests : IDisposable
         Assert.Equal("Not enough free memory: this server needs 4 GiB. Close other apps and try again.",
                      state.Failure!.Reason);
     }
+
+    /// <summary>W26: Host here asks before creating anything, so a refusal leaves no disk, seed or row.</summary>
+    [Fact]
+    public void StartRefusalIsKnownBeforeTheServerExists()
+    {
+        var store = new VMInventoryStore(new VMBundleLayout(_root));
+        var config = new VMConfig
+        {
+            Name = "b.h.flagship.services", ServerDomain = "b.h.flagship.services", Username = "harry",
+            ServerName = "b", CpuCount = 2, MemoryBytes = 4 * VMResourcePlan.GiB,
+            MainDiskSizeBytes = VMResourcePlan.DefaultMainDiskSizeBytes, NetworkMode = VMNetworkMode.Nat,
+            SerialConsoleEnabled = false, BootUnlockMode = "auto", DiskEncrypted = true,
+        };
+        var tc = new QemuToolchain("q.exe", "qi.exe", "code.fd", "vars.fd");
+        var low = new VMManager(store, tc, availableMemory: () => 4 * VMResourcePlan.GiB);
+        Assert.Equal("Not enough free memory: this server needs 4 GiB. Close other apps and try again.", low.StartRefusal(config));
+        Assert.Empty(low.Servers);
+        Assert.Empty(store.List());
+        var plenty = new VMManager(store, tc, availableMemory: () => 16 * VMResourcePlan.GiB);
+        Assert.Null(plenty.StartRefusal(config));
+        var noQemu = new VMManager(store, null, "QEMU is missing");
+        Assert.Equal("QEMU is missing", noQemu.StartRefusal(config));
+    }
 }
 
 internal static class VectorsFile

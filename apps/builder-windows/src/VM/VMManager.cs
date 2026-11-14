@@ -596,6 +596,14 @@ public sealed class VMManager
         }
     }
 
+    /// <summary>Why a server with this config can't start now (no QEMU, too little free RAM), or null. Asked
+    /// BEFORE Host here creates anything, so a refusal leaves no disk, seed or "Install failed" row (W26).</summary>
+    public string? StartRefusal(VMConfig config)
+    {
+        if (_toolchain is null) return ToolchainError ?? Strings.T("qemuIsNotInstalled");
+        return QemuFailure.CheckFreeMemory(config.MemoryBytes, _availableMemory(), QemuFailure.WhpxHeadroomBytes);
+    }
+
     private async Task FailFromStateAsync(string name, string reason)
     {
         switch (CurrentStateKind(name))
