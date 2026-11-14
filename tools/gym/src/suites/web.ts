@@ -649,6 +649,46 @@ const TOTAL: readonly Scenario[] = [
     },
   ),
 
+  webTotal(
+    "web-total-direct-access-admin",
+    "Direct access: an admin device reads the privacy warning, enters a public address and signs the direct-access order after a fresh unlock; it goes to the box and then .com. It then turns on the app's direct name (follow the server, CAA pinned) and runs the outside check.",
+    "gym total webapp server-detail direct access turns on and gives an app its direct name",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail as an admin device (routed box and .com, direct access off)." },
+        { kind: "tap", describe: "Turn on, enter 81.2.69.142, read the warning, sign.", handle: "#sd-direct-access-submit" },
+        { kind: "tap", describe: "Turn on the app's direct name.", handle: "#sd-direct-name-on-smoketest--notes" },
+        { kind: "tap", describe: "Check from outside.", handle: "#sd-direct-name-probe-btn-smoketest--notes" },
+      ],
+      assertions: [
+        { describe: "Direct access on", handle: "#sd-direct-access-state", expect: "text", text: "On. Visitors can reach" },
+        { describe: "Name published", handle: "#sd-direct-name-state-smoketest--notes", expect: "text", text: "Published" },
+      ],
+      screenshots: [
+        shot("direct-access-on", "Direct access on, with the server's addresses."),
+        shot("direct-name-published", "The app's direct name published and checked from outside."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-direct-access-read-only",
+    "Direct access on a non-admin device: the state, the names and the outside check show; no change or name controls, with the admin-only line.",
+    "gym total webapp server-detail direct access is read-only on a non-admin device",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail as a non-admin device (direct access on, one published name)." },
+        { kind: "assert", describe: "Admin-only line.", handle: "#sd-direct-access-admin-only" },
+      ],
+      assertions: [
+        { describe: "Admin-only line", handle: "#sd-direct-access-admin-only", expect: "present" },
+        { describe: "No Change button", handle: "#sd-direct-access-change", expect: "absent" },
+      ],
+      screenshots: [shot("direct-access-read-only", "Direct access read-only on a non-admin device.")],
+      dimension: "D6",
+    },
+  ),
+
   // ── D5 — server-event seed states (server-detail cert) ──
   webTotal(
     "web-total-cert-near-expiry",

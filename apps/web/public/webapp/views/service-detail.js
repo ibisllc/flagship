@@ -107,6 +107,7 @@ import { openUpstreamSync, syncRepoOf, syncRowHtml } from "../lib/upstreamSync.j
 import { tr } from "../lib/i18n.js";
 import { renderLinkField, bindLinkField } from "../lib/linkField.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
+import { directLinkSlotHtml, loadDirectLinkShare } from "./direct-access.js";
 const COM_BASE = controlApex();
 
 /** V3 — cached service-links per serviceId for the current render. Carries
@@ -220,6 +221,7 @@ export async function renderServiceDetail(serviceId) {
       <div id="sd-browser-access"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
+      ${directLinkSlotHtml()}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
       <h2 class="mt-4">${tr("App config")}</h2>
       <div class="card">
@@ -298,6 +300,13 @@ export async function renderServiceDetail(serviceId) {
     void loadBrowserAccessSection($("sd-browser-access"), { app: s, manifest: body.manifest, client: boxClient(), isCurrent: () => currentServiceId === s.serviceId });
     void loadUpdateMode(s);
     void loadRunsOn(s);
+    void loadDirectLinkShare({
+      username: session.username,
+      slug: s.slug,
+      creator: s.creator,
+      relayUrl: currentServiceLinks?.canonicalUrl ?? null,
+      isCurrent: () => currentServiceId === s.serviceId,
+    }).catch(() => {});
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;

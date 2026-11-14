@@ -14077,5 +14077,277 @@
   "During its first 14 days it is under review and acts as a non-admin device.": {
     "en": "During its first 14 days it is under review and acts as a non-admin device.",
     "ctx": "webapp/views/add-device.js:188"
+  },
+  "That change couldn't be read. Try again.": {
+    "en": "That change couldn't be read. Try again.",
+    "ctx": "webapp/lib/directNames.js:38"
+  },
+  "Only public addresses can be used. Private, local and reserved addresses can't.": {
+    "en": "Only public addresses can be used. Private, local and reserved addresses can't.",
+    "ctx": "webapp/lib/directNames.js:40"
+  },
+  "One of the addresses isn't an IP address.": {
+    "en": "One of the addresses isn't an IP address.",
+    "ctx": "webapp/lib/directNames.js:43"
+  },
+  "One of the address ranges isn't valid.": {
+    "en": "One of the address ranges isn't valid.",
+    "ctx": "webapp/lib/directNames.js:45"
+  },
+  "An address range is too wide. Use an IPv6 /32 or longer, or an IPv4 /24 or longer.": {
+    "en": "An address range is too wide. Use an IPv6 /32 or longer, or an IPv4 /24 or longer.",
+    "ctx": "webapp/lib/directNames.js:47"
+  },
+  "Add at least one public address or address range.": {
+    "en": "Add at least one public address or address range.",
+    "ctx": "webapp/lib/directNames.js:49"
+  },
+  "Too many addresses: at most 8 addresses and 4 ranges.": {
+    "en": "Too many addresses: at most 8 addresses and 4 ranges.",
+    "ctx": "webapp/lib/directNames.js:51"
+  },
+  "An address is listed twice.": {
+    "en": "An address is listed twice.",
+    "ctx": "webapp/lib/directNames.js:53"
+  },
+  "That name can't be used on fshp.app.": {
+    "en": "That name can't be used on fshp.app.",
+    "ctx": "webapp/lib/directNames.js:57"
+  },
+  "This device's clock is off. Check the time and try again.": {
+    "en": "This device's clock is off. Check the time and try again.",
+    "ctx": "webapp/lib/directNames.js:60"
+  },
+  "This account wasn't found.": {
+    "en": "This account wasn't found.",
+    "ctx": "webapp/lib/directNames.js:62"
+  },
+  "That server isn't one of this account's servers.": {
+    "en": "That server isn't one of this account's servers.",
+    "ctx": "webapp/lib/directNames.js:66"
+  },
+  "Only an admin device of this account can change direct access.": {
+    "en": "Only an admin device of this account can change direct access.",
+    "ctx": "webapp/lib/directNames.js:68"
+  },
+  "A newer change is already saved. Reload and try again.": {
+    "en": "A newer change is already saved. Reload and try again.",
+    "ctx": "webapp/lib/directNames.js:70"
+  },
+  "Chosen names on fshp.app aren't available yet.": {
+    "en": "Chosen names on fshp.app aren't available yet.",
+    "ctx": "webapp/lib/directNames.js:72"
+  },
+  "A direct name must end in this account's own name.": {
+    "en": "A direct name must end in this account's own name.",
+    "ctx": "webapp/lib/directNames.js:74"
+  },
+  "That name belongs to another account.": {
+    "en": "That name belongs to another account.",
+    "ctx": "webapp/lib/directNames.js:76"
+  },
+  "This name isn't on this account.": {
+    "en": "This name isn't on this account.",
+    "ctx": "webapp/lib/directNames.js:78"
+  },
+  "This name was checked a moment ago. Try again in a minute.": {
+    "en": "This name was checked a moment ago. Try again in a minute.",
+    "ctx": "webapp/lib/directNames.js:80"
+  },
+  "Direct access couldn't be changed. Try again.": {
+    "en": "Direct access couldn't be changed. Try again.",
+    "ctx": "webapp/lib/directNames.js:85"
+  },
+  "Turned off.": {
+    "en": "Turned off.",
+    "ctx": "webapp/lib/directNames.js:93"
+  },
+  "Suspended after an abuse report.": {
+    "en": "Suspended after an abuse report.",
+    "ctx": "webapp/lib/directNames.js:95"
+  },
+  "The account is gone.": {
+    "en": "The account is gone.",
+    "ctx": "webapp/lib/directNames.js:97"
+  },
+  "Its server is no longer on this account.": {
+    "en": "Its server is no longer on this account.",
+    "ctx": "webapp/lib/directNames.js:99"
+  },
+  "Its order no longer checks out under this account's admin key. Turn it on again.": {
+    "en": "Its order no longer checks out under this account's admin key. Turn it on again.",
+    "ctx": "webapp/lib/directNames.js:101"
+  },
+  "Direct access is off on its server.": {
+    "en": "Direct access is off on its server.",
+    "ctx": "webapp/lib/directNames.js:103"
+  },
+  "Its server hasn't reported a public address yet.": {
+    "en": "Its server hasn't reported a public address yet.",
+    "ctx": "webapp/lib/directNames.js:105"
+  },
+  "Waiting for the certificate account. It will be published soon.": {
+    "en": "Waiting for the certificate account. It will be published soon.",
+    "ctx": "webapp/lib/directNames.js:107"
+  },
+  "Waiting to be published": {
+    "en": "Waiting to be published",
+    "ctx": "webapp/lib/directNames.js:120"
+  },
+  "Reachable from outside.": {
+    "en": "Reachable from outside.",
+    "ctx": "webapp/lib/directNames.js:127"
+  },
+  "Not reachable from outside.": {
+    "en": "Not reachable from outside.",
+    "ctx": "webapp/lib/directNames.js:128"
+  },
+  "Not published yet, so there is nothing to check.": {
+    "en": "Not published yet, so there is nothing to check.",
+    "ctx": "webapp/lib/directNames.js:129"
+  },
+  "Turning this on puts this server's home IP address in public DNS. Anyone can look it up, and it stays in public DNS history even after you turn it off. The server then takes connections from the whole internet, attacks land on your home connection, and some internet providers don't allow running a server.": {
+    "en": "Turning this on puts this server's home IP address in public DNS. Anyone can look it up, and it stays in public DNS history even after you turn it off. The server then takes connections from the whole internet, attacks land on your home connection, and some internet providers don't allow running a server.",
+    "ctx": "webapp/views/direct-access.js:47"
+  },
+  "Only an admin device can change direct access. This device can see it.": {
+    "en": "Only an admin device can change direct access. This device can see it.",
+    "ctx": "webapp/views/direct-access.js:48"
+  },
+  "This app was made by another account, so it can't have a direct name here.": {
+    "en": "This app was made by another account, so it can't have a direct name here.",
+    "ctx": "webapp/views/direct-access.js:49"
+  },
+  "Direct access wasn't changed.": {
+    "en": "Direct access wasn't changed.",
+    "ctx": "webapp/views/direct-access.js:50"
+  },
+  "Change direct access?": {
+    "en": "Change direct access?",
+    "ctx": "webapp/views/direct-access.js:211"
+  },
+  "Turn on direct access?": {
+    "en": "Turn on direct access?",
+    "ctx": "webapp/views/direct-access.js:211"
+  },
+  "Saved.": {
+    "en": "Saved.",
+    "ctx": "webapp/views/direct-access.js:215"
+  },
+  "Direct access is on.": {
+    "en": "Direct access is on.",
+    "ctx": "webapp/views/direct-access.js:215"
+  },
+  "Turn off direct access?": {
+    "en": "Turn off direct access?",
+    "ctx": "webapp/views/direct-access.js:225"
+  },
+  "Its names stop pointing at this server. The address stays in public DNS history.": {
+    "en": "Its names stop pointing at this server. The address stays in public DNS history.",
+    "ctx": "webapp/views/direct-access.js:226"
+  },
+  "Direct access is off.": {
+    "en": "Direct access is off.",
+    "ctx": "webapp/views/direct-access.js:229"
+  },
+  "Change a direct name?": {
+    "en": "Change a direct name?",
+    "ctx": "webapp/views/direct-access.js:252"
+  },
+  "Visitors to {0} will go straight to this server.": {
+    "en": "Visitors to {0} will go straight to this server.",
+    "ctx": "webapp/views/direct-access.js:253"
+  },
+  "{0} will stop pointing at this server.": {
+    "en": "{0} will stop pointing at this server.",
+    "ctx": "webapp/views/direct-access.js:253"
+  },
+  "Checked {0}: {1}": {
+    "en": "Checked {0}: {1}",
+    "ctx": "webapp/views/direct-access.js:284"
+  },
+  "Addresses: {0}": {
+    "en": "Addresses: {0}",
+    "ctx": "webapp/views/direct-access.js:299"
+  },
+  "Address ranges: {0}": {
+    "en": "Address ranges: {0}",
+    "ctx": "webapp/views/direct-access.js:300"
+  },
+  "This server reports: {0}": {
+    "en": "This server reports: {0}",
+    "ctx": "webapp/views/direct-access.js:301"
+  },
+  "Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line": {
+    "en": "Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line",
+    "ctx": "webapp/views/direct-access.js:310"
+  },
+  "Address ranges this server may report its own address in (optional)": {
+    "en": "Address ranges this server may report its own address in (optional)",
+    "ctx": "webapp/views/direct-access.js:312"
+  },
+  "Only this server can get a certificate (CAA)": {
+    "en": "Only this server can get a certificate (CAA)",
+    "ctx": "webapp/views/direct-access.js:328"
+  },
+  "Turn this off only if the name points at a host that gets its own certificate.": {
+    "en": "Turn this off only if the name points at a host that gets its own certificate.",
+    "ctx": "webapp/views/direct-access.js:329"
+  },
+  "Point at other addresses (optional). Leave empty to follow this server's addresses.": {
+    "en": "Point at other addresses (optional). Leave empty to follow this server's addresses.",
+    "ctx": "webapp/views/direct-access.js:330"
+  },
+  "Any host may get a certificate for this name (CAA off).": {
+    "en": "Any host may get a certificate for this name (CAA off).",
+    "ctx": "webapp/views/direct-access.js:351"
+  },
+  "Points at: {0}": {
+    "en": "Points at: {0}",
+    "ctx": "webapp/views/direct-access.js:352"
+  },
+  "Not turned on": {
+    "en": "Not turned on",
+    "ctx": "webapp/views/direct-access.js:357"
+  },
+  "Check from outside": {
+    "en": "Check from outside",
+    "ctx": "webapp/views/direct-access.js:370"
+  },
+  "Direct names": {
+    "en": "Direct names",
+    "ctx": "webapp/views/direct-access.js:385"
+  },
+  "One name per app on fshp.app. Visitors go straight to this server and the relay never carries it.": {
+    "en": "One name per app on fshp.app. Visitors go straight to this server and the relay never carries it.",
+    "ctx": "webapp/views/direct-access.js:386"
+  },
+  "On. Visitors can reach this server's apps directly, without the relay.": {
+    "en": "On. Visitors can reach this server's apps directly, without the relay.",
+    "ctx": "webapp/views/direct-access.js:401"
+  },
+  "Off. Visitors reach this server's apps through the relay.": {
+    "en": "Off. Visitors reach this server's apps through the relay.",
+    "ctx": "webapp/views/direct-access.js:402"
+  },
+  "Direct access": {
+    "en": "Direct access",
+    "ctx": "webapp/views/direct-access.js:425"
+  },
+  "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.": {
+    "en": "Goes straight to your server and uses none of your relay data. It works only while your server can be reached from outside.",
+    "ctx": "webapp/views/direct-access.js:614"
+  },
+  "Goes through the Flagship relay. It works even when your server can't be reached from outside.": {
+    "en": "Goes through the Flagship relay. It works even when your server can't be reached from outside.",
+    "ctx": "webapp/views/direct-access.js:615"
+  },
+  "Link to share": {
+    "en": "Link to share",
+    "ctx": "webapp/views/direct-access.js:618"
+  },
+  "Through the relay": {
+    "en": "Through the relay",
+    "ctx": "webapp/views/direct-access.js:622"
   }
 }
