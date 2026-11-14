@@ -11,6 +11,7 @@ import { D1DirectAccessStorage, type DirectAccessStorage } from "./directAccess.
 import { D1VoiciStorage, type VoiciStorage } from "./voici.js";
 import { D1ServerBootKeyStorage, type ServerBootKeyStorage } from "./serverBootKeys.js";
 import { D1BoxClaimStorage, type BoxClaimStorage } from "./boxClaims.js";
+import { D1OrgStorage, type OrgStorage } from "./orgs.js";
 import { D1PqTrustStorage, type PqTrustStorage } from "./pqTrust.js";
 import {
   accountGoneStatements,
@@ -5409,6 +5410,8 @@ export class D1Storage implements Storage {
   directAccess: DirectAccessStorage;
   /** Retail box claims (migration 0134). */
   boxClaims: BoxClaimStorage;
+  /** Enterprise orgs (migration 0141). */
+  orgs: OrgStorage;
   constructor(db: D1Database) {
     this.names = new D1NameRegistryStorage(db);
     this.usernames = new D1UsernameStorage(db);
@@ -5477,6 +5480,7 @@ export class D1Storage implements Storage {
     this.relayHealth = new D1RelayHealthStorage(db);
     this.directAccess = new D1DirectAccessStorage(db);
     this.boxClaims = new D1BoxClaimStorage(db);
+    this.orgs = new D1OrgStorage(db);
   }
 }
 
