@@ -203,6 +203,7 @@ class TrustedDevicesViewModel(
                 ),
             )
             loadPendingRePair()
+            com.flagshipserver.app.core.RecoveryVetoEcho.record(now())
             RecoveryVetoOutcome.Rejected
         } catch (t: com.flagshipserver.app.api.ScreensError.Http) {
             if (t.status == 409) {
