@@ -22,6 +22,7 @@ const CHECKS = [
   ["studio-windows", "i18n-windows.mjs", ["check"]],
   ["server", "i18n-server.mjs", ["check"]],
   ["box pages", "i18n-box.mjs", ["check"]],
+  ["firefox extension", "i18n-browser-extension.mjs", ["check"]],
   ["store art", "i18n-store.mjs", ["check"]],
   ["voi.ci site", "apps/voici-site/i18n.mjs", ["check"]],
   // no new hard-coded English in any surface (owner rule 2026-11-02); scripts/i18n-literals.allow.json holds the exceptions

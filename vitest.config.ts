@@ -8,6 +8,7 @@ export default defineConfig({
       // billing's own CI (.github/workflows/billing.yml) runs them.
       "billing/packages/{metering,store-d1}/tests/**/*.test.ts",
       "apps/web/tests/**/*.test.ts",
+      "apps/browser-extension-firefox/tests/**/*.test.ts",
       "apps/voici-site/tests/**/*.test.ts",
       "apps/com/test/**/*.test.ts",
       "apps/boot/test/**/*.test.ts",

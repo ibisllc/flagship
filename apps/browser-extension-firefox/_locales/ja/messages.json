@@ -1,0 +1,209 @@
+{
+  "extName": {
+    "message": "Flagship"
+  },
+  "extDescription": {
+    "message": "アクセスした各 Flagship サーバーが、自ら署名した証明書を提示しているかを確認し、Flagship のサインインページを見分けます。Flagship アプリとペアリングして使い、あなたとして操作できる鍵は一切保持しません。"
+  },
+  "badgeMatch": {
+    "message": "Flagship：このサイトの証明書は、あなたのサーバーが署名したものです"
+  },
+  "badgeMismatch": {
+    "message": "Flagship がこのサイトを停止しました：証明書があなたのサーバーが署名したものではありません"
+  },
+  "badgeStale": {
+    "message": "Flagship：このサイトの証明書は一致していますが、今週はまだサーバーが確認していません"
+  },
+  "badgeUnchecked": {
+    "message": "Flagship はまだこのサイトの証明書を確認できていません"
+  },
+  "blockedTitle": {
+    "message": "Flagship がこのページを停止しました"
+  },
+  "blockedLead": {
+    "message": "$1 は、あなたのサーバー $2 が署名していない証明書を提示しました。"
+  },
+  "blockedExplain": {
+    "message": "誰かがあなたとサーバーとの通信を傍受している可能性があります。たとえば、サーバーの知らないうちにその名前で発行された証明書が使われている場合です。このページの内容は何も読み込まれていません。"
+  },
+  "blockedExpected": {
+    "message": "サーバーが署名した証明書"
+  },
+  "blockedServed": {
+    "message": "この接続で使われた証明書"
+  },
+  "blockedUnknownFingerprint": {
+    "message": "不明"
+  },
+  "blockedAdvice": {
+    "message": "このネットワークからは、このサイトにサインインしたり何かを入力したりしないでください。別のネットワークから試すか、同じ証明書を確認するスマートフォンの Flagship アプリでサーバーを開いてください。"
+  },
+  "blockedBack": {
+    "message": "戻る"
+  },
+  "blockedRecheck": {
+    "message": "もう一度確認"
+  },
+  "blockedStillWrong": {
+    "message": "まだサーバーが署名した証明書ではありません。"
+  },
+  "knockForeignTitle": {
+    "message": "このサインインコードはスキャンしないでください"
+  },
+  "knockForeignBody": {
+    "message": "このページには、このサイト（$2）ではなく $1 用のサインインコードが表示されています。スキャンすると、他人のブラウザーがあなたとしてサインインする可能性があります。"
+  },
+  "knockVerifiedTitle": {
+    "message": "Flagship がこのサインインページを確認しました"
+  },
+  "knockVerifiedBody": {
+    "message": "このページは $1 のもので、証明書はあなたのサーバーが署名したものです。Flagship アプリでサインインしてください。"
+  },
+  "knockUncheckedTitle": {
+    "message": "Flagship のサインインページ"
+  },
+  "knockNotYourServerBody": {
+    "message": "このサイトはペアリング済みのどのサーバーにもないため、拡張機能は証明書を保証できません。Firefox の通常の確認が適用されます。"
+  },
+  "knockNotPairedBody": {
+    "message": "拡張機能を Flagship アプリとペアリングすると、サーバーの証明書を確認できるようになります。"
+  },
+  "knockStaleBody": {
+    "message": "このサイトはあなたのサーバー $1 にありますが、拡張機能は今、その証明書を確認できませんでした。"
+  },
+  "knockDirectUnboundBody": {
+    "message": "このサインインはあなたのサーバー $1 用ですが、このアドレスをどのサーバーが提供しているかを拡張機能は判別できません。"
+  },
+  "knockSignInButton": {
+    "message": "アプリでサインイン"
+  },
+  "knockDismiss": {
+    "message": "非表示"
+  },
+  "pairTitle": {
+    "message": "Flagship アプリとペアリング"
+  },
+  "pairIntro": {
+    "message": "スマートフォンで Flagship アプリを開き、このコードをスキャンし、両方の画面に同じ 6 桁の数字が表示されていることを確認してから、サーバーを選んで承認してください。"
+  },
+  "pairConnecting": {
+    "message": "接続中…"
+  },
+  "pairWaiting": {
+    "message": "Flagship アプリでこのコードをスキャンしてください。"
+  },
+  "pairMatching": {
+    "message": "スマートフォンに同じコードが表示されていることを確認し、スマートフォンで承認してください。"
+  },
+  "pairCodeHint": {
+    "message": "コードが違う場合は、スマートフォンでキャンセルしてください。"
+  },
+  "pairRedeeming": {
+    "message": "$1 に接続中…"
+  },
+  "pairDone": {
+    "message": "$1 とペアリングしました。拡張機能はこのサーバーの証明書を確認するようになりました。"
+  },
+  "pairExpired": {
+    "message": "このコードは期限切れです。"
+  },
+  "pairFailed": {
+    "message": "ペアリングが完了しませんでした。"
+  },
+  "pairUnreachable": {
+    "message": "Flagship に接続できませんでした。接続を確認して、もう一度お試しください。"
+  },
+  "pairRelayClosed": {
+    "message": "スマートフォンとの接続が切れました。もう一度お試しください。"
+  },
+  "pairWrongKind": {
+    "message": "スマートフォンから別の種類の承認が送られました。Flagship アプリを更新して、もう一度お試しください。"
+  },
+  "pairUnreadable": {
+    "message": "スマートフォンから、拡張機能が読み取れないデータが送られました。"
+  },
+  "pairBadServer": {
+    "message": "スマートフォンが指定したサーバーには、拡張機能は接続しません。"
+  },
+  "pairRedeemFailed": {
+    "message": "サーバーがペアリングを受け付けませんでした。スマートフォンからもう一度お試しください。"
+  },
+  "pairAgain": {
+    "message": "新しいコードを表示"
+  },
+  "pairQrLabel": {
+    "message": "Flagship アプリ用のペアリングコード"
+  },
+  "pairNeverKeys": {
+    "message": "拡張機能が、あなたとして操作できる鍵を保持することはありません。読み取れるのはサーバー証明書の署名付きフィンガープリントだけで、期間は 30 日間です。スマートフォンからいつでも終了できます。"
+  },
+  "pairNeedsPermission": {
+    "message": "まず Flagship のサイトで拡張機能を許可してください。許可すると、サーバーに接続して証明書を確認できます。"
+  },
+  "pairGrantPermission": {
+    "message": "許可して続ける"
+  },
+  "popupThisSite": {
+    "message": "このサイト"
+  },
+  "popupYourServers": {
+    "message": "あなたのサーバー"
+  },
+  "popupSiteNotFlagship": {
+    "message": "Flagship のサイトではありません。"
+  },
+  "popupSiteReload": {
+    "message": "確認するにはページを再読み込みしてください。"
+  },
+  "popupSiteMatch": {
+    "message": "証明書を確認しました：$1 が署名したものです。"
+  },
+  "popupSiteMismatch": {
+    "message": "停止しました：この証明書は $1 が署名したものではありません。"
+  },
+  "popupSiteStale": {
+    "message": "証明書は一致していますが、今週はまだ $1 が確認していません。"
+  },
+  "popupSiteUnchecked": {
+    "message": "この証明書をまだ $1 で確認できていません。"
+  },
+  "popupSiteUnknown": {
+    "message": "ペアリング済みのどのサーバーにもありません。Firefox の通常の確認が適用されます。"
+  },
+  "popupNoServers": {
+    "message": "ペアリング済みのサーバーはまだありません。"
+  },
+  "popupPairButton": {
+    "message": "スマートフォンとペアリング"
+  },
+  "popupRevokeHint": {
+    "message": "ペアリングを終了するには、Flagship アプリでサーバーのリモートまたはブラウザーセッションから「Firefox 拡張機能」を取り消してください。"
+  },
+  "popupSessionActive": {
+    "message": "$1 までペアリング済み"
+  },
+  "popupSessionEnded": {
+    "message": "サーバーがこのペアリングを終了しました。証明書を最新に保つには、もう一度ペアリングしてください。"
+  },
+  "popupSessionExpired": {
+    "message": "ペアリングの期限が切れました。証明書を最新に保つには、もう一度ペアリングしてください。"
+  },
+  "popupPinHeld": {
+    "message": "固定した証明書 $1…"
+  },
+  "popupPinNone": {
+    "message": "固定した証明書はまだありません。"
+  },
+  "popupForget": {
+    "message": "削除"
+  },
+  "popupForgetConfirm": {
+    "message": "$1 を削除しますか？拡張機能はその証明書の確認をやめます。"
+  },
+  "popupNeedsPermission": {
+    "message": "証明書を確認できるよう、Flagship のサイトで拡張機能を許可してください。"
+  },
+  "popupGrantPermission": {
+    "message": "許可"
+  }
+}

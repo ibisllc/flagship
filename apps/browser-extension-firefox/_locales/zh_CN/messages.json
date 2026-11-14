@@ -1,0 +1,209 @@
+{
+  "extName": {
+    "message": "Flagship"
+  },
+  "extDescription": {
+    "message": "检查你访问的每台 Flagship 服务器是否提供它自己签名的证书，并识别 Flagship 登录页。与 Flagship 应用配对使用；不持有任何能以你的身份操作的密钥。"
+  },
+  "badgeMatch": {
+    "message": "Flagship：此网站的证书正是你的服务器签名的证书"
+  },
+  "badgeMismatch": {
+    "message": "Flagship 已拦截此网站：它的证书不是你的服务器签名的证书"
+  },
+  "badgeStale": {
+    "message": "Flagship：此网站的证书一致，但你的服务器本周尚未确认"
+  },
+  "badgeUnchecked": {
+    "message": "Flagship 暂时无法检查此网站的证书"
+  },
+  "blockedTitle": {
+    "message": "Flagship 已拦截此页面"
+  },
+  "blockedLead": {
+    "message": "$1 提供的证书不是你的服务器 $2 签名的。"
+  },
+  "blockedExplain": {
+    "message": "可能有人正在拦截你与服务器之间的连接，例如在服务器不知情的情况下为其名称签发了证书。此页面的任何内容都没有加载。"
+  },
+  "blockedExpected": {
+    "message": "你的服务器签名的证书"
+  },
+  "blockedServed": {
+    "message": "此连接使用的证书"
+  },
+  "blockedUnknownFingerprint": {
+    "message": "未知"
+  },
+  "blockedAdvice": {
+    "message": "不要在此网络中登录此网站或输入任何内容。请换一个网络再试，或在手机上的 Flagship 应用中打开该服务器，它会检查同一张证书。"
+  },
+  "blockedBack": {
+    "message": "返回"
+  },
+  "blockedRecheck": {
+    "message": "重新检查"
+  },
+  "blockedStillWrong": {
+    "message": "仍然不是你的服务器签名的证书。"
+  },
+  "knockForeignTitle": {
+    "message": "不要扫描此登录码"
+  },
+  "knockForeignBody": {
+    "message": "此页面显示的是 $1 的登录码，而不是此网站（$2）的。扫描它可能会让别人的浏览器以你的身份登录。"
+  },
+  "knockVerifiedTitle": {
+    "message": "Flagship 已检查此登录页"
+  },
+  "knockVerifiedBody": {
+    "message": "它属于 $1，且其证书正是你的服务器签名的证书。请使用 Flagship 应用登录。"
+  },
+  "knockUncheckedTitle": {
+    "message": "Flagship 登录页"
+  },
+  "knockNotYourServerBody": {
+    "message": "此网站不在你已配对的任何服务器上，因此扩展无法为其证书担保。Firefox 的常规检查仍然有效。"
+  },
+  "knockNotPairedBody": {
+    "message": "将扩展与 Flagship 应用配对，即可让它检查你的服务器证书。"
+  },
+  "knockStaleBody": {
+    "message": "此网站在你的服务器 $1 上，但扩展刚才无法确认它的证书。"
+  },
+  "knockDirectUnboundBody": {
+    "message": "此登录是针对你的服务器 $1 的，但扩展无法判断由哪台服务器提供此地址。"
+  },
+  "knockSignInButton": {
+    "message": "使用应用登录"
+  },
+  "knockDismiss": {
+    "message": "隐藏"
+  },
+  "pairTitle": {
+    "message": "与 Flagship 应用配对"
+  },
+  "pairIntro": {
+    "message": "在手机上打开 Flagship 应用，扫描此码，确认两个屏幕显示相同的六位数字，然后选择一台服务器并批准。"
+  },
+  "pairConnecting": {
+    "message": "正在连接…"
+  },
+  "pairWaiting": {
+    "message": "请用 Flagship 应用扫描此码。"
+  },
+  "pairMatching": {
+    "message": "确认手机显示相同的代码，然后在手机上批准。"
+  },
+  "pairCodeHint": {
+    "message": "如果代码不同，请在手机上取消。"
+  },
+  "pairRedeeming": {
+    "message": "正在连接到 $1…"
+  },
+  "pairDone": {
+    "message": "已与 $1 配对。扩展现在会检查此服务器的证书。"
+  },
+  "pairExpired": {
+    "message": "此码已过期。"
+  },
+  "pairFailed": {
+    "message": "配对未完成。"
+  },
+  "pairUnreachable": {
+    "message": "无法连接到 Flagship。请检查网络连接后重试。"
+  },
+  "pairRelayClosed": {
+    "message": "与手机的连接已关闭。请重试。"
+  },
+  "pairWrongKind": {
+    "message": "手机发送了另一种类型的批准。请更新 Flagship 应用后重试。"
+  },
+  "pairUnreadable": {
+    "message": "手机发送了扩展无法读取的内容。"
+  },
+  "pairBadServer": {
+    "message": "手机指定了一台扩展不会连接的服务器。"
+  },
+  "pairRedeemFailed": {
+    "message": "服务器没有接受配对。请在手机上重试。"
+  },
+  "pairAgain": {
+    "message": "显示新代码"
+  },
+  "pairQrLabel": {
+    "message": "Flagship 应用的配对码"
+  },
+  "pairNeverKeys": {
+    "message": "扩展从不持有能以你的身份操作的密钥。它只能读取你的服务器证书的签名指纹，期限 30 天，你随时可以在手机上终止。"
+  },
+  "pairNeedsPermission": {
+    "message": "请先在 Flagship 网站上允许此扩展，这样它才能联系你的服务器并检查其证书。"
+  },
+  "pairGrantPermission": {
+    "message": "允许并继续"
+  },
+  "popupThisSite": {
+    "message": "此网站"
+  },
+  "popupYourServers": {
+    "message": "你的服务器"
+  },
+  "popupSiteNotFlagship": {
+    "message": "不是 Flagship 网站。"
+  },
+  "popupSiteReload": {
+    "message": "重新加载页面以进行检查。"
+  },
+  "popupSiteMatch": {
+    "message": "证书已检查：正是 $1 签名的证书。"
+  },
+  "popupSiteMismatch": {
+    "message": "已拦截：此证书不是 $1 签名的。"
+  },
+  "popupSiteStale": {
+    "message": "证书一致，但 $1 本周尚未确认。"
+  },
+  "popupSiteUnchecked": {
+    "message": "暂时无法通过 $1 检查此证书。"
+  },
+  "popupSiteUnknown": {
+    "message": "不在你已配对的任何服务器上。Firefox 的常规检查仍然有效。"
+  },
+  "popupNoServers": {
+    "message": "尚未配对任何服务器。"
+  },
+  "popupPairButton": {
+    "message": "与手机配对"
+  },
+  "popupRevokeHint": {
+    "message": "要结束配对，请在 Flagship 应用中该服务器的远程或浏览器会话下撤销“Firefox 扩展”。"
+  },
+  "popupSessionActive": {
+    "message": "配对有效期至 $1"
+  },
+  "popupSessionEnded": {
+    "message": "服务器已结束此配对。请重新配对以保持其证书为最新。"
+  },
+  "popupSessionExpired": {
+    "message": "配对已过期。请重新配对以保持其证书为最新。"
+  },
+  "popupPinHeld": {
+    "message": "已固定的证书 $1…"
+  },
+  "popupPinNone": {
+    "message": "尚未固定任何证书。"
+  },
+  "popupForget": {
+    "message": "移除"
+  },
+  "popupForgetConfirm": {
+    "message": "移除 $1？扩展将不再检查它的证书。"
+  },
+  "popupNeedsPermission": {
+    "message": "请在 Flagship 网站上允许此扩展，以便它检查这些网站的证书。"
+  },
+  "popupGrantPermission": {
+    "message": "允许"
+  }
+}
