@@ -234,6 +234,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   device-revocation-list keyd-only, extension pairing phone-only). Retail: no printed cards; Bluetooth + press is the
   normal no-monitor method (phone registers the box key at .com before sending Wi-Fi); monitor + 3 presses shows the
   sharing QR; one public gestures page. Owner out of office for a few hours: keep building.
+- 2026-11-14 Started 3 more agents: `0.4/retail` (F4 phase 1 software, assumes lock-from-wipe; D1 0134-0135),
+  `0.4/unifiedpush` (F7; D1 0136 if needed), `0.4/voici-names` (F8; D1 0137). Direct access holds 0133. Still running:
+  social-ports, boot-remote, pq-stage1, direct-access-com. Worktree `~/flagship-0.4-fold` and branch
+  `0.4/fold-features` (local + origin) are merged and can be removed (my deletion was blocked by the permission gate).
 
 ## Resume point
 
