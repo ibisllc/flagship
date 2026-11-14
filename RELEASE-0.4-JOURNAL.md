@@ -189,6 +189,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   keyd revocation freshness, revoked cert), `0.4/social-ios` (U2+U3 with today's features + docs/social-tab.md),
   `0.4/small-fixes` (F9 client items, F10, F12), `0.4/direct-access` (F1 steps 1-2). Webapp shell bumps happen at
   merge only.
+- 2026-11-13 Owner answers: store price $10 (not $9.99); retail must be intuitive with NO monitor (the typical user
+  runs the box headless: the design is already headless-first, the monitor is only a last-resort fallback);
+  per-service certificates: a special domain with a subdomain per service (fold into F1/fshp.app planning);
+  asked what rank orders and the browser extension are (explained; the extension is a design-only branch,
+  recommended to stay parked with other-os-installers; retail code folds after its design is settled).
 
 ## Resume point
 
