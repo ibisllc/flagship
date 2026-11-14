@@ -8,6 +8,7 @@ import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.VoiciNameClient
+import com.flagshipserver.app.api.DirectNamesClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
@@ -51,6 +52,7 @@ object Variant : AppVariant {
     override fun defaultTransfer(): ServerTransferClient = missing("ServerTransferClient")
     override fun defaultNameDibs(): NameDibsClient = missing("NameDibsClient")
     override fun defaultVoiciName(): VoiciNameClient = missing("VoiciNameClient")
+    override fun defaultDirectNames(): DirectNamesClient = missing("DirectNamesClient")
 
     override fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture? = null
     override fun freeAiClient(): FreeAiClient? = null

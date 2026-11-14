@@ -117,6 +117,58 @@ class GymOctoberTest : GymBase() {
         gymShot("debug-access-read-only")
     }
 
+    // ─── Direct access ───────────────────────────────────────────────────────
+
+    /** An admin device turns direct access on (the privacy warning first),
+     *  turns on an app's direct name, checks it from outside, and then the
+     *  app's page offers the direct link beside the relay one. */
+    @Test
+    fun directAccessOnNameProbeAndShareChoice() {
+        launch(tab = "home", adminRoot = true)
+        waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
+        composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        waitUntilExists("sd-direct-access-on", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("sd-direct-access-on").performScrollTo().performClick()
+        waitUntilExists("sd-direct-access-warning")
+        val warning = textOf("sd-direct-access-warning")
+        assertTrue("Got: $warning", warning.startsWith("Turning this on puts this server's home IP address in public DNS."))
+        composeRule.onNodeWithTag("sd-direct-access-addresses-field").performScrollTo().typeText("81.2.69.142")
+        gymShot("direct-access-form")
+        composeRule.onNodeWithTag("sd-direct-access-submit").performScrollTo().performClick()
+        waitUntilExists("sd-direct-access-off", timeoutMs = 15_000)
+
+        val plants = "bright-maple--plants"
+        waitUntilExists("sd-direct-name-on-$plants", timeoutMs = 15_000)
+        composeRule.onNodeWithTag("sd-direct-name-on-$plants").performScrollTo().performClick()
+        composeRule.waitUntil(15_000) { count("sd-direct-name-state-$plants") > 0 && textOf("sd-direct-name-state-$plants") == "Published" }
+        composeRule.onNodeWithTag("sd-direct-name-probe-btn-$plants").performScrollTo().performClick()
+        waitUntilExists("sd-direct-name-probe-$plants", timeoutMs = 15_000)
+        val probed = textOf("sd-direct-name-probe-$plants")
+        assertTrue("Got: $probed", probed.endsWith("Reachable from outside."))
+        gymShot("direct-access-name-published")
+
+        composeRule.onNodeWithTag("server-app-$plants").performScrollTo().performClick()
+        waitUntilExists("app-direct-link-choice", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("app-direct-link-choice").performScrollTo()
+        assertEquals("plants--bright-maple.fshp.app", textOf("app-direct-link-url"))
+        composeRule.onNodeWithTag("app-direct-link-relay").performClick()
+        composeRule.waitForIdle()
+        assertNotEquals("plants--bright-maple.fshp.app", textOf("app-direct-link-url"))
+        gymShot("direct-access-share-choice")
+    }
+
+    /** A device without the admin root sees direct access but can't change it. */
+    @Test
+    fun directAccessReadOnlyOnANonAdminDevice() {
+        openHomeServerPage()
+        waitUntilExists("sd-direct-access-admin-only", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("sd-direct-access-admin-only").performScrollTo()
+        assertEquals("Only an admin device can change direct access. This device can see it.", textOf("sd-direct-access-admin-only"))
+        assertEquals(0, count("sd-direct-access-on"))
+        gymShot("direct-access-read-only")
+    }
+
     // ─── Configure environment: one signed change per variable ──────────────
 
     /** Plants' Configure environment: a name the box can't take is refused in

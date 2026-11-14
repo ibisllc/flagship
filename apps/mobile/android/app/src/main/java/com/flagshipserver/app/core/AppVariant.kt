@@ -12,6 +12,7 @@ import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.VoiciNameClient
+import com.flagshipserver.app.api.DirectNamesClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
@@ -71,6 +72,7 @@ interface AppVariant {
     fun defaultTransfer(): ServerTransferClient
     fun defaultNameDibs(): NameDibsClient
     fun defaultVoiciName(): VoiciNameClient
+    fun defaultDirectNames(): DirectNamesClient
 
     /** Gym: the mock box's access-control fixture for a mock [screens]. */
     fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture?
@@ -121,6 +123,8 @@ class GymMocks(
     val transfer: ServerTransferClient,
     val nameDibs: NameDibsClient,
     val voiciName: VoiciNameClient,
+    /** Direct access on `.com` (docs/direct-access-and-domains.md §8). */
+    val directNames: DirectNamesClient,
     val mailbox: SecretMailboxClient,
     val podClients: PodClients,
     val shares: ServerShareRuntime?,

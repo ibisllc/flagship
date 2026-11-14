@@ -151,11 +151,11 @@ class LiveScreensClient(
     }
 
     /** `GET /api/screens/direct-access`. */
-    suspend fun directAccess(): com.flagshipserver.app.core.DirectAccess.View =
+    override suspend fun directAccess(): com.flagshipserver.app.core.DirectAccess.View =
         request("/api/screens/direct-access", com.flagshipserver.app.core.DirectAccess.View.serializer())
 
     /** `POST /api/screens/direct-access` with an order signed by `DirectAccess.sign` behind the biometric prompt. */
-    suspend fun setDirectAccess(signed: com.flagshipserver.app.core.DirectAccess.SignedOrder): com.flagshipserver.app.core.DirectAccess.Change =
+    override suspend fun setDirectAccess(signed: com.flagshipserver.app.core.DirectAccess.SignedOrder): com.flagshipserver.app.core.DirectAccess.Change =
         request(
             "/api/screens/direct-access",
             com.flagshipserver.app.core.DirectAccess.Change.serializer(),

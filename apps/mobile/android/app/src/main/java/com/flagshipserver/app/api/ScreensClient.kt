@@ -428,6 +428,14 @@ interface ScreensClient {
     suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")
 
+    /** `GET /api/screens/direct-access` (docs/direct-access-and-domains.md §7). A box from before answers 404. */
+    suspend fun directAccess(): com.flagshipserver.app.core.DirectAccess.View =
+        throw ScreensError.NotImplemented("direct access")
+
+    /** `POST /api/screens/direct-access` with the owner's signed order. */
+    suspend fun setDirectAccess(signed: com.flagshipserver.app.core.DirectAccess.SignedOrder): com.flagshipserver.app.core.DirectAccess.Change =
+        throw ScreensError.NotImplemented("direct access")
+
     /** `POST /api/screens/services/copy` (docs/app-placement.md §5), sent to
      *  the TARGET box with the owner's signed grant: 202 `{copyId}`; 400
      *  malformed, 403 bad signature / not this box / stale, 409 already there
