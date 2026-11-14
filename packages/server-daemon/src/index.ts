@@ -350,6 +350,7 @@ import {
   resolvePinnedAdminRoot,
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
+import { startOrgAuthoritySync } from "./orgAuthorityPin.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
@@ -1678,6 +1679,32 @@ async function main(): Promise<void> {
     activityLog.note("authority.revoked", `${e.grants} grant${e.grants === 1 ? "" : "s"} revoked (${e.kinds.join(", ")}), epoch ${e.epoch}: ${e.reason}${e.stuckWork ? `; ${e.stuckWork} job(s) did not stop` : ""}`, { ok: e.stuckWork === 0 });
   authorityHub.ops.onTransition = (op) =>
     activityLog.note("authority.operation", `${op.kind} ${op.state}${op.reason ? ` (${op.reason})` : ""}, id ${op.id.slice(0, 8)}, payload ${op.payloadHash.slice(0, 12)}${op.resultDigest ? `, result ${op.resultDigest.slice(0, 12)}` : ""}`, { ok: op.state !== "failed" && op.state !== "outcome-unknown" });
+  // ---- Enterprise org authority (docs/enterprise-accounts.md §6, §8) ----
+  // An org server pins its org's genesis and replays the chain and seat book itself. The rotations a
+  // departed seat leaves behind stay pending (and are named in Activity) until the org's clients
+  // finish them; nothing here rotates a secret on its own yet.
+  if (cfg?.orgId && cfg.orgGenesisHash && env.controlPlaneBaseUrl) {
+    const orgSync = await startOrgAuthoritySync({
+      orgId: cfg.orgId,
+      genesisHash: cfg.orgGenesisHash,
+      serverDomain: cfg.serverId,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      pinPath: join(dataDir, "org-authority-pin.json"),
+      hooks: {
+        closeSessions: async (seat) => void (await authorityHub.revokeService(`org-seat:${seat}`, "org seat ended")),
+        dropEnrolledAppIds: async () => undefined,
+        freezeInvitesBy: async () => undefined,
+        rotate: async (kind, seat) => {
+          activityLog.note("org.rotation.pending", `Key rotation pending (${kind}) after seat ${seat.slice(0, 8)} left`, { ok: false });
+          return false;
+        },
+      },
+      onLog: (m) => console.log(m),
+    });
+    process.once("SIGTERM", () => orgSync.stop());
+    process.once("SIGINT", () => orgSync.stop());
+    console.log("[daemon] org authority sync armed (verify-then-pin from the org genesis)");
+  }
   const restoredAccess = new RestoredAccessDrafts(join(dataDir, "authority", "restored-access.json"));
   await restoredAccess.load();
   // What an uninstall removes beyond the app itself (N11): every grant, key, session and held draft

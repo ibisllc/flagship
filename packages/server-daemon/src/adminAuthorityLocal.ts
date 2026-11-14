@@ -1,6 +1,8 @@
 import { requireMasterAdmin, type AdminGrantView } from "@flagship/protocol";
 import { gateSigner, pqAuthority, type HybridOrderSignature, type PqAuthorityContext } from "./pqAuthority.js";
 import { trustedNow } from "./trustedClock.js";
+import { authorizeOrgSensitiveOrder, currentOrgPin, type OrgPinned } from "./orgAuthorityPin.js";
+import type { OrgAction, OrgApproval } from "@flagship/protocol";
 
 /**
  * Slice D — box-local sensitive-order authorization gate
@@ -65,6 +67,12 @@ export interface AuthorizeSensitiveOrderArgs<TOrder> {
   hybrid?: HybridOrderSignature;
   /** The policy and bindings to apply; defaults to the box's (pqAuthority.ts). */
   pq?: PqAuthorityContext | null;
+  /**
+   * Enterprise orgs: on an org server the order is decided ONLY by the org's approvals under the
+   * pinned org chain (docs/enterprise-accounts.md §4.2, §6); the admin root and IRK paths are not
+   * consulted. `pinned` defaults to the box's current org pin.
+   */
+  org?: { action: OrgAction; order: Uint8Array; approvals: readonly OrgApproval[]; pinned?: OrgPinned | null };
 }
 
 /**
@@ -74,6 +82,10 @@ export interface AuthorizeSensitiveOrderArgs<TOrder> {
 export function authorizeSensitiveOrder<TOrder>(
   args: AuthorizeSensitiveOrderArgs<TOrder>,
 ): boolean {
+  if (args.org) {
+    const pinned = args.org.pinned === undefined ? currentOrgPin() : args.org.pinned;
+    return authorizeOrgSensitiveOrder(pinned, args.org.action, args.org.order, args.org.approvals, args.now ?? trustedNow()).ok;
+  }
   const signer = classicalSigner(args);
   if (!signer) return false;
   return gateSigner(args.pq === undefined ? pqAuthority() : args.pq, signer, args.hybrid) === null;
