@@ -85,6 +85,7 @@ import { initHomeView, enterHome } from "./views/home.js";
 import { initSettingsView, refreshSessionGates, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
+import { remoteLandingFqdn } from "./lib/companionDockStart.js";
 import { initSharedServerView } from "./views/shared-server.js";
 import { initShareAcceptView } from "./views/share-accept.js";
 import { stashShareLinkFromLocation } from "./lib/serverShares.js";
@@ -577,10 +578,13 @@ async function boot() {
   initPeerBackupView();
   initCompanionDockView();
   initCompanionDockStartView({
-    onComplete: async () => {
+    // Land on the server the phone connected this browser to (W19: the keyless Home was empty).
+    onComplete: async (persisted) => {
       setSubtitle(tr("companion"));
       applyCompanionUiRestrictions();
-      await enterHome();
+      const fqdn = remoteLandingFqdn(persisted);
+      if (fqdn) await enterServerDetail(fqdn);
+      else await enterHome();
     },
   });
   initCompanionRequestsView();

@@ -29,8 +29,17 @@ describe("Home's server source", () => {
     expect(homeServerSource(null, { demoServer: null }, 0, { username: "plucky-avocet" })).toEqual({ kind: "account" });
   });
 
-  it("a remote (keyless) browser and a browser with no account stay empty", () => {
+  it("a remote (keyless) browser lists only the server the phone connected it to, never the account's (W19)", () => {
+    const source = homeServerSource(null, { podBaseUrl: "https://home.plucky-avocet.flagship.services" }, 5, { username: "plucky-avocet", companion: true });
+    expect(source).toEqual({
+      kind: "companion",
+      server: { serverId: "home.plucky-avocet.flagship.services", revoked: null },
+      fallbackPod: { serverDomain: "home.plucky-avocet.flagship.services", liveness: "live", lastReported: 5 },
+    });
     expect(homeServerSource(null, {}, 0, { username: "plucky-avocet", companion: true })).toEqual({ kind: "empty" });
+  });
+
+  it("a browser with no account stays empty", () => {
     expect(homeServerSource(null, {}, 0, {})).toEqual({ kind: "empty" });
   });
 

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   REMOTE_TICKET_KIND,
   openRemoteRequest,
   parseRemoteTicket,
+  remoteLandingFqdn,
 } from "../public/webapp/lib/companionDockStart.js";
 import { deriveMaterial, freshKeypair } from "../public/webapp/lib/pairingRelay.js";
 
@@ -139,5 +142,20 @@ describe("remote: ticket validation", () => {
     ["a short secret", { ...TICKET, ticketSecret: "cd" }],
   ])("refuses %s", (_label, obj) => {
     expect(() => parse(obj)).toThrow();
+  });
+});
+
+describe("after the phone approves (W19)", () => {
+  it("opens the page of the server the phone connected this browser to", () => {
+    expect(remoteLandingFqdn({ podBaseUrl: "https://Home.Smoketest.flagship.services" })).toBe("home.smoketest.flagship.services");
+    expect(remoteLandingFqdn({ podBaseUrl: "not a url" })).toBeNull();
+    expect(remoteLandingFqdn(null)).toBeNull();
+  });
+
+  it("the shell lands on that server's page, not the keyless Home", () => {
+    const app = readFileSync(resolve(__dirname, "..", "public", "webapp", "app.js"), "utf8");
+    const dock = app.slice(app.indexOf("initCompanionDockStartView({"), app.indexOf("initCompanionRequestsView();"));
+    expect(dock).toContain("enterServerDetail(fqdn)");
+    expect(dock.indexOf("enterServerDetail(fqdn)")).toBeLessThan(dock.indexOf("enterHome()"));
   });
 });

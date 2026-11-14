@@ -108,6 +108,15 @@ export async function openRemoteRequest({
   };
 }
 
+/** The server page a just-approved remote opens: the one the phone connected it to. */
+export function remoteLandingFqdn(persisted) {
+  try {
+    return new URL(String(persisted?.podBaseUrl ?? "")).hostname.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Redeem the ticket on its server and store the keyless remote profile. */
 export async function redeemRemoteTicket(ticket, deps) {
   const result = await redeemCompanionAndPersist(ticket, deps);

@@ -87,10 +87,11 @@ interface Rig {
   requests: string[];
   sockets: Array<{ url: string; ws: WebSocketRoute }>;
   redeems: Array<Record<string, unknown>>;
+  detailAuth: string[];
 }
 
 async function openRemote(page: Page, path = "/"): Promise<Rig> {
-  const rig: Rig = { requests: [], sockets: [], redeems: [] };
+  const rig: Rig = { requests: [], sockets: [], redeems: [], detailAuth: [] };
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: REMOTE });
   page.on("request", (r) => rig.requests.push(r.url()));
   await page.routeWebSocket(/\/qr-pipe\//, (ws) => {
@@ -119,6 +120,23 @@ async function openRemote(page: Page, path = "/"): Promise<Rig> {
             expiresAt: Date.now() + 8 * 3_600_000,
             podBaseUrl: BOX,
             username: "smoketest",
+          }),
+        });
+        return;
+      }
+      if (url.origin === BOX && url.pathname === "/api/screens/server-detail") {
+        rig.detailAuth.push(route.request().headers()["x-flagship-session"] ?? "");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            serverFqdn: "home.smoketest.flagship.services",
+            username: "smoketest",
+            daemonVersion: "0.4.0",
+            currentCommit: "0123456789abcdef0123456789abcdef01234567",
+            uptimeMs: 60_000,
+            serviceCount: 0,
+            pairedSessionCount: 1,
           }),
         });
         return;
@@ -198,7 +216,11 @@ test.describe("gym webapp remote", () => {
     relay.send(JSON.stringify({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce }));
     await expect.poll(() => rig.redeems.length, { timeout: 10_000 }).toBe(1);
     expect(rig.redeems[0]).toEqual({ ticketId: "0123456789abcdef0123456789abcdef", ticketSecret: "ab".repeat(32) });
-    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+    // It lands on that server's page under the remote session, not the keyless empty Home (W19).
+    await expect(page.locator("#view-server-detail")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#server-detail-title")).toHaveText("home");
+    await expect(page.locator("#view-home")).toBeHidden();
+    await expect.poll(() => rig.detailAuth[0] ?? "", { timeout: 10_000 }).toBe("gym-companion-session-token-0001");
     const profile = await page.evaluate(async () => {
       const store = await import("/lib/profilesStore.js");
       return { kind: store.get("kind"), podBaseUrl: store.get("podBaseUrl"), username: store.get("username") };
