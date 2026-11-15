@@ -15854,5 +15854,25 @@
   "release_box_confirm": {
     "en": "Wipe and release",
     "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "co_manager_count": {
+    "en": "%1$d of %2$d co-managers across your servers",
+    "ctx": "ui/screens/ShareServerScreens.kt (Shared with card)",
+    "args": 2
+  },
+  "co_manager_cap_free": {
+    "en": "On the Free plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Pro for more.",
+    "ctx": "core/ServerShareClient.kt (co-manager cap)",
+    "args": 1
+  },
+  "co_manager_cap_pro": {
+    "en": "On the Pro plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Pro Max for more.",
+    "ctx": "core/ServerShareClient.kt (co-manager cap)",
+    "args": 1
+  },
+  "co_manager_cap_pro_max": {
+    "en": "On the Pro Max plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Enterprise for more.",
+    "ctx": "core/ServerShareClient.kt (co-manager cap)",
+    "args": 1
   }
 }

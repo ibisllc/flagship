@@ -3844,5 +3844,9 @@
   "release_box_done": "Le boîtier est en cours d’effacement. Il redémarrera comme un boîtier neuf.",
   "release_box_busy": "Libération…",
   "release_box_confirm_title": "Libérer ce boîtier ?",
-  "release_box_confirm": "Effacer et libérer"
+  "release_box_confirm": "Effacer et libérer",
+  "co_manager_count": "%1$d cogestionnaires sur %2$d pour l’ensemble de vos serveurs",
+  "co_manager_cap_free": "Avec l’offre gratuite, vos serveurs peuvent avoir jusqu’à %1$d cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro pour en avoir plus.",
+  "co_manager_cap_pro": "Avec l’offre Pro, vos serveurs peuvent avoir jusqu’à %1$d cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro Max pour en avoir plus.",
+  "co_manager_cap_pro_max": "Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à %1$d cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus."
 }

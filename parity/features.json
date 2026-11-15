@@ -92,6 +92,16 @@
       }
     },
     {
+      "id": "co-manager-cap",
+      "title": "Co-manager cap per account (Free 5, Pro 10, Pro Max 25, Enterprise unlimited): n of N on the Shared with card, the co-manager-cap refusal in each app's words (docs/share-a-server.md §5.8)",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShareClient.swift", "isCoManagerCap"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift", "static func coManagerCap"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift", "share-co-manager-count"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShareClient.kt", "fun coManagerCapText"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ShareServerScreens.kt", "share-co-manager-count"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShares.js", "export function coManagerCapText"], ["apps/web/public/webapp/views/server-sharing.js", "data-co-manager-count"]] }
+      }
+    },
+    {
       "id": "share-co-manager-invites",
       "title": "Co-manager invites: invite at Member from a shared server's app, withdraw your own (docs/service-access-gating.md \"Co-manager invites\")",
       "ref": "web",

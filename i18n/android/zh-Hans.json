@@ -3844,5 +3844,9 @@
   "release_box_done": "正在清除主机。它将以全新主机的状态重启。",
   "release_box_busy": "正在释放…",
   "release_box_confirm_title": "要释放此主机吗？",
-  "release_box_confirm": "清除并释放"
+  "release_box_confirm": "清除并释放",
+  "co_manager_count": "共同管理者 %1$d/%2$d 位（所有服务器）",
+  "co_manager_cap_free": "免费套餐下，你的所有服务器最多共有 %1$d 位共同管理者。请先移除一位，或升级到 Pro 以添加更多。",
+  "co_manager_cap_pro": "Pro 套餐下，你的所有服务器最多共有 %1$d 位共同管理者。请先移除一位，或升级到 Pro Max 以添加更多。",
+  "co_manager_cap_pro_max": "Pro Max 套餐下，你的所有服务器最多共有 %1$d 位共同管理者。请先移除一位，或升级到 Enterprise 以添加更多。"
 }

@@ -3847,4 +3847,8 @@
     <string name="release_box_busy">Wird freigegeben …</string>
     <string name="release_box_confirm_title">Diese Box freigeben?</string>
     <string name="release_box_confirm">Löschen und freigeben</string>
+    <string name="co_manager_count">%1$d von %2$d Mitverwaltern auf deinen Servern</string>
+    <string name="co_manager_cap_free">Mit dem kostenlosen Tarif können deine Server insgesamt bis zu %1$d Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro, um mehr zu haben.</string>
+    <string name="co_manager_cap_pro">Mit dem Tarif Pro können deine Server insgesamt bis zu %1$d Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro Max, um mehr zu haben.</string>
+    <string name="co_manager_cap_pro_max">Mit dem Tarif Pro Max können deine Server insgesamt bis zu %1$d Mitverwalter haben. Entferne zuerst einen oder wechsle zu Enterprise, um mehr zu haben.</string>
 </resources>
