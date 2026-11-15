@@ -31,6 +31,7 @@
 // reachable only from same-origin code — means an apex XSS literally
 // cannot invoke the passkey.
 
+import { exportAdminRootSeed } from "./keyCustody.js";
 import {
   bytesToHex,
   hexToBytes,
@@ -89,7 +90,8 @@ export async function setupCloudRecovery(username) {
   // admin root (legacy) escrows the UMK alone.
   let adminRootSeed = null;
   try {
-    adminRootSeed = session.adminRootSeed ?? (await loadAdminRootSeed(session.umk));
+    // A passkey-sealed root is opened for this one escrow (lib/keyCustody.js) and wiped after.
+    adminRootSeed = session.adminRootSeed ? await exportAdminRootSeed(session.adminRootSeed) : await loadAdminRootSeed(session.umk);
   } catch {
     adminRootSeed = null;
   }
@@ -97,11 +99,16 @@ export async function setupCloudRecovery(username) {
   // Drive the sub-origin popup. It will receive the UMK seed +
   // username (+ admin root, when present), prompt the user for a passphrase
   // (Task #74), and postMessage back the wrap result.
-  const result = await subOriginFlow("enroll", {
-    umk: session.umk,
-    username,
-    ...(adminRootSeed ? { adminRootSeed } : {}),
-  });
+  let result;
+  try {
+    result = await subOriginFlow("enroll", {
+      umk: session.umk,
+      username,
+      ...(adminRootSeed ? { adminRootSeed } : {}),
+    });
+  } finally {
+    adminRootSeed?.fill(0);
+  }
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? tr("no result")}`);
   }

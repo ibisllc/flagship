@@ -4,10 +4,13 @@
 //
 //   flagship/box-release/v1|<serverDomain>|<stkPubHex>|<issuedAt>|<nonceHex>
 //
-// Signed by the admin root only, never the IRK (the box refuses it). The webapp signs classically:
-// it has no ML-DSA key, so a strict box answers `release-needs-hybrid` and the owner uses the phone.
+// Signed by the admin root only, never the IRK (the box refuses it), with its hybrid companion when
+// this browser holds the admin root's bound ML-DSA half (lib/adminSigning.js); without it a strict
+// box answers `release-needs-hybrid`.
 
-import { bytesToHex, signWithAdminRoot } from "../keystore.js";
+import { isAdminRootKey } from "./keyCustody.js";
+import { bytesToHex } from "../keystore.js";
+import { signAdminOrder } from "./adminSigning.js";
 import { tr } from "./i18n.js";
 
 export const TAG_BOX_RELEASE = "flagship/box-release/v1";
@@ -41,11 +44,16 @@ export function makeBoxRelease({ serverDomain, stkPubHex, issuedAt, random = (n)
   };
 }
 
-/** The body `POST /api/screens/box-release` takes, signed by the admin root seed. */
-export async function signBoxRelease(order, adminRootSeed, sign = signWithAdminRoot) {
-  if (!(adminRootSeed instanceof Uint8Array)) throw new Error(RELEASE_ADMIN_ONLY);
-  const sig = await sign(adminRootSeed, canonicalBoxRelease(order));
-  return { order: { ...order }, signatureHex: bytesToHex(sig) };
+/**
+ * The body `POST /api/screens/box-release` takes, signed by the admin root. `sign` (tests) returns
+ * the classical signature only; the default also adds `pqSignature` when it can.
+ */
+export async function signBoxRelease(order, adminRootSeed, sign) {
+  if (!isAdminRootKey(adminRootSeed)) throw new Error(RELEASE_ADMIN_ONLY);
+  const canonical = canonicalBoxRelease(order);
+  if (sign) return { order: { ...order }, signatureHex: bytesToHex(await sign(adminRootSeed, canonical)) };
+  const s = await signAdminOrder(adminRootSeed, canonical);
+  return { order: { ...order }, signatureHex: s.signatureHex, ...(s.pqSignature ? { pqSignature: s.pqSignature } : {}) };
 }
 
 export const RELEASE_TITLE = tr("Release this box");
@@ -61,7 +69,7 @@ export function releaseRefusal(code) {
     case "release-no-admin-root":
       return tr("Only this account's admin key can release this box.");
     case "release-needs-hybrid":
-      return tr("This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.");
+      return tr("This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Release it from the Flagship app on the admin phone that set the account up.");
     case "release-other-server":
       return tr("That order is for another server. Refresh this page and try again.");
     case "release-clock":

@@ -123,7 +123,7 @@ describe("the server page's Release this box", () => {
           throw Object.assign(new Error(code), { status: 403, body: { error: code, code } });
         },
       });
-    expect((await refuse("release-needs-hybrid")).error).toMatch(/quantum-safe signature, which the webapp can.t make/);
+    expect((await refuse("release-needs-hybrid")).error).toMatch(/quantum-safe signature, and this browser's admin key has no quantum-safe half/);
     expect((await refuse("release-not-admin")).error).toBe("Only this account's admin key can release this box.");
     expect((await refuse("release-not-claimed")).error).toBe("This box is already released.");
     expect((await refuse("release-whatever")).error).toBe("The box couldn't be released. Try again in a moment.");

@@ -1,4 +1,5 @@
 import { controlApex } from "./apex.js";
+import { isAdminRootKey } from "./keyCustody.js";
 import {
   canonicalAccountProfile,
   canonicalDeviceManagedProfile,
@@ -124,7 +125,7 @@ export async function fetchDecryptedDirectory(deps = {}) {
 export async function updateAccountDisplayName(displayName, current, deps = {}) {
   const session = deps.session ?? getSession();
   const profile = deps.profile ?? getActiveProfile();
-  if (!(session?.adminRootSeed instanceof Uint8Array)) throw new Error("administrator authorization required");
+  if (!isAdminRootKey(session?.adminRootSeed)) throw new Error("administrator authorization required");
   const issuedAt = Date.now();
   const revision = (current?.revision ?? 0) + 1;
   const encrypted = await encryptProfile(displayName, await deriveAccountProfileKey(session.umk), {
@@ -169,7 +170,7 @@ export async function updateSelfDisplayName(displayName, current, deps = {}) {
 export async function setManagedDeviceDisplayName(deviceId, displayName, locked, current, deps = {}) {
   const session = deps.session ?? getSession();
   const profile = deps.profile ?? getActiveProfile();
-  if (!(session?.adminRootSeed instanceof Uint8Array)) throw new Error("administrator authorization required");
+  if (!isAdminRootKey(session?.adminRootSeed)) throw new Error("administrator authorization required");
   const issuedAt = Date.now();
   const revision = (current?.revision ?? 0) + 1;
   const encrypted = await encryptProfile(displayName, await deriveDeviceDirectoryKey(session.umk), {
@@ -191,7 +192,7 @@ export async function setManagedDeviceDisplayName(deviceId, displayName, locked,
 export async function removeManagedDeviceDisplayName(deviceId, current, deps = {}) {
   const session = deps.session ?? getSession();
   const profile = deps.profile ?? getActiveProfile();
-  if (!(session?.adminRootSeed instanceof Uint8Array)) throw new Error("administrator authorization required");
+  if (!isAdminRootKey(session?.adminRootSeed)) throw new Error("administrator authorization required");
   const path = `/api/accounts/${encodeURIComponent(profile.accountId)}/devices/${deviceId}/managed-profile`;
   const response = await signedDirectoryFetch(path, {
     method: "DELETE",

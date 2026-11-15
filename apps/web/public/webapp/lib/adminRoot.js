@@ -27,7 +27,8 @@ import {
   generateAdminRoot as ksGenerateAdminRoot,
   loadAdminRootSeed as ksLoadAdminRootSeed,
 } from "../keystore.js";
-import { getSession } from "./state.js";
+import { adminKeyLabel, getSession } from "./state.js";
+import { isAdminRootKey, loadAdminRootKey } from "./keyCustody.js";
 
 /**
  * The canonical-bytes tags of the SENSITIVE orders the webapp signs — mirrors
@@ -126,7 +127,7 @@ export function canonicalTag(bytes) {
 export function makeSensitiveSigner(adminRootSeed, legacy = ksSignWithIrk, deps = {}) {
   const signAdmin = deps.signWithAdminRoot || ksSignWithAdminRoot;
   return async (umk, bytes) => {
-    if (adminRootSeed && SENSITIVE_TAGS.has(canonicalTag(bytes))) {
+    if (isAdminRootKey(adminRootSeed) && SENSITIVE_TAGS.has(canonicalTag(bytes))) {
       return signAdmin(adminRootSeed, bytes);
     }
     return legacy(umk, bytes);
@@ -165,10 +166,19 @@ export async function ensureAdminRoot(session, deps = {}) {
   const load = deps.loadAdminRootSeed || ksLoadAdminRootSeed;
   const pubHex = deps.adminRootPubHex || ksAdminRootPubHex;
 
-  let seed = session.adminRootSeed instanceof Uint8Array ? session.adminRootSeed : null;
-  if (!seed) {
-    seed = (await has()) ? await load(session.umk) : await gen(session.umk);
+  if (isAdminRootKey(session.adminRootSeed)) return pubHex(session.adminRootSeed);
+  if (!deps.loadAdminRootSeed && !deps.generateAdminRoot) {
+    // Production: a new root is written as a version 1 record and the session gets the handle,
+    // so the seed moves under a passkey on its first signature (lib/keyCustody.js).
+    if (!(await has())) {
+      const fresh = await gen(session.umk);
+      fresh.fill(0);
+    }
+    const handle = await (deps.loadAdminRootKey || loadAdminRootKey)(() => session.umk, { userName: adminKeyLabel(session.username) });
+    session.adminRootSeed = handle;
+    return handle ? pubHex(handle) : null;
   }
+  const seed = (await has()) ? await load(session.umk) : await gen(session.umk);
   session.adminRootSeed = seed;
   return seed ? pubHex(seed) : null;
 }

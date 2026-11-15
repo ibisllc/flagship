@@ -6,14 +6,54 @@
 // shows a non-modal "Update available — tap to refresh" toast.
 // The user can defer indefinitely; nothing breaks if they
 // ignore it (the old SW keeps serving them just fine).
+//
+// Before it offers the update, the page checks the new shell's release signature
+// (lib/shellTrust.js, docs/webapp-key-custody.md item 5). While signatures are required an
+// unsigned shell is never activated from here, and the page says so.
 import { tr } from "./i18n.js";
-if ("serviceWorker" in navigator) {
+import { SHELL_SIGNATURE_REQUIRED, checkDeployedShell } from "./shellTrust.js";
+
+export const SHELL_UNSIGNED = tr("This version of the webapp isn't signed by Flagship.");
+
+/** The waiting worker's SHELL_VERSION, or null. */
+function workerVersion(worker) {
+  return new Promise((resolve) => {
+    const ch = new MessageChannel();
+    const t = setTimeout(() => resolve(null), 3000);
+    ch.port1.onmessage = (ev) => {
+      clearTimeout(t);
+      resolve(typeof ev.data?.shellVersion === "string" ? ev.data.shellVersion : null);
+    };
+    try {
+      worker.postMessage({ type: "SHELL_VERSION" }, [ch.port2]);
+    } catch {
+      clearTimeout(t);
+      resolve(null);
+    }
+  });
+}
+
+/** Whether to offer this waiting shell: `{ offer, signed }`. */
+export async function vetUpdate(worker, { required = SHELL_SIGNATURE_REQUIRED, check = checkDeployedShell, version = workerVersion } = {}) {
+  const v = await version(worker);
+  const status = await check({ expectVersion: v });
+  return { offer: status.signed || !required, signed: status.signed, reason: status.reason ?? null };
+}
+
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   (async () => {
     const reg = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
-    const onWaiting = (worker) => {
+    const onWaiting = async (worker) => {
       if (!worker) return;
       const toastEl = document.getElementById("toast");
       if (!toastEl) return;
+      const vet = await vetUpdate(worker).catch(() => ({ offer: !SHELL_SIGNATURE_REQUIRED, signed: false }));
+      if (!vet.offer) {
+        toastEl.textContent = SHELL_UNSIGNED;
+        toastEl.classList.remove("hidden");
+        toastEl.classList.add("err");
+        return;
+      }
       toastEl.textContent = tr("Update available — tap to refresh");
       toastEl.classList.remove("hidden", "err");
       const accept = () => {

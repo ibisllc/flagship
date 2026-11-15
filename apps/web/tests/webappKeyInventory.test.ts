@@ -34,6 +34,7 @@ const KNOWN: Record<string, string> = {
   "lib/serviceInvite.js": "invite envelopes",
   "lib/peerBackup.js": "peer-backup key derivation",
   "lib/maintainerTrust.js": "verification keys only",
+  "lib/keyCustody.js": "the admin root and its ML-DSA half sealed under a passkey's PRF output and the account key, opened for one signature (owner, 2026-11-15: webapp custody 1-6, docs/webapp-key-custody.md)",
 };
 
 const ROOT = join(__dirname, "../public/webapp");

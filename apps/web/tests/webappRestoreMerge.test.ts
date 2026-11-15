@@ -85,7 +85,7 @@ describe("webapp restore-into-server choices", () => {
   it("a quantum-safe server's refusal points to the phone app (the webapp holds no ML-DSA key)", () => {
     const fallback = () => "fallback";
     expect(RM.restoreErrorText({ status: 403, body: { code: "needs-hybrid", error: "x" } }, fallback)).toBe(RM.RESTORE_NEEDS_PHONE);
-    expect(RM.RESTORE_NEEDS_PHONE).toContain("Flagship app on an admin phone");
+    expect(RM.RESTORE_NEEDS_PHONE).toContain("Flagship app on the admin phone that set the account up");
     expect(RM.restoreErrorText({ status: 403, body: { code: "not-admin" } }, fallback)).toBe("fallback");
   });
 

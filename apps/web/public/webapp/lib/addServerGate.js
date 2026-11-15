@@ -8,6 +8,7 @@
 // ask this one rule. Mirrors iOS AddServerGate.swift and Android
 // core/AddServerGate.kt.
 
+import { isAdminRootKey } from "./keyCustody.js";
 import { getSession } from "./state.js";
 import { getActiveProfile } from "./profiles.js";
 import { isAdminDevice } from "./memberRoles.js";
@@ -54,7 +55,7 @@ export class AddServerRefusedError extends Error {
  *  none. `pubHexOf` turns the session's seed into its public key. */
 export async function recipeAdminRootPin(session, { isDemo = false, pubHexOf } = {}) {
   const seed = session?.adminRootSeed;
-  if (seed instanceof Uint8Array) return pubHexOf(seed);
+  if (isAdminRootKey(seed)) return pubHexOf(seed);
   if (isDemo) return null;
   throw new AddServerRefusedError();
 }

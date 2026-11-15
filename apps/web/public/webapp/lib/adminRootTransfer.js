@@ -25,6 +25,7 @@
 // `|`-separated UTF-8, string fields guarded exactly like
 // canonicalBase.legacyFieldGuard (reject '|' + control chars).
 
+import { isAdminRootKey } from "./keyCustody.js";
 import {
   loadAdminRootSeed as ksLoadAdminRootSeed,
   adminRootPubHex as ksAdminRootPubHex,
@@ -131,12 +132,12 @@ export async function runGiverAdminHandoff(args, deps = {}) {
   const f = deps.fetch || fetch;
   const origin = deps.origin || controlApex();
 
-  const seed = args.adminRootSeed instanceof Uint8Array
+  const seed = isAdminRootKey(args.adminRootSeed)
     ? args.adminRootSeed
     : args.umkSeed instanceof Uint8Array
       ? await loadSeed(args.umkSeed)
       : null;
-  if (!(seed instanceof Uint8Array) || seed.length !== 32) return { status: "skipped" };
+  if (!isAdminRootKey(seed)) return { status: "skipped" };
 
   const handoff = {
     serverDomain,

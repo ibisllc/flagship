@@ -505,7 +505,11 @@
 //       signed plan, progress, and the earlier copies a restore kept with Undo and Delete now (admin devices only).
 //  v215: a restore into a quantum-safe server says the webapp can't sign it and points to the phone app.
 //  v216: a publish keeps the page's calls setting (a v2 index stays v2 while calls are on).
-const SHELL_VERSION = "v216";
+//  v218: the admin key is sealed under a passkey and opened for one signature (lib/keyCustody.js); admin orders
+//       carry a hybrid companion from ML-DSA-65 in pinned WebAssembly (lib/mldsaWasm.js, lib/pqSign.js,
+//       lib/adminSigning.js); the shell installs only files that match its manifest, and the page checks the
+//       manifest's release signature before it offers an update (lib/shellTrust.js; docs/webapp-key-custody.md).
+const SHELL_VERSION = "v218";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -575,6 +579,14 @@ const OPTIONAL_SHELL = [
   "/lib/boxKeyPins.js",
   "/lib/bootKey.js",
   "/lib/pqBinding.js",
+  "/lib/keyCustody.js",
+  "/lib/adminSigning.js",
+  "/lib/pqSign.js",
+  "/lib/mldsaWasm.js",
+  "/vendor/mldsa-wasm/mldsa65.wasm",
+  "/lib/shellTrust.js",
+  "/shell-manifest.json",
+  "/shell-signature.json",
   "/lib/releasePqPin.js",
   "/lib/assurancePolicy.js",
   "/vendor/noble-post-quantum/pq-verify.js",
@@ -882,9 +894,41 @@ self.addEventListener("install", (event) => {
       const cache = await caches.open(SHELL_CACHE);
       await precacheEssential(cache);
       await precacheOptional(cache);
+      await checkAgainstManifest(cache);
     })(),
   );
 });
+
+// The deploy's manifest (lib/shellTrust.js) names every shell file's SHA-256. A shell whose files
+// don't match it, or whose manifest is for another version, is not installed: the browser keeps
+// the previous worker. A deploy without a manifest (dev, the gym) installs as before; the page
+// still reports it unsigned.
+async function checkAgainstManifest(cache) {
+  if (typeof cache.match !== "function") return;
+  const res = await cache.match("/shell-manifest.json");
+  if (!res) return;
+  let manifest;
+  try {
+    manifest = JSON.parse(await res.clone().text());
+  } catch {
+    throw new Error("shell manifest unreadable");
+  }
+  if (!manifest || manifest.v !== 1 || manifest.shellVersion !== SHELL_VERSION || typeof manifest.files !== "object") {
+    await caches.delete(SHELL_CACHE);
+    throw new Error(`shell manifest is for ${manifest && manifest.shellVersion}, not ${SHELL_VERSION}`);
+  }
+  for (const path of SHELL) {
+    if (path === "/shell-manifest.json" || path === "/shell-signature.json") continue;
+    const hit = await cache.match(path);
+    if (!hit) continue;
+    const want = manifest.files[path];
+    const got = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await hit.clone().arrayBuffer())), (b) => b.toString(16).padStart(2, "0")).join("");
+    if (want !== got) {
+      await caches.delete(SHELL_CACHE);
+      throw new Error(`shell file ${path} does not match the manifest`);
+    }
+  }
+}
 
 self.addEventListener("activate", (event) => {
   // NOTE: no clients.claim(). The new SW only takes over once existing
@@ -926,6 +970,14 @@ self.addEventListener("fetch", (event) => {
   // additions slip through.
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // The deploy's shell manifest and signature: the page checks the NEW deploy's before it offers
+  // an update (lib/shellTrust.js), so these always come from the network. The running shell's own
+  // copies are read straight from this worker's cache.
+  if (url.pathname === "/shell-manifest.json" || url.pathname === "/shell-signature.json") {
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
     return;
   }
 
@@ -1323,6 +1375,11 @@ self.addEventListener("message", (event) => {
   // for re-loading itself after `controllerchange` fires.
   if (data.type === "SKIP_WAITING" || data === "SKIP_WAITING") {
     self.skipWaiting();
+    return;
+  }
+  // The page asks a waiting worker which shell it is before it checks that shell's signature.
+  if (data.type === "SHELL_VERSION" && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ shellVersion: SHELL_VERSION });
     return;
   }
   if (data.type !== "flagship-e2e:simulate-push") return;

@@ -123,7 +123,7 @@ export interface WebappBuildOptions {
   services?: string;
 }
 
-export async function buildWebappAssets(outDir: string, opts: WebappBuildOptions = {}): Promise<{ files: number }> {
+export async function buildWebappAssets(outDir: string, opts: WebappBuildOptions = {}): Promise<{ files: number; shellSigned: boolean }> {
   const publicDir = opts.publicDir ?? join(REPO_ROOT, "apps/web/public");
   const { _internal } = await import("../apps/com/src/route.js");
   rmSync(outDir, { recursive: true, force: true });
@@ -140,7 +140,14 @@ export async function buildWebappAssets(outDir: string, opts: WebappBuildOptions
     });
   }
   writeFileSync(join(outDir, "_headers"), webappHeadersFile(opts.apex, opts.services));
-  return { files: listFiles(outDir).length };
+  // The shell manifest, and the release signature when one signs exactly this build
+  // (scripts/webapp-shell.ts; docs/webapp-key-custody.md item 5).
+  const { stampShell, shellSignatureRequired } = await import("./webapp-shell.js");
+  const shell = stampShell(outDir);
+  if (!shell.signed && shellSignatureRequired(join(publicDir, "webapp"))) {
+    throw new Error(`webapp shell ${shell.shellVersion} is not signed (manifest ${shell.manifestSha256}): run npx tsx scripts/webapp-shell.ts sign --sign`);
+  }
+  return { files: listFiles(outDir).length, shellSigned: shell.signed };
 }
 
 export function listFiles(dir: string): string[] {

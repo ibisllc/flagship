@@ -43,6 +43,7 @@
 //   3. Explicit risk warning on both screens (the QR shares your account
 //      keys; anyone who scans it can join).
 
+import { exportAdminRootSeed, isAdminRootKey } from "./keyCustody.js";
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 import { isLocalPassphrase } from "./localPassphrase.js";
@@ -485,7 +486,7 @@ export async function runAdminAddDevice(deps) {
   if (!(seed instanceof Uint8Array) || seed.length !== 32) {
     throw new Error("runAdminAddDevice: account seed unavailable");
   }
-  if (!(deps.adminRootSeed instanceof Uint8Array)) throw new Error(ADD_DEVICE_ADMIN_ONLY);
+  if (!isAdminRootKey(deps.adminRootSeed)) throw new Error(ADD_DEVICE_ADMIN_ONLY);
   // Slice D (D-4): promote-at-add-time seals the admin master root INTO the
   // bundle so the new device becomes a bare-root admin. Only meaningful when
   // the caller opts in (default OFF) AND this admin device actually holds the
@@ -493,7 +494,7 @@ export async function runAdminAddDevice(deps) {
   // error — never silently drop the admin the operator asked to grant.
   const promoteAdmin = deps.promoteAdmin === true;
   const adminRootSeed = deps.adminRootSeed ?? null;
-  if (promoteAdmin && (!(adminRootSeed instanceof Uint8Array) || adminRootSeed.length !== 32)) {
+  if (promoteAdmin && !isAdminRootKey(adminRootSeed)) {
     throw new Error("runAdminAddDevice: promote requested but this device holds no admin root");
   }
   const toHex = deps.bytesToHex || defaultBytesToHex;
@@ -533,8 +534,11 @@ export async function runAdminAddDevice(deps) {
   // admin root when promoting (`.com` checks it under the matching key).
   const grant = buildDeviceGrant({ admit, promoted: promoteAdmin, grantId: deps.grantId });
   const grantBytes = deviceGrantCanonicalBytes(grant);
+  // Promoting hands the admin root itself on: it is opened (one passkey prompt) only here, after
+  // the SAS was confirmed, and wiped once sealed.
+  const rawRoot = promoteAdmin ? await exportAdminRootSeed(adminRootSeed) : null;
   const grantSig = promoteAdmin
-    ? await deps.signWithAdminRoot(adminRootSeed, grantBytes)
+    ? await deps.signWithAdminRoot(rawRoot, grantBytes)
     : await deps.signWithIrk(seed, grantBytes);
   const irkPubHex = String(deps.irkPubHex ?? "").toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(irkPubHex)) throw new Error("runAdminAddDevice: account key unavailable");
@@ -552,8 +556,9 @@ export async function runAdminAddDevice(deps) {
     irkPubHex,
     grant,
     grantSignature: toHex(grantSig),
-    ...(promoteAdmin && adminRootSeed ? { wrappedAdminRoot: toHex(adminRootSeed) } : {}),
+    ...(promoteAdmin && rawRoot ? { wrappedAdminRoot: toHex(rawRoot) } : {}),
   };
+  rawRoot?.fill(0);
   await relay.seal(new TextEncoder().encode(JSON.stringify(bundle)));
   relay.close?.();
   return { outcome: "sealed", admit, admitSigHex, grant, promotedAdmin: promoteAdmin };

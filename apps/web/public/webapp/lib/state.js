@@ -5,7 +5,8 @@
 // `getSession()` to read; the bootstrap/unlock flow calls `unlock()`
 // to populate; `lock()` clears.
 
-import { deriveIrkFromSeed, loadAdminRootSeed } from "../keystore.js";
+import { deriveIrkFromSeed } from "../keystore.js";
+import { loadAdminRootKey } from "./keyCustody.js";
 import {
   get as storeGet,
   set as storeSet,
@@ -20,9 +21,11 @@ const _session = {
   umk: null,
   irk: null,
   username: null,
-  // Slice D: the device-local ADMIN MASTER ROOT seed (32 bytes) when this
-  // device holds one, else null (legacy / non-admin device). Sensitive orders
-  // sign with this instead of the membership IRK (see lib/adminRoot.js).
+  // Slice D: the device-local ADMIN MASTER ROOT when this device holds one,
+  // else null (legacy / non-admin device). Sensitive orders sign with this
+  // instead of the membership IRK (see lib/adminRoot.js). It is a handle
+  // (lib/keyCustody.js): public keys and an `open` that asks for the passkey
+  // for one signature; the seed never stays in memory.
   adminRootSeed: null,
 };
 
@@ -42,10 +45,15 @@ export async function unlockSession(seed, username) {
   // sensitive orders sign with it. Best-effort: a legacy/non-admin device
   // has no record → null → sensitive signers fall back to the owner IRK.
   try {
-    _session.adminRootSeed = await loadAdminRootSeed(seed);
+    _session.adminRootSeed = await loadAdminRootKey(() => _session.umk, { userName: adminKeyLabel(_session.username) });
   } catch {
     _session.adminRootSeed = null;
   }
+}
+
+/** The name the browser's passkey prompt shows for this account's admin key. */
+export function adminKeyLabel(username) {
+  return username ? tr("{0} admin key (this browser)", username) : tr("Flagship admin key (this browser)");
 }
 
 const lockListeners = new Set();

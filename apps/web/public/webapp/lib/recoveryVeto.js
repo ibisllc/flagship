@@ -6,6 +6,7 @@
 // pending device key, when it began, its deadline) so it cannot be replayed onto a later
 // one. A veto cancels THIS attempt only; a retry starts a fresh full wait.
 
+import { isAdminRootKey } from "./keyCustody.js";
 import { escapeHtml } from "./util.js";
 import { formatWhen } from "./dateFormat.js";
 import { adminRootPubHex, signWithAdminRoot } from "../keystore.js";
@@ -52,7 +53,7 @@ export function renderRecoveryReview(snapshot, isAdmin, nowMs = Date.now()) {
 
 /** Sign and submit the veto for the snapshot's attempt. The caller has already confirmed. */
 export async function submitRecoveryVeto({ username, pending, adminRootSeed }, deps = {}) {
-  if (!(adminRootSeed instanceof Uint8Array)) throw new Error("administrator authorization required");
+  if (!isAdminRootKey(adminRootSeed)) throw new Error("administrator authorization required");
   const f = deps.fetch || fetch;
   const origin = deps.origin || controlApex();
   const req = {

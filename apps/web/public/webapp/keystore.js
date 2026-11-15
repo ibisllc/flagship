@@ -851,10 +851,15 @@ export async function persistAdminRootSeed(umkSeed, adminSeed, profileId = activ
   const ct = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kek, adminSeed),
   );
+  // A browser that already sealed a root under a passkey keeps that passkey: the new root moves
+  // under it on first use (lib/keyCustody.js) instead of creating a second one.
+  const prev = await dbGet(adminRootRecordKey(profileId));
+  const passkey = prev && prev.version === 2 && typeof prev.credentialId === "string" ? { credentialId: prev.credentialId } : {};
   await dbPut(adminRootRecordKey(profileId), {
     version: 1,
     nonce: bytesToHex(nonce),
     ciphertext: bytesToHex(ct),
+    ...passkey,
   });
 }
 
@@ -871,6 +876,10 @@ export async function generateAdminRoot(umkSeed, profileId = activeProfileId()) 
 export async function loadAdminRootSeed(umkSeed, profileId = activeProfileId()) {
   const blob = await dbGet(adminRootRecordKey(profileId));
   if (!blob) return null;
+  if (blob.version === 2) {
+    // Sealed under a passkey: only lib/keyCustody.js opens it, for one action.
+    throw Object.assign(new Error("admin root is sealed under a passkey"), { code: "custody-sealed" });
+  }
   const kek = await adminRootWrapKey(umkSeed);
   const nonce = hexToBytes(blob.nonce);
   const ct = hexToBytes(blob.ciphertext);
@@ -903,8 +912,14 @@ export async function deriveAdminRootFromSeed(adminSeed) {
 /** The admin master-root public key as lowercase hex — the value published to
  *  `.com` (username claim) + pinned in the recipe AuthCode (`adminRootPubKey`). */
 export async function adminRootPubHex(adminSeed) {
+  if (isLockedKey(adminSeed)) return adminSeed.pubHex;
   const kp = await deriveAdminRootFromSeed(adminSeed);
   return bytesToHex(kp.publicKey);
+}
+
+/** A sealed-key handle from lib/keyCustody.js (kept import-free here to avoid a module cycle). */
+function isLockedKey(x) {
+  return !!x && typeof x === "object" && x[Symbol.for("flagship.lockedKey")] === true;
 }
 
 /** Sign canonical-bytes with the admin master root. Same output shape as
@@ -912,6 +927,16 @@ export async function adminRootPubHex(adminSeed) {
  *  are byte-identical — a sensitive order signs the same bytes, just under the
  *  admin root instead of the membership IRK). */
 export async function signWithAdminRoot(adminSeed, canonicalBytes) {
+  if (isLockedKey(adminSeed)) {
+    // One passkey prompt, one signature, seeds wiped (docs/webapp-key-custody.md item 6).
+    const s = await adminSeed.open();
+    try {
+      return await signWithAdminRoot(s.edSeed, canonicalBytes);
+    } finally {
+      s.edSeed.fill(0);
+      s.mldsaSeed?.fill(0);
+    }
+  }
   const kp = await deriveAdminRootFromSeed(adminSeed);
   return new Uint8Array(
     await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, canonicalBytes),
