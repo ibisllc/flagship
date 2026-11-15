@@ -41,6 +41,17 @@ describe("flagship-web call protocol (test-vectors/voici-calls)", () => {
     expect(H(C.nextVoiciCallFrameKey(fk.c2p))).toBe(V.frames.c2pEpoch1);
   });
 
+  it("an answer signed by a bound call key (answering while locked)", () => {
+    const K = V.callKey;
+    for (const c of K.bindingChecks) expect(C.verifyVoiciCallKeyBinding({ binding: c.binding, signature: c.signature }, c.ctx), c.name).toBe(c.expected);
+    expect(dec(C.canonicalVoiciCallKeyBinding(K.binding.binding))).toBe(K.bindingCanonical);
+    // ctx.callKeyPub is the room's (the key `.com` admitted at join); the browser checks the binding itself.
+    for (const c of K.answer.checks.filter((x: { ctx: { callKeyPub?: string } }) => x.ctx.callKeyPub === undefined)) {
+      const r = C.checkVoiciCallAnswer(c.answer, { request: V.request.signed, ...c.ctx });
+      expect(r.ok ? "ok" : r.code, c.name).toBe(c.expected);
+    }
+  });
+
   it("frames, refusals and the scripted receivers", () => {
     for (const c of V.frames.cases) expect(H(C.sealVoiciCallFrameWithKey(h(c.key), callId, c.dir, c.ctr, h(c.frame)))).toBe(c.sealed);
     for (const c of V.frames.refusals) expect(C.openVoiciCallFrameWithKey(h(c.key), c.callId, c.dir, h(c.sealed)), c.name).toBeNull();

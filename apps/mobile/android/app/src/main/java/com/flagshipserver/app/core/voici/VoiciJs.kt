@@ -150,6 +150,13 @@ internal object VoiciJs {
         return fixed32(rs[0]) + fixed32(sv)
     }
 
+    /** A valid point on P-256 (any SEC1 encoding). */
+    fun isP256Point(pub: ByteArray): Boolean = try {
+        DOMAIN.curve.decodePoint(pub).isValid
+    } catch (_: Exception) {
+        false
+    }
+
     fun p256PublicKey(priv: ByteArray): ByteArray = DOMAIN.g.multiply(BigInteger(1, priv)).normalize().getEncoded(false)
 
     private fun fixed32(n: BigInteger): ByteArray {

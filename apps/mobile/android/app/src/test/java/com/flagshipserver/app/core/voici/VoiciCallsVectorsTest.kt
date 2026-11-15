@@ -23,6 +23,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoiciCallsVectorsTest {
@@ -126,6 +127,47 @@ class VoiciCallsVectorsTest {
         assertNotNull(missed)
         assertEquals("no-answer", missed!!.reason)
         assertNull(VoiciCalls.openMissedCall(inbox, callId, WebEnvelopes.b64Decode(V.o("missedCall").s("forgedSealed"))!!, k.s("pageId"), origin, listOf(k.s("caPub"))))
+    }
+
+    /** Answering while locked: the binding, join and revocation replay; the phone's own call-key answer and end verify. */
+    @Test fun callKey() {
+        val c = V.o("callKey")
+        val priv = h(c.s("priv"))
+        assertEquals(c.s("pub"), H(VoiciJs.p256PublicKey(priv)))
+        val b = c.o("binding").o("binding")
+        assertEquals(c.s("bindingCanonical"), utf8(VoiciCalls.canonicalCallKeyBinding(b.s("username"), b.s("deviceId"), b.s("callKeyPub"), b.l("createdAt"))))
+        assertEquals(WebEnvelopes.canonicalJson(c.o("binding")),
+            WebEnvelopes.canonicalJson(VoiciCalls.signCallKeyBinding(b.s("username"), b.s("deviceId"), b.s("callKeyPub"), b.l("createdAt"), h(k.s("ownerSignSeed")))))
+        for (t in c.a("bindingChecks").map { it.jsonObject }) {
+            val proof = JsonObject(mapOf("binding" to t["binding"]!!, "signature" to t["signature"]!!))
+            assertEquals(t.s("name"), bool(t, "expected"), VoiciCalls.verifyCallKeyBinding(proof, t.o("ctx").s("ownerSignPub"), t.o("ctx").s("username")))
+        }
+        for (t in c.a("bindingShapes").map { it.jsonObject }) {
+            val bb = t.o("binding")
+            val ok = bb.keys == setOf("username", "deviceId", "callKeyPub", "createdAt") && runCatching {
+                VoiciCalls.canonicalCallKeyBinding(VoiciJs.str(bb["username"]) ?: "", VoiciJs.str(bb["deviceId"]) ?: "", VoiciJs.str(bb["callKeyPub"]) ?: "", VoiciJs.time(bb["createdAt"]) ?: -1)
+            }.isSuccess
+            assertEquals(t.s("name"), bool(t, "expected"), ok)
+        }
+        for (t in c.o("join").a("checks").map { it.jsonObject }) {
+            val j = t.o("join")
+            assertEquals(t.s("name"), bool(t, "expected"),
+                VoiciCalls.verifyCallJoin(j.s("username"), j.s("callId"), j.s("deviceId"), j.s("callKeyPub"), j.l("issuedAt"), t.s("signature"), t.l("now")))
+        }
+        for (t in c.o("revoke").a("checks").map { it.jsonObject }) {
+            val r = t.o("revoke")
+            assertEquals(t.s("name"), bool(t, "expected"),
+                r.s("username") == t.o("ctx").s("username") &&
+                    VoiciCalls.verifyCallKeyRevoke(r.s("username"), r.s("deviceId"), r.s("callKeyPub"), r.l("revokedAt"), t.s("signature"), t.o("ctx").s("ownerSignPub")))
+        }
+        val signed = c.o("answer").o("signed")
+        val (body, _) = VoiciCalls.parseAnswer(JsonObject(signed - "callKey"))!!
+        val mine = VoiciCalls.signAnswerWithCallKey(body, c.o("binding")) { VoiciJs.p256Sign(priv, it) }
+        assertTrue(WebEnvelopes.p256VerifyP1363(mine.s("sig"), VoiciCalls.canonicalAnswer(body), c.s("pub")))
+        assertEquals(WebEnvelopes.canonicalJson(c.o("binding")), WebEnvelopes.canonicalJson(mine.o("callKey")))
+        assertEquals(VoiciCalls.deviceRef(c.s("pub")), body.deviceRef)
+        val end = VoiciCalls.signEndOwnerWithCallKey(body.callId, "hangup", 1) { VoiciJs.p256Sign(priv, it) }
+        assertTrue(WebEnvelopes.p256VerifyP1363(end.s("sig"), VoiciCalls.canonicalEnd(body.callId, "owner", "hangup", 1), c.s("pub")))
     }
 
     @Test fun video() {

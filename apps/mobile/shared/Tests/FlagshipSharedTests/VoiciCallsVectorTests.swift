@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import FlagshipCore
 
 /// Pins VoiciCalls.swift to packages/protocol/test-vectors/voici-calls/vectors.json (tools/voici-calls-vectors.ts; the
@@ -129,6 +130,59 @@ final class VoiciCallsVectorTests: XCTestCase {
         XCTAssertEqual(missed?.request.from, S.s(k["pseudonymPub"]))
         XCTAssertNil(VoiciCalls.openMissedCall(inboxSeed: inbox, callId: callId, sealed: try XCTUnwrap(CanonicalJson.b64Decode(S.s(mc["forgedSealed"]))),
                                                pageId: S.s(k["pageId"]), origin: origin, caKeys: [S.s(k["caPub"])]))
+    }
+
+    /// Answering while locked: the binding, join and revocation replay; the phone's own call-key answer and end verify.
+    func testCallKey() throws {
+        let v = try vectors(), c = try XCTUnwrap(v["callKey"]), k = try XCTUnwrap(v["keys"])
+        let priv = try P256.Signing.PrivateKey(rawRepresentation: S.h(c["priv"]))
+        XCTAssertEqual(CanonicalJson.hex(Array(priv.publicKey.x963Representation)), S.s(c["pub"]))
+        let b = try XCTUnwrap(c["binding"]?["binding"])
+        XCTAssertEqual(S.text(try VoiciCalls.canonicalCallKeyBinding(username: S.s(b["username"]), deviceId: S.s(b["deviceId"]), callKeyPub: S.s(b["callKeyPub"]),
+                                                                     createdAt: S.i(b["createdAt"]))), S.s(c["bindingCanonical"]))
+        // CryptoKit's Ed25519 is randomized: the phone's own binding has the same body and verifies.
+        let mine = try VoiciCalls.signCallKeyBinding(username: S.s(b["username"]), deviceId: S.s(b["deviceId"]), callKeyPub: S.s(b["callKeyPub"]),
+                                                     createdAt: S.i(b["createdAt"]), ownerSignSeed: S.h(k["ownerSignSeed"]))
+        XCTAssertEqual(S.cj(mine["binding"]!), S.cj(b))
+        XCTAssertTrue(VoiciCalls.verifyCallKeyBinding(mine, ownerSignPub: S.s(k["ownerSignPub"]), username: S.s(b["username"])))
+        for t in S.a(c["bindingChecks"]) {
+            let proof: JSONValue = .object(["binding": t["binding"]!, "signature": t["signature"]!])
+            XCTAssertEqual(VoiciCalls.verifyCallKeyBinding(proof, ownerSignPub: S.s(t["ctx"]?["ownerSignPub"]), username: S.s(t["ctx"]?["username"])),
+                           t["expected"] == .bool(true), S.s(t["name"]))
+        }
+        for t in S.a(c["bindingShapes"]) {
+            let bb = t["binding"]!
+            let ok = bb.object.map { Set($0.keys) == ["username", "deviceId", "callKeyPub", "createdAt"] } == true
+                && (try? VoiciCalls.canonicalCallKeyBinding(username: bb["username"]?.string ?? "", deviceId: bb["deviceId"]?.string ?? "",
+                                                           callKeyPub: bb["callKeyPub"]?.string ?? "", createdAt: bb["createdAt"]?.time ?? -1)) != nil
+            XCTAssertEqual(ok, t["expected"] == .bool(true), S.s(t["name"]))
+        }
+        for t in S.a(c["join"]?["checks"]) {
+            let j = t["join"]!
+            XCTAssertEqual(VoiciCalls.verifyCallJoin(username: S.s(j["username"]), callId: S.s(j["callId"]), deviceId: S.s(j["deviceId"]), callKeyPub: S.s(j["callKeyPub"]),
+                                                     issuedAt: S.i(j["issuedAt"]), signature: S.s(t["signature"]), now: S.i(t["now"])), t["expected"] == .bool(true), S.s(t["name"]))
+        }
+        for t in S.a(c["revoke"]?["checks"]) {
+            let r = t["revoke"]!
+            XCTAssertEqual(r["username"]?.string == S.s(t["ctx"]?["username"]) &&
+                           VoiciCalls.verifyCallKeyRevoke(username: S.s(r["username"]), deviceId: S.s(r["deviceId"]), callKeyPub: S.s(r["callKeyPub"]),
+                                                          revokedAt: S.i(r["revokedAt"]), signature: S.s(t["signature"]), ownerSignPub: S.s(t["ctx"]?["ownerSignPub"])),
+                           t["expected"] == .bool(true), S.s(t["name"]))
+        }
+        // The phone's own call-key answer: same canonical bytes as the TS one, P-256 by the call key, carrying the proof.
+        guard let (body, _) = VoiciCalls.parseAnswer(stripCallKey(c["answer"]?["signed"])) else { return XCTFail("answer") }
+        let signed = try VoiciCalls.signAnswerWithCallKey(body, proof: c["binding"]!) { Array(try priv.signature(for: $0).rawRepresentation) }
+        XCTAssertTrue(CanonicalJson.p256VerifyP1363(S.s(signed["sig"]), try VoiciCalls.canonicalAnswer(body), S.s(c["pub"])))
+        XCTAssertEqual(S.cj(signed["callKey"]!), S.cj(c["binding"]!))
+        XCTAssertEqual(body.deviceRef, try VoiciCalls.deviceRef(devicePubHex: S.s(c["pub"])))
+        let end = try VoiciCalls.signEndOwnerWithCallKey(callId: body.callId, reason: "hangup", issuedAt: 1) { Array(try priv.signature(for: $0).rawRepresentation) }
+        XCTAssertTrue(CanonicalJson.p256VerifyP1363(S.s(end["sig"]), try VoiciCalls.canonicalEnd(callId: body.callId, side: "owner", reason: "hangup", issuedAt: 1), S.s(c["pub"])))
+    }
+
+    private func stripCallKey(_ v: JSONValue?) -> JSONValue? {
+        guard var o = v?.object else { return nil }
+        o["callKey"] = nil
+        return .object(o)
     }
 
     func testVideo() throws {

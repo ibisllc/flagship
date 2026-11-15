@@ -2965,6 +2965,860 @@
       }
     ]
   },
+  "callKey": {
+    "priv": "7171717171717171717171717171717171717171717171717171717171717171",
+    "pub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+    "otherPriv": "7272727272727272727272727272727272727272727272727272727272727272",
+    "otherPub": "04515a01505234a85ea5f577a55ec3ef380f1c1ff6831a5f9b2865a29d41029dcef9005ff9cda331eec4d4a141dc5b7be7216980269c57b9ed83cfca1718fe2203",
+    "username": "alice",
+    "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+    "binding": {
+      "binding": {
+        "username": "alice",
+        "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+        "createdAt": 1799913600000
+      },
+      "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+    },
+    "bindingCanonical": "flagship/voici-call-key/v1|alice|d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1|0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54|1799913600000",
+    "bindingChecks": [
+      {
+        "name": "valid",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05",
+        "ctx": {
+          "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+          "username": "alice"
+        },
+        "expected": true
+      },
+      {
+        "name": "another account",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05",
+        "ctx": {
+          "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+          "username": "bob"
+        },
+        "expected": false
+      },
+      {
+        "name": "key swapped after signing",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "04515a01505234a85ea5f577a55ec3ef380f1c1ff6831a5f9b2865a29d41029dcef9005ff9cda331eec4d4a141dc5b7be7216980269c57b9ed83cfca1718fe2203",
+          "createdAt": 1799913600000
+        },
+        "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05",
+        "ctx": {
+          "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+          "username": "alice"
+        },
+        "expected": false
+      },
+      {
+        "name": "device swapped after signing",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05",
+        "ctx": {
+          "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+          "username": "alice"
+        },
+        "expected": false
+      },
+      {
+        "name": "signed by the pseudonym",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "signature": "62d050b37c87c230684a4550c1c5064c39b6f84181eb31ca4bce7f588b15bcc5c96285e20700e47ba7dcf310659bc257512b41a91a8e19c3724550f9bbc69408",
+        "ctx": {
+          "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+          "username": "alice"
+        },
+        "expected": false
+      },
+      {
+        "name": "signed by the call key's owner of another page",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "signature": "7ba079f7489ad36688133c65d9686453840883656789c85258cf4cb97af10c5bf62a104fdbfe31e3301172b17589c2222571986739b5c95be7a673f30ebe9808",
+        "ctx": {
+          "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+          "username": "alice"
+        },
+        "expected": false
+      }
+    ],
+    "bindingShapes": [
+      {
+        "name": "valid",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "expected": true
+      },
+      {
+        "name": "extra key",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000,
+          "extra": 1
+        },
+        "expected": false
+      },
+      {
+        "name": "compressed key",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0224d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be",
+          "createdAt": 1799913600000
+        },
+        "expected": false
+      },
+      {
+        "name": "not on the curve",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0411111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+          "createdAt": 1799913600000
+        },
+        "expected": false
+      },
+      {
+        "name": "uppercase key",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424D839C97AC374C8B4D501B3024C04E2866A5A8905448995522F285D37FBF1BE70C6A32182E59B94F19030607CCD566E1F5FD4A2B82D10B42629AECFB9943B54",
+          "createdAt": 1799913600000
+        },
+        "expected": false
+      },
+      {
+        "name": "short device id",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "expected": false
+      },
+      {
+        "name": "bad username",
+        "binding": {
+          "username": "Alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1799913600000
+        },
+        "expected": false
+      },
+      {
+        "name": "fractional time",
+        "binding": {
+          "username": "alice",
+          "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+          "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "createdAt": 1.5
+        },
+        "expected": false
+      }
+    ],
+    "answer": {
+      "body": {
+        "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+        "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+        "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+        "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+        "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+        "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+        "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+        "issuedAt": 1800000005000
+      },
+      "signed": {
+        "v": 1,
+        "kind": "voici-call-answer",
+        "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+        "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+        "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+        "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+        "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+        "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+        "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+        "issuedAt": 1800000005000,
+        "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+        "callKey": {
+          "binding": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "createdAt": 1799913600000
+          },
+          "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+        }
+      },
+      "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+      "checks": [
+        {
+          "name": "valid (browser)",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "ok"
+        },
+        {
+          "name": "valid (room, the joined key)",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54"
+          },
+          "expected": "ok"
+        },
+        {
+          "name": "room joined another key",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice",
+            "callKeyPub": "04515a01505234a85ea5f577a55ec3ef380f1c1ff6831a5f9b2865a29d41029dcef9005ff9cda331eec4d4a141dc5b7be7216980269c57b9ed83cfca1718fe2203"
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "no account to check the binding",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "binding of another account",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "bob"
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "deviceRef not the call key's",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "d2f381d7b0b5f1d39239f186fdee4dd3bdba42ce9448709c1d54741131e7f814",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "f0306f5f91e8ffe639a6132ef75749adf18e65c374707ffe78c6c4e347e7ac65442e7e6c45cf457db475612637974b94023d7a7202aac6d0d7fc481a39256176",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "signed by an unbound key",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "291527c0b079d4d225a0d8d32cbeab227f7dd44f8661ea7187cef906ab5de1c265526e1fd60343f3f694fe53fbf46401a395475d74d411a86a7dd197b64a859d",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-signature"
+        },
+        {
+          "name": "binding forged by the pseudonym",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "62d050b37c87c230684a4550c1c5064c39b6f84181eb31ca4bce7f588b15bcc5c96285e20700e47ba7dcf310659bc257512b41a91a8e19c3724550f9bbc69408"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "owner-signed answer with a call key attached",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "d2f381d7b0b5f1d39239f186fdee4dd3bdba42ce9448709c1d54741131e7f814",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "b62f58f7a9cf35c696fde370c29da7ce20b4fa24c1efa77bf9b73335257b91e99244db6f83bb9e9ecd0d74ab533fabf41a2443d25826734b4710e07be9f9ca0d",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "owner-signed answer where the room joined a call key",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "d2f381d7b0b5f1d39239f186fdee4dd3bdba42ce9448709c1d54741131e7f814",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "b62f58f7a9cf35c696fde370c29da7ce20b4fa24c1efa77bf9b73335257b91e99244db6f83bb9e9ecd0d74ab533fabf41a2443d25826734b4710e07be9f9ca0d"
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54"
+          },
+          "expected": "bad-signature"
+        },
+        {
+          "name": "call key signs without a proof",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84"
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-signature"
+        },
+        {
+          "name": "proof with an extra key",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "5ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec75ec7",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05",
+              "extra": 1
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-call-key"
+        },
+        {
+          "name": "turn secret swapped",
+          "answer": {
+            "v": 1,
+            "kind": "voici-call-answer",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceRef": "046ad3b7b7f9dbefa25abb7360617692f3ecf2fa91b45c87b5bea8add2b6efc7",
+            "requestHash": "5b9f9348a44da22f62058bb59ea8a1d7c83672718f071be304ddc8bd117a0993",
+            "xwingCiphertext": "d75358cfcf43955c0041cd57230cb7968f08a151fe36ed5342c69e6fb01a6b72891e73b8c910f5af6d26c242ff3a36591562d895744dca560a8613340e709f0983eb3cec5f9889d0ecbc9fb849895a8b2dfc2a47cbac20e602776d0f12812abd7af9f1dd667de479551ae22822e91fbeadf39ade7a824e3f8086ba2deb7004f9cf1c2845b23cf9a9889b0e709afd5b0118f2d5dde923f5bfe780cf6d02d75fc3744bffb32d0512257f0fdb6f64ba063e11b1a083f21ee993207405ccd62b839a2c3e8caa5aa4feacafac0a0423a09725bd4e17358c4455ebde96112c2472f614898b109b7a83510d76904bfbb32070be81e9cfdbb02ee4ef46044fa9c73b37d2be0ce573a1b075eebb5e8c1801a6b5b9700ec11f9386de5f893d0218dea3a7fb4927d9b0401e2590dc0fcfa1c39c3bf2cde3b2d321e5bcd5ee3ffd407c6b81257416deb8099211995075b6d162f0d94896ec965172b1ff4cdfce44228e6a143664cc75d3a5f9de5d7925371fa6e4f46588a4135fcb4418b2ed5de7d903a56245608cb50eb49eaea3e2f00137029c7a3ad0d7dade016be3352faeed803f65a77357c2e63720ed2b334523c28199fdb5418f8f0c804351c321629d7817a7240db6a84f36df9d279c6b75b2d05982ae2c9f644cdf9537fcde6e9681bd326085445322d112e2755934719331884d8d64cab1af286318bd99fb6c07fe4d04ba58f22267dc3a693be0ed099b590ee8504dcdbfbb13c3289e76e53e7af57853e33626376cbcf6f68f5010289e9a90d22b6c317671ca251ddc9c16b9ff2a5c42357749f18447eddd437775f9682dea9e54ab285de824a901c3a1099219d47f03441086b1a12e0180bdb98102cf951a45dbfe37af6ec362662c797872e663799f8bb0e39c64b08a71577310acc720c491a8c68c5d9722b7b516408a5b47aabc1355685843180f841dea129a3528c04615d2d7f63273c6394b25c9d91245b3465f8c6a71fa60e954c8133036b9d1e0d711201ab5f9a584201f2a111831e53f19369924c2eaaaa7ec5be7229b64eb4b649b8550603b3dc72916784bc4fb0d0450e8a078f10f931b50ce122f7ddb7e9bccf6f45457d5fa717d0f6a5055194a1c6cf5714974b0002c9a4295174d56458492b1e97bb4d51c9527cda95c0ee4a087aa8957ba9f342ccd076c7345e617632b61507d4b1a7c56993701e84355e2ea25136bda07844cce3f434b72679a53e6bfe44dd602c6c5861ca58fbc280d3022071a19cd2559a7e4116608c31e83a06e023764455d4b18bb94e1670b7c1f0dace5f12431f13fb193095bf66daf2f809bf0f1ec32fa97fac598b0e675097b682433255229a2c3489aa9cbd64dcff8c107a8a1207ddc7ae850b502949d2d12d332acc95cb839c4352bd8b2ae4dd622fe96e137ee710cd51695a333a0147ea00649f3c42c0ddb4fd3127aa1d01419538aed3702703143aa695efa1a6bfa73659b3eadce9a68f2570b058aec3e4a2576fb39248c854bde826f55eb886d86cd85013b43a4b5cb3efbe2c181d64580af6c2f7f661c99d52b11016c85b2d807ad18be1275b463c1054919",
+            "answerSdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:Wq3t\r\na=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT\r\na=ice-options:trickle\r\na=fingerprint:sha-256 A0:A1:A2:A3:A4:A5:A6:A7:A8:A9:AA:AB:AC:AD:AE:AF:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF\r\na=setup:active\r\na=mid:0\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=ptime:20\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=24000\r\na=ssrc:1001 cname:q8Xl1xVb4c2r3Yz5\r\na=ssrc:1001 msid:- 7d1f3a3c-6f0e-4b39-9f2e-3f0f3c6a1e55\r\n",
+            "turnUser": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "turnSecret": "0000000000000000000000000000000000000000000000000000000000000000",
+            "issuedAt": 1800000005000,
+            "sig": "af01043186056092f658bda2594621a96adb8a52c4a8bda0d782d1f41d501ae342c2a84a081223d5e60e142cca489b279e2feba07acbfe435f5b8415eb90ec84",
+            "callKey": {
+              "binding": {
+                "username": "alice",
+                "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+                "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+                "createdAt": 1799913600000
+              },
+              "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05"
+            }
+          },
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "now": 1800000030000,
+            "username": "alice"
+          },
+          "expected": "bad-signature"
+        }
+      ]
+    },
+    "join": {
+      "body": {
+        "username": "alice",
+        "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+        "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+        "issuedAt": 1800000002000
+      },
+      "canonical": "flagship/voici-call-join/v1|alice|ca11ca11ca11ca11ca11ca11ca11ca11|d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1|0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54|1800000002000",
+      "signature": "40c5fd0fd5bee5b1f5838ce6029c8f90fc61b5ae2441596b1b570a4f8939505b48dcef99c045d388340afabf4aa1358c15dd31af0e78065fa7fc7947b1e3cfc0",
+      "checks": [
+        {
+          "name": "valid",
+          "join": {
+            "username": "alice",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "issuedAt": 1800000002000
+          },
+          "signature": "40c5fd0fd5bee5b1f5838ce6029c8f90fc61b5ae2441596b1b570a4f8939505b48dcef99c045d388340afabf4aa1358c15dd31af0e78065fa7fc7947b1e3cfc0",
+          "now": 1800000003000,
+          "expected": true
+        },
+        {
+          "name": "another call",
+          "join": {
+            "username": "alice",
+            "callId": "00000000000000000000000000000000",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "issuedAt": 1800000002000
+          },
+          "signature": "40c5fd0fd5bee5b1f5838ce6029c8f90fc61b5ae2441596b1b570a4f8939505b48dcef99c045d388340afabf4aa1358c15dd31af0e78065fa7fc7947b1e3cfc0",
+          "now": 1800000003000,
+          "expected": false
+        },
+        {
+          "name": "another device",
+          "join": {
+            "username": "alice",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceId": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "issuedAt": 1800000002000
+          },
+          "signature": "40c5fd0fd5bee5b1f5838ce6029c8f90fc61b5ae2441596b1b570a4f8939505b48dcef99c045d388340afabf4aa1358c15dd31af0e78065fa7fc7947b1e3cfc0",
+          "now": 1800000003000,
+          "expected": false
+        },
+        {
+          "name": "signed by another key",
+          "join": {
+            "username": "alice",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "issuedAt": 1800000002000
+          },
+          "signature": "a4d3fc63334137a453bf45a606afaed4d64638558d816516cd0d70a55d9049952ff45fa5c3ee595a47ebbbd2f254edd064c0b48cc9db1a64fb03cfc15a8d64a6",
+          "now": 1800000003000,
+          "expected": false
+        },
+        {
+          "name": "stale",
+          "join": {
+            "username": "alice",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "issuedAt": 1800000002000
+          },
+          "signature": "40c5fd0fd5bee5b1f5838ce6029c8f90fc61b5ae2441596b1b570a4f8939505b48dcef99c045d388340afabf4aa1358c15dd31af0e78065fa7fc7947b1e3cfc0",
+          "now": 1800000602001,
+          "expected": false
+        }
+      ]
+    },
+    "revoke": {
+      "body": {
+        "username": "alice",
+        "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+        "revokedAt": 1800000090000
+      },
+      "canonical": "flagship/voici-call-key-revoke/v1|alice|d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1|0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54|1800000090000",
+      "ownerSignature": "ededa81aaac1a95050e89d83baf5ac024860bf9c26d53ddca800310fa193f3c2542d880bf609f3d653c28f8d0194824c41bea141d837d0d5b190109707664e0c",
+      "selfSignature": "fbe8ab6d3d0bf1076f541395cb3e694c36021f2cb972f639931bc31fdbff3e56257767832eee3f900ab63394e7cfa8a24d0bc54fcd01054d88d9df0744a4f91d",
+      "checks": [
+        {
+          "name": "by the owner key",
+          "revoke": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "revokedAt": 1800000090000
+          },
+          "signature": "ededa81aaac1a95050e89d83baf5ac024860bf9c26d53ddca800310fa193f3c2542d880bf609f3d653c28f8d0194824c41bea141d837d0d5b190109707664e0c",
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "username": "alice"
+          },
+          "expected": true
+        },
+        {
+          "name": "by the call key itself",
+          "revoke": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "revokedAt": 1800000090000
+          },
+          "signature": "fbe8ab6d3d0bf1076f541395cb3e694c36021f2cb972f639931bc31fdbff3e56257767832eee3f900ab63394e7cfa8a24d0bc54fcd01054d88d9df0744a4f91d",
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "username": "alice"
+          },
+          "expected": true
+        },
+        {
+          "name": "by another call key",
+          "revoke": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "revokedAt": 1800000090000
+          },
+          "signature": "4436e31633e067ef6feacc82ffc7d3a6daaf6818574cd27924d03027d44a41f77e31c4396833ddb44a8477060b11a08229552a5296dc7e4141f80a138061c468",
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "username": "alice"
+          },
+          "expected": false
+        },
+        {
+          "name": "another account",
+          "revoke": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "revokedAt": 1800000090000
+          },
+          "signature": "ededa81aaac1a95050e89d83baf5ac024860bf9c26d53ddca800310fa193f3c2542d880bf609f3d653c28f8d0194824c41bea141d837d0d5b190109707664e0c",
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "username": "bob"
+          },
+          "expected": false
+        },
+        {
+          "name": "key swapped",
+          "revoke": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "04515a01505234a85ea5f577a55ec3ef380f1c1ff6831a5f9b2865a29d41029dcef9005ff9cda331eec4d4a141dc5b7be7216980269c57b9ed83cfca1718fe2203",
+            "revokedAt": 1800000090000
+          },
+          "signature": "fbe8ab6d3d0bf1076f541395cb3e694c36021f2cb972f639931bc31fdbff3e56257767832eee3f900ab63394e7cfa8a24d0bc54fcd01054d88d9df0744a4f91d",
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "username": "alice"
+          },
+          "expected": false
+        },
+        {
+          "name": "binding signature reused as a revocation",
+          "revoke": {
+            "username": "alice",
+            "deviceId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "callKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+            "revokedAt": 1800000090000
+          },
+          "signature": "f7fbedb7ad5c37609512674f7aac50b4946220e180e7c26e05b4b45a5609631bd5735c2fd6ef7ccf3023fcc8ac22057ec7aa73a351c588bfe181df447f17ca05",
+          "ctx": {
+            "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+            "username": "alice"
+          },
+          "expected": false
+        }
+      ]
+    },
+    "end": {
+      "signed": {
+        "v": 1,
+        "kind": "voici-call-end",
+        "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+        "reason": "hangup",
+        "issuedAt": 1800000060000,
+        "side": "owner",
+        "sig": "1bf12d60bddfa40926f2592cf9a8dd5cba888c69cc3bafee8dc501469ef5febf4d2fac649f4ab3ff2295ca508775a16970480e95b32a31180b40fe3eee464a83"
+      },
+      "checks": [
+        {
+          "name": "the answering call key",
+          "end": {
+            "v": 1,
+            "kind": "voici-call-end",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "reason": "hangup",
+            "issuedAt": 1800000060000,
+            "side": "owner",
+            "sig": "1bf12d60bddfa40926f2592cf9a8dd5cba888c69cc3bafee8dc501469ef5febf4d2fac649f4ab3ff2295ca508775a16970480e95b32a31180b40fe3eee464a83"
+          },
+          "ownerCallKeyPub": "0424d839c97ac374c8b4d501b3024c04e2866a5a8905448995522f285d37fbf1be70c6a32182e59b94f19030607ccd566e1f5fd4a2b82d10b42629aecfb9943b54",
+          "expected": true
+        },
+        {
+          "name": "no call key answered",
+          "end": {
+            "v": 1,
+            "kind": "voici-call-end",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "reason": "hangup",
+            "issuedAt": 1800000060000,
+            "side": "owner",
+            "sig": "1bf12d60bddfa40926f2592cf9a8dd5cba888c69cc3bafee8dc501469ef5febf4d2fac649f4ab3ff2295ca508775a16970480e95b32a31180b40fe3eee464a83"
+          },
+          "ownerCallKeyPub": null,
+          "expected": false
+        },
+        {
+          "name": "another call key answered",
+          "end": {
+            "v": 1,
+            "kind": "voici-call-end",
+            "callId": "ca11ca11ca11ca11ca11ca11ca11ca11",
+            "reason": "hangup",
+            "issuedAt": 1800000060000,
+            "side": "owner",
+            "sig": "1bf12d60bddfa40926f2592cf9a8dd5cba888c69cc3bafee8dc501469ef5febf4d2fac649f4ab3ff2295ca508775a16970480e95b32a31180b40fe3eee464a83"
+          },
+          "ownerCallKeyPub": "04515a01505234a85ea5f577a55ec3ef380f1c1ff6831a5f9b2865a29d41029dcef9005ff9cda331eec4d4a141dc5b7be7216980269c57b9ed83cfca1718fe2203",
+          "expected": false
+        }
+      ]
+    }
+  },
   "missedCall": {
     "entry": {
       "request": {

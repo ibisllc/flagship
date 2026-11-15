@@ -575,6 +575,89 @@ public enum VoiciCalls {
         ["pageId": .string(pageId), "conv": .string(conv), "op": .string(op), "issuedAt": .int(issuedAt)]
     }
 
+    // MARK: call key (answering while locked; docs/voici-calls.md, owner decisions 2026-11-15)
+
+    public static let tagCallKey = "flagship/voici-call-key/v1"
+    public static let tagCallKeyRevoke = "flagship/voici-call-key-revoke/v1"
+    public static let tagCallJoin = "flagship/voici-call-join/v1"
+
+    /// A SEC1 uncompressed P-256 point, lowercase hex.
+    public static func isCallKeyPub(_ pub: String) -> Bool {
+        guard CanonicalJson.isLowerHex(pub, bytes: 65), pub.hasPrefix("04"), let b = try? CanonicalJson.hexToBytes(pub) else { return false }
+        return (try? P256.Signing.PublicKey(x963Representation: b)) != nil
+    }
+
+    static func isDeviceId(_ s: String) -> Bool { CanonicalJson.isLowerHex(s, bytes: 16) }
+
+    public static func canonicalCallKeyBinding(username: String, deviceId: String, callKeyPub: String, createdAt: Int64) throws -> [UInt8] {
+        guard isUsername(username), isDeviceId(deviceId), isCallKeyPub(callKeyPub), CanonicalJson.isTime(createdAt)
+        else { throw CanonicalJsonError("\(tagCallKey): bad field") }
+        return CanonicalJson.join([tagCallKey, username, deviceId, callKeyPub, String(createdAt)])
+    }
+
+    /// `{binding:{username, deviceId, callKeyPub, createdAt}, signature}` signed by the page's owner messages key.
+    public static func signCallKeyBinding(username: String, deviceId: String, callKeyPub: String, createdAt: Int64, ownerSignSeed: [UInt8]) throws -> JSONValue {
+        let sig = try CanonicalJson.ed25519SignHex(try canonicalCallKeyBinding(username: username, deviceId: deviceId, callKeyPub: callKeyPub, createdAt: createdAt), seed: ownerSignSeed)
+        return .object(["binding": .object(["username": .string(username), "deviceId": .string(deviceId), "callKeyPub": .string(callKeyPub),
+                                            "createdAt": .number(Double(createdAt))]), "signature": .string(sig)])
+    }
+
+    public static func verifyCallKeyBinding(_ proof: JSONValue?, ownerSignPub: String, username: String) -> Bool {
+        guard let p = proof?.object, Set(p.keys) == ["binding", "signature"], let b = p["binding"]?.object,
+              Set(b.keys) == ["username", "deviceId", "callKeyPub", "createdAt"], let sig = p["signature"]?.string, CanonicalJson.isLowerHex(sig, bytes: 64),
+              let u = b["username"]?.string, u == username, let d = b["deviceId"]?.string, let k = b["callKeyPub"]?.string, let at = b["createdAt"]?.time,
+              let bytes = try? canonicalCallKeyBinding(username: u, deviceId: d, callKeyPub: k, createdAt: at) else { return false }
+        return CanonicalJson.ed25519VerifyHex(sig, bytes, ownerSignPub)
+    }
+
+    public static func canonicalCallKeyRevoke(username: String, deviceId: String, callKeyPub: String, revokedAt: Int64) throws -> [UInt8] {
+        guard isUsername(username), isDeviceId(deviceId), isCallKeyPub(callKeyPub), CanonicalJson.isTime(revokedAt)
+        else { throw CanonicalJsonError("\(tagCallKeyRevoke): bad field") }
+        return CanonicalJson.join([tagCallKeyRevoke, username, deviceId, callKeyPub, String(revokedAt)])
+    }
+
+    /// A revocation under the owner key (Ed25519) or the revoked call key itself (P-256).
+    public static func verifyCallKeyRevoke(username: String, deviceId: String, callKeyPub: String, revokedAt: Int64, signature: String, ownerSignPub: String) -> Bool {
+        guard let bytes = try? canonicalCallKeyRevoke(username: username, deviceId: deviceId, callKeyPub: callKeyPub, revokedAt: revokedAt) else { return false }
+        return CanonicalJson.ed25519VerifyHex(signature, bytes, ownerSignPub) || CanonicalJson.p256VerifyP1363(signature, bytes, callKeyPub)
+    }
+
+    public static func revokeJson(username: String, deviceId: String, callKeyPub: String, revokedAt: Int64) -> JSONValue {
+        ["username": .string(username), "deviceId": .string(deviceId), "callKeyPub": .string(callKeyPub), "revokedAt": .number(Double(revokedAt))]
+    }
+
+    public static func canonicalCallJoin(username: String, callId: String, deviceId: String, callKeyPub: String, issuedAt: Int64) throws -> [UInt8] {
+        guard isUsername(username), CanonicalJson.isLowerHex(callId, bytes: 16), isDeviceId(deviceId), isCallKeyPub(callKeyPub), CanonicalJson.isTime(issuedAt)
+        else { throw CanonicalJsonError("\(tagCallJoin): bad field") }
+        return CanonicalJson.join([tagCallJoin, username, callId, deviceId, callKeyPub, String(issuedAt)])
+    }
+
+    public static func verifyCallJoin(username: String, callId: String, deviceId: String, callKeyPub: String, issuedAt: Int64, signature: String, now: Int64) -> Bool {
+        guard abs(issuedAt - now) <= skewMs,
+              let bytes = try? canonicalCallJoin(username: username, callId: callId, deviceId: deviceId, callKeyPub: callKeyPub, issuedAt: issuedAt) else { return false }
+        return CanonicalJson.p256VerifyP1363(signature, bytes, callKeyPub)
+    }
+
+    /// The answer signed by a bound call key: `sign` returns the IEEE P1363 (r‖s) P-256 signature of the bytes.
+    public static func signAnswerWithCallKey(_ a: VoiciCallAnswerBody, proof: JSONValue, sign: ([UInt8]) throws -> [UInt8]) throws -> JSONValue {
+        let sig = try sign(try canonicalAnswer(a))
+        guard sig.count == 64 else { throw CanonicalJsonError("\(tagAnswer): bad call-key signature") }
+        var o: [String: JSONValue] = ["v": .number(1), "kind": .string("voici-call-answer"), "callId": .string(a.callId), "deviceRef": .string(a.deviceRef),
+                                      "requestHash": .string(a.requestHash), "xwingCiphertext": .string(a.xwingCiphertext), "answerSdp": .string(a.answerSdp),
+                                      "turnUser": .string(a.turnUser), "turnSecret": .string(a.turnSecret), "issuedAt": .number(Double(a.issuedAt)),
+                                      "sig": .string(CanonicalJson.hex(sig)), "callKey": proof]
+        if let m = a.media { o["media"] = .string(m) }
+        return .object(o)
+    }
+
+    /// The owner's end order signed by the call key that answered.
+    public static func signEndOwnerWithCallKey(callId: String, reason: String, issuedAt: Int64, sign: ([UInt8]) throws -> [UInt8]) throws -> JSONValue {
+        let sig = try sign(try canonicalEnd(callId: callId, side: "owner", reason: reason, issuedAt: issuedAt))
+        guard sig.count == 64 else { throw CanonicalJsonError("\(tagEnd): bad call-key signature") }
+        return .object(["v": .number(1), "kind": .string("voici-call-end"), "callId": .string(callId), "side": .string("owner"),
+                        "reason": .string(reason), "issuedAt": .number(Double(issuedAt)), "sig": .string(CanonicalJson.hex(sig))])
+    }
+
     // MARK: push, missed call
 
     static func openCanonical(_ seed: [UInt8], purpose: String, callId: String, sealed: [UInt8]) -> [String: JSONValue]? {

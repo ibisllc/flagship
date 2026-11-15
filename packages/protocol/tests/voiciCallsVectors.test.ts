@@ -1,5 +1,6 @@
 // Replays packages/protocol/test-vectors/voici-calls/ (tools/voici-calls-vectors.ts) against the TypeScript and checks
 // the generator's output is fresh. Swift, Kotlin and flagship-web read the same file.
+import { p256 } from "@noble/curves/nist.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,6 +35,24 @@ describe("voici-calls vectors", () => {
     expect(P.mungeVoiciCallSdp(V.sdp.answerRaw)).toBe(V.sdp.answer);
     expect(P.voiciCallSdpFingerprint(V.sdp.offer)).toBe(V.sdp.offerFingerprint);
     for (const c of V.sdp.checks) expect(P.checkVoiciCallSdp(c.sdp), c.name).toBe(c.expected);
+  });
+
+  it("the call key: binding, answer, join, revocation, end (answering while locked)", () => {
+    const c = V.callKey;
+    expect(H(p256.getPublicKey(h(c.priv), false))).toBe(c.pub);
+    expect(dec(P.canonicalVoiciCallKeyBinding(c.binding.binding))).toBe(c.bindingCanonical);
+    for (const t of c.bindingChecks) expect(P.verifyVoiciCallKeyBinding(t.binding, t.signature, t.ctx), t.name).toBe(t.expected);
+    for (const t of c.bindingShapes) expect(P.parseVoiciCallKeyBinding(t.binding) !== null, t.name).toBe(t.expected);
+    expect(P.voiciCallDeviceRef(c.pub)).toBe(c.answer.deviceRef);
+    for (const t of c.answer.checks) expect(code(P.checkVoiciCallAnswer(t.answer, { request: V.request.signed, ...t.ctx })), t.name).toBe(t.expected);
+    expect(dec(P.canonicalVoiciCallJoin(c.join.body))).toBe(c.join.canonical);
+    for (const t of c.join.checks) expect(P.verifyVoiciCallJoin(t.join, t.signature, t.now), t.name).toBe(t.expected);
+    expect(dec(P.canonicalVoiciCallKeyRevoke(c.revoke.body))).toBe(c.revoke.canonical);
+    for (const t of c.revoke.checks) expect(P.verifyVoiciCallKeyRevoke(t.revoke, t.signature, t.ctx), t.name).toBe(t.expected);
+    for (const t of c.end.checks) {
+      const ctx = { callId: V.request.signed.callId, callerPub: V.keys.browserPub, ownerSignPub: V.keys.ownerSignPub, ...(t.ownerCallKeyPub ? { ownerCallKeyPub: t.ownerCallKeyPub } : {}) };
+      expect(P.checkVoiciCallEnd(t.end, ctx) !== null, t.name).toBe(t.expected);
+    }
   });
 
   it("the request: bytes, signature, checks", () => {

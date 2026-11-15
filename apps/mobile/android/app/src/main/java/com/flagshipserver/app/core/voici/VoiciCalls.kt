@@ -522,6 +522,103 @@ object VoiciCalls {
         put("issuedAt", kotlinx.serialization.json.JsonPrimitive(issuedAt))
     }
 
+    // ── call key (answering while locked; docs/voici-calls.md, owner decisions 2026-11-15) ──
+
+    const val TAG_CALL_KEY = "flagship/voici-call-key/v1"
+    const val TAG_CALL_KEY_REVOKE = "flagship/voici-call-key-revoke/v1"
+    const val TAG_CALL_JOIN = "flagship/voici-call-join/v1"
+    private val DEVICE_ID = Regex("^[0-9a-f]{32}$")
+    private val BINDING_KEYS = listOf("username", "deviceId", "callKeyPub", "createdAt")
+
+    /** A SEC1 uncompressed P-256 point, lowercase hex. */
+    fun isCallKeyPub(pub: String?): Boolean {
+        if (pub == null || !hex(pub, 65) || !pub.startsWith("04")) return false
+        return VoiciJs.isP256Point(WebEnvelopes.hexToBytes(pub))
+    }
+
+    fun canonicalCallKeyBinding(username: String, deviceId: String, callKeyPub: String, createdAt: Long): ByteArray {
+        if (!(USERNAME.matches(username) && DEVICE_ID.matches(deviceId) && isCallKeyPub(callKeyPub) && isTime(createdAt))) badField(TAG_CALL_KEY)
+        return join(TAG_CALL_KEY, username, deviceId, callKeyPub, createdAt)
+    }
+
+    /** `{binding:{username, deviceId, callKeyPub, createdAt}, signature}`, signed by the page's owner messages key. */
+    fun signCallKeyBinding(username: String, deviceId: String, callKeyPub: String, createdAt: Long, ownerSignSeed: ByteArray): JsonObject {
+        val sig = VoiciJs.hex(VoiciJs.edSign(ownerSignSeed, canonicalCallKeyBinding(username, deviceId, callKeyPub, createdAt)))
+        return JsonObject(linkedMapOf(
+            "binding" to JsonObject(linkedMapOf("username" to JsonPrimitive(username), "deviceId" to JsonPrimitive(deviceId),
+                "callKeyPub" to JsonPrimitive(callKeyPub), "createdAt" to JsonPrimitive(createdAt))),
+            "signature" to JsonPrimitive(sig),
+        ))
+    }
+
+    fun verifyCallKeyBinding(proof: JsonElement?, ownerSignPub: String, username: String): Boolean {
+        val p = VoiciJs.obj(proof) ?: return false
+        if (!VoiciJs.exactKeys(p, listOf("binding", "signature"))) return false
+        val b = VoiciJs.obj(p["binding"]) ?: return false
+        if (!VoiciJs.exactKeys(b, BINDING_KEYS)) return false
+        val sig = str(p["signature"]).takeIf { hex(it, 64) } ?: return false
+        if (str(b["username"]) != username) return false
+        val bytes = try {
+            canonicalCallKeyBinding(username, str(b["deviceId"]) ?: return false, str(b["callKeyPub"]) ?: return false, VoiciJs.time(b["createdAt"]) ?: return false)
+        } catch (_: IllegalArgumentException) { return false }
+        return WebEnvelopes.ed25519VerifyHex(sig, bytes, ownerSignPub)
+    }
+
+    fun canonicalCallKeyRevoke(username: String, deviceId: String, callKeyPub: String, revokedAt: Long): ByteArray {
+        if (!(USERNAME.matches(username) && DEVICE_ID.matches(deviceId) && isCallKeyPub(callKeyPub) && isTime(revokedAt))) badField(TAG_CALL_KEY_REVOKE)
+        return join(TAG_CALL_KEY_REVOKE, username, deviceId, callKeyPub, revokedAt)
+    }
+
+    /** A revocation under the owner key (Ed25519) or the revoked call key itself (P-256). */
+    fun verifyCallKeyRevoke(username: String, deviceId: String, callKeyPub: String, revokedAt: Long, signature: String, ownerSignPub: String): Boolean {
+        val bytes = try { canonicalCallKeyRevoke(username, deviceId, callKeyPub, revokedAt) } catch (_: IllegalArgumentException) { return false }
+        return WebEnvelopes.ed25519VerifyHex(signature, bytes, ownerSignPub) || WebEnvelopes.p256VerifyP1363(signature, bytes, callKeyPub)
+    }
+
+    fun revokeJson(username: String, deviceId: String, callKeyPub: String, revokedAt: Long): JsonObject = JsonObject(linkedMapOf(
+        "username" to JsonPrimitive(username), "deviceId" to JsonPrimitive(deviceId), "callKeyPub" to JsonPrimitive(callKeyPub), "revokedAt" to JsonPrimitive(revokedAt),
+    ))
+
+    fun canonicalCallJoin(username: String, callId: String, deviceId: String, callKeyPub: String, issuedAt: Long): ByteArray {
+        if (!(USERNAME.matches(username) && hex(callId, 16) && DEVICE_ID.matches(deviceId) && isCallKeyPub(callKeyPub) && isTime(issuedAt))) badField(TAG_CALL_JOIN)
+        return join(TAG_CALL_JOIN, username, callId, deviceId, callKeyPub, issuedAt)
+    }
+
+    fun verifyCallJoin(username: String, callId: String, deviceId: String, callKeyPub: String, issuedAt: Long, signature: String, now: Long): Boolean {
+        if (Math.abs(issuedAt - now) > SKEW_MS) return false
+        val bytes = try { canonicalCallJoin(username, callId, deviceId, callKeyPub, issuedAt) } catch (_: IllegalArgumentException) { return false }
+        return WebEnvelopes.p256VerifyP1363(signature, bytes, callKeyPub)
+    }
+
+    /** The answer signed by a bound call key: [sign] returns the IEEE P1363 (r‖s) P-256 signature of the bytes. */
+    fun signAnswerWithCallKey(a: VoiciCallAnswerBody, proof: JsonObject, sign: (ByteArray) -> ByteArray): JsonObject {
+        val sig = sign(canonicalAnswer(a))
+        require(sig.size == 64) { "$TAG_ANSWER: bad call-key signature" }
+        val m = LinkedHashMap(signAnswerShape(a))
+        m["sig"] = JsonPrimitive(VoiciJs.hex(sig))
+        m["callKey"] = proof
+        return JsonObject(m)
+    }
+
+    private fun signAnswerShape(a: VoiciCallAnswerBody): Map<String, JsonElement> {
+        val m = linkedMapOf<String, JsonElement>(
+            "v" to JsonPrimitive(1), "kind" to JsonPrimitive("voici-call-answer"), "callId" to JsonPrimitive(a.callId),
+            "deviceRef" to JsonPrimitive(a.deviceRef), "requestHash" to JsonPrimitive(a.requestHash), "xwingCiphertext" to JsonPrimitive(a.xwingCiphertext),
+            "answerSdp" to JsonPrimitive(a.answerSdp), "turnUser" to JsonPrimitive(a.turnUser), "turnSecret" to JsonPrimitive(a.turnSecret),
+            "issuedAt" to JsonPrimitive(a.issuedAt),
+        )
+        if (a.media != null) m["media"] = JsonPrimitive(a.media)
+        return m
+    }
+
+    /** The owner's end order signed by the call key that answered. */
+    fun signEndOwnerWithCallKey(callId: String, reason: String, issuedAt: Long, sign: (ByteArray) -> ByteArray): JsonObject {
+        val sig = sign(canonicalEnd(callId, "owner", reason, issuedAt))
+        require(sig.size == 64) { "$TAG_END: bad call-key signature" }
+        return JsonObject(mapOf("v" to JsonPrimitive(1), "kind" to JsonPrimitive("voici-call-end"), "callId" to JsonPrimitive(callId),
+            "side" to JsonPrimitive("owner"), "reason" to JsonPrimitive(reason), "issuedAt" to JsonPrimitive(issuedAt), "sig" to JsonPrimitive(VoiciJs.hex(sig))))
+    }
+
     // ── push, missed call ──
 
     private fun openCanonical(seed: ByteArray, purpose: String, callId: String, sealed: ByteArray): JsonObject? = try {
