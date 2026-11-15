@@ -136,3 +136,19 @@ export async function fetchOrgRings(deps: Pick<OrgBoxKeyDeps, "orgId" | "control
   const j = (await r.json()) as { rings?: OrgKeyRingBundle[] };
   return Array.isArray(j.rings) ? j.rings : [];
 }
+
+/**
+ * The org's CGK as this box last opened it from the key ring (`cgk|*` in `org-keys.json`), or null.
+ * On an org box it is the only gossip key: an org has no UMK, so no owner phone seals a CGK deposit.
+ */
+export async function readOrgCgk(dataDir: string): Promise<{ version: number; key: Uint8Array } | null> {
+  const r = await readStateFile(join(dataDir, "org-keys.json"));
+  if (r.kind !== "ok") return null;
+  try {
+    const k = (JSON.parse(r.text) as OrgKeysFile).keys?.["cgk|*"];
+    if (!k || !/^[0-9a-f]{64}$/.test(k.keyHex) || !Number.isSafeInteger(k.version)) return null;
+    return { version: k.version, key: Uint8Array.from(Buffer.from(k.keyHex, "hex")) };
+  } catch {
+    return null;
+  }
+}
