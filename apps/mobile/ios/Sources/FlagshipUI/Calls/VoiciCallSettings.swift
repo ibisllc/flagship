@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 import FlagshipCore
 
 /// The owner's calls settings (docs/voici-calls.md §8), Settings → Messages → Calls.
@@ -149,3 +150,10 @@ public enum VoiciThreadEntry: Equatable, Identifiable {
         c.video ? String(localized: "Missed video call") : String(localized: "Missed call")
     }
 }
+
+/// The calls' one session to `.com` (the VoIP token, the room WebSocket): the pinning factory's session, like every
+/// other client that may dial a box, so a call request can never skip the pin.
+enum VoiciCallNetwork {
+    static let session: URLSession = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
+}
+

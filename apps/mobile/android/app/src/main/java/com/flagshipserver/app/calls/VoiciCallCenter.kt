@@ -38,7 +38,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 object VoiciCallCenter {
@@ -64,7 +63,8 @@ object VoiciCallCenter {
     private const val ACCOUNT_ID = "voici"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val http by lazy { OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build() }
+    /** The room WebSocket to `.com`: the pinning factory's client (the update lock, account-gone and pin rules apply), with a ping. */
+    private val http by lazy { com.flagshipserver.app.core.HttpClientFactory.build().newBuilder().pingInterval(20, TimeUnit.SECONDS).build() }
     private val _ui = MutableStateFlow(Ui())
     val ui: StateFlow<Ui> = _ui.asStateFlow()
 
