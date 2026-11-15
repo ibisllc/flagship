@@ -3751,5 +3751,16 @@
   "Updated what {0} members see.": "{0} 人のメンバーに見える内容を更新しました。",
   "Members already see the latest.": "メンバーはすでに最新の内容を見ています。",
   "Each line reads like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki.": "各行は Sales = member、Ops = server-admin home.acme.flagship.services、Wiki = app-admin acme--wiki のように書きます。",
-  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": "グループごとに 1 行。例：Sales = member、Ops = server-admin home.acme.flagship.services、Wiki = app-admin acme--wiki"
+  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": "グループごとに 1 行。例：Sales = member、Ops = server-admin home.acme.flagship.services、Wiki = app-admin acme--wiki",
+  "Outgoing video call": "発信したビデオ通話",
+  "Outgoing call": "発信した通話",
+  "Call": "通話",
+  "Video call": "ビデオ通話",
+  "The call continues in the voi.ci tab.": "通話は voi.ci のタブで続きます。",
+  "Allow pop-ups for Flagship to make calls from here.": "ここから発信するには、Flagship のポップアップを許可してください。",
+  "No calls yet.": "まだ通話はありません。",
+  "{0} · {1}": "{0} · {1}",
+  "Open conversation": "会話を開く",
+  "voi.ci/{0}, since {1}": "voi.ci/{0}（{1} から）",
+  "Calls": "通話"
 }

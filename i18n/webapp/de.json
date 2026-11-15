@@ -3751,5 +3751,16 @@
   "Updated what {0} members see.": "Aktualisiert, was {0} Mitglieder sehen.",
   "Members already see the latest.": "Mitglieder sehen bereits den neuesten Stand.",
   "Each line reads like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki.": "Jede Zeile lautet etwa Sales = member, Ops = server-admin home.acme.flagship.services oder Wiki = app-admin acme--wiki.",
-  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": "Eine Zeile pro Gruppe, etwa Sales = member, Ops = server-admin home.acme.flagship.services oder Wiki = app-admin acme--wiki"
+  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": "Eine Zeile pro Gruppe, etwa Sales = member, Ops = server-admin home.acme.flagship.services oder Wiki = app-admin acme--wiki",
+  "Outgoing video call": "Ausgehender Videoanruf",
+  "Outgoing call": "Ausgehender Anruf",
+  "Call": "Anrufen",
+  "Video call": "Videoanruf",
+  "The call continues in the voi.ci tab.": "Der Anruf geht im voi.ci-Tab weiter.",
+  "Allow pop-ups for Flagship to make calls from here.": "Erlaube Pop-ups für Flagship, um von hier aus anzurufen.",
+  "No calls yet.": "Noch keine Anrufe.",
+  "{0} · {1}": "{0} · {1}",
+  "Open conversation": "Unterhaltung öffnen",
+  "voi.ci/{0}, since {1}": "voi.ci/{0}, seit {1}",
+  "Calls": "Anrufe"
 }

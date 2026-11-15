@@ -26,7 +26,7 @@ const APPS = [
   "view-service-detail", "view-service-access", "view-app-access", "view-app-db",
   "view-service-env", "view-edit-service", "view-edit-describe", "view-marketplace", "view-developer",
 ];
-const SOCIAL = ["view-thread", "view-voici-sign-in", "view-signed-in-sites"];
+const SOCIAL = ["view-thread", "view-voici-sign-in", "view-signed-in-sites", "view-calls"];
 const ACTIVITY = ["view-account-audit", "view-audit-log", "view-audit-entry", "view-install-progress"];
 const SETTINGS = [
   "view-settings", "view-account-security", "view-quantum-safety", "view-add-device", "view-recovery",

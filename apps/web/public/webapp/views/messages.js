@@ -17,7 +17,8 @@ import { canPublishPage } from "../lib/voiciPageControl.js";
 import { moreHorizontalIcon } from "../lib/icons.js";
 import { displayUrl, publicSwitchHtml, renderSamplePage, wirePublicSwitches } from "./page-header.js";
 import { isEditingField, openPageOptions, renderBar, renderProfile, resetProfileEdit } from "./page-editor.js";
-import { checkReplies, markReplySeen } from "../lib/voiciReplies.js";
+import { checkReplies, markReplySeen, visitedPages } from "../lib/voiciReplies.js";
+import { callButtons } from "./calls.js";
 import { voiciWebOrigin } from "../lib/voiciOwner.js";
 
 import { tr } from "../lib/i18n.js";
@@ -151,6 +152,8 @@ function renderReplyAlerts() {
   if (!root) return;
   root.replaceChildren();
   for (const a of replyAlerts) {
+    const line = document.createElement("div");
+    line.className = "row";
     const b = document.createElement("button");
     b.type = "button";
     b.className = "fs-row voici-reply-row mt-2";
@@ -169,7 +172,8 @@ function renderReplyAlerts() {
       updateBadge();
       window.open(`${voiciWebOrigin()}/${a.username}`, "_blank", "noopener,noreferrer");
     });
-    root.appendChild(b);
+    line.append(b, callButtons({ pageId: a.pageId, username: a.username }));
+    root.appendChild(line);
   }
   if (replyAlerts.length) {
     const foot = document.createElement("p");
@@ -238,18 +242,27 @@ function renderSignedInSites() {
   const root = $("signed-in-sites-content");
   if (!root) return;
   const sites = [...world.state.signedInSites].sort((a, b) => b.at - a.at);
+  const names = new Map(visitedPages().map((p) => [p.pageId, p.username]));
   root.innerHTML = `
     <div class="card stack-sm" data-testid="messages-signed-in-sites">
       ${sites.length
         ? sites
             .map(
-              (s) => `<div class="row"><span>${escapeHtml(tr("A voi.ci page, since {0}", formatWhen(s.at)))}</span>
+              (s) => `<div class="row" data-site-row="${escapeHtml(s.pageId)}"><span>${escapeHtml(names.has(s.pageId) ? tr("voi.ci/{0}, since {1}", names.get(s.pageId), formatWhen(s.at)) : tr("A voi.ci page, since {0}", formatWhen(s.at)))}</span>
               <button type="button" class="secondary" data-site-signout="${escapeHtml(s.delegatePub)}">${escapeHtml(tr("Sign out"))}</button></div>`,
             )
             .join("")
         : `<p class="note">${escapeHtml(tr("You aren't signed in to any website."))}</p>`}
       <button type="button" class="secondary full-width" id="messages-approve-sign-in">${escapeHtml(tr("Approve a voi.ci sign-in"))}</button>
     </div>`;
+  // A page this account knows can be called from here (a voi.ci tab takes the call).
+  const called = new Set();
+  root.querySelectorAll("[data-site-row]").forEach((row) => {
+    const pageId = row.getAttribute("data-site-row");
+    if (!names.has(pageId) || called.has(pageId)) return;
+    called.add(pageId);
+    row.insertBefore(callButtons({ pageId, username: names.get(pageId) }), row.lastElementChild);
+  });
   root.querySelectorAll("[data-site-signout]").forEach((b) =>
     b.addEventListener("click", async () => {
       const site = world.state.signedInSites.find((s) => s.delegatePub === b.getAttribute("data-site-signout"));
@@ -297,6 +310,7 @@ export function initMessagesView() {
     });
   }
   $("signed-in-sites-back")?.addEventListener("click", () => void enterMessages());
+  $("messages-calls")?.addEventListener("click", () => void import("./calls.js").then((m) => m.enterCalls()));
   // A publish, a draft or a refresh elsewhere: draw again (the field being typed in is kept).
   onWorldChange(() => {
     updateBadge();

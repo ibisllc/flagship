@@ -10,7 +10,13 @@
 import { tr } from "./i18n.js";
 
 export const PLATFORM = "web";
+<<<<<<< HEAD
 export const WEB_BUILD = 220;
+||||||| parent of 71da451c1 (Webapp: call pages you know from a voi.ci tab, with a call history)
+export const WEB_BUILD = 218;
+=======
+export const WEB_BUILD = 219;
+>>>>>>> 71da451c1 (Webapp: call pages you know from a voi.ci tab, with a call history)
 export const PROTOCOL_LEVEL = 1;
 
 // The one product version every Flagship surface shows (release/version.json;

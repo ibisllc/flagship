@@ -3751,5 +3751,16 @@
   "Updated what {0} members see.": "已更新 {0} 位成员看到的内容。",
   "Members already see the latest.": "成员已看到最新内容。",
   "Each line reads like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki.": "每行格式如 Sales = member、Ops = server-admin home.acme.flagship.services 或 Wiki = app-admin acme--wiki。",
-  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": "每组一行，例如 Sales = member、Ops = server-admin home.acme.flagship.services 或 Wiki = app-admin acme--wiki"
+  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": "每组一行，例如 Sales = member、Ops = server-admin home.acme.flagship.services 或 Wiki = app-admin acme--wiki",
+  "Outgoing video call": "已拨出的视频通话",
+  "Outgoing call": "已拨出的通话",
+  "Call": "通话",
+  "Video call": "视频通话",
+  "The call continues in the voi.ci tab.": "通话将在 voi.ci 标签页中继续。",
+  "Allow pop-ups for Flagship to make calls from here.": "要从这里拨打电话，请允许 Flagship 弹出窗口。",
+  "No calls yet.": "还没有通话。",
+  "{0} · {1}": "{0} · {1}",
+  "Open conversation": "打开对话",
+  "voi.ci/{0}, since {1}": "voi.ci/{0}，自 {1} 起",
+  "Calls": "通话记录"
 }

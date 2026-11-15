@@ -15305,5 +15305,49 @@
   "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": {
     "en": "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki",
     "ctx": "webapp/views/orgs.js:180"
+  },
+  "Outgoing video call": {
+    "en": "Outgoing video call",
+    "ctx": "webapp/views/calls.js"
+  },
+  "Outgoing call": {
+    "en": "Outgoing call",
+    "ctx": "webapp/views/calls.js"
+  },
+  "Call": {
+    "en": "Call",
+    "ctx": "webapp/views/calls.js"
+  },
+  "Video call": {
+    "en": "Video call",
+    "ctx": "webapp/views/calls.js"
+  },
+  "The call continues in the voi.ci tab.": {
+    "en": "The call continues in the voi.ci tab.",
+    "ctx": "webapp/views/calls.js"
+  },
+  "Allow pop-ups for Flagship to make calls from here.": {
+    "en": "Allow pop-ups for Flagship to make calls from here.",
+    "ctx": "webapp/views/calls.js"
+  },
+  "No calls yet.": {
+    "en": "No calls yet.",
+    "ctx": "webapp/views/calls.js"
+  },
+  "{0} · {1}": {
+    "en": "{0} · {1}",
+    "ctx": "webapp/views/calls.js"
+  },
+  "Open conversation": {
+    "en": "Open conversation",
+    "ctx": "webapp/views/calls.js"
+  },
+  "voi.ci/{0}, since {1}": {
+    "en": "voi.ci/{0}, since {1}",
+    "ctx": "webapp/views/messages.js"
+  },
+  "Calls": {
+    "en": "Calls",
+    "ctx": "webapp/index.html"
   }
 }
