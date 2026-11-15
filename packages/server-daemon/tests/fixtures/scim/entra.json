@@ -1,0 +1,77 @@
+{
+  "description": "Microsoft Entra ID provisioning, in the request shapes of Microsoft's SCIM reference (learn.microsoft.com, 'Tutorial: Develop a sample SCIM endpoint' and 'Known issues'): the validator's userName and externalId probes, create, PATCH with capitalised ops and string booleans, group create and member add/remove, then a soft delete (active False). {{user:x}} and {{group:x}} stand for the ids the server answered with; 'save' names the id of a 201.",
+  "steps": [
+    { "method": "GET", "path": "/scim/v2/Users?filter=userName+eq+%22Test_User_ab6490ee-1e48-479e-a20b-2d77186b5dd1%22", "status": 200, "expect": { "totalResults": 0 } },
+    { "method": "GET", "path": "/scim/v2/Users?filter=externalId+eq+%220a21f0f2-8d2a-4f8e-bf98-7363c4aed4ef%22", "status": 200, "expect": { "totalResults": 0 } },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Users",
+      "status": 201,
+      "save": "ana",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User", "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"],
+        "externalId": "0a21f0f2-8d2a-4f8e-bf98-7363c4aed4ef",
+        "userName": "ana.perez@acme.example",
+        "active": true,
+        "displayName": "Ana Pérez",
+        "emails": [{ "primary": true, "type": "work", "value": "ana.perez@acme.example" }],
+        "meta": { "resourceType": "User" },
+        "name": { "formatted": "Ana Pérez", "familyName": "Pérez", "givenName": "Ana" },
+        "roles": []
+      }
+    },
+    { "method": "GET", "path": "/scim/v2/Users?filter=userName+eq+%22ana.perez%40acme.example%22", "status": 200, "expect": { "totalResults": 1 } },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Users/{{user:ana}}",
+      "status": 200,
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [
+          { "op": "Replace", "path": "displayName", "value": "Ana P. Pérez" },
+          { "op": "Add", "path": "emails[type eq \"work\"].value", "value": "ana@acme.example" },
+          { "op": "Replace", "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department", "value": "Finance" }
+        ]
+      }
+    },
+    { "method": "GET", "path": "/scim/v2/Groups?excludedAttributes=members&filter=displayName+eq+%22Finance%22", "status": 200, "expect": { "totalResults": 0 } },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Groups",
+      "status": 201,
+      "save": "finance",
+      "body": { "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"], "externalId": "8aa1a0c0-c4c3-4bc0-b4a5-2ef676900159", "displayName": "Finance", "meta": { "resourceType": "Group" } }
+    },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Groups/{{group:finance}}",
+      "status": 204,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "Add", "path": "members", "value": [{ "value": "{{user:ana}}" }] }] }
+    },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Users",
+      "status": 201,
+      "save": "ben",
+      "body": { "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"], "externalId": "5c1f3d6e-0b1a-4c4d-9a8b-77c1d2e3f4a5", "userName": "ben@acme.example", "active": true, "displayName": "Ben Okafor" }
+    },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Groups/{{group:finance}}",
+      "status": 204,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "Add", "path": "members", "value": [{ "value": "{{user:ben}}" }] }] }
+    },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Groups/{{group:finance}}",
+      "status": 204,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "Remove", "path": "members", "value": [{ "value": "{{user:ben}}" }] }] }
+    },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Users/{{user:ana}}",
+      "status": 200,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "Replace", "path": "active", "value": "False" }] }
+    }
+  ]
+}

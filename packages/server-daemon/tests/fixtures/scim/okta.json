@@ -1,0 +1,67 @@
+{
+  "description": "Okta provisioning, in the request shapes of Okta's SCIM 2.0 reference ('SCIM 2.0 protocol reference', developer.okta.com): userName lookup with paging, create, PUT, PATCH without a path to deactivate, group push with members, members[value eq] removal, DELETE.",
+  "steps": [
+    { "method": "GET", "path": "/scim/v2/Users?filter=userName%20eq%20%22chen%40acme.example%22&startIndex=1&count=100", "status": 200, "expect": { "totalResults": 0 } },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Users",
+      "status": 201,
+      "save": "chen",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "chen@acme.example",
+        "name": { "givenName": "Chen", "familyName": "Wei" },
+        "emails": [{ "primary": true, "value": "chen@acme.example", "type": "work" }],
+        "displayName": "Chen Wei",
+        "locale": "en-US",
+        "externalId": "00ujl29u0le5T6Aj10h7",
+        "groups": [],
+        "password": "1mz050nq",
+        "active": true
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/scim/v2/Users/{{user:chen}}",
+      "status": 200,
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "id": "{{user:chen}}",
+        "userName": "chen@acme.example",
+        "name": { "givenName": "Chen", "familyName": "Wei-Lin" },
+        "emails": [{ "primary": true, "value": "chen@acme.example", "type": "work" }],
+        "displayName": "Chen Wei-Lin",
+        "externalId": "00ujl29u0le5T6Aj10h7",
+        "active": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Groups",
+      "status": 201,
+      "save": "eng",
+      "body": { "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"], "displayName": "Engineering", "members": [{ "value": "{{user:chen}}", "display": "chen@acme.example" }] }
+    },
+    { "method": "GET", "path": "/scim/v2/Groups/{{group:eng}}", "status": 200 },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Groups/{{group:eng}}",
+      "status": 204,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "replace", "value": { "id": "{{group:eng}}", "displayName": "Engineering EU" } }] }
+    },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Users/{{user:chen}}",
+      "status": 200,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "replace", "value": { "active": false } }] }
+    },
+    {
+      "method": "PATCH",
+      "path": "/scim/v2/Groups/{{group:eng}}",
+      "status": 204,
+      "body": { "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": [{ "op": "remove", "path": "members[value eq \"{{user:chen}}\"]" }] }
+    },
+    { "method": "DELETE", "path": "/scim/v2/Users/{{user:chen}}", "status": 204 },
+    { "method": "GET", "path": "/scim/v2/Users/{{user:chen}}", "status": 404 }
+  ]
+}
