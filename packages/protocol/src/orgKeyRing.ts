@@ -282,6 +282,10 @@ export function canonicalOrgKeyRing(r: OrgKeyRing): Bytes {
 export const orgKeyRingSha256 = (r: OrgKeyRing): string => orgSha256Hex(canonicalOrgKeyRing(r));
 
 export function orgKeyCommitment(orgId: string, kind: OrgKeyKind, scope: string, version: number, key: Bytes): string {
+  match("orgId", HEX16, orgId);
+  if (!ORG_KEY_KINDS.includes(kind)) fail("malformed", "kind");
+  if (orgWide(kind) ? scope !== "*" : !DOMAIN.test(String(scope))) fail("malformed", "scope");
+  uint("version", version);
   if (key.length !== 32) fail("malformed", "key");
   return orgSha256Hex(enc([TAG_ORG_KEY_COMMIT, orgId, kind, scope, version, hex(key)].join("|")));
 }

@@ -53,8 +53,20 @@ function uint(name: string, v: unknown): void {
   if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) fail("malformed", name);
 }
 
-/** `sha256("flagship/org-log/v1|<orgId>|<seq>|<prevHash>|<kind>|<refSha256>|<at>")`. */
+const LOG_KIND = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * `sha256("flagship/org-log/v1|<orgId>|<seq>|<prevHash>|<kind>|<refSha256>|<at>")`. No field may hold
+ * the "|" separator, so `.com` cannot move one between `kind` and `refSha256` and keep a chained hash
+ * while naming another object (AT-ENV-09). Throws `malformed` on anything else.
+ */
 export function orgLogEntryHash(orgId: string, seq: number, prevHash: string, kind: string, refSha256: string, at: number): string {
+  if (typeof orgId !== "string" || !HEX16.test(orgId)) fail("malformed", "log orgId");
+  if (typeof prevHash !== "string" || !HEX32.test(prevHash)) fail("malformed", "log prevHash");
+  if (typeof kind !== "string" || !LOG_KIND.test(kind)) fail("malformed", "log kind");
+  if (typeof refSha256 !== "string" || !HEX32.test(refSha256)) fail("malformed", "log refSha256");
+  uint("log seq", seq);
+  uint("log at", at);
   return orgSha256Hex(enc([TAG_ORG_LOG, orgId, seq, prevHash, kind, refSha256, at].join("|")));
 }
 
