@@ -84,3 +84,16 @@ describe("the cgk.orgAdopt and org.pin operations", () => {
     expect(() => svc.handle({ id: 1, op: "cgk.orgAdopt", args: { ...ok.args, chain: [], extra: 1 } })).toThrow(/unknown field extra/);
   });
 });
+
+describe("review-cloud: keyd and superseded authority records", () => {
+  it("review-cloud: refuses a CGK ring approved under a record older than the newest one it was shown", () => {
+    const F = JSON.parse(readFileSync(join(__dirname, "../../../rust/crates/flagship-keyd/tests/fixtures/review-cloud-superseded-oar.json"), "utf8"));
+    let code = "adopted";
+    try {
+      verifyOrgCgkAdoption({ ...F.args, chain: chain(F.chain) }, V.pin as OrgCgkPin, V.now);
+    } catch (e) {
+      code = (e as OrgCgkError).code;
+    }
+    expect(code).toBe("stale-oar");
+  });
+});
