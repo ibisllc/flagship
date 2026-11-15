@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
   buildOrgKeyRing,
+  buildOrgSeatBook,
+  orgKeyContextFromServed,
+  rotateOrgKey,
   canonicalOrgKeyRing,
   canonicalOrgSeatGrant,
   canonicalOrgSeatRevoke,
@@ -215,8 +218,18 @@ describe(".com org key ring and rotations", () => {
     d.set(t2);
     const withS = buildOrgKeyRing({ orgId: ORG, kind: "archive-keys", scope: SERVER, prev: v1.ring, key: new Uint8Array(32).fill(9), recipients: [kk(`seat:${A.seatId}`, kp.A), kk(`seat:${S.seatId}`, kp.S)], retired: [], oarVersion: 1, issuedAt: t2 });
     expect((await handleOrgKeyRingPost(d, ORG, { ...withS, approvals: [approve(B, canonicalOrgKeyRing(withS.ring), t2)] })).status).toBe(403);
-    const v2 = buildOrgKeyRing({ orgId: ORG, kind: "archive-keys", scope: SERVER, prev: v1.ring, key: new Uint8Array(32).fill(9), recipients: [kk(`seat:${A.seatId}`, kp.A), kk(`box:${SERVER}`, kp.box)], retired: [S.seatId], oarVersion: 1, issuedAt: t2 });
-    expect((await handleOrgKeyRingPost(d, ORG, { ...v2, approvals: [approve(B, canonicalOrgKeyRing(v2.ring), t2)] })).status).toBe(200);
+    // The client side: plan from what .com serves (verified here), seal, approve, post.
+    const served = before.body as { rings: never[]; seatKems: never[]; boxKems: never[] };
+    const servers = (await handleOrgServersList(d, ORG)).body as { servers: never[] };
+    const state = verifyOrgAuthorityChain(chain.entries.slice(0, 2), { genesisHash: V.genesisHash, now: t2 });
+    const revokes = [{ revoke, approvals: [approve(A, canonicalOrgSeatRevoke(revoke), tLeft)] }];
+    const book = buildOrgSeatBook(state, { grants, revokes: revokes as never, now: t2 });
+    const plan = orgKeyContextFromServed({ state, book, seatKems: served.seatKems, boxKems: served.boxKems, servers: servers.servers, rings: served.rings, history: { revokes, grants }, now: t2 });
+    expect(plan.pending.map((p) => p.seatId)).toEqual([S.seatId]);
+    const v2 = rotateOrgKey({ ctx: plan.ctx, rings: plan.rings, kind: "archive-keys", scope: SERVER, pending: plan.pending, issuedAt: t2, approve: (order) => approve(B, order, t2) });
+    expect(v2.ring.retired).toEqual([S.seatId]);
+    expect(v2.recipients.map((r) => r.recipient).sort()).toEqual([`box:${SERVER}`, `seat:${A.seatId}`, `seat:${B.seatId}`].sort());
+    expect((await handleOrgKeyRingPost(d, ORG, v2)).status).toBe(200);
     const after = await handleOrgKeysGet(d, ORG);
     expect((after.body as { pending: unknown[] }).pending).toEqual([]);
     expect((after.body as { rings: unknown[] }).rings.length).toBe(2);
@@ -225,8 +238,8 @@ describe(".com org key ring and rotations", () => {
     const exp = await handleOrgExport(d, ORG);
     expect(exp.status).toBe(200);
     const objects = exp.body as OrgAuditObjects;
-    const state = verifyOrgAuthorityChain(objects.entries, { genesisHash: V.genesisHash, now: t2 });
-    const signed = signOrgAuditExport(objects, state, { seatId: A.seatId, adminKeyId: A.keyId, hybridSecret: A.secret }, t2);
+    const stateNow = verifyOrgAuthorityChain(objects.entries, { genesisHash: V.genesisHash, now: t2 });
+    const signed = signOrgAuditExport(objects, stateNow, { seatId: A.seatId, adminKeyId: A.keyId, hybridSecret: A.secret }, t2);
     const verdict = verifyOrgAuditExport(JSON.parse(JSON.stringify(signed)), { genesisHash: V.genesisHash, now: t2 + 365 * DAY });
     expect(verdict.signedBy).toBe(A.seatId);
     expect(verdict.unlogged).toEqual([]);

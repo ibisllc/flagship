@@ -551,3 +551,84 @@ export function orgPendingRotations(
   }
   return out.sort((a, b) => a.leftAt - b.leftAt || (a.seatId < b.seatId ? -1 : 1));
 }
+
+/**
+ * The recipients a new version of `kind` for `scope` goes to: every recipient with a verified KEM key
+ * that may hold it now (`orgKeyRecipientAllowed`), minus `retired`. A client calls this, then
+ * `buildOrgKeyRing`, then collects the approval over the ring and posts it (`rotateOrgKey`).
+ */
+export function planOrgKeyRecipients(ctx: OrgKeyRingContext, kind: OrgKeyKind, scope: string, retired: readonly string[] = []): OrgKemKey[] {
+  const out: OrgKemKey[] = [];
+  for (const k of ctx.kems.values()) {
+    if (k.recipient.startsWith("seat:") && retired.includes(k.recipient.slice(5))) continue;
+    if (orgKeyRecipientAllowed(ctx, kind, scope, k.recipient)) out.push(k);
+  }
+  return out.sort((a, b) => (a.recipient < b.recipient ? -1 : 1));
+}
+
+/**
+ * One rotation, ready to post to `POST /api/orgs/<id>/keys`: a fresh random key sealed to the planned
+ * recipients, naming the departed seats it answers, approved by `approve` (the signing admin's seat
+ * admin key; on a phone it asks for the unlock). `pending` comes from `orgPendingRotations`.
+ */
+export function rotateOrgKey(args: {
+  ctx: OrgKeyRingContext;
+  rings: OrgKeyRings;
+  kind: OrgKeyKind;
+  scope: string;
+  pending: readonly OrgPendingRotation[];
+  issuedAt: number;
+  approve: (order: Bytes, oarVersion: number) => OrgApproval;
+  key?: Bytes;
+}): OrgKeyRingBundle {
+  const scope = orgWide(args.kind) ? "*" : args.scope;
+  const chain = args.rings.chains.get(orgKeyChainId(args.kind, scope)) ?? [];
+  const prev = chain[chain.length - 1]?.ring ?? null;
+  const retired = args.pending.filter((p) => p.keys.some((k) => k.kind === args.kind && k.scope === scope)).map((p) => p.seatId);
+  const recipients = planOrgKeyRecipients(args.ctx, args.kind, scope, retired);
+  if (recipients.length === 0) fail("seat-unknown", "no recipient may hold this key");
+  const key = args.key ?? crypto.getRandomValues(new Uint8Array(32));
+  const oarVersion = args.ctx.state.current.version;
+  const built = buildOrgKeyRing({ orgId: args.ctx.state.orgId, kind: args.kind, scope, prev, key, recipients, retired, oarVersion, issuedAt: args.issuedAt });
+  return { ...built, approvals: [args.approve(canonicalOrgKeyRing(built.ring), oarVersion)] };
+}
+
+/**
+ * A client's context from what `.com` serves (`GET /keys`, `GET /servers`) and the chain and seat
+ * book it verified itself: every KEM statement is checked here (a departed seat's no longer verifies),
+ * and the rings as of the record each names.
+ */
+export function orgKeyContextFromServed(args: {
+  state: OrgAuthorityState;
+  book: OrgSeatBook;
+  seatKems: readonly OrgSeatKemBundle[];
+  boxKems: readonly OrgBoxKemBundle[];
+  servers: ReadonlyArray<{ serverDomain: string; identityPubKeyHex: string; revoked?: unknown }>;
+  rings: readonly OrgKeyRingBundle[];
+  /** The seat objects (`GET /seats`): who left and what their grants allowed. */
+  history: Parameters<typeof orgPendingRotations>[3];
+  now: number;
+}): { ctx: OrgKeyRingContext; rings: OrgKeyRings; pending: OrgPendingRotation[] } {
+  const keys: OrgKemKey[] = [];
+  for (const s of args.seatKems) {
+    try {
+      keys.push(verifyOrgSeatKem(args.state, args.book, s, args.now));
+    } catch {
+      /* a departed or unknown seat */
+    }
+  }
+  const live = args.servers.filter((s) => !s.revoked);
+  const stk = new Map(live.map((s) => [s.serverDomain, s.identityPubKeyHex]));
+  for (const b of args.boxKems) {
+    const pub = stk.get(b.statement?.serverDomain);
+    if (!pub) continue;
+    try {
+      keys.push(verifyOrgBoxKem(b, args.state.orgId, pub, args.now));
+    } catch {
+      /* an older identity */
+    }
+  }
+  const ctx: OrgKeyRingContext = { state: args.state, book: args.book, kems: newestOrgKems(keys), servers: new Set(live.map((s) => s.serverDomain)), now: args.now };
+  const rings = buildOrgKeyRings(ctx, args.rings);
+  return { ctx, rings, pending: orgPendingRotations(args.state, args.book, rings, args.history) };
+}
