@@ -500,7 +500,10 @@
 //  v213: a retail box's server page offers "Release this box" to admin devices: the admin root signs
 //       flagship/box-release/v1 and the box wipes itself back to unclaimed (lib/releaseThisBox.js,
 //       views/release-this-box.js).
-const SHELL_VERSION = "v213";
+//  v214: the server page's Backups section restores apps from a backup into the running server (a saved backup's
+//       "Restore into this server…" or a .flagship file): signed stage, per-app choices with the box's preview, a
+//       signed plan, progress, and the earlier copies a restore kept with Undo and Delete now (admin devices only).
+const SHELL_VERSION = "v214";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -612,6 +615,7 @@ const OPTIONAL_SHELL = [
   "/lib/appDb.js",
   "/lib/permissions.js",
   "/lib/restoredAccess.js",
+  "/lib/restoreMerge.js",
   "/lib/updateMode.js",
   "/lib/companionDelegation.js",
   "/lib/knockIdentity.js",
@@ -770,6 +774,7 @@ const OPTIONAL_SHELL = [
   "/views/server-detail.js",
   "/views/server-sharing.js",
   "/views/server-backups.js",
+  "/views/restore-merge.js",
   "/views/debug-access.js",
   "/views/release-this-box.js",
   "/views/direct-access.js",
