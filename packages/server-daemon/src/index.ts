@@ -278,6 +278,7 @@ import { RETAIL_STATE_DIR, freshKeydIdentity, retailLifecycle, retailPaths, star
 
 const KEYD_SOCKET_DEFAULT = "/run/flagship-keyd/keyd.sock";
 import { retailNotices } from "./retailClaim/notices.js";
+import { retailBootMode } from "./retailClaim/firstBoot.js";
 import { BoxReleaseConsumer } from "./retailClaim/releaseOrder.js";
 import { withQuotaUsage } from "./appQuota/usage.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
@@ -832,6 +833,26 @@ async function main(): Promise<void> {
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
 
+  // A retail box with no owner yet serves nothing and installs nothing: an unclaimed or locked box,
+  // or a claimed one whose first boot has not finished, runs only the claim service (keyd, which
+  // the image starts, holds its key) until a claim restarts it into its first boot
+  // (retailClaim/daemon.ts, firstBoot.ts). This comes before the host components on purpose.
+  const retailImage = await readRetailImage();
+  if (retailImage) await ensureRetailHostConfig((m) => console.log(m));
+  if (retailImage && retailBootMode(await retailLifecycle(), existsSync(retailPaths(RETAIL_STATE_DIR).firstBootDone)) === "claim-only") {
+    console.log("[retail] this box has no owner yet: running the claim service only");
+    const claim = await startRetailClaim({
+      image: retailImage,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
+      identity: () => freshKeydIdentity(() => new KeydCustodian({ socketPath: process.env.FLAGSHIP_KEYD_SOCKET ?? KEYD_SOCKET_DEFAULT, component: "retail-claim" })),
+      restart: () => new SystemctlPowerRunner().power("restart"),
+    });
+    const stop = () => void claim.stop().finally(() => process.exit(0));
+    process.once("SIGTERM", stop);
+    process.once("SIGINT", stop);
+    await new Promise<never>(() => {});
+  }
+
   // ---- flagship-keyd (SECURITY-HARDENING-PLAN.md 5.1) ----
   // When keyd's socket is there, the box identity, workload and gossip keys live in that
   // process and this one holds only stand-ins. Without it (an older box, a developer run)
@@ -982,24 +1003,6 @@ async function main(): Promise<void> {
     for (const f of await readdir(certDir).catch(() => [] as string[])) if (f.endsWith(".key")) await rm(join(certDir, f), { force: true }).catch(() => {});
   } else if (keyd && !tlsUpstream) {
     console.warn("[daemon] the TLS key is still held in this process: flagship-tlsd is not installed");
-  }
-
-  // A retail box that nobody has claimed (or whose wipe was cut short) serves nothing: it runs only
-  // the claim service until a claim restarts it into its new owner's first boot (retailClaim/daemon.ts).
-  const retailImage = await readRetailImage();
-  if (retailImage) await ensureRetailHostConfig((m) => console.log(m));
-  if (retailImage && (await retailLifecycle()) !== "claimed") {
-    console.log("[retail] this box is not claimed: running the claim service only");
-    const claim = await startRetailClaim({
-      image: retailImage,
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
-      identity: () => freshKeydIdentity(() => new KeydCustodian({ socketPath: process.env.FLAGSHIP_KEYD_SOCKET ?? KEYD_SOCKET_DEFAULT, component: "retail-claim" })),
-      restart: () => new SystemctlPowerRunner().power("restart"),
-    });
-    const stop = () => void claim.stop().finally(() => process.exit(0));
-    process.once("SIGTERM", stop);
-    process.once("SIGINT", stop);
-    await new Promise<never>(() => {});
   }
 
   if (!env.serverFqdn || (!env.identityPrivKeyHex && !keyd)) {

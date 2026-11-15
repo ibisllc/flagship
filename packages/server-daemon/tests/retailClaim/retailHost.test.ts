@@ -37,6 +37,7 @@ describe("retail host files", () => {
     expect(RETAIL_DBUS_POLICY).toContain(`<policy user="${DAEMON_USER}">`);
     const allows = RETAIL_DBUS_POLICY.split("\n").filter((l) => l.includes("<allow"));
     expect(allows).toHaveLength(RETAIL_BLUEZ_CALLS.length);
+    for (const [i, m] of RETAIL_BLUEZ_CALLS) expect(RETAIL_DBUS_POLICY).toContain(`send_interface="${i}" send_member="${m}"`);
     for (const l of allows) expect(l).toMatch(/send_destination="org\.bluez" send_interface="[A-Za-z0-9.]+" send_member="[A-Za-z]+"/);
     expect(RETAIL_DBUS_POLICY).not.toMatch(/group=|context=|own=/);
   });

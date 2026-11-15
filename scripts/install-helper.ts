@@ -13,6 +13,9 @@
  *         out-pub   — 32-byte hex
  *         out-pem   — PKCS8 PEM the boot stage feeds to openssl pkeyutl
  *
+ *   keyd-public-key --keyd-socket <path>
+ *       The box key flagship-keyd holds, hex: a retail box's first boot keeps it.
+ *
  *   gen-boot-key --out-pem <p> --out-pub <p>
  *       Generate the box boot key (packages/protocol/src/bootKey.ts): the only
  *       key kept on the unencrypted /boot. PKCS8 PEM for the initramfs, pub hex.
@@ -158,6 +161,13 @@ function genBootKey(argv: string[]): void {
   chmodSync(outPub, 0o644);
   priv.fill(0);
   console.error(`[install-helper] wrote boot key pem=${outPem} pub=${outPub}`);
+}
+
+/** A retail box's first boot: the box key keyd already holds, hex, so the bootstrap keeps it. */
+async function keydPublicKey(argv: string[]): Promise<void> {
+  if (!optArg(argv, "--keyd-socket")) throw new Error("give --keyd-socket");
+  const identity = await identityFor(argv, undefined);
+  process.stdout.write(bytesToHex(identity.publicKey) + "\n");
 }
 
 async function signBootKeyBindingCmd(argv: string[]): Promise<void> {
@@ -429,6 +439,8 @@ async function main(): Promise<void> {
       return;
     case "gen-identity":
       return genIdentity(rest);
+    case "keyd-public-key":
+      return void (await keydPublicKey(rest));
     case "gen-boot-key":
       return genBootKey(rest);
     case "sign-boot-key-binding":
@@ -445,7 +457,7 @@ async function main(): Promise<void> {
       return mintEntitlements(rest);
     default:
       console.error(
-        "usage: install-helper <gen-identity|gen-boot-key|sign-boot-key-binding|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements|ohttp-post> [args]",
+        "usage: install-helper <gen-identity|keyd-public-key|gen-boot-key|sign-boot-key-binding|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements|ohttp-post> [args]",
       );
       process.exit(2);
   }

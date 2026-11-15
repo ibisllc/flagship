@@ -23,6 +23,7 @@ import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerS
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
 import { utf8ToBase64 } from "./base64.js";
+import { daemonServiceUnit } from "./daemonUnit.js";
 import { stackSetup } from "./engineSetup.js";
 import {
   APPROVED_BOOT_HOSTS,
@@ -776,9 +777,20 @@ rm -f "/var/tmp/$BOX_ARTIFACT_NAME.tar.gz" "/var/tmp/$BOX_ARTIFACT_NAME.manifest
 cd /opt/flagship
 fi
 
-# Generate server identity.
+# Generate server identity. A retail box (FLAGSHIP_BOX_KEY_IN_KEYD=1) already has one: flagship-keyd
+# made it on the first boot, its claim receipt named it and the owner's phone registered it at .com,
+# so the box keeps that key and every step below signs through keyd; no key file is written.
 mkdir -p /var/flagship/identity
 chmod 700 /var/flagship/identity
+KEYD_SOCKET=/run/flagship-keyd/keyd.sock
+if [ "\${FLAGSHIP_BOX_KEY_IN_KEYD:-0}" = "1" ]; then
+    [ ! -e /var/flagship/identity/identity.priv.hex ] || { echo "[flagship-bootstrap] FATAL: a box key file exists beside keyd's key; refusing to pick one"; exit 1; }
+    SERVER_IDENTITY_PUB_HEX="$(flagship-tsx scripts/install-helper.ts keyd-public-key --keyd-socket "$KEYD_SOCKET" | tr -d '\\n')"
+    [[ "$SERVER_IDENTITY_PUB_HEX" =~ ^[0-9a-f]{64}$ ]] || { echo "[flagship-bootstrap] FATAL: flagship-keyd did not give its box key"; exit 1; }
+    printf '%s\\n' "$SERVER_IDENTITY_PUB_HEX" > /var/flagship/identity/identity.pub.hex
+    SERVER_IDENTITY_PRIV_HEX=""
+    ID_ARGS=(--keyd-socket "$KEYD_SOCKET")
+else
 flagship-tsx scripts/install-helper.ts gen-identity \\
     --out-priv /var/flagship/identity/identity.priv.hex \\
     --out-pub  /var/flagship/identity/identity.pub.hex \\
@@ -788,6 +800,8 @@ rm -f /run/flagship-identity.pem /boot/identity.pem
 chmod 600 /var/flagship/identity/identity.priv.hex
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
 SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
+ID_ARGS=(--priv-hex "$SERVER_IDENTITY_PRIV_HEX")
+fi
 
 # Entitlement bundle: deliberately NOT minted here. The daemon hard-
 # requires an IRK-signed RootEntitlement on every tunnel HELLO, and the
@@ -849,41 +863,7 @@ kernel.core_pattern = |/bin/false
 SYSCTL
 sysctl -q -p /etc/sysctl.d/90-flagship-hardening.conf 2>/dev/null || true
 cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
-[Unit]
-Description=Flagship server daemon
-After=network-online.target flagship-first-boot-register.service
-Wants=network-online.target
-# Never stop restarting on a headless box: with a start-limit the daemon's
-# legitimate self-restarts (below) could trip StartLimitBurst and systemd would
-# give up, stranding the box with no console to recover it.
-StartLimitIntervalSec=0
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/flagship
-EnvironmentFile=/etc/flagship/daemon.env
-# SEC-KEY-003: a crash must never write key material to disk, and files the daemon
-# creates are private by default.
-LimitCORE=0
-UMask=0077
-ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js
-# MUST be always, NOT on-failure. The daemon deliberately exits 0 to ask the
-# supervisor to restart it once it has provisioned a post-boot secret or staged
-# an update: the SWK-deposit + CGK-deposit consumers, the admin-root rotation
-# consumer, and the self-update commit all exit with code 0 so the next boot
-# re-reads the new state (server-daemon/src/index.ts). Under on-failure systemd
-# treats exit 0 as success and does NOT restart, so a secret-free-recipe box
-# dies the instant it consumes its SWK, before it ever claims its entitlement,
-# opens the tunnel, runs ACME, or serves HTTPS. The real host power-off/reboot is
-# a separate systemctl poweroff (deadMan.ts), so always never strands a shutdown.
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-UNIT
+${daemonServiceUnit()}UNIT
 
 cat > /etc/systemd/system/flagship-first-boot-register.service <<UNIT
 [Unit]
@@ -1343,8 +1323,7 @@ fi
 # in-target too, before it. Keeping register+seal together is the invariant.
 report_phase registering
 echo "[flagship-bootstrap] registering server with .com (prereq for sealed-key upload)"
-flagship-tsx scripts/install-helper.ts sign-server-register \\
-    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
+flagship-tsx scripts/install-helper.ts sign-server-register "\${ID_ARGS[@]}" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
 if ! flagship_post "$REGISTRATION_URL" @/run/register-payload.json 120; then
@@ -1401,8 +1380,8 @@ if [ -z "$SEALED_LUKS_KEY_HEX" ]; then
     exit 1
 fi
 NOW_MS=$(date +%s%3N)
-flagship-tsx scripts/install-helper.ts sign-sealed-key \\
-    --priv "$SERVER_IDENTITY_PRIV_HEX" \\
+if [ -n "$SERVER_IDENTITY_PRIV_HEX" ]; then SEAL_ID_ARGS=(--priv "$SERVER_IDENTITY_PRIV_HEX"); else SEAL_ID_ARGS=("\${ID_ARGS[@]}"); fi
+flagship-tsx scripts/install-helper.ts sign-sealed-key "\${SEAL_ID_ARGS[@]}" \\
     --server-id "$SERVER_DOMAIN" \\
     --sealed-hex "$SEALED_LUKS_KEY_HEX" \\
     --issued-at "$NOW_MS" \\
@@ -1424,8 +1403,7 @@ flagship-tsx scripts/install-helper.ts gen-boot-key \\
     --out-pem /boot/flagship-boot-key.pem \\
     --out-pub /boot/flagship-boot-key.pub
 BOOT_KEY_PUB_HEX="$(tr -d '\\n' < /boot/flagship-boot-key.pub)"
-flagship-tsx scripts/install-helper.ts sign-boot-key-binding \\
-    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
+flagship-tsx scripts/install-helper.ts sign-boot-key-binding "\${ID_ARGS[@]}" \\
     --server-domain "$SERVER_DOMAIN" \\
     --boot-key-pub "$BOOT_KEY_PUB_HEX" \\
     --issued-at "$(date +%s%3N)" \\

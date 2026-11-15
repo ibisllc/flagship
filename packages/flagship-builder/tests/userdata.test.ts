@@ -1309,6 +1309,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-11-15: a retail box (FLAGSHIP_BOX_KEY_IN_KEYD=1) keeps keyd's key and signs through keyd.
       // Re-pinned 2026-11-03 (second): daemon.env names the recipe's .com (FLAGSHIP_CONTROL_PLANE_BASE_URL)
       // and root's /etc/flagship/config.json; without them ISO boxes talked to production's .com.
       // Re-pinned 2026-11-03: the bootstrap puts /usr/local/bin on PATH (in-target lacks it, so flagship-tsx was not found).
@@ -1333,7 +1334,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Re-pinned 2026-11-13 (feat/outbound-proxy folded into release/0.4): setup POSTs go through
       // flagship_post, which uses the private relay (OHTTP, via flagship-tsx) when the recipe
       // names an outbound proxy.
-      "d43030ff738a7f383475e951179da49101b11b0983b3b3176854a1bc8ea3f47f",
+      "99140f1171caf4cb0271435a14ff3809353c3210d7f862e95b452079a64a3cf3",
     );
   });
 
