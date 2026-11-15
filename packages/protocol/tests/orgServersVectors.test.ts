@@ -186,3 +186,22 @@ describe("org servers, key ring and audit vectors", () => {
     }
   });
 });
+
+describe("review-cloud: an audit export cannot silently drop a box log head the org log names", () => {
+  it("review-cloud: an export whose log names a box-log-head but carries no head (nor the server) is flagged", () => {
+    const ok = V.audit.cases[0];
+    const x = structuredClone(V.audit.export);
+    expect(x.log.some((e: { kind: string }) => e.kind === "box-log-head")).toBe(true);
+    // .com serves the same signed log, minus the server list and its head.
+    x.servers = [];
+    x.boxLogHeads = [];
+    let flagged: unknown = false;
+    try {
+      const r = verifyOrgAuditExport(x, { genesisHash: V.genesisHash, now: ok.now });
+      flagged = r.unlogged.length > 0 || r.boxLogHeads.length > 0;
+    } catch (e) {
+      flagged = codeOf(e);
+    }
+    expect(flagged).not.toBe(false);
+  });
+});
