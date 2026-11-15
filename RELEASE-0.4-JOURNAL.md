@@ -555,6 +555,18 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Shell v216. iOS build plus 14 package tests and the Android unit tests are green. `flagship-turn-lite` is not
   linked (that waits on the WebRTC choice).
 
+- 2026-11-15: **enterprise-3 merged** (`..917650314`, 8 commits): Android join and admit plus an Organizations
+  entry; "Rotate keys" on iOS/Android (the phone works out who left from the chain it verified itself); keyd adopts a
+  rotated CGK only after its own check (`cgk.orgAdopt`, TS `orgCgk.ts` = Rust `org_cgk.rs` on 24 shared vectors);
+  org install timeline; hash-chained box Activity with STK-signed log heads (`flagship/org-box-log-head/v1`) in the
+  audit export. 1291 targeted tests, cargo keyd, i18n and parity green; iOS builds plus 8 view-model tests, Android
+  tests green (agent ran them). Release-manager calls on its questions:
+  - a member seat announces its KEM key at join (yes: otherwise rotations skip it);
+  - a D1 index on `org_objects` for the serial lookup (yes; migration 0148, leaving 0147 to the calls key work);
+  - a full org-chain verifier in Rust keyd (yes, later; until then such boxes keep the old CGK until the next boot
+    ceremony). Recorded in `docs/enterprise-accounts.md` by the next agent.
+  Next: the org directory + connectors agent (`docs/org-directory.md`), plus Android create/invite/freeze.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -570,8 +582,8 @@ change ships with 0.4.
 Next steps for whoever resumes:
 1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
    - `calls-2` merged (`1041fec0a`, shell v216); its agent is now building answering-while-locked;
-   - `enterprise-3` is running: Android join, Rotate keys, keyd adopting a rotated CGK, org install timeline, box
-     log heads in the audit export.
+   - `enterprise-3` merged; `org-directory` agent next (directory + SCIM/LDAP connectors, KEM at join, index 0148,
+     Android create/invite/freeze).
    - Merge rule: run `scratchpad/rebase-i18n.sh` (or rebase by hand). Never commit conflict markers. On a shell
      clash, take the next number and move WEB_BUILD plus `release/compatibility.json` with it (the compat-matrix
      test guards this). Generated installer files (preseed engine, goldens, bootstrap pin): regenerate with
