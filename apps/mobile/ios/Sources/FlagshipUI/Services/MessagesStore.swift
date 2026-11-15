@@ -972,6 +972,21 @@ public final class MessagesStore {
 
     // MARK: the phone endpoint (§8.2)
 
+    /// What a voi.ci call needs from this device's keys (docs/voici-calls.md §4), or nil while the account is locked
+    /// or has no page: the call then rings with a generic name and asks for an unlock before it can be answered.
+    func callKeys() async -> VoiciCallKeys? {
+        guard isAdmin, let client, let idx = index, let k = keys(epoch: idx.inboxEpoch), let device = deviceKey() else { return nil }
+        var inbox: [[UInt8]] = []
+        for e in stride(from: idx.inboxEpoch, through: 1, by: -1) {
+            if let key = try? VoiciMessages.deriveVoiciInboxKey(umk: k.umk, pageId: idx.pageId, inboxEpoch: e) { inbox.append(key.seed) }
+        }
+        return VoiciCallKeys(
+            username: username, deviceId: deviceId, deviceKey: device, pageId: idx.pageId, acceptsCalls: idx.takesCalls,
+            ownerSignSeed: k.sign.seed, ownerSignPub: k.signPub, inboxSeeds: inbox, caKeys: await client.caKeys(),
+            origin: Endpoints.voiciOrigin, blocked: Set(state.blocks + local.blocks), revoked: Set(local.revoked),
+            nicknames: state.nicknames.mapValues(\.name))
+    }
+
     /// Hands the phone endpoint what it needs to take deliveries while this admin phone is open and unlocked.
     func updatePhoneInbox() {
         guard isAdmin, let idx = index, let k = keys(epoch: idx.inboxEpoch), let device = deviceKey(), let client else {

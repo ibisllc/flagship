@@ -108,6 +108,12 @@ object PushMessageHandler {
         // has already been woken above.
         if (!com.flagshipserver.app.core.PrivacySettings.fromContext(context).pushNotificationsEnabled.value) return
 
+        // A voi.ci call rings through Telecom (its own full-screen notification), never as a plain notice.
+        VoiciCallPush.parse(data)?.let { call ->
+            com.flagshipserver.app.calls.VoiciCallCenter.onPush(context, call)
+            return
+        }
+
         // An install's checkpoints update its one ongoing setup notification
         // instead of each posting a new one.
         if (provisionEvent != null) {

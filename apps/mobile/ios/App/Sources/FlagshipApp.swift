@@ -928,13 +928,19 @@ struct FlagshipApp: App {
                     }
                 }
                 .task { startNotices() }
+                // voi.ci calls (docs/voici-calls.md §8): the app's own call screen above everything.
+                .overlay { VoiciCallScreen() }
                 // Messages (docs/voici-and-messages.md): the store follows the account, so the admin phone takes
                 // direct deliveries (and Home knows about the page) even before the tab is opened.
                 .task(id: "\(appState.currentUser ?? "")|\(appState.isUnlocked)") {
                     MessagesStore.installWipeHook()
                     MessagesStore.shared.configure(client: activeVoiciCom, username: appState.currentUser,
                                                    deviceId: appState.activeProfile?.deviceId, isDemo: appState.isDemoAccount)
-                    if appState.isUnlocked { await MessagesStore.shared.refresh() }
+                    if appState.isUnlocked {
+                        await MessagesStore.shared.refresh()
+                        VoiciCallCenter.shared.accountChanged()
+                        VoiciCallCenter.shared.unlocked()
+                    }
                 }
                 .task {
                     #if DEBUG
@@ -950,12 +956,14 @@ struct FlagshipApp: App {
                         Task { await ServingRenewal.appOpened() }
                         PhoneRouteController.appForeground()
                         Task { await MessagesStore.shared.checkReplies() }
+                        VoiciCallCenter.shared.appForegrounded()
                     }
                     // The relay forwarder is a listener on this phone's loopback: close it (and the
                     // session that remembers its port) before suspension; the next need starts a new one.
                     if phase == .background {
                         RelayRoute.shared.suspend()
                         PhoneRouteController.appBackground()
+                        VoiciCallCenter.shared.appBackgrounded()
                     }
                 }
                 .onOpenURL { url in
@@ -1052,7 +1060,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         // Push is wired up lazily once the user pairs — see
         // PushBootstrap below — so we don't prompt on the cold-start
-        // welcome screen.
+        // welcome screen. voi.ci calls register PushKit here: a VoIP push can launch the app and must reach CallKit
+        // before anything else runs (PushKit asks no permission).
+        MainActor.assumeIsolated { VoiciCallCenter.shared.start() }
         return true
     }
 

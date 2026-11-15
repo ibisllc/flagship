@@ -779,7 +779,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Flagship uses Bluetooth to find a Flagship box you bought and set it up. It looks only while you set up a box.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server, and for your video in a call, only when you turn it on.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Flagship uses the microphone only during a call you answer.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -989,7 +990,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Flagship uses Bluetooth to find a Flagship box you bought and set it up. It looks only while you set up a box.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server, and for your video in a call, only when you turn it on.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Flagship uses the microphone only during a call you answer.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;

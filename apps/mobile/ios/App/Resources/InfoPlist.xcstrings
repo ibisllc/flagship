@@ -7,43 +7,43 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship uses the camera to scan a pairing QR shown by your server."
+            "value": "Flagship uses the camera to scan a pairing QR shown by your server, and for your video in a call, only when you turn it on."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor."
+            "value": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor y para tu vídeo en una llamada, solo cuando la activas."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship utilise l’appareil photo pour scanner un QR d’association affiché par votre serveur."
+            "value": "Flagship utilise la caméra pour scanner un QR d'association affiché par votre serveur, et pour votre vidéo pendant un appel, uniquement quand vous l'activez."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship verwendet die Kamera, um einen von deinem Server angezeigten Kopplungs-QR-Code zu scannen."
+            "value": "Flagship nutzt die Kamera, um einen Kopplungs-QR-Code deines Servers zu scannen, und für dein Video in einem Anruf, nur wenn du sie einschaltest."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O Flagship usa a câmera para escanear um QR de pareamento exibido pelo seu servidor."
+            "value": "O Flagship usa a câmera para ler um QR de pareamento mostrado pelo seu servidor e para o seu vídeo em uma chamada, só quando você a liga."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship は、サーバーに表示されるペアリング用 QR コードをスキャンするためにカメラを使用します。"
+            "value": "Flagship は、サーバーに表示されるペアリング用 QR コードの読み取りと、通話であなたがオンにしたときのビデオにのみカメラを使用します。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship 使用相机扫描你的服务器显示的配对二维码。"
+            "value": "Flagship 使用摄像头扫描服务器显示的配对二维码，以及在通话中你打开摄像头时传送你的视频。"
           }
         }
       }
@@ -185,6 +185,53 @@
           "stringUnit": {
             "state": "translated",
             "value": "当服务器与手机在同一网络时，Flagship 会直接与服务器通信，比经由中继更快；在无法连接 Flagship 时，也能在该网络上找到你的服务器。"
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship uses the microphone only during a call you answer."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship usa el micrófono solo durante una llamada que respondes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship utilise le micro uniquement pendant un appel auquel vous répondez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship nutzt das Mikrofon nur während eines Anrufs, den du annimmst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship usa o microfone só durante uma chamada que você atende."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は、あなたが応答した通話中にのみマイクを使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 仅在你接听的通话中使用麦克风。"
           }
         }
       }

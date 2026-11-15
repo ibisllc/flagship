@@ -15874,5 +15874,113 @@
     "en": "On the Pro Max plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Enterprise for more.",
     "ctx": "core/ServerShareClient.kt (co-manager cap)",
     "args": 1
+  },
+  "voici_call_someone": {
+    "en": "Someone on voi.ci",
+    "ctx": "voi.ci calls: caller name before the push is opened"
+  },
+  "voici_call_account": {
+    "en": "voi.ci calls",
+    "ctx": "voi.ci calls: Telecom account label"
+  },
+  "voici_call_channel": {
+    "en": "Calls",
+    "ctx": "voi.ci calls: notification channel"
+  },
+  "voici_call_channel_desc": {
+    "en": "voi.ci calls to this device",
+    "ctx": "voi.ci calls: notification channel description"
+  },
+  "voici_call_incoming_title": {
+    "en": "voi.ci call",
+    "ctx": "voi.ci calls: incoming call title"
+  },
+  "voici_call_incoming_from": {
+    "en": "%1$s is calling",
+    "ctx": "voi.ci calls: incoming call; %1$s is the caller's name"
+  },
+  "voici_call_ongoing": {
+    "en": "Call in progress",
+    "ctx": "voi.ci calls: ongoing call notification"
+  },
+  "voici_call_answer": {
+    "en": "Answer",
+    "ctx": "voi.ci calls: button"
+  },
+  "voici_call_decline": {
+    "en": "Decline",
+    "ctx": "voi.ci calls: button"
+  },
+  "voici_call_hang_up": {
+    "en": "Hang up",
+    "ctx": "voi.ci calls: button"
+  },
+  "voici_call_mute": {
+    "en": "Mute",
+    "ctx": "voi.ci calls: button"
+  },
+  "voici_call_unmute": {
+    "en": "Unmute",
+    "ctx": "voi.ci calls: button"
+  },
+  "voici_call_camera": {
+    "en": "Camera",
+    "ctx": "voi.ci calls: button that turns the camera on"
+  },
+  "voici_call_camera_off": {
+    "en": "Camera off",
+    "ctx": "voi.ci calls: button that turns the camera off"
+  },
+  "voici_call_camera_paused": {
+    "en": "Camera paused",
+    "ctx": "voi.ci calls: the caller's camera is paused"
+  },
+  "voici_call_remote_camera_on": {
+    "en": "%1$s turned on their camera",
+    "ctx": "voi.ci calls: %1$s is the caller's name"
+  },
+  "voici_call_connecting": {
+    "en": "Connecting…",
+    "ctx": "voi.ci calls: status"
+  },
+  "voici_call_connected": {
+    "en": "Quantum-safe call",
+    "ctx": "voi.ci calls: status while connected"
+  },
+  "voici_call_ended": {
+    "en": "Call ended",
+    "ctx": "voi.ci calls: status"
+  },
+  "voici_call_answered_elsewhere": {
+    "en": "Answered on another device",
+    "ctx": "voi.ci calls: status"
+  },
+  "voici_call_unlock": {
+    "en": "Open Flagship and unlock it to answer",
+    "ctx": "voi.ci calls: the account is locked"
+  },
+  "voici_call_open_app": {
+    "en": "Open Flagship",
+    "ctx": "voi.ci calls: button"
+  },
+  "voici_call_failed": {
+    "en": "The call couldn't connect.",
+    "ctx": "voi.ci calls: status"
+  },
+  "voici_call_media_unavailable": {
+    "en": "This version of Flagship can't connect calls yet.",
+    "ctx": "voi.ci calls: no media stack in this build"
+  },
+  "voici_call_limit": {
+    "en": "Calls end after 60 minutes.",
+    "ctx": "voi.ci calls: status"
+  },
+  "voici_call_camera_denied": {
+    "en": "Flagship needs the camera to show your video. You can keep talking without it.",
+    "ctx": "voi.ci calls: camera permission refused"
+  },
+  "voici_call_close": {
+    "en": "Close",
+    "ctx": "voi.ci calls: button"
   }
 }

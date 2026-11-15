@@ -1,6 +1,7 @@
 {
-  "NSCameraUsageDescription": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor.",
+  "NSCameraUsageDescription": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor y para tu vídeo en una llamada, solo cuando la activas.",
+  "NSBluetoothAlwaysUsageDescription": "Flagship usa Bluetooth para encontrar un equipo Flagship que has comprado y configurarlo. Solo busca mientras configuras un equipo.",
   "NSFaceIDUsageDescription": "Flagship usa Face ID para confirmar acciones sensibles, como aprobar un desbloqueo o revocar un servidor.",
   "NSLocalNetworkUsageDescription": "Flagship se comunica directamente con tu servidor cuando está en la misma red, lo que es más rápido que pasar por el relé, y lo encuentra ahí cuando no se puede contactar con Flagship.",
-  "NSBluetoothAlwaysUsageDescription": "Flagship usa Bluetooth para encontrar un equipo Flagship que has comprado y configurarlo. Solo busca mientras configuras un equipo."
+  "NSMicrophoneUsageDescription": "Flagship usa el micrófono solo durante una llamada que respondes."
 }

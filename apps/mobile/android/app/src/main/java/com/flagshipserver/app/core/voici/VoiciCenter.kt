@@ -1009,6 +1009,35 @@ class VoiciCenter(
         }
     }
 
+    /**
+     * What a voi.ci call needs from this device's keys (docs/voici-calls.md §4), or null while the account is locked
+     * or has no published page: the call then rings with a generic name and asks for an unlock before answering.
+     */
+    suspend fun callKeys(): com.flagshipserver.app.calls.VoiciCallKeys? {
+        val u = user() ?: return null
+        val umk = keyring.umk() ?: return null
+        val device = keyring.device() ?: return null
+        val local = vault.load(umk, u)
+        val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex) ?: return null
+        val keys = VoiciOwnerKeys.derive(umk, idx.body.pageId, idx.body.inboxEpoch)
+        val inboxSeeds = (idx.body.inboxEpoch downTo 1L).map { VoiciMessages.deriveVoiciInboxKey(umk, idx.body.pageId, it).seed }
+        val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
+        return com.flagshipserver.app.calls.VoiciCallKeys(
+            username = u,
+            device = device,
+            pageId = idx.body.pageId,
+            acceptsCalls = idx.body.takesCalls,
+            ownerSignSeed = keys.sign.seed,
+            ownerSignPub = keys.signPub,
+            inboxSeeds = inboxSeeds,
+            caKeys = caKeys(),
+            origin = origin(),
+            blocked = (local.inboxBlocks + state.blocks).toSet(),
+            revoked = local.revoked.toSet(),
+            nicknames = state.nicknames.mapValues { it.value.name },
+        )
+    }
+
     /** The CA keys, for the sign-in screen's own check of `.com`'s attestation. */
     suspend fun caKeys(): List<String> = caCache.ifEmpty { runCatching { caKeysSource() }.getOrDefault(emptyList()).also { caCache = it } }
 
