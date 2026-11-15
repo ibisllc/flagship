@@ -40,6 +40,7 @@ import {
   voiciListedPiece,
   voiciPieceKey,
   voiciRefusal,
+  VOICI_MISSED_RETENTION_MS,
   VOICI_PIECE_CACHE,
   type HandlerResponseWithHeaders,
   type VoiciBucket,
@@ -52,8 +53,9 @@ import { checkRateLimit, clientIp, type RateLimitEndpoint, type RateLimitEnv, ty
 import { voiciErrorResponse, voiciShellResponse, voiciSiteFile } from "./voiciSite.js";
 import { deriveUrlFragment } from "@flagship/protocol";
 import { deleteVoiciAbuseAccount, isAccountBanned, isPseudonymBanned, pruneVoiciAbuse } from "./voiciAbuse.js";
+import { handleVoiciCallApi, isVoiciCallPath, type VoiciCallEnv } from "./voiciCallRoutes.js";
 
-export interface VoiciEnv extends RateLimitEnv {
+export interface VoiciEnv extends RateLimitEnv, VoiciCallEnv {
   DB?: D1Database;
   /** R2 `flagship-voici` (gym `flagship-voici-gym`), served on files.voi.ci. */
   VOICI?: VoiciBucket;
@@ -94,7 +96,7 @@ const PAGE_ROUTE = /^\/api\/voici\/pages\/([^/]+)(?:\/(pieces|publish|remove|inb
 
 /** The paths this file owns. */
 export function isVoiciApiPath(pathname: string): boolean {
-  return pathname.startsWith("/api/voici/") || ACCOUNT_VOICI.test(pathname);
+  return pathname.startsWith("/api/voici/") || ACCOUNT_VOICI.test(pathname) || isVoiciCallPath(pathname);
 }
 
 /** Paths the voi.ci site may call cross-origin (§4.4). */
@@ -103,6 +105,7 @@ export function isVoiciCorsPath(method: string, pathname: string): boolean {
   if (m === "GET" && /^\/api\/username\/[^/]+$/.test(pathname)) return true;
   if (m === "GET" && /^\/api\/voici\/pages\/[^/]+$/.test(pathname)) return true;
   if (m === "POST" && pathname === "/api/voici/reports") return true;
+  if (m === "POST" && pathname === "/api/voici/calls") return true;
   return (m === "GET" || m === "POST") && pathname.startsWith("/api/voici/web/");
 }
 
@@ -215,6 +218,8 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
   const storage = new D1Storage(db);
   const now = Date.now();
   let m: RegExpMatchArray | null;
+
+  if (isVoiciCallPath(path)) return handleVoiciCallApi(request, env, (t) => caKeys(env, t), (p) => isPseudonymBanned(db, p), ctx);
 
   if (path.startsWith("/api/voici/web/")) {
     if (path === "/api/voici/web/alert-key" && method === "GET") {
@@ -439,7 +444,7 @@ export function voiciSiteHeaders(env: VoiciEnv): [string, string][] {
       "content-security-policy",
       // C: images are shown from blob: URLs of bytes the page already checked against the signed index (§4.2).
       `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; ` +
-        `connect-src https://${apex} wss://${apex} ${files} https://*.${services}; frame-ancestors 'none'; base-uri 'none'; ` +
+        `connect-src https://${apex} wss://${apex} ${files} https://*.${services}; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; ` +
         "form-action 'none'; object-src 'none'",
     ],
     ["x-frame-options", "DENY"],
@@ -447,7 +452,8 @@ export function voiciSiteHeaders(env: VoiciEnv): [string, string][] {
     ["referrer-policy", "no-referrer"],
     ["strict-transport-security", "max-age=63072000; includeSubDomains"],
     ["cross-origin-opener-policy", "same-origin"],
-    ["permissions-policy", "camera=(), microphone=(), geolocation=()"],
+    // Calls (docs/voici-calls.md §7) need the microphone on voi.ci itself; asked for only on the Call tap.
+    ["permissions-policy", `camera=(), microphone=${env.VOICI_CALLS === "on" ? "(self)" : "()"}, geolocation=()`],
   ];
 }
 
@@ -572,15 +578,23 @@ export async function deleteVoiciAccount(env: VoiciEnv, storage: Pick<D1Storage,
   const page = await storage.voici.getPage(username);
   if (page) await removeVoiciPageObjects(env, storage, username, page.pageId);
   await storage.voici.deleteAccount(username);
-  if (env.DB) await deleteVoiciAbuseAccount(env.DB, username);
+  if (env.DB) {
+    const calls = new D1Storage(env.DB).voiciCalls;
+    await Promise.all([page ? calls.deleteCallsForPage(page.pageId) : null, calls.deleteCallsForAccount(username)]);
+    await deleteVoiciAbuseAccount(env.DB, username);
+  }
 }
 
 /** The cron step (cronPlan.ts "voici-gc"). */
 export async function runVoiciGcCron(env: VoiciEnv, now: Date): Promise<unknown> {
   if (!env.DB) return null;
+  const t = now.getTime();
   const [gc] = await Promise.all([
-    runVoiciGc({ voici: new D1Storage(env.DB).voici, ...(env.VOICI ? { bucket: env.VOICI } : {}) }, now.getTime()),
-    pruneVoiciAbuse(env.DB, now.getTime()),
+    runVoiciGc({ voici: new D1Storage(env.DB).voici, ...(env.VOICI ? { bucket: env.VOICI } : {}) }, t),
+    pruneVoiciAbuse(env.DB, t),
+    new D1Storage(env.DB).voiciCalls
+      .collectCalls({ missedBefore: t - VOICI_MISSED_RETENTION_MS, countsBeforeDay: new Date(t - 2 * 86_400_000).toISOString().slice(0, 10), now: t, limit: 500 })
+      .catch(() => 0),
   ]);
   return gc;
 }

@@ -140,6 +140,10 @@ class_name = "BuildRelaySession"
 name = "BUILDER_RELAY"
 class_name = "BuilderRelaySession"
 
+[[durable_objects.bindings]]
+name = "VOICI_CALL_ROOM"
+class_name = "VoiciCallRoom"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["BuildRelaySession"]
@@ -164,6 +168,11 @@ tag = "v5"
 # The serving authority's feed to the relays (apps/com/src/servingFeed.ts).
 new_sqlite_classes = ["ServingFeed"]
 
+[[migrations]]
+tag = "v6"
+# voi.ci call rooms (apps/com/src/voiciCallRoom.ts).
+new_sqlite_classes = ["VoiciCallRoom"]
+
 [vars]
 # ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are
 # the SAME vars prod's wrangler.toml defaults to the literals — here we override
@@ -177,6 +186,8 @@ CONTROL_APEX = "gym.flagshipserver.com"
 # voi.ci pages and Messages: the gym's site origin (the delegation origin, CORS and the page host) and the switch.
 VOICI_WEB_ORIGIN = "https://gym.voi.ci"
 VOICI_ENABLED = "on"
+# voi.ci calls (docs/voici-calls.md): on in the gym; production turns it on at launch.
+VOICI_CALLS = "on"
 # Messages abuse side (voiciAbuse.ts, deviceIntegrity.ts): takedown purges go to the gym's files host; gym iOS builds
 # are development-signed, so App Attest checks the development aaguid.
 VOICI_FILES_HOST = "files.gym.voi.ci"

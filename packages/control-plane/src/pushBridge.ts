@@ -289,6 +289,10 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   // An operator's notice or a suspension (docs/abuse-handling.md): names no app, page or reason.
   "abuse-notice": { title: "Flagship", body: "There is a notice about your Flagship account. Open Flagship to read it." },
   "access-lists": { title: "Flagship", body: "Pro ended, so your apps use one access list on all your servers again." },
+  // voi.ci calls (docs/voici-calls.md §4) on a device without VoIP ringing (the China storefront, no CallKit):
+  // the call can still be answered while it rings if the app is opened. Names no caller.
+  "voici-call": { title: "Flagship", body: "Someone is calling you. Open Flagship to answer." },
+  "voici-missed-call": { title: "Flagship", body: "Missed call" },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 
@@ -367,6 +371,48 @@ async function sendApns(args: {
     body,
   });
   if (!r.ok) throw new Error(`apns ${r.status}: ${await r.text()}`);
+}
+
+/**
+ * iOS VoIP pushes for voi.ci calls (docs/voici-calls.md §4, §6): PushKit token, topic `<bundleId>.voip`, push type
+ * `voip`, priority 10, expiring with the ring. iOS wakes the app, which must report the call to CallKit at once.
+ * The payload names no caller: `flagship-call` carries the call id, the room host and the caller sealed to the inbox
+ * key. Returns how many tokens Apple accepted; a 410 (token gone) is reported through `gone`.
+ */
+export function buildVoipPushSender(cfg: { apns: NonNullable<PushBridgeConfig["apns"]>; fetchImpl?: FetchLike; now?: () => number }) {
+  const fetchImpl = cfg.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const now = cfg.now ?? (() => Date.now());
+  const state: { token?: string; mintedAt?: number } = {};
+  return async function sendVoip(tokens: string[], call: Record<string, string>, expiresAtSec: number, gone?: (token: string) => void): Promise<number> {
+    if (!state.token || (state.mintedAt && now() - state.mintedAt > APNS_TOKEN_TTL_MS)) {
+      state.token = await mintApnsJwt(cfg.apns, now);
+      state.mintedAt = now();
+    }
+    let sent = 0;
+    await Promise.all(
+      tokens.map(async (t) => {
+        try {
+          const r = await fetchImpl(`https://${cfg.apns.host ?? "api.push.apple.com"}/3/device/${t}`, {
+            method: "POST",
+            headers: {
+              authorization: `bearer ${state.token}`,
+              "apns-push-type": "voip",
+              "apns-topic": `${cfg.apns.bundleId}.voip`,
+              "apns-priority": "10",
+              "apns-expiration": String(expiresAtSec),
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ "flagship-call": call }),
+          });
+          if (r.ok) sent++;
+          else if (r.status === 410) gone?.(t);
+        } catch {
+          /* one token failing is not the call failing */
+        }
+      }),
+    );
+    return sent;
+  };
 }
 
 async function mintApnsJwt(
