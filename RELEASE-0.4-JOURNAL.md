@@ -528,6 +528,14 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   needed, view-model tests, mock gym lanes). Load is low, so agents compile natively, serialised by the lock
   `/private/tmp/claude-501/flagship-locks/native-build.lock`.
 
+- 2026-11-15: **Cloud report 03** (Task 3): Android at 5ffcb2e29 compiles and assembles (app + wear), 2975 tests, only
+  ENV/FLAKY failures (Android unit tests need root `node_modules`). Retail VM script NOT run: no `/dev/kvm` in the
+  cloud container (btvirt is in Ubuntu's bluez-test-tools; Debian unverified): the VM run needs a KVM host (UpCloud or
+  the Mac's Linux VM). New REAL failures, rechecked at the tip: two stale retail tests and the N06 key ratchet missing
+  `lib/orgJoin.js` (fixed here); `mobile-clients-inventory`: the call code builds raw HTTP clients outside the pinning
+  factory (iOS VoiciCallCenter/VoiciCallSession, Android VoiciCallCenter) → handed to the calls-2 agent.
+  calls-2 has 5 commits so far; enterprise-3 has the Android join screen committed.
+
 ## Resume point
 
 1. Merge agent branches as they report (enterprise-3, calls-2; worktrees ~/flagship-0.4-<slug>). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
