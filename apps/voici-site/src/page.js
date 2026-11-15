@@ -84,13 +84,14 @@ export function linkList(doc, links, lib) {
   );
 }
 
-export function messageButton(doc, onMessage) {
+export function messageButton(doc, onMessage, onCall) {
   return h(
     doc,
     "div",
     { class: "message-cta" },
-    h(doc, "button", { class: "btn btn-primary btn-wide", type: "button", on: { click: onMessage } }, icon(doc, "message"), h(doc, "span", {}, t("Send me a message"))),
-    h(doc, "p", { class: "cta-note" }, t("Private messages, with your Flagship app.")),
+    onMessage ? h(doc, "button", { class: "btn btn-primary btn-wide", type: "button", on: { click: onMessage } }, icon(doc, "message"), h(doc, "span", {}, t("Send me a message"))) : null,
+    onCall ? h(doc, "button", { class: onMessage ? "btn btn-secondary btn-wide call-btn" : "btn btn-primary btn-wide", type: "button", on: { click: onCall } }, icon(doc, "call"), h(doc, "span", {}, t("Call"))) : null,
+    h(doc, "p", { class: "cta-note" }, onCall ? t("Private messages and quantum-safe calls, with your Flagship app.") : t("Private messages, with your Flagship app.")),
   );
 }
 
@@ -171,7 +172,7 @@ export function footer(doc, o) {
 
 /**
  * The whole page into `root`. m = {username, host, apex, index, profile, avatarUrl, posts (newest first), hasOlder,
- * cardImageUrl(sha) → blob URL|null, pendingIds?, lib (the protocol module), onMessage, onReport, onOlder,
+ * cardImageUrl(sha) → blob URL|null, pendingIds?, lib (the protocol module), onMessage, onCall, onReport, onOlder,
  * languagePicker}.
  */
 export function renderPage(doc, root, m) {
@@ -187,7 +188,9 @@ export function renderPage(doc, root, m) {
         { class: "column" },
         profileHeader(doc, m),
         linkList(doc, m.profile.links, m.lib),
-        m.index.acceptsMessages === 1 && m.onMessage ? messageButton(doc, m.onMessage) : null,
+        (m.index.acceptsMessages === 1 && m.onMessage) || (m.index.acceptsCalls === 1 && m.onCall)
+          ? messageButton(doc, m.index.acceptsMessages === 1 ? m.onMessage : null, m.index.acceptsCalls === 1 ? m.onCall : null)
+          : null,
         m.posts.length ? postList(doc, m.posts, m) : null,
         footer(doc, m),
       ),

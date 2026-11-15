@@ -8,6 +8,7 @@ import { routeOf, siteConfig } from "./config.js";
 import { h } from "./dom.js";
 import { LOCALES, initLocale, locale, setLocale, t } from "./i18n.js";
 import { openMessages } from "./messages.js";
+import { openCall } from "./call.js";
 import { footer, renderPage, renderState } from "./page.js";
 import { openReport } from "./report.js";
 
@@ -111,6 +112,7 @@ async function showPage(cfg, username) {
       cardImageUrl: (sha) => images.get(sha) ?? null,
       lib: P,
       onMessage: () => withStore(openMessages),
+      onCall: () => withStore(openCall),
       onReport: () => withStore(openReport),
       onOlder: async () => {
         if (!(await loadChunk())) return failure(cfg, "bad-piece", username);
