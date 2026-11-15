@@ -378,6 +378,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   tree-move crash window closed, box refusals now in the catalog, iOS entries/choice sheet/progress/undo list). LEFT:
   Android + webapp screens, gym UI scenarios, Home entry, pull/peer sources, hybrid signature on these orders from iOS
   (strict boxes refuse). Machine load ~40: full suites unreliable; fewer parallel agents from now on.
+- 2026-11-14 Merged enterprise E1-E3 + first iOS screens: org authority protocol + vectors (TS, Swift), .com orgs
+  (D1 **0141**, /api/orgs, ceremony mailbox, audit chain), box org-authority pin + org-decided sensitive orders, iOS
+  Settings -> Organizations (create, approvals inbox, freeze, Restore my access, invite pseudonym-first). LEFT: Kotlin
+  port (written, uncompiled, uncommitted in ~/flagship-0.4-enterprise-build), invite accept screen, org servers
+  (AuthCode/registration/genesis), real key rotations on offboarding, Rust port, Android/web UI, audit export, account
+  conversion. Owner Qs: strictest-ceremony formula vs unanimity; founder veto k=1; recovery kit required under 3
+  admins?; trial seat limit (10 now); org reads need a signed token?
 
 ## Resume point
 
