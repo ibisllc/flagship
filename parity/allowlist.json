@@ -229,12 +229,7 @@
     {
       "check": "signed-tags",
       "key": "web:flagship/pq-seed-wrap/v1",
-      "reason": "iOS wraps a software ML-DSA seed under its Secure Enclave key, local storage only; the webapp holds no ML-DSA seed (keyless-web rule)."
-    },
-    {
-      "check": "test-vectors",
-      "key": "web:pq-hybrid",
-      "reason": "The webapp is verify-only for the architecture-v2 suites (keyless-web rule): it checks hybrid signatures, key bindings and the assurance policy but seals nothing hybrid, so it has no envelope, seal or KEM key-id code yet; the native apps and the box use them (pq-suites.md §11.1)."
+      "reason": "iOS wraps a software ML-DSA seed under its Secure Enclave key, local storage only; the webapp seals its ML-DSA seed with the admin root under a passkey instead (lib/keyCustody.js, docs/webapp-key-custody.md)."
     },
     {
       "check": "signed-tags",
