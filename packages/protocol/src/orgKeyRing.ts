@@ -496,3 +496,54 @@ export function orgNewestRingFor(rings: OrgKeyRings, kind: OrgKeyKind, scope: st
   const newest = chain[chain.length - 1];
   return newest && newest.recipients.some((x) => x.recipient === recipient) ? newest : null;
 }
+
+export interface OrgPendingRotation {
+  seatId: string;
+  leftAt: number;
+  keys: Array<{ kind: OrgKeyKind; scope: string }>;
+}
+
+/**
+ * What every departed seat still leaves to rotate: each key chain whose versions ever sealed to the
+ * seat and has no version since it left that leaves it out, and the disk key of every server where
+ * its grants gave it unlock at boot (its copy lives in the unlock deposit, not in a ring). A seat
+ * leaves at its revoke's `issuedAt`; an org admin at the first record that drops it.
+ */
+export function orgPendingRotations(
+  state: OrgAuthorityState,
+  book: OrgSeatBook,
+  rings: OrgKeyRings,
+  history: { revokes: ReadonlyArray<{ revoke: { seatId: string; issuedAt: number } }>; grants: ReadonlyArray<{ grant: { seatId: string }; roles: ReadonlyArray<{ role: string; servers?: unknown }> }> },
+): OrgPendingRotation[] {
+  const left = new Map<string, number>();
+  for (const r of history.revokes) {
+    if (book.revoked.has(r.revoke.seatId)) left.set(r.revoke.seatId, Math.min(left.get(r.revoke.seatId) ?? Infinity, r.revoke.issuedAt));
+  }
+  const current = new Set(state.current.admins.map((a) => a.seatId));
+  for (let i = 1; i < state.records.length; i++) {
+    const before = state.records[i - 1]!;
+    const at = state.records[i]!;
+    for (const a of before.admins) {
+      if (!at.admins.some((x) => x.seatId === a.seatId) && !current.has(a.seatId) && !left.has(a.seatId)) left.set(a.seatId, at.issuedAt);
+    }
+  }
+  const out: OrgPendingRotation[] = [];
+  for (const [seatId, leftAt] of left) {
+    const keys: OrgPendingRotation["keys"] = [];
+    for (const chain of rings.chains.values()) {
+      const r = chain[0]!.ring;
+      if (!chain.some((b) => b.recipients.some((x) => x.recipient === `seat:${seatId}`))) continue;
+      if (!orgRotationDone(rings, r.kind, r.scope, seatId, leftAt)) keys.push({ kind: r.kind, scope: r.scope });
+    }
+    const unlock = new Set<string>();
+    for (const g of history.grants) {
+      if (g.grant.seatId !== seatId) continue;
+      for (const role of g.roles) if (role.role === "unlock" && Array.isArray(role.servers)) for (const s of role.servers) unlock.add(String(s));
+    }
+    for (const s of unlock) {
+      if (!orgRotationDone(rings, "disk-key", s, seatId, leftAt) && !keys.some((k) => k.kind === "disk-key" && k.scope === s)) keys.push({ kind: "disk-key", scope: s });
+    }
+    if (keys.length > 0) out.push({ seatId, leftAt, keys: keys.sort((a, b) => (a.kind + a.scope < b.kind + b.scope ? -1 : 1)) });
+  }
+  return out.sort((a, b) => a.leftAt - b.leftAt || (a.seatId < b.seatId ? -1 : 1));
+}

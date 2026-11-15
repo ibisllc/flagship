@@ -294,6 +294,14 @@ import {
   handleOrgInviteCreate,
   handleOrgInviteGet,
   handleOrgLog,
+  handleOrgServerCode,
+  handleOrgServerRegister,
+  handleOrgServersList,
+  handleOrgSeatKem,
+  handleOrgBoxKem,
+  handleOrgKeysGet,
+  handleOrgKeyRingPost,
+  handleOrgExport,
   handleOrgOverturn,
   handleOrgRevoke,
   handleOrgSeatGrant,
@@ -701,7 +709,7 @@ const ROUTE_RE = {
   SERVER_REGISTER: /^\/api\/server\/register$/,
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
   ORGS: /^\/api\/orgs$/,
-  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log)$/,
+  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|keys|export)$/,
   ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
   ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
@@ -1470,6 +1478,7 @@ export async function tryControlPlane(
   // Enterprise orgs (docs/enterprise-accounts.md): every object verified against the org's chain.
   if (path.startsWith("/api/orgs")) {
     const od = { orgs: storage.orgs, usernames: storage.usernames };
+    const osd = { ...od, servers: storage.servers, authCodes: storage.authCodes, ...(env.SERVICES_APEX ? { apex: env.SERVICES_APEX } : {}) };
     if (method === "POST" && ROUTE_RE.ORGS.test(path)) return finish(await handleOrgCreate(od, await readJson(request)));
     if ((m = path.match(ROUTE_RE.ORG_CEREMONY_APPROVE)) && method === "POST") {
       return finish(await handleOrgCeremonyApprove(od, m[1]!, m[2]!, await readJson(request)));
@@ -1485,6 +1494,9 @@ export async function tryControlPlane(
         if (sub === "seats") return finish(await handleOrgSeatsGet(od, orgId));
         if (sub === "ceremonies") return finish(await handleOrgCeremonies(od, orgId));
         if (sub === "log") return finish(await handleOrgLog(od, orgId, Number(url.searchParams.get("after") ?? "0")));
+        if (sub === "servers") return finish(await handleOrgServersList(osd, orgId));
+        if (sub === "keys") return finish(await handleOrgKeysGet(osd, orgId));
+        if (sub === "export") return finish(await handleOrgExport(osd, orgId));
       }
       if (method === "POST") {
         const body = await readJson(request);
@@ -1496,6 +1508,11 @@ export async function tryControlPlane(
         if (sub === "overturns") return finish(await handleOrgOverturn(od, orgId, body));
         if (sub === "vetoes") return finish(await handleOrgVeto(od, orgId, body));
         if (sub === "ceremonies") return finish(await handleOrgCeremonyOpen(od, orgId, body));
+        if (sub === "servers/code") return finish(await handleOrgServerCode(osd, orgId, body));
+        if (sub === "servers/register") return finish(await handleOrgServerRegister(osd, orgId, body));
+        if (sub === "seat-kems") return finish(await handleOrgSeatKem(osd, orgId, body));
+        if (sub === "box-kems") return finish(await handleOrgBoxKem(osd, orgId, body));
+        if (sub === "keys") return finish(await handleOrgKeyRingPost(osd, orgId, body));
       }
     }
   }

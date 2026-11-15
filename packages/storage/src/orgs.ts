@@ -3,7 +3,7 @@
  * signed org objects `.com` relays (verified before storing; readers verify again) and the org's
  * audit hash chain.
  */
-import { orgSha256Hex } from "@flagship/protocol";
+import { ORG_LOG_GENESIS as PROTOCOL_LOG_GENESIS, orgLogEntryHash as protocolLogEntryHash } from "@flagship/protocol";
 import type { D1Database } from "./d1.js";
 
 export interface OrgRecord {
@@ -19,7 +19,26 @@ export interface OrgRecord {
 }
 
 /** `authority` keys by version (zero-padded), the others by their object's id or digest. */
-export type OrgObjectKind = "authority" | "invite" | "accept" | "grant" | "revoke" | "freeze" | "overturn" | "veto" | "ceremony";
+export type OrgObjectKind =
+  | "authority"
+  | "invite"
+  | "accept"
+  | "grant"
+  | "revoke"
+  | "freeze"
+  | "overturn"
+  | "veto"
+  | "ceremony"
+  /** A server code (the org's AuthCode), keyed by serial; `usedAt` is set in the body once a box registered with it. */
+  | "server-code"
+  /** A registered org server, keyed by its domain. */
+  | "server"
+  /** One version of a key-ring key, keyed `<kind>|<scope>|<version zero-padded>`. */
+  | "key-ring"
+  /** A seat's X-Wing key statement, keyed by seat id (newest wins). */
+  | "seat-kem"
+  /** A box's X-Wing key statement, keyed by server domain (newest wins). */
+  | "box-kem";
 
 export interface OrgObject {
   kind: OrgObjectKind;
@@ -54,13 +73,10 @@ export interface OrgStorage {
   listLog(orgId: string, afterSeq?: number): Promise<OrgLogEntry[]>;
 }
 
-export const ORG_LOG_GENESIS = "0".repeat(64);
-const TAG_ORG_LOG = "flagship/org-log/v1";
+export const ORG_LOG_GENESIS = PROTOCOL_LOG_GENESIS;
 
-/** `sha256("flagship/org-log/v1|<orgId>|<seq>|<prevHash>|<kind>|<refSha256>|<at>")`. */
-export function orgLogEntryHash(orgId: string, seq: number, prevHash: string, kind: string, refSha256: string, at: number): string {
-  return orgSha256Hex(new TextEncoder().encode([TAG_ORG_LOG, orgId, seq, prevHash, kind, refSha256, at].join("|")));
-}
+/** `sha256("flagship/org-log/v1|<orgId>|<seq>|<prevHash>|<kind>|<refSha256>|<at>")`; the audit export verifies the same hash. */
+export const orgLogEntryHash = protocolLogEntryHash;
 
 const byIssued = (a: OrgObject, b: OrgObject) => a.issuedAt - b.issuedAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
