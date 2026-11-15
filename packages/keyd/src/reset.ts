@@ -19,9 +19,34 @@ function writeKey(dir: string, name: string, bytes: Uint8Array): void {
   renameSync(tmp, final);
 }
 
+type Random = (n: number) => Uint8Array;
+const osRandom: Random = (n) => new Uint8Array(randomBytes(n));
+
 /** Empties keyd's state folder and puts a fresh box identity in it. keyd must be stopped. */
-export function resetKeydState(dir: string, random: (n: number) => Uint8Array = (n) => new Uint8Array(randomBytes(n))): { publicKeyHex: string; mldsaPubHex: string } {
+export function resetKeydState(dir: string, random: Random = osRandom): { publicKeyHex: string; mldsaPubHex: string } {
   if (existsSync(dir)) for (const f of readdirSync(dir)) rmSync(join(dir, f), { recursive: true, force: true });
+  return writeFreshIdentity(dir, random);
+}
+
+/** Same file as server-daemon retailClaim/wipe.ts RETAIL_IMAGE_MARKER: only a retail image has it. */
+export const RETAIL_IMAGE_MARKER_PATH = "/etc/flagship/retail-image.json";
+
+/**
+ * A retail box's first identity (docs/retail-box-setup.md §2): the image carries no box key, so
+ * every unit of a SKU makes its own on its first boot, from its own RNG, before keyd first serves.
+ * Runs in `migrate` (root, every keyd start) and does nothing once a key exists, or when the box
+ * holds an installer-made key keyd has yet to move in, or on any box that is not a retail image.
+ */
+export function ensureRetailFirstIdentity(
+  opts: { keydDir: string; legacyDir: string; retailMarker?: string; random?: Random },
+): { publicKeyHex: string; mldsaPubHex: string } | null {
+  if (!existsSync(opts.retailMarker ?? RETAIL_IMAGE_MARKER_PATH)) return null;
+  if (existsSync(join(opts.keydDir, "identity.key"))) return null;
+  if (existsSync(join(opts.legacyDir, "identity", "identity.priv.hex"))) return null;
+  return writeFreshIdentity(opts.keydDir, opts.random ?? osRandom);
+}
+
+function writeFreshIdentity(dir: string, random: Random): { publicKeyHex: string; mldsaPubHex: string } {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const seed = random(32);
   const pq = random(32);
