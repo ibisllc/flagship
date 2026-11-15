@@ -638,6 +638,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   libwebrtc on GitHub**: after a green CI run, a pre-release `libwebrtc-<milestone>-<run>` with checksums, apps pinned
   by URL + SHA-256 (sent to the libwebrtc agent).
 
+- 2026-11-15: **Cloud report 04** (at 612abfd7a): tsc, vitest **17941 passed / 0 failed**, i18n, parity, cargo fmt/test
+  (839/0), cargo deny clean, Android app + wear builds, 3016 Android tests (1 known flaky
+  `ModelMenuComposeTest.stagedAttachmentsWithNotice`). REAL: Rust CI clippy gate failed in flagship-keyd; the
+  cloud's fix was cherry-picked (`e46b6eb88`), workspace clippy clean here. Cloud task 5 sent: fix the Compose flake,
+  run the webapp Playwright gym specs, and an independent adversarial review of the new 0.4 protocol code (call keys,
+  org directory/connectors, keyd org CGK, log heads, retail claim helper).
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
