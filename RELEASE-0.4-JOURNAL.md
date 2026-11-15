@@ -588,6 +588,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   - `webapp-custody`: proposal 1-6 (shell v218, migration 0150 if needed).
   `org-directory` is still running (migration 0148, shell v219 if needed).
 
+- 2026-11-15: Owner: **keep the Terms §6 spam rules**. "Call back" means starting a call from the app's call and chat
+  logs (conversation list, thread, call history), not via the voi.ci page; told the calls-callback agent, doc
+  updated. Owner asked why the libwebrtc libraries need hosting: explained (they are compiled into the apps, and the
+  hosting question is only where our build machines fetch the pinned binary from); options written in
+  `docs/voici-calls-webrtc-options.md` "Where the built library lives".
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -620,7 +626,7 @@ Next steps for whoever resumes:
    - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
    - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
    - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
-4. **Waiting on the owner:** the Terms §6 spam bullet; hosting for the libwebrtc binaries; signing the webapp shell
+4. **Waiting on the owner:** where the built libwebrtc binary lives (options in the WebRTC doc); signing the webapp shell
    at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
    enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
 5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
