@@ -42,6 +42,13 @@ export {
   type ApplianceSeedPayload,
 } from "./appliance.js";
 export {
+  RETAIL_FORBIDDEN_PATHS,
+  RETAIL_IMAGE_MARKER_PATH,
+  buildRetailImageLayerScript,
+  retailImageMarker,
+  type RetailImageOptions,
+} from "./retailImage.js";
+export {
   buildPreseedFromRecipe,
   buildBootstrapFromRecipe,
   buildInstallBlobJsonFromRecipe,

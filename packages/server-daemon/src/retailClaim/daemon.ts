@@ -8,19 +8,20 @@
 // Claim state lives outside the owner's data volume (RETAIL_STATE_DIR), so it outlasts the wipe.
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { join } from "node:path";
 import { writeFileDurable } from "../durableFile.js";
 import { runSetupStep, runsUnprivileged } from "../privileged.js";
 import { localCommandRunner, type CommandRunner } from "../serviceRunner.js";
-import { BLUEZ_FRESH_IDENTITY_DROP_IN, BLUEZ_FRESH_IDENTITY_DROP_IN_PATH, BLUEZ_MAIN_CONF, BLUEZ_MAIN_CONF_PATH, BluezPeripheral } from "./bluez.js";
+import { RETAIL_HOST_FILES, retailHostSetupScript, type RetailHostFile } from "@flagship/boot-chain";
+import { BluezPeripheral } from "./bluez.js";
 import { ClaimStateStore, type ClaimLifecycle } from "./claimState.js";
 import { RetailClaimService, type ClaimEvent, type ClaimIdentity } from "./claimService.js";
 import { ConsoleCodeDisplay, type CodeDisplay } from "./codeDisplay.js";
 import { DbusConnection } from "./dbus.js";
 import { connectAndDiagnose, systemNetworkProbes } from "./network.js";
-import { EvdevPowerKeySource, ensureLogindPowerKeyIgnored, type PowerKeySource } from "./powerKey.js";
+import { EvdevPowerKeySource, type PowerKeySource } from "./powerKey.js";
 import { verifyClaimRecipe } from "./recipe.js";
 import { keydClaimIdentity, type KeydBoxSigner } from "./keydIdentity.js";
 import { defaultEntropyReader } from "./rngGate.js";
@@ -46,30 +47,41 @@ export async function retailLifecycle(dir = RETAIL_STATE_DIR): Promise<ClaimLife
 }
 
 /**
- * The host settings a retail box needs from its first boot: logind ignores short presses of the
- * power key, and bluetoothd runs LE-only with a private address and no hostname. The image ships
- * them; this puts them back if they went missing (root only; a daemon without root leaves them).
+ * The host settings a retail box needs from its first boot (boot-chain retailHost.ts): logind
+ * ignores short presses of the power key, bluetoothd runs LE-only with a private address and no
+ * hostname, and the daemon's user may make the claim's BlueZ calls and read the power button. The
+ * image ships them; this puts back any that went missing (root only; a daemon without root leaves
+ * them to the image).
  */
-export async function ensureRetailHostConfig(log: (m: string) => void, cmd: CommandRunner = localCommandRunner): Promise<void> {
-  if (runsUnprivileged() || process.getuid?.() !== 0) return;
-  await ensureLogindPowerKeyIgnored(cmd, { log }).catch((e) => log(`[retail] logind drop-in: ${(e as Error).message}`));
-  let changed = false;
-  for (const [path, text] of [
-    [BLUEZ_MAIN_CONF_PATH, BLUEZ_MAIN_CONF],
-    [BLUEZ_FRESH_IDENTITY_DROP_IN_PATH, BLUEZ_FRESH_IDENTITY_DROP_IN],
-  ] as const) {
-    if ((await readFile(path, "utf8").catch(() => null)) === text) continue;
+export async function ensureRetailHostConfig(
+  log: (m: string) => void,
+  cmd: CommandRunner = localCommandRunner,
+  opts: { files?: readonly RetailHostFile[]; isRoot?: boolean } = {},
+): Promise<RetailHostFile["reload"][]> {
+  if (!(opts.isRoot ?? (!runsUnprivileged() && process.getuid?.() === 0))) return [];
+  for (const line of retailHostSetupScript().trim().split("\n")) await cmd.run("sh", ["-c", line]).catch((e) => log(`[retail] ${(e as Error).message}`));
+  const reloads = new Set<RetailHostFile["reload"]>();
+  for (const f of opts.files ?? RETAIL_HOST_FILES) {
+    if ((await readFile(f.path, "utf8").catch(() => null)) === f.content) continue;
     try {
-      await mkdir(dirname(path), { recursive: true, mode: 0o755 });
-      await writeFile(path, text, { mode: 0o644 });
-      changed = true;
+      await mkdir(dirname(f.path), { recursive: true, mode: 0o755 });
+      await writeFileDurable(f.path, f.content, f.mode);
+      reloads.add(f.reload);
     } catch (e) {
-      log(`[retail] ${path}: ${(e as Error).message}`);
+      log(`[retail] ${f.path}: ${(e as Error).message}`);
     }
   }
-  if (!changed) return;
-  await cmd.run("systemctl", ["daemon-reload"]).catch(() => {});
-  await cmd.run("systemctl", ["restart", "bluetooth"]).catch((e) => log(`[retail] restart bluetooth: ${(e as Error).message}`));
+  const quiet = (c: string, a: string[]) => cmd.run(c, a).catch((e) => log(`[retail] ${c} ${a.join(" ")}: ${(e as Error).message}`));
+  if (reloads.has("systemd") || reloads.has("bluetooth")) await quiet("systemctl", ["daemon-reload"]);
+  if (reloads.has("logind")) await quiet("systemctl", ["kill", "-s", "HUP", "systemd-logind.service"]);
+  if (reloads.has("dbus")) await quiet("systemctl", ["reload", "dbus.service"]);
+  if (reloads.has("udev")) {
+    await quiet("udevadm", ["control", "--reload"]);
+    await quiet("udevadm", ["trigger", "--subsystem-match=input", "--action=change"]);
+  }
+  if (reloads.has("bluetooth")) await quiet("systemctl", ["restart", "bluetooth"]);
+  if (reloads.size > 0) log(`[retail] host settings put back: ${[...reloads].join(", ")}`);
+  return [...reloads];
 }
 
 /** A radio that never advertises: a box whose Bluetooth is missing can still be claimed by setup code. */

@@ -42,30 +42,8 @@ export function frameSizeForMtu(mtu: number | undefined): number {
   return Math.max(ATT_DEFAULT_PAYLOAD, Math.min(ATT_MAX_VALUE, Math.floor(mtu) - 3));
 }
 
-/**
- * What the image sets in `/etc/bluetooth/main.conf`: LE only, a resolvable private address,
- * a generic name for the GAP Device Name characteristic (never the hostname), and the
- * experimental advert properties the scan response needs (`ScanResponseServiceData`).
- */
-export const BLUEZ_MAIN_CONF = `[General]
-Name = Flagship
-ControllerMode = le
-Privacy = device
-Experimental = true
-
-[Policy]
-AutoEnable = true
-`;
-export const BLUEZ_MAIN_CONF_PATH = "/etc/bluetooth/main.conf";
-
-/**
- * A bluetoothd drop-in that forgets the adapter's local identity key before every start, so the
- * private addresses of one boot cannot be resolved to those of the next.
- */
-export const BLUEZ_FRESH_IDENTITY_DROP_IN = `[Service]
-ExecStartPre=/bin/sh -c 'rm -f /var/lib/bluetooth/*/identity'
-`;
-export const BLUEZ_FRESH_IDENTITY_DROP_IN_PATH = "/etc/systemd/system/bluetooth.service.d/50-flagship-fresh-identity.conf";
+// The host files the image ships (main.conf, the bluetoothd drop-in) live in boot-chain retailHost.ts.
+export { BLUEZ_FRESH_IDENTITY_DROP_IN, BLUEZ_FRESH_IDENTITY_DROP_IN_PATH, BLUEZ_MAIN_CONF, BLUEZ_MAIN_CONF_PATH } from "@flagship/boot-chain";
 
 export interface BluezPeripheralOptions {
   bus: DbusBus;

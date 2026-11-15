@@ -3,6 +3,7 @@
 // of 1 answers the claim's timed press, 3 shows the setup code on a monitor, 5 opens the reset
 // window. A hold of about 4 s is a firmware hard off the OS never sees.
 
+import { LOGIND_DROP_IN, LOGIND_DROP_IN_PATH } from "@flagship/boot-chain";
 import { existsSync } from "node:fs";
 import { mkdir, open, readFile, type FileHandle } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -180,23 +181,7 @@ export class EvdevPowerKeySource implements PowerKeySource {
   }
 }
 
-export const LOGIND_DROP_IN_PATH = "/etc/systemd/logind.conf.d/50-flagship-power-key.conf";
-
-/**
- * In the retail metal image from the first boot, so a short press never shuts the box down,
- * claimed or not. Never on a VM appliance: Studio stops a VM gracefully through the ACPI power
- * button, and ignoring it would leave only the forced stop that once corrupted a box mid-update.
- */
-export const LOGIND_DROP_IN = `[Login]
-HandlePowerKey=ignore
-HandlePowerKeyLongPress=ignore
-HandleRebootKey=ignore
-HandleRebootKeyLongPress=ignore
-HandleSuspendKey=ignore
-HandleSuspendKeyLongPress=ignore
-HandleHibernateKey=ignore
-HandleHibernateKeyLongPress=ignore
-`;
+export { LOGIND_DROP_IN, LOGIND_DROP_IN_PATH };
 
 /** Writes the drop-in on a box whose image predates it and has logind reread its settings. */
 export async function ensureLogindPowerKeyIgnored(
