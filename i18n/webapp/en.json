@@ -14461,5 +14461,61 @@
   "Don't allow calls from them": {
     "en": "Don't allow calls from them",
     "ctx": "webapp/views/thread.js:285"
+  },
+  "Release this box": {
+    "en": "Release this box",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": {
+    "en": "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": {
+    "en": "To keep your data, make a backup first, or transfer the server to its new owner instead.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "Only an admin device of this account can release this box.": {
+    "en": "Only an admin device of this account can release this box.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "The box is being wiped. It restarts as a new box.": {
+    "en": "The box is being wiped. It restarts as a new box.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "Only this account's admin key can release this box.": {
+    "en": "Only this account's admin key can release this box.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "That order is for another server. Refresh this page and try again.": {
+    "en": "That order is for another server. Refresh this page and try again.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "This device's clock is too far from the server's. Check the time and try again.": {
+    "en": "This device's clock is too far from the server's. Check the time and try again.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "That order was already used. Try again.": {
+    "en": "That order was already used. Try again.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "This box is already released.": {
+    "en": "This box is already released.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "The box couldn't be released. Try again in a moment.": {
+    "en": "The box couldn't be released. Try again in a moment.",
+    "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "Release this box?": {
+    "en": "Release this box?",
+    "ctx": "webapp/views/release-this-box.js"
+  },
+  "Wipe and release": {
+    "en": "Wipe and release",
+    "ctx": "webapp/views/release-this-box.js"
+  },
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": {
+    "en": "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.",
+    "ctx": "webapp/lib/releaseThisBox.js"
   }
 }

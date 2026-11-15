@@ -3540,5 +3540,19 @@
   "Allow calls from them": "Permitir chamadas dessa pessoa",
   "Don't allow calls from them": "Não permitir chamadas dessa pessoa",
   "They can call you now.": "Essa pessoa já pode ligar para você.",
-  "They can't call you any more.": "Essa pessoa não pode mais ligar para você."
+  "They can't call you any more.": "Essa pessoa não pode mais ligar para você.",
+  "Release this box": "Liberar esta caixa",
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": "Liberar apaga tudo nesta caixa: os apps, os dados deles e as chaves. Não dá para desfazer. A caixa volta a ficar como nova, pronta para o próximo proprietário.",
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": "Para manter seus dados, faça um backup antes ou transfira o servidor para o novo proprietário.",
+  "Only an admin device of this account can release this box.": "Só um dispositivo administrador desta conta pode liberar esta caixa.",
+  "The box is being wiped. It restarts as a new box.": "A caixa está sendo apagada. Ela reinicia como uma caixa nova.",
+  "Only this account's admin key can release this box.": "Só a chave de administrador desta conta pode liberar esta caixa.",
+  "That order is for another server. Refresh this page and try again.": "Essa ordem é para outro servidor. Atualize esta página e tente de novo.",
+  "This device's clock is too far from the server's. Check the time and try again.": "O relógio deste dispositivo está muito diferente do relógio do servidor. Confira a hora e tente de novo.",
+  "That order was already used. Try again.": "Essa ordem já foi usada. Tente de novo.",
+  "This box is already released.": "Esta caixa já está liberada.",
+  "The box couldn't be released. Try again in a moment.": "Não foi possível liberar a caixa. Tente de novo daqui a pouco.",
+  "Release this box?": "Liberar esta caixa?",
+  "Wipe and release": "Apagar e liberar",
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": "Este servidor precisa de uma assinatura resistente à computação quântica, que a webapp não consegue fazer. Libere-o pelo app Flagship em um telefone de administrador."
 }

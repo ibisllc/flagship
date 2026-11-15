@@ -144,6 +144,7 @@ import { accountReadFetch } from "../lib/accountRead.js";
 import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
+import { releaseThisBoxCardHtml, wireReleaseThisBox } from "./release-this-box.js";
 import { directAccessSlotHtml, wireDirectAccess } from "./direct-access.js";
 import { runtimeSectionHtml, wireRuntimeSection } from "./runtime-verification.js";
 import { localAiEntryHtml, wireLocalAiEntry } from "./local-ai.js";
@@ -574,6 +575,7 @@ export async function renderServerDetail() {
         <p class="note small hidden" id="power-status"></p>
       </div>
       ${debugAccessCardHtml(body.debugAccess, { isAdmin: isAdminDevice(session), fqdn: body.serverFqdn })}
+      ${releaseThisBoxCardHtml(body.retail, { isAdmin: isAdminDevice(session) })}
       ${directAccessSlotHtml(body.serverFqdn)}
       ${runtimeSectionHtml(body)}
       ${localAiEntryHtml()}
@@ -630,6 +632,7 @@ export async function renderServerDetail() {
     void wireServingLine(body, { pod: detailPod }).catch(() => {});
     wireJournal(body);
     wireDebugAccess(body);
+    wireReleaseThisBox(body);
     void wireDirectAccess(body).catch(() => {});
     wireRuntimeSection(body);
     wireLocalAiEntry(body.serverFqdn);

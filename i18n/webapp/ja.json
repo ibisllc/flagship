@@ -3540,5 +3540,19 @@
   "Allow calls from them": "この人からの通話を許可",
   "Don't allow calls from them": "この人からの通話を許可しない",
   "They can call you now.": "この人はあなたに通話できるようになりました。",
-  "They can't call you any more.": "この人はもうあなたに通話できません。"
+  "They can't call you any more.": "この人はもうあなたに通話できません。",
+  "Release this box": "このボックスを解放",
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": "解放すると、このボックスのアプリ、そのデータ、鍵がすべて消去されます。元に戻せません。ボックスは新品の状態に戻り、次の所有者を待ちます。",
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": "データを残すには、先にバックアップを作成するか、代わりにサーバーを新しい所有者に移管してください。",
+  "Only an admin device of this account can release this box.": "このボックスを解放できるのは、このアカウントの管理者デバイスだけです。",
+  "The box is being wiped. It restarts as a new box.": "ボックスを消去しています。新しいボックスとして再起動します。",
+  "Only this account's admin key can release this box.": "このボックスを解放できるのは、このアカウントの管理者キーだけです。",
+  "That order is for another server. Refresh this page and try again.": "その指示は別のサーバー向けです。このページを更新して、もう一度お試しください。",
+  "This device's clock is too far from the server's. Check the time and try again.": "このデバイスの時計がサーバーと大きくずれています。時刻を確認して、もう一度お試しください。",
+  "That order was already used. Try again.": "その指示はすでに使われています。もう一度お試しください。",
+  "This box is already released.": "このボックスはすでに解放されています。",
+  "The box couldn't be released. Try again in a moment.": "ボックスを解放できませんでした。しばらくしてからもう一度お試しください。",
+  "Release this box?": "このボックスを解放しますか？",
+  "Wipe and release": "消去して解放",
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": "このサーバーには耐量子署名が必要ですが、webapp では作成できません。管理者の電話の Flagship アプリから解放してください。"
 }

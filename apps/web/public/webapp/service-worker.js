@@ -497,7 +497,10 @@
 //  v211: an organization's seat invitation (/org-join) opens a page that shows it and hands the link to the
 //       phone (views/org-join.js, lib/orgJoin.js; docs/enterprise-accounts.md §7).
 //  v212: voi.ci missed calls in a thread and "Allow calls from them" (lib/voiciCalls.js).
-const SHELL_VERSION = "v212";
+//  v213: a retail box's server page offers "Release this box" to admin devices: the admin root signs
+//       flagship/box-release/v1 and the box wipes itself back to unclaimed (lib/releaseThisBox.js,
+//       views/release-this-box.js).
+const SHELL_VERSION = "v213";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -554,6 +557,7 @@ const OPTIONAL_SHELL = [
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
   "/lib/debugAccess.js",
+  "/lib/releaseThisBox.js",
   "/lib/directAccess.js",
   "/lib/directName.js",
   "/lib/directNames.js",
@@ -767,6 +771,7 @@ const OPTIONAL_SHELL = [
   "/views/server-sharing.js",
   "/views/server-backups.js",
   "/views/debug-access.js",
+  "/views/release-this-box.js",
   "/views/direct-access.js",
   "/views/runtime-verification.js",
   "/views/accelerators.js",
