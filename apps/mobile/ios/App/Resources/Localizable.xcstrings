@@ -151031,6 +151031,12 @@
           }
         }
       }
+    },
+    "Someone is calling you. Open Flagship to answer.": {
+      "extractionState": "manual"
+    },
+    "Missed call": {
+      "extractionState": "manual"
     }
   },
   "version": "1.0"

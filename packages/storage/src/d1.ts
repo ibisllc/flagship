@@ -9,6 +9,7 @@ import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js
 import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
 import { D1DirectAccessStorage, type DirectAccessStorage } from "./directAccess.js";
 import { D1VoiciStorage, type VoiciStorage } from "./voici.js";
+import { D1VoiciCallStorage, type VoiciCallStorage } from "./voiciCalls.js";
 import { D1ServerBootKeyStorage, type ServerBootKeyStorage } from "./serverBootKeys.js";
 import { D1BoxClaimStorage, type BoxClaimStorage } from "./boxClaims.js";
 import { D1OrgStorage, type OrgStorage } from "./orgs.js";
@@ -5406,6 +5407,8 @@ export class D1Storage implements Storage {
   serverBootKeys: ServerBootKeyStorage;
   pqTrust: PqTrustStorage;
   voici: VoiciStorage;
+  /** voi.ci calls (migration 0146). */
+  voiciCalls: VoiciCallStorage;
   relayHealth: RelayHealthStorage;
   directAccess: DirectAccessStorage;
   /** Retail box claims (migration 0134). */
@@ -5477,6 +5480,7 @@ export class D1Storage implements Storage {
     this.serverBootKeys = new D1ServerBootKeyStorage(db);
     this.pqTrust = new D1PqTrustStorage(db);
     this.voici = new D1VoiciStorage(db);
+    this.voiciCalls = new D1VoiciCallStorage(db);
     this.relayHealth = new D1RelayHealthStorage(db);
     this.directAccess = new D1DirectAccessStorage(db);
     this.boxClaims = new D1BoxClaimStorage(db);

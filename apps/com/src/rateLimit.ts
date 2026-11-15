@@ -231,6 +231,10 @@ export type RateLimitEndpoint =
   // thread fetches; the owner's inbox, blocks, drafts and state; anonymous page reads.
   | "voici-send"
   | "voici-new-conversation"
+  // voi.ci calls (docs/voici-calls.md §6): per address, per caller pseudonym (3 an hour, 10 a day), per page.
+  | "voici-call"
+  | "voici-call-caller"
+  | "voici-call-page"
   | "voici-publish"
   | "voici-piece"
   | "voici-thread"
@@ -524,6 +528,12 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "voici-report": [{ axis: "ip", limit: 10, windowSec: 3600 }],
   "voici-send": [{ axis: "ip", limit: 60, windowSec: 3600 }],
   "voici-new-conversation": [{ axis: "subject", limit: 200, windowSec: 86_400 }],
+  "voici-call": [{ axis: "ip", limit: 30, windowSec: 3600 }],
+  "voici-call-caller": [
+    { axis: "subject", limit: 3, windowSec: 3600 },
+    { axis: "subject", limit: 10, windowSec: 86_400 },
+  ],
+  "voici-call-page": [{ axis: "subject", limit: 20, windowSec: 3600 }],
   "voici-publish": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "subject", limit: 100, windowSec: 86_400 },

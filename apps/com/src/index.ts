@@ -6,6 +6,7 @@ export { BuildRelaySession } from "./buildRelay.js";
 export { BuilderRelaySession } from "./builderRelay.js";
 export { RateLimitCounter } from "./rateLimitCounter.js";
 export { ServingFeed } from "./servingFeed.js";
+export { VoiciCallRoom } from "./voiciCallRoom.js";
 
 /**
  * flagshipserver.com — Cloudflare Worker.

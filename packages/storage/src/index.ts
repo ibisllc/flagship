@@ -9,6 +9,7 @@ export * from "./requestD1.js";
 export * from "./serverBootKeys.js";
 export * from "./pqTrust.js";
 export * from "./voici.js";
+export * from "./voiciCalls.js";
 export * from "./names.js";
 export * from "./accountRename.js";
 export * from "./relayHealth.js";

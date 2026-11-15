@@ -15755,5 +15755,15 @@
   "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": {
     "en": "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:66"
+  },
+  "Someone is calling you. Open Flagship to answer.": {
+    "en": "Someone is calling you. Open Flagship to answer.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "Missed call": {
+    "en": "Missed call",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }
