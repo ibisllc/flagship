@@ -24,10 +24,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch makes the older run pointless.
+# A newer push to a feature or PR branch makes the older run pointless. main and release/* are
+# never cancelled: under rapid pushes they would otherwise rarely finish a run, and their result
+# is the one a release reads (runs still queue one at a time per branch).
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/release/') && github.ref != 'refs/heads/main' }}
 
 jobs:
   # The unit suite runs in four parallel shards; the typecheck, the vectors and the
