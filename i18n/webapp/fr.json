@@ -3534,5 +3534,11 @@
   "The organization knows you only by this name. It can't see your own account or your servers.": "L'organisation ne vous connaît que sous ce nom. Elle ne voit ni votre propre compte ni vos serveurs.",
   "This invitation was already accepted.": "Cette invitation a déjà été acceptée.",
   "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": "Ouvrez ce lien sur votre téléphone pour rejoindre. L'adhésion est signée avec des clés que seule l'app Flagship de votre téléphone détient.",
-  "Join an organization": "Rejoindre une organisation"
+  "Join an organization": "Rejoindre une organisation",
+  "Missed call": "Appel manqué",
+  "Missed video call": "Appel vidéo manqué",
+  "Allow calls from them": "Autoriser ses appels",
+  "Don't allow calls from them": "Ne pas autoriser ses appels",
+  "They can call you now.": "Cette personne peut maintenant vous appeler.",
+  "They can't call you any more.": "Cette personne ne peut plus vous appeler."
 }

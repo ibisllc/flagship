@@ -3534,5 +3534,11 @@
   "The organization knows you only by this name. It can't see your own account or your servers.": "组织只通过这个名称认识你，看不到你自己的账户或服务器。",
   "This invitation was already accepted.": "此邀请已被接受。",
   "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": "请在手机上打开此链接以加入。加入时的签名使用只有你手机上的 Flagship 应用持有的密钥。",
-  "Join an organization": "加入组织"
+  "Join an organization": "加入组织",
+  "Missed call": "未接来电",
+  "Missed video call": "未接视频通话",
+  "Allow calls from them": "允许对方来电",
+  "Don't allow calls from them": "不允许对方来电",
+  "They can call you now.": "对方现在可以给你打电话了。",
+  "They can't call you any more.": "对方不能再给你打电话了。"
 }

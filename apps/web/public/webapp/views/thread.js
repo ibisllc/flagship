@@ -7,7 +7,7 @@ import { toast } from "../lib/toast.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { inlineChoice, inlineConfirm, inlinePrompt } from "../lib/modal.js";
 import { findVoiciLinks, prepareVoiciText, VOICI_REPORT_REASONS } from "../lib/voiciProtocol.js";
-import { isRequest, postBlock, postMessageReport, sendReply } from "../lib/voiciOwner.js";
+import { isRequest, postBlock, postCallAllow, postMessageReport, sendReply } from "../lib/voiciOwner.js";
 import { changeState, emitWorld, findConversation, refreshWorld, visitorName, world } from "../lib/voiciWorld.js";
 import { voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
 
@@ -85,6 +85,19 @@ function render() {
     notice.appendChild(card);
   }
   list.replaceChildren();
+  for (const call of world.missedCalls.filter((x) => x.conv === cv.conv)) {
+    const row = document.createElement("div");
+    row.className = "msg msg-theirs msg-call";
+    row.setAttribute("data-call", call.callId);
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.textContent = call.video ? tr("Missed video call") : tr("Missed call");
+    const meta = document.createElement("div");
+    meta.className = "msg-meta muted-sm";
+    meta.textContent = formatWhen(call.ringingAt);
+    row.append(bubble, meta);
+    list.appendChild(row);
+  }
   const lastMine = [...cv.messages].reverse().find((m) => m.mine);
   for (const m of cv.messages) {
     const row = document.createElement("div");
@@ -254,17 +267,30 @@ async function deleteConv() {
   }
 }
 
+async function callAllow(cv, op) {
+  try {
+    await postCallAllow(world.page, cv.conv, op);
+    toast(op === "allow" ? tr("They can call you now.") : tr("They can't call you any more."));
+  } catch (e) {
+    toast(voiciErrorText(e), "err");
+  }
+}
+
 async function menu() {
   const cv = findConversation(openConv);
   if (!cv) return;
   const choices = [{ id: "rename", label: tr("Rename"), secondary: true }];
   if (isRequest(cv, world.state)) choices.push({ id: "accept", label: tr("Accept"), secondary: true });
+  if (world.page?.index?.acceptsCalls === 1) {
+    choices.push({ id: "allow-calls", label: tr("Allow calls from them"), secondary: true }, { id: "disallow-calls", label: tr("Don't allow calls from them"), secondary: true });
+  }
   choices.push({ id: "block", label: tr("Block"), danger: true }, { id: "report", label: tr("Report"), secondary: true }, { id: "delete", label: tr("Delete conversation"), danger: true });
   const pick = await inlineChoice({ title: visitorName(cv.pseudonymPub), choices });
   if (pick === "rename") await rename();
   else if (pick === "accept") await acceptConv();
   else if (pick === "block") await block();
   else if (pick === "delete") await deleteConv();
+  else if (pick === "allow-calls" || pick === "disallow-calls") await callAllow(cv, pick === "allow-calls" ? "allow" : "disallow");
   else if (pick === "report") {
     const last = [...cv.messages].reverse().find((m) => !m.mine);
     if (last) await report(last);
