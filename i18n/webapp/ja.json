@@ -3523,5 +3523,16 @@
   "{0} of {1} co-managers across your servers": "共同管理者 {0} / {1} 人（全サーバー）",
   "On the Free plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro for more.": "無料プランでは、サーバー全体で共同管理者は最大 {0} 人です。先に1人外すか、Pro に切り替えると増やせます。",
   "On the Pro plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro Max for more.": "Pro プランでは、サーバー全体で共同管理者は最大 {0} 人です。先に1人外すか、Pro Max に切り替えると増やせます。",
-  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "Pro Max プランでは、サーバー全体で共同管理者は最大 {0} 人です。先に1人外すか、Enterprise に切り替えると増やせます。"
+  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "Pro Max プランでは、サーバー全体で共同管理者は最大 {0} 人です。先に1人外すか、Enterprise に切り替えると増やせます。",
+  "Admin of every server": "すべてのサーバーの管理者",
+  "Admin of {0}": "{0} の管理者",
+  "Admin of the app {0}": "アプリ {0} の管理者",
+  "This invitation has run out. Ask for a new one.": "この招待は期限切れです。新しい招待を依頼してください。",
+  "This invitation couldn't be opened. Check the link and try again.": "この招待を開けませんでした。リンクを確認して、もう一度お試しください。",
+  "Checking the invitation…": "招待を確認しています…",
+  "{0} invited you to join as {1}": "{0} から {1} として参加するよう招待されました",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "組織はこの名前でしかあなたを知りません。あなた自身のアカウントやサーバーは見えません。",
+  "This invitation was already accepted.": "この招待はすでに承諾されています。",
+  "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": "参加するには、このリンクをスマートフォンで開いてください。参加の署名には、スマートフォンの Flagship アプリだけが持つ鍵が使われます。",
+  "Join an organization": "組織に参加"
 }

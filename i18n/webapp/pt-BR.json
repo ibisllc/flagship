@@ -3523,5 +3523,16 @@
   "{0} of {1} co-managers across your servers": "{0} de {1} coadministradores nos seus servidores",
   "On the Free plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro for more.": "No plano gratuito seus servidores podem ter até {0} coadministradores no total. Remova um primeiro ou mude para o Pro para ter mais.",
   "On the Pro plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro Max for more.": "No plano Pro seus servidores podem ter até {0} coadministradores no total. Remova um primeiro ou mude para o Pro Max para ter mais.",
-  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "No plano Pro Max seus servidores podem ter até {0} coadministradores no total. Remova um primeiro ou mude para o Enterprise para ter mais."
+  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "No plano Pro Max seus servidores podem ter até {0} coadministradores no total. Remova um primeiro ou mude para o Enterprise para ter mais.",
+  "Admin of every server": "Admin de todos os servidores",
+  "Admin of {0}": "Admin de {0}",
+  "Admin of the app {0}": "Admin do app {0}",
+  "This invitation has run out. Ask for a new one.": "Este convite expirou. Peça um novo.",
+  "This invitation couldn't be opened. Check the link and try again.": "Não foi possível abrir este convite. Confira o link e tente de novo.",
+  "Checking the invitation…": "Verificando o convite…",
+  "{0} invited you to join as {1}": "{0} convidou você para entrar como {1}",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "A organização só conhece você por este nome. Ela não vê sua própria conta nem seus servidores.",
+  "This invitation was already accepted.": "Este convite já foi aceito.",
+  "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": "Abra este link no seu celular para entrar. A entrada é assinada com chaves que só o app Flagship do seu celular tem.",
+  "Join an organization": "Entrar em uma organização"
 }

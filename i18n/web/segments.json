@@ -7031,6 +7031,22 @@
       "open/index.html"
     ]
   },
+  "s75e93280e5": {
+    "en": "You're invited to join an organization",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "sbfda151445": {
+    "en": "Join it in the Flagship app on your phone. Get the app, then open this link again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
   "s5e3791de5b": {
     "en": "Someone accepted your invite",
     "kind": "text",

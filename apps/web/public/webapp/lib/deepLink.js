@@ -87,6 +87,19 @@ export async function dispatchInitialView() {
     }
   }
 
+  // An organization's seat invitation (`/org-join#o=&s=&k=`, docs/enterprise-accounts.md §7) handed over by the
+  // open-in-app page: shown here, accepted on the phone.
+  if (window.location.pathname.replace(/\/+$/, "") === "/org-join") {
+    const raw = window.location.href;
+    window.history.replaceState({}, "", "/");
+    const { parseOrgJoinLink } = await import("./orgJoin.js");
+    const link = parseOrgJoinLink(raw);
+    if (link) {
+      const { enterOrgJoin } = await import("../views/org-join.js");
+      return enterOrgJoin(link);
+    }
+  }
+
   // Service-access friend deep-link: if this load was a /invite#<secret>
   // landing that detoured through bootstrap/unlock/PIN/recovery to get the
   // friend's key, resume the redeem now instead of the normal dispatch

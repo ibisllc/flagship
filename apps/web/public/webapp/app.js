@@ -203,6 +203,7 @@ const SUB_VIEW_TABS = {
   "view-messages": "messages",
   "view-thread": "messages",
   "view-voici-sign-in": "messages",
+  "view-org-join": "settings",
   "view-signed-in-sites": "messages",
   "view-install-progress": "activity",
   "view-account-audit": "activity",
