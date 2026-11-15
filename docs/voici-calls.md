@@ -559,3 +559,30 @@ superseded. What we promise instead:
   conversation can ring your phone." The ring-back uses today's push path on `.com`.
 - **Policy, not cryptography:** no log of who called whom, the channel is deleted on "Stop call-backs" or when the
   conversation ends, and pushes carry no content.
+
+### Deleting a conversation, and revealing who you are (owner, 2026-11-15)
+
+**Delete = forget.** Deleting a conversation in the app (either side) is the only control, and it does three things:
+1. The app sends a signed delete for that conversation's mailbox to `.com`, which drops the mailbox, any queued
+   messages and its ring-back channel at once. Nothing is kept: no archive and no tombstone (mailbox ids are random, so a
+   send or delete to a gone id simply fails).
+2. The other side's app sees "This conversation was ended" the next time it asks, and can no longer send or ring
+   into it. Its own copy of past messages stays on its device until its user deletes it too: we can't erase another
+   person's phone, and the sentence in the delete sheet says so ("Messages already on <name>'s device stay there").
+3. The device erases its own copy and the conversation's keys.
+
+**No logs.** `.com` and the relays keep no record of mailboxes created, messages passed, rings sent or deletes,
+beyond the live mailbox rows themselves and the aggregate counters we already keep (hourly totals, no ids). Rate
+limits count in their existing Durable Objects and forget with their window.
+
+**Reveal who I am (Bob's side only).** The conversation's settings on the pseudonymous caller's device have one
+switch: "Show <name> who I am". Turning it on sends, inside the end-to-end conversation, a reveal: Bob's voi.ci page
+name (or account name, Bob picks which if he has both) and a signature over
+`flagship/voici-reveal/v1|<conversationId>|<pageName>|<issuedAt>` by that page's key. Alice's app checks the
+signature against the page key `.com` serves for that name and, if it holds, shows a pill on the conversation and
+in the call screen: "<pageName> ✓" (tapping it opens the page). A reveal that fails the check shows nothing.
+- `.com` never sees the reveal (it travels sealed like any message).
+- Turning the switch off sends an un-reveal; Alice's app removes the pill. The sheet says plainly that Alice may
+  already have seen it ("Turning this off hides the name, but <name> may already have seen it").
+- Alice's side has no reveal switch: the page owner is already known by her page.
+- Ring-back is unchanged by a reveal; it still goes through the conversation's channel, never Bob's bare name.
