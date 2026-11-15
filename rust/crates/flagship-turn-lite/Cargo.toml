@@ -1,0 +1,17 @@
+[package]
+name = "flagship-turn-lite"
+description = "The phone's one-call TURN-over-TLS responder for voi.ci calls (docs/voici-calls.md §4): an RFC 8656 subset, sans-IO."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crc32fast = "=1.5.3"
+hmac = "=0.12.1"
+md-5 = "=0.10.6"
+sha1 = "=0.10.7"

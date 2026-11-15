@@ -1526,6 +1526,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "flagship-turn-lite"
+version = "0.3.0"
+dependencies = [
+ "crc32fast",
+ "hmac 0.12.1",
+ "md-5",
+ "sha1 0.10.7",
+]
+
+[[package]]
 name = "flagship-updater"
 version = "0.3.0"
 dependencies = [
