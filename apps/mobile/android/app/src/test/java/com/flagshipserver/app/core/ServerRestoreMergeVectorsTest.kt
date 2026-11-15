@@ -79,4 +79,22 @@ class ServerRestoreMergeVectorsTest {
             }
         }
     }
+
+    /** The admin root's hybrid half (`pqSignature`) a strict box needs beside each order's Ed25519 signature. */
+    @Test
+    fun hybridHalfOverEachOrder() {
+        val hy = v["hybrid"]!!.jsonObject
+        val kp = com.flagshipserver.app.core.pq.PqHybrid.hybridSigKeygen(HexUtil.decode(v.s("adminSeedHex")!!)!!, HexUtil.decode(hy.s("mldsaSeedHex")!!)!!)
+        assertEquals(hy.s("hybridPubHex"), HexUtil.encode(kp.publicKey))
+        val cases = listOf(v["stage"]!!.jsonObject.s("canonical")!! to hy["stage"]!!.jsonObject, v["merge"]!!.jsonObject.s("canonical")!! to hy["merge"]!!.jsonObject) +
+            v["undo"]!!.jsonArray.zip(hy["undo"]!!.jsonArray).map { (u, w) -> u.jsonObject.s("canonical")!! to w.jsonObject }
+        for ((canonical, wire) in cases) {
+            val payload = canonical.toByteArray(Charsets.UTF_8)
+            val purpose = canonical.substringBefore('|')
+            assertEquals("hybrid-ed25519-mldsa65/v1", wire.s("suite"))
+            val mine = com.flagshipserver.app.core.pq.PqHybrid.hybridSign(kp.secretKey, purpose, payload, deterministic = true)
+            assertEquals(wire.s("signature"), HexUtil.encode(mine))
+            com.flagshipserver.app.core.pq.PqHybrid.hybridVerify(kp.publicKey, purpose, payload, HexUtil.decode(wire.s("signature")!!)!!)
+        }
+    }
 }

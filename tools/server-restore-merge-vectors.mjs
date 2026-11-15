@@ -3,6 +3,7 @@
 // Run: node --import tsx tools/server-restore-merge-vectors.mjs [--check]
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ed } from "../packages/protocol/src/edSync.ts";
+import { hybridSign, hybridSigKeygen, hybridVerify } from "../packages/protocol/src/pqHybrid.ts";
 import {
   appRestoreUndoCanonicalBytes,
   restoreMergePlanLineString,
@@ -58,6 +59,18 @@ for (const [name, l] of invalidLines) {
   if (!threw) throw new Error(`invalid line accepted: ${name}`);
 }
 
+// The admin root's hybrid half (hybrid-ed25519-mldsa65/v1, purpose = the order's tag) over the same
+// canonical bytes, sent as `pqSignature: {suite, signature}`. A strict box refuses an order without it.
+const mldsaSeed = new Uint8Array(32).fill(0x53);
+const hybridKey = hybridSigKeygen(seed, mldsaSeed);
+const hybridSecret = Uint8Array.from([...seed, ...mldsaSeed]);
+const pqOf = (canonical) => {
+  const purpose = text(canonical).split("|")[0];
+  const sig = hybridSign(hybridSecret, purpose, canonical, { deterministic: true });
+  hybridVerify(hybridKey.publicKey, purpose, canonical, sig);
+  return { suite: "hybrid-ed25519-mldsa65/v1", signature: hex(sig) };
+};
+
 const doc = {
   about:
     "Restore into a running server (docs/restore-into-server.md §4). Ed25519 with seed 0x52 repeated. stage: tag|serverDomain|archiveId|bytes|sha256|source|issuedAt. merge: tag|serverDomain|restoreId|archiveId|sha256|planSha256|issuedAt|expiresAt, where planSha256 = SHA-256 hex of the plan lines sorted by archived id and joined by \\n, a line being archivedServiceId|action|target or -|sameApp 0/1|guardCode or -|guardSchema or -|guardGen or -. undo: tag|serverDomain|restoreId|serviceId|undo or discard|issuedAt. Every invalid line must be refused before signing.",
@@ -68,6 +81,15 @@ const doc = {
   merge: { order: merge, canonical: text(serverRestoreMergeCanonicalBytes(merge)), signatureHex: hex(signServerRestoreMerge(merge, admin)) },
   undo: [undo, discard].map((o) => ({ order: o, canonical: text(appRestoreUndoCanonicalBytes(o)), signatureHex: hex(signAppRestoreUndo(o, admin)) })),
   invalidLines: invalidLines.map(([name, line]) => ({ name, line })),
+  hybrid: {
+    about:
+      "The admin root's hybrid signature (hybrid-ed25519-mldsa65/v1, purpose = the order's tag, the text before the first |) over each canonical above, sent beside signatureHex as pqSignature: {suite, signature}. ML-DSA-65 seed 0x53 repeated; the hybrid public key is the Ed25519 key followed by the ML-DSA-65 key. Signed deterministically here; a client may sign hedged, the box verifies either.",
+    mldsaSeedHex: hex(mldsaSeed),
+    hybridPubHex: hex(hybridKey.publicKey),
+    stage: pqOf(serverRestoreStageCanonicalBytes(stage)),
+    merge: pqOf(serverRestoreMergeCanonicalBytes(merge)),
+    undo: [undo, discard].map((o) => pqOf(appRestoreUndoCanonicalBytes(o))),
+  },
 };
 const out = JSON.stringify(doc, null, 2) + "\n";
 if (process.argv.includes("--check")) {

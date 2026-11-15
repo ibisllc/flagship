@@ -75,4 +75,28 @@ private extension Data {
         }
         self = d
     }
+
+    /// The admin root's hybrid half (`pqSignature`) a strict box needs beside each order's Ed25519 signature.
+    func testHybridHalfOverEachOrder() throws {
+        let v = try vectors()
+        let hy = v["hybrid"] as! [String: Any]
+        let unhex = { (s: Any?) in [UInt8](Data(hexString: s as! String)) }
+        let (pub, sk) = try PqHybrid.hybridSigKeygen(edSeed: unhex(v["adminSeedHex"]), mldsaSeed: unhex(hy["mldsaSeedHex"]))
+        XCTAssertEqual(PqBin.hex(pub), hy["hybridPubHex"] as? String)
+        let undos = v["undo"] as! [[String: Any]]
+        let cases: [(canonical: String, wire: [String: Any])] =
+            [((v["stage"] as! [String: Any])["canonical"] as! String, hy["stage"] as! [String: Any]),
+             ((v["merge"] as! [String: Any])["canonical"] as! String, hy["merge"] as! [String: Any])]
+            + zip(undos, hy["undo"] as! [[String: Any]]).map { ($0["canonical"] as! String, $1) }
+        for (canonical, wire) in cases {
+            let payload = [UInt8](canonical.utf8)
+            let purpose = String(canonical.split(separator: "|")[0])
+            XCTAssertEqual(wire["suite"] as? String, "hybrid-ed25519-mldsa65/v1")
+            XCTAssertNoThrow(try PqHybrid.hybridVerify(publicKey: pub, purpose: purpose, payload: payload, signature: unhex(wire["signature"])))
+            let mine = try PqHybrid.hybridSign(secretKey: sk, purpose: purpose, payload: payload, deterministic: true)
+            // CryptoKit's Ed25519 signs hedged, so only the ML-DSA half is byte-identical; both verify.
+            XCTAssertEqual(PqBin.hex(Array(mine[64...])), String((wire["signature"] as! String).dropFirst(128)))
+            XCTAssertThrowsError(try PqHybrid.hybridVerify(publicKey: pub, purpose: "flagship/server-restore-stage/v1", payload: payload + [0x20], signature: unhex(wire["signature"])))
+        }
+    }
 }
