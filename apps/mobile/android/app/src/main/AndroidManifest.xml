@@ -100,6 +100,9 @@
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite-accept" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite-accept/" />
+                <!-- An org seat invitation: /org-join#o=&s=&k= opens the join screen (docs/enterprise-accounts.md §7). -->
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/org-join" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/org-join/" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

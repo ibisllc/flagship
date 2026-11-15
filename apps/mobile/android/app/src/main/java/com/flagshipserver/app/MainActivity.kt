@@ -294,6 +294,14 @@ class MainActivity : FragmentActivity() {
                 }
             },
         ) { trustCenter.isServerTrusted }
+        // Organizations (docs/enterprise-accounts.md): `.com` org routes; seats and their keys on this phone.
+        val liveOrgs = com.flagshipserver.app.viewmodels.OrgRuntime(
+            com.flagshipserver.app.core.OrgClient(com.flagshipserver.app.core.LiveOrgHttp(OkHttpJsonTransport(okHttp))),
+            com.flagshipserver.app.keystore.KeystoreOrgSeatKeys(appContext),
+        ) { reason ->
+            com.flagshipserver.app.keystore.Keystore.ensureUnlocked(reason)
+            com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
+        }
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val liveNameDibs = com.flagshipserver.app.api.LiveNameDibsClient(OkHttpJsonTransport(okHttp))
         val liveVoiciName = com.flagshipserver.app.api.LiveVoiciNameClient(OkHttpJsonTransport(okHttp))
@@ -928,6 +936,7 @@ class MainActivity : FragmentActivity() {
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
                     com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mocks?.shares),
+                    com.flagshipserver.app.viewmodels.LocalOrgs provides liveOrgs,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
