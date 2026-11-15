@@ -785,6 +785,51 @@
       "check": "test-vectors",
       "key": "web:voici-calls",
       "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "app-links",
+      "key": "aasa:/org-join",
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+    },
+    {
+      "check": "app-links",
+      "key": "aasa:/org-join/",
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+    },
+    {
+      "check": "app-links",
+      "key": "android-manifest:/org-join",
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+    },
+    {
+      "check": "app-links",
+      "key": "android-manifest:/org-join/",
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+    },
+    {
+      "check": "app-links",
+      "key": "ios-parser:/org-join",
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+    },
+    {
+      "check": "app-links",
+      "key": "android-parser:/org-join",
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:org-servers",
+      "reason": "Org servers, key ring and audit export (packages/protocol/src/orgServers.ts, orgKeyRing.ts, orgAudit.ts): TypeScript generates and reads the vectors (protocol, .com and box tests). The Swift and Kotlin ports and the webapp (keyless: seat keys and ring opening live on phones) follow with the org client screens (enterprise-accounts.md E4/E5)."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:org-servers",
+      "reason": "Org servers, key ring and audit export (packages/protocol/src/orgServers.ts, orgKeyRing.ts, orgAudit.ts): TypeScript generates and reads the vectors (protocol, .com and box tests). The Swift and Kotlin ports and the webapp (keyless: seat keys and ring opening live on phones) follow with the org client screens (enterprise-accounts.md E4/E5)."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:org-servers",
+      "reason": "Org servers, key ring and audit export (packages/protocol/src/orgServers.ts, orgKeyRing.ts, orgAudit.ts): TypeScript generates and reads the vectors (protocol, .com and box tests). The Swift and Kotlin ports and the webapp (keyless: seat keys and ring opening live on phones) follow with the org client screens (enterprise-accounts.md E4/E5)."
     }
   ]
 }

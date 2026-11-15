@@ -14393,5 +14393,49 @@
   "{0} of {1} co-managers across your servers": {
     "en": "{0} of {1} co-managers across your servers",
     "ctx": "webapp/lib/serverShares.js:71"
+  },
+  "Admin of every server": {
+    "en": "Admin of every server",
+    "ctx": "webapp/views/org-join.js:16"
+  },
+  "Admin of {0}": {
+    "en": "Admin of {0}",
+    "ctx": "webapp/views/org-join.js:16"
+  },
+  "Admin of the app {0}": {
+    "en": "Admin of the app {0}",
+    "ctx": "webapp/views/org-join.js:17"
+  },
+  "This invitation has run out. Ask for a new one.": {
+    "en": "This invitation has run out. Ask for a new one.",
+    "ctx": "webapp/views/org-join.js:24"
+  },
+  "This invitation couldn't be opened. Check the link and try again.": {
+    "en": "This invitation couldn't be opened. Check the link and try again.",
+    "ctx": "webapp/views/org-join.js:25"
+  },
+  "Checking the invitation…": {
+    "en": "Checking the invitation…",
+    "ctx": "webapp/views/org-join.js:32"
+  },
+  "{0} invited you to join as {1}": {
+    "en": "{0} invited you to join as {1}",
+    "ctx": "webapp/views/org-join.js:42"
+  },
+  "The organization knows you only by this name. It can't see your own account or your servers.": {
+    "en": "The organization knows you only by this name. It can't see your own account or your servers.",
+    "ctx": "webapp/views/org-join.js:44"
+  },
+  "This invitation was already accepted.": {
+    "en": "This invitation was already accepted.",
+    "ctx": "webapp/views/org-join.js:45"
+  },
+  "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": {
+    "en": "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.",
+    "ctx": "webapp/views/org-join.js:46"
+  },
+  "Join an organization": {
+    "en": "Join an organization",
+    "ctx": "webapp/index.html"
   }
 }

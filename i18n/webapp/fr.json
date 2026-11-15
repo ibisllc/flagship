@@ -3523,5 +3523,16 @@
   "{0} of {1} co-managers across your servers": "{0} cogestionnaires sur {1} pour l’ensemble de vos serveurs",
   "On the Free plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro for more.": "Avec l’offre gratuite, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro pour en avoir plus.",
   "On the Pro plan your servers can have up to {0} co-managers in all. Remove one first, or move to Pro Max for more.": "Avec l’offre Pro, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro Max pour en avoir plus.",
-  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus."
+  "On the Pro Max plan your servers can have up to {0} co-managers in all. Remove one first, or move to Enterprise for more.": "Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à {0} cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus.",
+  "Admin of every server": "Admin de tous les serveurs",
+  "Admin of {0}": "Admin de {0}",
+  "Admin of the app {0}": "Admin de l'app {0}",
+  "This invitation has run out. Ask for a new one.": "Cette invitation a expiré. Demandez-en une nouvelle.",
+  "This invitation couldn't be opened. Check the link and try again.": "Impossible d'ouvrir cette invitation. Vérifiez le lien et réessayez.",
+  "Checking the invitation…": "Vérification de l'invitation…",
+  "{0} invited you to join as {1}": "{0} vous a invité à rejoindre en tant que {1}",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "L'organisation ne vous connaît que sous ce nom. Elle ne voit ni votre propre compte ni vos serveurs.",
+  "This invitation was already accepted.": "Cette invitation a déjà été acceptée.",
+  "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": "Ouvrez ce lien sur votre téléphone pour rejoindre. L'adhésion est signée avec des clés que seule l'app Flagship de votre téléphone détient.",
+  "Join an organization": "Rejoindre une organisation"
 }

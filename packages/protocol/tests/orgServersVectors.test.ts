@@ -28,6 +28,7 @@ import {
 } from "../src/index.js";
 
 const dir = resolve(import.meta.dirname, "../test-vectors");
+// Reads test-vectors/org-servers (and its base, test-vectors/org-authority).
 const A = JSON.parse(readFileSync(resolve(dir, "org-authority/vectors.json"), "utf8"));
 const V = JSON.parse(readFileSync(resolve(dir, "org-servers/vectors.json"), "utf8"));
 const refs = (v: unknown): any => {

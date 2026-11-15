@@ -494,7 +494,9 @@
 //  v208: the outbound proxy (create flow and server page, part of Pro), folded from feat/outbound-proxy.
 //  v209: a joining browser passes the bundle's grantPqSignature on to /devices/admit.
 //  v210: Add / Restore offers "Set up a box from a store", which points to the phone app.
-const SHELL_VERSION = "v210";
+//  v211: an organization's seat invitation (/org-join) opens a page that shows it and hands the link to the
+//       phone (views/org-join.js, lib/orgJoin.js; docs/enterprise-accounts.md §7).
+const SHELL_VERSION = "v211";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -687,6 +689,8 @@ const OPTIONAL_SHELL = [
   "/views/page-editor.js",
   "/views/page-header.js",
   "/views/voici-sign-in.js",
+  "/views/org-join.js",
+  "/lib/orgJoin.js",
   "/lib/linkField.js",
   "/lib/nameRules.js",
   "/views/name-dibs.js",
