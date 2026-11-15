@@ -43,7 +43,7 @@ class RestoreMergeViewModelTest {
 
     private class World(val c: MockScreensClient, val m: RestoreMergeViewModel, val archiveId: String)
 
-    private fun world(admin: Boolean = true): World {
+    private fun world(admin: Boolean = true, pq: com.flagshipserver.app.api.PqSignatureWire? = null): World {
         val c = MockScreensClient(simulatedLatencyMs = 0)
         val id = s("archiveId")
         c.savedBackupsList.clear()
@@ -54,7 +54,7 @@ class RestoreMergeViewModelTest {
             serverFqdn = fqdn,
             client = c,
             isAdmin = admin,
-            sign = { _, bytes -> Ed25519Sign(kp.privateKey).sign(bytes) },
+            sign = { _, bytes -> RestoreMergeViewModel.OrderSignature(Ed25519Sign(kp.privateKey).sign(bytes), pq) },
             accountKek = { kek },
             now = { 1_794_000_000_000 },
             pollMs = 1,
@@ -193,5 +193,23 @@ class RestoreMergeViewModelTest {
         w.m.start(RestoreMergeViewModel.Source.Saved(w.archiveId))
         assertEquals(RestoreMergeViewModel.Phase.Failed("Only an admin device of this account can restore a backup."), w.m.phase)
         assertTrue(w.c.restoreMergeStages.isEmpty())
+    }
+
+    @Test fun aQuantumSafeServerGetsTheHybridHalfOnEveryOrder() = runBlocking {
+        val wire = com.flagshipserver.app.api.PqSignatureWire("hybrid-ed25519-mldsa65/v1", "ab")
+        val w = world(pq = wire)
+        w.m.start(RestoreMergeViewModel.Source.Saved(w.archiveId))
+        assertEquals(wire, w.c.restoreMergeStages.single().pqSignature)
+        w.m.choose(w.m.preview!!.apps.first { it.archivedServiceId == "demo--notes" }, "replace")
+        w.m.restore()
+        assertEquals(wire, w.c.restoreMergePlans.single().pqSignature)
+        w.m.undo(w.m.undoPoints.first(), discard = true)
+        assertEquals(wire, w.c.restoreMergeUndos.single().pqSignature)
+        assertEquals("discard", w.c.restoreMergeUndos.single().order.action)
+    }
+
+    @Test fun aQuantumSafeRefusalSaysHowToSignIt() {
+        val e = com.flagshipserver.app.api.ScreensError.Http(403, """{"error":"x","code":"needs-hybrid"}""")
+        assertEquals("This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.", RestoreMergeViewModel.message(e))
     }
 }

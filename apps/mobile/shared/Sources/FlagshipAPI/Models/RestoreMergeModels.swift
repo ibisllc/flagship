@@ -173,7 +173,11 @@ public struct RestoreMergeSigned<Order: Codable & Equatable & Sendable>: Codable
     public let order: Order
     public let signatureHex: String
     public let lines: [RestoreMergeLine]?
-    public init(order: Order, signatureHex: String, lines: [RestoreMergeLine]? = nil) { self.order = order; self.signatureHex = signatureHex; self.lines = lines }
+    /// The signer's hybrid half over the same canonical bytes; a quantum-safe (strict) box refuses the order without it.
+    public let pqSignature: PqSignatureWire?
+    public init(order: Order, signatureHex: String, lines: [RestoreMergeLine]? = nil, pqSignature: PqSignatureWire? = nil) {
+        self.order = order; self.signatureHex = signatureHex; self.lines = lines; self.pqSignature = pqSignature
+    }
 }
 
 public struct RestoreMergeStarted: Codable, Equatable, Sendable {
