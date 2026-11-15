@@ -110,7 +110,20 @@ internal fun restoreMergeViewModel(serverDomain: String, client: com.flagshipser
         serverFqdn = serverDomain,
         client = client,
         isAdmin = isAdmin,
-        sign = { reason, bytes -> Keystore.adminSigningKey(reason).sign(bytes) },
+        sign = { reason, bytes ->
+            val key = Keystore.adminSigningKey(reason)
+            val admin = Keystore.hasAdminRoot()
+            val user = serverDomain.lowercase().split('.').getOrNull(1).orEmpty()
+            // The hybrid half only while a server of the account is quantum-safe (pqSignature checks).
+            val pq = com.flagshipserver.app.keystore.QuantumSafetyService.pqSignature(
+                user,
+                if (admin) "admin-root" else "account-irk",
+                bytes,
+                key,
+                if (admin) Keystore.adminRootPubHex().orEmpty() else Keystore.irkPubHex(),
+            )
+            RestoreMergeViewModel.OrderSignature(key.sign(bytes), pq)
+        },
         accountKek = { id -> Keystore.deriveServerArchiveKey(id, FSStrings.get(R.string.rm_reason_open)) },
     )
 

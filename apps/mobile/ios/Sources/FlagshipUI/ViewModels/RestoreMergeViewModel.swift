@@ -50,6 +50,9 @@ public final class RestoreMergeViewModel {
     private let clients: PodScreensClientFactory
     private let signer: @Sendable (String) async throws -> Curve25519.Signing.PrivateKey
     private let accountKek: @Sendable (String) async throws -> Data
+    /// The signer's hybrid half over an order's canonical bytes (nil: classical only). A quantum-safe
+    /// box refuses these orders without it.
+    private let pqSigner: @Sendable (Data, Curve25519.Signing.PrivateKey) async -> PqSignatureWire?
     private let now: () -> Int64
     private let pollNs: UInt64
     private var archiveId = ""
@@ -64,6 +67,7 @@ public final class RestoreMergeViewModel {
         clients: PodScreensClientFactory,
         signer: (@Sendable (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         accountKek: (@Sendable (String) async throws -> Data)? = nil,
+        pqSigner: (@Sendable (Data, Curve25519.Signing.PrivateKey) async -> PqSignatureWire?)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         pollNs: UInt64 = 1_500_000_000
     ) {
@@ -71,6 +75,13 @@ public final class RestoreMergeViewModel {
         self.isAdminDevice = isAdminDevice
         self.clients = clients
         self.signer = signer ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
+        let account = serverFqdn.lowercased().split(separator: ".").dropFirst().first.map(String.init) ?? ""
+        self.pqSigner = pqSigner ?? { canonical, key in
+            // Only while a server of the account is strict: signing it opens the ML-DSA key.
+            guard QuantumSafetyService.anyStrict(username: account) else { return nil }
+            return await QuantumSafetyService.pqSignature(canonical: canonical, edKey: key,
+                                                          role: Keystore.hasAdminRoot ? .adminRoot : .accountIrk, username: account)
+        }
         self.accountKek = accountKek ?? { id in try await Keystore.deriveServerArchiveKey(archiveId: id, reason: String(localized: "Open the backup")) }
         self.now = now
         self.pollNs = pollNs
@@ -95,9 +106,11 @@ public final class RestoreMergeViewModel {
             let order = RestoreMergeUndoOrder(serverDomain: serverFqdn, restoreId: p.restoreId, serviceId: p.serviceId, action: discard ? "discard" : "undo", issuedAt: now())
             let bytes = try ServerRestoreMerge.undoBytes(.init(serverDomain: order.serverDomain, restoreId: order.restoreId, serviceId: order.serviceId, action: order.action, issuedAt: order.issuedAt))
             let reason = discard ? String(localized: "Delete the earlier copy of \(p.name)") : String(localized: "Put \(p.name) back as it was")
-            let sig = try await signer(reason).signature(for: bytes)
+            let key = try await signer(reason)
+            let sig = try key.signature(for: bytes)
+            let pq = await pqSigner(bytes, key)
             let c = await clients.client(forFqdn: serverFqdn)
-            try await c.restoreMergeUndo(RestoreMergeSigned(order: order, signatureHex: HexUtil.encode(sig)))
+            try await c.restoreMergeUndo(RestoreMergeSigned(order: order, signatureHex: HexUtil.encode(sig), pqSignature: pq))
             await loadUndoPoints()
         } catch is CancellationError {
         } catch {
@@ -136,8 +149,10 @@ public final class RestoreMergeViewModel {
                                                source: bundleURL == nil ? "saved" : "upload", issuedAt: now())
             let stageBytes = try ServerRestoreMerge.stageBytes(.init(serverDomain: order.serverDomain, archiveId: order.archiveId, bytes: order.bytes,
                                                                      sha256: order.sha256, source: order.source, issuedAt: order.issuedAt))
-            let sig = try await signer(String(localized: "Check the backup on \(serverFqdn)")).signature(for: stageBytes)
-            let started = try await c.restoreMergeStage(RestoreMergeSigned(order: order, signatureHex: HexUtil.encode(sig)))
+            let key = try await signer(String(localized: "Check the backup on \(serverFqdn)"))
+            let sig = try key.signature(for: stageBytes)
+            let pq = await pqSigner(stageBytes, key)
+            let started = try await c.restoreMergeStage(RestoreMergeSigned(order: order, signatureHex: HexUtil.encode(sig), pqSignature: pq))
             if let bundleURL, let bundleLayout { try await send(bundleURL, layout: bundleLayout, from: started.received ?? 0, client: c) }
             phase = .checking
             try await c.restoreMergeCommit(keyHex: HexUtil.encode(opened.contentKey))
@@ -271,9 +286,11 @@ public final class RestoreMergeViewModel {
                                               planSha256: planSha, issuedAt: issued, expiresAt: issued + 6 * 3_600_000)
             let bytes = try ServerRestoreMerge.mergeBytes(.init(serverDomain: order.serverDomain, restoreId: order.restoreId, archiveId: order.archiveId,
                                                                 sha256: order.sha256, planSha256: order.planSha256, issuedAt: order.issuedAt, expiresAt: order.expiresAt))
-            let sig = try await signer(String(localized: "Restore apps into \(serverFqdn)")).signature(for: bytes)
+            let key = try await signer(String(localized: "Restore apps into \(serverFqdn)"))
+            let sig = try key.signature(for: bytes)
+            let pq = await pqSigner(bytes, key)
             let c = await clients.client(forFqdn: serverFqdn)
-            try await c.restoreMergePlan(RestoreMergeSigned(order: order, signatureHex: HexUtil.encode(sig), lines: lines))
+            try await c.restoreMergePlan(RestoreMergeSigned(order: order, signatureHex: HexUtil.encode(sig), lines: lines, pqSignature: pq))
             phase = .restoring
             while true {
                 let v = try await c.restoreMergeStatus()
@@ -382,9 +399,12 @@ public final class RestoreMergeViewModel {
         if let e = error as? RestoreMergeError { return e.errorDescription ?? String(localized: "The restore didn't start.") }
         if case let ScreensClientError.http(_, body) = error,
            let d = body.data(using: .utf8),
-           let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-           let s = o["error"] as? String {
-            return s
+           let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
+            // A quantum-safe server wants this device's hybrid half too: say how to give it.
+            if o["code"] as? String == "needs-hybrid" {
+                return String(localized: "This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.")
+            }
+            if let s = o["error"] as? String { return s }
         }
         return (error as? LocalizedError)?.errorDescription ?? String(localized: "The restore didn't start.")
     }

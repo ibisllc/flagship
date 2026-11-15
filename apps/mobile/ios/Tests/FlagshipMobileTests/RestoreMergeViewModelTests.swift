@@ -40,7 +40,7 @@ final class RestoreMergeViewModelTests: XCTestCase {
         let saved: SavedBackup
     }
 
-    private func world(admin isAdmin: Bool = true) throws -> World {
+    private func world(admin isAdmin: Bool = true, pq: PqSignatureWire? = nil) throws -> World {
         let v = try vectors()
         let c = MockScreensClient()
         c.simulatedLatency = 0
@@ -51,7 +51,8 @@ final class RestoreMergeViewModelTests: XCTestCase {
         let kek = try need(HexUtil.decode(v["accountKekHex"] as! String))
         let key = admin
         let m = RestoreMergeViewModel(serverFqdn: fqdn, isAdminDevice: isAdmin, clients: .shared(c),
-                                      signer: { _ in key }, accountKek: { _ in kek }, now: { 1_794_000_000_000 }, pollNs: 1_000_000)
+                                      signer: { _ in key }, accountKek: { _ in kek }, pqSigner: { _, _ in pq },
+                                      now: { 1_794_000_000_000 }, pollNs: 1_000_000)
         return World(c: c, m: m, saved: saved)
     }
 
@@ -147,5 +148,26 @@ final class RestoreMergeViewModelTests: XCTestCase {
         XCTAssertEqual(m.phase, .failed(RestoreMergeViewModel.adminOnly))
         XCTAssertTrue(c.restoreMergeStages.isEmpty)
         }
+    }
+
+    func testAQuantumSafeServerGetsTheHybridHalfOnEveryOrder() async {
+        await run {
+        let wire = PqSignatureWire(suite: "hybrid-ed25519-mldsa65/v1", signature: "ab")
+        let w = try world(pq: wire); let c = w.c, m = w.m, saved = w.saved
+        await m.start(.saved(saved))
+        XCTAssertEqual(c.restoreMergeStages.first?.pqSignature, wire)
+        let notes = try need(m.preview?.apps.first { $0.archivedServiceId == "demo--notes" })
+        m.choose(notes, action: "replace")
+        await m.restore()
+        XCTAssertEqual(c.restoreMergePlans.first?.pqSignature, wire)
+        await m.undo(try need(m.undoPoints.first), discard: true)
+        XCTAssertEqual(c.restoreMergeUndos.first?.pqSignature, wire)
+        XCTAssertEqual(c.restoreMergeUndos.first?.order.action, "discard")
+        }
+    }
+
+    func testAQuantumSafeRefusalSaysHowToSignIt() {
+        let e = ScreensClientError.http(status: 403, message: #"{"error":"x","code":"needs-hybrid"}"#)
+        XCTAssertEqual(RestoreMergeViewModel.message(e), String(localized: "This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again."))
     }
 }

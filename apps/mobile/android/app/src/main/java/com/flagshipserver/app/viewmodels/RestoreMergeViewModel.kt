@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.flagshipserver.app.R
+import com.flagshipserver.app.api.PqSignatureWire
 import com.flagshipserver.app.api.RestoreMergeApp
 import com.flagshipserver.app.api.RestoreMergeLine
 import com.flagshipserver.app.api.RestoreMergePlanOrder
@@ -44,8 +45,11 @@ class RestoreMergeViewModel(
     private val client: ScreensClient,
     /** An admin device of the account: it signs every order (others see the entries disabled). */
     val isAdmin: Boolean,
-    /** Signs canonical bytes with the admin root, behind the biometric (the reason is the prompt's line). */
-    private val sign: suspend (reason: String, bytes: ByteArray) -> ByteArray,
+    /**
+     * Signs canonical bytes with the admin root, behind the biometric (the reason is the prompt's
+     * line), plus the signer's hybrid half while a server of the account is quantum-safe.
+     */
+    private val sign: suspend (reason: String, bytes: ByteArray) -> OrderSignature,
     /** This account's key for one archive id (the backup's account slot). */
     private val accountKek: suspend (archiveId: String) -> ByteArray,
     private val now: () -> Long = { System.currentTimeMillis() },
@@ -68,6 +72,9 @@ class RestoreMergeViewModel(
         data object Done : Phase
         data class Failed(val message: String) : Phase
     }
+
+    /** An order's Ed25519 signature and, for a quantum-safe box, the signer's hybrid half. */
+    class OrderSignature(val signature: ByteArray, val pq: PqSignatureWire? = null)
 
     /** The owner's choice for one app. */
     data class Choice(val action: String, val copyName: String, val sameApp: Boolean = false)
@@ -113,7 +120,8 @@ class RestoreMergeViewModel(
             val order = RestoreMergeUndoOrder(serverFqdn, p.restoreId, p.serviceId, if (discard) "discard" else "undo", now())
             val bytes = ServerRestoreMerge.undoBytes(ServerRestoreMerge.UndoOrder(order.serverDomain, order.restoreId, order.serviceId, order.action, order.issuedAt))
             val reason = if (discard) FSStrings.get(R.string.rm_reason_discard, p.name) else FSStrings.get(R.string.rm_reason_undo, p.name)
-            client.restoreMergeUndo(RestoreMergeUndoRequest(order, HexUtil.encode(sign(reason, bytes))))
+            val s = sign(reason, bytes)
+            client.restoreMergeUndo(RestoreMergeUndoRequest(order, HexUtil.encode(s.signature), s.pq))
             loadUndoPoints()
         } catch (e: CancellationException) {
             throw e
@@ -151,7 +159,8 @@ class RestoreMergeViewModel(
             dataSha256 = opened.body.data.sha256
             val order = RestoreMergeStageOrder(serverFqdn, archiveId, opened.body.data.bytes, dataSha256, if (data == null) "saved" else "upload", now())
             val bytes = ServerRestoreMerge.stageBytes(ServerRestoreMerge.StageOrder(order.serverDomain, order.archiveId, order.bytes, order.sha256, order.source, order.issuedAt))
-            val started = client.restoreMergeStage(RestoreMergeStageRequest(order, HexUtil.encode(sign(FSStrings.get(R.string.rm_reason_check, serverFqdn), bytes))))
+            val s = sign(FSStrings.get(R.string.rm_reason_check, serverFqdn), bytes)
+            val started = client.restoreMergeStage(RestoreMergeStageRequest(order, HexUtil.encode(s.signature), s.pq))
             staged = true
             if (data != null) send(data, started.received)
             phase = Phase.Checking
@@ -298,7 +307,8 @@ class RestoreMergeViewModel(
             val bytes = ServerRestoreMerge.mergeBytes(
                 ServerRestoreMerge.MergeOrder(order.serverDomain, order.restoreId, order.archiveId, order.sha256, order.planSha256, order.issuedAt, order.expiresAt),
             )
-            client.restoreMergePlan(RestoreMergePlanRequest(order, HexUtil.encode(sign(FSStrings.get(R.string.rm_reason_restore, serverFqdn), bytes)), lines))
+            val s = sign(FSStrings.get(R.string.rm_reason_restore, serverFqdn), bytes)
+            client.restoreMergePlan(RestoreMergePlanRequest(order, HexUtil.encode(s.signature), lines, s.pq))
             phase = Phase.Restoring
             while (true) {
                 val v = client.restoreMergeStatus()
@@ -329,6 +339,9 @@ class RestoreMergeViewModel(
 
         fun slug(serviceId: String): String = serviceId.substringAfterLast("--")
 
+        private fun codeOf(e: ScreensError.Http): String? =
+            ((runCatching { json.parseToJsonElement(e.body) as? JsonObject }.getOrNull())?.get("code") as? JsonPrimitive)?.content
+
         /** The offset a 409 `code: offset` names, or null for any other refusal. */
         fun receivedFrom(e: ScreensError.Http): Long? {
             if (e.status != 409) return null
@@ -341,7 +354,7 @@ class RestoreMergeViewModel(
             is RestoreMergeException -> t.message ?: FSStrings.get(R.string.rm_didnt_start)
             is ServerBackupFormat.BundleException -> t.message ?: FSStrings.get(R.string.rm_didnt_start)
             is ServerBackupFormat.FormatException -> t.message ?: FSStrings.get(R.string.rm_didnt_start)
-            is ScreensError.Http -> t.boxError() ?: t.userFacing()
+            is ScreensError.Http -> if (codeOf(t) == "needs-hybrid") FSStrings.get(R.string.release_box_needs_hybrid) else t.boxError() ?: t.userFacing()
             is ScreensError -> t.userFacing()
             else -> t.userFacing()
         }

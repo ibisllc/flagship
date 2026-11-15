@@ -141,14 +141,15 @@ data class RestoreMergeUndoOrder(
     val issuedAt: Long,
 )
 
+/** `pqSignature`: the signer's hybrid half; a quantum-safe (strict) box refuses the order without it. */
 @Serializable
-data class RestoreMergeStageRequest(val order: RestoreMergeStageOrder, val signatureHex: String)
+data class RestoreMergeStageRequest(val order: RestoreMergeStageOrder, val signatureHex: String, val pqSignature: PqSignatureWire? = null)
 
 @Serializable
-data class RestoreMergePlanRequest(val order: RestoreMergePlanOrder, val signatureHex: String, val lines: List<RestoreMergeLine>)
+data class RestoreMergePlanRequest(val order: RestoreMergePlanOrder, val signatureHex: String, val lines: List<RestoreMergeLine>, val pqSignature: PqSignatureWire? = null)
 
 @Serializable
-data class RestoreMergeUndoRequest(val order: RestoreMergeUndoOrder, val signatureHex: String)
+data class RestoreMergeUndoRequest(val order: RestoreMergeUndoOrder, val signatureHex: String, val pqSignature: PqSignatureWire? = null)
 
 @Serializable
 data class RestoreMergeStarted(val restoreId: String, val received: Long = 0)
