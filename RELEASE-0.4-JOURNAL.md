@@ -448,9 +448,21 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   instead of the `bluetooth`/`input` groups; build webapp "Release this box"; build the daemon start on an unclaimed
   image + post-claim first boot keeping keyd's key now, with a cloud-runnable QEMU + btvirt script. Agent resumed.
 
+- 2026-11-15: **Cloud reports landed** (`origin/0.4/cloud-reports`, 01 full suite at 278596830, 02 enterprise Android).
+  Green: tsc, Rust 837/0, Android 2970 (1 flaky Compose idle), Postgres 18 integration 11/11, enterprise-build Android
+  2974/0. REAL failures (9): migration ledger 0141/0146, accountRename for voici call tables, **BoxClaimKey canonical
+  field shift (AT-ENV-09, security)** + 17 unclassified tags, compat-matrix shell pin, gym ACME dir config, iOS mock in
+  Release, Rust fmt + RUSTSEC-2026-0459/0486, CI cancel-in-progress. Fixer agent on `0.4/cloud-fixes`.
+  **enterprise-servers merged** (`1e7fe2f79`..`88a55d937`): org server codes/registration, X-Wing org key ring with
+  rotation on offboarding (box verifies under its pinned chain), signed audit export, `/org-join` route + webapp view,
+  shell **v211**. 233 targeted tests, i18n, parity unchanged. Decisions: username claim checks orgs both ways; key
+  split and approval weights accepted. Agent resumed: org install path, gossip org CGK, auditor CLI, Swift/Kotlin
+  ports, phone-side rotations, iOS join screen (uncompiled code goes to the cloud). Calls agent was cut off by the Mac
+  sleeping; resumed.
+
 ## Resume point
 
-1. Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
+1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
    `cloud-reports/*.md`; fix real failures it lists.
 2. Enterprise Kotlin port: merged (f871219ca). Owner to answer: deploy `.com` from main for the terms change?: compile + test
    (`--tests '*OrgAuthorityVectorsTest*' --tests '*VoiciCallsVector*'`), commit, merge, push.
