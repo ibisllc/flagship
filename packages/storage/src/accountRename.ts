@@ -50,6 +50,10 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   ["voici_links", "username"],
   ["voici_name_changes", "username"],
   ["voici_names", "username"],
+  // voi.ci calls: the account's devices' PushKit tokens and its one live call move with it, and a previous holder's
+  // leftovers under the new name are cleared, so their devices are never rung for this account.
+  ["voici_voip_tokens", "username"],
+  ["voici_live_calls", "username"],
   ["vouchers", "redeemed_by"],
   ["watch_delegates", "username"],
   ["webauthn_recovery_records", "username"],
