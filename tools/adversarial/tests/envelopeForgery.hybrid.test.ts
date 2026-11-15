@@ -19,6 +19,11 @@
  *   AT-ENV-29  rotate-rck/v1: either of the two signatures missing or swapped
  *   AT-ENV-30  MAC proofs (gossip/v2, enrollment-proof/v1, server-code-seen/v1): wrong key, truncated, case
  *   AT-ENV-31  box-claim-receipt/v1: flipped, spliced, relabelled, re-signed by another box key, any field changed
+ *   AT-ENV-32  org-server-code/v1: any field changed, a separator shifted, a flipped approval, approval of another code
+ *   AT-ENV-33  org-server-register/v1: flipped, another box key, any field changed, a separator shifted
+ *   AT-ENV-34  org-seat-kem/v1 and org-box-kem/v1: flipped, another signer, any field changed
+ *   AT-ENV-35  org-key-ring/v1: any ring field changed, a flipped approval, a rolled-back version
+ *   AT-ENV-36  org-audit-export/v1 and the org-log/v1 chain: statement changed, log rewritten, separator shifted in a log entry
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -581,5 +586,238 @@ describe("AT-ENV-31 box-claim-receipt/v1 (the box's hybrid-signed receipt the ph
     expect(refused({ ...t.receipt, signature: "" })).toBe(true);
     expect(refused({ ...t.receipt, extra: 1 })).toBe(true);
     expect(refused({ ...t.receipt, v: 2 })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------- enterprise: org servers, key ring, audit
+
+describe("AT-ENV-32..36 enterprise org servers, key rings and audit export", () => {
+  const A = JSON.parse(readFileSync(join(VECTORS, "org-authority/vectors.json"), "utf8"));
+  const V = JSON.parse(readFileSync(join(VECTORS, "org-servers/vectors.json"), "utf8"));
+  const refs = (v: unknown): any => {
+    if (Array.isArray(v)) return v.map(refs);
+    if (!v || typeof v !== "object") return v;
+    const o = v as Record<string, unknown>;
+    if (typeof o.$key === "string") return A.keys[o.$key].binding;
+    if (typeof o.$approval === "number") return A.approvals[o.$approval];
+    return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, refs(x)]));
+  };
+  const entries = refs(A.chains[0]).entries.slice(0, 2);
+  const grants = refs(A.seatBooks[0]).grants;
+  const at = (now: number) => {
+    const state = P.verifyOrgAuthorityChain(entries, { genesisHash: A.genesisHash, now });
+    return { state, book: P.buildOrgSeatBook(state, { grants, revokes: [], now }) };
+  };
+  const flipHex = (h: string, i = 0) => h.slice(0, i) + (h[i] === "0" ? "1" : "0") + h.slice(i + 1);
+  const H32 = (c: string) => c.repeat(64);
+
+  describe("AT-ENV-32 org-server-code/v1 (the org's AuthCode, authorized by org approvals)", () => {
+    const c = V.serverCodes[0];
+    const { state, book } = at(c.now);
+    const verify = (code: unknown, approvals = c.approvals) => !throws(() => P.verifyOrgServerCode(state, book, code as never, approvals, c.now));
+
+    it("AT-ENV-32a control: the vector code verifies under one org admin's approval", () => {
+      expect(verify(c.code)).toBe(true);
+    });
+
+    it("AT-ENV-32b changing any field of the code breaks its approval (catches: a field left out of the approved bytes)", () => {
+      const changes: Record<string, unknown> = {
+        serial: "orgsrv-0002-abcd",
+        serverName: "work",
+        serverDomain: "home.other.flagship.services",
+        delegatedPubKeyHex: H32("e"),
+        issuedAt: c.code.issuedAt + 1,
+        expiresAt: c.code.expiresAt - 1,
+      };
+      for (const [k, v] of Object.entries(changes)) expect(verify({ ...c.code, [k]: v }), k).toBe(false);
+      expect(verify({ ...c.code, serverName: "work", serverDomain: "work.acme.flagship.services" })).toBe(false);
+    });
+
+    it("AT-ENV-32c no field can carry the separator into its neighbour (catches: canonical-join ambiguity)", () => {
+      const shifted = [
+        { ...c.code, serial: `${c.code.serial}|${c.code.serverName}` },
+        { ...c.code, serverName: `${c.code.serverName}|x` },
+        { ...c.code, serverDomain: `${c.code.serverDomain}|${c.code.delegatedPubKeyHex}` },
+      ];
+      for (const x of shifted) expect(throws(() => P.canonicalOrgServerCode(x))).toBe(true);
+    });
+
+    it("AT-ENV-32d a flipped approval signature, or none, is refused (catches: approvals counted without checking them)", () => {
+      const a = c.approvals[0];
+      expect(verify(c.code, [{ ...a, signature: flipHex(a.signature) }])).toBe(false);
+      expect(verify(c.code, [{ ...a, signature: flipHex(a.signature, 200) }])).toBe(false);
+      expect(verify(c.code, [])).toBe(false);
+    });
+  });
+
+  describe("AT-ENV-33 org-server-register/v1 (the box's STK proof over the code's hash)", () => {
+    const r = V.register.request;
+    const sig = V.register.signature;
+    const stkSeed = fromHex(V.register.stkSeedHex);
+
+    it("AT-ENV-33a control: the vector registration verifies", () => {
+      expect(P.verifyOrgServerRegister(r, sig)).toBe(true);
+    });
+
+    it("AT-ENV-33b a flipped, truncated or upper-case signature is refused", () => {
+      expect(P.verifyOrgServerRegister(r, flipHex(sig))).toBe(false);
+      expect(P.verifyOrgServerRegister(r, flipHex(sig, 127))).toBe(false);
+      expect(P.verifyOrgServerRegister(r, sig.slice(0, 126))).toBe(false);
+      expect(P.verifyOrgServerRegister(r, sig.toUpperCase())).toBe(false);
+    });
+
+    it("AT-ENV-33c another box's key cannot sign for the named key, and the signer must be the named key (catches: a relay registering for the real box)", () => {
+      const other = seed(51);
+      expect(throws(() => P.signOrgServerRegister(r, other))).toBe(true);
+      const forged = toHex(ed25519.sign(P.canonicalOrgServerRegister(r), other));
+      expect(P.verifyOrgServerRegister(r, forged)).toBe(false);
+      const self = { ...r, serverIdentityPubKeyHex: toHex(ed25519.getPublicKey(other)) };
+      expect(P.verifyOrgServerRegister(self, sig)).toBe(false);
+      expect(P.verifyOrgServerRegister(r, P.signOrgServerRegister(r, stkSeed))).toBe(true);
+    });
+
+    it("AT-ENV-33d changing any field breaks the signature, and no field can carry the separator", () => {
+      const changes: Record<string, unknown> = {
+        orgId: "0b".repeat(16),
+        serial: "orgsrv-0002-abcd",
+        serverDomain: "work.acme.flagship.services",
+        codeSha256: H32("c"),
+        issuedAt: r.issuedAt + 1,
+        nonceHex: "cd".repeat(16),
+      };
+      for (const [k, v] of Object.entries(changes)) expect(P.verifyOrgServerRegister({ ...r, [k]: v }, sig), k).toBe(false);
+      expect(P.verifyOrgServerRegister({ ...r, serial: `${r.serial}|${r.serverDomain}` }, sig)).toBe(false);
+      expect(throws(() => P.canonicalOrgServerRegister({ ...r, serverDomain: `${r.serverDomain}|${r.codeSha256}` }))).toBe(true);
+    });
+  });
+
+  describe("AT-ENV-34 org-seat-kem/v1 and org-box-kem/v1 (who a key-ring copy is sealed to)", () => {
+    const now = V.keyRings[0].now;
+    const { state, book } = at(now);
+    const stkPub = V.register.request.serverIdentityPubKeyHex;
+    const box = V.kems.box[0];
+    const seat = V.kems.seat[0];
+    const boxOk = (b: unknown, pub = stkPub) => !throws(() => P.verifyOrgBoxKem(b as never, V.orgId, pub, now));
+    const seatOk = (b: unknown) => !throws(() => P.verifyOrgSeatKem(state, book, b as never, now));
+
+    it("AT-ENV-34a control: both vector statements verify", () => {
+      expect(boxOk(box)).toBe(true);
+      expect(seatOk(seat)).toBe(true);
+    });
+
+    it("AT-ENV-34b a flipped signature is refused (both halves of the seat's hybrid signature)", () => {
+      expect(boxOk({ ...box, signature: flipHex(box.signature) })).toBe(false);
+      for (const i of [0, 127, 200, 6000]) expect(seatOk({ ...seat, signature: flipHex(seat.signature, i) }), `byte ${i / 2}`).toBe(false);
+    });
+
+    it("AT-ENV-34c another box's STK, or a box key signed for another org, is refused", () => {
+      const other = seed(52);
+      const forged = { ...box, signature: P.signOrgBoxKem(box.statement, other) };
+      expect(boxOk(forged)).toBe(false);
+      expect(boxOk(box, toHex(ed25519.getPublicKey(other)))).toBe(false);
+      expect(!throws(() => P.verifyOrgBoxKem(box, "0b".repeat(16), stkPub, now))).toBe(false);
+    });
+
+    it("AT-ENV-34d changing any statement field, or swapping the KEM key, breaks it", () => {
+      for (const [k, v] of Object.entries({ serverDomain: "work.acme.flagship.services", kemKeyId: H32("4"), issuedAt: box.statement.issuedAt + 1 }))
+        expect(boxOk({ ...box, statement: { ...box.statement, [k]: v } }), `box ${k}`).toBe(false);
+      for (const [k, v] of Object.entries({ seatId: "b2".repeat(16), kemKeyId: H32("4"), issuedAt: seat.statement.issuedAt + 1 }))
+        expect(seatOk({ ...seat, statement: { ...seat.statement, [k]: v } }), `seat ${k}`).toBe(false);
+      expect(boxOk({ ...box, kemPubHex: V.kems.box.at(-1).kemPubHex === box.kemPubHex ? seat.kemPubHex : V.kems.box.at(-1).kemPubHex })).toBe(false);
+      expect(seatOk({ ...seat, kemPubHex: box.kemPubHex })).toBe(false);
+    });
+  });
+
+  describe("AT-ENV-35 org-key-ring/v1 (versioned key records approved by org admins)", () => {
+    const c = V.keyRings[0];
+    const ctx = () => {
+      const { state, book } = at(c.now);
+      const kems = P.newestOrgKems([
+        ...V.kems.seat.flatMap((k: never) => {
+          try {
+            return [P.verifyOrgSeatKem(state, book, k, c.now)];
+          } catch {
+            return [];
+          }
+        }),
+        ...V.kems.box.map((k: never) => P.verifyOrgBoxKem(k, V.orgId, V.register.request.serverIdentityPubKeyHex, c.now)),
+      ]);
+      return { state, book, kems, servers: new Set<string>(V.servers), now: c.now };
+    };
+    const ok = (bundle: unknown, prev: unknown = c.prev) => !throws(() => P.verifyOrgKeyRing(ctx(), bundle as never, prev as never, { fresh: c.fresh }));
+
+    it("AT-ENV-35a control: the vector v1 ring verifies", () => {
+      expect(ok(c.bundle)).toBe(true);
+    });
+
+    it("AT-ENV-35b changing any ring field breaks the admins' approval (catches: a version record edited after approval)", () => {
+      const r = c.bundle.ring;
+      const changes: Record<string, unknown> = {
+        scope: "work.acme.flagship.services",
+        version: 2,
+        prevSha256: H32("1"),
+        keyCommitment: H32("2"),
+        recipientsHash: H32("3"),
+        retired: ["b2".repeat(16)],
+        oarVersion: r.oarVersion + 1,
+        issuedAt: r.issuedAt + 1,
+      };
+      for (const [k, v] of Object.entries(changes)) expect(ok({ ...c.bundle, ring: { ...r, [k]: v } }), k).toBe(false);
+      expect(ok({ ...c.bundle, ring: { ...r, kind: "disk-key" } })).toBe(false);
+    });
+
+    it("AT-ENV-35c a flipped approval, no approval, or a dropped recipient is refused", () => {
+      const a = c.bundle.approvals[0];
+      expect(ok({ ...c.bundle, approvals: [{ ...a, signature: flipHex(a.signature) }] })).toBe(false);
+      expect(ok({ ...c.bundle, approvals: [] })).toBe(false);
+      expect(ok({ ...c.bundle, recipients: c.bundle.recipients.slice(1) })).toBe(false);
+    });
+
+    it("AT-ENV-35d no ring or commitment field can carry the separator", () => {
+      const r = c.bundle.ring;
+      expect(throws(() => P.canonicalOrgKeyRing({ ...r, scope: `${r.scope}|1` }))).toBe(true);
+      expect(throws(() => P.orgKeyCommitment(r.orgId, r.kind, `${r.scope}|1`, r.version, new Uint8Array(32)))).toBe(true);
+      expect(throws(() => P.orgKeyCommitment(`${r.orgId}|x`, r.kind, r.scope, r.version, new Uint8Array(32)))).toBe(true);
+    });
+  });
+
+  describe("AT-ENV-36 org-audit-export/v1 and the org-log/v1 chain (what an auditor checks offline)", () => {
+    const ok0 = V.audit.cases[0];
+    const verify = (x: unknown) => !throws(() => P.verifyOrgAuditExport(x as never, { genesisHash: V.genesisHash, now: ok0.now }));
+
+    it("AT-ENV-36a control: the vector export verifies offline", () => {
+      expect(verify(V.audit.export)).toBe(true);
+    });
+
+    it("AT-ENV-36b changing any statement field breaks the admin's approval", () => {
+      const st = V.audit.export.statement;
+      for (const [k, v] of Object.entries({ oarVersion: st.oarVersion + 1, oarHash: H32("5"), logSeq: st.logSeq - 1, logHeadHash: H32("6"), issuedAt: st.issuedAt + 1 }))
+        expect(verify({ ...V.audit.export, statement: { ...st, [k]: v } }), k).toBe(false);
+    });
+
+    it("AT-ENV-36c a rewritten, dropped or reordered log entry is refused (catches: .com editing history under a signed head)", () => {
+      const x = structuredClone(V.audit.export);
+      x.log[2].refSha256 = H32("7");
+      expect(verify(x)).toBe(false);
+      const y = structuredClone(V.audit.export);
+      y.log.splice(3, 1);
+      expect(verify(y)).toBe(false);
+      const z = structuredClone(V.audit.export);
+      [z.log[1], z.log[2]] = [z.log[2], z.log[1]];
+      expect(verify(z)).toBe(false);
+    });
+
+    it("AT-ENV-36d a separator moved between a log entry's kind and its object hash is refused (catches: one chained hash naming two objects)", () => {
+      const e = V.audit.export.log[1];
+      expect(throws(() => P.orgLogEntryHash(V.orgId, e.seq, e.prevHash, `${e.kind}|${e.refSha256}`, "", e.at))).toBe(true);
+      expect(throws(() => P.orgLogEntryHash(V.orgId, e.seq, e.prevHash, e.kind, `${e.refSha256}|1`, e.at))).toBe(true);
+      expect(P.orgLogEntryHash(V.orgId, e.seq, e.prevHash, e.kind, e.refSha256, e.at)).toBe(e.entryHash);
+    });
+
+    it("AT-ENV-36e a flipped approval signature is refused", () => {
+      const a = V.audit.export.approval;
+      expect(verify({ ...V.audit.export, approval: { ...a, signature: flipHex(a.signature) } })).toBe(false);
+      expect(verify({ ...V.audit.export, approval: { ...a, signature: flipHex(a.signature, 300) } })).toBe(false);
+    });
   });
 });

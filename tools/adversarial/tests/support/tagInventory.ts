@@ -228,6 +228,18 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/messages-pseudonym/v1": "kdf per-page pseudonym key P (unlinkable across pages; voiciVectors.test.ts properties)",
   "flagship/messages-thread/v1": "kdf per-page thread X-Wing seed T",
   "flagship/voici-conv/v1": "hash conversation id H(pageId|Ppub)",
+  // ---- enterprise org servers, key ring and audit (docs/enterprise-accounts.md; orgServersVectors.test.ts + test-vectors/org-servers)
+  "flagship/org-server-code/v1": "bespoke AT-ENV-32 (every field, separator shift, flipped or missing approval); vectors org-servers serverCodes (scope, outsider, another genesis, expired, approval of another code)",
+  "flagship/org-server-register/v1": "bespoke AT-ENV-33 (flip, truncation, another box key, signer must be the named key, every field, separator shift)",
+  "flagship/org-seat-kem/v1": "bespoke AT-ENV-34 (flip either hybrid half, every field, KEM key swapped); vectors: a statement under another seat's name",
+  "flagship/org-box-kem/v1": "bespoke AT-ENV-34 (flip, another STK, another org, every field, KEM key swapped)",
+  "flagship/org-key-ring/v1": "bespoke AT-ENV-35 (every ring field, flipped or missing approval, dropped recipient, separator); vectors org-servers keyRings (scope, retired seat, prev-hash) and rotations",
+  "flagship/org-key-commit/v1": "hash: a ring version's key commitment (separator refused, AT-ENV-35d; openOrgKeyRing checks it, orgServersVectors 'opening a copy')",
+  "flagship/org-key-recipients/v1": "hash: a ring version's sorted recipient list (dropped recipient refused, AT-ENV-35c)",
+  "flagship/org-key-seal/v1": "aad: hybrid seal purpose of a ring copy, context [orgId, kind, scope, version, recipient]",
+  "flagship/org-seat-kem-seed/v1": "kdf: a seat's X-Wing seed from the person's UMK, per org",
+  "flagship/org-audit-export/v1": "bespoke AT-ENV-36 (every statement field, rewritten/dropped/reordered log, flipped approval); vectors org-servers audit (outsider, unlogged object)",
+  "flagship/org-log/v1": "hash: one org log entry, chained (separator refused, rewrite refused: AT-ENV-36c-d)",
   "flagship/voici-page/v2": "vectors voiciCallsVectors.test.ts + test-vectors/voici-calls pageV2 (9 index cases: v2 keys under version 1, acceptsCalls on v1, unknown callsFrom, calls switched off or callsFrom widened after signing)",
   // ---- voi.ci calls (docs/voici-calls.md; voiciCallsVectors.test.ts + test-vectors/voici-calls)
   "flagship/voici-call-request/v1": "vectors voiciCallsVectors.test.ts request.checks (25 cases: offer swapped after signing, another browser, another page or pseudonym, revoked browser key, unknown CA, stale, blocked, not allowed)",
