@@ -399,6 +399,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   ~/flagship-0.4-enterprise-build). Next: compile + commit it when load allows. Retail image still needs a build-time
   keyd identity step and bluetoothd group/experimental flag. Owner Qs: share-count (not people) OK?; refusal wording
   until payments ship; unopened links count; enterprise plan tier with the enterprise release.
+- 2026-11-14 Enterprise Kotlin port: Gradle was killed (Mac critically low on memory) before compiling; NOT committed.
+  Files ready in ~/flagship-0.4-enterprise-build (OrgAuthority.kt, OrgAuthorityVectorsTest.kt, PqTrust.kt roles,
+  parity allowlist for org-seat-key-wrap on android/web). Run when the calls agent is done and the Mac is idle:
+  `cd apps/mobile/android && JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew
+  --no-daemon :app:testDebugUnitTest --tests '*OrgAuthorityVectorsTest*' -Dorg.gradle.jvmargs=-Xmx3g`, fix, commit.
 
 ## Resume point
 
