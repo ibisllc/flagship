@@ -149,6 +149,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0137",
   // Quantum-safe stage 1: hybrid companions of admin-root rotations and device grants (pq_json, pq_signature_json).
   "0138",
+  // Enterprise accounts: org rows, every signed org object and the org's audit hash chain.
+  "0141",
+  // voi.ci calls: per-page daily ring counts, one live call per account, VoIP tokens, call allows, missed calls.
+  "0146",
 ];
 
 export interface SchemaStatusDeps {
