@@ -225,6 +225,7 @@ final class PhoneTlsTerminator: @unchecked Sendable {
             for b in out { c.send(content: b, completion: .contentProcessed { _ in }) }
             return true
         }
+        conn.attach(toClient: { b in c.send(content: b, completion: .contentProcessed { _ in }) }, end: { c.cancel() })
         guard feed(first) else { conn.close(); c.cancel(); return }
         func next() {
             c.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) { data, _, done, err in

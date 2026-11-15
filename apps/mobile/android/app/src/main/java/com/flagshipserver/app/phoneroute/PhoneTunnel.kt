@@ -250,6 +250,7 @@ class PhoneTunnelClient(
                         stream.tls.close()
                         return@onPlain
                     }
+                    conn?.attach(toClient = { stream.tls.write(it) }, end = { stream.tls.close() })
                 }
                 stream.turn?.let { turn ->
                     val out = turn.onClientBytes(plain)

@@ -49,8 +49,8 @@ public final class VoiciCallCenter: NSObject {
         return ms - issuedAt <= VoiciCalls.ringMs && !quietHours().isQuiet(at: now)
     }
 
-    /// The WebRTC implementation; a stub until the libwebrtc dependency is decided (docs/voici-calls.md).
-    @ObservationIgnored public var mediaFactory: () -> CallMediaEngine = { StubCallMediaEngine() }
+    /// The WebRTC implementation: our libwebrtc build when the app was built with it (CallMediaFactory), else the stub.
+    @ObservationIgnored public var mediaFactory: () -> CallMediaEngine = { CallMediaFactory.make() }
 
     @ObservationIgnored private var registry: PKPushRegistry?
     @ObservationIgnored private var provider: CXProvider?
@@ -398,6 +398,14 @@ extension VoiciCallCenter: CXProviderDelegate {
             self.setMuted(action.isMuted)
             action.fulfill()
         }
+    }
+    /// CallKit owns the audio session: WebRTC's audio starts only once CallKit activates it, and stops with it.
+    nonisolated public func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+        CallMediaFactory.audioSessionDidActivate(audioSession)
+    }
+
+    nonisolated public func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+        CallMediaFactory.audioSessionDidDeactivate(audioSession)
     }
 }
 #endif

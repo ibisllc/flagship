@@ -32,6 +32,13 @@ val shippedLocales: List<String> = run {
         .map { (it["androidId"] ?: it["code"]) as String }
 }
 
+// voi.ci call media (docs/voici-calls.md §4): our libwebrtc AAR and the TURN responder's .so files, built by
+// .github/workflows/libwebrtc.yml (artifacts only) and unpacked by tools/libwebrtc/use-artifacts.sh into
+// vendor/webrtc (git-ignored), or wherever -Pflagship.webrtcDir points. Without them the app builds with the stub
+// engine from src/nowebrtc, and calls ring but never connect.
+val webrtcDir: File = (project.findProperty("flagship.webrtcDir") as String?)?.let { file(it) } ?: rootProject.file("vendor/webrtc")
+val webrtcBundled: Boolean = webrtcDir.resolve("libwebrtc.aar").isFile && webrtcDir.resolve("jniLibs").isDirectory
+
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore/keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -126,6 +133,13 @@ android {
         }
     }
 
+    sourceSets {
+        getByName("main") {
+            java.srcDir(if (webrtcBundled) "src/webrtc/java" else "src/nowebrtc/java")
+            if (webrtcBundled) jniLibs.srcDir(webrtcDir.resolve("jniLibs"))
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -134,6 +148,7 @@ android {
 }
 
 dependencies {
+    if (webrtcBundled) implementation(files(webrtcDir.resolve("libwebrtc.aar")))
     val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)

@@ -1,5 +1,20 @@
 // swift-tools-version:5.9
+import Foundation
 import PackageDescription
+
+// voi.ci call media (docs/voici-calls.md §4): our WebRTC.xcframework and the TURN responder's FlagshipTurn.xcframework,
+// built by .github/workflows/libwebrtc.yml (artifacts only) and unpacked into Vendor/WebRTC (git-ignored) by
+// tools/libwebrtc/use-artifacts.sh. Without them FlagshipUI builds with StubCallMediaEngine: calls ring but never
+// connect (`#if canImport(WebRTC)` in WebRTCCallMediaEngine.swift).
+let vendorWebRTC = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/WebRTC")
+let webrtcBundled = ["WebRTC.xcframework", "FlagshipTurn.xcframework"].allSatisfy {
+    FileManager.default.fileExists(atPath: vendorWebRTC.appendingPathComponent($0).path)
+}
+let callMediaTargets: [Target] = webrtcBundled ? [
+    .binaryTarget(name: "WebRTC", path: "Vendor/WebRTC/WebRTC.xcframework"),
+    .binaryTarget(name: "FlagshipTurn", path: "Vendor/WebRTC/FlagshipTurn.xcframework")
+] : []
+let callMediaDependencies: [Target.Dependency] = webrtcBundled ? ["WebRTC", "FlagshipTurn"] : []
 
 // FlagshipMobile — iOS-only Swift package. Holds the bits that touch
 // argon2 (the `.flagshipkey` UMK backup KDF, via the locally-vendored
@@ -77,7 +92,7 @@ let package = Package(
                 "Flagship",
                 .product(name: "FlagshipAPI", package: "FlagshipShared"),
                 .product(name: "FlagshipCore", package: "FlagshipShared")
-            ],
+            ] + callMediaDependencies,
             path: "Sources/FlagshipUI"
         ),
         .testTarget(
@@ -91,5 +106,5 @@ let package = Package(
             ],
             path: "Tests/FlagshipMobileTests"
         )
-    ]
+    ] + callMediaTargets
 )

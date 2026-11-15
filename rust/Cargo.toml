@@ -15,6 +15,7 @@ members = [
     "crates/flagship-updater",
     "crates/flagship-access",
     "crates/flagship-turn-lite",
+    "crates/flagship-turn-ffi",
 ]
 
 [workspace.package]

@@ -1,6 +1,7 @@
 # voi.ci calls: which WebRTC stack the phones use
 
-Status: options for the owner (2026-11-15). Nothing is chosen; the apps ship `StubCallMediaEngine` until then.
+Status: decided 2026-11-15 (owner): **A**, our own build of Google's libwebrtc, no vendor prebuilt. Built as
+`docs/voici-calls.md` "As built: media" describes (`tools/libwebrtc`, `.github/workflows/libwebrtc.yml`).
 Read with `docs/voici-calls.md` (the call design, §11.2 the frame layer) and `docs/voici-calls-spike.md` (the
 measurements that chose WebRTC over our own frames).
 

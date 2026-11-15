@@ -5,9 +5,8 @@
 // streams as HTTP visits. The first byte after TLS decides (`flagship-turn-lite` `is_turn_first_byte`): a STUN first
 // byte goes to TURN, anything else to the HTTP endpoint. TURN is accepted only while a call this device answered is
 // armed with its one-time credential, only once, and only when a responder is linked; otherwise the stream is closed.
-// The responder is `rust/crates/flagship-turn-lite` (sans-IO), which the app does not link yet (no Rust in the apps,
-// and the workspace forbids the `unsafe` a C ABI needs): linking it is an owner decision that comes with the WebRTC
-// library.
+// The responder is `rust/crates/flagship-turn-lite` (sans-IO), linked through `flagship-turn-ffi` ([calls.TurnResponder]);
+// a build without the CI's libraries (tools/libwebrtc) has no factory, so TURN streams are closed.
 
 package com.flagshipserver.app.phoneroute
 
@@ -15,6 +14,8 @@ package com.flagshipserver.app.phoneroute
 interface CallTurnConnection {
     /** Bytes for the client's TLS stream; null ends the connection. */
     fun onClientBytes(data: ByteArray): List<ByteArray>?
+    /** Called once, before the first bytes: where bytes the peer sends later go, and how to end the stream. */
+    fun attach(toClient: (ByteArray) -> Unit, end: () -> Unit) {}
     fun close()
 }
 

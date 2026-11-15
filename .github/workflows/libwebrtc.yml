@@ -1,0 +1,275 @@
+name: libwebrtc (voi.ci call media, artifacts only)
+
+# Our own build of Google's libwebrtc for the phone apps (owner, 2026-11-15: option A in
+# docs/voici-calls-webrtc-options.md, no vendor prebuilt), with the Flagship frame-crypto overlay
+# (tools/libwebrtc/overlay), plus the TURN responder (rust/crates/flagship-turn-ffi) for iOS and Android.
+# Pins: tools/libwebrtc/pins.env. The output is one workflow artifact, `libwebrtc`, with SHA256SUMS and a
+# manifest naming the pins; nothing is published or hosted from here (where the binary lives is the owner's
+# decision). tools/libwebrtc/use-artifacts.sh takes a run's artifact into a local build, checked against
+# tools/libwebrtc/artifacts.sha256. A WebRTC build never runs on a developer Mac (tens of GB).
+#
+# The `media` job is the calls media lane: both apps compiled against these libraries (the real
+# CallMediaEngine, not the stub), plus the TURN responder's own tests.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "release/**", "0.4/libwebrtc"]
+    paths:
+      - "tools/libwebrtc/**"
+      - "rust/crates/flagship-turn-lite/**"
+      - "rust/crates/flagship-turn-ffi/**"
+      - ".github/workflows/libwebrtc.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libwebrtc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webrtc-ios:
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use the newest Xcode on the runner
+        run: |
+          x=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x/Contents/Developer"
+          xcodebuild -version
+      - name: Fetch WebRTC at the pinned commit
+        run: tools/libwebrtc/fetch.sh ios "$RUNNER_TEMP/webrtc"
+      - name: Build WebRTC.xcframework
+        run: tools/libwebrtc/build-ios.sh "$RUNNER_TEMP/webrtc" "$RUNNER_TEMP/out"
+      - name: Zip
+        run: |
+          cd "$RUNNER_TEMP/out"
+          find WebRTC.xcframework -exec touch -h -t 202001010000 {} +
+          find WebRTC.xcframework | LC_ALL=C sort | zip -q -X -y -@ WebRTC.xcframework.zip
+          du -sh WebRTC.xcframework WebRTC.xcframework.zip
+      - uses: actions/upload-artifact@v6
+        with:
+          name: part-webrtc-ios
+          path: ${{ runner.temp }}/out/WebRTC.xcframework.zip
+          retention-days: 7
+
+  webrtc-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk (the checkout carries its own Android SDK and NDK)
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af >/dev/null || true
+          df -h /
+      - uses: actions/checkout@v5
+      - name: Fetch WebRTC at the pinned commit
+        run: tools/libwebrtc/fetch.sh android "$RUNNER_TEMP/webrtc"
+      - name: Install the build dependencies upstream lists
+        run: sudo "$RUNNER_TEMP/webrtc/src/build/install-build-deps.sh" --android --no-prompt --no-chromeos-fonts
+      - name: Build libwebrtc.aar
+        run: tools/libwebrtc/build-android.sh "$RUNNER_TEMP/webrtc" "$RUNNER_TEMP/out"
+      - run: du -sh "$RUNNER_TEMP/out/libwebrtc.aar"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: part-webrtc-android
+          path: ${{ runner.temp }}/out/libwebrtc.aar
+          retention-days: 7
+
+  turn-ios:
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use the newest Xcode on the runner
+        run: |
+          x=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x/Contents/Developer"
+      - name: Toolchain from rust-toolchain.toml, with the iOS targets
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+      - name: Build the static library per target
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        run: |
+          for t in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
+            cargo build --locked --release -p flagship-turn-ffi --target "$t"
+          done
+      - name: FlagshipTurn.xcframework
+        run: |
+          set -eu
+          out="$RUNNER_TEMP/turn"
+          mkdir -p "$out/sim" "$out/headers"
+          cp crates/flagship-turn-ffi/include/flagship_turn.h crates/flagship-turn-ffi/include/module.modulemap "$out/headers/"
+          lipo -create target/aarch64-apple-ios-sim/release/libflagship_turn_ffi.a \
+            target/x86_64-apple-ios/release/libflagship_turn_ffi.a -output "$out/sim/libflagship_turn_ffi.a"
+          xcodebuild -create-xcframework \
+            -library target/aarch64-apple-ios/release/libflagship_turn_ffi.a -headers "$out/headers" \
+            -library "$out/sim/libflagship_turn_ffi.a" -headers "$out/headers" \
+            -output "$out/FlagshipTurn.xcframework"
+          cd "$out"
+          find FlagshipTurn.xcframework -exec touch -h -t 202001010000 {} +
+          find FlagshipTurn.xcframework | LC_ALL=C sort | zip -q -X -y -@ FlagshipTurn.xcframework.zip
+      - uses: actions/upload-artifact@v6
+        with:
+          name: part-turn-ios
+          path: ${{ runner.temp }}/turn/FlagshipTurn.xcframework.zip
+          retention-days: 7
+
+  turn-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain from rust-toolchain.toml, with the Android targets
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - name: TURN responder tests (host)
+        run: cargo test --locked -p flagship-turn-lite -p flagship-turn-ffi
+      - name: Build libflagship_turn_ffi.so per ABI (minSdk 29)
+        run: |
+          set -eu
+          ndk="${ANDROID_NDK_LATEST_HOME:?no NDK on the runner}"
+          bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$bin/aarch64-linux-android29-clang"
+          export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$bin/armv7a-linux-androideabi29-clang"
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$bin/x86_64-linux-android29-clang"
+          export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          export CC_armv7_linux_androideabi="$CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER"
+          export CC_x86_64_linux_android="$CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER"
+          # 16 KB pages (Android 15+ devices and Play's requirement for new apps).
+          export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384"
+          out="$RUNNER_TEMP/turn"
+          for pair in aarch64-linux-android:arm64-v8a armv7-linux-androideabi:armeabi-v7a x86_64-linux-android:x86_64; do
+            t="${pair%%:*}"; abi="${pair##*:}"
+            cargo build --locked --release -p flagship-turn-ffi --target "$t"
+            mkdir -p "$out/$abi"
+            cp "target/$t/release/libflagship_turn_ffi.so" "$out/$abi/"
+          done
+          cd "$out"
+          find . -exec touch -h -t 202001010000 {} +
+          find arm64-v8a armeabi-v7a x86_64 | LC_ALL=C sort | zip -q -X -@ flagship-turn-android.zip
+      - uses: actions/upload-artifact@v6
+        with:
+          name: part-turn-android
+          path: ${{ runner.temp }}/turn/flagship-turn-android.zip
+          retention-days: 7
+
+  package:
+    needs: [webrtc-ios, webrtc-android, turn-ios, turn-android]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/out
+      - name: Checksums and manifest
+        run: tools/libwebrtc/package.sh "$RUNNER_TEMP/out"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: libwebrtc
+          path: |
+            ${{ runner.temp }}/out/WebRTC.xcframework.zip
+            ${{ runner.temp }}/out/FlagshipTurn.xcframework.zip
+            ${{ runner.temp }}/out/libwebrtc.aar
+            ${{ runner.temp }}/out/flagship-turn-android.zip
+            ${{ runner.temp }}/out/SHA256SUMS
+            ${{ runner.temp }}/out/manifest.json
+          retention-days: 90
+
+  media-android:
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/mobile/android
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: libwebrtc
+          path: ${{ runner.temp }}/libwebrtc
+      - name: Unpack into vendor/webrtc
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP/libwebrtc" && shasum -a 256 -c SHA256SUMS
+          d="$GITHUB_WORKSPACE/apps/mobile/android/vendor/webrtc"
+          mkdir -p "$d/jniLibs"
+          cp libwebrtc.aar "$d/"
+          unzip -q flagship-turn-android.zip -d "$d/jniLibs"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - working-directory: .
+        run: npm ci
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Debug build with the real CallMediaEngine
+        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: The APK carries libwebrtc, the TURN responder and the overlay
+        run: |
+          set -eu
+          apk=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          unzip -l "$apk" | grep -q 'lib/arm64-v8a/libjingle_peerconnection_so.so'
+          unzip -l "$apk" | grep -q 'lib/arm64-v8a/libflagship_turn_ffi.so'
+          unzip -l "$apk" | grep -q 'lib/x86_64/libflagship_turn_ffi.so'
+      - name: Unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest --tests '*calls*' --tests '*phoneroute*'
+
+  media-ios:
+    needs: package
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use the newest Xcode on the runner
+        run: |
+          x=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x/Contents/Developer"
+      - uses: actions/download-artifact@v5
+        with:
+          name: libwebrtc
+          path: ${{ runner.temp }}/libwebrtc
+      - name: Unpack into Vendor/WebRTC
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP/libwebrtc" && shasum -a 256 -c SHA256SUMS
+          d="$GITHUB_WORKSPACE/apps/mobile/ios/Vendor/WebRTC"
+          mkdir -p "$d"
+          unzip -q WebRTC.xcframework.zip -d "$d"
+          unzip -q FlagshipTurn.xcframework.zip -d "$d"
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          id=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']))")
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+      - name: Package builds and tests with the real CallMediaEngine
+        working-directory: apps/mobile/ios
+        run: |
+          TEST_RUNNER_FLAGSHIP_EXPECT_WEBRTC=1 xcodebuild test -scheme FlagshipMobile-Package -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -only-testing:FlagshipMobileTests/CallMediaBundledTests -quiet
