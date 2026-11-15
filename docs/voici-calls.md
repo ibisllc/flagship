@@ -345,3 +345,24 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
 4. **D4 legal check** for calls in the China mainland storefront still stands.
 5. Calls settings (on/off, who can call, Do Not Disturb) and the missed-call rows on iOS/Android are not built here.
 6. Native review of the new strings (machine drafts in six languages).
+
+## Owner decisions, 2026-11-15
+
+- **Answering while locked is a setting, off by default**, on the Social (Messages) page: "Answer calls while
+  Flagship is locked". Design:
+  - Turning it on (an unlock is needed) makes a **call-only key** on that device: iOS Keychain
+    `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (Secure Enclave P-256 where available), Android Keystore
+    without user authentication (StrongBox where available).
+  - The device binds it once under the owner messages key: `flagship/voici-call-key/v1`
+    `{username, deviceId, callKeyPub, createdAt}`. The binding is published beside the device's messages
+    registration, and `.com` and the caller's browser check an answer against a key the binding names.
+  - The call key signs only the call answer and decline (`voici-call` answer purposes). It never signs messages,
+    pages or anything else; verifiers refuse it for any other purpose.
+  - Turning the setting off, signing out, or removing the device deletes the key and publishes a revocation.
+  - When it is off, today's behaviour stays: the phone rings with "Someone on voi.ci" and asks to unlock.
+- **Do Not Disturb stays per device**: no server learns the owner's hours or time zone (release-manager call; it
+  follows the AI and privacy rules).
+- **Only admin devices change the page's call settings**, as designed (a publish of the page index).
+- **WebRTC stack**: options in `docs/voici-calls-webrtc-options.md` (recommended: a pinned prebuilt now, our own
+  build before GA). The owner's choice is pending. Linking `flagship-turn-lite` (UniFFI vs ports) is decided with it.
+- **The terms change (legal minimum) ships with the 0.4 deploy**, not before.
