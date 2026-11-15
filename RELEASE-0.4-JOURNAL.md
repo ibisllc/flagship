@@ -440,6 +440,14 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   (`f871219ca`), org parity reds gone. Remaining parity reds: voici-call push handlers (ios/android) and web
   voici-call-allow / voici-missed-call: both handed to the calls-phone agent.
 
+- 2026-11-14 late: **retail-image merged** (`763d6fbfc`..`a9f915b7a`): keyd makes a fresh identity on a retail box's
+  first boot and after a wipe (tests: two boxes from one image differ; wiped box differs), BlueZ host files in
+  `packages/boot-chain/src/retailHost.ts` + builder layer `retailImage.ts` (refuses an image carrying any key/owner/
+  claim/BT identity), parity row `release-this-box` (webapp missing), doc §16. tsc, 15 targeted tests, i18n green;
+  parity unchanged. Release-manager decisions: narrow D-Bus policy (7 BlueZ calls) + `flagship-powerkey` group
+  instead of the `bluetooth`/`input` groups; build webapp "Release this box"; build the daemon start on an unclaimed
+  image + post-claim first boot keeping keyd's key now, with a cloud-runnable QEMU + btvirt script. Agent resumed.
+
 ## Resume point
 
 1. Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
