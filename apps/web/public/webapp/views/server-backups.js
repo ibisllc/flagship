@@ -47,6 +47,8 @@ import {
 
 import { tr, dateLocale } from "../lib/i18n.js";
 import { weekdayName } from "../lib/savedBackups.js";
+import { RESTORE_ADMIN_ONLY, mergeStatus } from "../lib/restoreMerge.js";
+import { BACKUP_BUNDLE_EXTENSION, openRestoreMerge, undoListHtml, wireUndoList } from "./restore-merge.js";
 const GB = 1024 ** 3;
 const fmtTime = (t) => new Date(t).toLocaleString(dateLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -126,6 +128,10 @@ export function backupsSectionHtml(body) {
         <button id="bk-run-now" class="full-width mt-2"${admin ? "" : " disabled"}>${tr("Back up now")}</button>
         <ul class="list mt-2" id="bk-list"></ul>
         <p class="faint-sm mt-2">${escapeHtml(SAVED_FILES_NOTE)}</p>
+        <button id="bk-restore-file" class="secondary full-width mt-2"${admin ? "" : " disabled"}>${tr("Restore apps from a backup file…")}</button>
+        <input id="bk-restore-file-input" type="file" class="hidden" accept="${BACKUP_BUNDLE_EXTENSION},application/octet-stream" />
+        ${admin ? "" : `<p class="note small mt-1" data-restore-admin-only>${escapeHtml(RESTORE_ADMIN_ONLY)}</p>`}
+        <div id="bk-undo"></div>
         ${admin ? "" : `<p class="note small mt-1" data-backups-admin-only>${escapeHtml(SERVER_ADMIN_ONLY)}</p>`}
       </div>`;
 }
@@ -143,6 +149,7 @@ export function wireBackupsSection(body, deps = {}) {
   let saved = null;
   let pollTimer = null;
   let depositing = false;
+  let undoPoints = [];
 
   const renderPolicy = () => {
     const v = policyView;
@@ -189,6 +196,7 @@ export function wireBackupsSection(body, deps = {}) {
             <button class="secondary" data-bk-download="${escapeHtml(b.archiveId)}">${tr("Download")}</button>
             <button class="danger" data-bk-delete="${escapeHtml(b.archiveId)}"${admin ? "" : " disabled"}>${tr("Delete")}</button>
           </div>
+          <button class="secondary full-width mt-1" data-bk-restore="${escapeHtml(b.archiveId)}"${admin ? "" : " disabled"}>${tr("Restore into this server…")}</button>
         </li>`;
       })
       .join("");
@@ -376,6 +384,39 @@ export function wireBackupsSection(body, deps = {}) {
     }
   });
 
+  // ---- restore into this server, and the earlier copies a restore kept ----
+  const renderUndo = () => {
+    const host = $("bk-undo");
+    if (host) host.innerHTML = undoListHtml(undoPoints, admin);
+  };
+  const loadUndo = async () => {
+    try {
+      undoPoints = (await mergeStatus({ client })).undo;
+    } catch {
+      undoPoints = []; // an older box has no restore lane
+    }
+    renderUndo();
+  };
+  const host = $("bk-undo");
+  if (host) wireUndoList(host, { client, serverDomain: fqdn, points: () => undoPoints, onChanged: loadUndo, onError: (t) => toast(t, "err") });
+  const startRestore = (source) => {
+    if (!admin) return toast(RESTORE_ADMIN_ONLY, "err");
+    void openRestoreMerge({ client, serverDomain: fqdn, source, onClose: () => void loadUndo() });
+  };
+  $("bk-restore-file")?.addEventListener("click", () => $("bk-restore-file-input")?.click());
+  $("bk-restore-file-input")?.addEventListener("change", (ev) => {
+    const input = ev.target;
+    const file = input?.files?.[0];
+    if (file) startRestore({ kind: "file", file });
+    input.value = "";
+  });
+  $("bk-list")?.addEventListener("click", (ev) => {
+    const target = ev.target instanceof Element ? ev.target : null;
+    const r = target?.closest("[data-bk-restore]");
+    if (r && !r.disabled) startRestore({ kind: "saved", archiveId: r.getAttribute("data-bk-restore") });
+  });
+
   void load();
+  void loadUndo();
   return { reload: load, formatGb };
 }

@@ -14517,5 +14517,265 @@
   "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": {
     "en": "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.",
     "ctx": "webapp/lib/releaseThisBox.js"
+  },
+  "Only an admin device of this account can restore a backup.": {
+    "en": "Only an admin device of this account can restore a backup.",
+    "ctx": "webapp/lib/restoreMerge.js:83"
+  },
+  "The backup couldn't be opened.": {
+    "en": "The backup couldn't be opened.",
+    "ctx": "webapp/lib/restoreMerge.js:142"
+  },
+  "Runs on {0} (its data is likely newer)": {
+    "en": "Runs on {0} (its data is likely newer)",
+    "ctx": "webapp/lib/restoreMerge.js:227"
+  },
+  "Not on this server": {
+    "en": "Not on this server",
+    "ctx": "webapp/lib/restoreMerge.js:227"
+  },
+  "Same version as this server's: {0}": {
+    "en": "Same version as this server's: {0}",
+    "ctx": "webapp/lib/restoreMerge.js:232"
+  },
+  "The backup is probably older: {0} vs {1}": {
+    "en": "The backup is probably older: {0} vs {1}",
+    "ctx": "webapp/lib/restoreMerge.js:234"
+  },
+  "The backup is older: {0} vs {1}": {
+    "en": "The backup is older: {0} vs {1}",
+    "ctx": "webapp/lib/restoreMerge.js:234"
+  },
+  "The backup is probably newer: {0} vs {1}": {
+    "en": "The backup is probably newer: {0} vs {1}",
+    "ctx": "webapp/lib/restoreMerge.js:236"
+  },
+  "The backup is newer: {0} vs {1}": {
+    "en": "The backup is newer: {0} vs {1}",
+    "ctx": "webapp/lib/restoreMerge.js:236"
+  },
+  "Changed separately here and in the backup: {0} vs {1}": {
+    "en": "Changed separately here and in the backup: {0} vs {1}",
+    "ctx": "webapp/lib/restoreMerge.js:238"
+  },
+  "Backup {0}, this server {1}": {
+    "en": "Backup {0}, this server {1}",
+    "ctx": "webapp/lib/restoreMerge.js:240"
+  },
+  "Restore it": {
+    "en": "Restore it",
+    "ctx": "webapp/lib/restoreMerge.js:247"
+  },
+  "Leave it out": {
+    "en": "Leave it out",
+    "ctx": "webapp/lib/restoreMerge.js:249"
+  },
+  "Keep this server's": {
+    "en": "Keep this server's",
+    "ctx": "webapp/lib/restoreMerge.js:251"
+  },
+  "Restore the backup's version": {
+    "en": "Restore the backup's version",
+    "ctx": "webapp/lib/restoreMerge.js:253"
+  },
+  "Use the backup's data with this server's version": {
+    "en": "Use the backup's data with this server's version",
+    "ctx": "webapp/lib/restoreMerge.js:255"
+  },
+  "Add as a separate app": {
+    "en": "Add as a separate app",
+    "ctx": "webapp/lib/restoreMerge.js:257"
+  },
+  "Comes back here too. Who can use it follows its list on your other servers.": {
+    "en": "Comes back here too. Who can use it follows its list on your other servers.",
+    "ctx": "webapp/lib/restoreMerge.js:267"
+  },
+  "Comes back with its data. Nobody from the backup's list can use it until you approve.": {
+    "en": "Comes back with its data. Nobody from the backup's list can use it until you approve.",
+    "ctx": "webapp/lib/restoreMerge.js:268"
+  },
+  "Nothing changes on this server.": {
+    "en": "Nothing changes on this server.",
+    "ctx": "webapp/lib/restoreMerge.js:270"
+  },
+  "Nothing changes. This server's version and data stay.": {
+    "en": "Nothing changes. This server's version and data stay.",
+    "ctx": "webapp/lib/restoreMerge.js:272"
+  },
+  "This server's copy is kept for 7 days, so you can undo. Who can use it: unchanged.": {
+    "en": "This server's copy is kept for 7 days, so you can undo. Who can use it: unchanged.",
+    "ctx": "webapp/lib/restoreMerge.js:274"
+  },
+  "This server's version runs on the backup's data. This server's copy is kept for 7 days. Who can use it: unchanged.": {
+    "en": "This server's version runs on the backup's data. This server's copy is kept for 7 days. Who can use it: unchanged.",
+    "ctx": "webapp/lib/restoreMerge.js:276"
+  },
+  "A new app with its own address. Nobody can use it until you invite them.": {
+    "en": "A new app with its own address. Nobody can use it until you invite them.",
+    "ctx": "webapp/lib/restoreMerge.js:278"
+  },
+  "It isn't on this server.": {
+    "en": "It isn't on this server.",
+    "ctx": "webapp/lib/restoreMerge.js:287"
+  },
+  "It is already on this server.": {
+    "en": "It is already on this server.",
+    "ctx": "webapp/lib/restoreMerge.js:289"
+  },
+  "It is a different app with the same name.": {
+    "en": "It is a different app with the same name.",
+    "ctx": "webapp/lib/restoreMerge.js:291"
+  },
+  "The backup's data is newer than this server's version can read.": {
+    "en": "The backup's data is newer than this server's version can read.",
+    "ctx": "webapp/lib/restoreMerge.js:293"
+  },
+  "The backup's data and this server's changed separately.": {
+    "en": "The backup's data and this server's changed separately.",
+    "ctx": "webapp/lib/restoreMerge.js:295"
+  },
+  "The backup keeps its data differently from this server's version.": {
+    "en": "The backup keeps its data differently from this server's version.",
+    "ctx": "webapp/lib/restoreMerge.js:297"
+  },
+  "There is no free name for a copy.": {
+    "en": "There is no free name for a copy.",
+    "ctx": "webapp/lib/restoreMerge.js:299"
+  },
+  "It is being changed right now. Try again when that is done.": {
+    "en": "It is being changed right now. Try again when that is done.",
+    "ctx": "webapp/lib/restoreMerge.js:301"
+  },
+  "Not possible for this app.": {
+    "en": "Not possible for this app.",
+    "ctx": "webapp/lib/restoreMerge.js:303"
+  },
+  "Also runs on {0}: not changed.": {
+    "en": "Also runs on {0}: not changed.",
+    "ctx": "webapp/lib/restoreMerge.js:309"
+  },
+  "Its address will move to this server (it is first in your server order).": {
+    "en": "Its address will move to this server (it is first in your server order).",
+    "ctx": "webapp/lib/restoreMerge.js:310"
+  },
+  "Jobs saved in the backup may run again.": {
+    "en": "Jobs saved in the backup may run again.",
+    "ctx": "webapp/lib/restoreMerge.js:311"
+  },
+  "Files the app keeps are read as the backup left them.": {
+    "en": "Files the app keeps are read as the backup left them.",
+    "ctx": "webapp/lib/restoreMerge.js:312"
+  },
+  "Restored": {
+    "en": "Restored",
+    "ctx": "webapp/lib/restoreMerge.js:319"
+  },
+  "Kept": {
+    "en": "Kept",
+    "ctx": "webapp/lib/restoreMerge.js:321"
+  },
+  "Left out": {
+    "en": "Left out",
+    "ctx": "webapp/lib/restoreMerge.js:323"
+  },
+  "Couldn't restore. It is back as it was.": {
+    "en": "Couldn't restore. It is back as it was.",
+    "ctx": "webapp/lib/restoreMerge.js:325"
+  },
+  "Changed since you chose. Kept as it is.": {
+    "en": "Changed since you chose. Kept as it is.",
+    "ctx": "webapp/lib/restoreMerge.js:327"
+  },
+  "Kept until {0}": {
+    "en": "Kept until {0}",
+    "ctx": "webapp/views/restore-merge.js:62"
+  },
+  "Undo": {
+    "en": "Undo",
+    "ctx": "webapp/views/restore-merge.js:64"
+  },
+  "Delete now": {
+    "en": "Delete now",
+    "ctx": "webapp/views/restore-merge.js:65"
+  },
+  "Earlier copies kept by a restore": {
+    "en": "Earlier copies kept by a restore",
+    "ctx": "webapp/views/restore-merge.js:71"
+  },
+  "Delete the earlier copy?": {
+    "en": "Delete the earlier copy?",
+    "ctx": "webapp/views/restore-merge.js:91"
+  },
+  "The copy of {0} from before the restore is deleted. This can't be undone.": {
+    "en": "The copy of {0} from before the restore is deleted. This can't be undone.",
+    "ctx": "webapp/views/restore-merge.js:91"
+  },
+  "Put the earlier copy back?": {
+    "en": "Put the earlier copy back?",
+    "ctx": "webapp/views/restore-merge.js:92"
+  },
+  "Changes to {0} since {1} are lost.": {
+    "en": "Changes to {0} since {1} are lost.",
+    "ctx": "webapp/views/restore-merge.js:92"
+  },
+  "Suggested": {
+    "en": "Suggested",
+    "ctx": "webapp/views/restore-merge.js:131"
+  },
+  "Name of the new app": {
+    "en": "Name of the new app",
+    "ctx": "webapp/views/restore-merge.js:142"
+  },
+  "Lowercase letters, digits and single hyphens.": {
+    "en": "Lowercase letters, digits and single hyphens.",
+    "ctx": "webapp/views/restore-merge.js:144"
+  },
+  "Restore apps from a backup": {
+    "en": "Restore apps from a backup",
+    "ctx": "webapp/views/restore-merge.js:166"
+  },
+  "Choose at least one app to restore.": {
+    "en": "Choose at least one app to restore.",
+    "ctx": "webapp/views/restore-merge.js:175"
+  },
+  "New on this server": {
+    "en": "New on this server",
+    "ctx": "webapp/views/restore-merge.js:262"
+  },
+  "Already on this server": {
+    "en": "Already on this server",
+    "ctx": "webapp/views/restore-merge.js:263"
+  },
+  "A different app with the same name": {
+    "en": "A different app with the same name",
+    "ctx": "webapp/views/restore-merge.js:264"
+  },
+  "This backup wasn't made by this account, so it can't be opened here.": {
+    "en": "This backup wasn't made by this account, so it can't be opened here.",
+    "ctx": "webapp/views/restore-merge.js:369"
+  },
+  "Sending the backup to {0}": {
+    "en": "Sending the backup to {0}",
+    "ctx": "webapp/views/restore-merge.js:387"
+  },
+  "Checking the backup on {0}": {
+    "en": "Checking the backup on {0}",
+    "ctx": "webapp/views/restore-merge.js:400"
+  },
+  "Backup of {0}": {
+    "en": "Backup of {0}",
+    "ctx": "webapp/views/restore-merge.js:409"
+  },
+  "Restore apps from a backup file…": {
+    "en": "Restore apps from a backup file…",
+    "ctx": "webapp/views/server-backups.js:131"
+  },
+  "Restore into this server…": {
+    "en": "Restore into this server…",
+    "ctx": "webapp/views/server-backups.js:199"
+  },
+  "The backup file can't be read any more (was its drive removed?). Pick it again.": {
+    "en": "The backup file can't be read any more (was its drive removed?). Pick it again.",
+    "ctx": "webapp/lib/restoreMerge.js:109"
   }
 }
