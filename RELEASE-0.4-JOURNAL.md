@@ -659,6 +659,14 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   learns the caller; "Call and allow call-back" says Flagship will know the conversation can ring that phone; no
   who-called-whom log; the ring-back channel is deleted on stop. calls-callback agent told.
 
+- 2026-11-15: Owner: **delete = forget, no logs, reveal who I am** (`docs/voici-calls.md` last section). Deleting a
+  conversation on either side sends a signed delete; `.com` drops the mailbox, queued messages and ring-back channel
+  with no archive or tombstone; the other side sees "This conversation was ended" (its own copy stays on its device,
+  and the sheet says so). No logs of mailboxes, messages, rings or deletes. The caller's conversation settings get
+  "Show <name> who I am": a `flagship/voici-reveal/v1` signed by the caller's page key, sent sealed inside the
+  conversation; the owner's app verifies it against `.com`'s page key and shows a pill; turning it off removes the
+  pill (the sheet warns it may already have been seen). Given to the calls-callback agent.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
