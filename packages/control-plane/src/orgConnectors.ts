@@ -8,6 +8,8 @@ import {
   orgSeatRolesHash,
   orgSha256Hex,
   verifyOrgConnector,
+  orgConnectorStanding,
+  orgConnectorsToReapprove,
   verifyOrgProposal,
   type OrgApproval,
   type OrgConnectorBundle,
@@ -50,10 +52,28 @@ async function servers(deps: OrgDeps, orgId: string): Promise<Set<string>> {
   return new Set((await deps.orgs.listObjects(orgId, "server")).map((o) => parse<{ serverDomain: string }>(o.bodyJson).serverDomain));
 }
 
+/**
+ * The connectors with each one's standing (`ok`, `needs-reapproval` for 7 days after its last
+ * approver stopped being an org admin, then `suspended`), and the ones to re-approve. Clients and
+ * boxes recompute the standing themselves; this is for display.
+ */
 export async function handleOrgConnectorsGet(deps: OrgDeps, orgId: string): Promise<HandlerResponseWithHeaders> {
   if (!ORG_ID.test(orgId)) return malformed("orgId");
-  if (!(await deps.orgs.getOrg(orgId))) return notFound("org not found");
-  return ok({ connectors: (await deps.orgs.listObjects(orgId, "connector")).map((o) => parse<OrgConnectorBundle>(o.bodyJson)) });
+  const now = nowOf(deps);
+  const v = await loadOrg(deps, orgId, now).catch(() => null);
+  if (!v) return notFound("org not found");
+  const bundles = (await deps.orgs.listObjects(orgId, "connector")).map((o) => parse<OrgConnectorBundle>(o.bodyJson));
+  const standing = (b: OrgConnectorBundle) => {
+    try {
+      return orgConnectorStanding(v.state, v.book, b, now);
+    } catch {
+      return null;
+    }
+  };
+  return ok({
+    connectors: bundles.map((b) => ({ ...b, standing: standing(b) })),
+    toReapprove: orgConnectorsToReapprove(v.state, v.book, bundles, now),
+  });
 }
 
 export async function handleOrgConnectorPut(deps: OrgDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
@@ -71,9 +91,19 @@ export async function handleOrgConnectorPut(deps: OrgDeps, orgId: string, body: 
     if (b.setup !== undefined && (typeof b.setup?.sealedHex !== "string" || !/^(?:[0-9a-f]{2})+$/.test(b.setup.sealedHex) || b.setup.sealedHex.length > 2 * 16_384 || !/^[0-9a-f]{64}$/.test(String(b.setup.kemKeyId)))) {
       return malformed("setup");
     }
-    // A pause or retire may leave the setup out: the box keeps the one it opened.
+    if (b.mappingSealed !== undefined && (!Number.isSafeInteger(b.mappingSealed?.keyVersion) || typeof b.mappingSealed?.sealedHex !== "string" || !/^(?:[0-9a-f]{2})+$/.test(b.mappingSealed.sealedHex) || b.mappingSealed.sealedHex.length > 2 * 65_536)) {
+      return malformed("mappingSealed");
+    }
+    // A pause, retire or re-approval may leave the setup and the sealed mapping out: the last ones stay.
     const setup = b.setup ?? prev?.setup;
-    const bundle: OrgConnectorBundle = { connector: b.connector, connectorPubHex: b.connectorPubHex, approvals: b.approvals.map(orgApprovalFromWire), ...(setup ? { setup } : {}) };
+    const mappingSealed = b.mappingSealed ?? prev?.mappingSealed;
+    const bundle: OrgConnectorBundle = {
+      connector: b.connector,
+      connectorPubHex: b.connectorPubHex,
+      approvals: b.approvals.map(orgApprovalFromWire),
+      ...(setup ? { setup } : {}),
+      ...(mappingSealed ? { mappingSealed } : {}),
+    };
     verifyOrgConnector({ state: v.state, book: v.book, servers: await servers(deps, orgId), now }, bundle, prev?.connector ?? null);
     await deps.orgs.putObject(orgId, { kind: "connector", key: b.connector.connectorId, bodyJson: JSON.stringify(bundle), issuedAt: b.connector.issuedAt, storedAt: now }, true);
     await deps.orgs.appendLog(orgId, `connector-${b.connector.status}`, orgSha256Hex(order), now);

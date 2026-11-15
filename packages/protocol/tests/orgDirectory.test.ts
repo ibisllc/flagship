@@ -22,6 +22,16 @@ import {
   verifyOrgAuthorityChain,
   verifyOrgConnector,
   verifyOrgProposal,
+  orgConnectorStanding,
+  orgConnectorsToReapprove,
+  canonicalOrgDirectorySlicePayload,
+  canonicalOrgDirectorySliceWrite,
+  openOrgDirectorySlice,
+  orgDirectoryShares,
+  orgDirectorySliceContent,
+  orgDirectorySliceTag,
+  openOrgConnectorMapping,
+  sealOrgConnectorMapping,
 } from "../src/index.js";
 
 // Reads test-vectors/org-directory (tools/org-directory-vectors.ts).
@@ -143,5 +153,73 @@ describe("org connectors and proposals vectors", () => {
   it("the decision form", () => {
     expect(text(canonicalOrgProposalDecision(C.decision.statement))).toBe(C.decision.bytes);
     expect(codeOf(() => canonicalOrgProposalDecision({ ...C.decision.statement, decision: "declined" }))).toBe("malformed");
+  });
+});
+
+describe("connector standing vectors (an approver who left)", () => {
+  const A = JSON.parse(readFileSync(resolve(import.meta.dirname, "../test-vectors/org-authority/vectors.json"), "utf8"));
+  const refs = (v: unknown): any => {
+    if (Array.isArray(v)) return v.map(refs);
+    if (!v || typeof v !== "object") return v;
+    const o = v as Record<string, unknown>;
+    if (typeof o.$key === "string") return A.keys[o.$key].binding;
+    if (typeof o.$approval === "number") return A.approvals[o.$approval];
+    return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, refs(x)]));
+  };
+  const all = refs(A.chains[0]).entries;
+  const grants = refs(A.seatBooks[0]).grants;
+  for (const c of V.standing.cases) {
+    it(c.name, () => {
+      const state = verifyOrgAuthorityChain(all.slice(0, c.entries), { genesisHash: A.genesisHash, now: c.now });
+      const book = buildOrgSeatBook(state, { grants, revokes: [], now: c.now });
+      const s = orgConnectorStanding(state, book, c.bundle, c.now);
+      expect({ state: s.state, leftAt: s.leftAt, ...(c.expect.suspendAt ? { suspendAt: s.suspendAt } : {}) }).toEqual(c.expect);
+      const servers = new Set(["home.acme.flagship.services"]);
+      if (c.expect.state === "suspended") expect(codeOf(() => verifyOrgConnector({ state, book, servers, now: c.now }, c.bundle, null, { stored: true }))).toBe("seat-revoked");
+      else expect(verifyOrgConnector({ state, book, servers, now: c.now }, c.bundle, null, { stored: true })?.state).toBe(c.expect.state);
+      expect(orgConnectorsToReapprove(state, book, [c.bundle], c.now).length).toBe(c.expect.state === "ok" ? 0 : 1);
+    });
+  }
+});
+
+describe("members' directory slices vectors", () => {
+  const A = JSON.parse(readFileSync(resolve(import.meta.dirname, "../test-vectors/org-authority/vectors.json"), "utf8"));
+  const refs = (v: unknown): any => {
+    if (Array.isArray(v)) return v.map(refs);
+    if (!v || typeof v !== "object") return v;
+    const o = v as Record<string, unknown>;
+    if (typeof o.$key === "string") return A.keys[o.$key].binding;
+    if (typeof o.$approval === "number") return A.approvals[o.$approval];
+    return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, refs(x)]));
+  };
+  const S = V.slices;
+  const state = verifyOrgAuthorityChain(refs(A.chains[0]).entries.slice(0, 2), { genesisHash: A.genesisHash, now: S.now });
+  const book = buildOrgSeatBook(state, { grants: refs(A.seatBooks[0]).grants, revokes: [], now: S.now });
+  const dir = new Map<string, OrgDirectoryEntry>(S.directory.map((e: OrgDirectoryEntry) => [e.seatId, e]));
+  for (const c of S.seats) {
+    it(`builds and opens the slice of ${c.name}`, () => {
+      expect(orgDirectoryShares(state, book, c.seatId, S.servers, S.now)).toEqual(c.shares);
+      const content = orgDirectorySliceContent(state, book, c.seatId, dir, S.servers, S.now);
+      expect(content).toEqual(c.content);
+      const payload = canonicalOrgDirectorySlicePayload(V.orgId, c.seatId, content);
+      expect(text(payload)).toBe(c.payload);
+      expect(orgDirectorySliceTag(bytes(S.directoryKeyHex), payload)).toBe(c.contentTag);
+      expect(text(canonicalOrgDirectorySliceWrite(c.slice))).toBe(c.write);
+      const kp = orgKemKeyPair(bytes(c.kemSeedHex));
+      expect(openOrgDirectorySlice(c.slice, kp.kemSecret)).toEqual(c.content);
+      // A member's slice carries no email or external id.
+      expect(JSON.stringify(c.content)).not.toMatch(/@acme|ext-/);
+      expect(codeOf(() => openOrgDirectorySlice({ ...c.slice, seatId: S.seats.find((x: { seatId: string }) => x.seatId !== c.seatId).seatId }, kp.kemSecret))).toBe("malformed");
+    });
+  }
+});
+
+describe("the connector mapping sealed for the admins", () => {
+  it("opens with the directory key and only with it", () => {
+    const m = V.connectors.mappingSealed;
+    const id = V.connectors.connector.connector.connectorId;
+    expect(openOrgConnectorMapping(V.orgId, id, bytes(m.directoryKeyHex), m.sealed)).toEqual(V.connectors.mapping);
+    expect(sealOrgConnectorMapping(V.orgId, id, bytes(m.directoryKeyHex), 1, V.connectors.mapping, bytes(m.sealed.sealedHex.slice(0, 24)))).toEqual(m.sealed);
+    expect(codeOf(() => openOrgConnectorMapping(V.orgId, "ee".repeat(16), bytes(m.directoryKeyHex), m.sealed))).toBe("malformed");
   });
 });

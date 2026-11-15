@@ -2576,6 +2576,7 @@ async function main(): Promise<void> {
           pin: currentOrgPin,
           boxKemSeed: () => orgBoxKemSeed(dataDir),
           log: (m) => console.warn(m),
+          note: (kind, text, ok) => activityLog.note(kind, text, { ok }),
         }),
         dataDir,
         note: (kind, text, ok) => activityLog.note(kind, text, { ok }),

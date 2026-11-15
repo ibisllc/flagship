@@ -14,6 +14,8 @@
  *   AT-ENV-47  org-directory-entry/v1: ciphertext or header changed, an entry moved to another id or key version,
  *              a write approval reused for other bytes, a separator in any field, a replayed older entry
  *   AT-ENV-48  org-connector/v1: scopes, box or key changed after approval, a box outside the org, a retired id reused
+ *   AT-ENV-50  org-directory-slice/v1: approved by a non-admin, moved to another seat, payload or tag changed,
+ *              a connector whose approver left past its 7-day grace refused on the box
  *   AT-ENV-49  org-proposal/v1: signed by another key, subject or kind moved, a sealed copy dropped or swapped,
  *              roles changed, a scope the connector lacks, a paused connector; the decision form
  */
@@ -330,5 +332,40 @@ describe("AT-ENV-49 org-proposal/v1 (a connector proposes; admins decide)", () =
     expect(run(clone(off.bundle), "", other)).toThrow(/bad-signature/);
     expect(() => P.canonicalOrgProposalDecision({ ...C.decision.statement, refSha256: "00".repeat(32) })).toThrow(/malformed/);
     expect(() => P.canonicalOrgProposalDecision({ ...C.decision.statement, decision: "done|x" })).toThrow(/malformed/);
+  });
+});
+
+describe("AT-ENV-50 org-directory-slice/v1 (a member's sealed slice) and connector re-approval", () => {
+  const S = D.slices;
+  const slice = S.seats[0];
+  const state = P.verifyOrgAuthorityChain(entries, { genesisHash: A.genesisHash, now: S.now });
+  const book = P.buildOrgSeatBook(state, { grants, revokes: [], now: S.now });
+  const key = (name: string) => {
+    const k = A.keys[name];
+    return { seatId: k.seatId as string, keyId: k.keyId as string, secret: Uint8Array.from(Buffer.from(k.edSeedHex + k.mldsaSeedHex, "hex")) };
+  };
+  const approve = (k: ReturnType<typeof key>, s: P.OrgDirectorySlice) =>
+    P.signOrgApproval({ orgId: A.orgId, oarVersion: 1, order: P.canonicalOrgDirectorySliceWrite(s), seatId: k.seatId, adminKeyId: k.keyId, issuedAt: s.issuedAt, notAfter: s.issuedAt + 86_400_000 }, k.secret);
+  it("AT-ENV-50a an org admin's approval verifies (control); a scoped seat's or another slice's does not", () => {
+    expect(() => P.verifyOrgDirectorySliceApproval(state, book, slice.slice, [approve(key("B admin"), slice.slice)], S.now)).not.toThrow();
+    expect(() => P.verifyOrgDirectorySliceApproval(state, book, slice.slice, [approve(key("S scoped admin"), slice.slice)], S.now)).toThrow(P.OrgAuthorityError);
+    expect(() => P.verifyOrgDirectorySliceApproval(state, book, slice.slice, [approve(key("B admin"), S.seats[1].slice)], S.now)).toThrow(P.OrgAuthorityError);
+  });
+  it("AT-ENV-50b moved to another seat, or with the tag or ciphertext changed, it does not open or verify", () => {
+    const kp = P.orgKemKeyPair(Buffer.from(slice.kemSeedHex, "hex"));
+    expect(() => P.openOrgDirectorySlice({ ...slice.slice, seatId: S.seats[1].seatId }, kp.kemSecret)).toThrow(/malformed/);
+    expect(() => P.verifyOrgDirectorySliceApproval(state, book, { ...slice.slice, contentTag: "00".repeat(32) }, [approve(key("B admin"), slice.slice)], S.now)).toThrow();
+    expect(() => P.openOrgDirectorySlice({ ...slice.slice, sealedHex: flip(slice.slice.sealedHex) }, kp.kemSecret)).toThrow(/malformed/);
+  });
+  it("AT-ENV-50c a payload with a separator in a server or out of order is refused", () => {
+    expect(() => P.canonicalOrgDirectorySlicePayload(A.orgId, slice.seatId, { entries: [], servers: ["a|b"] })).toThrow(/malformed/);
+    expect(() => P.canonicalOrgDirectorySlicePayload(A.orgId, slice.seatId, { entries: [], servers: ["b.x", "a.x"] })).toThrow(/malformed/);
+  });
+  it("AT-ENV-50d a connector whose last approver left more than 7 days ago is suspended on the box (stored mode)", () => {
+    const all = refs(A.chains[0]).entries;
+    const c = D.standing.cases[2];
+    const st = P.verifyOrgAuthorityChain(all.slice(0, c.entries), { genesisHash: A.genesisHash, now: c.now });
+    const bk = P.buildOrgSeatBook(st, { grants, revokes: [], now: c.now });
+    expect(() => P.verifyOrgConnector({ state: st, book: bk, servers: new Set(["home.acme.flagship.services"]), now: c.now }, clone(c.bundle), null, { stored: true })).toThrow(/suspended/);
   });
 });

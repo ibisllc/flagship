@@ -46,7 +46,9 @@ export type OrgObjectKind =
   /** A directory connector's authority record, keyed by connector id (newest wins). */
   | "connector"
   /** A connector's proposal, keyed by proposal id; `decided` is set in the body once an admin acted on it. */
-  | "proposal";
+  | "proposal"
+  /** A member's sealed slice of the directory, keyed by seat id (newest wins). */
+  | "directory-slice";
 
 export interface OrgObject {
   kind: OrgObjectKind;

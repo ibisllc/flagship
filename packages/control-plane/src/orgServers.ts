@@ -16,6 +16,8 @@ import {
   verifyOrgSeatKem,
   verifyOrgServerCode,
   verifyOrgServerRegister,
+  orgConnectorsToReapprove,
+  type OrgConnectorBundle,
   type OrgApproval,
   type OrgAuditObjects,
   type OrgBoxKemBundle,
@@ -291,7 +293,10 @@ export async function handleOrgKeysGet(deps: OrgServerDeps, orgId: string): Prom
     const { kems, seat, box } = await orgKems(deps, v, servers, now);
     const { bundles, rings } = await orgRings(deps, v, servers, kems, now);
     const pending = orgPendingRotations(v.state, v.book, rings, { revokes: v.revokes, grants: v.grants });
-    return ok({ rings: bundles, seatKems: seat, boxKems: box, pending, refused: rings.refused });
+    // A departed admin also leaves the connectors it approved to re-approve (docs/org-directory.md).
+    const connectors = (await deps.orgs.listObjects(orgId, "connector")).map((o) => parse<OrgConnectorBundle>(o.bodyJson));
+    const pendingConnectors = orgConnectorsToReapprove(v.state, v.book, connectors, now);
+    return ok({ rings: bundles, seatKems: seat, boxKems: box, pending, pendingConnectors, refused: rings.refused });
   } catch (e) {
     return refuse(e);
   }

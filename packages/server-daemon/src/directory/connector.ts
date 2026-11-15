@@ -23,7 +23,9 @@ import {
   verifyOrgConnector,
   verifyOrgSeatKem,
   type OrgConnectorBundle,
+  type OrgConnectorStanding,
   type OrgConnectorSetup,
+  type OrgConnectorMapping,
   type OrgKemKey,
   type OrgProposalBundle,
   type OrgSeatInvite,
@@ -45,11 +47,15 @@ export interface ConnectorDeps {
   fetchImpl?: typeof fetch;
   now?: () => number;
   log?: (line: string) => void;
+  /** An Activity line (connector id prefixes and dates only, never a name). */
+  note?: (kind: string, text: string, ok: boolean) => void;
 }
 
 export interface ActiveConnector {
   bundle: OrgConnectorBundle;
-  setup: OrgConnectorSetup;
+  /** `needs-reapproval` while its last approver has left less than 7 days ago. */
+  standing: OrgConnectorStanding;
+  setup: OrgConnectorSetup & { connectorSeedsHex: string; mapping: OrgConnectorMapping };
   connectorSecret: Uint8Array;
 }
 
@@ -101,14 +107,29 @@ export class ConnectorRuntime {
     const next = new Map<string, ActiveConnector>();
     for (const b of connectors) {
       if (b.connector?.serverDomain !== this.deps.serverDomain || b.connector.status !== "active" || !b.setup) continue;
+      const id = b.connector.connectorId;
       try {
-        // Checked as of the record its approval names; an approver who is no longer an org admin ends it.
-        verifyOrgConnector({ state: pin.state, book: pin.book, servers: live, now: this.now() }, b, null, { stored: true });
-        const setup = openOrgConnectorSetup(b.connector, b.setup, kem.kemSecret, hybridSigKeygen);
+        // Checked as of the record its approval names; once its last approver has left it needs re-approval
+        // (7 days of grace), then it is suspended until any org admin approves it again.
+        const standing = verifyOrgConnector({ state: pin.state, book: pin.book, servers: live, now: this.now() }, b, null, { stored: true })!;
+        const known = await this.loadSetup(id);
+        const setup = openOrgConnectorSetup(b.connector, b.setup, kem.kemSecret, hybridSigKeygen, known?.connectorSeedsHex, known ?? undefined);
+        await this.saveSetup(id, setup);
         const seeds = Buffer.from(setup.connectorSeedsHex, "hex");
-        next.set(b.connector.connectorId, { bundle: b, setup, connectorSecret: hybridSigKeygen(seeds.subarray(0, 32), seeds.subarray(32)).secretKey });
+        next.set(id, { bundle: b, standing, setup, connectorSecret: hybridSigKeygen(seeds.subarray(0, 32), seeds.subarray(32)).secretKey });
+        const key = `${id}|${standing.state}|${b.connector.issuedAt}`;
+        if (standing.state === "needs-reapproval" && !this.noted.has(key)) {
+          this.noted.add(key);
+          this.deps.note?.("org.directory.reapprove", `Directory connector ${id.slice(0, 8)} needs re-approval: the admin who approved it left. It stops on ${new Date(standing.suspendAt!).toISOString().slice(0, 10)} unless an org admin approves it again`, false);
+        }
       } catch (e) {
-        this.deps.log?.(`[directory] connector ${b.connector.connectorId.slice(0, 8)} refused: ${(e as Error).message}`);
+        const msg = (e as Error).message;
+        const key = `${id}|refused|${b.connector.issuedAt}|${msg}`;
+        if (!this.noted.has(key)) {
+          this.noted.add(key);
+          this.deps.note?.("org.directory.suspended", `Directory connector ${id.slice(0, 8)} is not running: ${/suspended/.test(msg) ? "it needs an org admin's re-approval" : msg}`, false);
+        }
+        this.deps.log?.(`[directory] connector ${id.slice(0, 8)} refused: ${msg}`);
       }
     }
     this.active = next;
@@ -133,6 +154,27 @@ export class ConnectorRuntime {
       }
     }
     return [...out.values()].sort((a, b) => (a.recipient < b.recipient ? -1 : 1));
+  }
+
+  private readonly noted = new Set<string>();
+
+  private setupPath(id: string): string {
+    return join(this.deps.dataDir, "org-directory", `${id}.setup.json`);
+  }
+
+  /** The setup this box opened last (seeds, token hash, LDAP settings), kept 0600 on the encrypted disk. */
+  private async loadSetup(id: string): Promise<(OrgConnectorSetup & { connectorSeedsHex: string }) | null> {
+    const r = await readStateFile(this.setupPath(id));
+    if (r.kind !== "ok") return null;
+    try {
+      return JSON.parse(r.text) as OrgConnectorSetup & { connectorSeedsHex: string };
+    } catch {
+      return null;
+    }
+  }
+
+  private async saveSetup(id: string, setup: OrgConnectorSetup): Promise<void> {
+    await writeFileDurable(this.setupPath(id), JSON.stringify(setup), 0o600);
   }
 
   private statePath(connectorId: string): string {
