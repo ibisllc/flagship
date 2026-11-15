@@ -252,6 +252,8 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/org-seat-kem-seed/v1": "kdf: a seat's X-Wing seed from the person's UMK, per org",
   "flagship/org-audit-export/v1": "bespoke AT-ENV-36 (every statement field, rewritten/dropped/reordered log, flipped approval); vectors org-servers audit (outsider, unlogged object)",
   "flagship/org-log/v1": "hash: one org log entry, chained (separator refused, rewrite refused: AT-ENV-36c-d)",
+  "flagship/org-box-log-head/v1": "bespoke AT-ENV-46 (orgForgery.test.ts: another STK, another server's name, another org, seq or head hash changed, separator in the domain); vectors org-servers audit (unsigned change, unregistered key, unlisted server)",
+  "flagship/org-box-log/v1": "hash: one box Activity line chained into the box's log head (the signed head covers it; strict fields, AT-ENV-46e)",
   "flagship/voici-page/v2": "vectors voiciCallsVectors.test.ts + test-vectors/voici-calls pageV2 (9 index cases: v2 keys under version 1, acceptsCalls on v1, unknown callsFrom, calls switched off or callsFrom widened after signing)",
   // ---- voi.ci calls (docs/voici-calls.md; voiciCallsVectors.test.ts + test-vectors/voici-calls)
   "flagship/voici-call-request/v1": "vectors voiciCallsVectors.test.ts request.checks (25 cases: offer swapped after signing, another browser, another page or pseudonym, revoked browser key, unknown CA, stale, blocked, not allowed)",

@@ -45,7 +45,19 @@ import {
   type OrgKemKey,
   type OrgKeyRingBundle,
 } from "../packages/protocol/src/orgKeyRing.js";
-import { canonicalOrgAuditExport, orgLogEntryHash, signOrgAuditExport, ORG_LOG_GENESIS, type OrgAuditObjects, type OrgLogEntryWire } from "../packages/protocol/src/orgAudit.js";
+import {
+  canonicalOrgAuditExport,
+  canonicalOrgBoxLogHead,
+  orgBoxLogEntryHash,
+  orgLogEntryHash,
+  orgServerRegisteredRef,
+  signOrgAuditExport,
+  signOrgBoxLogHead,
+  ORG_LOG_GENESIS,
+  type OrgAuditObjects,
+  type OrgBoxLogHead,
+  type OrgLogEntryWire,
+} from "../packages/protocol/src/orgAudit.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, "packages/protocol/test-vectors/org-servers/vectors.json");
@@ -240,6 +252,11 @@ const rotations = [
 ];
 
 // ── audit export ─────────────────────────────────────────────────────────
+// The box's own Activity chain: two entries (their JSON lines' digests), then its signed head.
+const boxLines = ['{"seq":1,"ts":1,"actor":{"kind":"owner"},"action":"org.recipe.verified","ok":true}', '{"seq":2,"ts":2,"actor":{"kind":"owner"},"action":"org.rotation.done","ok":true}'];
+const boxChain = boxLines.reduce((p, l, i) => orgBoxLogEntryHash(i + 1, p, orgSha256Hex(new TextEncoder().encode(l))), ORG_LOG_GENESIS);
+const boxHead: OrgBoxLogHead = { orgId: ORG, serverDomain: SERVER, seq: 2, headHash: boxChain, issuedAt: LEFT + 90 * MIN };
+const boxHeadBundle = { head: boxHead, signature: signOrgBoxLogHead(boxHead, stkSeed) };
 const logRefs: Array<[string, string, number]> = [
   ["authority", orgAuthorityHash(entries[0].record), entries[0].record.issuedAt],
   ["authority-direct", orgAuthorityHash(entries[1].record), T1],
@@ -249,6 +266,8 @@ const logRefs: Array<[string, string, number]> = [
   ["key-ring", orgSha256Hex(canonicalOrgKeyRing(ring1.ring)), AT + HOUR],
   ["revoke", orgSha256Hex(canonicalOrgSeatRevoke(revokeS.revoke)), LEFT],
   ["key-ring", orgSha256Hex(canonicalOrgKeyRing(ring2.ring)), LEFT + HOUR],
+  ["server-registered", orgServerRegisteredRef(SERVER, stkPub), LEFT + HOUR + MIN],
+  ["box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(boxHead)), LEFT + 90 * MIN],
 ];
 const log: OrgLogEntryWire[] = [];
 let prev = ORG_LOG_GENESIS;
@@ -269,12 +288,17 @@ const objects: OrgAuditObjects = {
   keyRings: [ring1, ring2],
   serverCodes: [{ code, approvals: serverCodes[0]!.approvals }],
   log,
+  servers: [{ serverDomain: SERVER, serial: code.serial, identityPubKeyHex: stkPub }],
+  boxLogHeads: [boxHeadBundle],
 };
 const EXPORT_AT = LEFT + 2 * HOUR;
 const state = verifyOrgAuthorityChain(entries, { genesisHash: GENESIS, now: EXPORT_AT });
 void buildOrgSeatBook;
 const exported = signOrgAuditExport(objects, state, { seatId: A.seatId, adminKeyId: A.keyId, hybridSecret: A.secret }, EXPORT_AT, { deterministic: true });
-/** audit.cases apply `patch` to audit.export: log[index].at += atDelta; a copy of grants[from] with issuedAt += delta appended; or another approval. */
+/**
+ * audit.cases apply `patch` to audit.export: log[index].at += atDelta; a copy of grants[from] with issuedAt += delta appended;
+ * another approval; boxHead.seqDelta added to boxLogHeads[0].head.seq; server fields merged into servers[0]; dropServers empties servers.
+ */
 const audit = {
   export: exported,
   cases: [
@@ -282,6 +306,9 @@ const audit = {
     { name: "a log entry changed after signing", patch: { log: { index: 3, atDelta: 1 } }, now: EXPORT_AT + MIN, expect: no("order-mismatch") },
     { name: "an object the log never named", patch: { extraGrant: { from: 0, issuedAtDelta: 1 } }, now: EXPORT_AT + MIN, expect: { ok: true, signedBy: A.seatId, logEntries: log.length, unlogged: 1 } },
     { name: "signed by an outsider", patch: { approval: approve(X, canonicalOrgAuditExport(exported.statement), 1, EXPORT_AT) }, now: EXPORT_AT + MIN, expect: no("unknown-signer") },
+    { name: "a box log head changed after the box signed it", patch: { boxHead: { seqDelta: 1 } }, now: EXPORT_AT + MIN, expect: no("bad-signature") },
+    { name: "a box log head under a key the server did not register", patch: { server: { identityPubKeyHex: hex(ed25519.getPublicKey(fill(32, 0x77))) } }, now: EXPORT_AT + MIN, expect: no("bad-signature") },
+    { name: "a box log head of a server the export does not list", patch: { dropServers: true }, now: EXPORT_AT + MIN, expect: no("unknown-signer") },
   ],
 };
 
@@ -292,12 +319,13 @@ const canonical = [
   { name: "box kem", bytes: utf8(canonicalOrgBoxKem(boxKemStatement)) },
   { name: "key ring v2", bytes: utf8(canonicalOrgKeyRing(ring2.ring)) },
   { name: "audit export", bytes: utf8(canonicalOrgAuditExport(exported.statement)) },
+  { name: "box log head", bytes: utf8(canonicalOrgBoxLogHead(boxHead)) },
   { name: "install blob", bytes: utf8(blobOrder) },
 ].map((c) => ({ ...c, sha256: orgSha256Hex(new TextEncoder().encode(c.bytes)) }));
 
 const doc = {
   description:
-    "Org servers, the org key ring and the audit export (docs/enterprise-accounts.md). Uses org-authority/vectors.json: its keys, chains[0].entries[0..1] (v0, v1) and seatBooks[0]'s grants [M, S]. serverCodes: verifyOrgServerCode(state, book, code, approvals, now). installBlobs: verifyOrgInstallBlob(state, book, blob, now). register: verifyOrgServerRegister(request, signature) with an Ed25519 STK from seed 5e*32. kems: verifyOrgSeatKem / verifyOrgBoxKem (STK above). keyRings: verifyOrgKeyRing(ctx, bundle, prev, {fresh}) with ctx = state, seat book (grants [M, S] + revokes), newest KEM keys, servers [home, other] at now. rotations: orgRotationDone over buildOrgKeyRings(ctx with revokes [revokeS]). opens: openOrgKeyRing(ring, recipient, X-Wing secret from kemSeedHex) returns keyHex. audit: verifyOrgAuditExport(export, {genesisHash, now}).",
+    "Org servers, the org key ring and the audit export (docs/enterprise-accounts.md). Uses org-authority/vectors.json: its keys, chains[0].entries[0..1] (v0, v1) and seatBooks[0]'s grants [M, S]. serverCodes: verifyOrgServerCode(state, book, code, approvals, now). installBlobs: verifyOrgInstallBlob(state, book, blob, now). register: verifyOrgServerRegister(request, signature) with an Ed25519 STK from seed 5e*32. kems: verifyOrgSeatKem / verifyOrgBoxKem (STK above). keyRings: verifyOrgKeyRing(ctx, bundle, prev, {fresh}) with ctx = state, seat book (grants [M, S] + revokes), newest KEM keys, servers [home, other] at now. rotations: orgRotationDone over buildOrgKeyRings(ctx with revokes [revokeS]). opens: openOrgKeyRing(ring, recipient, X-Wing secret from kemSeedHex) returns keyHex. audit: verifyOrgAuditExport(export, {genesisHash, now}); box log head: the box's Activity chain (orgBoxLogEntryHash over each line's sha256) signed with the STK above.",
   orgId: ORG,
   genesisHash: GENESIS,
   servers: [SERVER, OTHER],

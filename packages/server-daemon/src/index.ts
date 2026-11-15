@@ -355,7 +355,7 @@ import {
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
-import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
+import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, postOrgBoxLogHead, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
@@ -1765,6 +1765,18 @@ async function main(): Promise<void> {
       },
       onLog: (m) => console.log(m),
     });
+    // The box's own record of what it did: its Activity chain's head, signed with the STK, every
+    // 15 minutes when it moved (docs/enterprise-accounts.md §11; the audit export carries it).
+    let sentHeadSeq = -1;
+    const sendLogHead = async () => {
+      const head = activityLog.head();
+      if (head.seq <= sentHeadSeq) return;
+      await postOrgBoxLogHead(orgKeyDeps, head);
+      sentHeadSeq = head.seq;
+    };
+    const logHeadTimer = setInterval(() => void sendLogHead().catch((e) => console.warn(`[org] log head not sent: ${(e as Error).message}`)), 15 * 60_000);
+    logHeadTimer.unref?.();
+    void sendLogHead().catch((e) => console.warn(`[org] log head not sent: ${(e as Error).message}`));
     process.once("SIGTERM", () => orgSync.stop());
     process.once("SIGINT", () => orgSync.stop());
     console.log("[daemon] org authority sync armed (verify-then-pin from the org genesis)");

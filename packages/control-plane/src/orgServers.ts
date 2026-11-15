@@ -10,6 +10,8 @@ import {
   orgServerCodeSha256,
   orgSha256Hex,
   verifyOrgBoxKem,
+  verifyOrgBoxLogHead,
+  canonicalOrgBoxLogHead,
   verifyOrgKeyRing,
   verifyOrgSeatKem,
   verifyOrgServerCode,
@@ -17,6 +19,7 @@ import {
   type OrgApproval,
   type OrgAuditObjects,
   type OrgBoxKemBundle,
+  type OrgBoxLogHeadBundle,
   type OrgKemKey,
   type OrgKeyRingBundle,
   type OrgKeyRings,
@@ -40,6 +43,7 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  *   POST /api/orgs/:orgId/box-kems          box KEM bundle          a box's X-Wing key (signed by its STK)
  *   GET  /api/orgs/:orgId/keys                                      key-ring versions, KEM keys, pending rotations
  *   POST /api/orgs/:orgId/keys              { ring, recipients, approvals }   a new version
+ *   POST /api/orgs/:orgId/box-log-heads     { head, signature }     a box's signed Activity log head
  *   GET  /api/orgs/:orgId/export                                    everything an audit export holds, unsigned
  *
  * Adding a server is admin-only (owner rule, 2026-10-16) and, in an org, "an org admin's or a
@@ -244,6 +248,39 @@ export async function handleOrgBoxKem(deps: OrgServerDeps, orgId: string, body: 
   }
 }
 
+/**
+ * A box's own signed log head (`flagship/org-box-log-head/v1`, its STK): kept newest per server and
+ * named in the org log, so the audit export pins each box's record of what it did. A head at the
+ * same sequence with another hash, or an older one, is refused (a box never rewrites its log).
+ */
+export async function handleOrgBoxLogHead(deps: OrgServerDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = nowOf(deps);
+  const b = body as OrgBoxLogHeadBundle | undefined;
+  if (!b?.head || typeof b.signature !== "string") return malformed("head and signature required");
+  try {
+    if (b.head.orgId !== orgId) return malformed("orgId");
+    if (!(await deps.orgs.getOrg(orgId))) return notFound("org not found");
+    const srv = await deps.orgs.getObject(orgId, "server", String(b.head.serverDomain));
+    if (!srv) return notFound("not an org server");
+    const rec = await deps.servers.get(b.head.serverDomain);
+    if (rec?.revokedAt) return forbidden("server revoked");
+    if (Math.abs(now - b.head.issuedAt) > 10 * 60_000) return malformed("stale head");
+    verifyOrgBoxLogHead(b, parse<StoredServer>(srv.bodyJson).identityPubKeyHex);
+    const prev = await deps.orgs.getObject(orgId, "box-log-head", b.head.serverDomain);
+    if (prev) {
+      const p = parse<OrgBoxLogHeadBundle>(prev.bodyJson).head;
+      if (b.head.seq < p.seq || b.head.issuedAt <= p.issuedAt) return conflict("older than the head kept");
+      if (b.head.seq === p.seq && b.head.headHash !== p.headHash) return conflict("a different log at the same sequence");
+      if (b.head.seq === p.seq) return ok({ serverDomain: b.head.serverDomain, seq: b.head.seq, unchanged: true });
+    }
+    await deps.orgs.putObject(orgId, { kind: "box-log-head", key: b.head.serverDomain, bodyJson: JSON.stringify(b), issuedAt: b.head.issuedAt, storedAt: now }, true);
+    await deps.orgs.appendLog(orgId, "box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(b.head)), now);
+    return ok({ serverDomain: b.head.serverDomain, seq: b.head.seq });
+  } catch (e) {
+    return refuse(e);
+  }
+}
+
 export async function handleOrgKeysGet(deps: OrgServerDeps, orgId: string): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
   if (!/^[0-9a-f]{32}$/.test(orgId)) return malformed("orgId");
@@ -293,10 +330,12 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
   try {
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
-    const [rings, codes, log] = await Promise.all([
+    const [rings, codes, log, servers, heads] = await Promise.all([
       listParsed<OrgKeyRingBundle>(deps, orgId, "key-ring"),
       deps.orgs.listObjects(orgId, "server-code"),
       deps.orgs.listLog(orgId, 0),
+      orgServers(deps, orgId),
+      listParsed<OrgBoxLogHeadBundle>(deps, orgId, "box-log-head"),
     ]);
     const objects: OrgAuditObjects = {
       orgId,
@@ -313,6 +352,8 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
         return { code: c.code, approvals: c.approvals };
       }),
       log: log.map((e) => ({ seq: e.seq, prevHash: e.prevHash, entryHash: e.entryHash, kind: e.kind, refSha256: e.refSha256, at: e.at })),
+      servers: servers.map((s) => ({ serverDomain: s.serverDomain, serial: s.serial, identityPubKeyHex: s.identityPubKeyHex })),
+      boxLogHeads: heads,
     };
     return ok({ ...objects, currentVersion: v.state.current.version, currentHash: v.state.currentHash });
   } catch (e) {

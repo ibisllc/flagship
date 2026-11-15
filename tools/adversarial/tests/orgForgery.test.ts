@@ -10,6 +10,7 @@
  *   AT-ENV-43  org-key-ring/v1: recipient spliced after approval, retired seat dropped, commitment and scope swap
  *   AT-ENV-44  org-audit-export/v1: log head swap, record hash swap, outsider
  *   AT-ENV-45  org-install-blob/v1: installer commit, registration URL or genesis changed after approval; the code's approval reused
+ *   AT-ENV-46  org-box-log-head/v1: another STK, moved to another server or org, seq or head hash changed, separator refused
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -179,5 +180,41 @@ describe("AT-ENV-45 org-install-blob/v1", () => {
   it("AT-ENV-45d unlock mode or disk encryption downgraded after approval is refused", () => {
     expect(run({ ...good.blob, bootUnlockMode: "auto" })).toThrow(/order-mismatch/);
     expect(run({ ...good.blob, diskEncryption: "none" })).toThrow(/order-mismatch/);
+  });
+});
+
+describe("AT-ENV-46 org-box-log-head/v1 (a box's own signed log head)", () => {
+  const good = V.audit.export.boxLogHeads[0];
+  const stk = V.register.request.serverIdentityPubKeyHex;
+  it("AT-ENV-46a the head verifies under the key the server registered with (control)", () => {
+    expect(() => P.verifyOrgBoxLogHead(clone(good), stk)).not.toThrow();
+  });
+  it("AT-ENV-46b another box's key does not verify it (catches: one box vouching for another's log)", () => {
+    const other = Buffer.from(P.ed.getPublicKey(new Uint8Array(32).fill(0x77))).toString("hex");
+    expect(() => P.verifyOrgBoxLogHead(clone(good), other)).toThrow(/bad-signature/);
+  });
+  it("AT-ENV-46c moving the head to another server or org breaks it", () => {
+    for (const patch of [{ serverDomain: "other.acme.flagship.services" }, { orgId: "ab".repeat(16) }]) {
+      const b = clone(good);
+      Object.assign(b.head, patch);
+      expect(() => P.verifyOrgBoxLogHead(b, stk)).toThrow(/bad-signature/);
+    }
+  });
+  it("AT-ENV-46d a rewritten log (another seq or head hash) does not verify", () => {
+    const a = clone(good);
+    a.head.seq += 1;
+    expect(() => P.verifyOrgBoxLogHead(a, stk)).toThrow(/bad-signature/);
+    const b = clone(good);
+    b.head.headHash = flip(b.head.headHash);
+    expect(() => P.verifyOrgBoxLogHead(b, stk)).toThrow(/bad-signature/);
+    const c = clone(good);
+    c.signature = flip(c.signature);
+    expect(() => P.verifyOrgBoxLogHead(c, stk)).toThrow(/bad-signature/);
+  });
+  it("AT-ENV-46e no field can carry the separator", () => {
+    const b = clone(good);
+    b.head.serverDomain = `${good.head.serverDomain}|1`;
+    expect(() => P.canonicalOrgBoxLogHead(b.head)).toThrow(/malformed/);
+    expect(() => P.orgBoxLogEntryHash(1, "00".repeat(32), "aa|bb")).toThrow(/malformed/);
   });
 });

@@ -172,6 +172,9 @@ describe("org servers, key ring and audit vectors", () => {
         x.grants.push(g);
       }
       if (c.patch?.approval) x.approval = c.patch.approval;
+      if (c.patch?.boxHead) x.boxLogHeads[0].head.seq += c.patch.boxHead.seqDelta;
+      if (c.patch?.server) Object.assign(x.servers[0], c.patch.server);
+      if (c.patch?.dropServers) x.servers = [];
       let got: unknown;
       try {
         const r = verifyOrgAuditExport(x, { genesisHash: V.genesisHash, now: c.now });

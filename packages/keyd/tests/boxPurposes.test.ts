@@ -52,11 +52,12 @@ const MESH_BOX_PURPOSES = new Set(["flagship/relay-attachment/v1"]);
  */
 const HEALTH_BOX_PURPOSES = new Set(["flagship/box-health/v1"]);
 /**
- * An org box's KEM statement is built by canonicalOrgBoxKem and signed through a signer callback
- * (packages/server-daemon/src/orgBoxKeys.ts), which this scan cannot follow;
+ * An org box's KEM statement and its Activity log head are built by canonicalOrgBoxKem /
+ * canonicalOrgBoxLogHead and signed through a signer callback (packages/server-daemon/src/orgBoxKeys.ts),
+ * which this scan cannot follow;
  * packages/server-daemon/tests/orgBoxKeys.test.ts signs one through keyd's policy.
  */
-const ORG_BOX_PURPOSES = new Set(["flagship/org-box-kem/v1"]);
+const ORG_BOX_PURPOSES = new Set(["flagship/org-box-kem/v1", "flagship/org-box-log-head/v1"]);
 
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [

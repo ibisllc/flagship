@@ -32,6 +32,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/server-register/v1",
     "flagship/org-server-register/v1",
     "flagship/org-box-kem/v1",
+    "flagship/org-box-log-head/v1",
     "flagship/put-sealed-luks-key/v1",
     "flagship/boot-suspension/v1",
     "flagship/boot-auth/v1",

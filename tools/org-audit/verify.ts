@@ -8,8 +8,9 @@
  *   npx tsx tools/org-audit/verify.ts <export.json> --genesis <64-hex> [--now <unix ms>] [--json]
  *
  * Exit 0: the authority chain, the log chain up to the signed head, every seat object, key-ring
- * version and server code, and the admin's signature all verify. Objects the log never named are
- * listed (exit 0, but flag them). Exit 1: something does not verify; the reason is printed.
+ * version and server code, each server's own signed log head (under the key it registered with),
+ * and the admin's signature all verify. Objects the log never named are listed (exit 0, but flag
+ * them); so are servers that sent no head. Exit 1: something does not verify; the reason is printed.
  */
 import { readFileSync } from "node:fs";
 import { OrgAuthorityError, verifyOrgAuditExport, type OrgAuditExport } from "../../packages/protocol/src/index.js";
@@ -56,6 +57,9 @@ export function runOrgAuditVerify(argv: string[], out: (s: string) => void = con
       signedBy: v.signedBy,
       signedAt: new Date(x.statement.issuedAt).toISOString(),
       unlogged: v.unlogged,
+      servers: (x.servers ?? []).map((s) => s.serverDomain),
+      boxLogHeads: v.boxLogHeads.map((h) => ({ serverDomain: h.serverDomain, seq: h.seq, headHash: h.headHash, signedAt: new Date(h.issuedAt).toISOString() })),
+      serversWithoutHead: (x.servers ?? []).map((s) => s.serverDomain).filter((d) => !v.boxLogHeads.some((h) => h.serverDomain === d)),
     };
     if (args.includes("--json")) out(JSON.stringify(summary, null, 2));
     else {
@@ -64,6 +68,12 @@ export function runOrgAuditVerify(argv: string[], out: (s: string) => void = con
       out(`    log: ${summary.logEntries} entries up to ${summary.logHead}`);
       out(`    org admins: ${summary.admins.length}; live seats: ${summary.liveSeats.length}; revoked seats: ${summary.revokedSeats.length}`);
       out(`    key-ring versions: ${summary.keyRingVersions}; server codes: ${summary.serverCodes}`);
+      out(`    servers: ${summary.servers.length}; signed box log heads: ${summary.boxLogHeads.length}`);
+      for (const h of summary.boxLogHeads) out(`    ${h.serverDomain}: its log up to entry ${h.seq} is ${h.headHash} (signed ${h.signedAt})`);
+      if (summary.serversWithoutHead.length) {
+        out(`WARN ${summary.serversWithoutHead.length} server(s) sent no signed log head:`);
+        for (const d of summary.serversWithoutHead) out(`    ${d}`);
+      }
       if (summary.unlogged.length) {
         out(`WARN ${summary.unlogged.length} object(s) the log never named:`);
         for (const u of summary.unlogged) out(`    ${u}`);
