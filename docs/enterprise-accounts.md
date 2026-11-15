@@ -586,13 +586,33 @@ How the binding decisions were built, and what is still open. Not deployed, not 
   shows the invitation (opens the offer with the fragment key, checks org, seat and genesis) and hands the
   link to the phone (shell v211). Vectors `test-vectors/org-servers/` (TypeScript only so far).
 
-Open on this branch: the iOS join screen (accept + SAS) and the admin's grant step after the SAS; the
-iOS/Android org `/org-join` claims (AASA, manifest, parsers; allowlisted until then); the org install
-path (install blob and installer carrying the server code, orgId and genesis; the box's config still
-needs an IRK); clients that build and post key-ring versions (phones) and the box's LUKS re-key for a
-disk-key rotation; the gossip layer reading the org CGK from `org-keys.json`; the auditor CLI around
-`verifyOrgAuditExport`; Swift/Kotlin ports of the new envelopes. A personal username can still be claimed
-with an existing org's name (org create checks usernames, not the reverse; the server code refuses then).
+**Second tranche (2026-11-15, same branch):**
+
+- **One namespace.** Usernames and org names share `<server>.<name>.<apex>`: username claim, account bootstrap
+  and org create each refuse the other's names with the existing `taken` code.
+- **Org install path.** An org recipe (`kind: "org"`, `flagship/org-install-blob/v1`) carries the server code
+  and its approval plus an org admin's approval over the recipe (installer commit, registration URL, unlock mode,
+  disk encryption). The preseed engine hands it to the box unchanged; the bootstrap reads the code's serial,
+  strips the org registration route and writes a config with `orgId` + `orgGenesisHash` and no IRK (the IRK slot
+  is a zero key nobody holds, so owner-IRK paths fail closed); `install-helper sign-server-register` signs the
+  org registration. The box checks its own recipe's approvals once it has replayed the chain (Activity).
+- **Gossip on the org CGK.** An org box takes the CGK it opened from the key ring as its gossip key (no cgk
+  deposit poller), and restarts when it opens a newer version. A keyd box takes only the first version (keyd
+  changes its CGK only with the ceremony token).
+- **Rotations, client side.** `orgKeyContextFromServed` + `rotateOrgKey` (TS) and `buildKeyRing` (Swift, Kotlin)
+  plan and seal a version; the webapp cannot (keyless).
+- **Auditor CLI.** `npx tsx tools/org-audit/verify.ts <export.json> --genesis <hash>`.
+- **Ports.** `OrgServers.swift` and `OrgServers.kt` with vector tests (uncompiled here).
+- **iOS join.** `/org-join` opens `OrgJoinScreen` (accept, the 6-digit code); the org detail lists people waiting
+  to join with their code and "Codes match: admit" (a second admin completes an admin-role grant in the inbox).
+  Uncompiled here.
+
+Open on this branch: the box's LUKS re-key for a disk-key rotation (needs a real box drill); the Android join
+screen and `/org-join` claim; an iOS "Rotate keys" action for pending rotations (TS and Swift have the pieces);
+keyd taking a rotated CGK; the org's pseudonyms on the admin's screens (labels are sealed under the link key; the
+org directory key is not built), so waiting people show as "Seat <id>"; `.com` order status for an org server's
+install timeline (keyed by AuthCode serial today); the appliance path (`appliance.ts` matches only the personal
+registration route); the boxes' own signed log heads in the audit export.
 
 Open (from `0.4/enterprise-build`): the join screen that opens an `org-join` link (accept + SAS), org server creation (AuthCode/registration and
 the install blob carrying the genesis), passing org approvals at each box order call site, the org directory key and
