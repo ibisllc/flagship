@@ -59,11 +59,11 @@ rules (main only deploys, feature branches for unlaunched features, i18n for eve
   `GYM_ADMIN_SECRET` from the environment, else `.gym-secrets.env` in the main checkout, else asks silently, and
   sweeps with only that secret; `sweep-cli` exits 1 on a refused call, so no destroy prompt follows. Still to do:
   the run itself (needs both admin secrets: the Mac, or this machine with the secrets file).
-- **In-app rules sheet: name the nudity / violence rule (2026-11-07).** Terms §8.2 now forbids nudity or sexual
-  content and graphic real-world violence on pages and in messages (`7accf8146`, needed for the Play content rating
-  answers), but the "Page and message rules" sheet's one-line summary in the iOS, Android and web apps still lists
-  only illegal content, harassment, threats, spam and impersonation. Add it to the summary in every language in the
-  next app builds; the sheet's "Full terms" link already carries the rule.
+- **Page and message rules are the legal minimum (owner, 2026-11-14).** No use in furtherance of anything illegal, and
+  lawful takedowns; no topic rules (sex, nudity, violence) unless a store or a government requires them. Terms §8.2 and
+  the rules sheet in every app and language say only that (`scripts/rules-summary.test.ts` guards it). The Play
+  content rating answers sent on 2026-11-07 assumed the old rule: re-answer the questionnaire truthfully with the next
+  Play submission.
 - **UnifiedPush for de-Googled Android (owner, 2026-11-05).** Today every push goes through Firebase
   (`apps/mobile/android/.../push/FlagshipFcmService.kt`, `PushRegistrar.kt`), so a phone without Play Services
   (GrapheneOS without sandboxed Play, LineageOS, CalyxOS, /e/) gets no pushes at all, e.g. "your server needs
