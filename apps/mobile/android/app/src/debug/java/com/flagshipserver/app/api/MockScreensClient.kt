@@ -646,6 +646,14 @@ class MockScreensClient(
     /** Debug access as a box would hold it: a grant turns it on until its end, a revoke turns it off. */
     var debugAccessState: DebugAccessView = DebugAccessView(on = false)
     val debugAccessBodies: MutableList<String> = mutableListOf()
+    val releaseBodies: MutableList<String> = mutableListOf()
+    /** A `release-*` code the next release answers with (403), for tests and the gym. */
+    var releaseRefusal: String? = null
+
+    override suspend fun releaseBox(bodyJson: String) {
+        releaseBodies += bodyJson
+        releaseRefusal?.let { throw ScreensError.Http(403, "{\"error\":\"$it\",\"code\":\"$it\"}") }
+    }
 
     override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse {
         tick()

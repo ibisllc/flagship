@@ -46,6 +46,8 @@ class AiChatAlertPoller(
     private val currentServer: () -> String? = { null },
     /** An app on [server] reached its disk limit: say so once per app. */
     private val notifyStorageFull: (serviceId: String, server: String?) -> Unit = { _, _ -> },
+    /** A retail box's reset window opened on [server]: tell the owner once per opening. */
+    private val notifyResetWindow: (server: String?, at: Long) -> Unit = { _, _ -> },
     /** Every box this device has a session on, each drained with its own
      *  cursor so an alert names the box it came from. Empty: only [client],
      *  the current server. */
@@ -57,6 +59,7 @@ class AiChatAlertPoller(
     /** ACK cursor per server ("" for the current server's [client]): the
      *  highest alert id drained there. */
     private val cursors = HashMap<String, Int>()
+    private val resetNotified = HashSet<String>()
     /** Dedup set so a re-drain (e.g. after a failed ACK) won't re-notify the
      *  same pending tool. Keyed by "<sessionId>|<toolUseId>". */
     private val notified = mutableSetOf<String>()
@@ -112,6 +115,10 @@ class AiChatAlertPoller(
         for (env in resp.events) {
             if (env.id > maxId) maxId = env.id
             val alert = env.alert
+            if (alert is PhoneAlert.ResetWindowOpened) {
+                if (resetNotified.add("${server.orEmpty()}|${alert.at}")) notifyResetWindow(server, alert.at)
+                continue
+            }
             if (alert is PhoneAlert.AppStorageFull) {
                 if (storageNotified.add("${server.orEmpty()}|${alert.serviceId}")) notifyStorageFull(alert.serviceId, server)
                 continue

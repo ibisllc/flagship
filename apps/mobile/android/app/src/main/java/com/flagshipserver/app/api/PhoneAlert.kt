@@ -19,6 +19,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -39,6 +40,8 @@ sealed interface PhoneAlert {
     /** An app reached its disk limit (docs/app-runtimes.md 5.3): value-free,
      *  the app's service id and which store ("files" or "postgres"). */
     data class AppStorageFull(val serviceId: String, val store: String) : PhoneAlert
+    /** A retail box's reset window opened (docs/retail-box-setup.md §7.5); value-free, the phone words it. */
+    data class ResetWindowOpened(val at: Long, val until: Long) : PhoneAlert
 
     /** Any other daemon alert kind — surfaced by its own feature, not here. */
     data class Other(val kind: String) : PhoneAlert
@@ -96,6 +99,10 @@ data class PhoneAlertsResponse(
                     val serviceId = obj["serviceId"]?.jsonPrimitive?.contentOrNull ?: ""
                     if (serviceId.isEmpty()) PhoneAlert.Other(kind)
                     else PhoneAlert.AppStorageFull(serviceId, obj["store"]?.jsonPrimitive?.contentOrNull ?: "")
+                }
+                "reset-window-opened" -> {
+                    val at = obj["at"]?.jsonPrimitive?.longOrNull ?: 0L
+                    PhoneAlert.ResetWindowOpened(at, obj["until"]?.jsonPrimitive?.longOrNull ?: at)
                 }
                 else -> PhoneAlert.Other(kind)
             }

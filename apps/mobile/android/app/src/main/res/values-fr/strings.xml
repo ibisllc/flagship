@@ -3829,4 +3829,22 @@
     <string name="retail_open_server">Ouvrir le serveur</string>
     <string name="retail_alarm_title">N\'utilisez pas ce serveur</string>
     <string name="retail_delete_this_server">Supprimer ce serveur</string>
+    <string name="retail_reset_window_notice">Quelqu’un a appuyé sur le bouton de réinitialisation de %1$s. Si ce n’était pas vous, le serveur n’a pas changé et reste à vous, sauf si quelqu’un le configure dans les 10 prochaines minutes.</string>
+    <string name="release_box_warning">Libérer efface tout sur ce boîtier : ses apps, leurs données et ses clés. C’est irréversible. Le boîtier redevient neuf, prêt pour son prochain propriétaire.</string>
+    <string name="release_box_suggestion">Pour garder vos données, faites d’abord une sauvegarde, ou transférez plutôt le serveur à son nouveau propriétaire.</string>
+    <string name="release_box_admin_only">Seul un appareil administrateur de ce compte peut libérer ce boîtier.</string>
+    <string name="release_box_reason">Libérer %1$s</string>
+    <string name="release_box_cancelled">Le boîtier n’a pas été libéré.</string>
+    <string name="release_box_not_admin">Seule la clé administrateur de ce compte peut libérer ce boîtier.</string>
+    <string name="release_box_needs_hybrid">Ce serveur exige une signature résistante au quantique. Activez la protection résistante au quantique sur cet appareil et réessayez.</string>
+    <string name="release_box_other_server">Cet ordre concerne un autre serveur. Actualisez cette page et réessayez.</string>
+    <string name="release_box_clock">L’horloge de cet appareil est trop éloignée de celle du serveur. Vérifiez l’heure et réessayez.</string>
+    <string name="release_box_replayed">Cet ordre a déjà été utilisé. Réessayez.</string>
+    <string name="release_box_already">Ce boîtier est déjà libéré.</string>
+    <string name="release_box_failed">Le boîtier n’a pas pu être libéré. Réessayez dans un instant.</string>
+    <string name="release_box_title">Libérer ce boîtier</string>
+    <string name="release_box_done">Le boîtier est en cours d’effacement. Il redémarrera comme un boîtier neuf.</string>
+    <string name="release_box_busy">Libération…</string>
+    <string name="release_box_confirm_title">Libérer ce boîtier ?</string>
+    <string name="release_box_confirm">Effacer et libérer</string>
 </resources>

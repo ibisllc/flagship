@@ -3829,4 +3829,22 @@
     <string name="retail_open_server">サーバーを開く</string>
     <string name="retail_alarm_title">このサーバーを使わないでください</string>
     <string name="retail_delete_this_server">このサーバーを削除</string>
+    <string name="retail_reset_window_notice">誰かが %1$s のリセットボタンを押しました。心当たりがない場合でも、今後 10 分以内に誰かが設定しない限り、サーバーは変わらずあなたのものです。</string>
+    <string name="release_box_warning">解放すると、このボックスのアプリ、そのデータ、鍵がすべて消去されます。元に戻せません。ボックスは新品の状態に戻り、次の所有者を待ちます。</string>
+    <string name="release_box_suggestion">データを残すには、先にバックアップを作成するか、代わりにサーバーを新しい所有者に移管してください。</string>
+    <string name="release_box_admin_only">このボックスを解放できるのは、このアカウントの管理者デバイスだけです。</string>
+    <string name="release_box_reason">%1$s を解放</string>
+    <string name="release_box_cancelled">ボックスは解放されませんでした。</string>
+    <string name="release_box_not_admin">このボックスを解放できるのは、このアカウントの管理者キーだけです。</string>
+    <string name="release_box_needs_hybrid">このサーバーには耐量子署名が必要です。このデバイスで耐量子保護をオンにして、もう一度お試しください。</string>
+    <string name="release_box_other_server">その指示は別のサーバー向けです。このページを更新して、もう一度お試しください。</string>
+    <string name="release_box_clock">このデバイスの時計がサーバーと大きくずれています。時刻を確認して、もう一度お試しください。</string>
+    <string name="release_box_replayed">その指示はすでに使われています。もう一度お試しください。</string>
+    <string name="release_box_already">このボックスはすでに解放されています。</string>
+    <string name="release_box_failed">ボックスを解放できませんでした。しばらくしてからもう一度お試しください。</string>
+    <string name="release_box_title">このボックスを解放</string>
+    <string name="release_box_done">ボックスを消去しています。新しいボックスとして再起動します。</string>
+    <string name="release_box_busy">解放しています…</string>
+    <string name="release_box_confirm_title">このボックスを解放しますか？</string>
+    <string name="release_box_confirm">消去して解放</string>
 </resources>

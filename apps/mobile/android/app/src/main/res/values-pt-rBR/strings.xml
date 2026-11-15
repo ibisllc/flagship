@@ -3829,4 +3829,22 @@
     <string name="retail_open_server">Abrir o servidor</string>
     <string name="retail_alarm_title">Não use este servidor</string>
     <string name="retail_delete_this_server">Excluir este servidor</string>
+    <string name="retail_reset_window_notice">Alguém apertou o botão de redefinição de %1$s. Se não foi você, o servidor não mudou e continua seu, a menos que alguém o configure nos próximos 10 minutos.</string>
+    <string name="release_box_warning">Liberar apaga tudo nesta caixa: os apps, os dados deles e as chaves. Não dá para desfazer. A caixa volta a ficar como nova, pronta para o próximo proprietário.</string>
+    <string name="release_box_suggestion">Para manter seus dados, faça um backup antes ou transfira o servidor para o novo proprietário.</string>
+    <string name="release_box_admin_only">Só um dispositivo administrador desta conta pode liberar esta caixa.</string>
+    <string name="release_box_reason">Liberar %1$s</string>
+    <string name="release_box_cancelled">A caixa não foi liberada.</string>
+    <string name="release_box_not_admin">Só a chave de administrador desta conta pode liberar esta caixa.</string>
+    <string name="release_box_needs_hybrid">Este servidor precisa de uma assinatura resistente à computação quântica. Ative a proteção resistente à computação quântica neste dispositivo e tente de novo.</string>
+    <string name="release_box_other_server">Essa ordem é para outro servidor. Atualize esta página e tente de novo.</string>
+    <string name="release_box_clock">O relógio deste dispositivo está muito diferente do relógio do servidor. Confira a hora e tente de novo.</string>
+    <string name="release_box_replayed">Essa ordem já foi usada. Tente de novo.</string>
+    <string name="release_box_already">Esta caixa já está liberada.</string>
+    <string name="release_box_failed">Não foi possível liberar a caixa. Tente de novo daqui a pouco.</string>
+    <string name="release_box_title">Liberar esta caixa</string>
+    <string name="release_box_done">A caixa está sendo apagada. Ela reinicia como uma caixa nova.</string>
+    <string name="release_box_busy">Liberando…</string>
+    <string name="release_box_confirm_title">Liberar esta caixa?</string>
+    <string name="release_box_confirm">Apagar e liberar</string>
 </resources>

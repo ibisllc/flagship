@@ -519,9 +519,15 @@ data class ServerDetailResponse(
     /** The box's outbound proxy and whether it works (docs/outbound-proxy.md).
      *  Absent from older daemons: the server page hides the section. */
     val outboundProxy: OutboundProxySummary? = null,
+    /** A retail box (docs/retail-box-setup.md §8.2): the server key a "Release this box" order
+     *  must name. Absent on every other box. */
+    val retail: RetailBoxView? = null,
 ) {
     val runtimeView: RuntimeVerificationView? get() = RuntimeVerificationView.from(runtime)
 }
+
+@kotlinx.serialization.Serializable
+data class RetailBoxView(val stkPubHex: String)
 
 /** One store's use and limit (`limitBytes` null: no limit but the disk). */
 @Serializable
