@@ -517,6 +517,10 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   sat inside a private `Data` extension; moved, **50/50**. Not yet run: the iOS app-package tests (FlagshipUI view
   models), Wear, the full Android suite, gym specs.
 
+- 2026-11-15: iOS package tests (`FlagshipMobile-Package` on the iPhone 17 Pro simulator; `swift test` can't build
+  UIKit on the Mac host): RestoreMergeViewModelTests + ReleaseThisBoxViewModelTests **13/13**. No view-model tests
+  exist yet for the iOS org join screen or the call screens. Next round: enterprise tranche 3 and calls tranche 2.
+
 ## Resume point
 
 1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
