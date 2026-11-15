@@ -391,6 +391,14 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   iOS 9 retail gym tests green; Android unit tests green, Android gym scenarios not run (no emulator). My first rebase
   of this branch committed conflict markers (zsh did not split the file list); reset to the agent's tip and redone
   with scratchpad/rebase-i18n.sh (refuses on any marker). Owner Q: mark a box that never comes online untrusted too?
+- 2026-11-14 Merged `0.4/retail-bluez` round 2 (fresh keyd identity on every wipe/reset/release incl. /boot and the
+  retail folder; wipe-check false alarm 1 in 2,000 fixed; hybrid release under strict; phones: reset-window
+  notification + Release this box) and `0.4/comanager-caps` (cap counts active shares; box sums siblings over the
+  gossip-MAC'd access-sync; .com backstop; n of N on all apps). tsc + i18n green. PARITY RED: 18 org-authority tags and
+  vectors missing on Android, because the enterprise Kotlin port is written but uncompiled (uncommitted in
+  ~/flagship-0.4-enterprise-build). Next: compile + commit it when load allows. Retail image still needs a build-time
+  keyd identity step and bluetoothd group/experimental flag. Owner Qs: share-count (not people) OK?; refusal wording
+  until payments ship; unopened links count; enterprise plan tier with the enterprise release.
 
 ## Resume point
 
