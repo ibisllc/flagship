@@ -175,26 +175,26 @@ fn claim_receipt_ok(msg: &[u8], public_key_hex: &str, mldsa_pub_hex: Option<&str
         return false;
     };
     let p: Vec<&str> = text.split('|').collect();
-    if p.len() != 10 {
+    let [_, mode, domain, serial, keys, p5, p6, p7, p8, issued] = p.as_slice() else {
         return false;
-    }
+    };
     let own = format!("{public_key_hex}{}", mldsa_pub_hex.unwrap_or(""));
-    let serial_ok = (8..=64).contains(&p[3].len())
-        && p[3]
+    let serial_ok = (8..=64).contains(&serial.len())
+        && serial
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-');
-    let issued_ok = !p[9].is_empty()
-        && p[9].len() <= 16
-        && p[9].bytes().all(|c| c.is_ascii_digit())
-        && (p[9] == "0" || !p[9].starts_with('0'));
-    (p[1] == "open" || p[1] == "code")
-        && session_domain_ok(p[2])
+    let issued_ok = !issued.is_empty()
+        && issued.len() <= 16
+        && issued.bytes().all(|c| c.is_ascii_digit())
+        && (*issued == "0" || !issued.starts_with('0'));
+    (*mode == "open" || *mode == "code")
+        && session_domain_ok(domain)
         && serial_ok
-        && p[4] == own
-        && (p[5].is_empty() || lower_hex_len(p[5], 64))
-        && receipt_text_ok(p[6])
-        && receipt_text_ok(p[7])
-        && lower_hex_len(p[8], 128)
+        && *keys == own
+        && (p5.is_empty() || lower_hex_len(p5, 64))
+        && receipt_text_ok(p6)
+        && receipt_text_ok(p7)
+        && lower_hex_len(p8, 128)
         && issued_ok
 }
 
