@@ -490,7 +490,7 @@ Messages state); no server keeps a log of who called whom.
    browser-to-browser Playwright test against a local `.com` with two voi.ci pages, and a media CI lane once the
    libwebrtc build exists.
 
-## Who may call a page, and ringing a caller back (proposal, 2026-11-15, awaiting the owner's yes)
+## Who may call a page, and ringing a caller back (owner-approved, 2026-11-15)
 
 Owner idea: turning calls on means agreeing to ring. Each page owner picks one mode:
 - **Anyone on the internet**: no account needed; a browser visitor calls. Abuse controls from `voici-calls-v2.md`
@@ -507,3 +507,18 @@ Owner idea: turning calls on means agreeing to ring. Each page owner picks one m
   the relay sees tokens but no conversations. All pushes, account ones included, use it, so `.com` never holds a
   raw token. Linking needs both to collude; Apple and Google still see that a push reached a device. Its hosting
   is decided at deploy.
+
+### Owner additions (2026-11-15)
+
+- **The call-back choice is a pop-up before the call** on a page open to anyone: "Let <name> call you back?" with
+  two buttons, **"Call anonymously"** (no account, no ring-back) and **"Call and allow call-back"** (signs in with
+  Flagship, if not already, and attaches the conversation's ring-back channel). On a "callback accounts only" page,
+  the pop-up shows only the second choice and says why. The choice is per call and per conversation, and a later
+  "Stop call-backs" in the thread withdraws it (the channel is deleted at `.com` and the relay).
+- **Push relay hosting (release-manager recommendation, cheapest):** inside the existing Fly relay app
+  (`flagship-services`, the Rust relay). `.com` stays on Cloudflare, the relay is on Fly: two providers, two sets
+  of secrets. The APNs key and the FCM credentials move to the relay only; `.com` holds no raw push token, and no
+  APNs or FCM secret. Extra cost: about $0 (a few HTTP/2 calls per push on a machine already paid for; APNs and
+  FCM are free). Limits: we run both halves, so the split guards against one side's breach, a subpoena served on
+  one provider, and our own logs, but it is not protection against Flagship itself. A third-party operator would
+  be the stronger option later.
