@@ -113,3 +113,44 @@ public enum OrgConnectors {
         return OrgAuthority.join([tagProposal, "decision", orgId, proposalId, decision, refSha256, String(issuedAt)])
     }
 }
+
+extension OrgConnectors {
+    /// SHA-256 of the mapping's canonical JSON (sorted keys), as `orgConnectorMappingSha256` makes it.
+    public static func mappingSha256(_ mapping: [String: Any]) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: mapping, options: [.sortedKeys, .withoutEscapingSlashes])
+        return OrgAuthority.sha256Hex([UInt8](data))
+    }
+
+    /// The default mapping a new connector starts with: everyone in scope is proposed as a member.
+    public static func defaultMapping(kind: String) -> [String: Any] {
+        let attributes: [String: Any] = kind == "ldap"
+            ? ["email": "userPrincipalName", "displayName": "displayName", "externalId": "objectGUID", "disabled": "userAccountControl"]
+            : ["email": "userName", "displayName": "displayName", "externalId": "externalId"]
+        return ["attributes": attributes, "groups": [String: Any](), "defaultRoles": [["role": "member"]]]
+    }
+
+    /// A new connector on `serverDomain`: fresh hybrid seeds, the record (unapproved), and the setup to seal.
+    public static func newConnector(orgId: String, kind: String, serverDomain: String, mapping: [String: Any], issuedAt: Int64)
+        throws -> (connector: OrgConnector, pubHex: String, seedsHex: String) {
+        let ed = PqHybrid.randomSeed(), ml = PqHybrid.randomSeed()
+        let kp = try PqHybrid.hybridSigKeygen(edSeed: ed, mldsaSeed: ml)
+        let c = OrgConnector(orgId: orgId, connectorId: OrgAuthority.randomId(), kind: kind, serverDomain: serverDomain, connectorKeyId: try connectorKeyId(kp.publicKey),
+                             scopes: scopes, mappingSha256: try mappingSha256(mapping), status: "active", issuedAt: issuedAt)
+        _ = try canonicalConnector(c)
+        return (c, PqBin.hex(kp.publicKey), PqBin.hex(ed + ml))
+    }
+
+    /// The setup sealed to the connector's box (`sealOrgConnectorSetup`).
+    public static func sealSetup(_ c: OrgConnector, boxKem: OrgVerifiedKem, setup: [String: Any], issuedAt: Int64) throws -> [String: Any] {
+        try need(boxKem.recipient == "box:\(c.serverDomain)", "scope", "not the connector's box")
+        let plain = try JSONSerialization.data(withJSONObject: setup, options: [.sortedKeys, .withoutEscapingSlashes])
+        let opts = HybridSealOptions(purpose: tagConnector, senderKeyId: [UInt8](repeating: 0, count: 32), issuedAt: UInt64(issuedAt))
+        let sealed = try PqHybrid.hybridSeal(recipientPublicKey: boxKem.kemPub, options: opts, context: [c.orgId, c.connectorId, c.serverDomain].map { Array($0.utf8) }, plaintext: [UInt8](plain))
+        return ["kemKeyId": boxKem.kemKeyId, "sealedHex": PqBin.hex(sealed)]
+    }
+
+    public static func connectorJSON(_ c: OrgConnector) -> [String: Any] {
+        ["orgId": c.orgId, "connectorId": c.connectorId, "kind": c.kind, "serverDomain": c.serverDomain, "connectorKeyId": c.connectorKeyId,
+         "scopes": c.scopes, "mappingSha256": c.mappingSha256, "status": c.status, "issuedAt": NSNumber(value: c.issuedAt)]
+    }
+}

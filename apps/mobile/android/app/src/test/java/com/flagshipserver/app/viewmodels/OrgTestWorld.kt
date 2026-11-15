@@ -92,6 +92,9 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
     val directory = mutableMapOf<String, JsonObject>()
     val freezes = mutableListOf<JsonObject>()
     val created = mutableListOf<JsonObject>()
+    val connectors = mutableListOf<JsonObject>()
+    val proposals = mutableListOf<JsonObject>()
+    val decisions = mutableListOf<JsonObject>()
     val calls = mutableListOf<String>()
 
     init {
@@ -184,6 +187,11 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
                 offers[s] = (body["offerHex"] as JsonPrimitive).content
                 200 to JsonObject(emptyMap())
             }
+            method == "GET" && path == "$base/connectors" -> 200 to buildJsonObject { put("connectors", JsonArray(connectors)) }
+            method == "POST" && path == "$base/connectors" -> { connectors += body!!; 200 to JsonObject(emptyMap()) }
+            method == "GET" && path == "$base/proposals" -> 200 to buildJsonObject { put("proposals", JsonArray(proposals)) }
+            method == "POST" && path == "$base/proposals/decisions" -> { decisions += body!!; 200 to JsonObject(emptyMap()) }
+            method == "POST" && path == "$base/revokes" -> { revokes += body!!; 200 to JsonObject(emptyMap()) }
             method == "POST" && path == "$base/freezes" -> { freezes += body!!; 200 to JsonObject(emptyMap()) }
             method == "POST" && path == "/api/orgs" -> { created += body!!; 200 to JsonObject(emptyMap()) }
             else -> 404 to JsonObject(emptyMap())

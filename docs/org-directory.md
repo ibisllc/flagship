@@ -168,6 +168,21 @@ read by TS, Swift and Kotlin. The ring kind is the existing `directory-key` (sea
 - Not built: a `changes()` delta feed for any built-in source, group sync beyond membership names, a webhook for the
   company's mailer, SCIM bulk.
 
+**Admin console (§8 step 6).** iOS (`OrgDirectorySections` in `OrgScreens.swift`, `OrgViewModel`) and Android
+(`OrgDirectorySections` in `OrgScreens.kt`, `OrgViewModel`), for org admins on the org page:
+- **From your company directory:** each open proposal, checked against its connector record and opened with this admin's
+  seat KEM key (one that changed after the connector signed it is not shown). Approve carries it out: an invite makes the
+  invitation with the proposed roles and the person's entry (share the link as usual), an offboard revokes the seat
+  (the key rotations follow in "Keys to rotate"), an entry update re-seals the entry; then the decision is recorded with
+  the digest of what was done. A role change is shown but must be done from the person's seat (open). Decline records a
+  decline.
+- **People:** each entry's name, email and groups.
+- **Directory connectors:** the org's connectors (kind, server, status) and "Add a SCIM connector": pick one of the org's
+  servers; the phone makes the key and token, seals the setup to that server and shows the SCIM URL and token once.
+- Not built: the LDAP form (the box and protocol take `setup.ldap`; no screen fills it), editing the group → role
+  mapping (new connectors propose everyone in scope as a member), pause / retire / token rotation buttons, the
+  members' "Shared with: Ana (Finance)" view, and the webapp console (no seat keys until the key-custody decision).
+
 **Joining.** A joining seat signs its seat KEM statement (`org-seat-kem/v1`) with its member key at accept and sends it
 with the accept; `.com` checks it against the member binding, keeps it, and records it as the seat's KEM key when the
 grant lands, so a member receives key-ring versions without opening the org page (release-manager decision).

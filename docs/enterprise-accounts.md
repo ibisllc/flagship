@@ -656,4 +656,9 @@ of the verified chain on `.com` (each request re-verifies every ML-DSA signature
   and `.com` records it when the grant lands); D1 **0148** indexes `org_objects(kind, object_key)` for the server-code
   serial lookup (in `KNOWN_MIGRATIONS`); Android has create, invite (pseudonym first, QR and share link) and freeze,
   matching iOS.
+- **Directory connectors on the org box** (SCIM 2.0 at `/scim/v2`, LDAP pull) and the developer guide
+  `docs/directory-connectors.md`; **the admin console's Directory** on iOS and Android (proposals with Approve, people,
+  connectors with "Add a SCIM connector"). SCIM tokens are per connector, rotated by hand, warned after 365 days (owner,
+  2026-11-15). Open: the LDAP form and mapping editor, role-change execution, member slices of the directory, the
+  webapp console.
 

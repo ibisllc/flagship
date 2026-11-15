@@ -67,6 +67,7 @@ class OrgDirectoryVectorsTest {
         val conn = OrgConnectors.connector(cb["connector"]!!.jsonObject)
         assertEquals(c.s("connectorBytes"), utf8(OrgConnectors.canonical(conn)))
         assertEquals(conn.connectorKeyId, OrgConnectors.connectorKeyId(bytes(cb.s("connectorPubHex"))))
+        assertEquals(conn.mappingSha256, OrgConnectorConsole.mappingSha256(c["mapping"]!!.jsonObject))
         val now = c.l("now")
         for (p in c["proposals"]!!.jsonArray.map { it.jsonObject }) {
             val b = p["bundle"]!!.jsonObject

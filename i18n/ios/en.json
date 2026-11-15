@@ -16021,5 +16021,89 @@
   "Show the names in this organization": {
     "en": "Show the names in this organization",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Invitation made. Share the link with them.": {
+    "en": "Invitation made. Share the link with them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Removed. Rotate the keys they could open when the list asks.": {
+    "en": "Removed. Rotate the keys they could open when the list asks.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Updated.": {
+    "en": "Updated.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Change this person's role from their seat, then decline this proposal.": {
+    "en": "Change this person's role from their seat, then decline this proposal.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "That server hasn't announced its key yet. Try again in a few minutes.": {
+    "en": "That server hasn't announced its key yet. Try again in a few minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "From your company directory": {
+    "en": "From your company directory",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "People": {
+    "en": "People",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Give these to your identity provider. The token is shown only now.": {
+    "en": "Give these to your identity provider. The token is shown only now.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Add a SCIM connector": {
+    "en": "Add a SCIM connector",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Directory connectors": {
+    "en": "Directory connectors",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Microsoft Entra ID, Okta and others send people to your own server. Nothing changes until an admin approves it here.": {
+    "en": "Microsoft Entra ID, Okta and others send people to your own server. Nothing changes until an admin approves it here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Which server runs the connector?": {
+    "en": "Which server runs the connector?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Proposed: invite to the organization": {
+    "en": "Proposed: invite to the organization",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Proposed: remove from the organization": {
+    "en": "Proposed: remove from the organization",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Proposed: change their role": {
+    "en": "Proposed: change their role",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Proposed: update their details": {
+    "en": "Proposed: update their details",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "SCIM connector": {
+    "en": "SCIM connector",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "LDAP connector": {
+    "en": "LDAP connector",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Custom connector": {
+    "en": "Custom connector",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Paused": {
+    "en": "Paused",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Retired": {
+    "en": "Retired",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
   }
 }

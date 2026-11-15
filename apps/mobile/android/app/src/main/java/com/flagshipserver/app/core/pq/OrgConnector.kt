@@ -111,3 +111,51 @@ object OrgConnectors {
         return join(TAG_PROPOSAL, "decision", orgId, proposalId, decision, refSha256, issuedAt)
     }
 }
+
+/** The admin console's side of connectors: the mapping digest, a new connector and its sealed setup (as iOS). */
+object OrgConnectorConsole {
+    /** JSON with keys sorted at every level, as `orgConnectorMappingSha256` hashes it. */
+    fun canonicalJson(e: kotlinx.serialization.json.JsonElement): String = when (e) {
+        is JsonObject -> e.keys.sorted().joinToString(",", "{", "}") { k -> JsonPrimitive(k).toString() + ":" + canonicalJson(e[k]!!) }
+        is JsonArray -> e.joinToString(",", "[", "]") { canonicalJson(it) }
+        else -> e.toString()
+    }
+
+    fun mappingSha256(mapping: JsonObject): String = OrgAuthority.sha256Hex(canonicalJson(mapping).toByteArray(Charsets.UTF_8))
+
+    fun defaultMapping(): JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("attributes", kotlinx.serialization.json.buildJsonObject {
+            put("email", JsonPrimitive("userName")); put("displayName", JsonPrimitive("displayName")); put("externalId", JsonPrimitive("externalId"))
+        })
+        put("groups", JsonObject(emptyMap()))
+        put("defaultRoles", JsonArray(listOf(kotlinx.serialization.json.buildJsonObject { put("role", JsonPrimitive("member")) })))
+    }
+
+    class Made(val connector: OrgConnector, val pubHex: String, val seedsHex: String)
+
+    fun newConnector(orgId: String, connectorId: String, kind: String, serverDomain: String, mapping: JsonObject, issuedAt: Long): Made {
+        val rnd = java.security.SecureRandom()
+        val ed = ByteArray(32).also(rnd::nextBytes)
+        val ml = ByteArray(32).also(rnd::nextBytes)
+        val kp = PqHybrid.hybridSigKeygen(ed, ml)
+        val c = OrgConnector(orgId, connectorId, kind, serverDomain, OrgConnectors.connectorKeyId(kp.publicKey), OrgConnectors.SCOPES,
+            mappingSha256(mapping), "active", issuedAt)
+        OrgConnectors.canonical(c)
+        return Made(c, PqHex.encode(kp.publicKey), PqHex.encode(ed + ml))
+    }
+
+    fun sealSetup(c: OrgConnector, boxKem: OrgVerifiedKem, setup: JsonObject, issuedAt: Long): JsonObject {
+        if (boxKem.recipient != "box:${c.serverDomain}") throw OrgAuthorityException("scope", "not the connector's box")
+        val opts = PqHybrid.HybridSealOptions(purpose = OrgConnectors.TAG_CONNECTOR, senderKeyId = ByteArray(32), issuedAt = issuedAt)
+        val sealed = PqHybrid.hybridSeal(boxKem.kemPub, opts, listOf(c.orgId, c.connectorId, c.serverDomain).map { it.toByteArray(Charsets.UTF_8) },
+            canonicalJson(setup).toByteArray(Charsets.UTF_8))
+        return kotlinx.serialization.json.buildJsonObject { put("kemKeyId", JsonPrimitive(boxKem.kemKeyId)); put("sealedHex", JsonPrimitive(PqHex.encode(sealed))) }
+    }
+
+    fun json(c: OrgConnector): JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("orgId", JsonPrimitive(c.orgId)); put("connectorId", JsonPrimitive(c.connectorId)); put("kind", JsonPrimitive(c.kind))
+        put("serverDomain", JsonPrimitive(c.serverDomain)); put("connectorKeyId", JsonPrimitive(c.connectorKeyId))
+        put("scopes", JsonArray(c.scopes.map { JsonPrimitive(it) })); put("mappingSha256", JsonPrimitive(c.mappingSha256))
+        put("status", JsonPrimitive(c.status)); put("issuedAt", JsonPrimitive(c.issuedAt))
+    }
+}

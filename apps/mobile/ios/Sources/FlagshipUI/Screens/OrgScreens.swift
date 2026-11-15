@@ -67,6 +67,7 @@ public struct OrgDetailScreen: View {
                 joinsSection(c: c)
                 rotationsSection(c: c)
                 approvalsSection(c: c)
+                if seat.memberOnly != true { OrgDirectorySections(vm: vm, seat: seat) }
                 adminsSection(c: c)
                 Section {
                     Button("Invite a person") { inviting = true }.accessibilityIdentifier("org-invite")
@@ -278,6 +279,102 @@ enum OrgCopy {
         case .admin: return String(localized: "Admin")
         case .board: return String(localized: "Board member: lifts freezes")
         case .recovery: return String(localized: "Recovery key")
+        }
+    }
+}
+
+/// The admin console's Directory (docs/org-directory.md §6): people with their names, proposals from the
+/// company directory with Approve, and the connectors with "Add a SCIM connector" (URL and token once).
+struct OrgDirectorySections: View {
+    @Environment(\.colorScheme) private var scheme
+    @Bindable var vm: OrgViewModel
+    let seat: OrgSeatKeys.Seat
+    @State private var pickingServer = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        if !vm.proposals.isEmpty {
+            Section("From your company directory") {
+                ForEach(vm.proposals) { p in
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Text(p.entry.pseudonym).font(FS.font.body()).foregroundColor(c.text)
+                        if !p.entry.email.isEmpty { Text(p.entry.email).font(FS.font.caption()).foregroundColor(c.textMuted) }
+                        Text(OrgDirectoryCopy.proposal(p.kind)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        HStack {
+                            Button("Approve") { Task { await vm.approveProposal(seat, p) } }
+                                .disabled(vm.busy || vm.myFreeze(seat) != nil)
+                                .accessibilityIdentifier("org-proposal-approve-\(p.id.prefix(8))")
+                            Spacer()
+                            Button("Decline", role: .destructive) { Task { await vm.declineProposal(seat, p) } }
+                                .disabled(vm.busy)
+                                .accessibilityIdentifier("org-proposal-decline-\(p.id.prefix(8))")
+                        }
+                    }
+                }
+            }
+        }
+        if !vm.people.isEmpty {
+            Section("People") {
+                ForEach(vm.people.values.sorted { $0.pseudonym < $1.pseudonym }, id: \.seatId) { e in
+                    VStack(alignment: .leading) {
+                        Text(e.pseudonym).font(FS.font.body()).foregroundColor(c.text)
+                        if !e.email.isEmpty || !e.groups.isEmpty {
+                            Text(([e.email] + e.groups).filter { !$0.isEmpty }.joined(separator: " · ")).font(FS.font.caption()).foregroundColor(c.textMuted)
+                        }
+                    }
+                }
+            }
+        }
+        Section {
+            ForEach(vm.connectors, id: \.connectorId) { k in
+                VStack(alignment: .leading) {
+                    Text(OrgDirectoryCopy.kind(k.kind)).font(FS.font.body()).foregroundColor(c.text)
+                    Text("\(k.serverDomain) · \(OrgDirectoryCopy.status(k.status))").font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+            }
+            if let n = vm.newConnector {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Give these to your identity provider. The token is shown only now.").font(FS.font.bodySm()).foregroundColor(c.text)
+                    Text(n.url).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    Text(n.token).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        .accessibilityIdentifier("org-connector-token")
+                    Button("Done") { vm.clearNewConnector() }
+                }
+            } else {
+                Button("Add a SCIM connector") { pickingServer = true }
+                    .disabled(vm.busy || vm.servers.isEmpty)
+                    .accessibilityIdentifier("org-connector-add")
+            }
+        } header: { Text("Directory connectors") } footer: {
+            Text("Microsoft Entra ID, Okta and others send people to your own server. Nothing changes until an admin approves it here.")
+        }
+        .confirmationDialog("Which server runs the connector?", isPresented: $pickingServer, titleVisibility: .visible) {
+            ForEach(vm.servers, id: \.self) { d in Button(d) { Task { await vm.addScimConnector(seat, serverDomain: d) } } }
+        }
+    }
+}
+
+enum OrgDirectoryCopy {
+    static func proposal(_ kind: String) -> String {
+        switch kind {
+        case "invite": return String(localized: "Proposed: invite to the organization")
+        case "offboard": return String(localized: "Proposed: remove from the organization")
+        case "role-change": return String(localized: "Proposed: change their role")
+        default: return String(localized: "Proposed: update their details")
+        }
+    }
+    static func kind(_ k: String) -> String {
+        switch k {
+        case "scim": return String(localized: "SCIM connector")
+        case "ldap": return String(localized: "LDAP connector")
+        default: return String(localized: "Custom connector")
+        }
+    }
+    static func status(_ s: String) -> String {
+        switch s {
+        case "active": return String(localized: "Active")
+        case "paused": return String(localized: "Paused")
+        default: return String(localized: "Retired")
         }
     }
 }

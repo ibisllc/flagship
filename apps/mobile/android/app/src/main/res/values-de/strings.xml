@@ -4062,4 +4062,27 @@
     <string name="org_role_member">Mitglied</string>
     <string name="org_role_server_admin">Admin eines Servers</string>
     <string name="org_show_names_reason">Die Namen in dieser Organisation anzeigen</string>
+    <string name="org_decline">Ablehnen</string>
+    <string name="org_directory_proposals">Aus dem Firmenverzeichnis</string>
+    <string name="org_directory_people">Personen</string>
+    <string name="org_directory_connectors">Verzeichnis-Connectoren</string>
+    <string name="org_directory_connectors_note">Microsoft Entra ID, Okta und andere senden Personen an deinen eigenen Server. Nichts ändert sich, bevor ein Admin es hier bestätigt.</string>
+    <string name="org_connector_token_once">Gib diese Angaben deinem Identitätsanbieter. Das Token wird nur jetzt angezeigt.</string>
+    <string name="org_connector_which_server">Welcher Server führt den Connector aus?</string>
+    <string name="org_connector_add">SCIM-Connector hinzufügen</string>
+    <string name="org_connector_no_key">Dieser Server hat seinen Schlüssel noch nicht bekannt gegeben. Versuche es in ein paar Minuten erneut.</string>
+    <string name="org_proposal_invited">Einladung erstellt. Teile den Link mit der Person.</string>
+    <string name="org_proposal_removed">Entfernt. Wechsle die Schlüssel, die die Person öffnen konnte, sobald die Liste darum bittet.</string>
+    <string name="org_proposal_updated">Aktualisiert.</string>
+    <string name="org_proposal_role_from_seat">Ändere die Rolle dieser Person über ihren Platz und lehne dann diesen Vorschlag ab.</string>
+    <string name="org_proposal_invite">Vorschlag: in die Organisation einladen</string>
+    <string name="org_proposal_offboard">Vorschlag: aus der Organisation entfernen</string>
+    <string name="org_proposal_role">Vorschlag: Rolle ändern</string>
+    <string name="org_proposal_entry">Vorschlag: Angaben aktualisieren</string>
+    <string name="org_connector_scim">SCIM-Connector</string>
+    <string name="org_connector_ldap">LDAP-Connector</string>
+    <string name="org_connector_custom">Eigener Connector</string>
+    <string name="org_connector_active">Aktiv</string>
+    <string name="org_connector_paused">Pausiert</string>
+    <string name="org_connector_retired">Stillgelegt</string>
 </resources>

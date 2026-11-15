@@ -225,6 +225,27 @@ public final class OrgClient: @unchecked Sendable {
         return ((r["entries"] as? [Any]) ?? []).compactMap { try? OrgDirectorySealed.fromWire($0) }
     }
 
+    /// Directory connectors (newest record each) and their proposals with any decision.
+    public func connectors(orgId: String) async throws -> [[String: Any]] {
+        ((try await call("GET", "/api/orgs/\(orgId)/connectors"))["connectors"] as? [[String: Any]]) ?? []
+    }
+
+    public func postConnector(orgId: String, body: [String: Any]) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/connectors", body)
+    }
+
+    public func proposals(orgId: String) async throws -> [[String: Any]] {
+        ((try await call("GET", "/api/orgs/\(orgId)/proposals"))["proposals"] as? [[String: Any]]) ?? []
+    }
+
+    public func decideProposal(orgId: String, decision: [String: Any], approval: OrgApproval) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/proposals/decisions", ["decision": decision, "approvals": [approval.jsonObject]])
+    }
+
+    public func revoke(orgId: String, body: [String: Any]) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/revokes", body)
+    }
+
     /// Stores one sealed entry, approved by this org admin over its write form.
     public func putDirectory(orgId: String, entry: OrgDirectorySealed, approval: OrgApproval) async throws {
         _ = try await call("POST", "/api/orgs/\(orgId)/directory", ["entry": entry.json, "approvals": [approval.jsonObject]])

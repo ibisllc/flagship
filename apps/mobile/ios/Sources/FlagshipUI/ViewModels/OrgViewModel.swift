@@ -38,6 +38,21 @@ public final class OrgViewModel {
     public private(set) var names: [String: String] = [:]
     private var directoryKeys: [Int64: [UInt8]] = [:]
     private var directoryEntryIds: [String: String] = [:]
+    /// The admin console's Directory: everyone's entry (seat id → entry), open proposals, connectors.
+    public private(set) var people: [String: OrgDirectoryEntry] = [:]
+    public private(set) var proposals: [DirectoryProposal] = []
+    public private(set) var connectors: [OrgConnector] = []
+    /// The SCIM URL and token of a connector just added: shown once, never stored on the phone.
+    public private(set) var newConnector: (url: String, token: String)?
+
+    public struct DirectoryProposal: Identifiable {
+        public let id: String
+        public let kind: String
+        public let entry: OrgDirectoryEntry
+        public let roles: [OrgSeatRole]
+        public let connectorKind: String
+        let subject: String
+    }
 
     private let client: OrgClient
     private let keys: OrgSeatKeys
@@ -260,43 +275,49 @@ public final class OrgViewModel {
     public func invite(_ seat: OrgSeatKeys.Seat, pseudonym: String, role: InviteRole, target: String) async {
         let name = pseudonym.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { message = String(localized: "Give this person a name the organization will know them by."); return }
-        guard let s = snapshot else { return }
-        busy = true; defer { busy = false }
         let roles: [OrgSeatRole]
         switch role {
         case .member: roles = [.member]
         case .serverAdmin: roles = [.serverAdmin(servers: [target.lowercased()])]
         case .appAdmin: roles = [.serviceAdmin(apps: [target.lowercased()])]
         }
-        let seatId = OrgAuthority.randomId(), t = now()
-        do {
-            let linkKey = SymmetricKey(size: .bits256)
-            let sealedLabel = try AES.GCM.seal(Data(name.utf8), using: linkKey).combined!
-            let offerJSON = try JSONSerialization.data(withJSONObject: [
-                "orgId": seat.orgId, "orgName": seat.orgName, "genesisHash": seat.genesisHash, "seatId": seatId,
-                "roles": OrgAuthorityWire.rolesJSON(roles), "pseudonym": name,
-            ])
-            let offer = try AES.GCM.seal(offerJSON, using: linkKey).combined!
-            let rolesHash = try OrgAuthority.rolesHash(roles)
-            let labelSha = OrgAuthority.sha256Hex([UInt8](sealedLabel))
-            let order = try OrgAuthority.canonicalSeatInvite(orgId: seat.orgId, seatId: seatId, labelSha256: labelSha, rolesHash: rolesHash,
-                                                             oarVersion: s.state.current.version, issuedAt: t, expiresAt: t + 7 * OrgAuthority.day)
-            let a = try approval(seat, order: order)
-            try await client.createInvite(orgId: seat.orgId, body: [
-                "invite": ["orgId": seat.orgId, "seatId": seatId, "labelSha256": labelSha, "rolesHash": rolesHash,
-                           "oarVersion": NSNumber(value: s.state.current.version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: t + 7 * OrgAuthority.day)],
-                "roles": OrgAuthorityWire.rolesJSON(roles),
-                "approvals": [a.jsonObject],
-                "sealedLabelHex": OrgAuthority.hex([UInt8](sealedLabel)),
-                "offerHex": OrgAuthority.hex([UInt8](offer)),
-            ])
-            // The admins' copy of the pseudonym, under the directory key (the link key's copy is the person's).
-            try? await recordName(seat, seatId: seatId, pseudonym: name)
-            let k = linkKey.withUnsafeBytes { OrgAuthority.hex(Array($0)) }
-            inviteLink = "\(Endpoints.controlBaseUrl.absoluteString)/org-join#o=\(seat.orgId)&s=\(seatId)&k=\(k)"
-        } catch let e as OrgClientError where e.code == "org-seat-limit" {
+        busy = true; defer { busy = false }
+        do { _ = try await makeInvite(seat, name: name, roles: roles, entry: nil) } catch let e as OrgClientError where e.code == "org-seat-limit" {
             message = String(localized: "Your plan has no free seats. Remove someone or add seats first.")
         } catch { failed(error) }
+    }
+
+    /// Posts an invitation for `roles` and records the person in the directory; returns the invite's digest.
+    private func makeInvite(_ seat: OrgSeatKeys.Seat, name: String, roles: [OrgSeatRole], entry: OrgDirectoryEntry?) async throws -> String {
+        guard let s = snapshot else { throw OrgAuthorityError("stale-oar") }
+        let seatId = OrgAuthority.randomId(), t = now()
+        let linkKey = SymmetricKey(size: .bits256)
+        let sealedLabel = try AES.GCM.seal(Data(name.utf8), using: linkKey).combined!
+        let offerJSON = try JSONSerialization.data(withJSONObject: [
+            "orgId": seat.orgId, "orgName": seat.orgName, "genesisHash": seat.genesisHash, "seatId": seatId,
+            "roles": OrgAuthorityWire.rolesJSON(roles), "pseudonym": name,
+        ])
+        let offer = try AES.GCM.seal(offerJSON, using: linkKey).combined!
+        let rolesHash = try OrgAuthority.rolesHash(roles)
+        let labelSha = OrgAuthority.sha256Hex([UInt8](sealedLabel))
+        let order = try OrgAuthority.canonicalSeatInvite(orgId: seat.orgId, seatId: seatId, labelSha256: labelSha, rolesHash: rolesHash,
+                                                         oarVersion: s.state.current.version, issuedAt: t, expiresAt: t + 7 * OrgAuthority.day)
+        let a = try approval(seat, order: order)
+        try await client.createInvite(orgId: seat.orgId, body: [
+            "invite": ["orgId": seat.orgId, "seatId": seatId, "labelSha256": labelSha, "rolesHash": rolesHash,
+                       "oarVersion": NSNumber(value: s.state.current.version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: t + 7 * OrgAuthority.day)],
+            "roles": OrgAuthorityWire.rolesJSON(roles),
+            "approvals": [a.jsonObject],
+            "sealedLabelHex": OrgAuthority.hex([UInt8](sealedLabel)),
+            "offerHex": OrgAuthority.hex([UInt8](offer)),
+        ])
+        // The admins' copy of the pseudonym, under the directory key (the link key's copy is the person's).
+        var e = entry ?? OrgDirectoryEntry(seatId: seatId, pseudonym: name, updatedAt: t)
+        e.seatId = seatId; e.pendingId = ""; e.updatedAt = t
+        try? await recordEntry(seat, e)
+        let k = linkKey.withUnsafeBytes { OrgAuthority.hex(Array($0)) }
+        inviteLink = "\(Endpoints.controlBaseUrl.absoluteString)/org-join#o=\(seat.orgId)&s=\(seatId)&k=\(k)"
+        return OrgAuthority.sha256Hex(order)
     }
 
     public func clearInvite() { inviteLink = nil }
@@ -381,23 +402,30 @@ public final class OrgViewModel {
             directoryKeys = OrgDirectory.keys(p, seatId: seat.seatId, kemSecret: kp.secretKey)
             let view = OrgDirectory.openAll(orgId: seat.orgId, try await client.directory(orgId: seat.orgId), keys: directoryKeys)
             names = view.bySeat.mapValues { $0.entry.pseudonym }
+            people = view.bySeat.mapValues { $0.entry }
             directoryEntryIds = view.bySeat.mapValues { $0.entryId }
+            await loadConsole(seat, kemSecret: kp.secretKey)
         } catch {
             names = [:]
         }
     }
 
-    /// Writes (or renames) one person's entry under the newest directory key.
-    func recordName(_ seat: OrgSeatKeys.Seat, seatId: String, pseudonym: String) async throws {
+    /// Writes (or updates) one person's entry under the newest directory key; returns the write's digest.
+    @discardableResult
+    func recordEntry(_ seat: OrgSeatKeys.Seat, _ entry: OrgDirectoryEntry) async throws -> String {
         if directoryKeys.isEmpty { await loadNames(seat) }
         guard let p = plan, let version = OrgDirectory.newestVersion(p), let key = directoryKeys[version] else { throw OrgAuthorityError("locked") }
         let t = now()
-        let entry = OrgDirectoryEntry(seatId: seatId, pseudonym: pseudonym, updatedAt: t)
-        let sealed = try OrgDirectory.seal(orgId: seat.orgId, entryId: directoryEntryIds[seatId] ?? OrgAuthority.randomId(), keyVersion: version,
-                                           directoryKey: key, entry: entry, issuedAt: t)
-        try await client.putDirectory(orgId: seat.orgId, entry: sealed, approval: try approval(seat, order: try OrgDirectory.canonicalWrite(sealed)))
-        names[seatId] = pseudonym
-        directoryEntryIds[seatId] = sealed.entryId
+        var e = entry
+        e.updatedAt = t
+        let sealed = try OrgDirectory.seal(orgId: seat.orgId, entryId: directoryEntryIds[e.seatId] ?? OrgAuthority.randomId(), keyVersion: version,
+                                           directoryKey: key, entry: e, issuedAt: t)
+        let order = try OrgDirectory.canonicalWrite(sealed)
+        try await client.putDirectory(orgId: seat.orgId, entry: sealed, approval: try approval(seat, order: order))
+        names[e.seatId] = e.pseudonym
+        people[e.seatId] = e
+        directoryEntryIds[e.seatId] = sealed.entryId
+        return OrgAuthority.sha256Hex(order)
     }
 
     /// After the directory key changes, every entry is sealed again under the new version, so a new
@@ -414,4 +442,105 @@ public final class OrgViewModel {
             try? await client.putDirectory(orgId: seat.orgId, entry: sealed, approval: a)
         }
     }
+
+    // MARK: admin console: directory proposals and connectors (docs/org-directory.md §6)
+
+    /// Opens the open proposals addressed to this admin (each checked against its connector record) and lists the connectors.
+    func loadConsole(_ seat: OrgSeatKeys.Seat, kemSecret: [UInt8]) async {
+        let raw = (try? await client.connectors(orgId: seat.orgId)) ?? []
+        var byId: [String: [String: Any]] = [:]
+        for c in raw { if let id = (c["connector"] as? [String: Any])?["connectorId"] as? String { byId[id] = c } }
+        connectors = raw.compactMap { try? OrgConnector.fromWire($0["connector"]) }.sorted { $0.issuedAt < $1.issuedAt }
+        var out: [DirectoryProposal] = []
+        for p in (try? await client.proposals(orgId: seat.orgId)) ?? [] where p["decision"] == nil || p["decision"] is NSNull {
+            guard let b = p["bundle"] as? [String: Any], let prop = b["proposal"] as? [String: Any], let cid = prop["connectorId"] as? String, let cb = byId[cid],
+                  let conn = try? OrgConnector.fromWire(cb["connector"]) else { continue }
+            let roles = (try? OrgAuthorityWire.roles(b["roles"])) ?? []
+            let rolesHash = roles.isEmpty ? "" : ((try? OrgAuthority.rolesHash(roles)) ?? "")
+            guard let v = try? OrgConnectors.verifyProposal(connector: cb, proposal: b, rolesHash: rolesHash, now: now()),
+                  let body = try? OrgConnectors.openProposal(b, recipient: "seat:\(seat.seatId)", kemSecret: kemSecret),
+                  let entry = try? OrgDirectory.parseBody(body) else { continue }
+            out.append(DirectoryProposal(id: v.proposalId, kind: v.kind, entry: entry, roles: roles, connectorKind: conn.kind, subject: v.subject))
+        }
+        proposals = out.sorted { $0.entry.pseudonym < $1.entry.pseudonym }
+    }
+
+    private func decide(_ seat: OrgSeatKeys.Seat, _ p: DirectoryProposal, done refSha256: String?) async throws {
+        let t = now()
+        let ref = refSha256 ?? String(repeating: "0", count: 64)
+        let decision = refSha256 == nil ? "declined" : "done"
+        let order = try OrgConnectors.canonicalDecision(orgId: seat.orgId, proposalId: p.id, decision: decision, refSha256: ref, issuedAt: t)
+        try await client.decideProposal(orgId: seat.orgId, decision: ["orgId": seat.orgId, "proposalId": p.id, "decision": decision, "refSha256": ref, "issuedAt": NSNumber(value: t)],
+                                        approval: try approval(seat, order: order))
+        proposals.removeAll { $0.id == p.id }
+    }
+
+    /// Carries a proposal out with the usual order, then records it: an invitation (share its link as
+    /// usual), a removal, or the updated entry. A role change is done from the person's seat.
+    public func approveProposal(_ seat: OrgSeatKeys.Seat, _ p: DirectoryProposal) async {
+        guard let s = snapshot else { return }
+        busy = true; defer { busy = false }
+        do {
+            switch p.kind {
+            case "invite":
+                let ref = try await makeInvite(seat, name: p.entry.pseudonym, roles: p.roles.isEmpty ? [.member] : p.roles, entry: p.entry)
+                try await decide(seat, p, done: ref)
+                message = String(localized: "Invitation made. Share the link with them.")
+            case "offboard":
+                let t = now()
+                let order = try OrgAuthority.canonicalSeatRevoke(orgId: seat.orgId, seatId: p.subject, reason: "offboarded", oarVersion: s.state.current.version, issuedAt: t)
+                let a = try approval(seat, order: order)
+                try await client.revoke(orgId: seat.orgId, body: [
+                    "revoke": ["orgId": seat.orgId, "seatId": p.subject, "reason": "offboarded", "oarVersion": NSNumber(value: s.state.current.version), "issuedAt": NSNumber(value: t)],
+                    "approvals": [a.jsonObject],
+                ])
+                try await decide(seat, p, done: OrgAuthority.sha256Hex(order))
+                message = String(localized: "Removed. Rotate the keys they could open when the list asks.")
+                await load(seat)
+            case "entry-update":
+                var e = p.entry
+                e.seatId = p.subject; e.pendingId = ""
+                try await decide(seat, p, done: try await recordEntry(seat, e))
+                message = String(localized: "Updated.")
+            default:
+                message = String(localized: "Change this person's role from their seat, then decline this proposal.")
+            }
+        } catch { failed(error) }
+    }
+
+    public func declineProposal(_ seat: OrgSeatKeys.Seat, _ p: DirectoryProposal) async {
+        busy = true; defer { busy = false }
+        do { try await decide(seat, p, done: nil) } catch { failed(error) }
+    }
+
+    /// Adds a SCIM connector on one of the org's servers: the phone makes its key and bearer token,
+    /// approves the record and seals the setup to that server. The token is shown once.
+    public func addScimConnector(_ seat: OrgSeatKeys.Seat, serverDomain: String) async {
+        guard let p = plan, let boxKem = p.ctx.kems["box:\(serverDomain)"] else {
+            message = String(localized: "That server hasn't announced its key yet. Try again in a few minutes.")
+            return
+        }
+        busy = true; defer { busy = false }
+        do {
+            let t = now()
+            let mapping = OrgConnectors.defaultMapping(kind: "scim")
+            let made = try OrgConnectors.newConnector(orgId: seat.orgId, kind: "scim", serverDomain: serverDomain, mapping: mapping, issuedAt: t)
+            let token = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0).base64EncodedString() }
+                .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+            let setup: [String: Any] = ["connectorSeedsHex": made.seedsHex, "mapping": mapping,
+                                        "scimTokenSha256": OrgAuthority.sha256Hex(Array(token.utf8)), "scimTokenIssuedAt": NSNumber(value: t)]
+            let a = try approval(seat, order: try OrgConnectors.canonicalConnector(made.connector))
+            try await client.postConnector(orgId: seat.orgId, body: [
+                "connector": OrgConnectors.connectorJSON(made.connector), "connectorPubHex": made.pubHex, "approvals": [a.jsonObject],
+                "setup": try OrgConnectors.sealSetup(made.connector, boxKem: boxKem, setup: setup, issuedAt: t),
+            ])
+            newConnector = ("https://\(serverDomain)/scim/v2", token)
+            connectors.append(made.connector)
+        } catch { failed(error) }
+    }
+
+    public func clearNewConnector() { newConnector = nil }
+
+    /// The org's servers this phone verified (for the connector's server picker).
+    public var servers: [String] { plan.map { Array($0.ctx.servers).sorted() } ?? [] }
 }

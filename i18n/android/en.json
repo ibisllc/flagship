@@ -16718,5 +16718,97 @@
   "org_show_names_reason": {
     "en": "Show the names in this organization",
     "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_decline": {
+    "en": "Decline",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_directory_proposals": {
+    "en": "From your company directory",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_directory_people": {
+    "en": "People",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_directory_connectors": {
+    "en": "Directory connectors",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_directory_connectors_note": {
+    "en": "Microsoft Entra ID, Okta and others send people to your own server. Nothing changes until an admin approves it here.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_token_once": {
+    "en": "Give these to your identity provider. The token is shown only now.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_which_server": {
+    "en": "Which server runs the connector?",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_add": {
+    "en": "Add a SCIM connector",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_no_key": {
+    "en": "That server hasn't announced its key yet. Try again in a few minutes.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_invited": {
+    "en": "Invitation made. Share the link with them.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_removed": {
+    "en": "Removed. Rotate the keys they could open when the list asks.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_updated": {
+    "en": "Updated.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_role_from_seat": {
+    "en": "Change this person's role from their seat, then decline this proposal.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_invite": {
+    "en": "Proposed: invite to the organization",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_offboard": {
+    "en": "Proposed: remove from the organization",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_role": {
+    "en": "Proposed: change their role",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_proposal_entry": {
+    "en": "Proposed: update their details",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_scim": {
+    "en": "SCIM connector",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_ldap": {
+    "en": "LDAP connector",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_custom": {
+    "en": "Custom connector",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_active": {
+    "en": "Active",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_paused": {
+    "en": "Paused",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_retired": {
+    "en": "Retired",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
   }
 }
