@@ -228,8 +228,8 @@ final class GymMessagesTests: GymSweepCase {
         any(app, "page-options").tap()
         let ink = any(app, "page-theme-ink")
         XCTAssertTrue(ink.waitForExistence(timeout: 5))
-        for id in ["page-copy-link", "page-accept-messages", "messages-settings-sites", "messages-settings-rotate",
-                   "messages-settings-rules", "page-remove"] {
+        for id in ["page-copy-link", "page-accept-messages", "page-accept-calls", "calls-dnd", "messages-settings-sites",
+                   "messages-settings-rotate", "messages-settings-rules", "page-remove"] {
             XCTAssertTrue(reveal(app, any(app, id)), "\(id) is in Page options.")
         }
         app.swipeDown(velocity: .slow)
