@@ -490,6 +490,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Accepted boundary (told the owner): a compromised claim process can fake a button press, but root only runs signed
   recipes. Wi-Fi join privilege waits for the hardware choice.
 
+- 2026-11-15: **restore hybrid follow-up merged** (`..093ac5add`): box answers `403 needs-hybrid` to a classical admin
+  restore order under strict (`authorizeRestoreOrder`), vectors gain a `hybrid` section, iOS/Android send
+  `pqSignature` while any server is strict (uncompiled), webapp says to use the phone (shell **v215**). 72 targeted
+  tests, i18n, parity 0 red. cloud-fixes must set WEB_BUILD 215 when it rebases.
+
 ## Resume point
 
 1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
