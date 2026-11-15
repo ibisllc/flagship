@@ -53,7 +53,7 @@ import { checkRateLimit, clientIp, type RateLimitEndpoint, type RateLimitEnv, ty
 import { voiciErrorResponse, voiciShellResponse, voiciSiteFile } from "./voiciSite.js";
 import { deriveUrlFragment } from "@flagship/protocol";
 import { deleteVoiciAbuseAccount, isAccountBanned, isPseudonymBanned, pruneVoiciAbuse } from "./voiciAbuse.js";
-import { handleVoiciCallApi, isVoiciCallPath, type VoiciCallEnv } from "./voiciCallRoutes.js";
+import { handleVoiciCallApi, isVoiciCallPath, voiciCallsEnabled, type VoiciCallEnv } from "./voiciCallRoutes.js";
 
 export interface VoiciEnv extends RateLimitEnv, VoiciCallEnv {
   DB?: D1Database;
@@ -104,6 +104,7 @@ export function isVoiciCorsPath(method: string, pathname: string): boolean {
   const m = method.toUpperCase();
   if (m === "GET" && /^\/api\/username\/[^/]+$/.test(pathname)) return true;
   if (m === "GET" && /^\/api\/voici\/pages\/[^/]+$/.test(pathname)) return true;
+  if (m === "GET" && /^\/api\/voici\/pages\/[^/]+\/call-challenge$/.test(pathname)) return true;
   if (m === "POST" && pathname === "/api/voici/reports") return true;
   if (m === "POST" && pathname === "/api/voici/calls") return true;
   return (m === "GET" || m === "POST") && pathname.startsWith("/api/voici/web/");
@@ -279,7 +280,7 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       const wait = await limited(env, path.endsWith("thread") ? "voici-thread" : "voici-owner", request, undefined, ctx);
       if (wait !== null) return tooMany(wait);
       const body = await readJson(request);
-      const deps = { voici: storage.voici, origin, caKeys: (t: number) => caKeys(env, t) };
+      const deps = { voici: storage.voici, origin, caKeys: (t: number) => caKeys(env, t), ...(voiciCallsEnabled(env) ? { calls: storage.voiciCalls } : {}) };
       return toResponse(path.endsWith("thread") ? await handleVoiciThread(deps, body) : await handleVoiciRevoke(deps, body));
     }
   }

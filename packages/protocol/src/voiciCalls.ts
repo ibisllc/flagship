@@ -75,6 +75,7 @@ import type { Bytes } from "./types.js";
 import { checkWebDelegation, type WebDelegation } from "./webDelegation.js";
 import { canonicalJson, canonicalJsonBytes, ed25519VerifyHex, hexToBytes, isLowerHex, p256VerifyP1363, sha256Hex } from "./webEnvelope.js";
 import { x25519 } from "@noble/curves/ed25519.js";
+import { canonicalVoiciCallRequestAnon, checkVoiciCallRequestAnon, type VoiciCallRequestAnon, type VoiciCallRequestAnonBody } from "./voiciCallModes.js";
 import { canonicalVoiciThreadStatement, checkVoiciSignInAnswer, parseVoiciThreadStatement, TAG_VOICI_SIGN_IN_REQUEST, voiciConv, type VoiciMessageCred, type VoiciSignInAnswer } from "./voiciMessages.js";
 
 export const TAG_VOICI_CALL_REQUEST = "flagship/voici-call-request/v1";
@@ -657,8 +658,10 @@ export function canonicalVoiciCallAnswer(a: VoiciCallAnswerBody): Bytes {
   return join([TAG_VOICI_CALL_ANSWER, a.callId, a.deviceRef, a.requestHash, a.xwingCiphertext, voiciCallSdpHash(a.answerSdp), a.turnUser, sha256Hex(utf8(a.turnSecret)), a.issuedAt, ...(a.media !== undefined ? [a.media] : [])]);
 }
 
-export function voiciCallRequestHash(r: VoiciCallRequestBody): string {
-  return sha256Hex(canonicalVoiciCallRequest(r));
+/** H(request bytes) for a signed-in request or, by its kind, an anonymous one (voiciCallModes.ts). */
+export function voiciCallRequestHash(r: VoiciCallRequestBody | VoiciCallRequestAnonBody): string {
+  if ((r as { kind?: unknown }).kind === "voici-call-request-anon") return sha256Hex(canonicalVoiciCallRequestAnon(r as VoiciCallRequestAnonBody));
+  return sha256Hex(canonicalVoiciCallRequest(r as VoiciCallRequestBody));
 }
 
 export function signVoiciCallAnswer(a: VoiciCallAnswerBody, ownerSignSeed: Bytes): VoiciCallAnswer {
@@ -679,7 +682,7 @@ export type VoiciCallAnswerRefusal = "malformed" | "wrong-call" | "wrong-request
  */
 export function checkVoiciCallAnswer(
   v: unknown,
-  ctx: { request: VoiciCallRequestBody; ownerSignPub: string; now?: number; username?: string; callKeyPub?: string },
+  ctx: { request: VoiciCallRequestBody | VoiciCallRequestAnonBody; ownerSignPub: string; now?: number; username?: string; callKeyPub?: string },
 ): { ok: true; answer: VoiciCallAnswer } | Fail<VoiciCallAnswerRefusal> {
   const no = (code: VoiciCallAnswerRefusal): Fail<VoiciCallAnswerRefusal> => ({ ok: false, code });
   if (!isObj(v) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
@@ -1036,7 +1039,7 @@ export type VoiciMissedCallReason = (typeof VOICI_MISSED_CALL_REASONS)[number];
 
 export interface VoiciMissedCall {
   v: 1;
-  request: VoiciCallRequest;
+  request: VoiciCallRequest | VoiciCallRequestAnon;
   ringingAt: number;
   endedAt: number;
   reason: VoiciMissedCallReason;
@@ -1045,7 +1048,7 @@ export interface VoiciMissedCall {
 /** A missed call for the mailbox, sealed to the inbox key; it carries the signed request (cred, abuse tag) whole. */
 export function sealVoiciMissedCall(inboxPub: Bytes, m: Omit<VoiciMissedCall, "v">, eseed: Bytes = crypto.getRandomValues(new Uint8Array(HYBRID_SEAL_RANDOMNESS_LEN))): Bytes {
   const body: VoiciMissedCall = { v: 1, ...m };
-  return hybridSealWithRandomness(inboxPub, sealOpts(TAG_VOICI_MISSED_CALL, m.request.from, m.endedAt), [utf8(m.request.callId)], canonicalJsonBytes(body), eseed);
+  return hybridSealWithRandomness(inboxPub, sealOpts(TAG_VOICI_MISSED_CALL, "from" in m.request ? m.request.from : m.request.browserPub, m.endedAt), [utf8(m.request.callId)], canonicalJsonBytes(body), eseed);
 }
 
 /**
@@ -1065,7 +1068,10 @@ export function openVoiciMissedCall(
     if (canonicalJson(v) !== text || !isObj(v) || !exactKeys(v, ["v", "request", "ringingAt", "endedAt", "reason"]) || v.v !== 1) return null;
     const m = v as unknown as VoiciMissedCall;
     if (!isTime(m.ringingAt) || !isTime(m.endedAt) || m.endedAt < m.ringingAt || !VOICI_MISSED_CALL_REASONS.includes(m.reason)) return null;
-    const r = checkVoiciCallRequest(m.request, { pageId: ctx.pageId, acceptsCalls: true, origin: ctx.origin, caKeys: ctx.caKeys, now: m.ringingAt, skipFresh: true });
+    const anon = (m.request as { kind?: unknown }).kind === "voici-call-request-anon";
+    const r = anon
+      ? checkVoiciCallRequestAnon(m.request, { pageId: ctx.pageId, acceptsCalls: true, callsFrom: "anyone", now: m.ringingAt, skipFresh: true })
+      : checkVoiciCallRequest(m.request, { pageId: ctx.pageId, acceptsCalls: true, origin: ctx.origin, caKeys: ctx.caKeys, now: m.ringingAt, skipFresh: true });
     if (!r.ok || r.request.callId !== callId) return null;
     return m;
   } catch {

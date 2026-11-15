@@ -157,6 +157,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0147",
   // Enterprise accounts: index org_objects by (kind, object_key) for the org server code serial lookup.
   "0148",
+  // voi.ci call modes: ring-back channels, rings in progress, spent proofs of work, blocked anonymous callers.
+  "0149",
 ];
 
 export interface SchemaStatusDeps {

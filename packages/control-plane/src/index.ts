@@ -40,6 +40,7 @@ export * from "./voiciPages.js";
 export * from "./demoVoiciPage.js";
 export * from "./voiciMailbox.js";
 export * from "./voiciCalls.js";
+export * from "./voiciCallModes.js";
 export * from "./voiciAlerts.js";
 export * from "./serviceRename.js";
 export * from "./customDomain.js";

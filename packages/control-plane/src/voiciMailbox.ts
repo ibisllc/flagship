@@ -49,7 +49,8 @@ import {
   type WebDelegation,
   type WebEnvelope,
 } from "@flagship/protocol";
-import type { DeviceCapabilityGrantStorage, PushTokenStorage, UsernameStorage, VoiciStorage } from "@flagship/storage";
+import type { DeviceCapabilityGrantStorage, PushTokenStorage, UsernameStorage, VoiciCallStorage, VoiciStorage } from "@flagship/storage";
+import { voiciRingForThread } from "./voiciCallModes.js";
 import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization } from "./accountDirectory.js";
 import { requireAccountRead, ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, type AccountReadTokenDeps } from "./accountReadToken.js";
 import { appRouteLink } from "./appLink.js";
@@ -455,6 +456,8 @@ export interface VoiciThreadDeps {
   origin: string;
   /** The CA keys an attestation may be signed by; absent, the thread fetch does not look at the attestation. */
   caKeys?: (now: number) => readonly string[];
+  /** voi.ci calls: the owner's ring still ringing in this conversation (docs/voici-calls.md, ringing a caller back). */
+  calls?: Pick<VoiciCallStorage, "getRing">;
   now?: () => number;
 }
 
@@ -541,10 +544,12 @@ export async function handleVoiciThread(deps: VoiciThreadDeps, body: unknown): P
   ]);
   if (revoked) return voiciRefusal(403, "revoked");
   const page = rows.slice(0, VOICI_FETCH_LIMIT);
+  const ring = deps.calls ? await voiciRingForThread(deps.calls, d.audience, f.conv, nowOf(deps)) : null;
   return okNoStore({
     items: page.map(wireMessage),
     next: page.length ? String(page[page.length - 1]!.id) : f.since,
     more: rows.length > VOICI_FETCH_LIMIT,
+    ...(ring ? { ring } : {}),
   });
 }
 
