@@ -414,13 +414,22 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   missed calls, gym/CI). Expected parity reds: org tags on Android (Kotlin port compiling now), voici-call push
   handlers (phone call layer not built).
 
+- 2026-11-14 late: Owner "keep building". Enterprise Kotlin port committed on `0.4/enterprise-build` (`fc088c058`,
+  pushed; local Gradle compile still running under load ~27, so the cloud session also got it as Task 2). No cloud report
+  had landed yet; nudged the cloud session (reports to `0.4/cloud-reports`, fallback harrywinner2/flagship). Four
+  builder agents started, worktrees `~/flagship-0.4-<slug>` on `0.4/<slug>` from `0ce68ca01`: **calls-phone** (iOS
+  PushKit/CallKit + China no-ring, Android ConnectionService, `voici-call` push handlers, media behind an interface),
+  **restore-ui** (webapp + Android restore-into-server screens, gym), **enterprise-servers** (invite-accept, org
+  servers, offboarding rotations, audit export), **retail-image** (keyd identity at first boot, bluetoothd unit/group,
+  parity row for Release this box). Agents may not run full suites or native builds; those go to the cloud session.
+
 ## Resume point
 
 1. Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
    `cloud-reports/*.md`; fix real failures it lists.
-2. Enterprise Kotlin port (uncommitted in ~/flagship-0.4-enterprise-build): compile + test
+2. Enterprise Kotlin port (committed on `0.4/enterprise-build` fc088c058; cloud Task 2 compiles it): compile + test
    (`--tests '*OrgAuthorityVectorsTest*' --tests '*VoiciCallsVector*'`), commit, merge, push.
-3. Remaining build work: calls phone layers (iOS CallKit/PushKit, Android ConnectionService), restore screens on
+3. Builder agents running (calls-phone, restore-ui, enterprise-servers, retail-image): merge each when it reports. Remaining build work: calls phone layers (iOS CallKit/PushKit, Android ConnectionService), restore screens on
    Android/webapp, enterprise invite-accept + org servers + rotations, retail image (keyd identity at build,
    bluetoothd setup), webapp shell bump at release.
 4. Owner open questions: see the Log entries of 2026-11-14 (co-manager caps, enterprise, calls v2, retail untrusted,
