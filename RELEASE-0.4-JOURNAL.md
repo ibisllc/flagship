@@ -404,9 +404,26 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   parity allowlist for org-seat-key-wrap on android/web). Run when the calls agent is done and the Mac is idle:
   `cd apps/mobile/android && JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew
   --no-daemon :app:testDebugUnitTest --tests '*OrgAuthorityVectorsTest*' -Dorg.gradle.jvmargs=-Xmx3g`, fix, commit.
+- 2026-11-15 Owner opened a CLOUD session for heavy work (tests, long builds): ListAgents name "Session ID for
+  inter-session communication" (cloud; it cannot message back). It reports by pushing Markdown files under
+  `cloud-reports/` on branch `0.4/cloud-reports` (check with `git fetch && git log origin/0.4/cloud-reports`).
+  Task 1 sent: full tsc/vitest/i18n/parity/cargo/Android run on release/0.4. It also has the owner's private clone
+  harrywinner2/flagship: unannounced features may live there or on non-public ibisllc branches (owner OK to change
+  access). Merged `0.4/calls` (half: protocol TS/Swift/Kotlin, .com call rooms + D1 **0146**, VOICI_CALLS off in
+  prod, voi.ci Call button, flagship-turn-lite crate; LEFT: phone call layers iOS/Android, relay forwarding, webapp
+  missed calls, gym/CI). Expected parity reds: org tags on Android (Kotlin port compiling now), voici-call push
+  handlers (phone call layer not built).
 
 ## Resume point
 
-Merge each agent branch as it reports (rebase onto release/0.4, tsc + touched tests, fast-forward, delete the
-branch). The fold lands first if possible; others rebase after it. Owner open questions: see the list given
-2026-11-13 (calls D1-D4, retail Q1-Q10, payments §9 rest, advisor owner decisions, P1 YubiKey, Fly test-CA app).
+1. Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
+   `cloud-reports/*.md`; fix real failures it lists.
+2. Enterprise Kotlin port (uncommitted in ~/flagship-0.4-enterprise-build): compile + test
+   (`--tests '*OrgAuthorityVectorsTest*' --tests '*VoiciCallsVector*'`), commit, merge, push.
+3. Remaining build work: calls phone layers (iOS CallKit/PushKit, Android ConnectionService), restore screens on
+   Android/webapp, enterprise invite-accept + org servers + rotations, retail image (keyd identity at build,
+   bluetoothd setup), webapp shell bump at release.
+4. Owner open questions: see the Log entries of 2026-11-14 (co-manager caps, enterprise, calls v2, retail untrusted,
+   direct names, restore).
+Merge rule unchanged: rebase each agent branch with scratchpad-style safe i18n merge (never commit conflict markers),
+tsc + touched tests + parity + i18n, fast-forward, push, journal.
