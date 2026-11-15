@@ -849,7 +849,19 @@ export interface BoxClaimKey {
   issuedAt: number;
 }
 
+const CLAIM_USERNAME = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const CLAIM_STK = /^[0-9a-fA-F]{64}$/;
+
+/**
+ * Every field has a charset that cannot hold the "|" separator, so no value can shift into its
+ * neighbour under one signature (AT-ENV-09). Throws on anything else; verify reads that as false.
+ */
 export function canonicalBoxClaimKey(k: BoxClaimKey): Bytes {
+  if (typeof k.username !== "string" || !CLAIM_USERNAME.test(k.username)) throw new Error(`${TAG_BOX_CLAIM_KEY}: bad username`);
+  if (typeof k.serial !== "string" || !SERIAL.test(k.serial)) throw new Error(`${TAG_BOX_CLAIM_KEY}: bad serial`);
+  if (typeof k.serverDomain !== "string" || !DOMAIN.test(k.serverDomain)) throw new Error(`${TAG_BOX_CLAIM_KEY}: bad serverDomain`);
+  if (typeof k.stkPubHex !== "string" || !CLAIM_STK.test(k.stkPubHex)) throw new Error(`${TAG_BOX_CLAIM_KEY}: bad stkPubHex`);
+  if (typeof k.issuedAt !== "number" || !Number.isSafeInteger(k.issuedAt) || k.issuedAt < 0) throw new Error(`${TAG_BOX_CLAIM_KEY}: bad issuedAt`);
   return utf8([TAG_BOX_CLAIM_KEY, k.username, k.serial, k.serverDomain, k.stkPubHex.toLowerCase(), k.issuedAt].join("|"));
 }
 

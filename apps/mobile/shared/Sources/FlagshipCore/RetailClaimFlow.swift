@@ -655,7 +655,7 @@ public final class RetailClaimViewModel {
             let key = BoxClaim.ClaimKey(username: deps.username, serial: m.serial, serverDomain: m.serverDomain,
                                         stkPubHex: rc.stkPubHex, issuedAt: deps.now())
             let signature: [UInt8]
-            do { signature = try m.signer.sign(key.canonical) } catch { m.signer.discard(); throw error }
+            do { signature = try m.signer.sign(try key.signingBytes()) } catch { m.signer.discard(); throw error }
             m.signer.discard()
             try await deps.registerKey(key, signature)
         } catch RetailClaimKeyError.taken {

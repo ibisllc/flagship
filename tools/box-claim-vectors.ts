@@ -238,6 +238,26 @@ function claimKey() {
     fields: k,
     canonical: new TextDecoder().decode(canonicalBoxClaimKey(k)),
     signatureHex: hex(signBoxClaimKey(k, { publicKey: pub, privateKey: seed })),
+    // Each field's charset excludes "|", so a value can never shift into its neighbour (AT-ENV-09):
+    // every port refuses to sign these and verifies none of them.
+    refuse: [
+      { name: "separator moved from serial into username", fields: { ...k, username: `alice|${SERIAL}`, serial: SERIAL } },
+      { name: "separator moved from serverDomain into serial", fields: { ...k, serial: `${SERIAL}|${DOMAIN}` } },
+      { name: "separator moved from stkPubHex into serverDomain", fields: { ...k, serverDomain: `${DOMAIN}|${k.stkPubHex}` } },
+      { name: "upper-case username", fields: { ...k, username: "Alice" } },
+      { name: "short serial", fields: { ...k, serial: "abc" } },
+      { name: "short stkPubHex", fields: { ...k, stkPubHex: k.stkPubHex.slice(2) } },
+      { name: "negative issuedAt", fields: { ...k, issuedAt: -1 } },
+    ].map((c) => {
+      let threw = false;
+      try {
+        canonicalBoxClaimKey(c.fields);
+      } catch {
+        threw = true;
+      }
+      if (!threw) throw new Error(`claimKey refuse case accepted: ${c.name}`);
+      return c;
+    }),
   };
 }
 

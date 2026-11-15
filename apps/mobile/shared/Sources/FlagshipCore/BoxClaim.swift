@@ -678,6 +678,13 @@ public enum BoxClaim {
         return (8...64).contains(b.count) && b.allSatisfy { (0x41...0x5a).contains($0) || (0x61...0x7a).contains($0) || (0x30...0x39).contains($0) || $0 == 0x5f || $0 == 0x2d }
     }
 
+    static func claimUsernameOk(_ s: String) -> Bool {
+        let b = Array(s.utf8)
+        let an: (UInt8) -> Bool = { (0x61...0x7a).contains($0) || (0x30...0x39).contains($0) }
+        guard let f = b.first, let l = b.last, b.count <= 64, an(f), an(l) else { return false }
+        return b.allSatisfy { an($0) || $0 == 0x2d }
+    }
+
     static func lowerHex(_ s: String, _ n: Int) -> Bool { s.utf8.count == n * 2 && PqBin.unhex(s) != nil }
 
     /// Checks a receipt on the phone: shape, the hybrid signature under the key it names, and that it
@@ -720,12 +727,23 @@ public enum BoxClaim {
             self.username = username; self.serial = serial; self.serverDomain = serverDomain
             self.stkPubHex = stkPubHex.lowercased(); self.issuedAt = issuedAt
         }
+        /// Every field's charset excludes "|", so no value can shift into its neighbour under one
+        /// signature (AT-ENV-09). Signing refuses, and verifying fails, anything else.
+        public var isWellFormed: Bool {
+            BoxClaim.claimUsernameOk(username) && BoxClaim.serialOk(serial) && BoxClaim.domainOk(serverDomain)
+                && BoxClaim.lowerHex(stkPubHex, 32) && issuedAt >= 0
+        }
         public var canonical: [UInt8] {
             utf8([tagKey, username, serial, serverDomain, stkPubHex.lowercased(), String(issuedAt)].joined(separator: "|"))
         }
-        public func sign(with key: Curve25519.Signing.PrivateKey) throws -> [UInt8] { Array(try key.signature(for: canonical)) }
+        /// The bytes to sign, or `bad-claim-key` when a field is malformed.
+        public func signingBytes() throws -> [UInt8] {
+            guard isWellFormed else { throw cfail("bad-claim-key") }
+            return canonical
+        }
+        public func sign(with key: Curve25519.Signing.PrivateKey) throws -> [UInt8] { Array(try key.signature(for: try signingBytes())) }
         public func verify(signature: [UInt8], publicKey: [UInt8]) -> Bool {
-            PqHybrid.ed25519VerifyStrict(signature: signature, message: canonical, publicKey: publicKey)
+            isWellFormed && PqHybrid.ed25519VerifyStrict(signature: signature, message: canonical, publicKey: publicKey)
         }
     }
 

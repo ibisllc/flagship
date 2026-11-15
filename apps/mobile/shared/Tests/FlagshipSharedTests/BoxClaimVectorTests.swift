@@ -199,6 +199,17 @@ final class BoxClaimVectorTests: XCTestCase {
         XCTAssertTrue(key.verify(signature: try key.sign(with: signer), publicKey: h(k["signerPubHex"])))
         let other = BoxClaim.ClaimKey(username: key.username, serial: key.serial, serverDomain: key.serverDomain, stkPubHex: String(repeating: "00", count: 32), issuedAt: key.issuedAt)
         XCTAssertFalse(other.verify(signature: h(k["signatureHex"]), publicKey: h(k["signerPubHex"])))
+        let refuse = k["refuse"] as! [[String: Any]]
+        XCTAssertFalse(refuse.isEmpty)
+        for c in refuse {
+            let name = c["name"] as! String
+            let rf = c["fields"] as! [String: Any]
+            let bad = BoxClaim.ClaimKey(username: rf["username"] as! String, serial: rf["serial"] as! String, serverDomain: rf["serverDomain"] as! String,
+                                        stkPubHex: rf["stkPubHex"] as! String, issuedAt: (rf["issuedAt"] as! NSNumber).int64Value)
+            XCTAssertFalse(bad.isWellFormed, name)
+            XCTAssertThrowsError(try bad.sign(with: signer), name)
+            XCTAssertFalse(bad.verify(signature: h(k["signatureHex"]), publicKey: h(k["signerPubHex"])), name)
+        }
     }
 
     func testFrames() throws {

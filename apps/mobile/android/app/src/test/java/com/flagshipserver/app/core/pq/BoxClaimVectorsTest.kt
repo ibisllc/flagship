@@ -184,6 +184,16 @@ class BoxClaimVectorsTest {
         assertEquals(k.s("signatureHex"), x(PqHybrid.ed25519Sign(h(k.s("signerSeedHex")), key.canonical)))
         assertTrue(key.verify(h(k.s("signatureHex")), h(k.s("signerPubHex"))))
         assertFalse(key.copy(stkPubHex = "00".repeat(32)).verify(h(k.s("signatureHex")), h(k.s("signerPubHex"))))
+        val refuse = k["refuse"]!!.jsonArray
+        assertTrue(refuse.isNotEmpty())
+        for (e in refuse) {
+            val c = e.jsonObject
+            val rf = c.o("fields")
+            val bad = BoxClaim.ClaimKey(rf.s("username"), rf.s("serial"), rf.s("serverDomain"), rf.s("stkPubHex"), rf["issuedAt"]!!.jsonPrimitive.long)
+            assertFalse(c.s("name"), bad.isWellFormed)
+            assertTrue(c.s("name"), runCatching { bad.canonical }.exceptionOrNull() is BoxClaimException)
+            assertFalse(c.s("name"), bad.verify(h(k.s("signatureHex")), h(k.s("signerPubHex"))))
+        }
     }
 
     @Test
