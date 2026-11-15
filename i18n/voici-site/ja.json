@@ -126,5 +126,9 @@
   "Camera": "カメラ",
   "Camera off": "カメラをオフ",
   "{0} turned on their camera.": "{0} さんがカメラをオンにしました。",
-  "Camera paused": "カメラ一時停止中"
+  "Camera paused": "カメラ一時停止中",
+  "This call link was already used or has expired. Start the call again from your Flagship app.": "この通話リンクは使用済みか、期限が切れています。Flagship アプリから通話をやり直してください。",
+  "This call link isn't valid. Start the call again from your Flagship app.": "この通話リンクは無効です。Flagship アプリから通話をやり直してください。",
+  "Getting the call from your Flagship app…": "Flagship アプリから通話を受け取っています…",
+  "Your Flagship app is ready to call {0}.": "Flagship アプリで {0} に発信する準備ができました。"
 }

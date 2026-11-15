@@ -27,6 +27,17 @@
  * callKeyPub is SEC1 uncompressed P-256, hex (130). `.com` stores the binding and its revocation; the caller's browser
  * checks the binding under the page's ownerSignPub.
  *
+ * Calling from the app with the browser's WebRTC (docs/voici-calls.md "Calling from the app"): when the app's media
+ * engine is missing, the app signs a short-lived voi.ci session for the callee's page (its own pseudonym there, a
+ * delegation to a P-256 key it makes for this one call) and hands it to `https://voi.ci/<callee>#call=<sid>.<k>`
+ * over `/qr-pipe`: k is a fresh X25519 secret (base64url) the app made for the browser, the app says `hello` with its
+ * own ephemeral key and delivers the handoff AES-256-GCM sealed under the pipe key (HKDF(X25519, "flagship/qr/v1",
+ * "flagship/qr/enc/v1"), the sign-in and remote-ticket construction). The relay consumes the session on delivery, so
+ * the ticket is one-use. Not a signature: the sign-in answer inside carries the signatures.
+ *   handoff  {kind:"flagship/voici-call-handoff/v1", username, pageId, media, issuedAt, expiresAt (≤ 5 min after
+ *            issuedAt), delegatePriv (P-256 scalar, hex 64), signIn (a flagship/voici-sign-in/v1 answer whose
+ *            delegation names delegatePriv's public key and lasts at most 10 minutes)}
+ *
  * H = SHA-256 hex. turnSecret is the UTF-8 of its hex. deviceRef = SHA-256 hex of the raw device public key.
  *
  * Frame layer (flagship/voici-call-frame/v1):
@@ -63,7 +74,8 @@ import { HYBRID_SEAL_ENC_LEN, HYBRID_SEAL_PUBLIC_KEY_LEN, HYBRID_SEAL_RANDOMNESS
 import type { Bytes } from "./types.js";
 import { checkWebDelegation, type WebDelegation } from "./webDelegation.js";
 import { canonicalJson, canonicalJsonBytes, ed25519VerifyHex, hexToBytes, isLowerHex, p256VerifyP1363, sha256Hex } from "./webEnvelope.js";
-import { canonicalVoiciThreadStatement, parseVoiciThreadStatement, voiciConv, type VoiciMessageCred } from "./voiciMessages.js";
+import { x25519 } from "@noble/curves/ed25519.js";
+import { canonicalVoiciThreadStatement, checkVoiciSignInAnswer, parseVoiciThreadStatement, TAG_VOICI_SIGN_IN_REQUEST, voiciConv, type VoiciMessageCred, type VoiciSignInAnswer } from "./voiciMessages.js";
 
 export const TAG_VOICI_CALL_REQUEST = "flagship/voici-call-request/v1";
 export const TAG_VOICI_CALL_ANSWER = "flagship/voici-call-answer/v1";
@@ -76,6 +88,7 @@ export const TAG_VOICI_MISSED_CALL = "flagship/voici-missed-call/v1";
 export const TAG_VOICI_CALL_KEY = "flagship/voici-call-key/v1";
 export const TAG_VOICI_CALL_KEY_REVOKE = "flagship/voici-call-key-revoke/v1";
 export const TAG_VOICI_CALL_JOIN = "flagship/voici-call-join/v1";
+export const TAG_VOICI_CALL_HANDOFF = "flagship/voici-call-handoff/v1";
 
 /** `.com` and the phone refuse set-up records further than this from their clock. */
 export const VOICI_CALL_SKEW_MS = 10 * 60_000;
@@ -1055,6 +1068,117 @@ export function openVoiciMissedCall(
     const r = checkVoiciCallRequest(m.request, { pageId: ctx.pageId, acceptsCalls: true, origin: ctx.origin, caKeys: ctx.caKeys, now: m.ringingAt, skipFresh: true });
     if (!r.ok || r.request.callId !== callId) return null;
     return m;
+  } catch {
+    return null;
+  }
+}
+
+// ── the browser handoff (calling from the app without a media engine) ───────
+
+/** A handoff lives 5 minutes; the session it carries at most 10 (one call, then it lapses). */
+export const VOICI_CALL_HANDOFF_TTL_MS = 5 * 60_000;
+export const VOICI_CALL_HANDOFF_SESSION_MS = 10 * 60_000;
+const HANDOFF_USERNAME = /^[a-z0-9](?:-?[a-z0-9]){0,31}$/;
+const B64U = /^[A-Za-z0-9_-]+$/;
+const HANDOFF_KEYS = ["kind", "username", "pageId", "media", "issuedAt", "expiresAt", "delegatePriv", "signIn"];
+
+export interface VoiciCallHandoff {
+  kind: typeof TAG_VOICI_CALL_HANDOFF;
+  username: string;
+  pageId: string;
+  media: VoiciCallMedia;
+  issuedAt: number;
+  expiresAt: number;
+  delegatePriv: string;
+  signIn: VoiciSignInAnswer;
+}
+
+export type VoiciCallHandoffRefusal = "malformed" | "expired" | "bad-key" | "wrong-page" | "bad-attestation" | "bad-delegation" | "bad-thread";
+
+/** The delegate's public key (uncompressed SEC1 hex) for a handoff's private scalar, or null when it isn't one. */
+export function voiciCallHandoffDelegatePub(delegatePriv: unknown): string | null {
+  if (!isLowerHex(delegatePriv, 32)) return null;
+  try {
+    return hex(p256.getPublicKey(hexToBytes(delegatePriv), false));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Checks a handoff the browser opened (strict shape, times, the delegate key, the page, then the sign-in answer as a
+ * sign-in would). `caKeys` as for a sign-in: without a CA list the attestation is checked against its own signer and
+ * `.com` checks the chain when the call is placed.
+ */
+export function checkVoiciCallHandoff(
+  v: unknown,
+  ctx: { origin: string; caKeys: readonly string[]; now: number; username?: string },
+): { ok: true; handoff: VoiciCallHandoff; delegatePub: string } | Fail<VoiciCallHandoffRefusal> {
+  const no = (code: VoiciCallHandoffRefusal): Fail<VoiciCallHandoffRefusal> => ({ ok: false, code });
+  if (!isObj(v) || !exactKeys(v, HANDOFF_KEYS) || v.kind !== TAG_VOICI_CALL_HANDOFF) return no("malformed");
+  if (typeof v.username !== "string" || !HANDOFF_USERNAME.test(v.username) || typeof v.pageId !== "string" || !PAGE_ID.test(v.pageId) || !isMedia(v.media)) return no("malformed");
+  if (!isTime(v.issuedAt) || !isTime(v.expiresAt) || v.expiresAt <= v.issuedAt || v.expiresAt - v.issuedAt > VOICI_CALL_HANDOFF_TTL_MS || !isObj(v.signIn)) return no("malformed");
+  if (ctx.now > v.expiresAt || ctx.now < v.issuedAt - VOICI_CALL_SKEW_MS) return no("expired");
+  if (ctx.username !== undefined && ctx.username !== v.username) return no("wrong-page");
+  const delegatePub = voiciCallHandoffDelegatePub(v.delegatePriv);
+  if (!delegatePub) return no("bad-key");
+  if (v.signIn.pageId !== v.pageId) return no("wrong-page");
+  const d = v.signIn.delegation;
+  const nonce = isObj(d) && typeof d.nonce === "string" ? d.nonce : "";
+  const r = checkVoiciSignInAnswer(v.signIn, { request: { kind: TAG_VOICI_SIGN_IN_REQUEST, origin: ctx.origin, pageId: v.pageId, username: v.username, delegatePub, nonce }, caKeys: ctx.caKeys, now: ctx.now });
+  if (!r.ok) return no(r.code);
+  if (r.answer.delegation.expiresAt - r.answer.delegation.issuedAt > VOICI_CALL_HANDOFF_SESSION_MS) return no("bad-delegation");
+  return { ok: true, handoff: { ...(v as unknown as VoiciCallHandoff), signIn: r.answer }, delegatePub };
+}
+
+const b64u = (b: Bytes) => {
+  let s = "";
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+const fromB64u = (s: string): Bytes | null => {
+  if (!B64U.test(s)) return null;
+  try {
+    const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+};
+
+/** The link the app opens: `https://<voiciHost>/<username>#call=<sid>.<browser X25519 secret>` (both base64url). */
+export function voiciCallHandoffLink(o: { host: string; username: string; sid: string; browserSecret: Bytes }): string {
+  if (!HANDOFF_USERNAME.test(o.username) || !B64U.test(o.sid) || o.sid.length > 64 || o.browserSecret.length !== 32) throw new Error(`${TAG_VOICI_CALL_HANDOFF}: bad link field`);
+  return `https://${o.host}/${o.username}#call=${o.sid}.${b64u(o.browserSecret)}`;
+}
+
+/** The browser's reading of the fragment: the pipe session and its X25519 secret, or null. */
+export function parseVoiciCallHandoffFragment(hash: string): { sid: string; browserSecret: Bytes } | null {
+  const m = /^#?call=([A-Za-z0-9_-]{1,64})\.([A-Za-z0-9_-]{43})$/.exec(hash);
+  if (!m) return null;
+  const k = fromB64u(m[2]!);
+  return k && k.length === 32 ? { sid: m[1]!, browserSecret: k } : null;
+}
+
+/** The pipe key both sides derive (the sign-in / remote-ticket construction). */
+export function voiciCallHandoffKey(mySecret: Bytes, peerPub: Bytes): Bytes {
+  return hkdf(sha256, x25519.getSharedSecret(mySecret, peerPub), utf8("flagship/qr/v1"), utf8("flagship/qr/enc/v1"), 32);
+}
+
+/** The app's sealed delivery: {phonePk, nonce, ciphertext} (base64url), the plaintext the handoff's canonical JSON. */
+export function sealVoiciCallHandoff(h: VoiciCallHandoff, appSecret: Bytes, browserSecret: Bytes, nonce: Bytes = crypto.getRandomValues(new Uint8Array(12))): { phonePk: string; nonce: string; ciphertext: string } {
+  const key = voiciCallHandoffKey(appSecret, x25519.getPublicKey(browserSecret));
+  return { phonePk: b64u(x25519.getPublicKey(appSecret)), nonce: b64u(nonce), ciphertext: b64u(gcm(key, nonce).encrypt(canonicalJsonBytes(h))) };
+}
+
+/** The browser's opening of a delivery; null when it doesn't open or isn't JSON. Check the result with checkVoiciCallHandoff. */
+export function openVoiciCallHandoff(browserSecret: Bytes, d: { phonePk: string; nonce: string; ciphertext: string }): unknown {
+  const pk = fromB64u(d.phonePk);
+  const nonce = fromB64u(d.nonce);
+  const ct = fromB64u(d.ciphertext);
+  if (!pk || pk.length !== 32 || !nonce || nonce.length !== 12 || !ct) return null;
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(gcm(voiciCallHandoffKey(browserSecret, pk), nonce).decrypt(ct)));
   } catch {
     return null;
   }

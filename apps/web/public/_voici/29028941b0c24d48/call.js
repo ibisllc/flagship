@@ -52,6 +52,44 @@ const mmss = (ms) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
+/** The sentence for a handoff that couldn't be opened (never shown raw). */
+export function handoffRefusal(code) {
+  switch (code) {
+    case "used":
+    case "expired":
+      return t("This call link was already used or has expired. Start the call again from your Flagship app.");
+    case "unreachable":
+    case "relay":
+      return t("Couldn't reach Flagship. Check your connection and try again.");
+    default:
+      return t("This call link isn't valid. Start the call again from your Flagship app.");
+  }
+}
+
+/**
+ * The Flagship app handed this tab a call (docs/voici-calls.md "Calling from the app": its media engine is missing):
+ * the session arrives over /qr-pipe, lives in this tab only, and the call starts on the visitor's tap (the
+ * microphone is asked for then, never on load).
+ */
+export async function openHandoffCall(ctx, hash) {
+  const { doc, lib, cfg, page } = ctx;
+  const status = h(doc, "p", { class: "call-status", role: "status" }, t("Getting the call from your Flagship app…"));
+  const controls = h(doc, "div", { class: "call-controls" });
+  const sheet = openSheet(doc, { title: page.profile.displayName, onClose: () => rx.cancel() });
+  replace(sheet.body, status, controls);
+  const rx = lib.receiveVoiciCallHandoff({ hash, username: page.username, origin: cfg.origin, apex: cfg.apex, secure: cfg.secure });
+  let got;
+  try {
+    got = await rx.done;
+  } catch (e) {
+    replace(status, handoffRefusal(e?.code));
+    return;
+  }
+  if (got.session.pageId !== page.index.pageId) return replace(status, handoffRefusal("wrong-page"));
+  replace(status, t("Your Flagship app is ready to call {0}.", page.profile.displayName));
+  replace(controls, h(doc, "button", { class: "btn btn-primary", type: "button", on: { click: () => (closeSheet(), startCall(ctx, got.session)) } }, icon(doc, "call"), h(doc, "span", {}, t("Call"))));
+}
+
 export async function openCall(ctx) {
   const session = await ctx.lib.loadVoiciSession(ctx.store, ctx.page.index.pageId, { origin: ctx.cfg.origin });
   if (!session) return openMessages(ctx);
