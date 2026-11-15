@@ -645,6 +645,15 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   run the webapp Playwright gym specs, and an independent adversarial review of the new 0.4 protocol code (call keys,
   org directory/connectors, keyd org CGK, log heads, retail claim helper).
 
+- 2026-11-15: **webapp-custody merged** (shell **v218**, no migration): passkey-PRF wrap of the admin root and an ML-DSA
+  seed, opened per signature (`lib/keyCustody.js`); ML-DSA-65 in WebAssembly from mldsa-native v2.0.0, pinned by
+  SHA-256 (`tools/mldsa-wasm/build.sh --check`); hybrid on Release this box and restore; signed shell manifest
+  (`lib/shellTrust.js`, `scripts/webapp-shell.ts`), `SHELL_SIGNATURE_REQUIRED=false` until the **owner signs a
+  release shell** (steps in `docs/webapp-key-custody.md` "Signing a release shell"); `custody: "browser"` on org
+  records and the `adminCustody` / `quorumHardware` bylaws in TS and on `.com`. The release manager added allowlist
+  entries for the browser-only tags. 1445 targeted tests, tsc, i18n, parity 0 red. Agent resumed: Swift/Kotlin
+  custody ports, the webapp as a full org seat, hybrid on the other web orders, gym with a virtual PRF passkey.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -678,7 +687,8 @@ Next steps for whoever resumes:
    - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
    - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
    - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
-4. **Waiting on the owner:** signing the webapp shell
+4. **Waiting on the owner:** at release, sign the webapp shell (`docs/webapp-key-custody.md`), then set
+   `SHELL_SIGNATURE_REQUIRED=true`; signing the webapp shell
    at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
    enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
 5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
