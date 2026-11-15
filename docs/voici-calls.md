@@ -463,6 +463,11 @@ Owner decision 2026-11-15, built as designed above. Off by default; on the Socia
 
 ## Calling back (design, 2026-11-15)
 
+Owner clarification: "call back" means a user starts a call to someone **directly from the app's call and chat
+logs** (conversation list, thread, call history), not by opening the voi.ci page. The browser handoff below is only
+the fallback when the app's media engine is missing. The call history is kept on the device (or in the sealed
+Messages state); no server keeps a log of who called whom.
+
 1. **Who can be called back:** the other side of a Messages conversation, who is a signed-in Flagship account with a
    voi.ci page. Their page's call settings apply as usual. An accepted conversation counts for "accepted
    conversations"; their own block list and Do Not Disturb apply.

@@ -52,3 +52,24 @@ measurements that chose WebRTC over our own frames).
 - LiveKit webrtc-sdk (prebuilt iOS and Android): https://github.com/webrtc-sdk , https://github.com/webrtc-sdk/android
 - webrtc-rs status: https://github.com/webrtc-rs/webrtc , https://webrtc.rs/blog/2026/01/18/rtc-feature-complete-whats-next
 - Pion: https://pion.ly/blog/
+
+## Where the built library lives (owner question, 2026-11-15)
+
+**Users never download it separately.** libwebrtc is compiled into the iOS app and the Android APK/AAB at build time,
+the same way every other library is. Browsers (voi.ci visitors, the webapp) use the copy their vendor ships, so the
+web needs nothing from us.
+
+The only question is where our **build machines** fetch the finished library from when they build the apps. Building
+libwebrtc takes hours, needs about 30 GB of disk, and doesn't fit on this Mac, so the apps don't rebuild it on every
+app build. Options:
+
+| | How | Pros | Cons |
+|---|---|---|---|
+| 1. Release asset on the public repo | CI builds it and attaches it to a GitHub Release, e.g. `libwebrtc-<milestone>`. SPM `binaryTarget(url:checksum:)` and Gradle download it, checked by SHA-256. | Free, simple, and anyone can rebuild it and compare checksums (the source and the build script are public anyway). | It's a public download (harmless: it's an open-source library). |
+| 2. Private bucket (R2) | CI uploads it to a private R2 bucket; build machines use a read token. | Not public. | One more secret on every build machine and in CI; costs a little. |
+| 3. Git LFS in the repo | Commit the binaries with LFS. | No extra service. | Tens to hundreds of MB per version in LFS; LFS bandwidth quotas. |
+| 4. No storage: build it inside every app release workflow | The app's release CI builds libwebrtc first, then the app. | Nothing stored anywhere. | Every app release takes hours longer; local builds can't use it. |
+
+**Recommendation: 1.** It's free and verifiable, and the library is open source. The checksum pin in the app makes a
+swapped file fail the build. Whichever you choose, the app itself carries the library inside it; nothing changes for
+users.
