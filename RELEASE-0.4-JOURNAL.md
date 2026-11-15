@@ -536,16 +536,59 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   factory (iOS VoiciCallCenter/VoiciCallSession, Android VoiciCallCenter) → handed to the calls-2 agent.
   calls-2 has 5 commits so far; enterprise-3 has the Android join screen committed.
 
+- 2026-11-15: **Owner answers.**
+  - **Terms (legal minimum)** deploy with 0.4, not before.
+  - **Spam rules:** asked what they are; quoted Terms §6 to the owner (decision pending).
+  - **WebRTC:** asked for options with pros and cons; written to `docs/voici-calls-webrtc-options.md`. Recommended
+    a pinned LiveKit prebuilt now and our own libwebrtc build before GA. Quantum safety comes from the X-Wing frame
+    layer, so DTLS 1.3 with a PQ group is no longer a requirement.
+  - **Answering while locked:** a setting on the Social page, off by default. Designed in `docs/voici-calls.md`
+    "Owner decisions, 2026-11-15" (a call-only device key bound by `flagship/voici-call-key/v1`).
+  - **Webapp keys:** debate written to `docs/webapp-key-custody.md`. Proposal: allow full seats, labelled software
+    custody, passkey-wrapped, an ML-DSA WASM module, a signed (verifiable) shell before GA, and bylaws that can
+    require hardware approvals.
+  - **Directory:** yes, with connectors; design in `docs/org-directory.md` (sealed directory, a SCIM 2.0 server and
+    an LDAP pull on an org box, connectors only propose, a `DirectorySource` interface for developers).
+  - Release-manager calls: Do Not Disturb stays per device; only admin devices change call settings.
+  **calls-2** reported: calls settings, missed-call rows, call-allow on iOS/Android, `CallTurnGate` demux, mock gym,
+  call HTTP through the pinning factories, and a bug fix (every publish now keeps the page index's call settings).
+  Shell v216. iOS build plus 14 package tests and the Android unit tests are green. `flagship-turn-lite` is not
+  linked (that waits on the WebRTC choice).
+
 ## Resume point
 
-1. Merge agent branches as they report (enterprise-3, calls-2; worktrees ~/flagship-0.4-<slug>). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
-   `cloud-reports/*.md`; fix real failures it lists.
-2. Enterprise Kotlin port: merged (f871219ca). Owner to answer: deploy `.com` from main for the terms change?: compile + test
-   (`--tests '*OrgAuthorityVectorsTest*' --tests '*VoiciCallsVector*'`), commit, merge, push.
-3. Builder agents running (calls-phone, restore-ui, enterprise-servers, retail-image): merge each when it reports. Remaining build work: calls phone layers (iOS CallKit/PushKit, Android ConnectionService), restore screens on
-   Android/webapp, enterprise invite-accept + org servers + rotations, retail image (keyd identity at build,
-   bluetoothd setup), webapp shell bump at release.
-4. Owner open questions: see the Log entries of 2026-11-14 (co-manager caps, enterprise, calls v2, retail untrusted,
-   direct names, restore).
-Merge rule unchanged: rebase each agent branch with scratchpad-style safe i18n merge (never commit conflict markers),
-tsc + touched tests + parity + i18n, fast-forward, push, journal.
+State (2026-11-15): `release/0.4` holds everything merged so far:
+- calls: rings on iOS/Android, video, missed calls, settings;
+- restore into a server (iOS, Android, webapp; hybrid for strict boxes);
+- enterprise: org servers, key ring and rotations, audit export, install path, iOS join;
+- retail: identity at first boot, BlueZ with least privilege, unprivileged claim service, webapp Release;
+- the cloud-report fixes.
+
+Parity has 0 red. Shell is v215 (v216 arrives with calls-2). Nothing is deployed; only `main` deploys, and the terms
+change ships with 0.4.
+
+Next steps for whoever resumes:
+1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
+   - `calls-2` is checked and ready (rebase again if release/0.4 moved);
+   - `enterprise-3` is running: Android join, Rotate keys, keyd adopting a rotated CGK, org install timeline, box
+     log heads in the audit export.
+   - Merge rule: run `scratchpad/rebase-i18n.sh` (or rebase by hand). Never commit conflict markers. On a shell
+     clash, take the next number and move WEB_BUILD plus `release/compatibility.json` with it (the compat-matrix
+     test guards this). Generated installer files (preseed engine, goldens, bootstrap pin): regenerate with
+     `node scripts/box-release-regen.mjs`. Then run tsc, the touched tests, `npm run i18n` and `npm run parity`;
+     fast-forward and push.
+2. **Cloud session** (`Session ID for inter-session communication`, cloud): it reports on `origin/0.4/cloud-reports`
+   (`cloud-reports/NN-*.md`). It has no KVM, so the retail VM test (`tools/retail-vm/run.sh`) needs another Linux
+   KVM host. It has no Xcode; iOS builds run on this Mac (commands in the 2026-11-15 log entries; native builds are
+   serialised by `/private/tmp/claude-501/flagship-locks/native-build.lock`).
+3. **Build next** (designs on disk):
+   - org directory + SCIM/LDAP connectors (`docs/org-directory.md` §8 build order);
+   - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
+   - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
+   - after the owner decides: the WebRTC media engine, linking `flagship-turn-lite`, the webapp key custody items.
+4. **Waiting on the owner:** the Terms §6 spam bullet; the WebRTC choice (B now + A before GA?); webapp key custody
+   (accept proposal 1-6?); directory visibility for members and SCIM token rotation (`org-directory.md` §9); a
+   KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
+   enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
+5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
+   Playwright gym specs, and anything on a real box or phone.
