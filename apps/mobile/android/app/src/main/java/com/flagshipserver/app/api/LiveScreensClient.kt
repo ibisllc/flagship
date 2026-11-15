@@ -685,6 +685,43 @@ class LiveScreensClient(
 
     private val savedPath = "/api/screens/server-archive/backups"
 
+    private val mergePath = "/api/screens/server-restore-merge"
+
+    override suspend fun restoreMergeStatus(): RestoreMergeView =
+        request(mergePath, RestoreMergeView.serializer())
+
+    override suspend fun restoreMergeStage(req: RestoreMergeStageRequest): RestoreMergeStarted {
+        val body = json.encodeToString(RestoreMergeStageRequest.serializer(), req).toByteArray()
+        return request("$mergePath/stage", RestoreMergeStarted.serializer(), "POST", body, readTimeoutSeconds = 60)
+    }
+
+    override suspend fun restoreMergeChunk(offset: Long, data: ByteArray) {
+        request<Unit>("$mergePath/chunk?offset=$offset", null, "POST", data, readTimeoutSeconds = 300, binaryBody = true)
+    }
+
+    override suspend fun restoreMergeCommit(keyHex: String) {
+        val body = json.encodeToString(ServerRestoreCommitRequest.serializer(), ServerRestoreCommitRequest(keyHex)).toByteArray()
+        request<Unit>("$mergePath/commit", null, "POST", body, readTimeoutSeconds = 60)
+    }
+
+    override suspend fun restoreMergePlan(req: RestoreMergePlanRequest) {
+        val body = json.encodeToString(RestoreMergePlanRequest.serializer(), req).toByteArray()
+        request<Unit>("$mergePath/plan", null, "POST", body, readTimeoutSeconds = 60)
+    }
+
+    override suspend fun restoreMergeCancel() {
+        request<Unit>("$mergePath/cancel", null, "POST", "{}".toByteArray(), readTimeoutSeconds = 30)
+    }
+
+    override suspend fun restoreMergeUndo(req: RestoreMergeUndoRequest) {
+        val body = json.encodeToString(RestoreMergeUndoRequest.serializer(), req).toByteArray()
+        request<Unit>("$mergePath/undo", null, "POST", body, readTimeoutSeconds = 120)
+    }
+
+    override suspend fun savedBackupFile(archiveId: String): ByteArray =
+        requestBytes("$savedPath/$archiveId/backup-file", readTimeoutSeconds = 60)
+
+
     override suspend fun savedBackups(): SavedBackupsView =
         request(savedPath, SavedBackupsView.serializer())
 

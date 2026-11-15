@@ -15982,5 +15982,309 @@
   "voici_call_close": {
     "en": "Close",
     "ctx": "voi.ci calls: button"
+  },
+  "rm_title": {
+    "en": "Restore apps from a backup",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_admin_only": {
+    "en": "Only an admin device of this account can restore a backup.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_restore_into_this_server": {
+    "en": "Restore into this server…",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_restore_from_file": {
+    "en": "Restore apps from a backup file…",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_opening": {
+    "en": "Opening the backup…",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_sending": {
+    "en": "Sending the backup to %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_checking": {
+    "en": "Checking the backup on %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_backup_of": {
+    "en": "Backup of %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_group_new": {
+    "en": "New on this server",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_group_already": {
+    "en": "Already on this server",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_group_different": {
+    "en": "A different app with the same name",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_restore": {
+    "en": "Restore",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_choose_one": {
+    "en": "Choose at least one app to restore.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_restoring": {
+    "en": "Restoring…",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_suggested": {
+    "en": "Suggested",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_copy_name": {
+    "en": "Name of the new app",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_slug_rule": {
+    "en": "Lowercase letters, digits and single hyphens.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_earlier_copies": {
+    "en": "Earlier copies kept by a restore",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_kept_until": {
+    "en": "Kept until %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_undo": {
+    "en": "Undo",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_delete_now": {
+    "en": "Delete now",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_delete_q": {
+    "en": "Delete the earlier copy?",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_undo_q": {
+    "en": "Put the earlier copy back?",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_discard_msg": {
+    "en": "The copy of %1$s from before the restore is deleted. This can't be undone.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_undo_msg": {
+    "en": "Changes to %1$s since %2$s are lost.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_reason_check": {
+    "en": "Check the backup on %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_reason_restore": {
+    "en": "Restore apps into %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_reason_discard": {
+    "en": "Delete the earlier copy of %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_reason_undo": {
+    "en": "Put %1$s back as it was",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_reason_open": {
+    "en": "Open the backup",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_not_this_account": {
+    "en": "This backup wasn't made by this account, so it can't be opened here.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_couldnt_open": {
+    "en": "The backup couldn't be opened.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_didnt_start": {
+    "en": "The restore didn't start.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cut_short": {
+    "en": "This backup is cut short: it ends before its data.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_unreadable": {
+    "en": "The backup file can't be read any more (was its drive removed?). Pick it again.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_runs_elsewhere": {
+    "en": "Runs on %1$s (its data is likely newer)",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_not_here": {
+    "en": "Not on this server",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_same": {
+    "en": "Same version as this server's: %1$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_older_probably": {
+    "en": "The backup is probably older: %1$s vs %2$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_older": {
+    "en": "The backup is older: %1$s vs %2$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_newer_probably": {
+    "en": "The backup is probably newer: %1$s vs %2$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_newer": {
+    "en": "The backup is newer: %1$s vs %2$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_diverged": {
+    "en": "Changed separately here and in the backup: %1$s vs %2$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_cmp_unknown": {
+    "en": "Backup %1$s, this server %2$s",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_act_install": {
+    "en": "Restore it",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_act_skip": {
+    "en": "Leave it out",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_act_keep": {
+    "en": "Keep this server's",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_act_replace": {
+    "en": "Restore the backup's version",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_act_replace_data": {
+    "en": "Use the backup's data with this server's version",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_act_copy": {
+    "en": "Add as a separate app",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_install_elsewhere": {
+    "en": "Comes back here too. Who can use it follows its list on your other servers.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_install": {
+    "en": "Comes back with its data. Nobody from the backup's list can use it until you approve.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_skip": {
+    "en": "Nothing changes on this server.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_keep": {
+    "en": "Nothing changes. This server's version and data stay.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_replace": {
+    "en": "This server's copy is kept for 7 days, so you can undo. Who can use it: unchanged.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_replace_data": {
+    "en": "This server's version runs on the backup's data. This server's copy is kept for 7 days. Who can use it: unchanged.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_csq_copy": {
+    "en": "A new app with its own address. Nobody can use it until you invite them.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_not_on_server": {
+    "en": "It isn't on this server.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_already": {
+    "en": "It is already on this server.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_different": {
+    "en": "It is a different app with the same name.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_schema_newer": {
+    "en": "The backup's data is newer than this server's version can read.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_schema_diverged": {
+    "en": "The backup's data and this server's changed separately.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_stores_differ": {
+    "en": "The backup keeps its data differently from this server's version.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_no_copy_name": {
+    "en": "There is no free name for a copy.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_busy": {
+    "en": "It is being changed right now. Try again when that is done.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_ref_other": {
+    "en": "Not possible for this app.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_note_also_on": {
+    "en": "Also runs on %1$s: not changed.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_note_address": {
+    "en": "Its address will move to this server (it is first in your server order).",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_note_jobs": {
+    "en": "Jobs saved in the backup may run again.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_note_files": {
+    "en": "Files the app keeps are read as the backup left them.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_step_done": {
+    "en": "Restored",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_step_kept": {
+    "en": "Kept",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_step_skipped": {
+    "en": "Left out",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_step_failed": {
+    "en": "Couldn't restore. It is back as it was.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_step_refused": {
+    "en": "Changed since you chose. Kept as it is.",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "rm_step_waiting": {
+    "en": "Waiting",
+    "ctx": "restore into a server (RestoreMergeScreen.kt)"
   }
 }

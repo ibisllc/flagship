@@ -491,6 +491,29 @@ interface ScreensClient {
     suspend fun deleteSavedBackup(archiveId: String): SavedBackupsView =
         throw ScreensError.NotImplemented("saved backups")
 
+    // Restore a backup into a running server (docs/restore-into-server.md §6.2):
+    // `/api/screens/server-restore-merge`, owner sessions only; the orders are admin-signed.
+    suspend fun restoreMergeStatus(): RestoreMergeView =
+        throw ScreensError.NotImplemented("restore into a server")
+    /** 202 `{restoreId, received}`; 409 `code: busy` while a backup, restore or Migrate runs. */
+    suspend fun restoreMergeStage(req: RestoreMergeStageRequest): RestoreMergeStarted =
+        throw ScreensError.NotImplemented("restore into a server")
+    /** 409 `code: offset` with `received` when the box wants another offset. */
+    suspend fun restoreMergeChunk(offset: Long, data: ByteArray): Unit =
+        throw ScreensError.NotImplemented("restore into a server")
+    suspend fun restoreMergeCommit(keyHex: String): Unit =
+        throw ScreensError.NotImplemented("restore into a server")
+    /** 202; 409 with the box's sentence when a line is refused, 507 when it won't fit. */
+    suspend fun restoreMergePlan(req: RestoreMergePlanRequest): Unit =
+        throw ScreensError.NotImplemented("restore into a server")
+    suspend fun restoreMergeCancel(): Unit =
+        throw ScreensError.NotImplemented("restore into a server")
+    suspend fun restoreMergeUndo(req: RestoreMergeUndoRequest): Unit =
+        throw ScreensError.NotImplemented("restore into a server")
+    /** A saved backup's small backup file (the sealed JSON the account key opens). */
+    suspend fun savedBackupFile(archiveId: String): ByteArray =
+        throw ScreensError.NotImplemented("saved backups")
+
     // The backup policy and the size limit it puts on app data.
     suspend fun backupPolicy(): BackupPolicyView =
         throw ScreensError.NotImplemented("backup policy")
