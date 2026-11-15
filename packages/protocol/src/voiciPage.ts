@@ -12,6 +12,12 @@
  * Envelope: {kind:"VoiciPage", version:1, username, pageId, seq, issuedAt, acceptsMessages, inboxEpoch, inboxPub,
  * ownerSignPub, pieces:[{role, sha256, size}], signerKind, signerPub, signature}; acceptsMessages is 0 or 1.
  *
+ * Version 2 (voi.ci calls, docs/voici-calls.md §6) adds the call setting after acceptsMessages:
+ *   flagship/voici-page/v2|<username>|<pageId>|<seq>|<issuedAt>|<acceptsMessages>|<acceptsCalls 0|1>
+ *     |<callsFrom accepted|signed-in>|<inboxEpoch>|<inboxPub>|<ownerSignPub>|<pieces>|<signerKind>|<signerPub>
+ * with `version: 2, acceptsCalls, callsFrom` in the envelope. A v1 index means calls are off. Writers sign v2 only
+ * while calls are on, so pages without calls stay readable by v1 readers.
+ *
  * Pieces are canonical JSON (webEnvelope.ts `canonicalJson`) or JPEG:
  *   profile  {v:1, displayName, bio, avatar:<sha256>|null, theme, links:[{url, label, site:<id>|null}]}  ≤ 16 KiB
  *   chunk    {v:1, chunk:<n>, posts:[{id, createdAt, editedAt|null, text, links:[{url, card|null}]}]}    ≤ 256 KiB
@@ -34,6 +40,9 @@ import { checkVoiciLinkUrl, checkVoiciText, VOICI_LINK_SITES } from "./voiciText
 import { canonicalJson, ed25519VerifyHex, isLowerHex } from "./webEnvelope.js";
 
 export const TAG_VOICI_PAGE = "flagship/voici-page/v1";
+export const TAG_VOICI_PAGE_V2 = "flagship/voici-page/v2";
+export const VOICI_CALLS_FROM_VALUES = ["accepted", "signed-in"] as const;
+export type VoiciPageCallsFrom = (typeof VOICI_CALLS_FROM_VALUES)[number];
 export const TAG_VOICI_PIECE_UPLOAD = "flagship/voici-piece-upload/v1";
 
 export const VOICI_PROFILE_MAX_BYTES = 16 * 1024;
@@ -204,6 +213,9 @@ export interface VoiciPageIndexBody {
   seq: number;
   issuedAt: number;
   acceptsMessages: 0 | 1;
+  /** Present (with callsFrom) only on a v2 index. */
+  acceptsCalls?: 0 | 1;
+  callsFrom?: VoiciPageCallsFrom;
   inboxEpoch: number;
   inboxPub: string;
   ownerSignPub: string;
@@ -214,8 +226,15 @@ export interface VoiciPageIndexBody {
 
 export interface VoiciPageIndex extends VoiciPageIndexBody {
   kind: "VoiciPage";
-  version: 1;
+  version: 1 | 2;
   signature: string;
+}
+
+const isV2 = (b: VoiciPageIndexBody) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
+
+/** Calls on (a v2 index with acceptsCalls 1); a v1 index never takes calls. */
+export function voiciPageAcceptsCalls(b: VoiciPageIndexBody): boolean {
+  return b.acceptsCalls === 1;
 }
 
 const ROLE = /^(profile|avatar|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$/;
@@ -247,6 +266,8 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
   if (typeof b.pageId !== "string" || !PAGE_ID.test(b.pageId)) throw bad("pageId");
   if (!isTime(b.seq) || b.seq < 1 || !isTime(b.issuedAt)) throw bad("seq/issuedAt");
   if (b.acceptsMessages !== 0 && b.acceptsMessages !== 1) throw bad("acceptsMessages");
+  const v2 = isV2(b);
+  if (v2 && ((b.acceptsCalls !== 0 && b.acceptsCalls !== 1) || !VOICI_CALLS_FROM_VALUES.includes(b.callsFrom as VoiciPageCallsFrom))) throw bad("calls");
   if (!isTime(b.inboxEpoch) || b.inboxEpoch < 1) throw bad("inboxEpoch");
   if (!isLowerHex(b.inboxPub, 1216) || !isLowerHex(b.ownerSignPub, 32)) throw bad("keys");
   const pp = piecesProblem(b.pieces);
@@ -255,12 +276,13 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
   if (!isLowerHex(b.signerPub, 32)) throw bad("signerPub");
   return enc(
     [
-      TAG_VOICI_PAGE,
+      v2 ? TAG_VOICI_PAGE_V2 : TAG_VOICI_PAGE,
       b.username,
       b.pageId,
       String(b.seq),
       String(b.issuedAt),
       String(b.acceptsMessages),
+      ...(v2 ? [String(b.acceptsCalls), b.callsFrom as string] : []),
       String(b.inboxEpoch),
       b.inboxPub,
       b.ownerSignPub,
@@ -271,7 +293,10 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
   );
 }
 
-/** Sorts the pieces, then signs with the sensitive key's seed (whose public key must be `signerPub`). */
+/**
+ * Sorts the pieces, then signs with the sensitive key's seed (whose public key must be `signerPub`). A body with
+ * acceptsCalls / callsFrom signs a v2 index.
+ */
 export function signVoiciPageIndex(body: Omit<VoiciPageIndexBody, "signerPub">, signerSeed: Bytes): VoiciPageIndex {
   const pieces = [...body.pieces].map((p) => ({ role: p.role, sha256: p.sha256, size: p.size }));
   pieces.sort((a, b) => {
@@ -280,10 +305,11 @@ export function signVoiciPageIndex(body: Omit<VoiciPageIndexBody, "signerPub">, 
     return x < y ? -1 : x > y ? 1 : 0;
   });
   const full: VoiciPageIndexBody = { ...body, pieces, signerPub: hex(ed.getPublicKey(signerSeed)) };
-  return { kind: "VoiciPage", version: 1, ...full, signature: hex(ed.sign(canonicalVoiciPageIndex(full), signerSeed)) };
+  return { kind: "VoiciPage", version: isV2(full) ? 2 : 1, ...full, signature: hex(ed.sign(canonicalVoiciPageIndex(full), signerSeed)) };
 }
 
 const INDEX_KEYS = ["kind", "version", "username", "pageId", "seq", "issuedAt", "acceptsMessages", "inboxEpoch", "inboxPub", "ownerSignPub", "pieces", "signerKind", "signerPub", "signature"];
+const INDEX_KEYS_V2 = [...INDEX_KEYS, "acceptsCalls", "callsFrom"];
 
 /** Strict shape of an untrusted index (JSON text ≤ 300 KiB or a parsed value); no signature check. */
 export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
@@ -296,7 +322,8 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
       return null;
     }
   }
-  if (!isObj(v) || !exactKeys(v, INDEX_KEYS) || v.kind !== "VoiciPage" || v.version !== 1 || !isLowerHex(v.signature, 64)) return null;
+  if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
+  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && exactKeys(v, INDEX_KEYS_V2))) return null;
   const r = v as unknown as VoiciPageIndex;
   try {
     canonicalVoiciPageIndex(r);
@@ -305,12 +332,13 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
   }
   return {
     kind: "VoiciPage",
-    version: 1,
+    version: r.version,
     username: r.username,
     pageId: r.pageId,
     seq: r.seq,
     issuedAt: r.issuedAt,
     acceptsMessages: r.acceptsMessages,
+    ...(r.version === 2 ? { acceptsCalls: r.acceptsCalls, callsFrom: r.callsFrom } : {}),
     inboxEpoch: r.inboxEpoch,
     inboxPub: r.inboxPub,
     ownerSignPub: r.ownerSignPub,
