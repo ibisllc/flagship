@@ -569,7 +569,7 @@ change ships with 0.4.
 
 Next steps for whoever resumes:
 1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
-   - `calls-2` is checked and ready (rebase again if release/0.4 moved);
+   - `calls-2` merged (`1041fec0a`, shell v216); its agent is now building answering-while-locked;
    - `enterprise-3` is running: Android join, Rotate keys, keyd adopting a rotated CGK, org install timeline, box
      log heads in the audit export.
    - Merge rule: run `scratchpad/rebase-i18n.sh` (or rebase by hand). Never commit conflict markers. On a shell
