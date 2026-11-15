@@ -10,13 +10,19 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
+  canonicalOrgDirectorySlicePayload,
+  canonicalOrgDirectorySliceWrite,
+  orgDirectoryShares,
+  orgDirectorySliceContent,
+  orgDirectorySliceTag,
+  sealOrgDirectorySlice,
   canonicalOrgDirectoryEntryBody,
   canonicalOrgDirectoryWrite,
   orgDirectoryEntryKey,
   sealOrgDirectoryEntry,
   type OrgDirectoryEntry,
 } from "../packages/protocol/src/orgDirectory.js";
-import { orgSha256Hex, orgSeatRolesHash, signOrgApproval, type OrgApproval } from "../packages/protocol/src/orgAuthority.js";
+import { buildOrgSeatBook, orgSha256Hex, orgSeatRolesHash, signOrgApproval, verifyOrgAuthorityChain, type OrgApproval } from "../packages/protocol/src/orgAuthority.js";
 import {
   buildOrgProposal,
   canonicalOrgConnector,
@@ -24,6 +30,7 @@ import {
   canonicalOrgProposalDecision,
   orgConnectorKeyId,
   orgConnectorMappingSha256,
+  sealOrgConnectorMapping,
   type OrgConnector,
 } from "../packages/protocol/src/orgConnector.js";
 import { orgKemKeyPair } from "../packages/protocol/src/orgKeyRing.js";
@@ -222,7 +229,73 @@ const connectors = {
     },
   ],
   decision: { statement: decision, bytes: utf8(canonicalOrgProposalDecision(decision)) },
+  mappingSealed: { directoryKeyHex: hex(KEY1), sealed: sealOrgConnectorMapping(ORG, connector.connectorId, KEY1, 1, mapping, fill(12, 0x0b)) },
   now: AT + 200_000,
+};
+
+// ── connector standing: its approver left (chain 0 v2, the founder's removal of C) ──
+const Ckey = key("C admin");
+const v2At: number = chain.entries[2].record.issuedAt;
+const cAt = T1 + 3_600_000;
+const byC: OrgConnector = { ...connector, connectorId: "c5".repeat(16), issuedAt: cAt };
+const byCBundle = {
+  connector: byC,
+  connectorPubHex: hex(conn.publicKey),
+  approvals: [signOrgApproval({ orgId: ORG, oarVersion: 1, order: canonicalOrgConnector(byC), seatId: Ckey.seatId, adminKeyId: Ckey.keyId, issuedAt: cAt, notAfter: cAt + 86_400_000 }, Ckey.secret, { deterministic: true })],
+};
+const reAt = v2At + 2 * 86_400_000;
+const reapproved: OrgConnector = { ...byC, issuedAt: reAt };
+const reBundle = {
+  connector: reapproved,
+  connectorPubHex: hex(conn.publicKey),
+  approvals: [signOrgApproval({ orgId: ORG, oarVersion: 2, order: canonicalOrgConnector(reapproved), seatId: B.seatId, adminKeyId: B.keyId, issuedAt: reAt, notAfter: reAt + 86_400_000 }, B.secret, { deterministic: true })],
+};
+const standing = {
+  description: "orgConnectorStanding over org-authority chains[0].entries[0..2] (C removed at v2) and seatBooks[0] grants",
+  entries: 3,
+  cases: [
+    { name: "approved by C, C still an admin (v1 only)", entries: 2, bundle: byCBundle, now: cAt + 60_000, expect: { state: "ok", leftAt: null } },
+    { name: "C left: needs re-approval for 7 days", entries: 3, bundle: byCBundle, now: v2At + 3_600_000, expect: { state: "needs-reapproval", leftAt: v2At, suspendAt: v2At + 7 * 86_400_000 } },
+    { name: "C left 8 days ago: suspended", entries: 3, bundle: byCBundle, now: v2At + 8 * 86_400_000, expect: { state: "suspended", leftAt: v2At, suspendAt: v2At + 7 * 86_400_000 } },
+    { name: "re-approved by B under v2", entries: 3, bundle: reBundle, now: v2At + 8 * 86_400_000, expect: { state: "ok", leftAt: null } },
+  ],
+};
+
+// ── a member's slice ─────────────────────────────────────────────────
+const sliceNow = T1 + 5 * 3_600_000;
+const st01 = verifyOrgAuthorityChain(chain.entries.slice(0, 2), { genesisHash: A.genesisHash, now: sliceNow });
+const book01 = buildOrgSeatBook(st01, { grants: resolveRefs(A.seatBooks[0]).grants, revokes: [], now: sliceNow });
+const orgServers = [SERVER, "other.acme.flagship.services"];
+const named = (k: string, name: string, groups: string[] = []): [string, OrgDirectoryEntry] => [
+  A.keys[k].seatId,
+  { seatId: A.keys[k].seatId, pendingId: "", pseudonym: name, displayName: name, email: `${name.toLowerCase()}@acme.example`, externalId: `ext-${name}`, source: "manual", groups, updatedAt: T },
+];
+const dirMap = new Map<string, OrgDirectoryEntry>([named("A founder", "Alma"), named("B admin", "Bo", ["Finance"]), named("C admin", "Cy"), named("M member", "Mia"), named("S scoped admin", "Sam")]);
+const sliceSeats = ["S scoped admin", "M member"].map((k) => {
+  const seatId = A.keys[k].seatId as string;
+  const kp = orgKemKeyPair(fill(32, k.startsWith("S") ? 0x73 : 0x74));
+  const content = orgDirectorySliceContent(st01, book01, seatId, dirMap, orgServers, sliceNow);
+  const payload = canonicalOrgDirectorySlicePayload(ORG, seatId, content);
+  const slice = sealOrgDirectorySlice({ orgId: ORG, seatId, kemPub: kp.kemPub, kemKeyId: kp.kemKeyId, content, directoryKey: KEY1, tagKeyVersion: 1, issuedAt: sliceNow, randomness: fill(64, 0xa0) });
+  return {
+    name: k,
+    seatId,
+    kemSeedHex: hex(fill(32, k.startsWith("S") ? 0x73 : 0x74)),
+    shares: orgDirectoryShares(st01, book01, seatId, orgServers, sliceNow),
+    content,
+    payload: utf8(payload),
+    contentTag: orgDirectorySliceTag(KEY1, payload),
+    slice,
+    write: utf8(canonicalOrgDirectorySliceWrite(slice)),
+  };
+});
+const slices = {
+  description: "Members' slices over org-authority chains[0].entries[0..1] and seatBooks[0] grants at now; directory entries `directory`; servers `servers`; directory key directoryKeyHex (version 1). orgDirectoryShares, orgDirectorySliceContent (email and externalId emptied, updatedAt 0), canonicalOrgDirectorySlicePayload, orgDirectorySliceTag, canonicalOrgDirectorySliceWrite; openOrgDirectorySlice with the X-Wing seed kemSeedHex returns content.",
+  now: sliceNow,
+  servers: orgServers,
+  directoryKeyHex: hex(KEY1),
+  directory: [...dirMap.values()],
+  seats: sliceSeats,
 };
 
 const doc = {
@@ -234,6 +307,8 @@ const doc = {
   badBodies,
   newest,
   connectors,
+  standing,
+  slices,
   writeSha256: entries.map((e) => orgSha256Hex(new TextEncoder().encode(e.write))),
 };
 

@@ -12,6 +12,8 @@ import {
   canonicalOrgSeatRevoke,
   canonicalOrgVeto,
   canonicalOrgDirectoryWrite,
+  canonicalOrgDirectorySliceWrite,
+  type OrgDirectorySlice,
   canonicalOrgSeatKem,
   orgKemKeyIdHex,
   verifyOrgSeatKem,
@@ -71,6 +73,8 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  *   GET  /api/orgs/:orgId/log                                                  the org's audit hash chain
  *   GET  /api/orgs/:orgId/directory                                            sealed directory entries
  *   POST /api/orgs/:orgId/directory              { entry, approvals }          store or replace one (one org admin)
+ *   GET  /api/orgs/:orgId/directory/slices                                     members' sealed slices
+ *   POST /api/orgs/:orgId/directory/slices       { slice, approvals }          store a seat's slice (one org admin)
  *
  * An accept may carry the joining seat's KEM statement (`seatKem`, signed by the member key it
  * accepts with); `.com` keeps it with the accept and records it as the seat's KEM key when the grant
@@ -617,6 +621,45 @@ export async function handleOrgDirectoryPut(deps: OrgDeps, orgId: string, body: 
     await deps.orgs.putObject(orgId, { kind: "directory", key: e.entryId, bodyJson: JSON.stringify({ entry: clean, approvals: b.approvals }), issuedAt: e.issuedAt, storedAt: now }, true);
     await logged(deps, orgId, "directory", orgSha256Hex(order), now);
     return ok({ entryId: e.entryId });
+  } catch (e) {
+    if (e instanceof PqTrustError) return { status: 403, body: { error: e.message, code: "org-binding" } };
+    return refuse(e);
+  }
+}
+
+export async function handleOrgDirectorySlicesGet(deps: OrgDeps, orgId: string): Promise<HandlerResponseWithHeaders> {
+  if (!ORG_ID.test(orgId)) return malformed("orgId");
+  if (!(await deps.orgs.getOrg(orgId))) return notFound("org not found");
+  // The approvals travel too: a member checks that an org admin sealed its slice (anyone can seal to a public key).
+  return ok({ slices: await list<{ slice: OrgDirectorySlice; approvals: unknown[] }>(deps, orgId, "directory-slice") });
+}
+
+/**
+ * Stores a member's slice of the directory (sealed to the seat's KEM key), approved by one org admin.
+ * The seat must be live and the slice sealed to the KEM key it announced.
+ */
+export async function handleOrgDirectorySlicePut(deps: OrgDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = nowOf(deps);
+  const b = body as { slice?: OrgDirectorySlice; approvals?: unknown[] } | undefined;
+  if (!b?.slice || !Array.isArray(b.approvals)) return malformed("slice and approvals required");
+  try {
+    const s = b.slice;
+    const order = canonicalOrgDirectorySliceWrite(s);
+    if (s.orgId !== orgId) return malformed("orgId");
+    if (Math.abs(now - s.issuedAt) > 10 * 60_000) return malformed("stale slice");
+    const v = await loadOrg(deps, orgId, now);
+    if (!v) return notFound("org not found");
+    const seat = v.book.seats.get(s.seatId);
+    if (!seat || v.book.revoked.has(s.seatId) || seat.grant.expiresAt <= now) return { status: 403, body: { error: "not a live seat", code: "org-seat-unknown" } };
+    const kem = await deps.orgs.getObject(orgId, "seat-kem", s.seatId);
+    if (!kem || parse<OrgSeatKemBundle>(kem.bodyJson).statement.kemKeyId !== s.kemKeyId) return { status: 403, body: { error: "not the seat's KEM key", code: "org-binding" } };
+    authorizeOrgOrder({ state: v.state, book: v.book, action: { kind: "seat-invite" }, order, approvals: b.approvals.map(orgApprovalFromWire), now });
+    const prev = await deps.orgs.getObject(orgId, "directory-slice", s.seatId);
+    if (prev && prev.issuedAt >= s.issuedAt) return conflict("older than the slice kept");
+    const clean: OrgDirectorySlice = { orgId, seatId: s.seatId, kemKeyId: s.kemKeyId, tagKeyVersion: s.tagKeyVersion, contentTag: s.contentTag, sealedHex: s.sealedHex, issuedAt: s.issuedAt };
+    await deps.orgs.putObject(orgId, { kind: "directory-slice", key: s.seatId, bodyJson: JSON.stringify({ slice: clean, approvals: b.approvals }), issuedAt: s.issuedAt, storedAt: now }, true);
+    await logged(deps, orgId, "directory-slice", orgSha256Hex(order), now);
+    return ok({ seatId: s.seatId });
   } catch (e) {
     if (e instanceof PqTrustError) return { status: 403, body: { error: e.message, code: "org-binding" } };
     return refuse(e);

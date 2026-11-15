@@ -258,7 +258,9 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
     const parts = rawPath.slice(BASE.length).split("/").filter(Boolean);
     const resource = parts[0] ?? "";
     const finish = (r: HttpResponse) => {
-      deps.audit?.({ method: req.method, resource, status: r.status });
+      // Content-free: a known resource kind or "other", never the path's own text (it could hold a name).
+      const kind = ["Users", "Groups", "ServiceProviderConfig", "Schemas", "ResourceTypes"].includes(resource) ? resource : "other";
+      deps.audit?.({ method: /^[A-Z]{3,7}$/.test(req.method) ? req.method : "OTHER", resource: kind, status: r.status });
       return r;
     };
     if (!authorized(req)) return finish(scimError(401, "a valid connector token is required"));

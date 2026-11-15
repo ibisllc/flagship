@@ -101,6 +101,11 @@ jobs:
         if: matrix.shard == 1
         run: npx tsx tools/org-authority-vectors.ts --check
 
+      # The org directory, connectors, proposals, standing and members' slices (docs/org-directory.md).
+      - name: Org directory vectors are fresh
+        if: matrix.shard == 1
+        run: npx tsx tools/org-directory-vectors.ts --check
+
       # keyd adopting a rotated org CGK: the TS and Rust keyd backends both read this file.
       - name: keyd org CGK vectors are fresh
         if: matrix.shard == 1
@@ -128,6 +133,51 @@ jobs:
       - name: Files-folder limits on real loop images (root)
         if: matrix.shard == 1
         run: sudo -E env "PATH=$PATH" FLAGSHIP_TEST_LOOP=1 FLAGSHIP_TEST_LOOP_DOCKER=1 npx vitest run packages/server-daemon/tests/appQuotaLoop.integration.test.ts
+
+  # LDAP pull (docs/org-directory.md §4) against a real OpenLDAP server: the box's LdapDirectorySource
+  # binds, searches and maps entries the test adds through the same client. The unit suite runs the
+  # same code against an in-process fake server; this job proves it against slapd.
+  openldap:
+    name: LDAP pull against OpenLDAP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      openldap:
+        image: osixia/openldap:1.5.0
+        env:
+          LDAP_ORGANISATION: Acme
+          LDAP_DOMAIN: acme.example
+          LDAP_ADMIN_PASSWORD: flagship-ci
+        ports:
+          - 389:389
+        options: >-
+          --health-cmd "ldapsearch -x -H ldap://localhost -b dc=acme,dc=example -D cn=admin,dc=acme,dc=example -w flagship-ci -s base"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FLAGSHIP_TEST_LDAP_URL: ldap://127.0.0.1:389
+      FLAGSHIP_TEST_LDAP_BIND_DN: cn=admin,dc=acme,dc=example
+      FLAGSHIP_TEST_LDAP_PASSWORD: flagship-ci
+      FLAGSHIP_TEST_LDAP_BASE: dc=acme,dc=example
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install workspace deps
+        run: npm ci
+
+      - name: Build the daemon's dependencies
+        run: npx tsc -b packages/server-daemon
+
+      - name: LDAP pull against slapd
+        run: npx vitest run packages/server-daemon/tests/directory.openldap.integration.test.ts
 
   # The web gym (docs/ui-test-gym.md, tools/gym/README.md): the real webapp
   # in chromium against a static server with every .com/box call stubbed, so

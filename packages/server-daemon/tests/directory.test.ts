@@ -316,3 +316,67 @@ describe("LDAP pull", () => {
     }
   });
 });
+
+describe("a connector whose approver left", () => {
+  it("keeps working for 7 days with an Activity note, then stops until re-approved; a later setup without seeds uses the kept ones", async () => {
+    const C = key("C admin");
+    const entries = chain.entries.slice(0, 3);
+    const v2At: number = entries[2].record.issuedAt;
+    const pinAt = (now: number) =>
+      verifyOrgPin(
+        { v: 1, orgId: A.orgId, genesisHash: A.genesisHash, entries, freezes: [], overturns: [], vetoes: [], grants: R(A.seatBooks[0]).grants, revokes: [], rotationsPending: [], syncedAt: now },
+        { orgId: A.orgId, genesisHash: A.genesisHash },
+        now,
+      );
+    const boxSeed = new Uint8Array(32).fill(0x35);
+    const boxKem = orgKemKeyPair(boxSeed);
+    const seeds = [new Uint8Array(32).fill(0x61), new Uint8Array(32).fill(0x62)] as const;
+    const conn = hybridSigKeygen(seeds[0], seeds[1]);
+    const at = chain.entries[1].record.issuedAt + 3_600_000;
+    const connector: OrgConnector = {
+      orgId: A.orgId, connectorId: "c6".repeat(16), kind: "scim", serverDomain: HOST, connectorKeyId: orgConnectorKeyId(conn.publicKey),
+      scopes: ["propose-invite", "propose-offboard", "update-entry"], mappingSha256: orgConnectorMappingSha256(mapping), status: "active", issuedAt: at,
+    };
+    const kemKey = { recipient: `box:${HOST}`, kemPub: boxKem.kemPub, kemKeyId: boxKem.kemKeyId, issuedAt: at };
+    const approval = signOrgApproval({ orgId: A.orgId, oarVersion: 1, order: canonicalOrgConnector(connector), seatId: C.seatId, adminKeyId: C.keyId, issuedAt: at, notAfter: at + 86_400_000 }, C.secret);
+    let bundle: any = {
+      connector, connectorPubHex: Buffer.from(conn.publicKey).toString("hex"), approvals: [approval],
+      setup: sealOrgConnectorSetup(connector, kemKey, { connectorSeedsHex: Buffer.concat([seeds[0], seeds[1]]).toString("hex"), mapping, scimTokenSha256: TOKEN_SHA }, at),
+    };
+    let now = v2At + 3_600_000;
+    let pin = pinAt(now);
+    const notes: Array<[string, string]> = [];
+    const fetchImpl = (async (url: string) => {
+      const path = new URL(url).pathname.replace(`/api/orgs/${A.orgId}`, "");
+      if (path === "/connectors") return new Response(JSON.stringify({ connectors: [bundle] }));
+      if (path === "/servers") return new Response(JSON.stringify({ servers: [{ serverDomain: HOST }] }));
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+    const rt = new ConnectorRuntime({
+      dataDir: mkdtempSync(join(tmpdir(), "connector-standing-")), orgId: A.orgId, serverDomain: HOST, controlPlaneBaseUrl: "https://flagshipserver.example",
+      pin: () => pin, boxKemSeed: async () => boxSeed, fetchImpl, now: () => now, note: (k, t) => notes.push([k, t]),
+    });
+    const first = await rt.refresh();
+    expect(first.map((c) => c.standing.state)).toEqual(["needs-reapproval"]);
+    expect(notes.map(([k]) => k)).toEqual(["org.directory.reapprove"]);
+    expect(notes[0]![1]).not.toMatch(/@/);
+
+    now = v2At + 8 * 86_400_000;
+    pin = pinAt(now);
+    expect(await rt.refresh()).toEqual([]);
+    expect(notes.map(([k]) => k)).toEqual(["org.directory.reapprove", "org.directory.suspended"]);
+
+    // B re-approves under v2, with a later setup that carries a new token but no seeds.
+    const B = key("B admin");
+    const re: OrgConnector = { ...connector, issuedAt: now - 60_000 };
+    const newTokenSha = createHash("sha256").update("a-new-scim-token-0123456789").digest("hex");
+    bundle = {
+      connector: re, connectorPubHex: bundle.connectorPubHex,
+      approvals: [signOrgApproval({ orgId: A.orgId, oarVersion: 2, order: canonicalOrgConnector(re), seatId: B.seatId, adminKeyId: B.keyId, issuedAt: now - 60_000, notAfter: now + 86_400_000 }, B.secret)],
+      setup: sealOrgConnectorSetup(re, kemKey, { mapping, scimTokenSha256: newTokenSha }, now),
+    };
+    const back = await rt.refresh();
+    expect(back.map((c) => c.standing.state)).toEqual(["ok"]);
+    expect(back[0]!.setup.scimTokenSha256).toBe(newTokenSha);
+  });
+});

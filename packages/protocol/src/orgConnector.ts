@@ -20,6 +20,8 @@
  * (entry-update). `status` is `active`, `paused` or `retired`; a newer record for the same id
  * replaces the older, and a retired id never comes back.
  */
+import { gcm } from "@noble/ciphers/aes";
+import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { hex } from "./canonicalBase.js";
 import {
@@ -104,6 +106,8 @@ export interface OrgConnectorBundle {
   approvals: OrgApproval[];
   /** The setup sealed to the connector box (sealOrgConnectorSetup); `.com` stores it as ciphertext. */
   setup?: { kemKeyId: string; sealedHex: string };
+  /** The mapping sealed under the org directory key, for the admins' editor (sealOrgConnectorMapping). */
+  mappingSealed?: OrgConnectorMappingSealed;
 }
 
 export function canonicalOrgConnector(c: OrgConnector): Bytes {
@@ -134,15 +138,17 @@ export function orgConnectorKeyId(connectorPub: Bytes): string {
  * Checks a connector record against the org's chain and seat book: well formed, its key matches the
  * named id, one org admin approved it, and the box is one of the org's servers. Throws.
  * Fresh (`.com` at submission): the approval must be current. `stored` (the connector box, later):
- * the approval is checked as of the record it names (it may have expired since), and its signers
- * must still be org admins now, so a connector an ousted admin added stops at the next refresh.
+ * the approval is checked as of the record it names (it may have expired since) and the result is
+ * the connector's standing: when every approver has since stopped being an org admin it needs
+ * re-approval, keeps working for 7 days, and is then suspended until any org admin approves it
+ * again (owner decision, 2026-11-15). A suspended connector throws `connector-suspended`.
  */
 export function verifyOrgConnector(
   ctx: { state: OrgAuthorityState; book: OrgSeatBook; servers: ReadonlySet<string>; now: number },
   b: OrgConnectorBundle,
   prev: OrgConnector | null,
   opts: { stored?: boolean } = {},
-): void {
+): OrgConnectorStanding | null {
   const c = b.connector;
   const order = canonicalOrgConnector(c);
   if (c.orgId !== ctx.state.orgId) fail("wrong-org");
@@ -155,11 +161,62 @@ export function verifyOrgConnector(
     if (c.issuedAt <= prev.issuedAt) fail("not-after-previous");
   }
   if (opts.stored) {
-    const { signers } = verifyOrgRecordedApprovals(ctx.state, ctx.book, order, b.approvals, b.approvals[0]?.oarVersion ?? -1, ctx.now);
-    for (const s of signers) if (!ctx.state.current.admins.some((a) => a.seatId === s && a.kind === "admin")) fail("not-an-admin", s);
-    return;
+    const standing = orgConnectorStanding(ctx.state, ctx.book, b, ctx.now);
+    if (standing.state === "suspended") fail("seat-revoked", "connector-suspended: its approver left more than 7 days ago");
+    return standing;
   }
   authorizeOrgOrder({ state: ctx.state, book: ctx.book, action: { kind: "seat-invite" }, order, approvals: b.approvals, now: ctx.now });
+  return null;
+}
+
+export const ORG_CONNECTOR_REAPPROVAL_GRACE_MS = 7 * 24 * 3_600_000;
+
+export interface OrgConnectorStanding {
+  state: "ok" | "needs-reapproval" | "suspended";
+  /** Seats whose approval the stored record carries. */
+  approvers: string[];
+  /** Approvers no longer org admins, with when each left (the first record that dropped them). */
+  departed: Array<{ seatId: string; leftAt: number }>;
+  /** When the last approver left (null while one is still an org admin). */
+  leftAt: number | null;
+  /** leftAt + 7 days. */
+  suspendAt: number | null;
+}
+
+/**
+ * The standing of a stored connector record: its approval checked as of the record it names, then
+ * whether any approver is still an org admin now. Throws when the approval itself does not verify.
+ */
+export function orgConnectorStanding(st: OrgAuthorityState, book: OrgSeatBook, b: OrgConnectorBundle, now: number): OrgConnectorStanding {
+  const order = canonicalOrgConnector(b.connector);
+  const at = b.approvals[0]?.oarVersion ?? -1;
+  const { signers } = verifyOrgRecordedApprovals(st, book, order, b.approvals, at, now);
+  const isAdmin = (s: string) => st.current.admins.some((a) => a.seatId === s && a.kind === "admin");
+  const departed = signers
+    .filter((s) => !isAdmin(s))
+    .map((s) => {
+      const drop = st.records.find((r) => r.version > at && !r.admins.some((a) => a.seatId === s && a.kind === "admin"));
+      return { seatId: s, leftAt: drop?.issuedAt ?? st.current.issuedAt };
+    });
+  if (departed.length < signers.length) return { state: "ok", approvers: signers, departed, leftAt: null, suspendAt: null };
+  const leftAt = Math.max(...departed.map((d) => d.leftAt));
+  const suspendAt = leftAt + ORG_CONNECTOR_REAPPROVAL_GRACE_MS;
+  return { state: now < suspendAt ? "needs-reapproval" : "suspended", approvers: signers, departed, leftAt, suspendAt };
+}
+
+/** Every connector whose approvers have all left: what the org page lists beside the pending rotations. */
+export function orgConnectorsToReapprove(st: OrgAuthorityState, book: OrgSeatBook, bundles: readonly OrgConnectorBundle[], now: number): Array<{ connectorId: string; standing: OrgConnectorStanding }> {
+  const out: Array<{ connectorId: string; standing: OrgConnectorStanding }> = [];
+  for (const b of bundles) {
+    if (b.connector?.status === "retired") continue;
+    try {
+      const standing = orgConnectorStanding(st, book, b, now);
+      if (standing.state !== "ok") out.push({ connectorId: b.connector.connectorId, standing });
+    } catch {
+      /* a record that does not verify is not offered for re-approval */
+    }
+  }
+  return out;
 }
 
 // ── proposals ───────────────────────────────────────────────────────────
@@ -332,9 +389,14 @@ export function orgConnectorMappingSha256(mapping: unknown): string {
  * token is shown once on the phone; only its SHA-256 travels. LDAP bind passwords travel only here.
  */
 export interface OrgConnectorSetup {
-  /** Ed25519 seed (32 bytes) then ML-DSA-65 seed (32 bytes), hex. */
-  connectorSeedsHex: string;
-  mapping: OrgConnectorMapping;
+  /** Left out of a later setup that keeps the mapping (a token rotation, new LDAP settings): the box keeps its own. */
+  /**
+   * Ed25519 seed (32 bytes) then ML-DSA-65 seed (32 bytes), hex. Present in the first setup; a later
+   * one (a mapping edit, a token rotation, new LDAP settings) leaves it out and the box keeps the
+   * seeds it already opened (the record's key never changes).
+   */
+  connectorSeedsHex?: string;
+  mapping?: OrgConnectorMapping;
   /** SCIM: SHA-256 of the bearer token, hex. */
   scimTokenSha256?: string;
   /** When the token was made (the console warns after 365 days). */
@@ -371,18 +433,87 @@ export function sealOrgConnectorSetup(c: OrgConnector, boxKem: OrgKemKey, setup:
   return { kemKeyId: boxKem.kemKeyId, sealedHex: hex(sealed) };
 }
 
-/** The box opens its connector's setup and checks it against the approved record. Throws. */
-export function openOrgConnectorSetup(c: OrgConnector, sealed: { sealedHex: string }, boxKemSecret: Bytes, keygen: (ed: Bytes, ml: Bytes) => { publicKey: Bytes }): OrgConnectorSetup {
+/**
+ * The box opens its connector's setup and checks it against the approved record. A setup without
+ * seeds takes `knownSeedsHex` (what the box kept from the first one). Throws.
+ */
+export function openOrgConnectorSetup(
+  c: OrgConnector,
+  sealed: { sealedHex: string },
+  boxKemSecret: Bytes,
+  keygen: (ed: Bytes, ml: Bytes) => { publicKey: Bytes },
+  knownSeedsHex?: string,
+  known?: Pick<OrgConnectorSetup, "mapping" | "scimTokenSha256" | "scimTokenIssuedAt" | "ldap">,
+): OrgConnectorSetup & { connectorSeedsHex: string; mapping: OrgConnectorMapping } {
   let setup: OrgConnectorSetup;
   try {
     setup = JSON.parse(new TextDecoder().decode(hybridOpen(boxKemSecret, TAG_ORG_CONNECTOR, setupContext(c), fromHex(String(sealed?.sealedHex ?? ""))).plaintext));
   } catch {
     return fail("malformed", "setup does not open");
   }
+  if (setup.connectorSeedsHex === undefined && knownSeedsHex !== undefined) setup.connectorSeedsHex = knownSeedsHex;
+  // A partial setup changes only what it carries; the rest is what the box opened before.
+  if (known) {
+    if (setup.mapping === undefined) setup.mapping = known.mapping;
+    if (setup.scimTokenSha256 === undefined && known.scimTokenSha256 !== undefined) {
+      setup.scimTokenSha256 = known.scimTokenSha256;
+      setup.scimTokenIssuedAt = known.scimTokenIssuedAt;
+    }
+    if (setup.ldap === undefined && known.ldap !== undefined) setup.ldap = known.ldap;
+  }
   if (typeof setup.connectorSeedsHex !== "string" || !/^[0-9a-f]{128}$/.test(setup.connectorSeedsHex)) fail("malformed", "seeds");
-  const seeds = fromHex(setup.connectorSeedsHex);
+  const seeds = fromHex(setup.connectorSeedsHex as string);
   if (orgConnectorKeyId(keygen(seeds.subarray(0, 32), seeds.subarray(32)).publicKey) !== c.connectorKeyId) fail("binding", "setup seeds");
   if (orgConnectorMappingSha256(setup.mapping) !== c.mappingSha256) fail("order-mismatch", "mapping");
   if (setup.scimTokenSha256 !== undefined) match("scimTokenSha256", HEX32, setup.scimTokenSha256);
-  return setup;
+  return setup as OrgConnectorSetup & { connectorSeedsHex: string; mapping: OrgConnectorMapping };
+}
+
+// ── the mapping, readable by org admins ─────────────────────────────────
+
+/**
+ * The connector's mapping sealed under the org directory key (AES-256-GCM; key HKDF(directoryKey,
+ * info = flagship/org-connector/v1|mapping|<orgId>|<connectorId>|<keyVersion>), the same text as AAD),
+ * carried beside the record so any org admin's phone can show and edit it. Group names are the org's
+ * structure, not people, but `.com` still never reads them.
+ */
+export interface OrgConnectorMappingSealed {
+  keyVersion: number;
+  sealedHex: string;
+}
+
+function mappingInfo(orgId: string, connectorId: string, keyVersion: number): Bytes {
+  match("orgId", HEX16, orgId);
+  match("connectorId", HEX16, connectorId);
+  uint("keyVersion", keyVersion);
+  return enc([TAG_ORG_CONNECTOR, "mapping", orgId, connectorId, keyVersion].join("|"));
+}
+
+export function sealOrgConnectorMapping(orgId: string, connectorId: string, directoryKey: Bytes, keyVersion: number, mapping: OrgConnectorMapping, nonce?: Bytes): OrgConnectorMappingSealed {
+  if (directoryKey.length !== 32) fail("malformed", "directory key");
+  const info = mappingInfo(orgId, connectorId, keyVersion);
+  const key = hkdf(sha256, directoryKey, new Uint8Array(0), info, 32);
+  const n = nonce ?? crypto.getRandomValues(new Uint8Array(12));
+  const ct = gcm(key, n, info).encrypt(enc(canonicalMappingJson(mapping)));
+  const out = new Uint8Array(12 + ct.length);
+  out.set(n, 0);
+  out.set(ct, 12);
+  return { keyVersion, sealedHex: hex(out) };
+}
+
+export function openOrgConnectorMapping(orgId: string, connectorId: string, directoryKey: Bytes, sealed: OrgConnectorMappingSealed): OrgConnectorMapping {
+  const info = mappingInfo(orgId, connectorId, sealed.keyVersion);
+  const key = hkdf(sha256, directoryKey, new Uint8Array(0), info, 32);
+  const b = fromHex(String(sealed.sealedHex ?? ""));
+  try {
+    return JSON.parse(new TextDecoder().decode(gcm(key, b.subarray(0, 12), info).decrypt(b.subarray(12)))) as OrgConnectorMapping;
+  } catch {
+    return fail("malformed", "mapping does not open");
+  }
+}
+
+function canonicalMappingJson(mapping: unknown): string {
+  const canon = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon((v as Record<string, unknown>)[k])])) : v;
+  return JSON.stringify(canon(mapping));
 }

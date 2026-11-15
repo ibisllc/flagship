@@ -28,7 +28,6 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
   const handlers = new Map<string, (req: HttpRequest) => Promise<HttpResponse | null>>();
   const ldapNext = new Map<string, number>();
   const warned = new Set<string>();
-  let counts: Record<string, number> = {};
   const path = (id: string) => join(deps.dataDir, "org-directory", `${id}.scim.json`);
 
   async function load(id: string): Promise<ScimData> {
@@ -57,7 +56,8 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
               await writeFileDurable(path(id), JSON.stringify(d));
               void deps.rt.sync(id, scimSnapshot(d)).catch((e) => deps.log(`[directory] SCIM sync: ${(e as Error).message}`));
             },
-            audit: (l) => void (counts[`${l.method} ${l.resource} ${l.status}`] = (counts[`${l.method} ${l.resource} ${l.status}`] ?? 0) + 1),
+            // One Activity line per request: the method, the resource kind and the status, never a name.
+            audit: (l) => deps.note("org.directory.scim", `SCIM ${l.method} ${l.resource} ${l.status} (connector ${id.slice(0, 8)})`, l.status < 400),
           }),
         );
       }
@@ -87,16 +87,9 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
     }
   }
 
-  function flushAudit(): void {
-    const lines = Object.entries(counts);
-    if (lines.length === 0) return;
-    counts = {};
-    deps.note("org.directory.scim", `SCIM requests in the last 15 minutes: ${lines.map(([k, n]) => `${k} ×${n}`).join(", ")}`, true);
-  }
-
   const tick = () => void refresh().then(runLdap).catch((e) => deps.log(`[directory] ${(e as Error).message}`));
   tick();
-  const timers = [setInterval(tick, 5 * 60_000), setInterval(flushAudit, 15 * 60_000)];
+  const timers = [setInterval(tick, 5 * 60_000)];
   for (const t of timers) t.unref?.();
 
   return {
@@ -105,6 +98,7 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
       const m = /^Bearer\s+(\S+)$/.exec(req.headers["authorization"] ?? "");
       const sha = m ? createHash("sha256").update(m[1]!).digest("hex") : "";
       for (const [id, h] of handlers) if (deps.rt.connector(id)?.setup.scimTokenSha256 === sha) return h(req);
+      deps.note("org.directory.scim", "SCIM request refused: no connector matched the token (401)", false);
       return { status: 401, headers: { "content-type": "application/scim+json" }, body: JSON.stringify({ schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"], status: "401", detail: "a valid connector token is required" }) };
     },
     stop: () => timers.forEach(clearInterval),
