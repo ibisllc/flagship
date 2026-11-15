@@ -46,7 +46,7 @@ describe("one qualified Node, launched by absolute path", () => {
         for (const tok of line.split(/\s+/)) if (/(^|\/)node$/.test(tok)) expect(tok, `${name}: ${line}`).toBe("/usr/local/bin/node");
       }
     }
-    const userdata = readFileSync(join(REPO, "packages/flagship-builder/src/userdata.ts"), "utf8");
+    const userdata = readFileSync(join(REPO, "packages/flagship-builder/src/daemonUnit.ts"), "utf8");
     expect(userdata).toMatch(/^ExecStart=\/usr\/local\/bin\/node --disable-warning=ExperimentalWarning packages\/server-daemon\/dist\/index\.js$/m);
   });
 
