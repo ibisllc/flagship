@@ -509,10 +509,18 @@
 //       carry a hybrid companion from ML-DSA-65 in pinned WebAssembly (lib/mldsaWasm.js, lib/pqSign.js,
 //       lib/adminSigning.js); the shell installs only files that match its manifest, and the page checks the
 //       manifest's release signature before it offers an update (lib/shellTrust.js; docs/webapp-key-custody.md).
+<<<<<<< HEAD
 //  v220: browser org seats (join, approvals, admits, rotations, the directory console and members' "Shared with"),
 //       hybrid server order, direct access and update orders, and the strict opt-in from Settings, Quantum-safe
 //       protection (lib/orgSeat.js, lib/orgDirectoryConsole.js, vendor/flagship-org, lib/policySigning.js).
 const SHELL_VERSION = "v220";
+||||||| parent of 71da451c1 (Webapp: call pages you know from a voi.ci tab, with a call history)
+const SHELL_VERSION = "v218";
+=======
+//  v219: calls from the webapp to pages this account knows, in a voi.ci tab (lib/voiciCallOut.js, voiciCallHandoff.js,
+//        views/calls.js: the call history).
+const SHELL_VERSION = "v219";
+>>>>>>> 71da451c1 (Webapp: call pages you know from a voi.ci tab, with a call history)
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -716,8 +724,11 @@ const OPTIONAL_SHELL = [
   "/lib/voiciImage.js",
   "/lib/voiciSignIn.js",
   "/lib/voiciReplies.js",
+  "/lib/voiciCallHandoff.js",
+  "/lib/voiciCallOut.js",
   "/views/messages.js",
   "/views/thread.js",
+  "/views/calls.js",
   "/views/page-editor.js",
   "/views/page-header.js",
   "/views/voici-sign-in.js",

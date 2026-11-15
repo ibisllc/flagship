@@ -269,6 +269,7 @@
         <div id="social-profile"></div>
         <div id="social-messages" class="hidden">
           <div id="messages-reply-alerts"></div>
+          <button type="button" class="fs-row mt-2" id="messages-calls" data-testid="messages-calls"><span class="fs-row-body"><span class="fs-row-title">Calls</span></span></button>
           <div class="fs-segmented mt-3" id="messages-segments" role="radiogroup" aria-label="Messages">
             <button type="button" role="radio" aria-checked="true" data-messages-tab="messages">Conversations</button>
             <button type="button" role="radio" aria-checked="false" data-messages-tab="requests">Requests <span id="messages-requests-count"></span></button>
@@ -287,6 +288,14 @@
         <div id="thread-notice"></div>
         <div id="thread-list" class="thread-list" aria-live="polite"></div>
         <div id="thread-compose" class="thread-compose"></div>
+      </section>
+
+      <section id="view-calls" class="hidden">
+        <div class="thread-head">
+          <button type="button" class="secondary" id="calls-back">← Back</button>
+          <h2 class="thread-title">Calls</h2>
+        </div>
+        <div id="calls-content"></div>
       </section>
 
       <section id="view-signed-in-sites" class="hidden">

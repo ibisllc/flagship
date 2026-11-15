@@ -151,6 +151,7 @@ import { initJoinView, enterJoin } from "./views/join.js";
 import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
 import { initMessagesView, enterMessages, enterYourPage } from "./views/messages.js";
 import { initThreadView } from "./views/thread.js";
+import { initCallsView } from "./views/calls.js";
 import { initVoiciSignInView } from "./views/voici-sign-in.js";
 import { joinLinkFromLocation } from "./lib/crossDevicePairing.js";
 import {
@@ -207,6 +208,7 @@ const SUB_VIEW_TABS = {
   "view-voici-sign-in": "messages",
   "view-org-join": "settings",
   "view-signed-in-sites": "messages",
+  "view-calls": "messages",
   "view-install-progress": "activity",
   "view-account-audit": "activity",
   "view-settings": "settings",
@@ -631,6 +633,7 @@ async function boot() {
   initProfilesView();
   initMessagesView();
   initThreadView();
+  initCallsView();
   initVoiciSignInView();
   // When the user flips profiles, re-render the surfaces that read per-
   // profile state so the new active cloud's view is what they see.
