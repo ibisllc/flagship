@@ -798,18 +798,68 @@
     },
     {
       "check": "test-vectors",
-      "key": "swift:org-servers",
-      "reason": "Org servers, key ring and audit export (packages/protocol/src/orgServers.ts, orgKeyRing.ts, orgAudit.ts): TypeScript generates and reads the vectors (protocol, .com and box tests). The Swift and Kotlin ports and the webapp (keyless: seat keys and ring opening live on phones) follow with the org client screens (enterprise-accounts.md E4/E5)."
-    },
-    {
-      "check": "test-vectors",
-      "key": "kotlin:org-servers",
-      "reason": "Org servers, key ring and audit export (packages/protocol/src/orgServers.ts, orgKeyRing.ts, orgAudit.ts): TypeScript generates and reads the vectors (protocol, .com and box tests). The Swift and Kotlin ports and the webapp (keyless: seat keys and ring opening live on phones) follow with the org client screens (enterprise-accounts.md E4/E5)."
-    },
-    {
-      "check": "test-vectors",
       "key": "web:org-servers",
       "reason": "Org servers, key ring and audit export (packages/protocol/src/orgServers.ts, orgKeyRing.ts, orgAudit.ts): TypeScript generates and reads the vectors (protocol, .com and box tests). The Swift and Kotlin ports and the webapp (keyless: seat keys and ring opening live on phones) follow with the org client screens (enterprise-accounts.md E4/E5)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-audit-export/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-box-kem/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-install-blob/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-key-commit/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-key-recipients/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-key-ring/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-key-seal/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-log/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-kem-seed/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-kem/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-server-code/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-server-register/v1",
+      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
     }
   ]
 }
