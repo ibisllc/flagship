@@ -601,3 +601,48 @@ unique is printed per box.
   **Design: `docs/retail-wired-fleet.md`** (v2, owner feedback 2026-11-14: Flagship Studio with a shared Rust engine
   as the LAN helper, the webapp as claimer and signer over native messaging, the console code by default, the press
   only on an isolated link, and air-gapped "site mode" as a later, D1-reopening build; questions Q-W1 to Q-W14).
+
+## 16. Retail image: built, and what waits for the hardware (2026-11-14)
+
+### 16.1 Built (hardware-independent)
+
+- **A box makes its own identity.** The image carries no box key. keyd's `migrate` step (root, every keyd start)
+  makes a fresh STK and ML-DSA seed from the box's own RNG when `/etc/flagship/retail-image.json` exists and no key
+  does (`packages/keyd/src/reset.ts` `ensureRetailFirstIdentity`). A wipe already writes a new one (`resetKeydState`).
+  Test: two boxes written from one image get different keys, keep them across restarts, and a wiped box gets a new
+  one (`packages/keyd/tests/reset.test.ts`).
+- **The retail layer** (`packages/flagship-builder/src/retailImage.ts`, `buildRetailImageLayerScript`), run in the
+  factory chroot after the appliance prepare step: installs `bluez`, the claim service's host files, keyd's unit,
+  masks the seed-disk specializer, writes the marker, and refuses to finish if any box key, owner file, claim state
+  or Bluetooth identity is on the image (`RETAIL_FORBIDDEN_PATHS`).
+- **Host files, least privilege** (`packages/boot-chain/src/retailHost.ts`, one definition for the image and the
+  daemon's repair): `main.conf` (LE only, private address, generic name, `Experimental = true` for the scan
+  response's service data, so bluetoothd's command line stays Debian's), the bluetoothd drop-in that forgets the
+  adapter identity, the logind drop-in, a D-Bus policy that lets the daemon's user make only the seven BlueZ calls
+  `bluez.ts` makes (a test keeps them equal), a udev rule that gives only the power button's event nodes to the
+  `flagship-powerkey` group, and a daemon drop-in that joins that group for its process. The daemon is NOT added to
+  `bluetooth` (any call on `org.bluez`, pairing agents included) or `input` (every keyboard).
+- **Parity row** `release-this-box`: iOS and Android present, webapp missing.
+
+### 16.2 Waits for the chosen hardware (Q1)
+
+- **Partition layout and recovery partition.** The marker's `dataLuksDevice` and `recoveryPartition` stay null, so a
+  reset stops at the lock instead of guessing a device. Needs a layout that keeps the OS apart from the owner's
+  data volume, the factory image on a recovery partition, and the reimage path (§8.2, §13.3 item 10).
+- **The physical power button.** The udev rule and `powerKey.ts` know the ACPI "Power Button" and the Pi 5's
+  `pwr_button`. Each SKU must pass H1 to H3 (§10); a SKU that names its button differently adds the name to both.
+  Firmware defaults (AC-loss power on, short press reported to the OS) are set per SKU.
+- **Wi-Fi chipset and stack** (owner, §15.3). Firmware packages (`non-free-firmware`) and the stack the claim's Wi-Fi
+  join uses (`network.ts` speaks `nmcli` today) are chosen with the SKU, and with them the privileges the join needs.
+- **Bluetooth controller firmware** (H4) and the per-SKU metal build in CI. No workflow runs the retail layer yet.
+
+### 16.3 Still open, not hardware-bound
+
+- **The image starts keyd but not the daemon.** `flagship-daemon.service` is written by the bootstrap during
+  specialization, which a retail box never runs. To build: the daemon's unit on the image for an unclaimed box (no
+  `daemon.env`; the claim-only branch in `index.ts`), and the retail first boot after a claim. Run both once in a VM
+  with BlueZ's virtual controller.
+- **The retail first boot must keep keyd's identity.** The receipt named keyd's STK and the phone registered it at
+  `.com`; a bootstrap that writes a new key to `/var/flagship/identity` would be refused by `migrate`
+  ("exists and differs").
+- **Webapp "Release this box"** (parity row above).
