@@ -337,14 +337,52 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
    architecture). Pick the build (Google's prebuilt, a pinned self-build, or a vendor such as the community
    `stream-webrtc-android` / `WebRTC.xcframework`) that negotiates DTLS 1.3 with X25519MLKEM768 and exposes
    FrameEncryptor / FrameDecryptor (§11.2). Until then `StubCallMediaEngine` is what ships.
-2. **The phone's TURN responder and endpoint demux** are not wired into the apps (`flagship-turn-lite` exists).
+2. **Linking the TURN responder.** The endpoint demux is built (below); `flagship-turn-lite` itself is not linked into
+   either app: the apps link no Rust today and the workspace forbids `unsafe` (a C ABI needs it). Pick UniFFI (an
+   `unsafe`-allowed binding crate, iOS and Android Rust targets, the NDK in CI) or Swift/Kotlin ports pinned to shared
+   vectors; decide together with item 1, since a responder is useless without the WebRTC peer behind it.
 3. **Answering while locked**: the answer is signed by the owner messages key, derived from the account key, which is
    only in memory while the app is unlocked. A call that arrives with the app locked rings with "Someone on voi.ci" and
    asks to open and unlock Flagship before it can be answered. Decide whether a device-held, call-only signing key
    (Keychain / Keystore, available after first unlock) is acceptable.
 4. **D4 legal check** for calls in the China mainland storefront still stands.
-5. Calls settings (on/off, who can call, Do Not Disturb) and the missed-call rows on iOS/Android are not built here.
+5. **Do Not Disturb is per device, not synced** (below). Syncing it through the sealed Messages state blob is possible
+   (`.com` sees only ciphertext) but changes the state format in four ports; say if one setting for every device is
+   wanted.
 6. Native review of the new strings (machine drafts in six languages).
+
+## As built: settings, missed calls, the TURN demux (2026-11-15, worktree `0.4/calls-2`)
+
+- **Calls settings** (Settings → Messages → Page options → Calls, iOS `Calls/VoiciCallsSettingsSection.swift`, Android
+  `ui/screens/VoiciCallsSettings.kt`, models `VoiciCallSettings`): Accept calls, Who can call (accepted conversations |
+  anyone signed in), Do Not Disturb hours. On/off and who can call live in the signed page index: an admin device
+  changes them with a publish of its own (`setCalls`), other devices see them read-only ("Only an admin device can
+  change this"), and an unpublished page says "Publish your page to take calls." **Every publish now carries the calls
+  fields of the index it replaces** (iOS, Android and the webapp, shell v216); before this, any publish signed v1 and
+  turned calls off. Off is a v1 index again; the last "who can call" is remembered on the device.
+- **Do Not Disturb** stays on each device (UserDefaults / SharedPreferences) and never reaches `.com` or the index, so
+  no server learns the owner's hours or time zone. A quiet device stays out of the room: iOS still reports the VoIP push
+  to CallKit (Apple requires it) and ends it at once as unanswered; Android doesn't ring. Another device may answer; an
+  unanswered call becomes a missed call. Start == end means all day.
+- **China mainland storefront** (iOS no-ring mode, D4): the Calls section adds "In your region, calls ring only while
+  Flagship is open."
+- **Missed calls** on iOS and Android: `GET /api/voici/pages/<u>/calls`, each item opened under every inbox epoch and
+  checked (`openMissedCall`), shown in its conversation's thread in time order ("Missed call" / "Missed video call").
+  The thread menu signs `flagship/voici-call-allow/v1` ("Allow calls from them" / "Don't allow calls from them") while
+  calls are on.
+- **The endpoint demux** (`CallTurnGate`, iOS `Flagship/CallTurnGate.swift` in `PhoneTlsTerminator`, Android
+  `phoneroute/CallTurnGate.kt` in `PhoneTunnel`): the first byte after TLS picks HTTP or TURN; TURN is accepted only
+  while this device's signed answer is out (armed with its one-time credential, disarmed when the call ends), once per
+  call, and only when a responder factory is set. With no responder linked, such a stream is closed.
+- **Relays:** bare-name forwarding between relays is already in the Rust mesh (`mesh/mod.rs`, `NameClass::Bare`, the
+  phone items of relay-mesh.md §8.4). Not built: the separate call bridge connection, pre-emption with a call receipt,
+  and the live-call count in `scripts/release.sh` (§5).
+- **Tests:** iOS `VoiciCallsViewModelTests`, `CallTurnGateTests`; Android `VoiciCallSettingsTest`,
+  `VoiciCallScreenModelTest`, `CallTurnGateTest`, `VoiciAppTest` (calls setting and call-allow against the in-memory
+  `.com`); webapp `webappVoiciOwner.test.ts`. Mock gym: Android `anAdminTurnsCallsOnAndAllowsAVisitorToCall`
+  (compiled, not run: no emulator), iOS Page options lists the calls controls (not run). The media CI lane and the live
+  gym group `calls` need real WebRTC.
+
 
 ## Owner decisions, 2026-11-15
 
