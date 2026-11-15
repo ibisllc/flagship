@@ -10,6 +10,15 @@ Facts about store, payment-network and legal rules were read from the sources ci
 not legal advice; every "(counsel)" item needs a lawyer before building, and every "(check)" item needs the live
 source again at build time.
 
+## Owner decisions (2026-11-14)
+
+- **Video calls (§1) are slated for 0.4.** Built with the phone call layers on `0.4/calls-phone`. §2-§4 stay design.
+- **No content-specific rules.** Flagship adds no rules about sex, nudity or similar subjects to its terms, rules
+  sheets or this design. What we say is: you may not use the software in furtherance of anything illegal, and we
+  comply with takedown requests as the law requires. Content-specific rules are added only if an app store or a
+  government requires them. §4 below is background facts only, not a policy proposal; the phase-1 category list in
+  §3.5 is a payment-processor constraint to revisit when paid calls are built, not a Flagship content rule.
+
 ## 0. The answer in short
 
 1. **Video is an upgrade of an audio call**, never how a call starts. Each side turns its camera on by itself. Same
