@@ -292,7 +292,6 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   // voi.ci calls (docs/voici-calls.md §4) on a device without VoIP ringing (the China storefront, no CallKit):
   // the call can still be answered while it rings if the app is opened. Names no caller.
   "voici-call": { title: "Flagship", body: "Someone is calling you. Open Flagship to answer." },
-  "voici-missed-call": { title: "Flagship", body: "Missed call" },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 

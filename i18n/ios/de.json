@@ -3683,5 +3683,7 @@
   "%lld of %lld co-managers across your servers": "%lld von %lld Mitverwaltern auf deinen Servern",
   "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": "Mit dem kostenlosen Tarif können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro, um mehr zu haben.",
   "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": "Mit dem Tarif Pro können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro Max, um mehr zu haben.",
-  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "Mit dem Tarif Pro Max können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Enterprise, um mehr zu haben."
+  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "Mit dem Tarif Pro Max können deine Server insgesamt bis zu %lld Mitverwalter haben. Entferne zuerst einen oder wechsle zu Enterprise, um mehr zu haben.",
+  "Someone is calling you. Open Flagship to answer.": "Jemand ruft dich an. Öffne Flagship, um anzunehmen.",
+  "Missed call": "Verpasster Anruf"
 }

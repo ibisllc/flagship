@@ -3677,5 +3677,7 @@
   "%lld of %lld co-managers across your servers": "7ac67cf8d378",
   "On the Free plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro for more.": "dcbb5b5030a1",
   "On the Pro plan your servers can have up to %lld co-managers in all. Remove one first, or move to Pro Max for more.": "a0f2d8f5f016",
-  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "4593b577628b"
+  "On the Pro Max plan your servers can have up to %lld co-managers in all. Remove one first, or move to Enterprise for more.": "4593b577628b",
+  "Someone is calling you. Open Flagship to answer.": "e38e721fe8bf",
+  "Missed call": "77557e00e347"
 }
