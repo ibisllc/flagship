@@ -100,6 +100,10 @@ public struct VoiciPageIndex: Equatable, Sendable {
     public var issuedAt: Int64
     /// 0 or 1.
     public var acceptsMessages: Int64
+    /// Calls (docs/voici-calls.md §6): set on a v2 index only; nil on v1 (calls off).
+    public var acceptsCalls: Int64?
+    /// "accepted" or "signed-in" on a v2 index.
+    public var callsFrom: String?
     public var inboxEpoch: Int64
     public var inboxPub: String
     public var ownerSignPub: String
@@ -111,18 +115,30 @@ public struct VoiciPageIndex: Equatable, Sendable {
     public var signature: String
 
     public init(username: String, pageId: String, seq: Int64, issuedAt: Int64, acceptsMessages: Int64, inboxEpoch: Int64,
-                inboxPub: String, ownerSignPub: String, pieces: [VoiciPieceRef], signerKind: String, signerPub: String = "", signature: String = "") {
+                inboxPub: String, ownerSignPub: String, pieces: [VoiciPieceRef], signerKind: String, signerPub: String = "", signature: String = "",
+                acceptsCalls: Int64? = nil, callsFrom: String? = nil) {
         self.username = username; self.pageId = pageId; self.seq = seq; self.issuedAt = issuedAt; self.acceptsMessages = acceptsMessages
+        self.acceptsCalls = acceptsCalls; self.callsFrom = callsFrom
         self.inboxEpoch = inboxEpoch; self.inboxPub = inboxPub; self.ownerSignPub = ownerSignPub; self.pieces = pieces
         self.signerKind = signerKind; self.signerPub = signerPub; self.signature = signature
     }
 
+    var isV2: Bool { acceptsCalls != nil || callsFrom != nil }
+    /// Calls on: a v2 index with acceptsCalls 1.
+    public var takesCalls: Bool { acceptsCalls == 1 }
+
     /// The signed envelope.
     public var json: JSONValue {
-        ["kind": "VoiciPage", "version": 1, "username": .string(username), "pageId": .string(pageId), "seq": .int(seq),
-         "issuedAt": .int(issuedAt), "acceptsMessages": .int(acceptsMessages), "inboxEpoch": .int(inboxEpoch),
-         "inboxPub": .string(inboxPub), "ownerSignPub": .string(ownerSignPub), "pieces": .array(pieces.map(\.json)),
-         "signerKind": .string(signerKind), "signerPub": .string(signerPub), "signature": .string(signature)]
+        var o: [String: JSONValue] = [
+            "kind": "VoiciPage", "version": .int(isV2 ? 2 : 1), "username": .string(username), "pageId": .string(pageId), "seq": .int(seq),
+            "issuedAt": .int(issuedAt), "acceptsMessages": .int(acceptsMessages), "inboxEpoch": .int(inboxEpoch),
+            "inboxPub": .string(inboxPub), "ownerSignPub": .string(ownerSignPub), "pieces": .array(pieces.map(\.json)),
+            "signerKind": .string(signerKind), "signerPub": .string(signerPub), "signature": .string(signature)]
+        if isV2 {
+            o["acceptsCalls"] = acceptsCalls.map { .int($0) } ?? .null
+            o["callsFrom"] = callsFrom.map { .string($0) } ?? .null
+        }
+        return .object(o)
     }
 }
 
@@ -156,6 +172,7 @@ public struct VoiciPageState: Equatable, Sendable {
 
 public enum VoiciPage {
     public static let tagVoiciPage = "flagship/voici-page/v1"
+    public static let tagVoiciPageV2 = "flagship/voici-page/v2"
     public static let tagVoiciPieceUpload = "flagship/voici-piece-upload/v1"
     public static let profileMaxBytes = 16 * 1024
     public static let chunkMaxBytes = 256 * 1024
@@ -309,13 +326,17 @@ public enum VoiciPage {
         guard isPageId(b.pageId) else { throw bad("pageId") }
         guard CanonicalJson.isTime(b.seq), b.seq >= 1, CanonicalJson.isTime(b.issuedAt) else { throw bad("seq/issuedAt") }
         guard b.acceptsMessages == 0 || b.acceptsMessages == 1 else { throw bad("acceptsMessages") }
+        if b.isV2 {
+            guard let c = b.acceptsCalls, c == 0 || c == 1, b.callsFrom == "accepted" || b.callsFrom == "signed-in" else { throw bad("calls") }
+        }
         guard CanonicalJson.isTime(b.inboxEpoch), b.inboxEpoch >= 1 else { throw bad("inboxEpoch") }
         guard CanonicalJson.isLowerHex(b.inboxPub, bytes: 1216), CanonicalJson.isLowerHex(b.ownerSignPub, bytes: 32) else { throw bad("keys") }
         if let pp = piecesProblem(b.pieces) { throw bad(pp) }
         guard b.signerKind == "admin-root" || b.signerKind == "irk" else { throw bad("signerKind") }
         guard CanonicalJson.isLowerHex(b.signerPub, bytes: 32) else { throw bad("signerPub") }
-        return CanonicalJson.join([tagVoiciPage, b.username, b.pageId, String(b.seq), String(b.issuedAt), String(b.acceptsMessages),
-                                   String(b.inboxEpoch), b.inboxPub, b.ownerSignPub, b.pieces.map(\.key).joined(separator: ","),
+        let calls = b.isV2 ? [String(b.acceptsCalls!), b.callsFrom!] : []
+        return CanonicalJson.join([b.isV2 ? tagVoiciPageV2 : tagVoiciPage, b.username, b.pageId, String(b.seq), String(b.issuedAt), String(b.acceptsMessages)]
+                                  + calls + [String(b.inboxEpoch), b.inboxPub, b.ownerSignPub, b.pieces.map(\.key).joined(separator: ","),
                                    b.signerKind, b.signerPub])
     }
 
@@ -338,7 +359,9 @@ public enum VoiciPage {
             guard text.utf8.count <= indexMaxBytes, let p = JSONValue.parse(text) else { return nil }
             v = p
         }
-        guard let r = v.object, exactKeys(r, indexKeys), r["kind"]?.string == "VoiciPage", r["version"]?.isOne == true,
+        guard let r = v.object, r["kind"]?.string == "VoiciPage" else { return nil }
+        let v2 = r["version"]?.safeInt == 2
+        guard (r["version"]?.isOne == true && exactKeys(r, indexKeys)) || (v2 && exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom"]))),
               CanonicalJson.isLowerHex(r["signature"], bytes: 64),
               let username = r["username"]?.string, let pageId = r["pageId"]?.string, let seq = r["seq"]?.safeInt,
               let issuedAt = r["issuedAt"]?.safeInt, let accepts = r["acceptsMessages"]?.safeInt, let epoch = r["inboxEpoch"]?.safeInt,
@@ -353,7 +376,12 @@ public enum VoiciPage {
         let idx = VoiciPageIndex(username: username, pageId: pageId, seq: seq, issuedAt: issuedAt, acceptsMessages: accepts,
                                  inboxEpoch: epoch, inboxPub: inboxPub, ownerSignPub: ownerSignPub, pieces: pieces,
                                  signerKind: signerKind, signerPub: signerPub, signature: r["signature"]!.string!)
-        return (try? canonicalVoiciPageIndex(idx)) != nil ? idx : nil
+        var out = idx
+        if v2 {
+            guard let c = r["acceptsCalls"]?.safeInt, let from = r["callsFrom"]?.string else { return nil }
+            out.acceptsCalls = c; out.callsFrom = from
+        }
+        return (try? canonicalVoiciPageIndex(out)) != nil ? out : nil
     }
 
     /// A reader's check: shape, username, signer = the account's current sensitive key (and kind), the signature,

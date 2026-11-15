@@ -389,6 +389,32 @@ want("missed unknown CA", P.openVoiciMissedCall(inboxSeed, CALL_ID, missedSealed
 const missedForged = P.sealVoiciMissedCall(inboxPub, { ...missed, request: { ...request, offerSdp: answerSdp } }, missedEseed);
 want("missed with a forged request", P.openVoiciMissedCall(inboxSeed, CALL_ID, missedForged, mctx), null);
 
+// ── page index v2 (acceptsCalls, callsFrom) ─────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const VP: any = JSON.parse(readFileSync(resolve(ROOT, "packages/protocol/test-vectors/voici/vectors.json"), "utf8"));
+const adminRootSeed = h(k.adminRootSeed);
+const pageV2Body = { ...VP.index.body, seq: 8, acceptsCalls: 1 as const, callsFrom: "accepted" as const };
+delete (pageV2Body as Record<string, unknown>).signerPub;
+const pageV2 = P.signVoiciPageIndex(pageV2Body, adminRootSeed);
+want("v2 version", pageV2.version, 2);
+const pctx = { username: "alice", sensitiveKind: "admin-root" as const, sensitivePub: k.adminRootPub };
+const pageV2Checks = (
+  [
+    ["v2 valid", pageV2, "ok"],
+    ["v1 still read", VP.index.signed, "ok"],
+    ["v2 without callsFrom", (() => { const x = clone(pageV2) as R; delete x.callsFrom; return x; })(), "malformed"],
+    ["v1 carrying acceptsCalls", { ...VP.index.signed, acceptsCalls: 1, callsFrom: "accepted" }, "malformed"],
+    ["v2 keys under version 1", { ...pageV2, version: 1 }, "malformed"],
+    ["unknown callsFrom", { ...pageV2, callsFrom: "anyone" }, "malformed"],
+    ["acceptsCalls 2", { ...pageV2, acceptsCalls: 2 }, "malformed"],
+    ["calls switched off after signing", { ...pageV2, acceptsCalls: 0 }, "bad-signature"],
+    ["callsFrom widened after signing", { ...pageV2, callsFrom: "signed-in" }, "bad-signature"],
+  ] as const
+).map(([name, index, expected]) => ({ name, index, expected: want(`page v2 ${name}`, code(P.checkVoiciPageIndex(index, pctx)), expected) }));
+want("v1 has no calls", P.voiciPageAcceptsCalls(VP.index.signed), false);
+want("v2 calls on", P.voiciPageAcceptsCalls(pageV2), true);
+
 // ── write ──────────────────────────────────────────────────────────────────
 
 const doc = {
@@ -449,6 +475,7 @@ const doc = {
   end: { owner: endOwner, caller: endCaller, ownerCanonical: new TextDecoder().decode(P.canonicalVoiciCallEnd(endOwner)), checks: endChecks },
   allow: { order: allow, canonical: new TextDecoder().decode(P.canonicalVoiciCallAllow(allow)), signature: allowSig },
   push: { payload: { v: 1, callId: CALL_ID, pageId: PAGE_ID, conv: CONV, from: PPUB }, issuedAt: M.t0 + 1_000, eseed: H(pushEseed), sealed: P.b64Encode(pushSealed), badConvSealed: P.b64Encode(pushBadConv) },
+  pageV2: { body: pageV2Body, signed: pageV2, canonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(pageV2)), ctx: pctx, checks: pageV2Checks },
   missedCall: { entry: missed, eseed: H(missedEseed), sealed: P.b64Encode(missedSealed), forgedSealed: P.b64Encode(missedForged) },
 };
 

@@ -161,12 +161,20 @@ function piecesProblem(pieces) {
   return null;
 }
 
+const TAG_VOICI_PAGE_V2 = "flagship/voici-page/v2";
+const CALLS_FROM = ["accepted", "signed-in"];
+// Version 2 (docs/voici-calls.md §6): acceptsCalls and callsFrom after acceptsMessages; a v1 index takes no calls.
+const isV2 = (b) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
+export const voiciPageAcceptsCalls = (b) => b.acceptsCalls === 1;
+
 export function canonicalVoiciPageIndex(b) {
   const bad = (f) => new Error(`${TAG_VOICI_PAGE}: bad ${f}`);
   if (typeof b.username !== "string" || !USERNAME.test(b.username)) throw bad("username");
   if (!PAGE_ID.test(b.pageId)) throw bad("pageId");
   if (!isTime(b.seq) || b.seq < 1 || !isTime(b.issuedAt)) throw bad("seq/issuedAt");
   if (b.acceptsMessages !== 0 && b.acceptsMessages !== 1) throw bad("acceptsMessages");
+  const v2 = isV2(b);
+  if (v2 && ((b.acceptsCalls !== 0 && b.acceptsCalls !== 1) || !CALLS_FROM.includes(b.callsFrom))) throw bad("calls");
   if (!isTime(b.inboxEpoch) || b.inboxEpoch < 1) throw bad("inboxEpoch");
   if (!isLowerHex(b.inboxPub, 1216) || !isLowerHex(b.ownerSignPub, 32)) throw bad("keys");
   const pp = piecesProblem(b.pieces);
@@ -175,12 +183,13 @@ export function canonicalVoiciPageIndex(b) {
   if (!isLowerHex(b.signerPub, 32)) throw bad("signerPub");
   return enc(
     [
-      TAG_VOICI_PAGE,
+      v2 ? TAG_VOICI_PAGE_V2 : TAG_VOICI_PAGE,
       b.username,
       b.pageId,
       String(b.seq),
       String(b.issuedAt),
       String(b.acceptsMessages),
+      ...(v2 ? [String(b.acceptsCalls), b.callsFrom] : []),
       String(b.inboxEpoch),
       b.inboxPub,
       b.ownerSignPub,
@@ -200,10 +209,11 @@ export function signVoiciPageIndex(body, signerSeed) {
     return x < y ? -1 : x > y ? 1 : 0;
   });
   const full = { ...body, pieces, signerPub: hex(ed25519PublicKey(signerSeed)) };
-  return { kind: "VoiciPage", version: 1, ...full, signature: ed25519SignHex(canonicalVoiciPageIndex(full), signerSeed) };
+  return { kind: "VoiciPage", version: isV2(full) ? 2 : 1, ...full, signature: ed25519SignHex(canonicalVoiciPageIndex(full), signerSeed) };
 }
 
 const INDEX_KEYS = ["kind", "version", "username", "pageId", "seq", "issuedAt", "acceptsMessages", "inboxEpoch", "inboxPub", "ownerSignPub", "pieces", "signerKind", "signerPub", "signature"];
+const INDEX_KEYS_V2 = [...INDEX_KEYS, "acceptsCalls", "callsFrom"];
 
 /** Strict shape of an untrusted index (JSON text ≤ 300 KiB or a parsed value); no signature check. */
 export function parseVoiciPageIndex(input) {
@@ -216,7 +226,8 @@ export function parseVoiciPageIndex(input) {
       return null;
     }
   }
-  if (!isObj(v) || !exactKeys(v, INDEX_KEYS) || v.kind !== "VoiciPage" || v.version !== 1 || !isLowerHex(v.signature, 64)) return null;
+  if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
+  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && exactKeys(v, INDEX_KEYS_V2))) return null;
   try {
     canonicalVoiciPageIndex(v);
   } catch {
@@ -224,12 +235,13 @@ export function parseVoiciPageIndex(input) {
   }
   return {
     kind: "VoiciPage",
-    version: 1,
+    version: v.version,
     username: v.username,
     pageId: v.pageId,
     seq: v.seq,
     issuedAt: v.issuedAt,
     acceptsMessages: v.acceptsMessages,
+    ...(v.version === 2 ? { acceptsCalls: v.acceptsCalls, callsFrom: v.callsFrom } : {}),
     inboxEpoch: v.inboxEpoch,
     inboxPub: v.inboxPub,
     ownerSignPub: v.ownerSignPub,

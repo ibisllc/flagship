@@ -114,6 +114,13 @@ describe("voici-calls vectors", () => {
     expect(P.openVoiciMissedCall(inboxSeed, push.callId, P.b64Decode(V.missedCall.forgedSealed)!, mctx)).toBeNull();
   });
 
+  it("page index v2", () => {
+    expect(dec(P.canonicalVoiciPageIndex(V.pageV2.signed))).toBe(V.pageV2.canonical);
+    expect(P.signVoiciPageIndex(V.pageV2.body, h("33".repeat(32)))).toEqual(V.pageV2.signed);
+    for (const c of V.pageV2.checks) expect(code(P.checkVoiciPageIndex(c.index, V.pageV2.ctx)), c.name).toBe(c.expected);
+    expect(P.voiciPageAcceptsCalls(V.pageV2.signed)).toBe(true);
+  });
+
   it("the vectors file is fresh", () => {
     execFileSync("npx", ["tsx", join(import.meta.dirname, "..", "..", "..", "tools", "voici-calls-vectors.ts"), "--check"], { stdio: "pipe" });
   }, 60_000);
