@@ -597,8 +597,8 @@ How the binding decisions were built, and what is still open. Not deployed, not 
   is a zero key nobody holds, so owner-IRK paths fail closed); `install-helper sign-server-register` signs the
   org registration. The box checks its own recipe's approvals once it has replayed the chain (Activity).
 - **Gossip on the org CGK.** An org box takes the CGK it opened from the key ring as its gossip key (no cgk
-  deposit poller), and restarts when it opens a newer version. A keyd box takes only the first version (keyd
-  changes its CGK only with the ceremony token).
+  deposit poller), and restarts when it opens a newer version. Under keyd every version goes through keyd's own
+  check (third tranche below).
 - **Rotations, client side.** `orgKeyContextFromServed` + `rotateOrgKey` (TS) and `buildKeyRing` (Swift, Kotlin)
   plan and seal a version; the webapp cannot (keyless).
 - **Auditor CLI.** `npx tsx tools/org-audit/verify.ts <export.json> --genesis <hash>`.
@@ -607,15 +607,40 @@ How the binding decisions were built, and what is still open. Not deployed, not 
   to join with their code and "Codes match: admit" (a second admin completes an admin-role grant in the inbox).
   Uncompiled here.
 
-Open on this branch: the box's LUKS re-key for a disk-key rotation (needs a real box drill); the Android join
-screen and `/org-join` claim; an iOS "Rotate keys" action for pending rotations (TS and Swift have the pieces);
-keyd taking a rotated CGK; the org's pseudonyms on the admin's screens (labels are sealed under the link key; the
-org directory key is not built), so waiting people show as "Seat <id>"; `.com` order status for an org server's
-install timeline (keyed by AuthCode serial today); the appliance path (`appliance.ts` matches only the personal
-registration route); the boxes' own signed log heads in the audit export.
+**Third tranche (branch `0.4/enterprise-3`, 2026-11-15):**
 
-Open (from `0.4/enterprise-build`): the join screen that opens an `org-join` link (accept + SAS), org server creation (AuthCode/registration and
-the install blob carrying the genesis), passing org approvals at each box order call site, the org directory key and
-every E5 rotation (nothing rotates yet; the box only records them as pending), the Rust port, Android and web UI, the
-audit export CLI (E7), co-manager caps (E6) and conversion (§17), a per-isolate cache of the verified chain on `.com`
-(each request re-verifies every ML-DSA signature).
+- **Android join and admit.** `/org-join` is claimed in the manifest and the parser and opens the join screen
+  (offer opened with the link key, chain checked from the genesis in it, seat member key from the UMK, a random
+  admin key wrapped like the other PQ seeds for an admin role, the 6-digit code). Settings → Organizations lists
+  this phone's seats; an org page shows people waiting to join ("Codes match: admit") and the approvals inbox.
+  Android has no create, invite or freeze yet (iOS does).
+- **Rotate keys (iOS, Android).** The org page lists each departed seat with the keys it could open and "Rotate
+  keys". The phone computes the pending list itself (ports of `orgPendingRotations` and recorded approvals:
+  `OrgRotation.swift`, `OrgRotation.kt`), verifies every served KEM statement, announces its own seat KEM key,
+  seals a fresh key to the recipients it accepts and signs the ring with its seat admin key (one org admin, or one
+  scoped seat for a server's own keys). Disk keys are listed, not rotated (the LUKS re-key is open).
+- **keyd and the org CGK.** keyd pins the org (`org.json`, with the ceremony's token) and adopts a CGK only
+  through `cgk.orgAdopt`: it replays the chain from that genesis under a narrower rule (genesis, then `direct`
+  transitions only), needs a `cgk` ring above the version it holds that names this box, one org admin's approval
+  as of the record it names, and the key's commitment. A chain moved by a founder's removal, a recovery or an
+  overturn is refused (the box keeps its CGK until the next ceremony); keyd never sees freezes, so a frozen admin's
+  approval counts there. TS `packages/keyd/src/orgCgk.ts` and Rust `flagship-keyd/src/org_cgk.rs` replay the same
+  vectors (`test-vectors/keyd-org-cgk`). An org box never hands keyd a raw CGK any more.
+- **Install timeline.** Order status and install events accept an org server code's serial (pushes and Activity
+  stay AuthCode-only); the appliance specializer reads the code's serial and the org registration route.
+- **Box log heads.** Each Activity line is chained (`flagship/org-box-log/v1`) and an org box signs the head with
+  its STK (`flagship/org-box-log-head/v1`, every 15 minutes when it moved, `POST …/box-log-heads`). The export
+  carries the servers and their newest heads; `verifyOrgAuditExport` and the CLI check each under the key its
+  server registered with (AT-ENV-46).
+
+Open on this branch: the box's LUKS re-key for a disk-key rotation (needs a real box drill); the org's pseudonyms on
+the admin's screens (labels are sealed under the link key; the org directory key is not built), so waiting people
+show as "Seat <id>"; a seat announces its KEM key only when it rotates (a member that never opens the org page
+receives no new version until it does); keyd's chain rule refuses non-`direct` transitions and does not see
+freezes; Android create, invite and freeze; `.com`'s serial lookup for org install timelines scans `org_objects`
+(no index by kind and key); `/api/order/<serial>/health` (Studio) still needs an AuthCode; nothing has run on a
+device or a real box.
+
+Still open from `0.4/enterprise-build`: passing org approvals at each box order call site, the org directory key,
+the webapp's org UI (it can only show an invitation), conversion of an existing account (§17), and a per-isolate cache
+of the verified chain on `.com` (each request re-verifies every ML-DSA signature).
