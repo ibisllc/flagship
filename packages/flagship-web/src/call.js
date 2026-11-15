@@ -158,7 +158,7 @@ export function startVoiciCall(o) {
   };
 
   async function onAnswer(answer) {
-    const r = checkVoiciCallAnswer(answer, { request, ownerSignPub: index.ownerSignPub, now: deps.now() });
+    const r = checkVoiciCallAnswer(answer, { request, ownerSignPub: index.ownerSignPub, now: deps.now(), username: o.username });
     if (!r.ok) return set("failed", { code: "bad-answer" });
     set("connecting");
     const ss = voiciCallDecapsulate(hexToBytes(answer.xwingCiphertext), callerKey.seed);

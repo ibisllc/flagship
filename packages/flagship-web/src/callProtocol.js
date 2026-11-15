@@ -7,15 +7,18 @@
 //   canonicalVoiciCallRequest, voiciCallRequestHash                                     the request's bytes
 //   voiciCallKeygen, voiciCallDecapsulate, deriveVoiciCallFrameKeys, nextVoiciCallFrameKey   the per-call keys
 //   checkVoiciCallAnswer, canonicalVoiciCallAnswer                                      the owner's answer
+//   canonicalVoiciCallKeyBinding, verifyVoiciCallKeyBinding                             an answer from a locked phone
 //   sealVoiciCallFrameWithKey, openVoiciCallFrameWithKey, VoiciCallFrameSender, VoiciCallFrameReceiver
 //   canonicalVoiciCallEnd                                                               a signed hang-up
 
 import { gcm, hkdf, ml_kem768_x25519, sha256 } from "./proto/vendor/noble-post-quantum/pq-seal.js";
-import { ed25519VerifyHex, hex, hexToBytes, isLowerHex, parseHybridSealPublicKey, sha256Hex } from "./proto/lib/voiciCore.js";
+import { p256 } from "./proto/vendor/noble-post-quantum/pq-seal.js";
+import { ed25519VerifyHex, hex, hexToBytes, isLowerHex, p256VerifyP1363, parseHybridSealPublicKey, sha256Hex } from "./proto/lib/voiciCore.js";
 
 export const TAG_VOICI_CALL_REQUEST = "flagship/voici-call-request/v1";
 export const TAG_VOICI_CALL_ANSWER = "flagship/voici-call-answer/v1";
 export const TAG_VOICI_CALL_END = "flagship/voici-call-end/v1";
+export const TAG_VOICI_CALL_KEY = "flagship/voici-call-key/v1";
 export const TAG_VOICI_CALL_FRAME = "flagship/voici-call-frame/v1";
 export const VOICI_CALL_SKEW_MS = 10 * 60_000;
 export const VOICI_CALL_RING_MS = 45_000;
@@ -189,10 +192,47 @@ export function canonicalVoiciCallAnswer(a) {
 
 const ANSWER_KEYS = ["v", "kind", "callId", "deviceRef", "requestHash", "xwingCiphertext", "answerSdp", "turnUser", "turnSecret", "issuedAt", "sig"];
 
-/** The owner's answer to `request`, under the verified page's ownerSignPub: {ok, answer} or {ok:false, code}. */
-export function checkVoiciCallAnswer(v, { request, ownerSignPub, now }) {
+// ── a call key (answering while locked: docs/voici-calls.md, owner decisions 2026-11-15) ──
+
+const USERNAME = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const DEVICE_ID = /^[0-9a-f]{32}$/;
+const isCallKeyPub = (pub) => {
+  if (!isLowerHex(pub, 65) || !pub.startsWith("04")) return false;
+  try {
+    p256.Point.fromHex(pub);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** `flagship/voici-call-key/v1|<username>|<deviceId>|<callKeyPub>|<createdAt>`, Ed25519 by the page's ownerSignPub. */
+export function canonicalVoiciCallKeyBinding(b) {
+  if (!USERNAME.test(b?.username ?? "") || !DEVICE_ID.test(b.deviceId ?? "") || !isCallKeyPub(b.callKeyPub) || !isTime(b.createdAt)) throw new Error(`${TAG_VOICI_CALL_KEY}: bad field`);
+  return join([TAG_VOICI_CALL_KEY, b.username, b.deviceId, b.callKeyPub, b.createdAt]);
+}
+
+/** The proof an answer carries: {binding:{username, deviceId, callKeyPub, createdAt}, signature} for this page. */
+export function verifyVoiciCallKeyBinding(proof, { ownerSignPub, username }) {
+  if (!isObj(proof) || !exactKeys(proof, ["binding", "signature"]) || !isObj(proof.binding) || !exactKeys(proof.binding, ["username", "deviceId", "callKeyPub", "createdAt"])) return false;
+  if (proof.binding.username !== username || !isLowerHex(proof.signature, 64)) return false;
+  try {
+    return ed25519VerifyHex(proof.signature, canonicalVoiciCallKeyBinding(proof.binding), ownerSignPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The owner's answer to `request`: under the verified page's ownerSignPub, or by a call key the owner bound under it
+ * (then deviceRef must be H(callKeyPub)): {ok, answer} or {ok:false, code}. `username` is the page's account.
+ */
+export function checkVoiciCallAnswer(v, { request, ownerSignPub, now, username }) {
   const no = (code) => ({ ok: false, code });
-  if (!isObj(v) || !(exactKeys(v, ANSWER_KEYS) || exactKeys(v, [...ANSWER_KEYS, "media"])) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
+  if (!isObj(v) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
+  const withKey = Object.prototype.hasOwnProperty.call(v, "callKey");
+  const base = withKey ? [...ANSWER_KEYS, "callKey"] : ANSWER_KEYS;
+  if (!(exactKeys(v, base) || exactKeys(v, [...base, "media"]))) return no("malformed");
   let bytes;
   try {
     bytes = canonicalVoiciCallAnswer(v);
@@ -203,7 +243,13 @@ export function checkVoiciCallAnswer(v, { request, ownerSignPub, now }) {
   if (v.requestHash !== voiciCallRequestHash(request)) return no("wrong-request");
   if (voiciCallMedia(v) === "audio,video" && voiciCallMedia(request) !== "audio,video") return no("bad-sdp");
   if (checkVoiciCallSdp(v.answerSdp, voiciCallMedia(request))) return no("bad-sdp");
-  if (!ed25519VerifyHex(v.sig, bytes, ownerSignPub)) return no("bad-signature");
+  if (withKey) {
+    if (username === undefined || !verifyVoiciCallKeyBinding(v.callKey, { ownerSignPub, username })) return no("bad-call-key");
+    if (v.deviceRef !== sha256Hex(hexToBytes(v.callKey.binding.callKeyPub))) return no("bad-call-key");
+    if (!p256VerifyP1363(v.sig, bytes, v.callKey.binding.callKeyPub)) return no("bad-signature");
+  } else if (!ed25519VerifyHex(v.sig, bytes, ownerSignPub)) {
+    return no("bad-signature");
+  }
   if (now !== undefined && Math.abs(v.issuedAt - now) > VOICI_CALL_SKEW_MS) return no("stale");
   return { ok: true, answer: v };
 }

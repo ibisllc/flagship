@@ -12,6 +12,21 @@
  *   end      flagship/voici-call-end/v1|<callId>|<side>|<reason>|<issuedAt>   B (caller) or ownerSignPub (owner)
  *   allow    flagship/voici-call-allow/v1|<pageId>|<conv>|<allow|disallow>|<issuedAt>   Ed25519 by ownerSignPub
  *
+ * Answering while locked (docs/voici-calls.md, owner decisions 2026-11-15): a device may hold a call-only P-256 key
+ * (Keychain after-first-unlock / Secure Enclave; Android Keystore without user auth / StrongBox), bound once under the
+ * owner messages key. It signs only three things, each under its own tag; every other verifier refuses it (it is a
+ * P-256 key no other record accepts as its signer):
+ *   binding  flagship/voici-call-key/v1|<username>|<deviceId>|<callKeyPub>|<createdAt>   Ed25519 by ownerSignPub
+ *   revoke   flagship/voici-call-key-revoke/v1|<username>|<deviceId>|<callKeyPub>|<revokedAt>
+ *            Ed25519 by ownerSignPub, or P-256 by the call key itself
+ *   join     flagship/voici-call-join/v1|<username>|<callId>|<deviceId>|<callKeyPub>|<issuedAt>   P-256 by the call key:
+ *            the ringing device's room WebSocket while the account key is locked
+ *   answer   the answer above, P-256 (IEEE P1363) by the call key, carrying `callKey: {binding, signature}`;
+ *            deviceRef = H(callKeyPub)
+ *   end      an owner end order may be signed by the winning answer's call key
+ * callKeyPub is SEC1 uncompressed P-256, hex (130). `.com` stores the binding and its revocation; the caller's browser
+ * checks the binding under the page's ownerSignPub.
+ *
  * H = SHA-256 hex. turnSecret is the UTF-8 of its hex. deviceRef = SHA-256 hex of the raw device public key.
  *
  * Frame layer (flagship/voici-call-frame/v1):
@@ -58,6 +73,9 @@ export const TAG_VOICI_CALL_ALLOW = "flagship/voici-call-allow/v1";
 export const TAG_VOICI_CALL_FRAME = "flagship/voici-call-frame/v1";
 export const TAG_VOICI_CALL_PUSH = "flagship/voici-call-push/v1";
 export const TAG_VOICI_MISSED_CALL = "flagship/voici-missed-call/v1";
+export const TAG_VOICI_CALL_KEY = "flagship/voici-call-key/v1";
+export const TAG_VOICI_CALL_KEY_REVOKE = "flagship/voici-call-key-revoke/v1";
+export const TAG_VOICI_CALL_JOIN = "flagship/voici-call-join/v1";
 
 /** `.com` and the phone refuse set-up records further than this from their clock. */
 export const VOICI_CALL_SKEW_MS = 10 * 60_000;
@@ -604,6 +622,8 @@ export interface VoiciCallAnswer extends VoiciCallAnswerBody {
   v: 1;
   kind: "voici-call-answer";
   sig: string;
+  /** Present when a bound call key signed (`sig` is then P-256 IEEE P1363 by binding.callKeyPub). */
+  callKey?: VoiciCallKeyProof;
 }
 const ANSWER_KEYS = ["v", "kind", "callId", "deviceRef", "requestHash", "xwingCiphertext", "answerSdp", "turnUser", "turnSecret", "issuedAt", "sig"];
 
@@ -632,14 +652,27 @@ export function signVoiciCallAnswer(a: VoiciCallAnswerBody, ownerSignSeed: Bytes
   return { v: 1, kind: "voici-call-answer", ...a, sig: hex(ed.sign(canonicalVoiciCallAnswer(a), ownerSignSeed)) };
 }
 
-export type VoiciCallAnswerRefusal = "malformed" | "wrong-call" | "wrong-request" | "bad-sdp" | "bad-signature" | "stale";
+/** The answer signed by a bound call key instead of the owner messages key (§ answering while locked). */
+export function signVoiciCallAnswerWithCallKey(a: VoiciCallAnswerBody, callKeyPriv: Bytes, proof: VoiciCallKeyProof): VoiciCallAnswer {
+  return { v: 1, kind: "voici-call-answer", ...a, sig: hex(p256.sign(canonicalVoiciCallAnswer(a), callKeyPriv, { lowS: true })), callKey: proof };
+}
 
+export type VoiciCallAnswerRefusal = "malformed" | "wrong-call" | "wrong-request" | "bad-sdp" | "bad-signature" | "stale" | "bad-call-key";
+
+/**
+ * An answer for `ctx.request`. Signed by ownerSignPub, or by a bound call key: then its proof must verify under
+ * ownerSignPub for `ctx.username`, deviceRef must be H(callKeyPub), and when `ctx.callKeyPub` is given (the room, which
+ * checked `.com`'s stored binding at join) the key must be that one.
+ */
 export function checkVoiciCallAnswer(
   v: unknown,
-  ctx: { request: VoiciCallRequestBody; ownerSignPub: string; now?: number },
+  ctx: { request: VoiciCallRequestBody; ownerSignPub: string; now?: number; username?: string; callKeyPub?: string },
 ): { ok: true; answer: VoiciCallAnswer } | Fail<VoiciCallAnswerRefusal> {
   const no = (code: VoiciCallAnswerRefusal): Fail<VoiciCallAnswerRefusal> => ({ ok: false, code });
-  if (!isObj(v) || !(exactKeys(v, ANSWER_KEYS) || exactKeys(v, [...ANSWER_KEYS, "media"])) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
+  if (!isObj(v) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
+  const withKey = Object.prototype.hasOwnProperty.call(v, "callKey");
+  const base = withKey ? [...ANSWER_KEYS, "callKey"] : ANSWER_KEYS;
+  if (!(exactKeys(v, base) || exactKeys(v, [...base, "media"]))) return no("malformed");
   const a = v as unknown as VoiciCallAnswer;
   let bytes: Bytes;
   try {
@@ -651,7 +684,15 @@ export function checkVoiciCallAnswer(
   if (a.requestHash !== voiciCallRequestHash(ctx.request)) return no("wrong-request");
   if (hasVideo(voiciCallMedia(a)) && !hasVideo(voiciCallMedia(ctx.request))) return no("bad-sdp");
   if (checkVoiciCallSdp(a.answerSdp, voiciCallMedia(ctx.request))) return no("bad-sdp");
-  if (!ed25519VerifyHex(a.sig, bytes, ctx.ownerSignPub)) return no("bad-signature");
+  if (withKey) {
+    const proof = parseVoiciCallKeyProof(a.callKey);
+    if (!proof || ctx.username === undefined || !verifyVoiciCallKeyBinding(proof.binding, proof.signature, { ownerSignPub: ctx.ownerSignPub, username: ctx.username })) return no("bad-call-key");
+    if (ctx.callKeyPub !== undefined && proof.binding.callKeyPub !== ctx.callKeyPub) return no("bad-call-key");
+    if (a.deviceRef !== voiciCallDeviceRef(proof.binding.callKeyPub)) return no("bad-call-key");
+    if (!p256VerifyP1363(a.sig, bytes, proof.binding.callKeyPub)) return no("bad-signature");
+  } else if (ctx.callKeyPub !== undefined || !ed25519VerifyHex(a.sig, bytes, ctx.ownerSignPub)) {
+    return no("bad-signature");
+  }
   if (ctx.now !== undefined && Math.abs(a.issuedAt - ctx.now) > VOICI_CALL_SKEW_MS) return no("stale");
   return { ok: true, answer: a };
 }
@@ -739,8 +780,17 @@ export function signVoiciCallEndCallerP256(e: Omit<VoiciCallEndBody, "side">, br
   return { v: 1, kind: "voici-call-end", ...body, sig: hex(p256.sign(canonicalVoiciCallEnd(body), browserPriv, { lowS: true })) };
 }
 
-/** An end order for `callId`: the caller's under B (P-256), the owner's under ownerSignPub (Ed25519). */
-export function checkVoiciCallEnd(v: unknown, ctx: { callId: string; callerPub: string; ownerSignPub: string }): VoiciCallEnd | null {
+/** The owner's end order signed by the call key that answered (P-256). */
+export function signVoiciCallEndOwnerWithCallKey(e: Omit<VoiciCallEndBody, "side">, callKeyPriv: Bytes): VoiciCallEnd {
+  const body = { ...e, side: "owner" as const };
+  return { v: 1, kind: "voici-call-end", ...body, sig: hex(p256.sign(canonicalVoiciCallEnd(body), callKeyPriv, { lowS: true })) };
+}
+
+/**
+ * An end order for `callId`: the caller's under B (P-256), the owner's under ownerSignPub (Ed25519) or, when the call
+ * was answered with a call key, under that key (`ownerCallKeyPub`, P-256).
+ */
+export function checkVoiciCallEnd(v: unknown, ctx: { callId: string; callerPub: string; ownerSignPub: string; ownerCallKeyPub?: string }): VoiciCallEnd | null {
   if (!isObj(v) || !exactKeys(v, END_KEYS) || v.v !== 1 || v.kind !== "voici-call-end" || typeof v.sig !== "string") return null;
   const e = v as unknown as VoiciCallEnd;
   let bytes: Bytes;
@@ -750,8 +800,152 @@ export function checkVoiciCallEnd(v: unknown, ctx: { callId: string; callerPub: 
     return null;
   }
   if (e.callId !== ctx.callId) return null;
-  const ok = e.side === "caller" ? p256VerifyP1363(e.sig, bytes, ctx.callerPub) : ed25519VerifyHex(e.sig, bytes, ctx.ownerSignPub);
+  const ok =
+    e.side === "caller"
+      ? p256VerifyP1363(e.sig, bytes, ctx.callerPub)
+      : ed25519VerifyHex(e.sig, bytes, ctx.ownerSignPub) || (ctx.ownerCallKeyPub !== undefined && p256VerifyP1363(e.sig, bytes, ctx.ownerCallKeyPub));
   return ok ? e : null;
+}
+
+// ── call key (answering while locked) ──────────────────────────────────────
+
+export interface VoiciCallKeyBinding {
+  username: string;
+  deviceId: string;
+  /** SEC1 uncompressed P-256, hex (130). */
+  callKeyPub: string;
+  createdAt: number;
+}
+export interface VoiciCallKeyProof {
+  binding: VoiciCallKeyBinding;
+  /** Ed25519 by the page's ownerSignPub over the binding. */
+  signature: string;
+}
+export interface VoiciCallKeyRevoke {
+  username: string;
+  deviceId: string;
+  callKeyPub: string;
+  revokedAt: number;
+}
+
+const DEVICE_ID = /^[0-9a-f]{32}$/;
+/** A valid SEC1 uncompressed P-256 point, hex. */
+export function isVoiciCallKeyPub(pub: unknown): pub is string {
+  if (!isLowerHex(pub, 65) || !pub.startsWith("04")) return false;
+  try {
+    p256.Point.fromHex(pub);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function callKeyFields(b: { username: string; deviceId: string; callKeyPub: string }, at: number, tag: string): void {
+  if (typeof b.username !== "string" || !USERNAME.test(b.username) || typeof b.deviceId !== "string" || !DEVICE_ID.test(b.deviceId) || !isVoiciCallKeyPub(b.callKeyPub) || !isTime(at)) {
+    throw new Error(`${tag}: bad field`);
+  }
+}
+
+export function canonicalVoiciCallKeyBinding(b: VoiciCallKeyBinding): Bytes {
+  callKeyFields(b, b.createdAt, TAG_VOICI_CALL_KEY);
+  return join([TAG_VOICI_CALL_KEY, b.username, b.deviceId, b.callKeyPub, b.createdAt]);
+}
+
+export function signVoiciCallKeyBinding(b: VoiciCallKeyBinding, ownerSignSeed: Bytes): VoiciCallKeyProof {
+  return { binding: { username: b.username, deviceId: b.deviceId, callKeyPub: b.callKeyPub, createdAt: b.createdAt }, signature: hex(ed.sign(canonicalVoiciCallKeyBinding(b), ownerSignSeed)) };
+}
+
+const BINDING_KEYS = ["username", "deviceId", "callKeyPub", "createdAt"];
+
+export function parseVoiciCallKeyBinding(v: unknown): VoiciCallKeyBinding | null {
+  if (!isObj(v) || !exactKeys(v, BINDING_KEYS)) return null;
+  const b = v as unknown as VoiciCallKeyBinding;
+  try {
+    canonicalVoiciCallKeyBinding(b);
+  } catch {
+    return null;
+  }
+  return { username: b.username, deviceId: b.deviceId, callKeyPub: b.callKeyPub, createdAt: b.createdAt };
+}
+
+export function parseVoiciCallKeyProof(v: unknown): VoiciCallKeyProof | null {
+  if (!isObj(v) || !exactKeys(v, ["binding", "signature"]) || !isLowerHex(v.signature, 64)) return null;
+  const binding = parseVoiciCallKeyBinding(v.binding);
+  return binding ? { binding, signature: v.signature as string } : null;
+}
+
+export function verifyVoiciCallKeyBinding(b: VoiciCallKeyBinding, signature: string, ctx: { ownerSignPub: string; username: string }): boolean {
+  if (b.username !== ctx.username) return false;
+  try {
+    return ed25519VerifyHex(signature, canonicalVoiciCallKeyBinding(b), ctx.ownerSignPub);
+  } catch {
+    return false;
+  }
+}
+
+export function canonicalVoiciCallKeyRevoke(r: VoiciCallKeyRevoke): Bytes {
+  callKeyFields(r, r.revokedAt, TAG_VOICI_CALL_KEY_REVOKE);
+  return join([TAG_VOICI_CALL_KEY_REVOKE, r.username, r.deviceId, r.callKeyPub, r.revokedAt]);
+}
+
+export function signVoiciCallKeyRevokeOwner(r: VoiciCallKeyRevoke, ownerSignSeed: Bytes): string {
+  return hex(ed.sign(canonicalVoiciCallKeyRevoke(r), ownerSignSeed));
+}
+
+export function signVoiciCallKeyRevokeSelf(r: VoiciCallKeyRevoke, callKeyPriv: Bytes): string {
+  return hex(p256.sign(canonicalVoiciCallKeyRevoke(r), callKeyPriv, { lowS: true }));
+}
+
+export function parseVoiciCallKeyRevoke(v: unknown): VoiciCallKeyRevoke | null {
+  if (!isObj(v) || !exactKeys(v, ["username", "deviceId", "callKeyPub", "revokedAt"])) return null;
+  const r = v as unknown as VoiciCallKeyRevoke;
+  try {
+    canonicalVoiciCallKeyRevoke(r);
+  } catch {
+    return null;
+  }
+  return { username: r.username, deviceId: r.deviceId, callKeyPub: r.callKeyPub, revokedAt: r.revokedAt };
+}
+
+/** A revocation signed by the page's ownerSignPub (Ed25519) or by the revoked call key itself (P-256). */
+export function verifyVoiciCallKeyRevoke(r: VoiciCallKeyRevoke, signature: string, ctx: { ownerSignPub: string; username: string }): boolean {
+  if (r.username !== ctx.username) return false;
+  let bytes: Bytes;
+  try {
+    bytes = canonicalVoiciCallKeyRevoke(r);
+  } catch {
+    return false;
+  }
+  return ed25519VerifyHex(signature, bytes, ctx.ownerSignPub) || p256VerifyP1363(signature, bytes, r.callKeyPub);
+}
+
+export interface VoiciCallJoin {
+  username: string;
+  callId: string;
+  deviceId: string;
+  callKeyPub: string;
+  issuedAt: number;
+}
+
+export function canonicalVoiciCallJoin(j: VoiciCallJoin): Bytes {
+  callKeyFields(j, j.issuedAt, TAG_VOICI_CALL_JOIN);
+  if (!isLowerHex(j.callId, 16)) throw new Error(`${TAG_VOICI_CALL_JOIN}: bad field`);
+  return join([TAG_VOICI_CALL_JOIN, j.username, j.callId, j.deviceId, j.callKeyPub, j.issuedAt]);
+}
+
+export function signVoiciCallJoin(j: VoiciCallJoin, callKeyPriv: Bytes): string {
+  return hex(p256.sign(canonicalVoiciCallJoin(j), callKeyPriv, { lowS: true }));
+}
+
+/** A join by the call key `j.callKeyPub`, fresh within the skew at `now`. */
+export function verifyVoiciCallJoin(j: VoiciCallJoin, signature: string, now: number): boolean {
+  let bytes: Bytes;
+  try {
+    bytes = canonicalVoiciCallJoin(j);
+  } catch {
+    return false;
+  }
+  return Math.abs(j.issuedAt - now) <= VOICI_CALL_SKEW_MS && p256VerifyP1363(signature, bytes, j.callKeyPub);
 }
 
 // ── call-allow order ───────────────────────────────────────────────────────

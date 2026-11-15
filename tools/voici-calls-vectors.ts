@@ -210,6 +210,102 @@ const answerChecks = (
   ] as const
 ).map(([name, a, c, expected]) => ({ name, answer: a, ctx: c, expected: want(`answer ${name}`, code(P.checkVoiciCallAnswer(a, { request, ...c })), expected) }));
 
+// ── call key (answering while locked) ──────────────────────────────────────
+
+const USER = "alice";
+const DEVICE_ID = "d1".repeat(16);
+const callKeyPriv = fill(32, 0x71);
+const callKeyPub = H(p256.getPublicKey(callKeyPriv, false));
+const otherCallKeyPriv = fill(32, 0x72);
+const otherCallKeyPub = H(p256.getPublicKey(otherCallKeyPriv, false));
+const binding: P.VoiciCallKeyBinding = { username: USER, deviceId: DEVICE_ID, callKeyPub, createdAt: M.t0 - 86_400_000 };
+const proof = P.signVoiciCallKeyBinding(binding, ownerSignSeed);
+const bctx = { ownerSignPub: OWNER_SIGN_PUB, username: USER };
+const bindingChecks = (
+  [
+    ["valid", proof.binding, proof.signature, bctx, true],
+    ["another account", proof.binding, proof.signature, { ...bctx, username: "bob" }, false],
+    ["key swapped after signing", { ...proof.binding, callKeyPub: otherCallKeyPub }, proof.signature, bctx, false],
+    ["device swapped after signing", { ...proof.binding, deviceId: "d2".repeat(16) }, proof.signature, bctx, false],
+    ["signed by the pseudonym", proof.binding, P.signVoiciCallKeyBinding(binding, h(d.pseudonymSeed)).signature, bctx, false],
+    ["signed by the call key's owner of another page", proof.binding, P.signVoiciCallKeyBinding(binding, h(k.adminRootSeed)).signature, bctx, false],
+  ] as const
+).map(([name, b, sig, c, expected]) => ({ name, binding: b, signature: sig, ctx: c, expected: want(`binding ${name}`, P.verifyVoiciCallKeyBinding(b, sig, c), expected) }));
+const bindingShapes = (
+  [
+    ["valid", proof.binding, true],
+    ["extra key", { ...proof.binding, extra: 1 }, false],
+    ["compressed key", { ...proof.binding, callKeyPub: H(p256.getPublicKey(callKeyPriv, true)) }, false],
+    ["not on the curve", { ...proof.binding, callKeyPub: "04" + "11".repeat(64) }, false],
+    ["uppercase key", { ...proof.binding, callKeyPub: callKeyPub.toUpperCase() }, false],
+    ["short device id", { ...proof.binding, deviceId: "d1" }, false],
+    ["bad username", { ...proof.binding, username: "Alice" }, false],
+    ["fractional time", { ...proof.binding, createdAt: 1.5 }, false],
+  ] as const
+).map(([name, b, expected]) => ({ name, binding: b, expected: want(`binding shape ${name}`, P.parseVoiciCallKeyBinding(b) !== null, expected) }));
+
+const keyRef = P.voiciCallDeviceRef(callKeyPub);
+const keyAnswerBody: P.VoiciCallAnswerBody = { ...answerBody, deviceRef: keyRef };
+const keyAnswer = P.signVoiciCallAnswerWithCallKey(keyAnswerBody, callKeyPriv, proof);
+const kctx = { ownerSignPub: OWNER_SIGN_PUB, now: NOW, username: USER };
+const keyAnswerChecks = (
+  [
+    ["valid (browser)", keyAnswer, kctx, "ok"],
+    ["valid (room, the joined key)", keyAnswer, { ...kctx, callKeyPub }, "ok"],
+    ["room joined another key", keyAnswer, { ...kctx, callKeyPub: otherCallKeyPub }, "bad-call-key"],
+    ["no account to check the binding", keyAnswer, { ownerSignPub: OWNER_SIGN_PUB, now: NOW }, "bad-call-key"],
+    ["binding of another account", keyAnswer, { ...kctx, username: "bob" }, "bad-call-key"],
+    ["deviceRef not the call key's", P.signVoiciCallAnswerWithCallKey(answerBody, callKeyPriv, proof), kctx, "bad-call-key"],
+    ["signed by an unbound key", P.signVoiciCallAnswerWithCallKey(keyAnswerBody, otherCallKeyPriv, proof), kctx, "bad-signature"],
+    ["binding forged by the pseudonym", P.signVoiciCallAnswerWithCallKey(keyAnswerBody, callKeyPriv, P.signVoiciCallKeyBinding(binding, h(d.pseudonymSeed))), kctx, "bad-call-key"],
+    ["owner-signed answer with a call key attached", { ...answer, callKey: proof }, kctx, "bad-call-key"],
+    ["owner-signed answer where the room joined a call key", answer, { ...kctx, callKeyPub }, "bad-signature"],
+    ["call key signs without a proof", { ...keyAnswer, callKey: undefined }, kctx, "bad-signature"],
+    ["proof with an extra key", { ...keyAnswer, callKey: { ...proof, extra: 1 } }, kctx, "bad-call-key"],
+    ["turn secret swapped", { ...keyAnswer, turnSecret: "00".repeat(32) }, kctx, "bad-signature"],
+  ] as const
+).map(([name, a, c, expected]) => ({ name, answer: JSON.parse(JSON.stringify(a)), ctx: c, expected: want(`call-key answer ${name}`, code(P.checkVoiciCallAnswer(JSON.parse(JSON.stringify(a)), { request, ...c })), expected) }));
+
+const join: P.VoiciCallJoin = { username: USER, callId: CALL_ID, deviceId: DEVICE_ID, callKeyPub, issuedAt: M.t0 + 2_000 };
+const joinSig = P.signVoiciCallJoin(join, callKeyPriv);
+const joinChecks = (
+  [
+    ["valid", join, joinSig, M.t0 + 3_000, true],
+    ["another call", { ...join, callId: "00".repeat(16) }, joinSig, M.t0 + 3_000, false],
+    ["another device", { ...join, deviceId: "d2".repeat(16) }, joinSig, M.t0 + 3_000, false],
+    ["signed by another key", join, P.signVoiciCallJoin(join, otherCallKeyPriv), M.t0 + 3_000, false],
+    ["stale", join, joinSig, join.issuedAt + P.VOICI_CALL_SKEW_MS + 1, false],
+  ] as const
+).map(([name, j, sig, now, expected]) => ({ name, join: j, signature: sig, now, expected: want(`join ${name}`, P.verifyVoiciCallJoin(j, sig, now), expected) }));
+
+const revoke: P.VoiciCallKeyRevoke = { username: USER, deviceId: DEVICE_ID, callKeyPub, revokedAt: M.t0 + 90_000 };
+const revokeOwnerSig = P.signVoiciCallKeyRevokeOwner(revoke, ownerSignSeed);
+const revokeSelfSig = P.signVoiciCallKeyRevokeSelf(revoke, callKeyPriv);
+const revokeChecks = (
+  [
+    ["by the owner key", revoke, revokeOwnerSig, bctx, true],
+    ["by the call key itself", revoke, revokeSelfSig, bctx, true],
+    ["by another call key", revoke, P.signVoiciCallKeyRevokeSelf(revoke, otherCallKeyPriv), bctx, false],
+    ["another account", revoke, revokeOwnerSig, { ...bctx, username: "bob" }, false],
+    ["key swapped", { ...revoke, callKeyPub: otherCallKeyPub }, revokeSelfSig, bctx, false],
+    ["binding signature reused as a revocation", revoke, proof.signature, bctx, false],
+  ] as const
+).map(([name, r, sig, c, expected]) => ({ name, revoke: r, signature: sig, ctx: c, expected: want(`revoke ${name}`, P.verifyVoiciCallKeyRevoke(r, sig, c), expected) }));
+
+const keyEnd = P.signVoiciCallEndOwnerWithCallKey({ callId: CALL_ID, reason: "hangup", issuedAt: M.t0 + 60_000 }, callKeyPriv);
+const keyEndChecks = (
+  [
+    ["the answering call key", keyEnd, callKeyPub, true],
+    ["no call key answered", keyEnd, undefined, false],
+    ["another call key answered", keyEnd, otherCallKeyPub, false],
+  ] as const
+).map(([name, e, pub, expected]) => ({
+  name,
+  end: e,
+  ownerCallKeyPub: pub ?? null,
+  expected: want(`call-key end ${name}`, P.checkVoiciCallEnd(e, { callId: CALL_ID, callerPub: k.browserPub, ownerSignPub: OWNER_SIGN_PUB, ...(pub ? { ownerCallKeyPub: pub } : {}) }) !== null, expected),
+}));
+
 // ── frames ─────────────────────────────────────────────────────────────────
 
 const fk = P.deriveVoiciCallFrameKeys(encap.sharedSecret, requestBytes, answerBytes);
@@ -635,6 +731,22 @@ const doc = {
   allow: { order: allow, canonical: new TextDecoder().decode(P.canonicalVoiciCallAllow(allow)), signature: allowSig },
   push: { payload: { v: 1, callId: CALL_ID, pageId: PAGE_ID, conv: CONV, from: PPUB }, issuedAt: M.t0 + 1_000, eseed: H(pushEseed), sealed: P.b64Encode(pushSealed), badConvSealed: P.b64Encode(pushBadConv) },
   pageV2: { body: pageV2Body, signed: pageV2, canonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(pageV2)), ctx: pctx, checks: pageV2Checks },
+  callKey: {
+    priv: H(callKeyPriv),
+    pub: callKeyPub,
+    otherPriv: H(otherCallKeyPriv),
+    otherPub: otherCallKeyPub,
+    username: USER,
+    deviceId: DEVICE_ID,
+    binding: proof,
+    bindingCanonical: new TextDecoder().decode(P.canonicalVoiciCallKeyBinding(binding)),
+    bindingChecks,
+    bindingShapes,
+    answer: { body: keyAnswerBody, signed: keyAnswer, deviceRef: keyRef, checks: keyAnswerChecks },
+    join: { body: join, canonical: new TextDecoder().decode(P.canonicalVoiciCallJoin(join)), signature: joinSig, checks: joinChecks },
+    revoke: { body: revoke, canonical: new TextDecoder().decode(P.canonicalVoiciCallKeyRevoke(revoke)), ownerSignature: revokeOwnerSig, selfSignature: revokeSelfSig, checks: revokeChecks },
+    end: { signed: keyEnd, checks: keyEndChecks },
+  },
   missedCall: { entry: missed, eseed: H(missedEseed), sealed: P.b64Encode(missedSealed), forgedSealed: P.b64Encode(missedForged) },
   video: {
     buckets: P.VOICI_CALL_VIDEO_BUCKETS,

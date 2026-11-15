@@ -261,6 +261,10 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/voici-call-receipt/v1": "vectors voiciCallsVectors.test.ts receipt.checks (10 cases: unknown CA, device swapped, another account or device, too long, expired, not yet valid); CA artifact",
   "flagship/voici-call-end/v1": "vectors voiciCallsVectors.test.ts end.checks (owner end claimed as caller, another call, caller key swapped, unknown reason)",
   "flagship/voici-call-frame/v1": "kdf + aad: per-direction frame keys and epoch ratchet; refusals in voiciCallsVectors.test.ts frames.refusals",
+  "flagship/voici-call-allow/v1": "vectors voiciCallsVectors.test.ts allow (op swapped after signing refused); verifyVoiciCallAllow under the page's ownerSignPub only; handleVoiciCallAllow refuses a stale order or another page",
+  "flagship/voici-call-key/v1": "vectors voiciCallsVectors.test.ts callKey.bindingChecks + bindingShapes (14 cases: another account, key or device swapped after signing, signed by the pseudonym or another key, extra key, compressed or off-curve key, uppercase hex, short device id, bad username, fractional time); voiciCallKeys.test.ts (a binding under an old page key is refused at join)",
+  "flagship/voici-call-key-revoke/v1": "vectors voiciCallsVectors.test.ts callKey.revoke.checks (by another call key, another account, key swapped, the binding signature replayed as a revocation); voiciCallKeys.test.ts (a revoked key never binds again)",
+  "flagship/voici-call-join/v1": "vectors voiciCallsVectors.test.ts callKey.join.checks (another call or device, another key, stale); voiciCallKeys.test.ts (not an admin device, a replaced key)",
   "flagship/voici-call-push/v1": "aad: hybrid seal purpose of the content-free ring push (badConvSealed refused in voiciCallsVectors.test.ts)",
   "flagship/voici-missed-call/v1": "aad: hybrid seal purpose of a missed call; the sealed entry carries the caller's signed request, re-checked on open (forgedSealed refused in voiciCallsVectors.test.ts)",
   // ---- retail box claim (docs/retail-box-setup.md §7, §15; boxClaimVectors.test.ts + test-vectors/box-claim)

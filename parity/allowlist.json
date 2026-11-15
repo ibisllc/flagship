@@ -777,6 +777,21 @@
       "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
     },
     {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-key/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8), so it holds no call key (answering while locked, owner decisions 2026-11-15): the call binding is made only by a phone that can ring; the caller's browser checks it in packages/flagship-web/src/callProtocol.js (verifyVoiciCallKeyBinding), pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-key-revoke/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8), so it holds no call key (answering while locked, owner decisions 2026-11-15): the call key exists only on a phone that can ring, so only a phone revokes it (owner-signed when unlocked, self-signed on sign-out)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-join/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8), so it holds no call key (answering while locked, owner decisions 2026-11-15): the call key joins the room only from a ringing phone that is locked; the room check is packages/control-plane/src/voiciCalls.ts (authorizeVoiciCallKeyDevice)."
+    },
+    {
       "check": "push-categories",
       "key": "web:voici-call",
       "reason": "Calls ring only native admin devices: .com never sends a voici-call push to a browser's Web Push token (docs/voici-calls.md §8)."
