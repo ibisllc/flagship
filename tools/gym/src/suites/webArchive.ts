@@ -367,4 +367,43 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
       dimension: "D1",
     },
   ),
+  // Restore a backup into a running server (gym-restoremerge.spec.ts, docs/restore-into-server.md §7).
+  webTotal(
+    "web-total-restore-merge-saved",
+    "Server page → Backups → a saved backup → Restore into this server…: the backup opens with this account's key, an admin-root-signed flagship/server-restore-stage/v1 (source saved) lets the box check it, the preview shows New / Already / Different groups with the accepted defaults (keep, install, skip for an app on another server, copy on a clash), a clash's replace is greyed with the box's reason, notes → Restore the backup's version, Restore sends an admin-root-signed flagship/server-restore-merge/v1 whose planSha256 covers exactly the shown lines (guards on the replace only), the result lists each app, and the earlier copy's Undo is confirmed and signed (flagship/app-restore-undo/v1).",
+    "gym restore-merge an admin restores a saved backup into the server with the accepted defaults, a replace, and Undo",
+    {
+      steps: [
+        { kind: "tap", describe: "Restore into this server… on a saved backup.", handle: "[data-bk-restore]" },
+        { kind: "tap", describe: "notes → Restore the backup's version.", handle: '[data-rm-option="replace"] input' },
+        { kind: "tap", describe: "Restore.", handle: "[data-rm-restore]" },
+        { kind: "tap", describe: "Undo on the earlier copy (confirm).", handle: "[data-rm-undo]" },
+      ],
+      assertions: [{ describe: "Groups", handle: "[data-rm-group]", expect: "text", text: "New on this server" }],
+      screenshots: [shot("restore-merge-choose", "The per-app choices."), shot("restore-merge-result", "The result with the earlier copy.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-restore-merge-file",
+    "Restore apps from a backup file…: the .flagship file's data part is sent to the box in chunks after a signed stage (source upload), Restore stays off while every app is on keep or skip, and closing before the plan drops the staging (POST cancel) with no plan sent.",
+    "gym restore-merge a backup file is sent to the box, Restore stays off for keep and skip only, and closing drops the staging",
+    {
+      steps: [{ kind: "tap", describe: "Pick a .flagship file.", handle: "#bk-restore-file" }],
+      assertions: [{ describe: "Hint", handle: "[data-rm-hint]", expect: "text", text: "Choose at least one app to restore." }],
+      screenshots: [shot("restore-merge-nothing-chosen", "Nothing to restore.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-restore-merge-non-admin",
+    "On a non-admin device the restore buttons are disabled with 'Only an admin device of this account can restore a backup.' and no restore order is sent.",
+    "gym restore-merge a non-admin device sees why and sends no order",
+    {
+      steps: [],
+      assertions: [{ describe: "Admin-only line", handle: "[data-restore-admin-only]", expect: "present" }],
+      screenshots: [shot("restore-merge-non-admin", "Non-admin device.")],
+      dimension: "D4",
+    },
+  ),
 ];
