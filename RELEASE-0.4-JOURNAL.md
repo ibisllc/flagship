@@ -594,6 +594,25 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   hosting question is only where our build machines fetch the pinned binary from); options written in
   `docs/voici-calls-webrtc-options.md` "Where the built library lives".
 
+- 2026-11-15: **Disk full (ENOSPC)** stopped every agent mid-work. The owner cleaned up from a normal Terminal (a `!`
+  command can't run while Claude Code's own temporary folder is full). libwebrtc and webapp-custody were paused,
+  then resumed with disk rules: no local libwebrtc build, a `df` check before big steps, stop under 5 GB. Lesson: Xcode
+  derived data, the Swift `.build` folders and downloaded CI artifacts fill this Mac fast.
+  **org-directory merged** (`..92a2c9884`): D1 **0148** index; sealed directory entries; connectors and proposals
+  that take effect only through admin orders; seat KEM key sent at join; Android create/invite/freeze; pseudonyms
+  replace "Seat <id>"; SCIM 2.0 and LDAP pull (`ldapts@9.2.0`) on the org box; the `DirectorySource` guide
+  `docs/directory-connectors.md`; the iOS/Android directory console. 1435 targeted tests, i18n and parity green.
+  Release-manager decisions: connector setup through the admin's phone OK; an approver leaving flags the connector
+  for re-approval (7-day grace, then suspended); members get their directory slice in 0.4. The agent is resumed to
+  close every console gap (LDAP form, mapping editor, pause/retire/rotate, role-change execution, per-request SCIM
+  audit, OpenLDAP CI, the member view).
+  **Calls, pseudonymity (owner):** "impossible to be pseudonymous AND keep direct-to-phone": correct for the callee
+  direction. Proposed: the pseudonymous side always dials out and the public side hosts; default A (no ring, "tried
+  to call you · Call back"); B (ring by the visitor's opt-in, policy-only unlinkability at `.com`); drop the card (C).
+  Waiting on the owner. calls-callback resumed on the parts that don't depend on it (calling known pages from the
+  app, call history, call-key cleanup on revoke, a Playwright browser call, webapp handoff, a check whether the relay
+  leaks visitor IPs).
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -608,7 +627,7 @@ change ships with 0.4.
 
 Next steps for whoever resumes:
 1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
-   - Running: `org-directory`, `libwebrtc`, `calls-callback`, `webapp-custody` (reserved: shells v217/v218/v219,
+   - Running: `org-directory` (gap closure), `libwebrtc`, `calls-callback`, `webapp-custody` (reserved: shells v217/v218/v219,
      migrations 0148 directory, 0149 callback, 0150 custody). `calls-2` (incl. locked answering) is merged.
    - `enterprise-3` merged; `org-directory` agent next (directory + SCIM/LDAP connectors, KEM at join, index 0148,
      Android create/invite/freeze).
@@ -626,7 +645,7 @@ Next steps for whoever resumes:
    - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
    - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
    - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
-4. **Waiting on the owner:** where the built libwebrtc binary lives (options in the WebRTC doc); signing the webapp shell
+4. **Waiting on the owner:** calls to pseudonymous visitors (A no-ring default + B opt-in ring?); where the built libwebrtc binary lives (options in the WebRTC doc); signing the webapp shell
    at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
    enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
 5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
