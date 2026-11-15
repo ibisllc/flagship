@@ -12,7 +12,13 @@ fn reset_leaves_only_a_fresh_identity() {
         fs::write(dir.join(f), format!("{}\n", "11".repeat(32))).unwrap();
         fs::set_permissions(dir.join(f), fs::Permissions::from_mode(0o400)).unwrap();
     }
-    for f in ["policy.json", "owner.json", "audit.log", "revocations.json", "acme-account.key"] {
+    for f in [
+        "policy.json",
+        "owner.json",
+        "audit.log",
+        "revocations.json",
+        "acme-account.key",
+    ] {
         fs::write(dir.join(f), "{\"previous\":\"owner\"}").unwrap();
     }
     fs::write(dir.join("tls").join("old.key"), "old").unwrap();
@@ -25,7 +31,9 @@ fn reset_leaves_only_a_fresh_identity() {
     names.sort();
     assert_eq!(names, vec!["identity-mldsa.key", "identity.key"]);
     let id = read_key_file(&dir.join("identity.key")).unwrap().unwrap();
-    let pq = read_key_file(&dir.join("identity-mldsa.key")).unwrap().unwrap();
+    let pq = read_key_file(&dir.join("identity-mldsa.key"))
+        .unwrap()
+        .unwrap();
     assert_ne!(*id, [0x11u8; 32]);
     assert_ne!(*id, *pq);
     for f in ["identity.key", "identity-mldsa.key"] {
