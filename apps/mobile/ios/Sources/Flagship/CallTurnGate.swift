@@ -4,7 +4,13 @@ import Foundation
 public protocol CallTurnConnection: AnyObject {
     /// Bytes for the client's TLS stream; nil ends the connection.
     func onClientBytes(_ data: Data) -> [Data]?
+    /// Called once, before the first bytes: where bytes the peer sends later go, and how to end the stream.
+    func attach(toClient: @escaping (Data) -> Void, end: @escaping () -> Void)
     func close()
+}
+
+public extension CallTurnConnection {
+    func attach(toClient: @escaping (Data) -> Void, end: @escaping () -> Void) {}
 }
 
 /// The phone side of a voi.ci call's transport (docs/voici-calls.md §4): the bare-name endpoint's demux after TLS and
@@ -14,9 +20,8 @@ public protocol CallTurnConnection: AnyObject {
 /// relayed streams as HTTP visits. The first byte after TLS decides (`flagship-turn-lite` `is_turn_first_byte`): a
 /// STUN first byte goes to TURN, anything else to the HTTP endpoint. TURN is accepted only while a call this device
 /// answered is armed with its one-time credential, only once, and only when a responder is linked; otherwise the
-/// stream is closed. The responder itself is `rust/crates/flagship-turn-lite` (sans-IO), which no app links yet: the
-/// apps link no Rust today and the workspace forbids the `unsafe` a C ABI needs, so linking it (UniFFI or a Swift
-/// port) is an owner decision that comes with the WebRTC library (docs/voici-calls.md "Open items").
+/// stream is closed. The responder is `rust/crates/flagship-turn-lite` (sans-IO) through `flagship-turn-ffi`
+/// (FlagshipUI's TurnResponder); a build without the CI's libraries (tools/libwebrtc) has no factory.
 public final class CallTurnGate: @unchecked Sendable {
     public static let shared = CallTurnGate()
 

@@ -333,14 +333,9 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
 
 ### Open items (owner)
 
-1. **libwebrtc**: no WebRTC library is a dependency of either app, and adding one is a large binary (tens of MB per
-   architecture). Pick the build (Google's prebuilt, a pinned self-build, or a vendor such as the community
-   `stream-webrtc-android` / `WebRTC.xcframework`) that negotiates DTLS 1.3 with X25519MLKEM768 and exposes
-   FrameEncryptor / FrameDecryptor (§11.2). Until then `StubCallMediaEngine` is what ships.
-2. **Linking the TURN responder.** The endpoint demux is built (below); `flagship-turn-lite` itself is not linked into
-   either app: the apps link no Rust today and the workspace forbids `unsafe` (a C ABI needs it). Pick UniFFI (an
-   `unsafe`-allowed binding crate, iOS and Android Rust targets, the NDK in CI) or Swift/Kotlin ports pinned to shared
-   vectors; decide together with item 1, since a responder is useless without the WebRTC peer behind it.
+1. **libwebrtc**: decided 2026-11-15 (option A, our own build); built as below ("As built: media"). Still the owner's:
+   where the built binary lives for release builds (the CI keeps it as a 90-day workflow artifact only).
+2. **Linking the TURN responder**: done through `flagship-turn-ffi` (below).
 3. **Answering while locked**: the answer is signed by the owner messages key, derived from the account key, which is
    only in memory while the app is unlocked. A call that arrives with the app locked rings with "Someone on voi.ci" and
    asks to open and unlock Flagship before it can be answered. Decide whether a device-held, call-only signing key
@@ -628,3 +623,44 @@ in the call screen: "<pageName> ✓" (tapping it opens the page). A reveal that 
    Call back disabled from the start instead of after a refused ring.
 5. **Privacy policy §2.11** overstates: no relay passes a visitor's IP to the owner's box or phone. Wording fix
    proposed to the owner (legal text: owner approves).
+||||||| parent of 09d0ace39 (Calls: CI-built libwebrtc and TURN responder behind the real CallMediaEngine)
+
+## As built: media (2026-11-15, worktree `0.4/libwebrtc`)
+
+- **The library.** `tools/libwebrtc` pins one upstream WebRTC (`pins.env`: M157, branch-heads/8103, an exact commit and
+  depot_tools commit) and adds one overlay: `RTCFlagshipFrameCrypto` (Objective-C) and `org.webrtc.FlagshipFrameCrypto`
+  (Java + JNI), which put an app delegate behind libwebrtc's C++ `FrameEncryptorInterface` / `FrameDecryptorInterface`
+  (upstream exposes those only in C++). `apply-overlay.py` lists the files in the SDK's `BUILD.gn` after named anchor
+  lines and fails when a new pin moved them. `.github/workflows/libwebrtc.yml` fetches (no history), builds
+  `WebRTC.xcframework` (iOS arm64, simulator arm64 + x86_64, iOS 18 floor) and `libwebrtc.aar` (arm64-v8a,
+  armeabi-v7a, x86_64), checks the overlay is in each, and uploads one artifact `libwebrtc` with `SHA256SUMS` and a
+  `manifest.json` naming the pins. **Artifacts only**: nothing is published or hosted. A WebRTC build never runs on a
+  developer Mac.
+- **The TURN responder** is `rust/crates/flagship-turn-ffi`: a C ABI (`include/flagship_turn.h`, an Xcode module
+  `FlagshipTurn`) and JNI exports for `calls.TurnResponder` over `flagship-turn-lite`. It has its own lint table (the
+  workspace forbids `unsafe`, a C boundary needs it); everything that can be safe is in `session.rs`, which forbids
+  `unsafe` again. The same workflow builds `FlagshipTurn.xcframework` and `libflagship_turn_ffi.so` per ABI (NDK,
+  minSdk 29, 16 KB pages). The responder only accepts loopback relay and peer addresses.
+- **Taking a build.** `tools/libwebrtc/use-artifacts.sh <run-id>` downloads a run's artifact, checks every file against
+  the committed pin `tools/libwebrtc/artifacts.sha256` (`--record` writes it from a reviewed run), and unpacks into
+  `apps/mobile/ios/Vendor/WebRTC` and `apps/mobile/android/vendor/webrtc` (both git-ignored); `--clean` deletes them.
+  Without those folders both apps build exactly as before, with `StubCallMediaEngine`.
+- **The engines.** iOS `WebRTCCallMediaEngine` (`#if canImport(WebRTC) && canImport(FlagshipTurn)`; `Package.swift`
+  adds the two binary targets only when the folder holds them) and Android `WebRtcCallMediaEngine` (`src/webrtc`,
+  picked by `app/build.gradle.kts` when `vendor/webrtc` holds the AAR; `src/nowebrtc` otherwise) behind the existing
+  `CallMediaEngine`. `CallMediaFactory` picks one. The peer connection ignores every network adapter but loopback (on
+  by default it is ignored), has no ICE servers, bundles and muxes, and returns its answer once its one loopback host
+  candidate is gathered (at most 3 s), so the signed answer carries it and nothing trickles. The frame layer is
+  attached to every sender and receiver before the answer, and drops every frame until `start` hands it the keys.
+  Audio: CallKit's audio session drives `RTCAudioSession` (manual audio, enabled on `didActivate`); Android uses the
+  Java audio device module with the hardware echo canceller and noise suppressor. The camera is 360p at 24 fps.
+- **The endpoint.** `CallTurnConnection.attach(toClient:end:)` gives the responder a way to write bytes that arrive
+  later (peer datagrams); the engine installs `CallTurnGate`'s factory for the call (64 kbit/s audio, 2.56 Mbit/s with
+  video) and removes it on stop.
+- **The media lane.** The workflow's `media-android` job builds the debug APK against the artifact and checks it
+  carries libwebrtc, the responder for each ABI and the overlay; `media-ios` runs `CallMediaBundledTests` with
+  `FLAGSHIP_EXPECT_WEBRTC=1` (the real engine is linked; the responder answers a STUN Binding and refuses HTTP).
+- **Not done yet.** No run of the workflow yet (the first one is the real check of the pins, the overlay's anchors and
+  the JNI glue); no call between a browser and a phone; the remote camera has a track (`remoteVideo`) but no renderer
+  in the call screens; DTLS 1.3 / X25519MLKEM768 in the build is unchecked (not required, §3).
+

@@ -1,0 +1,31 @@
+[package]
+name = "flagship-turn-ffi"
+description = "C and JNI bindings of flagship-turn-lite, linked into the iOS and Android apps (docs/voici-calls.md §4)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# The workspace forbids unsafe code; a C and JNI boundary cannot be written without it. Everything that can be safe
+# is in session.rs (forbid there too); only the thin exports in lib.rs use unsafe.
+[lints.rust]
+unused_must_use = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "warn"
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+dbg_macro = "deny"
+todo = "deny"
+print_stdout = "warn"
+
+[dependencies]
+flagship-turn-lite = { path = "../flagship-turn-lite" }
+jni-sys = "=0.3.0"

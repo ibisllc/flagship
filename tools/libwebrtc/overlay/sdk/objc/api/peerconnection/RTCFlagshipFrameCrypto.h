@@ -17,8 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
 RTC_OBJC_EXPORT
 @protocol RTC_OBJC_TYPE (RTCFlagshipFrameCryptoDelegate)<NSObject>
 
-- (nullable NSData *)sealFrame:(NSData *)frame video:(BOOL)video;
-- (nullable NSData *)openFrame:(NSData *)frame video:(BOOL)video;
+- (nullable NSData *)sealFrame:(NSData *)frame video:(BOOL)video NS_SWIFT_NAME(sealFrame(_:video:));
+- (nullable NSData *)openFrame:(NSData *)frame video:(BOOL)video NS_SWIFT_NAME(openFrame(_:video:));
 
 @end
 
@@ -31,9 +31,9 @@ RTC_OBJC_EXPORT
     NS_DESIGNATED_INITIALIZER;
 
 /** Every frame this sender sends goes through -sealFrame:video:. */
-- (void)attachToSender:(RTC_OBJC_TYPE(RTCRtpSender) *)sender;
+- (void)attachToSender:(RTC_OBJC_TYPE(RTCRtpSender) *)sender NS_SWIFT_NAME(attach(sender:));
 /** Every frame this receiver gets goes through -openFrame:video: before the decoder. */
-- (void)attachToReceiver:(RTC_OBJC_TYPE(RTCRtpReceiver) *)receiver;
+- (void)attachToReceiver:(RTC_OBJC_TYPE(RTCRtpReceiver) *)receiver NS_SWIFT_NAME(attach(receiver:));
 /** Drops the delegate: from now on every frame is dropped. */
 - (void)detach;
 

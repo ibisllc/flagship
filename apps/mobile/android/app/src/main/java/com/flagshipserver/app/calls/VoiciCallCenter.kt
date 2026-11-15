@@ -68,8 +68,8 @@ object VoiciCallCenter {
     private val _ui = MutableStateFlow(Ui())
     val ui: StateFlow<Ui> = _ui.asStateFlow()
 
-    /** The WebRTC implementation; a stub until the libwebrtc dependency is decided (docs/voici-calls.md). */
-    @Volatile var mediaFactory: () -> CallMediaEngine = { StubCallMediaEngine() }
+    /** The WebRTC implementation: our libwebrtc build when the app was built with it (CallMediaFactory), else the stub. */
+    @Volatile var mediaFactory: () -> CallMediaEngine = { CallMediaFactory.make(app) }
 
     @Volatile private var session: VoiciCallSession? = null
     @Volatile private var media: CallMediaEngine? = null
