@@ -49,6 +49,9 @@ public struct OrgSnapshot {
     public let book: OrgSeatBook
     public let freezes: [OrgSigned<OrgSeatFreeze>]
     public let ceremonies: [OrgCeremony]
+    /// The seat objects as served (verified into `book`): who left and what their grants allowed.
+    public var grants: [OrgSeatGrantBundle] = []
+    public var revokes: [OrgSeatRevokeBundle] = []
 }
 
 /// A person who accepted an invitation and waits for an admin to compare the code and admit them.
@@ -87,11 +90,26 @@ public final class OrgClient: @unchecked Sendable {
     private let urlSession: URLSession
     private let baseUrl: URL
 
+    public typealias Transport = (_ method: String, _ path: String, _ body: [String: Any]?) async throws -> (status: Int, json: [String: Any])
+    private let transport: Transport?
+
     public init(urlSession: URLSession = .shared, baseUrl: URL = Endpoints.controlBaseUrl) {
-        self.urlSession = urlSession; self.baseUrl = baseUrl
+        self.urlSession = urlSession; self.baseUrl = baseUrl; self.transport = nil
+    }
+
+    /// Tests: answer every call from `transport` (a fake `.com`).
+    public init(transport: @escaping Transport) {
+        self.urlSession = .shared; self.baseUrl = Endpoints.controlBaseUrl; self.transport = transport
     }
 
     private func call(_ method: String, _ path: String, _ body: [String: Any]? = nil) async throws -> [String: Any] {
+        if let transport {
+            let (status, json) = try await transport(method, path, body)
+            guard (200..<300).contains(status) else {
+                throw OrgClientError(status: status, code: (json["code"] as? String) ?? (json["error"] as? String) ?? "")
+            }
+            return json
+        }
         var req = URLRequest(url: baseUrl.appendingPathComponent(path))
         req.httpMethod = method
         req.cachePolicy = .reloadIgnoringLocalCacheData
@@ -131,7 +149,8 @@ public final class OrgClient: @unchecked Sendable {
                   let approvals = try? OrgAuthorityWire.approvals(o["approvals"]) else { return nil }
             return OrgCeremony(sha256: sha, order: order, payload: (o["payload"] as? [String: Any]) ?? [:], approvals: approvals)
         }
-        return OrgSnapshot(name: ((a["org"] as? [String: Any])?["name"] as? String) ?? "", state: state, book: book, freezes: freezes, ceremonies: ceremonies)
+        return OrgSnapshot(name: ((a["org"] as? [String: Any])?["name"] as? String) ?? "", state: state, book: book, freezes: freezes, ceremonies: ceremonies,
+                           grants: grants, revokes: revokes)
     }
 
     public func openCeremony(orgId: String, order: String, payload: [String: Any], approval: OrgApproval) async throws {
@@ -175,6 +194,21 @@ public final class OrgClient: @unchecked Sendable {
             let admin = (a["adminBinding"] as? [String: Any]).flatMap { try? PqTrust.pqKeyBindingFromWire($0) }
             return OrgPendingJoin(seatId: seatId, invite: invite, roles: (inv["roles"] as? [Any]) ?? [], accept: acc, memberBinding: member, adminBinding: admin)
         }
+    }
+
+    /// Key-ring versions and KEM keys (`GET /keys`) and the org's servers, verified into a rotation plan on this phone.
+    public func rotationPlan(_ snap: OrgSnapshot, now: Int64) async throws -> OrgRotationPlan {
+        let k = try await call("GET", "/api/orgs/\(snap.state.orgId)/keys")
+        let s = try await call("GET", "/api/orgs/\(snap.state.orgId)/servers")
+        return OrgRotation.planFromServed(snap.state, snap.book, keys: k, servers: s, revokes: snap.revokes, grants: snap.grants, now: now)
+    }
+
+    public func postKeyRing(orgId: String, _ b: OrgKeyRingBundle) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/keys", b.json)
+    }
+
+    public func postSeatKem(orgId: String, body: [String: Any]) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/seat-kems", body)
     }
 
     public func grant(orgId: String, body: [String: Any]) async throws {

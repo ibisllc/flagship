@@ -4010,5 +4010,15 @@
   "org_you_approved": "Du hast zugestimmt.",
   "org_approve": "Genehmigen",
   "orgs_none": "Dieses Telefon gehört noch zu keiner Organisation. Öffne einen Einladungslink, um einer beizutreten.",
-  "orgs_settings_subtitle": "Server, die du mit anderen betreibst"
+  "orgs_settings_subtitle": "Server, die du mit anderen betreibst",
+  "org_keys_to_rotate": "Zu wechselnde Schlüssel",
+  "org_left_rotate": "%1$s ist gegangen. Wechsle die Schlüssel, die diese Person öffnen konnte, damit sie nichts Neues mehr lesen kann.",
+  "org_rotate_keys": "Schlüssel wechseln",
+  "org_keys_rotated": "Schlüssel gewechselt.",
+  "org_rotate_reason": "Die Schlüssel dieser Organisation wechseln",
+  "org_key_cgk": "Schlüssel zwischen den Servern",
+  "org_key_directory": "Verzeichnisschlüssel",
+  "org_key_archive": "Sicherungsschlüssel von %1$s",
+  "org_key_disk": "Festplattenschlüssel von %1$s",
+  "org_disk_key_later": "Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar."
 }

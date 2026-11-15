@@ -3729,5 +3729,15 @@
   "Do Not Disturb": "a7e7ed3318cb",
   "From": "702140636ff3",
   "Until": "aa277cea7bca",
-  "This device doesn't ring during these hours. Your other devices keep their own setting.": "31717bbe80d2"
+  "This device doesn't ring during these hours. Your other devices keep their own setting.": "31717bbe80d2",
+  "Keys to rotate": "6895943340ea",
+  "%@ left. Rotate the keys they could open so they can't read anything new.": "92e4ae698bc0",
+  "Rotate keys": "bea6426a9d38",
+  "Keys rotated.": "6ebde79d00bb",
+  "Rotate this organization's keys": "1b73541fb4f0",
+  "Server-to-server key": "92cb7e28e84b",
+  "Directory key": "b5b3d106070c",
+  "Backup keys of %@": "25189d7df541",
+  "Disk key of %@": "a5263956d19b",
+  "A disk key changes when its server is re-keyed, which isn't available yet.": "63baa7098a0c"
 }

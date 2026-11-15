@@ -4013,4 +4013,14 @@
     <string name="org_approve">Genehmigen</string>
     <string name="orgs_none">Dieses Telefon gehört noch zu keiner Organisation. Öffne einen Einladungslink, um einer beizutreten.</string>
     <string name="orgs_settings_subtitle">Server, die du mit anderen betreibst</string>
+    <string name="org_keys_to_rotate">Zu wechselnde Schlüssel</string>
+    <string name="org_left_rotate">%1$s ist gegangen. Wechsle die Schlüssel, die diese Person öffnen konnte, damit sie nichts Neues mehr lesen kann.</string>
+    <string name="org_rotate_keys">Schlüssel wechseln</string>
+    <string name="org_keys_rotated">Schlüssel gewechselt.</string>
+    <string name="org_rotate_reason">Die Schlüssel dieser Organisation wechseln</string>
+    <string name="org_key_cgk">Schlüssel zwischen den Servern</string>
+    <string name="org_key_directory">Verzeichnisschlüssel</string>
+    <string name="org_key_archive">Sicherungsschlüssel von %1$s</string>
+    <string name="org_key_disk">Festplattenschlüssel von %1$s</string>
+    <string name="org_disk_key_later">Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar.</string>
 </resources>

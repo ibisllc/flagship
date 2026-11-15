@@ -16522,5 +16522,45 @@
   "orgs_settings_subtitle": {
     "en": "Servers you run with other people",
     "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_keys_to_rotate": {
+    "en": "Keys to rotate",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_left_rotate": {
+    "en": "%1$s left. Rotate the keys they could open so they can't read anything new.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_rotate_keys": {
+    "en": "Rotate keys",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_keys_rotated": {
+    "en": "Keys rotated.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_rotate_reason": {
+    "en": "Rotate this organization's keys",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_key_cgk": {
+    "en": "Server-to-server key",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_key_directory": {
+    "en": "Directory key",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_key_archive": {
+    "en": "Backup keys of %1$s",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_key_disk": {
+    "en": "Disk key of %1$s",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_disk_key_later": {
+    "en": "A disk key changes when its server is re-keyed, which isn't available yet.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
   }
 }

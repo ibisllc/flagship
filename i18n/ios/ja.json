@@ -3733,5 +3733,15 @@
   "Do Not Disturb": "おやすみモード",
   "From": "開始",
   "Until": "終了",
-  "This device doesn't ring during these hours. Your other devices keep their own setting.": "このデバイスはこの時間帯に着信音を鳴らしません。ほかのデバイスはそれぞれの設定に従います。"
+  "This device doesn't ring during these hours. Your other devices keep their own setting.": "このデバイスはこの時間帯に着信音を鳴らしません。ほかのデバイスはそれぞれの設定に従います。",
+  "Keys to rotate": "更新が必要な鍵",
+  "%@ left. Rotate the keys they could open so they can't read anything new.": "%@ が退出しました。この人が開けた鍵を更新して、新しい内容を読めないようにしてください。",
+  "Rotate keys": "鍵を更新",
+  "Keys rotated.": "鍵を更新しました。",
+  "Rotate this organization's keys": "この組織の鍵を更新",
+  "Server-to-server key": "サーバー間の鍵",
+  "Directory key": "ディレクトリの鍵",
+  "Backup keys of %@": "%@ のバックアップの鍵",
+  "Disk key of %@": "%@ のディスクの鍵",
+  "A disk key changes when its server is re-keyed, which isn't available yet.": "ディスクの鍵はサーバーの再暗号化で変わります。この機能はまだ使えません。"
 }

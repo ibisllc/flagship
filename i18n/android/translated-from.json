@@ -3947,5 +3947,15 @@
   "org_you_approved": "4a3d011640ab",
   "org_approve": "6a170dd7aac6",
   "orgs_none": "ecd02a58b037",
-  "orgs_settings_subtitle": "5c861fe86ef3"
+  "orgs_settings_subtitle": "5c861fe86ef3",
+  "org_keys_to_rotate": "6895943340ea",
+  "org_left_rotate": "7fb945abce98",
+  "org_rotate_keys": "bea6426a9d38",
+  "org_keys_rotated": "6ebde79d00bb",
+  "org_rotate_reason": "1b73541fb4f0",
+  "org_key_cgk": "92cb7e28e84b",
+  "org_key_directory": "b5b3d106070c",
+  "org_key_archive": "e8ee9bb3003c",
+  "org_key_disk": "c23a361c0531",
+  "org_disk_key_later": "63baa7098a0c"
 }

@@ -4010,5 +4010,15 @@
   "org_you_approved": "承認済みです。",
   "org_approve": "承認",
   "orgs_none": "このスマートフォンはまだどの組織にも参加していません。招待リンクを開いて参加してください。",
-  "orgs_settings_subtitle": "ほかの人と一緒に運用するサーバー"
+  "orgs_settings_subtitle": "ほかの人と一緒に運用するサーバー",
+  "org_keys_to_rotate": "更新が必要な鍵",
+  "org_left_rotate": "%1$s が退出しました。この人が開けた鍵を更新して、新しい内容を読めないようにしてください。",
+  "org_rotate_keys": "鍵を更新",
+  "org_keys_rotated": "鍵を更新しました。",
+  "org_rotate_reason": "この組織の鍵を更新",
+  "org_key_cgk": "サーバー間の鍵",
+  "org_key_directory": "ディレクトリの鍵",
+  "org_key_archive": "%1$s のバックアップの鍵",
+  "org_key_disk": "%1$s のディスクの鍵",
+  "org_disk_key_later": "ディスクの鍵はサーバーの再暗号化で変わります。この機能はまだ使えません。"
 }

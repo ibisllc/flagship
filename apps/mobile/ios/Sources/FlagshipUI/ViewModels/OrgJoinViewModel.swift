@@ -25,13 +25,15 @@ public final class OrgJoinViewModel {
     private let client: OrgClient
     private let keys: OrgSeatKeys
     private let now: () -> Int64
+    private let umk: (String) async throws -> [UInt8]
     private var offer: [String: Any] = [:]
     private var invite: [String: Any] = [:]
     private var roles: [OrgSeatRole] = []
 
     public init(orgId: String, seatId: String, keyHex: String, client: OrgClient = OrgClient(), keys: OrgSeatKeys = .shared,
-                now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
-        self.orgId = orgId; self.seatId = seatId; self.keyHex = keyHex; self.client = client; self.keys = keys; self.now = now
+                now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+                umk: @escaping (String) async throws -> [UInt8] = { reason in try await Keystore.currentUMK(reason: reason).withUnsafeBytes { Array($0) } }) {
+        self.orgId = orgId; self.seatId = seatId; self.keyHex = keyHex; self.client = client; self.keys = keys; self.now = now; self.umk = umk
     }
 
     public func load() async {
@@ -66,7 +68,8 @@ public final class OrgJoinViewModel {
         busy = true; defer { busy = false }
         let t = now()
         do {
-            let umk = try await Keystore.currentUMK(reason: String(localized: "Join this organization")).withUnsafeBytes { Array($0) }
+            var umk = try await self.umk(String(localized: "Join this organization"))
+            defer { for i in umk.indices { umk[i] = 0 } }
             let member = try OrgAuthority.memberKey(umk: umk, orgId: orgId, seatId: seatId, issuedAt: t)
             let memberKeyId = OrgAuthority.keyIdHex(ed25519PubHex: member.binding.ed25519PubHex, mldsaPubHex: member.binding.mldsaPubHex)
             var admin: (binding: PqKeyBindingWire, secret: [UInt8])?

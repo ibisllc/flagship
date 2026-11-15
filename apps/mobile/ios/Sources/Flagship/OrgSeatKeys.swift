@@ -5,7 +5,7 @@ import FlagshipCore
 /// UMK-derived: the person's non-admin devices hold the UMK), hybrid Ed25519 + ML-DSA-65, made here,
 /// sealed to the Secure Enclave wrapping key that seals the UMK ("PQ, hardware-wrapped"), and opened
 /// only in an unlocked session. It is bound by a `pq-key-binding` of role `org-seat-admin`.
-public final class OrgSeatKeys: @unchecked Sendable {
+open class OrgSeatKeys: @unchecked Sendable {
     public static let shared = OrgSeatKeys()
 
     public struct Seat: Codable, Equatable, Identifiable {
@@ -17,6 +17,9 @@ public final class OrgSeatKeys: @unchecked Sendable {
         /// A member seat holds no admin key: `binding` is its member key's (re-derived from the UMK when
         /// needed), and it approves nothing. Nil on records from before members could join.
         public var memberOnly: Bool?
+        public init(orgId: String, seatId: String, orgName: String, genesisHash: String, binding: PqKeyBindingWire, memberOnly: Bool?) {
+            self.orgId = orgId; self.seatId = seatId; self.orgName = orgName; self.genesisHash = genesisHash; self.binding = binding; self.memberOnly = memberOnly
+        }
         public var keyId: String { OrgAuthority.keyIdHex(ed25519PubHex: binding.ed25519PubHex, mldsaPubHex: binding.mldsaPubHex) }
         public var id: String { "\(orgId):\(seatId)" }
     }
@@ -33,13 +36,13 @@ public final class OrgSeatKeys: @unchecked Sendable {
 
     public init() {}
 
-    public func seats() -> [Seat] {
+    open func seats() -> [Seat] {
         Keystore.pqRecords(prefix: prefix).compactMap { try? JSONDecoder().decode(Record.self, from: $0).seat }
     }
 
     /// Makes a seat admin key for `orgId`/`seatId` and its binding. The seat is stored only once
     /// `genesisHash` is known (`remember`), so a key for a seat that never formed leaves nothing behind.
-    public func makeKey(orgId: String, seatId: String, now: Int64) throws -> (binding: PqKeyBindingWire, secret: [UInt8]) {
+    open func makeKey(orgId: String, seatId: String, now: Int64) throws -> (binding: PqKeyBindingWire, secret: [UInt8]) {
         let (pub, secret) = try PqHybrid.hybridSigKeygen(edSeed: PqHybrid.randomSeed(), mldsaSeed: PqHybrid.randomSeed())
         let st = PqKeyBindingStatement(role: "org-seat-admin", subjectId: OrgAuthority.seatSubject(orgId: orgId, seatId: seatId),
                                        ed25519PubHex: OrgAuthority.hex(Array(pub[0..<32])), mldsaPubHex: OrgAuthority.hex(Array(pub[32...])), issuedAt: now)
@@ -47,7 +50,7 @@ public final class OrgSeatKeys: @unchecked Sendable {
         return (binding, secret)
     }
 
-    public func remember(orgId: String, seatId: String, orgName: String, genesisHash: String, binding: PqKeyBindingWire, secret: [UInt8]) throws {
+    open func remember(orgId: String, seatId: String, orgName: String, genesisHash: String, binding: PqKeyBindingWire, secret: [UInt8]) throws {
         let sealed = try Keystore.pqSealSeed(Data(secret), aad: aad(orgId, seatId))
         let rec = Record(seat: Seat(orgId: orgId, seatId: seatId, orgName: orgName, genesisHash: genesisHash, binding: binding, memberOnly: nil),
                          sealed: sealed.sealed, ephemeralPub: sealed.ephemeralPub)
@@ -55,14 +58,14 @@ public final class OrgSeatKeys: @unchecked Sendable {
     }
 
     /// A member seat: nothing secret is kept (the member key derives from the UMK), only the binding.
-    public func rememberMember(orgId: String, seatId: String, orgName: String, genesisHash: String, memberBinding: PqKeyBindingWire) throws {
+    open func rememberMember(orgId: String, seatId: String, orgName: String, genesisHash: String, memberBinding: PqKeyBindingWire) throws {
         let rec = Record(seat: Seat(orgId: orgId, seatId: seatId, orgName: orgName, genesisHash: genesisHash, binding: memberBinding, memberOnly: true),
                          sealed: Data(), ephemeralPub: Data())
         try Keystore.pqRecordWrite(slot(orgId, seatId), try JSONEncoder().encode(rec))
     }
 
     /// Signs with the seat admin key; nil when the session is locked (the caller asks to unlock).
-    public func sign(_ seat: Seat, purpose: String, payload: [UInt8]) -> [UInt8]? {
+    open func sign(_ seat: Seat, purpose: String, payload: [UInt8]) -> [UInt8]? {
         guard let raw = Keystore.pqRecordRead(slot(seat.orgId, seat.seatId)),
               let rec = try? JSONDecoder().decode(Record.self, from: raw),
               let ctx = Keystore.sessionAuthContext,
@@ -73,5 +76,5 @@ public final class OrgSeatKeys: @unchecked Sendable {
         return try? PqHybrid.hybridSign(secretKey: s, purpose: purpose, payload: payload)
     }
 
-    public func forget(_ seat: Seat) { Keystore.pqRecordDelete(slot(seat.orgId, seat.seatId)) }
+    open func forget(_ seat: Seat) { Keystore.pqRecordDelete(slot(seat.orgId, seat.seatId)) }
 }

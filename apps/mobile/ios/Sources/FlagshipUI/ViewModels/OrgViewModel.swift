@@ -31,13 +31,18 @@ public final class OrgViewModel {
     public private(set) var inviteLink: String?
     /// People who accepted an invitation and wait for an admin to compare the code and admit them.
     public private(set) var pendingJoins: [OrgPendingJoin] = []
+    /// Departed seats whose keys still need rotating, computed on this phone from what it verified.
+    public private(set) var rotations: [OrgPendingRotation] = []
+    private var plan: OrgRotationPlan?
 
     private let client: OrgClient
     private let keys: OrgSeatKeys
     private let now: () -> Int64
+    private let umk: (String) async throws -> [UInt8]
 
-    public init(client: OrgClient = OrgClient(), keys: OrgSeatKeys = .shared, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
-        self.client = client; self.keys = keys; self.now = now
+    public init(client: OrgClient = OrgClient(), keys: OrgSeatKeys = .shared, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+                umk: @escaping (String) async throws -> [UInt8] = { reason in try await Keystore.currentUMK(reason: reason).withUnsafeBytes { Array($0) } }) {
+        self.client = client; self.keys = keys; self.now = now; self.umk = umk
         seats = keys.seats()
     }
 
@@ -78,6 +83,8 @@ public final class OrgViewModel {
         do {
             snapshot = try await client.snapshot(orgId: seat.orgId, genesisHash: seat.genesisHash, now: now())
             pendingJoins = (try? await client.pendingJoins(orgId: seat.orgId)) ?? []
+            plan = seat.memberOnly == true ? nil : try? await client.rotationPlan(snapshot!, now: now())
+            rotations = plan?.pending ?? []
             phase = .loaded
         } catch {
             snapshot = nil
@@ -280,4 +287,56 @@ public final class OrgViewModel {
     }
 
     public func clearInvite() { inviteLink = nil }
+
+    // MARK: rotate keys (after someone leaves)
+
+    /// Keys this seat can rotate now; a disk key changes only with its server's own re-key (not built yet).
+    public func rotatable(_ r: OrgPendingRotation) -> [OrgPendingRotation.Key] { r.keys.filter { $0.kind != .diskKey } }
+
+    /// "Rotate keys" for one departed seat: this phone announces its own seat KEM key first (so it keeps
+    /// getting new versions), then seals a fresh key per chain to the recipients it verified, approved by
+    /// this seat's admin key, and posts each version.
+    public func rotate(_ seat: OrgSeatKeys.Seat, _ r: OrgPendingRotation) async {
+        guard let s = snapshot else { return }
+        busy = true; defer { busy = false }
+        do {
+            try await publishSeatKem(seat, s)
+            await load(seat)
+            guard var p = plan else { throw OrgAuthorityError("malformed", "no plan") }
+            for k in rotatable(r) {
+                var key = [UInt8](repeating: 0, count: 32)
+                guard SecRandomCopyBytes(kSecRandomDefault, 32, &key) == errSecSuccess else { throw OrgAuthorityError("malformed", "random") }
+                defer { for i in key.indices { key[i] = 0 } }
+                let b = try OrgRotation.rotate(p, kind: k.kind, scope: k.scope, issuedAt: now(), key: key) { order, _ in try approval(seat, order: order) }
+                try await client.postKeyRing(orgId: seat.orgId, b)
+                if let snap = snapshot { p = try await client.rotationPlan(snap, now: now()) }
+            }
+            message = String(localized: "Keys rotated.")
+            await load(seat)
+        } catch { failed(error) }
+    }
+
+    /// This seat's X-Wing key from the UMK, signed by the seat admin key (an org admin) or the member key.
+    private func publishSeatKem(_ seat: OrgSeatKeys.Seat, _ s: OrgSnapshot) async throws {
+        let t = now()
+        var umk = try await self.umk(String(localized: "Rotate this organization's keys"))
+        defer { for i in umk.indices { umk[i] = 0 } }
+        let kp = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umk, orgId: seat.orgId))
+        let kemKeyId = OrgAuthority.kemKeyIdHex(kp.publicKey)
+        let msg = try OrgAuthority.canonicalSeatKem(orgId: seat.orgId, seatId: seat.seatId, kemKeyId: kemKeyId, issuedAt: t)
+        let sig: [UInt8]
+        if s.state.current.admins.contains(where: { $0.seatId == seat.seatId }) {
+            guard let x = keys.sign(seat, purpose: OrgAuthority.tagSeatKem, payload: msg) else { throw OrgAuthorityError("locked") }
+            sig = x
+        } else {
+            var member = try OrgAuthority.memberKey(umk: umk, orgId: seat.orgId, seatId: seat.seatId, issuedAt: t)
+            defer { for i in member.secret.indices { member.secret[i] = 0 } }
+            sig = try PqHybrid.hybridSign(secretKey: member.secret, purpose: OrgAuthority.tagSeatKem, payload: msg)
+        }
+        try await client.postSeatKem(orgId: seat.orgId, body: [
+            "statement": ["orgId": seat.orgId, "seatId": seat.seatId, "kemKeyId": kemKeyId, "issuedAt": NSNumber(value: t)] as [String: Any],
+            "kemPubHex": OrgAuthority.hex(kp.publicKey),
+            "signature": OrgAuthority.hex(sig),
+        ])
+    }
 }

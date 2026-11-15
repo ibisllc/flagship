@@ -15965,5 +15965,45 @@
   "This device doesn't ring during these hours. Your other devices keep their own setting.": {
     "en": "This device doesn't ring during these hours. Your other devices keep their own setting.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Keys to rotate": {
+    "en": "Keys to rotate",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "%@ left. Rotate the keys they could open so they can't read anything new.": {
+    "en": "%@ left. Rotate the keys they could open so they can't read anything new.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Rotate keys": {
+    "en": "Rotate keys",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Keys rotated.": {
+    "en": "Keys rotated.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Rotate this organization's keys": {
+    "en": "Rotate this organization's keys",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Server-to-server key": {
+    "en": "Server-to-server key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Directory key": {
+    "en": "Directory key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Backup keys of %@": {
+    "en": "Backup keys of %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Disk key of %@": {
+    "en": "Disk key of %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "A disk key changes when its server is re-keyed, which isn't available yet.": {
+    "en": "A disk key changes when its server is re-keyed, which isn't available yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
   }
 }

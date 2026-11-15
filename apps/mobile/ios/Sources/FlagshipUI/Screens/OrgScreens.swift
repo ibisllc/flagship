@@ -65,6 +65,7 @@ public struct OrgDetailScreen: View {
             case .loaded:
                 if let f = vm.myFreeze(seat) { frozenSection(f, c: c) }
                 joinsSection(c: c)
+                rotationsSection(c: c)
                 approvalsSection(c: c)
                 adminsSection(c: c)
                 Section {
@@ -118,6 +119,33 @@ public struct OrgDetailScreen: View {
                         Button("Codes match: admit") { Task { await vm.admit(seat, j) } }
                             .disabled(vm.busy || vm.myFreeze(seat) != nil)
                             .accessibilityIdentifier("org-admit-\(j.seatId.prefix(8))")
+                    }
+                }
+            }
+        }
+    }
+
+    /// People who left: rotate the keys they could open so they read nothing new.
+    @ViewBuilder
+    private func rotationsSection(c: FSColors) -> some View {
+        if !vm.rotations.isEmpty && seat.memberOnly != true {
+            Section("Keys to rotate") {
+                ForEach(vm.rotations) { r in
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Text("\(label(r.seatId)) left. Rotate the keys they could open so they can't read anything new.")
+                            .font(FS.font.body()).foregroundColor(c.text)
+                        ForEach(Array(r.keys.enumerated()), id: \.offset) { _, k in
+                            Text(OrgCopy.key(k)).font(FS.font.caption()).foregroundColor(c.textMuted)
+                        }
+                        if r.keys.contains(where: { $0.kind == .diskKey }) {
+                            Text("A disk key changes when its server is re-keyed, which isn't available yet.")
+                                .font(FS.font.caption()).foregroundColor(c.textMuted)
+                        }
+                        if !vm.rotatable(r).isEmpty {
+                            Button("Rotate keys") { Task { await vm.rotate(seat, r) } }
+                                .disabled(vm.busy || vm.myFreeze(seat) != nil)
+                                .accessibilityIdentifier("org-rotate-\(r.seatId.prefix(8))")
+                        }
                     }
                 }
             }
@@ -234,6 +262,15 @@ enum OrgCopy {
         case "flagship/servers-self-delete/v1": return String(localized: "Delete a server")
         case "flagship/server-update/v1": return String(localized: "Update a server")
         default: return String(localized: "Approve an organization change")
+        }
+    }
+
+    static func key(_ k: OrgPendingRotation.Key) -> String {
+        switch k.kind {
+        case .cgk: return String(localized: "Server-to-server key")
+        case .directoryKey: return String(localized: "Directory key")
+        case .archiveKeys: return String(localized: "Backup keys of \(k.scope)")
+        case .diskKey: return String(localized: "Disk key of \(k.scope)")
         }
     }
 

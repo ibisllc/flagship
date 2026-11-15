@@ -10,6 +10,7 @@ import com.flagshipserver.app.core.OrgJson
 import com.flagshipserver.app.core.OrgPendingJoin
 import com.flagshipserver.app.core.OrgSnapshot
 import com.flagshipserver.app.core.str
+import com.flagshipserver.app.core.memberKey
 import com.flagshipserver.app.core.pq.OrgApproval
 import com.flagshipserver.app.core.pq.OrgAuthority
 import com.flagshipserver.app.core.pq.OrgAuthorityException
@@ -65,6 +66,10 @@ class OrgViewModel(
     val snapshot: StateFlow<OrgSnapshot?> = _snapshot.asStateFlow()
     private val _pendingJoins = MutableStateFlow<List<OrgPendingJoin>>(emptyList())
     val pendingJoins: StateFlow<List<OrgPendingJoin>> = _pendingJoins.asStateFlow()
+    private val _rotations = MutableStateFlow<List<com.flagshipserver.app.core.pq.OrgPendingRotation>>(emptyList())
+    /** Departed seats whose keys still need rotating, as this phone verified them. */
+    val rotations: StateFlow<List<com.flagshipserver.app.core.pq.OrgPendingRotation>> = _rotations.asStateFlow()
+    private var plan: com.flagshipserver.app.core.pq.OrgRotationPlan? = null
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
     private val _message = MutableStateFlow<String?>(null)
@@ -77,6 +82,8 @@ class OrgViewModel(
         try {
             _snapshot.value = client.snapshot(seat.orgId, seat.genesisHash, now())
             _pendingJoins.value = runCatching { client.pendingJoins(seat.orgId) }.getOrDefault(emptyList())
+            plan = if (seat.memberOnly) null else runCatching { client.rotationPlan(_snapshot.value!!, now()) }.getOrNull()
+            _rotations.value = plan?.pending ?: emptyList()
             _phase.value = Phase.Loaded
         } catch (e: Exception) {
             _snapshot.value = null
@@ -177,7 +184,74 @@ class OrgViewModel(
         }
     }
 
+    /** Keys this seat can rotate now (a disk key changes only with the server's own re-key, not built yet). */
+    fun rotatable(r: com.flagshipserver.app.core.pq.OrgPendingRotation) =
+        r.keys.filter { it.first != com.flagshipserver.app.core.pq.OrgKeyKind.DISK_KEY }
+
+    /**
+     * "Rotate keys" for one departed seat: this phone first announces its own seat KEM key (so it
+     * keeps receiving the new versions), then seals a fresh key for each chain the seat could read
+     * to the recipients it verified, approved by this seat's admin key, and posts each version.
+     */
+    suspend fun rotate(seat: OrgSeatRecord, r: com.flagshipserver.app.core.pq.OrgPendingRotation) {
+        val s = _snapshot.value ?: return
+        _busy.value = true
+        try {
+            publishSeatKem(seat, s)
+            load(seat)
+            var p = plan ?: throw OrgAuthorityException("malformed", "no plan")
+            for ((kind, scope) in rotatable(r)) {
+                val key = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
+                val b = try {
+                    com.flagshipserver.app.core.pq.OrgRotation.rotate(p, kind, scope, now(), key) { order, _ -> approval(seat, order) }
+                } finally { key.fill(0) }
+                client.postKeyRing(seat.orgId, com.flagshipserver.app.core.pq.OrgRotation.bundleJson(b))
+                p = client.rotationPlan(_snapshot.value!!, now())
+            }
+            _message.value = FSStrings.get(R.string.org_keys_rotated)
+            load(seat)
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /** This seat's X-Wing key from the UMK, signed by the seat's admin key (an org admin) or its member key. */
+    private suspend fun publishSeatKem(seat: OrgSeatRecord, s: OrgSnapshot) {
+        val t = now()
+        val seed = umk(FSStrings.get(R.string.org_rotate_reason))
+        try {
+            val kemSeed = com.flagshipserver.app.core.pq.OrgServers.seatKemSeed(seed, seat.orgId)
+            val kp = com.flagshipserver.app.core.pq.PqHybrid.hybridSealKeygen(kemSeed)
+            kemSeed.fill(0)
+            val kemKeyId = com.flagshipserver.app.core.pq.OrgServers.kemKeyIdHex(kp.publicKey)
+            val msg = com.flagshipserver.app.core.pq.OrgServers.canonicalSeatKem(seat.orgId, seat.seatId, kemKeyId, t)
+            val purpose = com.flagshipserver.app.core.pq.OrgServers.TAG_SEAT_KEM
+            val sig = if (s.state.current.admins.any { it.seatId == seat.seatId }) {
+                keys.sign(seat, purpose, msg) ?: throw OrgAuthorityException("locked")
+            } else {
+                val (_, secret) = OrgAuthority.memberKey(seed, seat.orgId, seat.seatId, t)
+                try { com.flagshipserver.app.core.pq.PqHybrid.hybridSign(secret, purpose, msg) } finally { secret.fill(0) }
+            }
+            client.postSeatKem(seat.orgId, buildJsonObject {
+                put("statement", buildJsonObject { put("orgId", seat.orgId); put("seatId", seat.seatId); put("kemKeyId", kemKeyId); put("issuedAt", t) })
+                put("kemPubHex", com.flagshipserver.app.core.pq.PqHex.encode(kp.publicKey))
+                put("signature", com.flagshipserver.app.core.pq.PqHex.encode(sig))
+            })
+        } finally {
+            seed.fill(0)
+        }
+    }
+
     companion object {
+        fun keyText(kind: com.flagshipserver.app.core.pq.OrgKeyKind, scope: String): String = when (kind) {
+            com.flagshipserver.app.core.pq.OrgKeyKind.CGK -> FSStrings.get(R.string.org_key_cgk)
+            com.flagshipserver.app.core.pq.OrgKeyKind.DIRECTORY_KEY -> FSStrings.get(R.string.org_key_directory)
+            com.flagshipserver.app.core.pq.OrgKeyKind.ARCHIVE_KEYS -> FSStrings.get(R.string.org_key_archive, scope)
+            com.flagshipserver.app.core.pq.OrgKeyKind.DISK_KEY -> FSStrings.get(R.string.org_key_disk, scope)
+        }
+
         const val DAY = 24 * 3_600_000L
 
         fun purposeText(tag: String): String = when (tag) {
