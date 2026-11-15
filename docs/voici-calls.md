@@ -544,3 +544,18 @@ Flagship relays, the deeper the obfuscation". Design:
 - **Fallback:** with a single relay (today), the path is entry = exit = the Fly relay. That is the about-$0 option,
   with protection exactly as described above, deepening as relays join.
 - **Cost:** nothing extra beyond relays we or partners already run; the mesh links already exist.
+
+### Correction: no onion routing, no sealed-token relay (owner, 2026-11-15)
+
+Owner: "we (who run .com and .services) already know the endpoints ... let's not do security cosplay." Agreed. To ring
+a phone, whoever sends the push knows the token; Flagship runs `.com`, the relays and the only possible exits (the
+APNs/FCM keys are ours), so onion paths through our own relays and a sealed-token split hide nothing from Flagship.
+Both are **dropped**: the two subsections above ("Push relay hosting" and "Push relay over the relay network") are
+superseded. What we promise instead:
+- **The page owner never learns who the caller is**, with or without call-back. The pseudonymous side always dials
+  out; its bare name is never used.
+- **"Call anonymously"** leaves no ring-back channel.
+- **"Call and allow call-back"** tells the caller plainly: "<name> won't learn who you are. Flagship will know this
+  conversation can ring your phone." The ring-back uses today's push path on `.com`.
+- **Policy, not cryptography:** no log of who called whom, the channel is deleted on "Stop call-backs" or when the
+  conversation ends, and pushes carry no content.
