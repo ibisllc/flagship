@@ -272,6 +272,90 @@ describe("the connector runtime", () => {
   });
 });
 
+describe("review-cloud: the connector runtime links a seat only on evidence it verifies", () => {
+  it("review-cloud: an unapproved decision and invite served by .com do not link a pending person to an existing seat", async () => {
+    const pin = pinned();
+    const B = key("B admin");
+    const boxSeed = new Uint8Array(32).fill(0x35);
+    const boxKem = orgKemKeyPair(boxSeed);
+    const seeds = [new Uint8Array(32).fill(0x61), new Uint8Array(32).fill(0x62)] as const;
+    const conn = hybridSigKeygen(seeds[0], seeds[1]);
+    const connector: OrgConnector = {
+      orgId: A.orgId,
+      connectorId: "c1".repeat(16),
+      kind: "scim",
+      serverDomain: HOST,
+      connectorKeyId: orgConnectorKeyId(conn.publicKey),
+      scopes: ["propose-invite", "propose-offboard", "update-entry"],
+      mappingSha256: orgConnectorMappingSha256(mapping),
+      status: "active",
+      issuedAt: NOW,
+    };
+    const setup = sealOrgConnectorSetup(connector, { recipient: `box:${HOST}`, kemPub: boxKem.kemPub, kemKeyId: boxKem.kemKeyId, issuedAt: NOW }, {
+      connectorSeedsHex: Buffer.concat([seeds[0], seeds[1]]).toString("hex"),
+      mapping,
+      scimTokenSha256: TOKEN_SHA,
+      scimTokenIssuedAt: NOW,
+    }, NOW);
+    // Approved "yesterday": the box checks a stored record as of the record it names.
+    const approval = signOrgApproval({ orgId: A.orgId, oarVersion: 1, order: canonicalOrgConnector(connector), seatId: B.seatId, adminKeyId: B.keyId, issuedAt: NOW, notAfter: NOW + 86_400_000 }, B.secret);
+    const bundle = { connector, connectorPubHex: Buffer.from(conn.publicKey).toString("hex"), approvals: [approval], setup };
+    // B announces its seat KEM key (signed with its admin key, as an org admin does).
+    const bKem = orgKemKeyPair(new Uint8Array(32).fill(0x72));
+    const st = { orgId: A.orgId, seatId: B.seatId, kemKeyId: bKem.kemKeyId, issuedAt: NOW };
+    const seatKems = [{ statement: st, kemPubHex: Buffer.from(bKem.kemPub).toString("hex"), signature: signOrgSeatKem(st, B.secret) }];
+    const posted: any[] = [];
+    let proposals: any[] = [];
+    let invites: any[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname.replace(`/api/orgs/${A.orgId}`, "");
+      const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+      if (init?.method === "POST" && path === "/proposals") {
+        posted.push(JSON.parse(String(init.body)));
+        return ok({});
+      }
+      if (path === "/connectors") return ok({ connectors: [bundle] });
+      if (path === "/servers") return ok({ servers: [{ serverDomain: HOST }] });
+      if (path === "/keys") return ok({ seatKems, boxKems: [], rings: [] });
+      if (path === "/proposals") return ok({ proposals });
+      if (path === "/seats") return ok({ invites });
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+    const rt = new ConnectorRuntime({
+      dataDir: mkdtempSync(join(tmpdir(), "connector-")),
+      orgId: A.orgId,
+      serverDomain: HOST,
+      controlPlaneBaseUrl: "https://flagshipserver.example",
+      pin: () => pin,
+      boxKemSeed: async () => boxSeed,
+      fetchImpl,
+      now: () => NOW + 2 * 86_400_000,
+    });
+    expect((await rt.refresh()).map((c) => c.bundle.connector.connectorId)).toEqual([connector.connectorId]);
+    expect(rt.connector(connector.connectorId)!.setup.scimTokenSha256).toBe(TOKEN_SHA);
+
+    const ana: DirectoryUser = { externalId: "ext-ana", userName: "ana@acme.example", displayName: "Ana Pérez", active: true, groups: ["Finance"] };
+    const first = await rt.sync(connector.connectorId, [ana]);
+    expect(first.map((i) => i.kind)).toEqual(["invite"]);
+    const p = posted[0];
+    verifyOrgProposal(bundle, p, { rolesHash: orgSeatRolesHash([{ role: "member" }]), now: NOW + 2 * 86_400_000 });
+    expect(p.recipients.map((r: { recipient: string }) => r.recipient)).toEqual([`seat:${B.seatId}`]);
+    const opened = parseOrgDirectoryEntryBody(openOrgProposal(p, `seat:${B.seatId}`, bKem.kemSecret));
+    expect(opened).toMatchObject({ pseudonym: "Ana Pérez", email: "ana@acme.example", pendingId: p.proposal.subject, source: "scim" });
+    expect(JSON.stringify(p)).not.toContain("Ana");
+
+    // .com fabricates both halves: an invite naming an existing seat (M, someone else entirely) and a
+    // "done" decision for Ana's proposal, neither carrying any org admin's approval.
+    const target = A.keys["M member"].seatId as string;
+    const invite = { orgId: A.orgId, seatId: target, labelSha256: "aa".repeat(32), rolesHash: orgSeatRolesHash([{ role: "member" }]), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 86_400_000 };
+    invites = [{ invite }];
+    proposals = [{ bundle: p, decision: { statement: { orgId: A.orgId, proposalId: p.proposal.proposalId, decision: "done", refSha256: orgSha256Hex(canonicalOrgSeatInvite(invite)), issuedAt: NOW } } }];
+    // Disabling Ana in the IdP must not turn into "offboard <that seat>".
+    const gone = await rt.sync(connector.connectorId, [{ ...ana, active: false }]);
+    expect(gone.map((i) => [i.kind, i.subject])).toEqual([]);
+  });
+});
+
 describe("LDAP pull", () => {
   const guid = Buffer.from("00112233445566778899aabbccddeeff", "hex");
   it("reads Active Directory over the real client: objectGUID, UPN, memberOf, disabled accounts", async () => {
@@ -313,6 +397,22 @@ describe("LDAP pull", () => {
       expect(() => new LdapDirectorySource("c3".repeat(16), cfg)).toThrow(/ldaps/);
     } finally {
       await srv.close();
+    }
+  });
+});
+
+describe("review-cloud: SCIM resource ids are not object keys", () => {
+  it("review-cloud: PUT/PATCH /scim/v2/Users/__proto__ and /Groups/__proto__ are 404 and pollute nothing", async () => {
+    const polluted = ["userName", "active", "displayName", "externalId", "givenName", "familyName", "emails", "lastModified", "members"];
+    const w = scimWorld();
+    try {
+      const status = async (p: Promise<{ status: number } | null>) => p.then((r) => r?.status, (e: Error) => `threw ${e.message}`);
+      const put = await status(w.call("PUT", "/scim/v2/Users/__proto__", { schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"], userName: "x@acme.example", active: true }));
+      const patch = await status(w.call("PATCH", "/scim/v2/Groups/__proto__", { schemas: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], Operations: [{ op: "replace", path: "displayName", value: "g" }] }));
+      const leaked = polluted.filter((k) => k in {});
+      expect({ put, patch, leaked }).toEqual({ put: 404, patch: 404, leaked: [] });
+    } finally {
+      for (const k of polluted) delete (Object.prototype as Record<string, unknown>)[k];
     }
   });
 });
