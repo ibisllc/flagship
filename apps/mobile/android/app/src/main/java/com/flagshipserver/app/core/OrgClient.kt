@@ -139,6 +139,18 @@ class OrgClient(private val http: OrgHttp) {
         }
     }
 
+    /** Key-ring versions and KEM keys (`GET /keys`) and the org's servers (`GET /servers`), verified into a rotation plan. */
+    suspend fun rotationPlan(snapshot: OrgSnapshot, now: Long): com.flagshipserver.app.core.pq.OrgRotationPlan {
+        val orgId = snapshot.state.orgId
+        val keys = call("GET", "/api/orgs/$orgId/keys")
+        val servers = call("GET", "/api/orgs/$orgId/servers")
+        return com.flagshipserver.app.core.pq.OrgRotation.planFromServed(snapshot.state, snapshot.book, keys, servers, snapshot.revokes, snapshot.grants, now)
+    }
+
+    suspend fun postKeyRing(orgId: String, bundle: JsonObject) { call("POST", "/api/orgs/$orgId/keys", bundle) }
+
+    suspend fun postSeatKem(orgId: String, bundle: JsonObject) { call("POST", "/api/orgs/$orgId/seat-kems", bundle) }
+
     suspend fun grant(orgId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/seats", body) }
 
     suspend fun openCeremony(orgId: String, order: String, payload: JsonObject, approval: OrgApproval) {

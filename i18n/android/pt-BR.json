@@ -4010,5 +4010,15 @@
   "org_you_approved": "Você aprovou isto.",
   "org_approve": "Aprovar",
   "orgs_none": "Este telefone ainda não está em nenhuma organização. Abra um link de convite para entrar em uma.",
-  "orgs_settings_subtitle": "Servidores que você administra com outras pessoas"
+  "orgs_settings_subtitle": "Servidores que você administra com outras pessoas",
+  "org_keys_to_rotate": "Chaves a trocar",
+  "org_left_rotate": "%1$s saiu. Troque as chaves que essa pessoa podia abrir para que ela não leia nada novo.",
+  "org_rotate_keys": "Trocar chaves",
+  "org_keys_rotated": "Chaves trocadas.",
+  "org_rotate_reason": "Trocar as chaves desta organização",
+  "org_key_cgk": "Chave entre servidores",
+  "org_key_directory": "Chave do diretório",
+  "org_key_archive": "Chaves de backup de %1$s",
+  "org_key_disk": "Chave do disco de %1$s",
+  "org_disk_key_later": "A chave de um disco muda quando o servidor é recriptografado, o que ainda não está disponível."
 }

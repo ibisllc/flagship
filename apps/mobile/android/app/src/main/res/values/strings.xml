@@ -4018,4 +4018,14 @@
     <string name="org_approve">Approve</string>
     <string name="orgs_none">This phone isn\'t in any organization yet. Open an invitation link to join one.</string>
     <string name="orgs_settings_subtitle">Servers you run with other people</string>
+    <string name="org_keys_to_rotate">Keys to rotate</string>
+    <string name="org_left_rotate">%1$s left. Rotate the keys they could open so they can\'t read anything new.</string>
+    <string name="org_rotate_keys">Rotate keys</string>
+    <string name="org_keys_rotated">Keys rotated.</string>
+    <string name="org_rotate_reason">Rotate this organization\'s keys</string>
+    <string name="org_key_cgk">Server-to-server key</string>
+    <string name="org_key_directory">Directory key</string>
+    <string name="org_key_archive">Backup keys of %1$s</string>
+    <string name="org_key_disk">Disk key of %1$s</string>
+    <string name="org_disk_key_later">A disk key changes when its server is re-keyed, which isn\'t available yet.</string>
 </resources>

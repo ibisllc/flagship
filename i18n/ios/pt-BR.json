@@ -3735,5 +3735,15 @@
   "Do Not Disturb": "Não perturbe",
   "From": "De",
   "Until": "Até",
-  "This device doesn't ring during these hours. Your other devices keep their own setting.": "Este dispositivo não toca nesses horários. Seus outros dispositivos mantêm a própria configuração."
+  "This device doesn't ring during these hours. Your other devices keep their own setting.": "Este dispositivo não toca nesses horários. Seus outros dispositivos mantêm a própria configuração.",
+  "Keys to rotate": "Chaves a trocar",
+  "%@ left. Rotate the keys they could open so they can't read anything new.": "%@ saiu. Troque as chaves que essa pessoa podia abrir para que ela não leia nada novo.",
+  "Rotate keys": "Trocar chaves",
+  "Keys rotated.": "Chaves trocadas.",
+  "Rotate this organization's keys": "Trocar as chaves desta organização",
+  "Server-to-server key": "Chave entre servidores",
+  "Directory key": "Chave do diretório",
+  "Backup keys of %@": "Chaves de backup de %@",
+  "Disk key of %@": "Chave do disco de %@",
+  "A disk key changes when its server is re-keyed, which isn't available yet.": "A chave de um disco muda quando o servidor é recriptografado, o que ainda não está disponível."
 }

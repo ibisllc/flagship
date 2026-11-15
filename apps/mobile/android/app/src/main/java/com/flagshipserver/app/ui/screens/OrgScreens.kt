@@ -128,6 +128,7 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
     val snap by vm.snapshot.collectAsState()
     val busy by vm.busy.collectAsState()
     val message by vm.message.collectAsState()
+    val rotations by vm.rotations.collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(seat.id) { vm.load(seat) }
     fun label(id: String) = if (id == seat.seatId) com.flagshipserver.app.core.FSStrings.get(R.string.org_you)
@@ -150,6 +151,24 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
                                 j.sas?.let { Body(fsString(R.string.org_their_code, it.take(3), it.takeLast(3)), muted = true) }
                                 FSPrimaryButton(stringResource(R.string.org_admit), onClick = { scope.launch { vm.admit(seat, j) } },
                                     enabled = !busy && frozen == null, modifier = Modifier.testTag("org-admit-${j.seatId.take(8)}"))
+                            }
+                        }
+                    }
+                }
+                if (rotations.isNotEmpty() && !seat.memberOnly) {
+                    FSSectionHeader(stringResource(R.string.org_keys_to_rotate))
+                    rotations.forEach { r ->
+                        FSCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                Body(fsString(R.string.org_left_rotate, label(r.seatId)))
+                                r.keys.forEach { (kind, sc) ->
+                                    Body(OrgViewModel.keyText(kind, sc), muted = true)
+                                    if (kind == com.flagshipserver.app.core.pq.OrgKeyKind.DISK_KEY) Body(stringResource(R.string.org_disk_key_later), muted = true)
+                                }
+                                if (vm.rotatable(r).isNotEmpty()) {
+                                    FSPrimaryButton(stringResource(R.string.org_rotate_keys), onClick = { scope.launch { vm.rotate(seat, r) } },
+                                        enabled = !busy && frozen == null, modifier = Modifier.testTag("org-rotate-${r.seatId.take(8)}"))
+                                }
                             }
                         }
                     }

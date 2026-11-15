@@ -4013,4 +4013,14 @@
     <string name="org_approve">Approuver</string>
     <string name="orgs_none">Ce téléphone ne fait encore partie d\'aucune organisation. Ouvre un lien d\'invitation pour en rejoindre une.</string>
     <string name="orgs_settings_subtitle">Serveurs que tu gères avec d\'autres personnes</string>
+    <string name="org_keys_to_rotate">Clés à changer</string>
+    <string name="org_left_rotate">%1$s est parti. Change les clés que cette personne pouvait ouvrir pour qu\'elle ne puisse plus rien lire de nouveau.</string>
+    <string name="org_rotate_keys">Changer les clés</string>
+    <string name="org_keys_rotated">Clés changées.</string>
+    <string name="org_rotate_reason">Changer les clés de cette organisation</string>
+    <string name="org_key_cgk">Clé entre serveurs</string>
+    <string name="org_key_directory">Clé de l\'annuaire</string>
+    <string name="org_key_archive">Clés de sauvegarde de %1$s</string>
+    <string name="org_key_disk">Clé du disque de %1$s</string>
+    <string name="org_disk_key_later">Une clé de disque change quand son serveur est rechiffré, ce qui n\'est pas encore disponible.</string>
 </resources>

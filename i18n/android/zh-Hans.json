@@ -4010,5 +4010,15 @@
   "org_you_approved": "你已批准。",
   "org_approve": "批准",
   "orgs_none": "这部手机还没有加入任何组织。打开邀请链接即可加入。",
-  "orgs_settings_subtitle": "与他人一起运行的服务器"
+  "orgs_settings_subtitle": "与他人一起运行的服务器",
+  "org_keys_to_rotate": "需要轮换的密钥",
+  "org_left_rotate": "%1$s 已离开。请轮换其能打开的密钥，使其无法读取任何新内容。",
+  "org_rotate_keys": "轮换密钥",
+  "org_keys_rotated": "密钥已轮换。",
+  "org_rotate_reason": "轮换此组织的密钥",
+  "org_key_cgk": "服务器之间的密钥",
+  "org_key_directory": "目录密钥",
+  "org_key_archive": "%1$s 的备份密钥",
+  "org_key_disk": "%1$s 的磁盘密钥",
+  "org_disk_key_later": "磁盘密钥会在其服务器重新加密时更换，此功能尚不可用。"
 }
