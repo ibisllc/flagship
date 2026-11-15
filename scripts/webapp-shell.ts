@@ -1,5 +1,5 @@
 // The webapp shell's manifest and its release signature (docs/webapp-key-custody.md item 5;
-// browser side in apps/web/public/webapp/lib/shellTrust.js, runbook docs/runbooks/webapp-shell-signing.md).
+// browser side in apps/web/public/webapp/lib/shellTrust.js, steps in docs/webapp-key-custody.md "Signing a release shell").
 //
 //   npx tsx scripts/webapp-shell.ts manifest [dir]        print the manifest of a built webapp dir
 //   npx tsx scripts/webapp-shell.ts sign [--sign] [--signing-key <src>] [--path .maintainers]

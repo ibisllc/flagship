@@ -41,7 +41,7 @@ describe("webapp quantum-safe protection view", () => {
   });
 
   it("says the browser cannot change strict, and is wired into Settings and the shell", async () => {
-    expect((await view()).WEB_CANNOT_CHANGE).toMatch(/holds no post-quantum key/);
+    expect((await view()).WEB_CANNOT_CHANGE).toMatch(/can't turn strict protection on or off/);
     const html = readFileSync(resolve(__dirname, "../public/webapp/index.html"), "utf8");
     expect(html).toContain('id="settings-tab-quantum-safety"');
     expect(html).toContain('id="view-quantum-safety"');

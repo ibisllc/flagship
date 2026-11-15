@@ -301,7 +301,7 @@ export async function handleOrgInviteGet(deps: OrgDeps, orgId: string, seatId: s
 export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
   const b = body as {
-    accept?: { orgId: string; seatId: string; inviteSha256: string; memberKeyId: string; adminKeyId: string; issuedAt: number };
+    accept?: { orgId: string; seatId: string; inviteSha256: string; memberKeyId: string; adminKeyId: string; issuedAt: number; custody?: "hardware" | "browser" };
     memberBinding?: unknown;
     adminBinding?: unknown;
     signature?: unknown;
@@ -383,8 +383,10 @@ export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unk
       if (inv.invite.labelSha256 !== g.grant.labelSha256) return malformed("the grant's pseudonym differs from the invite's");
       const acc = await deps.orgs.getObject(orgId, "accept", g.grant.seatId);
       if (!acc) return { status: 403, body: { error: "the person has not accepted yet", code: "org-not-accepted" } };
-      const a = parse<{ accept: { memberKeyId: string; adminKeyId: string } }>(acc.bodyJson).accept;
+      const a = parse<{ accept: { memberKeyId: string; adminKeyId: string; custody?: string } }>(acc.bodyJson).accept;
       if (a.memberKeyId !== g.grant.memberKeyId || a.adminKeyId !== g.grant.adminKeyId) return malformed("the grant's keys differ from the accepted ones");
+      // The custody the person's accept signed is the custody the grant shows (docs/webapp-key-custody.md item 1).
+      if ((a.custody ?? "hardware") !== (g.grant.custody ?? "hardware")) return malformed("the grant's custody differs from the accepted one");
     }
     const frozen = (s: string, t: number) => v.book.freezes.some((f) => f.seatId === s && f.issuedAt <= t && t < f.untilMs);
     verifyOrgSeatGrant(v.state, g, frozen, now);

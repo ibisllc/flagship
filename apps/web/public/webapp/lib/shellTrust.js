@@ -37,7 +37,7 @@ export const SHELL_MANIFEST_PATH = "/shell-manifest.json";
 export const SHELL_SIGNATURE_PATH = "/shell-signature.json";
 
 // Off until the owner signs the first shell at a release (the signing step is in
-// docs/runbooks/webapp-shell-signing.md). Turned on, an unsigned update is refused from the page.
+// docs/webapp-key-custody.md "Signing a release shell"). Turned on, an unsigned update is refused from the page.
 // BEGIN SHELL_SIGNATURE_REQUIRED (owner)
 export const SHELL_SIGNATURE_REQUIRED = false;
 // END SHELL_SIGNATURE_REQUIRED

@@ -73,7 +73,7 @@ function wipe(e, msgAt, msgLen) {
 }
 
 function seedOk(seed) {
-  if (!(seed instanceof Uint8Array) || seed.length !== 32) throw Object.assign(new Error("ML-DSA seed must be 32 bytes"), { code: "bad-secret-key" });
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) throw Object.assign(new Error("bad-secret-key"), { code: "bad-secret-key" });
 }
 
 /** True once the pinned module loads (false on a browser without WebAssembly or a mismatched file). */
@@ -93,7 +93,7 @@ export async function mldsaPublicKey(seed) {
   const a = e.fl_arena();
   try {
     view(e).set(seed, a + OFF_SEED);
-    if (e.fl_pk() !== 0) throw Object.assign(new Error("ML-DSA keygen failed"), { code: "bad-secret-key" });
+    if (e.fl_pk() !== 0) throw Object.assign(new Error("bad-secret-key"), { code: "bad-secret-key" });
     return view(e).slice(a + OFF_PK, a + OFF_PK + PK);
   } finally {
     wipe(e);
@@ -117,7 +117,7 @@ export async function mldsaSign(seed, msg, ctx, { deterministic = false } = {}) 
     m.set(seed, a + OFF_SEED);
     m.set(rnd, a + OFF_RND);
     m.set(ctx, a + OFF_CTX);
-    if (e.fl_sign(at, msg.length, ctx.length) !== 0) throw Object.assign(new Error("ML-DSA sign failed"), { code: "bad-secret-key" });
+    if (e.fl_sign(at, msg.length, ctx.length) !== 0) throw Object.assign(new Error("bad-secret-key"), { code: "bad-secret-key" });
     return view(e).slice(a + OFF_SIG, a + OFF_SIG + SIG);
   } finally {
     wipe(e, at, msg.length);

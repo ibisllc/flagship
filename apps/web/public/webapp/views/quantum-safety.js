@@ -22,7 +22,7 @@ registerView("view-quantum-safety");
 
 export const BROWSER_LOSS = "browser-without-pq-authentication";
 export const WEB_CANNOT_CHANGE =
-  tr("This browser holds no post-quantum key, so it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.");
+  tr("This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.");
 
 /** What a row says about one server's policy. Exported for tests. */
 export function describePolicy(state, headLoss, verified) {
