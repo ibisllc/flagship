@@ -1,7 +1,8 @@
 // gym-refresh.sh step 5b (docs/gym-test-acme.md item 8): it restarts the gym's Pebble only, and only when the gym
 // Worker's config names it. Production's wrangler.toml never names a test CA.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -9,9 +10,17 @@ const root = join(import.meta.dirname, "..");
 const script = readFileSync(join(root, "scripts/gym-refresh.sh"), "utf8");
 const code = script.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
 
+// The config goes in a real file: on Linux, Node hands a child's stdin over as a socket, which /dev/stdin cannot open.
 function readDirectory(toml: string): string {
-  const line = /^ACME_DIR="\$\((.*)\)"$/m.exec(code)![1]!.replace(/"\$WT\/apps\/com\/\$CFG"/, "/dev/stdin");
-  return execFileSync("bash", ["-c", line], { input: toml, encoding: "utf8" }).trim();
+  const dir = mkdtempSync(join(tmpdir(), "gym-acme-"));
+  try {
+    const file = join(dir, "wrangler.gym.toml");
+    writeFileSync(file, toml);
+    const line = /^ACME_DIR="\$\((.*)\)"$/m.exec(code)![1]!.replace(/"\$WT\/apps\/com\/\$CFG"/, '"$CFG_FILE"');
+    return execFileSync("bash", ["-c", line], { env: { ...process.env, CFG_FILE: file }, encoding: "utf8" }).trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 describe("gym-refresh restarts only the gym's test CA", () => {
