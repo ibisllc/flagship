@@ -74,6 +74,32 @@ class GymMessagesTest : GymBase() {
         eventually(10_000, "blocked at .com") { GymVoici.client.blocks[account()].orEmpty().isNotEmpty() }
     }
 
+    /** docs/voici-calls.md §8: calls on is a publish (v2 index), a later post keeps it, and the thread can allow a caller. */
+    @Test fun anAdminTurnsCallsOnAndAllowsAVisitorToCall() {
+        launch(tab = "messages", adminRoot = true)
+        waitUntilExists("social-title", 20_000)
+        publishFirstPage()
+        tap("page-options")
+        tap("page-accept-calls")
+        eventually(15_000, "calls on at .com") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsCalls == 1 }
+        waitUntilExists("page-calls-from")
+        waitUntilExists("calls-dnd")
+        gymShot("calls-settings")
+        tap("page-options-done")
+
+        runBlocking { GymVoici.client.visitorWrites(account(), visitor, "Can I call you?") }
+        tap("social-tab-messages")
+        tap("messages-segment-requests")
+        eventually(15_000, "the request arrives") {
+            runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.refreshInbox() }
+            tagCount("messages-empty") == 0
+        }
+        tapMatching(tagPrefix("messages-row-"))
+        tap("thread-menu")
+        tap("thread-allow-calls")
+        eventually(10_000, "the signed allow reached .com") { GymVoici.client.callAllows.any { VoiciJs.str(it["op"]) == "allow" } }
+    }
+
     @Test fun theNameIsEditedThroughItsPencilAndPublishedFromTheBar() {
         launch(tab = "messages", adminRoot = true)
         waitUntilExists("social-title", 20_000)
