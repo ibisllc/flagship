@@ -1,0 +1,214 @@
+import Foundation
+import CryptoKit
+import Flagship
+import FlagshipAPI
+import FlagshipCore
+
+/// What a voi.ci call needs from this device's keys (MessagesStore.callKeys).
+struct VoiciCallKeys: @unchecked Sendable {
+    let username: String
+    let deviceId: String
+    let deviceKey: Curve25519.Signing.PrivateKey
+    let pageId: String
+    let acceptsCalls: Bool
+    let ownerSignSeed: [UInt8]
+    let ownerSignPub: String
+    /// The page's inbox seeds, newest epoch first (a push sealed before a rotation still opens).
+    let inboxSeeds: [[UInt8]]
+    let caKeys: [String]
+    let origin: String
+    let blocked: Set<String>
+    let revoked: Set<String>
+    let nicknames: [String: String]
+
+    var devicePubHex: String { HexUtil.encode(deviceKey.publicKey.rawRepresentation) }
+    var deviceRef: String? { try? VoiciCalls.deviceRef(devicePubHex: devicePubHex) }
+
+    /// The caller in a push, opened under the inbox keys.
+    func openPush(_ push: VoiciCallPush) -> (pageId: String, conv: String, from: String)? {
+        guard let sealed = CanonicalJson.b64Decode(push.sealed) else { return nil }
+        for seed in inboxSeeds { if let p = VoiciCalls.openPush(inboxSeed: seed, callId: push.callId, sealed: sealed) { return p } }
+        return nil
+    }
+
+    /// Device headers for one `.com` request (the `/profile` scheme), signed by this device's account key.
+    func deviceHeaders(method: String, path: String) -> [String: String]? {
+        let pub = devicePubHex
+        guard let requestId = try? AccountMetadata.generateDeviceId() else { return nil }
+        let at = Int64(Date().timeIntervalSince1970 * 1000)
+        guard let bytes = try? AccountMetadata.canonicalDirectoryRequest(accountId: username, deviceId: deviceId, signerPubHex: pub, method: method,
+                                                                         path: path, requestId: requestId, issuedAt: at),
+              let sig = try? deviceKey.signature(for: bytes) else { return nil }
+        return ["x-flagship-device-id": deviceId, "x-flagship-device-pub": pub, "x-flagship-request-id": requestId,
+                "x-flagship-issued-at": String(at), "x-flagship-signature": HexUtil.encode(Data(sig))]
+    }
+}
+
+/// One ringing voi.ci call on this admin device (docs/voici-calls.md §1, §2, §6): the room WebSocket to `.com`, the
+/// caller's signed request checked here, the signed answer (X-Wing encapsulation, the one-time TURN credential, the
+/// munged answer SDP, `media` when the caller offered video), the CA receipt that says this device won, and the frame
+/// keys handed to the media engine. Every check and signature is the shared VoiciCalls port.
+@MainActor
+final class VoiciCallSession {
+    enum Event {
+        case request(VoiciCallRequest)
+        case won
+        case connected
+        /// A room reason (hangup, cancel, no-answer, limit, ...), "answered-elsewhere", "decline", "left" or "failed".
+        case ended(String)
+        case remoteCamera(String)
+    }
+
+    let push: VoiciCallPush
+    private let keys: VoiciCallKeys
+    private let media: CallMediaEngine
+    private let onEvent: (Event) -> Void
+    private var task: URLSessionWebSocketTask?
+    private(set) var request: VoiciCallRequest?
+    private var pending: (ss: [UInt8], req: [UInt8], ans: [UInt8])?
+    private var over = false
+
+    init(push: VoiciCallPush, keys: VoiciCallKeys, media: CallMediaEngine, onEvent: @escaping (Event) -> Void) {
+        self.push = push; self.keys = keys; self.media = media; self.onEvent = onEvent
+    }
+
+    private static func now() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+    private static func randHex(_ n: Int) -> String { CanonicalJson.hex((0..<n).map { _ in UInt8.random(in: 0...255) }) }
+
+    func connect() {
+        let path = "/api/voici/calls/\(push.callId)/device"
+        guard let url = URL(string: "wss://\(push.room)\(path)?u=\(keys.username)"), let headers = keys.deviceHeaders(method: "GET", path: path) else {
+            return end("failed")
+        }
+        var req = URLRequest(url: url, timeoutInterval: 20)
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        media.onLocalIce = { [weak self] c in Task { @MainActor in self?.send(["t": "ice", "candidate": c.map { .string($0) } ?? .null]) } }
+        media.onConnected = { [weak self] in Task { @MainActor in self?.onEvent(.connected) } }
+        media.onFailed = { [weak self] in Task { @MainActor in self?.end("failed") } }
+        let t = URLSession.shared.webSocketTask(with: req)
+        task = t
+        t.resume()
+        receive()
+    }
+
+    private func receive() {
+        task?.receive { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(.string(let text)):
+                    self.onRoom(text)
+                    self.receive()
+                case .success:
+                    self.receive()
+                case .failure:
+                    self.end("failed")
+                }
+            }
+        }
+    }
+
+    private func send(_ o: [String: JSONValue]) {
+        guard let text = try? CanonicalJson.canonicalJson(.object(o)) else { return }
+        task?.send(.string(text)) { _ in }
+    }
+
+    private func onRoom(_ text: String) {
+        guard let m = JSONValue.parse(text)?.object, let t = m["t"]?.string else { return }
+        switch t {
+        case "request": onRequest(m["request"])
+        case "won": onWon(m["receipt"])
+        case "answered-elsewhere": end("answered-elsewhere")
+        case "ice": media.addRemoteIce(m["candidate"]?.string)
+        case "camera": if let s = m["state"]?.string, VoiciCalls.cameraStates.contains(s) { onEvent(.remoteCamera(s)) }
+        case "ended": end(m["reason"]?.string ?? "hangup")
+        case "error": end("failed")
+        default: break
+        }
+    }
+
+    private func onRequest(_ raw: JSONValue?) {
+        guard let raw else { return end("failed") }
+        let ctx = VoiciCallRequestCheckContext(pageId: keys.pageId, acceptsCalls: keys.acceptsCalls, origin: keys.origin, caKeys: keys.caKeys,
+                                               now: Self.now(), blocked: keys.blocked, revoked: keys.revoked)
+        guard case .ok(let r) = VoiciCalls.checkRequest(raw, ctx), r.callId == push.callId else { return end("failed") }
+        request = r
+        onEvent(.request(r))
+    }
+
+    /// Answers. `cameraAble`: this device can send video (the call itself starts as audio). Nil once the signed answer
+    /// is sent, else a code: "not-ready", "media-unavailable", "failed".
+    func answer(cameraAble: Bool) async -> String? {
+        guard let r = request, let deviceRef = keys.deviceRef, let reqBytes = VoiciCalls.requestBytes(r.json),
+              let requestHash = VoiciCalls.requestHash(r.json), let xpub = try? CanonicalJson.hexToBytes(r.callerXwingPub),
+              let encap = try? VoiciCalls.encapsulate(callerXwingPub: xpub) else { return request == nil ? "not-ready" : "failed" }
+        let ct = encap.ciphertext
+        var ss = encap.sharedSecret
+        let turn = CallTurnCredential(user: Self.randHex(16), secret: Self.randHex(32))
+        let sdp: String
+        do {
+            sdp = VoiciCalls.mungeSdp(try await media.answer(offerSdp: r.offerSdp, video: r.hasVideo, turn: turn))
+        } catch {
+            wipe(&ss)
+            return error is CallMediaUnavailable ? "media-unavailable" : "failed"
+        }
+        guard VoiciCalls.checkSdp(sdp, media: r.media) == nil else { wipe(&ss); return "failed" }
+        let body = VoiciCallAnswerBody(callId: r.callId, deviceRef: deviceRef, requestHash: requestHash, xwingCiphertext: CanonicalJson.hex(ct),
+                                       answerSdp: sdp, turnUser: turn.user, turnSecret: turn.secret, issuedAt: Self.now(),
+                                       media: r.hasVideo ? (cameraAble ? VoiciCalls.mediaVideo : VoiciCalls.mediaAudio) : nil)
+        guard let signed = try? VoiciCalls.signAnswer(body, ownerSignSeed: keys.ownerSignSeed), let ansBytes = try? VoiciCalls.canonicalAnswer(body) else {
+            wipe(&ss)
+            return "failed"
+        }
+        pending = (ss, reqBytes, ansBytes)
+        send(["t": "answer", "answer": signed])
+        return nil
+    }
+
+    private func onWon(_ receipt: JSONValue?) {
+        guard var p = pending, let deviceRef = keys.deviceRef,
+              case .ok = VoiciCalls.checkReceipt(receipt, caKeys: keys.caKeys, now: Self.now(), account: keys.username, deviceRef: deviceRef)
+        else { return end("failed") }
+        let audio = VoiciCalls.frameKeys(sharedSecret: p.ss, requestBytes: p.req, answerBytes: p.ans)
+        let video = request?.hasVideo == true ? VoiciCalls.videoFrameKeys(sharedSecret: p.ss, requestBytes: p.req, answerBytes: p.ans) : nil
+        wipe(&p.ss)
+        pending = nil
+        media.start(CallFrameCrypto(callId: push.callId, audio: audio, video: video))
+        onEvent(.won)
+    }
+
+    /// Decline while ringing: the room ends the call for every device and records a missed call.
+    func decline() {
+        send(["t": "decline"])
+        end("decline")
+    }
+
+    /// Hang up an answered call: the end order is signed by the owner messages key.
+    func hangUp() {
+        if let order = try? VoiciCalls.signEndOwner(callId: push.callId, reason: "hangup", issuedAt: Self.now(), ownerSignSeed: keys.ownerSignSeed) {
+            send(["t": "end", "end": order])
+        }
+        end("hangup")
+    }
+
+    /// Leaves the room without ending the call for the other devices (this device couldn't answer).
+    func leave() { end("left") }
+
+    func sendCamera(_ state: String) {
+        if VoiciCalls.cameraStates.contains(state) { send(["t": "camera", "state": .string(state)]) }
+    }
+
+    private func end(_ reason: String) {
+        guard !over else { return }
+        over = true
+        if var p = pending { wipe(&p.ss) }
+        pending = nil
+        media.stop()
+        task?.cancel(with: .normalClosure, reason: nil)
+        onEvent(.ended(reason))
+    }
+}
+
+private func wipe(_ b: inout [UInt8]) {
+    for i in b.indices { b[i] = 0 }
+}

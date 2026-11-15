@@ -38,6 +38,8 @@
 		<string>remote-notification</string>
 		<string>fetch</string>
 		<string>processing</string>
+		<string>voip</string>
+		<string>audio</string>
 	</array>
 </dict>
 </plist>

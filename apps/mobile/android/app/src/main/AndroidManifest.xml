@@ -15,6 +15,15 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- voi.ci calls (docs/voici-calls.md §4): a self-managed Telecom connection, the full-screen incoming-call
+         notification (Play declaration), the microphone (asked on Answer), and the call's foreground service. -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
 
     <uses-feature android:name="android.hardware.strongbox_keystore" android:required="false" />
     <!-- On-device USB-OTG builder: write a bootable installer to a USB stick via
@@ -212,6 +221,31 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- voi.ci calls: Telecom, the call screen, the notification actions, the call's foreground service. -->
+        <service
+            android:name=".calls.VoiciConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+        <activity
+            android:name=".calls.VoiciCallActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.flagshipserver.app.calls" />
+        <receiver
+            android:name=".calls.VoiciCallActionReceiver"
+            android:exported="false" />
+        <service
+            android:name=".calls.VoiciCallService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone|camera" />
 
         <!-- Home-screen server status widget (Glance). -->
         <receiver

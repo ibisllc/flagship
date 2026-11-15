@@ -293,3 +293,55 @@ demux, settings and the thread entries), the relays' call work (§5), the CI lan
    `VOICI_CALLS = "on"` only after the store builds with the call layer ship.
 4. D4: the legal check for calls in the China mainland storefront before release.
 5. Native review of the voi.ci call strings (machine drafts in six languages).
+
+## As built: video and the phone call layers (2026-11-15, worktree `0.4/calls-phone`)
+
+Owner, 2026-11-14: video calling is in 0.4 as an upgrade of the audio call (`docs/voici-calls-v2.md` §1 only; §2 to §4
+are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac under load; Android: no Gradle run).
+
+- **`media`** (request and answer, optional): `audio` or `audio,video`, what that side is able to send. Present, it is
+  appended to the canonical bytes (`…|<issuedAt>|<media>`); absent, the record is the audio one above, so stripping it
+  only downgrades a call to audio. The answer's media must be within the request's. A video SDP has exactly m=audio then
+  m=video, the video section VP8 only (rtx, RED, FEC and other codecs munged away), header extensions MID and
+  transport-wide CC only. New SDP refusals: `bad-media`, `not-vp8`, `video-extension`.
+- **Video frames** (§1.5, §1.6 of v2): keys `HKDF(ss, th, "flagship/voici-call-frame/v1|<dir>|video")`, own counters,
+  epochs as audio (ctr / 30000). Sealed frame = clear VP8 payload header (10 bytes on a key frame, 3 on a delta frame,
+  inside the AAD `<callId>|<dir>|video|<ctr>|` ‖ clear) ‖ u64be(ctr) ‖ AES-GCM(u32be(len) ‖ body ‖ zeros), its total
+  padded to a bucket: 1 KiB doubling to 1 MiB (a larger frame is refused). Vectors: the `video` section of
+  `test-vectors/voici-calls/vectors.json`, read by TS, flagship-web, Swift and Kotlin.
+- **Camera states**: the room relays `{t:"camera", state:"on"|"off"|"paused"}` between the caller and the winner (UI only,
+  unsigned). voi.ci offers video only when the browser has a camera (no permission asked), asks for the camera on the
+  Camera tap, and shows the other side's state; voi.ci's permissions policy is `camera=(self)` while calls are on.
+- **Webapp**: missed calls in a thread and "Allow calls from them" / "Don't allow calls from them" (`lib/voiciCalls.js`,
+  shell v211). It still never answers.
+- **iOS** (`apps/mobile/ios/Sources/FlagshipUI/Calls/`): `VoiciCallCenter` registers PushKit at launch, sends the VoIP
+  token to `POST /api/accounts/<u>/voici-voip-token`, reports every VoIP push to CallKit before anything else (a late,
+  malformed or second call is reported and ended at once), CallKit Answer / End / Mute drive the room
+  (`VoiciCallSession`: request check, signed answer, receipt check, frame keys). `supportsVideo` on, `hasVideo` follows
+  either camera, calls stay out of Recents. **China mainland storefront** (`Storefront.current` = `CHN`, remembered):
+  no CallKit and no VoIP token (an old one is removed), so `.com` sends the `voici-call` alert push and the open app rings
+  on `VoiciCallScreen`; calls work only while the app is open (D4). The camera pauses when the app leaves the foreground
+  (the caller sees "Camera paused"). Info.plist: background modes `voip`, `audio`; `NSMicrophoneUsageDescription`; the
+  camera sentence now names calls.
+- **Android** (`app/.../calls/`): `voici-call` push → `VoiciCallCenter` → a self-managed `ConnectionService`
+  (`MANAGE_OWN_CALLS`), the full-screen CallStyle notification (`USE_FULL_SCREEN_INTENT`) and `VoiciCallActivity`
+  (Answer / Decline, Mute, Camera, Hang up). The microphone is asked on Answer, the camera on the Camera tap; the call
+  runs a `phoneCall` (+ microphone, + camera once granted) foreground service. Leaving the call screen pauses the camera.
+- **Media**: both apps go through a small `CallMediaEngine` interface with `CallFrameCrypto` (the frame layer above, p2c
+  out, c2p in). Only `StubCallMediaEngine` exists: it refuses every answer, so a call rings, and answering says "This
+  version of Flagship can't connect calls yet."
+
+### Open items (owner)
+
+1. **libwebrtc**: no WebRTC library is a dependency of either app, and adding one is a large binary (tens of MB per
+   architecture). Pick the build (Google's prebuilt, a pinned self-build, or a vendor such as the community
+   `stream-webrtc-android` / `WebRTC.xcframework`) that negotiates DTLS 1.3 with X25519MLKEM768 and exposes
+   FrameEncryptor / FrameDecryptor (§11.2). Until then `StubCallMediaEngine` is what ships.
+2. **The phone's TURN responder and endpoint demux** are not wired into the apps (`flagship-turn-lite` exists).
+3. **Answering while locked**: the answer is signed by the owner messages key, derived from the account key, which is
+   only in memory while the app is unlocked. A call that arrives with the app locked rings with "Someone on voi.ci" and
+   asks to open and unlock Flagship before it can be answered. Decide whether a device-held, call-only signing key
+   (Keychain / Keystore, available after first unlock) is acceptable.
+4. **D4 legal check** for calls in the China mainland storefront still stands.
+5. Calls settings (on/off, who can call, Do Not Disturb) and the missed-call rows on iOS/Android are not built here.
+6. Native review of the new strings (machine drafts in six languages).

@@ -15765,5 +15765,77 @@
     "en": "Missed call",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Someone on voi.ci": {
+    "en": "Someone on voi.ci",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "%@ turned on their camera": {
+    "en": "%@ turned on their camera",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Camera paused": {
+    "en": "Camera paused",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Flagship needs the camera to show your video. You can keep talking without it.": {
+    "en": "Flagship needs the camera to show your video. You can keep talking without it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "voi.ci call": {
+    "en": "voi.ci call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Unlock Flagship to answer": {
+    "en": "Unlock Flagship to answer",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Quantum-safe call": {
+    "en": "Quantum-safe call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Answered on another device": {
+    "en": "Answered on another device",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "This version of Flagship can't connect calls yet.": {
+    "en": "This version of Flagship can't connect calls yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "The call couldn't connect.": {
+    "en": "The call couldn't connect.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Calls end after 60 minutes.": {
+    "en": "Calls end after 60 minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Call ended": {
+    "en": "Call ended",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Answer": {
+    "en": "Answer",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Unmute": {
+    "en": "Unmute",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Mute": {
+    "en": "Mute",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Camera off": {
+    "en": "Camera off",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Camera": {
+    "en": "Camera",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Hang up": {
+    "en": "Hang up",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
   }
 }

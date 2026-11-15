@@ -1,6 +1,7 @@
 {
+  "NSCameraUsageDescription": "fd65c9ef9722",
   "NSBluetoothAlwaysUsageDescription": "9b2e7b854e62",
-  "NSCameraUsageDescription": "55b710d5dd53",
   "NSFaceIDUsageDescription": "c221e312c7d5",
-  "NSLocalNetworkUsageDescription": "2a074c799c6f"
+  "NSLocalNetworkUsageDescription": "2a074c799c6f",
+  "NSMicrophoneUsageDescription": "86f6c78a6332"
 }

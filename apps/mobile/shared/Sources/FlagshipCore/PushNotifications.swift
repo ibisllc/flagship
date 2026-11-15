@@ -97,6 +97,19 @@ public final class PushNotifications: NSObject {
     /// opens the activity, where the box's row says what happened.
     public nonisolated static let accessListsCategory = "access-lists"
 
+    /// A voi.ci call ringing this admin device (docs/voici-calls.md §4, §6). PushKit's VoIP push carries the fields
+    /// under `flagship-call`; a device without VoIP ringing (the China mainland storefront, where CallKit is not
+    /// allowed) gets them as an alert push of this category, which the open app turns into its own ringing screen.
+    public nonisolated static let voiciCallCategory = "voici-call"
+
+    /// A call push, VoIP or alert, or nil.
+    public nonisolated static func voiciCall(_ info: [AnyHashable: Any], categoryIdentifier: String = "") -> VoiciCallPush? {
+        if let nested = info["flagship-call"] as? [AnyHashable: Any] { return VoiciCallPush.parse(nested) }
+        let category = info["category"] as? String ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
+        guard categoryIdentifier == voiciCallCategory || category == voiciCallCategory || (info["kind"] as? String) == voiciCallCategory else { return nil }
+        return VoiciCallPush.parse(info)
+    }
+
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
@@ -241,10 +254,17 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             completionHandler([.list])
             return
         }
+        // A call while the app is open rings on its own screen, not as a banner.
+        if let call = Self.voiciCall(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
+            Task { @MainActor in VoiciCallEvents.post(call) }
+            completionHandler([.list])
+            return
+        }
         Task { @MainActor in
             if Self.isAbuseNotice(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
                 AbuseNoticeEvents.post()
             }
+
             if let event = ProvisionPhaseBridge.parse(info) {
                 ProvisionPhaseBridge.shared.onPhase?(event)
             }
@@ -269,6 +289,11 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
                 return
             }
             if Self.isAbuseNotice(userInfo, categoryIdentifier: category) { AbuseNoticeEvents.post() }
+            if let call = Self.voiciCall(userInfo, categoryIdentifier: category) {
+                VoiciCallEvents.post(call)
+                completionHandler()
+                return
+            }
             self.handleNotificationPayload(userInfo)
             completionHandler()
         }
@@ -293,4 +318,38 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             linker.enqueue(link)
         }
     }
+}
+
+/// The fields of a voi.ci call push: the call id, the room host, the caller sealed to the page's inbox key (base64)
+/// and the ring's start. Apple sees no caller.
+public struct VoiciCallPush: Equatable, Sendable {
+    public let callId: String
+    public let room: String
+    public let sealed: String
+    public let issuedAt: Int64
+
+    public init(callId: String, room: String, sealed: String, issuedAt: Int64) {
+        self.callId = callId; self.room = room; self.sealed = sealed; self.issuedAt = issuedAt
+    }
+
+    public static func parse(_ d: [AnyHashable: Any]) -> VoiciCallPush? {
+        guard let callId = d["callId"] as? String, CanonicalJson.isLowerHex(callId, bytes: 16),
+              let room = (d["room"] as? String)?.lowercased(), !room.isEmpty, room.count <= 253,
+              room.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") }),
+              let sealed = d["sealed"] as? String, !sealed.isEmpty, sealed.count <= 8192 else { return nil }
+        let at: Int64? = (d["issuedAt"] as? String).flatMap(Int64.init) ?? (d["issuedAt"] as? NSNumber)?.int64Value
+        guard let issuedAt = at else { return nil }
+        return VoiciCallPush(callId: callId, room: room, sealed: sealed, issuedAt: issuedAt)
+    }
+}
+
+/// An alert-push call (no VoIP ringing on this device) reached the open app.
+public enum VoiciCallEvents {
+    public static let name = Notification.Name("flagship.voici-call")
+
+    public static func post(_ call: VoiciCallPush) {
+        NotificationCenter.default.post(name: name, object: nil, userInfo: ["call": call])
+    }
+
+    public static func call(from n: Notification) -> VoiciCallPush? { n.userInfo?["call"] as? VoiciCallPush }
 }

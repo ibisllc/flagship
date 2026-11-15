@@ -1,6 +1,6 @@
 {
   "NSCameraUsageDescription": {
-    "en": "Flagship uses the camera to scan a pairing QR shown by your server.",
+    "en": "Flagship uses the camera to scan a pairing QR shown by your server, and for your video in a call, only when you turn it on.",
     "ctx": "App/project.yml INFOPLIST_KEY_NSCameraUsageDescription"
   },
   "NSBluetoothAlwaysUsageDescription": {
@@ -19,5 +19,9 @@
     "en": "Flagship",
     "ctx": "app name under the icon",
     "translatable": false
+  },
+  "NSMicrophoneUsageDescription": {
+    "en": "Flagship uses the microphone only during a call you answer.",
+    "ctx": "App/project.yml INFOPLIST_KEY_NSMicrophoneUsageDescription"
   }
 }
