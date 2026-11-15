@@ -33,6 +33,7 @@ suspend fun decommissionServer(
                 if (out.releasedName) FSStrings.get(R.string.server_deleted_the_name_is_free, pod.name)
                 else FSStrings.get(R.string.removed_from_your_servers, pod.name),
             )
+            UntrustedServers.shared.forget(pod.fqdn)
             app.removePod(pod.podId)
         }
         // The name is still reserved, so the pod stays; the sentence says why.

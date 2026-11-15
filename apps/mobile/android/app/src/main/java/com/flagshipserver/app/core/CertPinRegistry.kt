@@ -27,7 +27,10 @@ package com.flagshipserver.app.core
 
 import com.flagshipserver.app.api.PodDirectoryEntry
 
-class CertPinRegistry {
+class CertPinRegistry(
+    /** Servers this device stopped trusting: known boxes with no pin, so every connection is refused. */
+    private val untrusted: () -> UntrustedServers = { UntrustedServers.shared },
+) {
     companion object {
         /** Process-wide registry consulted by the shared OkHttp client. */
         val shared = CertPinRegistry()
@@ -69,6 +72,7 @@ class CertPinRegistry {
     fun isKnownBox(host: String, nowMs: Long = System.currentTimeMillis()): Boolean {
         val h = host.trim().trimEnd('.').lowercase()
         if (h.isEmpty()) return false
+        if (untrusted().contains(h)) return true
         synchronized(pins) {
             if (nowMs < (enrollment[h] ?: 0L)) return false
             return known.any { h == it || h.endsWith(".$it") }
@@ -176,7 +180,7 @@ class CertPinRegistry {
      */
     fun pinFor(host: String): String? {
         val h = host.trim().trimEnd('.').lowercase()
-        if (h.isEmpty()) return null
+        if (h.isEmpty() || untrusted().contains(h)) return null
         synchronized(pins) {
             pins[h]?.let { return it }
             for ((domain, pin) in pins) {

@@ -215,6 +215,20 @@ object Variant : AppVariant {
             GymRescue.environment("home.${username.lowercase()}.flagship.services", it, java.io.File(context.cacheDir, "gym-rescue")).first
         }
 
+    override fun retailClaimGym(): RetailClaimGym? {
+        val r = GymSeams.retail ?: return null
+        val scenario = MockBoxClaimRadio.Scenario.of(r) ?: MockBoxClaimRadio.Scenario.NORMAL
+        var checks = 0
+        return RetailClaimGym(
+            radio = MockBoxClaimRadio(scenario, appearAfterMs = 4_000),
+            registeredStk = { if (r == "keyMismatch") "ee".repeat(32) else MockBoxClaimRadio.stkPubHex },
+            tlsCheck = {
+                checks++
+                if (r == "certSlow" || checks <= 3) null else true
+            },
+        )
+    }
+
     override val forceAdminRoot: Boolean get() = GymSeams.forceAdminRoot
     override val bypassBiometricGates: Boolean get() = GymSeams.bypassBiometricGates
     override val refuseBiometricGates: Boolean get() = GymSeams.refuseBiometricGates

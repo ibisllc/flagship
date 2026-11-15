@@ -28,7 +28,14 @@ class InMemoryServerKeyPinStore : ServerKeyPinStore {
     override fun domains(): List<String> = map.keys.sorted()
 }
 
-class ServerKeyPins(private val store: ServerKeyPinStore) {
+class ServerKeyPins(
+    private val store: ServerKeyPinStore,
+    /** Servers this device stopped trusting: no pin for them, and they can't be pinned again.
+     *  Null reads [UntrustedServers.shared] at each call. */
+    private val untrustedServers: UntrustedServers? = null,
+) {
+    private val untrusted: UntrustedServers get() = untrustedServers ?: UntrustedServers.shared
+
     /**
      * A pin and what its STK vouched for since (architecture v2, [BoxKeyPins]): the ML-DSA-65 key
      * it bound and the boot key. Stored as the bare key while it carries nothing else.
@@ -69,8 +76,12 @@ class ServerKeyPins(private val store: ServerKeyPinStore) {
     /** The pinned key as lowercase hex, or null. */
     fun pinnedHex(serverDomain: String): String? = record(serverDomain)?.stk
 
-    /** The whole pin for [serverDomain], or null when none was pinned. */
-    fun record(serverDomain: String): Pin? = decode(store.get(serverDomain.lowercase()))
+    /** The whole pin for [serverDomain], or null when none was pinned or the server is untrusted
+     *  (nothing is sealed to an untrusted server). */
+    fun record(serverDomain: String): Pin? =
+        if (untrusted.contains(serverDomain)) null else stored(serverDomain)
+
+    private fun stored(serverDomain: String): Pin? = decode(store.get(serverDomain.lowercase()))
 
     /**
      * Add what the pinned STK vouched for to its pin, only while [stkHex] is still the pin (a
@@ -95,7 +106,8 @@ class ServerKeyPins(private val store: ServerKeyPinStore) {
     fun recordFirstSeen(serverDomain: String, stkPubHex: String?): Record {
         val d = serverDomain.lowercase()
         val offered = stkPubHex?.lowercase()?.takeIf { HEX64.matches(it) }
-        val have = record(d)?.stk
+        if (untrusted.contains(d)) return Record.Mismatch
+        val have = stored(d)?.stk
         return when {
             have != null && offered != null && have != offered -> Record.Mismatch
             have != null -> Record.AlreadyPinned

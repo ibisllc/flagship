@@ -41,6 +41,9 @@ interface AppVariant {
     /** Gym: Offline control against the in-process box of the scenario the launch named; null otherwise (always in release). */
     fun rescueEnvironment(context: android.content.Context, username: String): com.flagshipserver.app.viewmodels.OfflineControlEnvironment?
 
+    /** Gym: "Set up a box from a store" on a scripted box; null for the real radio (always in release). */
+    fun retailClaimGym(): RetailClaimGym?
+
     /** True while the app runs on mock clients (a debug gym run). */
     val usesMockClients: Boolean
 
@@ -108,6 +111,13 @@ interface AppVariant {
      *  transport at all: the pairing screens then say it isn't available. */
     fun devicePairingRelays(): DevicePairingRelays?
 }
+
+/** The retail claim's gym stand-ins: a scripted box, the key the gym's `.com` lists, its TLS check. */
+class RetailClaimGym(
+    val radio: BoxClaimRadio,
+    val registeredStk: suspend (serverDomain: String) -> String?,
+    val tlsCheck: suspend (serverDomain: String) -> Boolean?,
+)
 
 /** A gym launch: the tab to open and the mock clients (null: live clients). */
 class GymLaunch(

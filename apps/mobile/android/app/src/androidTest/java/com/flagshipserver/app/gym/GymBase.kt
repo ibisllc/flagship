@@ -129,6 +129,8 @@ abstract class GymBase {
         rescue: String? = null,
         listsPlan: String? = null,
         separateLists: Boolean = false,
+        /** "Set up a box from a store" on a scripted box (MockBoxClaimRadio scenario, "keyMismatch", "certSlow"). */
+        retail: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -160,6 +162,7 @@ abstract class GymBase {
             if (rescue != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_RESCUE, rescue)
             if (listsPlan != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_PLAN, listsPlan)
             if (separateLists) putExtra(SmokeModeConfig.EXTRA_SMOKE_SEPARATE_LISTS, true)
+            if (retail != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_RETAIL, retail)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()

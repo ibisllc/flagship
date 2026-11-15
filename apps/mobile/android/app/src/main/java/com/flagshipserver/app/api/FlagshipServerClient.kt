@@ -145,6 +145,13 @@ interface FlagshipServerClient {
      *  `GET /api/users/:u/allowance` (account read token); null when unknown. */
     suspend fun accountTier(username: String): String? = null
 
+    /** Retail box claim (docs/retail-box-setup.md §4 step 8): registers the box key from the claim
+     *  receipt under the recipe's AuthCode (`POST /api/box-claim/key`), before the Wi-Fi password leaves. */
+    suspend fun registerBoxClaimKey(req: BoxClaimKeyRequest): Unit = error("box claim key unavailable")
+    /** The blind claim mailbox for the remote claim by setup code (`/api/box-claim/mailbox/<id>/<dir>`). */
+    suspend fun postBoxClaimMailbox(mailboxId: String, dir: String, body: String): Unit = error("box claim mailbox unavailable")
+    suspend fun readBoxClaimMailbox(mailboxId: String, dir: String, after: Int): List<BoxClaimMailboxMessage> = error("box claim mailbox unavailable")
+
     /** Returns true iff a cloud-stored recovery envelope exists for
      *  the given username. Powers the Home recovery-setup nudge (C9).
      *  Underlying endpoint: GET /api/recovery/by-username/<u> — 200
@@ -1798,6 +1805,20 @@ class LiveFlagshipServerClient(
         }
     }
 
+    override suspend fun registerBoxClaimKey(req: BoxClaimKeyRequest) {
+        transport.postJson("$base/api/box-claim/key", req, serializer = BoxClaimKeyRequest.serializer())
+    }
+
+    override suspend fun postBoxClaimMailbox(mailboxId: String, dir: String, body: String) {
+        transport.postJson("$base/api/box-claim/mailbox/$mailboxId/$dir", BoxClaimMailboxPost(body), serializer = BoxClaimMailboxPost.serializer())
+    }
+
+    override suspend fun readBoxClaimMailbox(mailboxId: String, dir: String, after: Int): List<BoxClaimMailboxMessage> =
+        transport.getJson(
+            "$base/api/box-claim/mailbox/$mailboxId/$dir?after=$after",
+            responseSerializer = BoxClaimMailboxRead.serializer(),
+        ).messages.orEmpty()
+
     override suspend fun accountTier(username: String): String? {
         val encoded = java.net.URLEncoder.encode(username, "UTF-8")
         return runCatching {
@@ -2106,3 +2127,19 @@ private data class SuggestUsernameWire(
     val name: String? = null,
     val retryAfterMs: Int? = null,
 )
+
+/** `POST /api/box-claim/key`: the fields of `flagship/box-claim-key/v1` and the admin signature. */
+@kotlinx.serialization.Serializable
+data class BoxClaimKeyRequest(val key: Key, val signature: String) {
+    @kotlinx.serialization.Serializable
+    data class Key(val username: String, val serial: String, val serverDomain: String, val stkPubHex: String, val issuedAt: Long)
+}
+
+@kotlinx.serialization.Serializable
+data class BoxClaimMailboxMessage(val seq: Int, val body: String)
+
+@kotlinx.serialization.Serializable
+data class BoxClaimMailboxPost(val body: String)
+
+@kotlinx.serialization.Serializable
+data class BoxClaimMailboxRead(val messages: List<BoxClaimMailboxMessage>? = null)

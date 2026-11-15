@@ -88,6 +88,9 @@ data class SmokeModeConfig(
     val listsPlan: String? = null,
     /** Plants keeps a separate access list on each server (GymSeams.separateLists). */
     val separateLists: Boolean = false,
+    /** "Set up a box from a store" runs on a scripted box (MockBoxClaimRadio.Scenario wire name), or
+     *  "keyMismatch" (the gym's `.com` lists another key) or "certSlow" (no certificate ever). */
+    val retail: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -114,6 +117,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_STORE_WAITING = "flagship.smokeStoreWaiting"
         const val EXTRA_SMOKE_PLAN = "flagship.smokePlan"
         const val EXTRA_SMOKE_SEPARATE_LISTS = "flagship.smokeSeparateLists"
+        const val EXTRA_SMOKE_RETAIL = "flagship.smokeRetail"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -155,6 +159,7 @@ data class SmokeModeConfig(
                 listsPlan = intent.getStringExtra(EXTRA_SMOKE_PLAN)?.trim()?.lowercase()
                     ?.takeIf { it == "pro" || it == "free" },
                 separateLists = intent.getBooleanExtra(EXTRA_SMOKE_SEPARATE_LISTS, false),
+                retail = intent.getStringExtra(EXTRA_SMOKE_RETAIL)?.trim()?.takeIf { it.isNotEmpty() },
             )
         }
     }
@@ -235,6 +240,7 @@ object SmokeMode {
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
         GymSeams.rescueScenario = config.rescue
+        GymSeams.retail = config.retail
         GymSeams.bypassBiometricGates = !config.realBiometrics
         GymSeams.refuseBiometricGates = config.refuseBiometrics
         if (config.realBiometrics) appState.setRequireBiometricAtLaunch(true)
