@@ -460,6 +460,20 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   ports, phone-side rotations, iOS join screen (uncompiled code goes to the cloud). Calls agent was cut off by the Mac
   sleeping; resumed.
 
+- 2026-11-15: **calls-phone merged** (`2c41c9641`..`5ffcb2e29`): video as an upgrade of the audio call (signed
+  optional `media`, VP8, own video keys/counters, size-bucket padding, vectors TS/web/Swift/Kotlin), webapp missed calls
+  + "Allow calls from them" (shell **v212**), iOS PushKit/CallKit + China no-ring (no VoIP token in the CN storefront),
+  Android self-managed ConnectionService + full-screen CallStyle. Media is `StubCallMediaEngine` (no libwebrtc yet:
+  owner decision). Swift/Kotlin NOT compiled (cloud Task 3 compiles Android; iOS needs Xcode here). tsc, 68 tests,
+  i18n green; **parity: 0 red** for the first time in 0.4. Owner questions in `docs/voici-calls.md` open items:
+  libwebrtc build, answering while locked (device-held call key?), D4 China legal check, calls settings UI.
+  **retail-image tranche 2 merged** (`e0d59bbd0`..`502e27a39`): webapp "Release this box" (shell **v213**; classical
+  signature, a strict box refuses and points to the phone), daemon unit on an unclaimed image running claim-only, first
+  boot after a claim adopts keyd's key (`FLAGSHIP_BOX_KEY_IN_KEYD=1`), VM smoke `tools/retail-vm/run.sh` (cloud Task 3).
+  tsc + 149 targeted tests green. Limits: daemon runs as root on an unclaimed box; a second claim after a wipe can't
+  serve until the recovery partition exists (hardware). Cloud Task 3 sent: Android calls compile, retail VM, full suite.
+  Restore-ui agent told to take shell v214.
+
 ## Resume point
 
 1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
