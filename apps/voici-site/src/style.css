@@ -419,6 +419,31 @@ body.has-sheet {
 .message-cta .btn {
   height: 52px;
 }
+.call-btn {
+  margin-top: 10px;
+  height: 52px;
+}
+.btn-danger {
+  background: var(--danger, #b42318);
+  color: #fff;
+}
+.call-status {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 17px;
+}
+.call-timer {
+  margin: 4px 0 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+.call-controls {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 24px 0 16px;
+}
 .cta-note {
   margin: 10px 0 0;
   text-align: center;

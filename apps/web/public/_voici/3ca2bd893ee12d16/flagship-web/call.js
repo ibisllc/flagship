@@ -1,0 +1,205 @@
+// A visitor's voi.ci call to a page owner (docs/voici-calls.md §1, §7): WebRTC audio whose only ICE server is the
+// owner's phone (`turns:<u>.<services>:443?transport=tcp`, relay only), every frame sealed again in callWorker.js
+// under keys from the X-Wing exchange in the signed set-up. `.com` only arranges: the request goes to
+// POST /api/voici/calls and the set-up messages through the call's room WebSocket.
+//
+//   startVoiciCall(o) -> call   o = {session (a signed-in page session), index (the verified page index), username,
+//                               cfg {apiBase, apex, services, origin}, stream (the microphone MediaStream), worker
+//                               (a module Worker of callWorker.js), onState(state, detail), deps? (fetch, WebSocket,
+//                               RTCPeerConnection, RTCRtpScriptTransform, now)}
+//   call.hangUp(), call.setMuted(bool), call.remoteStream
+//
+// States: "requesting", "ringing", "connecting", "connected", "ended" with detail {reason} or "failed" {code,
+// retryAfterSec?}. The offer is made before the request (its hash is signed) and applied only once the answer brings
+// the phone's one-time TURN credential, so no candidate is gathered before the call is answered.
+
+import {
+  canonicalVoiciCallAnswer,
+  canonicalVoiciCallEnd,
+  canonicalVoiciCallRequest,
+  checkVoiciCallAnswer,
+  deriveVoiciCallFrameKeys,
+  hex,
+  hexToBytes,
+  mungeVoiciCallSdp,
+  voiciCallDecapsulate,
+  voiciCallKeygen,
+  VOICI_CALL_MAX_MS,
+} from "./callProtocol.js";
+import { messageCred, randomHex, signP256 } from "./envelope.js";
+import { voiciConv } from "./proto/lib/voiciProtocol.js";
+
+const NO_CREDS = { credentials: "omit", referrerPolicy: "no-referrer", mode: "cors", cache: "no-store" };
+const AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
+
+/** The getUserMedia constraints of a call (echo cancellation, noise suppression and auto gain on). */
+export const VOICI_CALL_AUDIO = { audio: AUDIO, video: false };
+
+/** The ICE server of a call: the owner's phone on its bare name, TURN over TLS on 443, with the answer's credential. */
+export function voiciCallIceServer(username, services, answer) {
+  return { urls: `turns:${username}.${services}:443?transport=tcp`, username: answer.turnUser, credential: answer.turnSecret };
+}
+
+/** The signed request body for POST /api/voici/calls. */
+export async function buildVoiciCallRequest(session, o) {
+  const conv = voiciConv(session.pageId, session.pseudonymPub);
+  const body = { pageId: session.pageId, conv, callId: o.callId, from: session.pseudonymPub, callerXwingPub: hex(o.callerXwingPub), offerSdp: o.offerSdp, issuedAt: o.issuedAt, cred: messageCred(session) };
+  const sig = await signP256(session.privateKey, canonicalVoiciCallRequest(body), o.subtle);
+  return { v: 1, kind: "voici-call-request", ...body, sig };
+}
+
+async function signEnd(session, callId, reason, issuedAt) {
+  const body = { callId, side: "caller", reason, issuedAt };
+  return { v: 1, kind: "voici-call-end", ...body, sig: await signP256(session.privateKey, canonicalVoiciCallEnd(body)) };
+}
+
+function attachTransform(deps, worker, target, side) {
+  if (deps.RTCRtpScriptTransform) {
+    target.transform = new deps.RTCRtpScriptTransform(worker, { side });
+    return true;
+  }
+  if (typeof target.createEncodedStreams === "function") {
+    const { readable, writable } = target.createEncodedStreams();
+    worker.postMessage({ kind: "streams", side, readable, writable }, [readable, writable]);
+    return true;
+  }
+  return false;
+}
+
+export function startVoiciCall(o) {
+  const deps = {
+    fetch: o.deps?.fetch ?? globalThis.fetch.bind(globalThis),
+    WebSocket: o.deps?.WebSocket ?? globalThis.WebSocket,
+    RTCPeerConnection: o.deps?.RTCPeerConnection ?? globalThis.RTCPeerConnection,
+    RTCRtpScriptTransform: o.deps?.RTCRtpScriptTransform ?? globalThis.RTCRtpScriptTransform,
+    now: o.deps?.now ?? (() => Date.now()),
+  };
+  const { session, index, cfg } = o;
+  const scriptTransform = !!deps.RTCRtpScriptTransform;
+  const pc = new deps.RTCPeerConnection({ iceServers: [], iceTransportPolicy: "relay", bundlePolicy: "max-bundle", rtcpMuxPolicy: "require", ...(scriptTransform ? {} : { encodedInsertableStreams: true }) });
+  const remoteStream = new MediaStream();
+  let ws = null;
+  let state = "requesting";
+  const callId = randomHex(16);
+  let request = null;
+  let callerKey = null;
+  let limitTimer = null;
+  const pendingIce = [];
+  const track = o.stream.getAudioTracks()[0];
+
+  const set = (s, detail = {}) => {
+    if (state === "ended" || state === "failed") return;
+    state = s;
+    o.onState?.(s, detail);
+    if (s === "ended" || s === "failed") cleanup();
+  };
+  const cleanup = () => {
+    clearTimeout(limitTimer);
+    try {
+      ws?.close(1000);
+    } catch {
+      /* closed */
+    }
+    try {
+      pc.close();
+    } catch {
+      /* closed */
+    }
+    o.worker.postMessage({ kind: "stop" });
+    for (const t of o.stream.getTracks()) t.stop();
+    if (callerKey) callerKey.seed.fill(0);
+  };
+  const send = (m) => {
+    if (ws?.readyState === 1) ws.send(JSON.stringify(m));
+  };
+
+  const sender = pc.addTrack(track, o.stream);
+  if (!attachTransform(deps, o.worker, sender, "send")) {
+    queueMicrotask(() => set("failed", { code: "unsupported" }));
+    return { hangUp() {}, setMuted() {}, remoteStream };
+  }
+  pc.ontrack = (e) => {
+    attachTransform(deps, o.worker, e.receiver, "receive");
+    remoteStream.addTrack(e.track);
+  };
+  pc.onicecandidate = (e) => {
+    if (state === "connecting" || state === "connected") send({ t: "ice", candidate: e.candidate ? e.candidate.candidate : null });
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "connected") set("connected");
+    if (pc.connectionState === "failed") set("failed", { code: "unreachable" });
+  };
+
+  async function onAnswer(answer) {
+    const r = checkVoiciCallAnswer(answer, { request, ownerSignPub: index.ownerSignPub, now: deps.now() });
+    if (!r.ok) return set("failed", { code: "bad-answer" });
+    set("connecting");
+    const ss = voiciCallDecapsulate(hexToBytes(answer.xwingCiphertext), callerKey.seed);
+    const k = deriveVoiciCallFrameKeys(ss, canonicalVoiciCallRequest(request), canonicalVoiciCallAnswer(answer));
+    ss.fill(0);
+    o.worker.postMessage({ kind: "keys", callId, c2p: hex(k.c2p), p2c: hex(k.p2c) });
+    k.c2p.fill(0);
+    k.p2c.fill(0);
+    pc.setConfiguration({ iceServers: [voiciCallIceServer(o.username, cfg.services, answer)], iceTransportPolicy: "relay", bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
+    await pc.setLocalDescription({ type: "offer", sdp: request.offerSdp });
+    await pc.setRemoteDescription({ type: "answer", sdp: answer.answerSdp });
+    for (const c of pendingIce.splice(0)) await pc.addIceCandidate(c === null ? null : { candidate: c, sdpMid: "0" }).catch(() => {});
+    limitTimer = setTimeout(() => set("ended", { reason: "limit" }), VOICI_CALL_MAX_MS);
+  }
+
+  function onRoom(msg) {
+    if (!msg || typeof msg.t !== "string") return;
+    if (msg.t === "ringing") set("ringing");
+    else if (msg.t === "answer") onAnswer(msg.answer).catch(() => set("failed", { code: "unreachable" }));
+    else if (msg.t === "ice" && (msg.candidate === null || typeof msg.candidate === "string")) {
+      if (pc.remoteDescription) pc.addIceCandidate(msg.candidate === null ? null : { candidate: msg.candidate, sdpMid: "0" }).catch(() => {});
+      else pendingIce.push(msg.candidate);
+    } else if (msg.t === "ended") set("ended", { reason: typeof msg.reason === "string" ? msg.reason : "hangup" });
+  }
+
+  (async () => {
+    callerKey = voiciCallKeygen();
+    const offer = await pc.createOffer({ offerToReceiveAudio: true });
+    request = await buildVoiciCallRequest(session, { callId, callerXwingPub: callerKey.publicKey, offerSdp: mungeVoiciCallSdp(offer.sdp), issuedAt: deps.now() });
+    const res = await deps.fetch(`${cfg.apiBase}/api/voici/calls`, { ...NO_CREDS, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request }) });
+    let j = null;
+    try {
+      j = await res.json();
+    } catch {
+      j = null;
+    }
+    if (!res.ok || typeof j?.room !== "string" || !/^[0-9a-f]{64}$/.test(j?.token ?? "")) {
+      const code = typeof j?.code === "string" && /^[a-z0-9-]{1,40}$/.test(j.code) ? j.code : "unavailable";
+      return set("failed", { code, ...(Number.isSafeInteger(j?.retryAfterSec) ? { retryAfterSec: j.retryAfterSec } : {}) });
+    }
+    if (j.room !== `wss://${cfg.apex}/api/voici/calls/${callId}/caller`) return set("failed", { code: "unavailable" });
+    if (state !== "requesting") return;
+    ws = new deps.WebSocket(`${j.room}?t=${j.token}`);
+    ws.onmessage = (e) => {
+      try {
+        onRoom(JSON.parse(typeof e.data === "string" ? e.data : ""));
+      } catch {
+        /* not ours */
+      }
+    };
+    ws.onclose = () => {
+      if (state === "requesting" || state === "ringing") set("failed", { code: "unavailable" });
+    };
+  })().catch(() => set("failed", { code: "unavailable" }));
+
+  return {
+    remoteStream,
+    get callId() {
+      return callId;
+    },
+    async hangUp() {
+      if (state === "ended" || state === "failed") return;
+      const reason = state === "connected" || state === "connecting" ? "hangup" : "cancel";
+      if (ws && request) send({ t: "end", end: await signEnd(session, callId, reason, deps.now()) });
+      set("ended", { reason });
+    },
+    setMuted(m) {
+      track.enabled = !m;
+    },
+  };
+}
