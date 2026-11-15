@@ -297,6 +297,30 @@ test.describe("gym webapp restore into a server", () => {
     expect(s.plans).toEqual([]);
   });
 
+  test("gym restore-merge a quantum-safe server refuses the webapp's classical order and the page points to the phone", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const m = await mock(page);
+    const fx = await makeBackup(page);
+    const s = box(page, m, keys, fx);
+    // The box is strict: an admin-signed order without the hybrid half is refused as needs-hybrid.
+    m.first("POST", at(`${MERGE}/stage`), (call: Call) => {
+      s.stages.push(call);
+      return { status: 403, json: { error: "This server is quantum-safe, so a restore needs a quantum-safe signature.", code: "needs-hybrid" } };
+    });
+    await openServer(page);
+    await page.locator(`[data-bk-restore="${fx.archiveId}"]`).click();
+    const dlg = dialog(page);
+    await expect(dlg.locator("[data-rm-error]")).toHaveText(
+      "This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.",
+      { timeout: 15_000 },
+    );
+    expect(s.stages).toHaveLength(1);
+    expect((s.stages[0]!.body as { pqSignature?: unknown }).pqSignature).toBeUndefined();
+    await shot(page, testInfo, "restore-merge-needs-phone");
+    await dlg.locator("[data-rm-close]").click();
+    expect(s.cancels).toBe(0);
+  });
+
   test("gym restore-merge a non-admin device sees why and sends no order", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "non-admin", servers: [HOME] });
     const m = await mock(page);

@@ -81,6 +81,14 @@ export const MERGE_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PLAN_TTL_MS = 6 * 60 * 60_000;
 export const ACTION_ORDER = ["install", "keep", "replace", "replace-data", "copy", "skip"];
 export const RESTORE_ADMIN_ONLY = tr("Only an admin device of this account can restore a backup.");
+/** A quantum-safe (strict) box wants the signer's hybrid half, which a browser can't make (it holds no ML-DSA key). */
+export const RESTORE_NEEDS_PHONE = tr("This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.");
+
+/** The box's refusal of a restore order as a sentence: a strict box's points to the phone. */
+export function restoreErrorText(e, fallback) {
+  if (e?.body?.code === "needs-hybrid") return RESTORE_NEEDS_PHONE;
+  return fallback(e);
+}
 const COPY_SLUG = /^[a-z0-9](-?[a-z0-9]){0,29}$/;
 
 export async function mergeStatus({ client }) {

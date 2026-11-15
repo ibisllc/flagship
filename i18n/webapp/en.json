@@ -14777,5 +14777,9 @@
   "The backup file can't be read any more (was its drive removed?). Pick it again.": {
     "en": "The backup file can't be read any more (was its drive removed?). Pick it again.",
     "ctx": "webapp/lib/restoreMerge.js:109"
+  },
+  "This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.": {
+    "en": "This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.",
+    "ctx": "webapp/lib/restoreMerge.js"
   }
 }

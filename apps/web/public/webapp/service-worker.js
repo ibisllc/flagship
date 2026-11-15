@@ -503,7 +503,8 @@
 //  v214: the server page's Backups section restores apps from a backup into the running server (a saved backup's
 //       "Restore into this server…" or a .flagship file): signed stage, per-app choices with the box's preview, a
 //       signed plan, progress, and the earlier copies a restore kept with Undo and Delete now (admin devices only).
-const SHELL_VERSION = "v214";
+//  v215: a restore into a quantum-safe server says the webapp can't sign it and points to the phone app.
+const SHELL_VERSION = "v215";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
