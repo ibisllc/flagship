@@ -132705,43 +132705,43 @@
         }
       }
     },
-    "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.": {
+    "Don't use your page or messages for anything illegal. Flagship takes content down and stops accounts from sending messages when the law requires it.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tu página y tus mensajes no deben contener contenido ilegal, acoso, amenazas, desnudos ni contenido sexual, violencia real explícita, spam ni contenido que se haga pasar por otra persona."
+            "value": "No uses tu página ni tus mensajes para nada ilegal. Flagship retira contenido e impide que las cuentas envíen mensajes cuando la ley lo exige."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre page et vos messages ne doivent contenir ni contenu illégal, ni harcèlement, ni menaces, ni nudité ou contenu sexuel, ni violence réelle explicite, ni spam, ni contenu qui se fait passer pour quelqu’un d’autre."
+            "value": "N’utilisez pas votre page ni vos messages pour quoi que ce soit d’illégal. Flagship retire des contenus et empêche des comptes d’envoyer des messages lorsque la loi l’exige."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deine Seite und deine Nachrichten dürfen keine illegalen Inhalte, Belästigung, Drohungen, Nacktheit oder sexuellen Inhalte, drastische reale Gewalt, Spam oder Inhalte enthalten, die sich als jemand anderes ausgeben."
+            "value": "Nutze deine Seite und deine Nachrichten für nichts Illegales. Flagship entfernt Inhalte und sperrt das Senden von Nachrichten für Konten, wenn das Gesetz es verlangt."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sua página e suas mensagens não podem conter conteúdo ilegal, assédio, ameaças, nudez ou conteúdo sexual, violência real explícita, spam ou conteúdo que finja ser outra pessoa."
+            "value": "Não use sua página nem suas mensagens para nada ilegal. A Flagship remove conteúdo e impede contas de enviar mensagens quando a lei exige."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ページとメッセージには、違法なコンテンツ、嫌がらせ、脅迫、ヌードや性的なコンテンツ、現実の生々しい暴力、スパム、他人になりすますコンテンツを含めてはいけません。"
+            "value": "ページやメッセージを違法な目的に使わないでください。法律で求められる場合、Flagship はコンテンツを削除し、アカウントからのメッセージ送信を停止します。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你的页面和消息不得包含违法内容、骚扰、威胁、裸露或色情内容、真实的血腥暴力、垃圾信息或冒充他人的内容。"
+            "value": "请勿将你的页面或消息用于任何违法用途。在法律要求时，Flagship 会删除内容并停止账户发送消息。"
           }
         }
       }

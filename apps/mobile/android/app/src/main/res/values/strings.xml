@@ -3322,7 +3322,7 @@
     <string name="voici_delete_post">Delete post</string>
     <string name="voici_delete_post_title">Delete this post?</string>
     <string name="voici_rules_title">Page and message rules</string>
-    <string name="voici_rules_body">Don\'t post or send anything illegal or hateful, violent threats, harassment, nudity or sexual content, graphic real-world violence, spam or someone else\'s private information. Flagship removes pages and blocks accounts that break these rules. Reports are reviewed by people at Flagship.</string>
+    <string name="voici_rules_body">Don\'t use your page or messages for anything illegal. Flagship takes content down and stops accounts from sending messages when the law requires it.</string>
     <string name="voici_rules_agree">I agree</string>
     <string name="voici_sites">Websites you\'re signed in to</string>
     <string name="voici_sites_none">You aren\'t signed in to any page.</string>

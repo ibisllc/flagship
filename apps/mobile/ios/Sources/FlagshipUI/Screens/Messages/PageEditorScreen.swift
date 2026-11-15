@@ -668,7 +668,7 @@ struct VoiciRulesSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.")
+                    Text("Don't use your page or messages for anything illegal. Flagship takes content down and stops accounts from sending messages when the law requires it.")
                     Text("Anyone can report a page or a message. Flagship can remove a page and stop an account from sending messages.")
                     Text("Messages are private. If someone reports your message, Flagship can see which account sent it.")
                     Text("The full rules are in the terms at flagshipserver.com/terms.")

@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The in-app "Page and message rules" summary must name every kind of content the terms forbid on pages and in
-// messages (Terms §8.2, apps/web/public/terms.html). Google Play's content rating answers rest on it (journal F10).
+// Owner rule (2026-11-14): the page and message rules are the legal minimum only, no use in furtherance of anything
+// illegal plus lawful takedowns. Topic rules (sex, nudity, violence...) come back only if a store or a government
+// requires them, so the summaries and Terms §8.2 must not name any.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
@@ -14,15 +15,21 @@ const SUMMARIES: Array<[string, () => string]> = [
   ["Android", () => /<string name="voici_rules_body">([^<]+)<\/string>/.exec(read("apps/mobile/android/app/src/main/res/values/strings.xml"))?.[1] ?? ""],
 ];
 
+const TOPIC_RULES = /nudity|sexual content|graphic real-world violence|hateful/i;
+
 describe("page and message rules summary", () => {
-  it("the terms still forbid nudity, sexual content and graphic violence", () => {
-    expect(read("apps/web/public/terms.html")).toContain("nudity or sexual content, or graphic real-world violence");
+  it("Terms §8.2 forbids only illegal use and names no topic rules", () => {
+    const terms = read("apps/web/public/terms.html");
+    const s82 = terms.slice(terms.indexOf("<h3>8.2"), terms.indexOf("<h3>8.3"));
+    expect(s82).toContain("in furtherance of anything illegal");
+    expect(s82).toContain("takedown requests as the law requires");
+    expect(s82).not.toMatch(TOPIC_RULES);
   });
   for (const [app, summary] of SUMMARIES) {
-    it(`${app} names nudity or sexual content and graphic real-world violence`, () => {
+    it(`${app} summary says no illegal use and names no topic rules`, () => {
       const text = summary();
-      expect(text).toContain("nudity or sexual content");
-      expect(text).toContain("graphic real-world violence");
+      expect(text).toContain("anything illegal");
+      expect(text).not.toMatch(TOPIC_RULES);
     });
   }
 });

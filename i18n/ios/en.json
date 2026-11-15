@@ -13942,8 +13942,8 @@
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
   },
-  "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.": {
-    "en": "Your page and your messages must not contain illegal content, harassment, threats, nudity or sexual content, graphic real-world violence, spam, or content that pretends to be someone else.",
+  "Don't use your page or messages for anything illegal. Flagship takes content down and stops accounts from sending messages when the law requires it.": {
+    "en": "Don't use your page or messages for anything illegal. Flagship takes content down and stops accounts from sending messages when the law requires it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:414"
   },
   "Choose where this server's backups go.": {

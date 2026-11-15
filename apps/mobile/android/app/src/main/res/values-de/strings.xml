@@ -3318,7 +3318,7 @@
     <string name="voici_delete_post">Beitrag löschen</string>
     <string name="voici_delete_post_title">Diesen Beitrag löschen?</string>
     <string name="voici_rules_title">Regeln für Seiten und Nachrichten</string>
-    <string name="voici_rules_body">Veröffentliche oder sende nichts Illegales oder Hasserfülltes, keine Gewaltdrohungen, Belästigung, Nacktheit oder sexuellen Inhalte, drastische reale Gewalt, Spam oder private Informationen anderer. Flagship entfernt Seiten und sperrt Konten, die gegen diese Regeln verstoßen. Meldungen werden von Menschen bei Flagship geprüft.</string>
+    <string name="voici_rules_body">Nutze deine Seite und deine Nachrichten für nichts Illegales. Flagship entfernt Inhalte und sperrt das Senden von Nachrichten für Konten, wenn das Gesetz es verlangt.</string>
     <string name="voici_rules_agree">Ich stimme zu</string>
     <string name="voici_sites">Websites, bei denen du angemeldet bist</string>
     <string name="voici_sites_none">Du bist bei keiner Seite angemeldet.</string>

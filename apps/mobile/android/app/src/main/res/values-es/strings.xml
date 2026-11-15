@@ -3318,7 +3318,7 @@
     <string name="voici_delete_post">Eliminar publicación</string>
     <string name="voici_delete_post_title">¿Eliminar esta publicación?</string>
     <string name="voici_rules_title">Normas de páginas y mensajes</string>
-    <string name="voici_rules_body">No publiques ni envíes nada ilegal o de odio, amenazas violentas, acoso, desnudos o contenido sexual, violencia real explícita, spam ni información privada de otras personas. Flagship elimina páginas y bloquea cuentas que incumplen estas normas. Las denuncias las revisan personas de Flagship.</string>
+    <string name="voici_rules_body">No uses tu página ni tus mensajes para nada ilegal. Flagship retira contenido e impide que las cuentas envíen mensajes cuando la ley lo exige.</string>
     <string name="voici_rules_agree">Acepto</string>
     <string name="voici_sites">Sitios web en los que has iniciado sesión</string>
     <string name="voici_sites_none">No has iniciado sesión en ninguna página.</string>
