@@ -374,6 +374,7 @@ class MainActivity : FragmentActivity() {
             ),
             caKeysSource = mocks?.voiciCaKeys ?: { TrustChecker(OkHttpJsonTransport(okHttp)).verifiedCaKeys() },
             http = if (mocks != null) null else okHttp,
+            callKeyVault = if (mocks != null) com.flagshipserver.app.calls.MemoryCallKeyVault() else com.flagshipserver.app.calls.KeystoreCallKeyVault(this),
         )
         com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
         com.flagshipserver.app.keystore.Keystore.onWipe = { voiciCenter.forgetLocal() }

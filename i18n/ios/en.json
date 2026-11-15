@@ -16005,5 +16005,13 @@
   "A disk key changes when its server is re-keyed, which isn't available yet.": {
     "en": "A disk key changes when its server is re-keyed, which isn't available yet.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Answer calls while Flagship is locked": {
+    "en": "Answer calls while Flagship is locked",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (answering while locked)"
+  },
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": {
+    "en": "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (answering while locked)"
   }
 }

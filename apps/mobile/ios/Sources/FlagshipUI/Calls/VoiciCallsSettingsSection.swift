@@ -9,6 +9,7 @@ struct VoiciCallsSettingsSection: View {
     @State private var center = VoiciCallCenter.shared
     @State private var quiet = CallSettingsStore.quietHours()
     @State private var busy = false
+    @State private var lockedNote: String?
 
     var body: some View {
         let v = VoiciCallSettings.viewState(isAdmin: store.isAdmin, isPublic: store.isPublic, callsOn: store.callsOn, noRingMode: center.noRingMode)
@@ -36,6 +37,24 @@ struct VoiciCallsSettingsSection: View {
                 }
                 if v.noRingNote {
                     Text("In your region, calls ring only while Flagship is open.").accessibilityIdentifier("calls-no-ring-note")
+                }
+            }
+        }
+        if v.showsWho && store.isAdmin {
+            Section {
+                Toggle("Answer calls while Flagship is locked", isOn: Binding(get: { store.answersWhileLocked }, set: { on in
+                    busy = true
+                    Task {
+                        lockedNote = await store.setAnswerWhileLocked(on)
+                        busy = false
+                    }
+                }))
+                .disabled(busy)
+                .accessibilityIdentifier("calls-answer-locked")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.")
+                    if let lockedNote { Text(verbatim: lockedNote) }
                 }
             }
         }

@@ -4023,4 +4023,7 @@
     <string name="org_key_archive">Chaves de backup de %1$s</string>
     <string name="org_key_disk">Chave do disco de %1$s</string>
     <string name="org_disk_key_later">A chave de um disco muda quando o servidor é recriptografado, o que ainda não está disponível.</string>
+    <string name="voici_calls_answer_locked">Atender chamadas com o Flagship bloqueado</string>
+    <string name="voici_calls_answer_locked_footer">Este dispositivo guarda uma chave que só serve para atender chamadas, para você atender pela tela de bloqueio. Quem liga aparece como “Alguém no voi.ci” até você desbloquear.</string>
+    <string name="voici_calls_answer_locked_unlock">Desbloqueie o Flagship e tente de novo.</string>
 </resources>

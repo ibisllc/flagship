@@ -98,6 +98,10 @@ interface VoiciClient {
     suspend fun missedCalls(username: String): List<VoiciMissedCallItem> = emptyList()
     /** The owner's signed "may call" / "may not call" (`POST /api/voici/pages/<u>/call-allow`, `{allow, signature}`). */
     suspend fun callAllow(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** Binds this device's call-only key (`POST /api/accounts/<u>/voici-call-key`, device headers, `{binding, signature}`). */
+    suspend fun registerCallKey(username: String, device: VoiciDeviceSigner, proof: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** A signed revocation (`POST /api/accounts/<u>/voici-call-key/revoke`, `{revoke, signature}`). */
+    suspend fun revokeCallKey(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
 }
 
 class LiveVoiciClient(
@@ -223,6 +227,15 @@ class LiveVoiciClient(
 
     override suspend fun callAllow(username: String, body: JsonObject) {
         postJson("${base()}/api/voici/pages/${enc(username)}/call-allow", body)
+    }
+
+    override suspend fun registerCallKey(username: String, device: VoiciDeviceSigner, proof: JsonObject) {
+        val path = "/api/accounts/${enc(username)}/voici-call-key"
+        postJson(base() + path, proof, deviceHeaders(username, device, "POST", path))
+    }
+
+    override suspend fun revokeCallKey(username: String, body: JsonObject) {
+        postJson("${base()}/api/accounts/${enc(username)}/voici-call-key/revoke", body)
     }
 
     override suspend fun send(envelope: JsonObject, direct: Boolean) {

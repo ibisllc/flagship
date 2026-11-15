@@ -90,6 +90,8 @@ data class VoiciPageUi(
     val callsOn: Boolean = false,
     /** Who may call while calls are on: "accepted" or "signed-in". */
     val callsFrom: String = "accepted",
+    /** "Answer calls while Flagship is locked" is on here: this device holds a bound call key. */
+    val answersWhileLocked: Boolean = false,
 )
 
 data class VoiciMessagesUi(
@@ -126,6 +128,8 @@ class VoiciCenter(
     val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     /** The app's HTTP client, for link cards (third-party sites, fetched once by this device, §2.5). */
     private val http: okhttp3.OkHttpClient? = null,
+    /** This device's call-only keys (answering while locked); null where calls never ring. */
+    private val callKeyVault: com.flagshipserver.app.calls.VoiciCallKeyVault? = null,
 ) {
     private val mutex = Mutex()
     private val _page = MutableStateFlow(VoiciPageUi())
@@ -211,6 +215,7 @@ class VoiciCenter(
             publicWarned = local.publicWarned,
             callsOn = idx != null && !local.removed && idx.body.takesCalls,
             callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
+            answersWhileLocked = callKeyVault?.load(u) != null,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
         _messages.value = _messages.value.copy(conversations = local.conversations, state = state)
@@ -223,6 +228,12 @@ class VoiciCenter(
     fun forgetLocal() {
         _demoPage.value = null
         val u = user() ?: return
+        // Sign-out or removal: the call key goes too, revoked first (the owner key may be gone: it signs itself).
+        callKeyVault?.load(u)?.let { k ->
+            val body = runCatching { k.selfRevokeBody(now()) }.getOrNull()
+            callKeyVault.delete(u)
+            if (body != null) scope.launch { runCatching { client.revokeCallKey(u, body) } }
+        }
         vault.forget(u)
         pageCheckedFor = null
         _page.value = VoiciPageUi()
@@ -241,6 +252,7 @@ class VoiciCenter(
         runCatching { refreshDrafts() }
         runCatching { syncState() }
         runCatching { refreshInbox() }
+        runCatching { rebindCallKeyIfNeeded() }
         runCatching { checkReplies() }
         // Every change waits for Publish on an admin device (or the Messages header's quick controls).
         withLocal { u, _, local -> publishUi(u, local) }
@@ -665,6 +677,86 @@ class VoiciCenter(
         if (!p.isPublic || !p.canPublish || from !in com.flagshipserver.app.calls.VoiciCallSettings.FROM_VALUES) return false
         if (on == p.callsOn && (!on || from == p.callsFrom)) return true
         return publish(reason, only = emptyList(), calls = on to from)
+    }
+
+    // ── answering while locked (docs/voici-calls.md, owner decisions 2026-11-15) ──
+
+    /**
+     * Settings → Messages → "Answer calls while Flagship is locked" (off by default). On: an unlocked admin device makes
+     * its call-only key, binds it under the owner messages key and registers the binding with `.com`. Off: a signed
+     * revocation, then the key is deleted. Null on success, else a code.
+     */
+    suspend fun setAnswerWhileLocked(on: Boolean): String? {
+        val vault = callKeyVault ?: return "unsupported"
+        val u = user() ?: return "not-found"
+        if (!on) {
+            revokeCallKey()
+            return null
+        }
+        val umk = keyring.umk() ?: return "locked"
+        val device = keyring.device() ?: return "locked"
+        val local = withLocal { _, _, l -> l } ?: return "not-found"
+        if (local.removed || !_page.value.canPublish) return "not-admin"
+        val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex) ?: return "not-found"
+        val keys = VoiciOwnerKeys.derive(umk, idx.body.pageId, idx.body.inboxEpoch)
+        val signer = runCatching { vault.generate(u) }.getOrElse { return "keystore" }
+        return try {
+            val proof = VoiciCalls.signCallKeyBinding(u, device.deviceId, signer.pubHex, now(), keys.sign.seed)
+            client.registerCallKey(u, device, proof)
+            vault.load(u)?.takeIf { it.pubHex != signer.pubHex }?.let { old -> runCatching { client.revokeCallKey(u, ownerRevokeBody(old, keys)) } }
+            vault.save(com.flagshipserver.app.calls.VoiciCallKey(u, device.deviceId, idx.body.pageId, keys.signPub, proof, signer))
+            withLocal { uu, _, l -> publishUi(uu, l) }
+            null
+        } catch (e: VoiciHttpError) {
+            vault.discard(signer)
+            e.code ?: "network"
+        } catch (e: Exception) {
+            vault.discard(signer)
+            "network"
+        }
+    }
+
+    private fun ownerRevokeBody(k: com.flagshipserver.app.calls.VoiciCallKey, keys: VoiciOwnerKeys): JsonObject {
+        val at = now()
+        val sig = VoiciJs.hex(VoiciJs.edSign(keys.sign.seed, VoiciCalls.canonicalCallKeyRevoke(k.username, k.deviceId, k.pubHex, at)))
+        return JsonObject(mapOf("revoke" to VoiciCalls.revokeJson(k.username, k.deviceId, k.pubHex, at), "signature" to JsonPrimitive(sig)))
+    }
+
+    /** Off: a revocation signed by the owner key when this device holds it, else by the call key itself. */
+    suspend fun revokeCallKey() {
+        val vault = callKeyVault ?: return
+        val u = user() ?: return
+        val k = vault.load(u) ?: return
+        val owner = keyring.umk()?.let { umk -> withLocal { _, _, l -> l }?.let { ownerKeys(it, umk) } }?.takeIf { it.signPub == k.ownerSignPub }
+        runCatching { client.revokeCallKey(u, if (owner != null) ownerRevokeBody(k, owner) else k.selfRevokeBody(now())) }
+        vault.delete(u)
+        withLocal { uu, _, l -> publishUi(uu, l) }
+    }
+
+    /** The inbox key was rotated (a new ownerSignPub): the binding no longer verifies, so bind the same key again. */
+    private suspend fun rebindCallKeyIfNeeded() {
+        val vault = callKeyVault ?: return
+        val u = user() ?: return
+        val k = vault.load(u) ?: return
+        val umk = keyring.umk() ?: return
+        val device = keyring.device() ?: return
+        val local = withLocal { _, _, l -> l } ?: return
+        if (local.removed) return
+        val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex) ?: return
+        val keys = VoiciOwnerKeys.derive(umk, idx.body.pageId, idx.body.inboxEpoch)
+        if (keys.signPub == k.ownerSignPub) return
+        val proof = VoiciCalls.signCallKeyBinding(u, k.deviceId, k.pubHex, now(), keys.sign.seed)
+        runCatching { client.registerCallKey(u, device, proof) }.onSuccess {
+            vault.save(com.flagshipserver.app.calls.VoiciCallKey(u, k.deviceId, idx.body.pageId, keys.signPub, proof, k.signer))
+        }
+    }
+
+    /** A ringing phone that is locked: its call key, when the setting is on. */
+    suspend fun lockedCallKeys(): com.flagshipserver.app.calls.VoiciCallKeys? {
+        val vault = callKeyVault ?: return null
+        val u = user() ?: vault.currentAccount() ?: return null
+        val k = vault.load(u) ?: return null
+        return com.flagshipserver.app.calls.VoiciCallKeys.locked(k, caKeys(), origin())
     }
 
     /** Settings → Messages → Rotate inbox key: a new inbox epoch, published at once (§10.2). Drafts stay drafts. */

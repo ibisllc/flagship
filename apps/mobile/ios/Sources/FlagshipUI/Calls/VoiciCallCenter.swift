@@ -149,6 +149,9 @@ public final class VoiciCallCenter: NSObject {
         phase = .ringing
         if let keys = await MessagesStore.shared.callKeys() {
             join(call, keys)
+        } else if let locked = await lockedKeys() {
+            // "Answer calls while Flagship is locked" is on: the call key answers; the caller stays "Someone on voi.ci".
+            join(call, locked)
         } else {
             phase = .needsUnlock
         }
@@ -164,6 +167,13 @@ public final class VoiciCallCenter: NSObject {
         let s = VoiciCallSession(push: call, keys: keys, media: m) { [weak self] e in self?.onSession(e) }
         session = s
         s.connect()
+    }
+
+    /// The call key of this device's account, while the setting is on (it was made and bound on an unlocked device).
+    private func lockedKeys() async -> VoiciCallKeys? {
+        guard let k = VoiciCallKeyStore.currentAccountKey else { return nil }
+        let ca = await MessagesStore.shared.client?.caKeys() ?? []
+        return VoiciCallKeys.locked(k, caKeys: ca, origin: Endpoints.voiciOrigin)
     }
 
     /// The account was unlocked while a call rings: join the room now.

@@ -4023,4 +4023,7 @@
     <string name="org_key_archive">%1$s 的备份密钥</string>
     <string name="org_key_disk">%1$s 的磁盘密钥</string>
     <string name="org_disk_key_later">磁盘密钥会在其服务器重新加密时更换，此功能尚不可用。</string>
+    <string name="voici_calls_answer_locked">在 Flagship 锁定时接听来电</string>
+    <string name="voici_calls_answer_locked_footer">此设备保存一个只能用于接听来电的密钥，因此可以在锁定屏幕上接听。在你解锁之前，来电者显示为“voi.ci 上的某人”。</string>
+    <string name="voici_calls_answer_locked_unlock">请解锁 Flagship 后重试。</string>
 </resources>

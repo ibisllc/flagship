@@ -4023,4 +4023,7 @@
     <string name="org_key_archive">Sicherungsschlüssel von %1$s</string>
     <string name="org_key_disk">Festplattenschlüssel von %1$s</string>
     <string name="org_disk_key_later">Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar.</string>
+    <string name="voici_calls_answer_locked">Anrufe annehmen, während Flagship gesperrt ist</string>
+    <string name="voici_calls_answer_locked_footer">Dieses Gerät behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Der Anrufer erscheint als „Jemand auf voi.ci“, bis du entsperrst.</string>
+    <string name="voici_calls_answer_locked_unlock">Entsperre Flagship und versuche es erneut.</string>
 </resources>

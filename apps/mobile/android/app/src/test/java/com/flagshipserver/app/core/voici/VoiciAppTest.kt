@@ -129,6 +129,51 @@ class VoiciAppTest {
         assertFalse(b.setCalls(true, "accepted", "test"))
     }
 
+    /** docs/voici-calls.md, owner decisions 2026-11-15: the call key is bound, answers and ends while locked, and is revoked. */
+    @Test fun answeringWhileLockedBindsUsesAndRevokesTheCallKey() = runBlocking {
+        val mock = mock()
+        val vault = com.flagshipserver.app.calls.MemoryCallKeyVault()
+        val k = admin()
+        val a = VoiciCenter(mock, k, VoiciVault(MemoryVoiciVaultStore()), { listOf(mock.caPub) }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), callKeyVault = vault)
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        assertNull(a.setAnswerWhileLocked(true))
+        assertTrue(a.page.value.answersWhileLocked)
+        val key = vault.load("alice")!!
+        val (idx, _) = published(mock)
+        assertTrue(VoiciCalls.verifyCallKeyBinding(mock.callKeys["alice|${k.deviceId}"], idx.body.ownerSignPub, "alice"))
+        assertEquals(key.pubHex, VoiciJs.str((mock.callKeys["alice|${k.deviceId}"]!!["binding"] as JsonObject)["callKeyPub"]))
+        // Locked: no UMK; the call key alone joins, answers and ends.
+        val locked = a.lockedCallKeys()!!
+        assertNull(locked.ownerSignSeed)
+        assertEquals(VoiciCalls.deviceRef(key.pubHex), locked.deviceRef)
+        val join = key.joinHeaders("ca".repeat(16), 1_000)
+        assertTrue(VoiciCalls.verifyCallJoin("alice", "ca".repeat(16), k.deviceId, key.pubHex, 1_000, join.getValue("x-flagship-call-key-sig"), 1_000))
+        val end = locked.signEnd("ca".repeat(16), "hangup", 5)!!
+        assertTrue(WebEnvelopes.p256VerifyP1363(VoiciJs.str(end["sig"]), VoiciCalls.canonicalEnd("ca".repeat(16), "owner", "hangup", 5), key.pubHex))
+        // Off: an owner-signed revocation, the key is gone.
+        assertNull(a.setAnswerWhileLocked(false))
+        assertFalse(a.page.value.answersWhileLocked)
+        assertNull(vault.load("alice"))
+        assertEquals(key.pubHex, VoiciJs.str(mock.callKeyRevokes.single()["callKeyPub"]))
+        assertTrue(mock.callKeys.isEmpty())
+    }
+
+    @Test fun aDeviceThatCantSignThePageCantTurnOnAnsweringWhileLocked() = runBlocking {
+        val mock = mock()
+        val owner = center(mock, admin())
+        owner.refresh()
+        owner.acceptRules()
+        assertTrue(owner.publish("test"))
+        val vault = com.flagshipserver.app.calls.MemoryCallKeyVault()
+        val b = VoiciCenter(mock, FakeKeyring("alice", umk, root, false, ByteArray(32) { 5 }), VoiciVault(MemoryVoiciVaultStore()), { listOf(mock.caPub) },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), callKeyVault = vault)
+        b.refresh()
+        assertEquals("not-admin", b.setAnswerWhileLocked(true))
+        assertNull(vault.load("alice"))
+    }
+
     @Test fun callAllowIsSignedByTheOwnerKey() = runBlocking {
         val mock = mock()
         val a = center(mock, admin())

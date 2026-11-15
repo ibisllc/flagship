@@ -114,6 +114,35 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = FS.space.s4),
     )
+    if (v.showsWho && page.canPublish) {
+        var lockedBusy by remember { mutableStateOf(false) }
+        FSGroup {
+            FSRow(
+                title = stringResource(R.string.voici_calls_answer_locked),
+                enabled = !lockedBusy,
+                trailing = {
+                    Switch(
+                        checked = page.answersWhileLocked,
+                        onCheckedChange = { on ->
+                            lockedBusy = true
+                            scope.launch {
+                                center.setAnswerWhileLocked(on)?.let { onError(VoiciCopy.callKeyError(it)) }
+                                lockedBusy = false
+                            }
+                        },
+                        enabled = !lockedBusy,
+                        modifier = Modifier.testTag("calls-answer-locked"),
+                    )
+                },
+            )
+        }
+        Text(
+            stringResource(R.string.voici_calls_answer_locked_footer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = FS.space.s4),
+        )
+    }
     FSGroup {
         FSRow(
             title = stringResource(R.string.voici_calls_dnd),
