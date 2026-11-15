@@ -269,6 +269,13 @@ fun SettingsScreen(nav: NavController) {
                     testTag = "settings-open-quantum-safety",
                 ),
                 FSSettingsRowData(
+                    icon = Icons.Outlined.Devices,
+                    title = stringResource(R.string.orgs_title),
+                    subtitle = stringResource(R.string.orgs_settings_subtitle),
+                    onClick = { nav.navigate("organizations") },
+                    testTag = "settings-open-organizations",
+                ),
+                FSSettingsRowData(
                     icon = Icons.Outlined.Wifi,
                     title = stringResource(R.string.offline_control),
                     subtitle = stringResource(R.string.offline_settings_subtitle),

@@ -61,6 +61,10 @@ fun SettingsTab() {
                     URLEncoder.encode(link.pk, "UTF-8"),
             )
         }
+        if (link is DeepLink.OrgJoin) {
+            deepLinker.consume()
+            nav.navigate("org-join?o=${link.orgId}&s=${link.seatId}&k=${link.keyHex}")
+        }
         if (link is DeepLink.CompanionDockApproval) {
             deepLinker.consume()
             nav.navigate("companion-dock?link=" + URLEncoder.encode(link.rawLink, "UTF-8"))
@@ -84,6 +88,28 @@ fun SettingsTab() {
         popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
     ) {
         composable("settings-root") { SettingsScreen(nav) }
+        composable(
+            "org-join?o={o}&s={s}&k={k}",
+            arguments = listOf(
+                navArgument("o") { type = NavType.StringType; defaultValue = "" },
+                navArgument("s") { type = NavType.StringType; defaultValue = "" },
+                navArgument("k") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { e ->
+            val a = e.arguments
+            com.flagshipserver.app.ui.screens.OrgJoinScreen(
+                a?.getString("o") ?: "", a?.getString("s") ?: "", a?.getString("k") ?: "",
+                onDone = { nav.popBackStack("settings-root", inclusive = false) },
+            )
+        }
+        composable("organizations") {
+            com.flagshipserver.app.ui.screens.OrgListScreen(onOpen = { nav.navigate("organization/${it.orgId}/${it.seatId}") })
+        }
+        composable("organization/{o}/{s}") { e ->
+            val rt = com.flagshipserver.app.viewmodels.LocalOrgs.current
+            val seat = rt?.keys?.seats()?.firstOrNull { it.orgId == e.arguments?.getString("o") && it.seatId == e.arguments?.getString("s") }
+            if (seat != null) com.flagshipserver.app.ui.screens.OrgDetailScreen(seat)
+        }
         composable("delete-account") { AccountDeletionScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }
         // H5 — Replace-device FINALIZE (24h grace countdown + Complete).

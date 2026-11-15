@@ -16358,5 +16358,169 @@
   "voici_calls_admin_only": {
     "en": "Only an admin device can change this.",
     "ctx": "voi.ci calls: settings footer on a device that is not an admin"
+  },
+  "org_join_already": {
+    "en": "This invitation was already accepted.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_expired": {
+    "en": "This invitation has run out. Ask for a new one.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_bad_link": {
+    "en": "This invitation couldn't be opened. Check the link and try again.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_try_again": {
+    "en": "That didn't go through. Try again.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_reason": {
+    "en": "Join this organization",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_records_bad": {
+    "en": "This organization's records didn't check out, so nothing is shown. Try again later.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_unlock_to_sign": {
+    "en": "Unlock Flagship to sign this.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_no_seats": {
+    "en": "Your plan has no free seats. Remove someone or add seats first.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_admitted": {
+    "en": "Admitted.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_needs_second_admin": {
+    "en": "Another admin needs to approve this before it takes effect.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_approved": {
+    "en": "Approved.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_overturn": {
+    "en": "Lift a freeze",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_authority": {
+    "en": "Change who are admins or the rules",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_grant": {
+    "en": "Give a person a seat or a role",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_delayed": {
+    "en": "Remove an admin after notice",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_delete_server": {
+    "en": "Delete a server",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_update_server": {
+    "en": "Update a server",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_purpose_other": {
+    "en": "Approve an organization change",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_title": {
+    "en": "Join an organization",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_invited_as": {
+    "en": "%1$s invited you to join as %2$s",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_only_pseudonym": {
+    "en": "The organization knows you only by this name. It can't see your own account or your servers.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_admin_note": {
+    "en": "You'll be an admin. This phone makes a key that only it holds for this organization.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_button": {
+    "en": "Join",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_join_read_code": {
+    "en": "Read this code to the person who invited you. They admit you once it matches theirs.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_done": {
+    "en": "Done",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "orgs_title": {
+    "en": "Organizations",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "orgs_intro": {
+    "en": "An organization lets several people run servers together. No one person can delete everything, and every change is signed by the people who approved it.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "orgs_yours": {
+    "en": "Your organizations",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_you": {
+    "en": "You",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_seat": {
+    "en": "Seat %1$s",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_frozen_until": {
+    "en": "Your access is frozen until %1$s.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_waiting_join": {
+    "en": "Waiting to join",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_their_code": {
+    "en": "Their code should read %1$s %2$s",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_admit": {
+    "en": "Codes match: admit",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_waiting_approval": {
+    "en": "Waiting for approval",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_nothing_to_approve": {
+    "en": "Nothing to approve.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_approved_by": {
+    "en": "Approved by %1$d",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_you_approved": {
+    "en": "You approved this.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_approve": {
+    "en": "Approve",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "orgs_none": {
+    "en": "This phone isn't in any organization yet. Open an invitation link to join one.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "orgs_settings_subtitle": {
+    "en": "Servers you run with other people",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
   }
 }

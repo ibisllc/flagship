@@ -275,7 +275,7 @@ object OrgAuthority {
         fail("binding", e.code)
     }
 
-    private fun checkApprovals(
+    internal fun checkApprovals(
         approvals: List<OrgApproval>, orgId: String, oarVersion: Long, order: ByteArray, now: Long,
         keyOf: (String) -> PqTrust.VerifiedBinding?, frozenAt: (String, Long) -> Boolean,
     ): List<String> {
@@ -572,7 +572,7 @@ object OrgAuthority {
         signers.forEach { s -> need(r.admins.firstOrNull { it.seatId == s }?.kind == OrgAdminKind.ADMIN, "not-an-admin", s) }
     }
 
-    private fun covers(seat: OrgSeat, action: OrgAction): Boolean = seat.roles.any { r ->
+    internal fun covers(seat: OrgSeat, action: OrgAction): Boolean = seat.roles.any { r ->
         when {
             action is OrgAction.AddServer && r is OrgSeatRole.ServersAdd -> true
             action is OrgAction.Operate && r is OrgSeatRole.ServerAdmin -> r.servers == null || action.server in r.servers

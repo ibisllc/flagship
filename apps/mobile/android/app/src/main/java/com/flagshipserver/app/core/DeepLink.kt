@@ -139,6 +139,13 @@ sealed interface DeepLink {
         override fun toString(): String = "ShareOffer(shareId=$shareId)"
     }
 
+    /** An org seat invitation (docs/enterprise-accounts.md §7):
+     *  `https://flagshipserver.com/org-join#o=<orgId>&s=<seatId>&k=<link key>`, all in the fragment
+     *  (the key never reaches a server and must stay out of logs). */
+    data class OrgJoin(val orgId: String, val seatId: String, val keyHex: String) : DeepLink {
+        override fun toString(): String = "OrgJoin(orgId=$orgId)"
+    }
+
     /** A server's install progress (`…/app/install-progress[?serial=]`), from a
      *  `provision-status` push. Without a serial (or an order this phone doesn't
      *  know) it lands on Home, whose pending server cards show the progress. */
@@ -192,6 +199,9 @@ sealed interface DeepLink {
                     val json = uri.getQueryParameter("o")?.let { ServerTransferFlow.decodeOfferParam(it) }
                     return if (json != null) TransferOffer(json) else null
                 }
+                if (Endpoints.isControlHost(host) && (uri.path == "/org-join" || uri.path == "/org-join/")) {
+                    return orgJoinLink(uri.encodedFragment)
+                }
                 if (host == Endpoints.controlHost && (uri.path == "/share" || uri.path == "/share/")) {
                     // The App Link also claims `/share/`; the link format itself is `/share`.
                     val link = uri.toString().replaceFirst("/share/#", "/share#")
@@ -209,6 +219,19 @@ sealed interface DeepLink {
             if (uri.scheme != "flagship") return null
             val host = uri.host ?: return null
             return parseHost(host, uri)
+        }
+
+        /** `o=<32 hex>&s=<32 hex>&k=<64 hex>`, as iOS DeepLink.orgJoinLink. */
+        fun orgJoinLink(fragment: String?): DeepLink? {
+            val p = (fragment ?: return null).split('&').mapNotNull { kv ->
+                val i = kv.indexOf('=')
+                if (i <= 0) null else kv.substring(0, i) to kv.substring(i + 1)
+            }.toMap()
+            fun hex(v: String?, n: Int) = v?.takeIf { it.length == n && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }
+            val o = hex(p["o"], 32) ?: return null
+            val s = hex(p["s"], 32) ?: return null
+            val k = hex(p["k"], 64) ?: return null
+            return OrgJoin(o, s, k)
         }
 
         private val APP_LINK_PATHS = listOf("join", "remote", "pair-extension", "builder", "access", "invite", "invite-accept", "voici-sign-in")

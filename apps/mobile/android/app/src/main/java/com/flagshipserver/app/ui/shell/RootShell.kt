@@ -149,6 +149,7 @@ fun RootShell(
             com.flagshipserver.app.core.DeepLink.TrustedDevices -> RootDestination.SETTINGS
             com.flagshipserver.app.core.DeepLink.AccountActivity -> RootDestination.ACTIVITY
             com.flagshipserver.app.core.DeepLink.Settings -> RootDestination.SETTINGS
+            is com.flagshipserver.app.core.DeepLink.OrgJoin -> RootDestination.SETTINGS
             is com.flagshipserver.app.core.DeepLink.VoiciSignIn -> selected
             is com.flagshipserver.app.core.DeepLink.Messages -> RootDestination.MESSAGES
             com.flagshipserver.app.core.DeepLink.PageEditor -> RootDestination.MESSAGES
