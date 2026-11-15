@@ -3847,4 +3847,8 @@
     <string name="release_box_busy">Liberando…</string>
     <string name="release_box_confirm_title">¿Liberar este equipo?</string>
     <string name="release_box_confirm">Borrar y liberar</string>
+    <string name="co_manager_count">%1$d de %2$d cogestores en tus servidores</string>
+    <string name="co_manager_cap_free">Con el plan gratuito tus servidores pueden tener hasta %1$d cogestores en total. Quita uno primero o pásate a Pro para tener más.</string>
+    <string name="co_manager_cap_pro">Con el plan Pro tus servidores pueden tener hasta %1$d cogestores en total. Quita uno primero o pásate a Pro Max para tener más.</string>
+    <string name="co_manager_cap_pro_max">Con el plan Pro Max tus servidores pueden tener hasta %1$d cogestores en total. Quita uno primero o pásate a Enterprise para tener más.</string>
 </resources>

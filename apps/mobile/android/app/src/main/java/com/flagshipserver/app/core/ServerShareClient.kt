@@ -43,7 +43,7 @@ interface ShareKeys {
 data class ShareAccount(val username: String, val isDemo: Boolean)
 
 class ShareException(val kind: Kind, message: String) : Exception(message) {
-    enum class Kind { BadLink, Expired, AlreadyUsed, Ended, NotShared, NotFound, Refused, Invalid, NotAdmin, Cancelled }
+    enum class Kind { BadLink, Expired, AlreadyUsed, Ended, NotShared, NotFound, Refused, Invalid, NotAdmin, Cancelled, CoManagerCap }
 }
 
 // ── Wire ──────────────────────────────────────────────────────────────────
@@ -94,8 +94,16 @@ data class BoxShare(
 @Serializable
 data class BoxEndedShare(val shareId: String, val label: String = "", val endedAt: Long = 0, val reason: String = "")
 
+/** The account's co-managers across its servers and the plan's cap (null: unlimited). */
 @Serializable
-data class BoxShares(val shares: List<BoxShare> = emptyList(), val ended: List<BoxEndedShare> = emptyList())
+data class CoManagerCount(val count: Int, val cap: Int? = null, val plan: String = "free")
+
+@Serializable
+data class BoxShares(
+    val shares: List<BoxShare> = emptyList(),
+    val ended: List<BoxEndedShare> = emptyList(),
+    val coManagers: CoManagerCount? = null,
+)
 
 @Serializable
 data class ActivityActor(val kind: String, val shareId: String? = null, val label: String? = null)
@@ -258,6 +266,8 @@ data class OwnerShares(
     val accepted: List<AcceptedShare>,
     /** Null when the box answered; otherwise why the active list is missing. */
     val boxProblem: String? = null,
+    /** The account's co-managers across its servers, as the box counts them. */
+    val coManagers: CoManagerCount? = null,
 )
 
 data class ActiveShare(
@@ -360,6 +370,22 @@ class ServerShareClient(
         /** The box's refusals of a first grant; each carries a sentence for the owner. */
         private val ACCEPT_REFUSAL_CODES = setOf("accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable")
 
+        /** The account's co-manager cap (packages/protocol/src/coManagerCap.ts): the box and `.com` send the plan and its cap. */
+        const val CO_MANAGER_CAP = "co-manager-cap"
+
+        /** The refusal in the plan's words: its cap, and the plan to move to. */
+        fun coManagerCapText(plan: String?, cap: Int): String = when (plan) {
+            "hobby" -> FSStrings.get(R.string.co_manager_cap_pro, cap)
+            "maker" -> FSStrings.get(R.string.co_manager_cap_pro_max, cap)
+            else -> FSStrings.get(R.string.co_manager_cap_free, cap)
+        }
+
+        /** "n of N co-managers"; null when the plan has no cap or the server didn't say. */
+        fun coManagerCountText(c: CoManagerCount?): String? {
+            val cap = c?.cap ?: return null
+            return FSStrings.get(R.string.co_manager_count, c.count, cap)
+        }
+
         /** Whether this phone may accept a co-manage share: it holds the admin root, or the account is a demo. */
         fun canAccept(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean = holdsAdminRoot || isDemoAccount
 
@@ -440,6 +466,7 @@ class ServerShareClient(
         )
         val signature = ServerShare.signHex(offer, keys.sensitive(reason))
         val res = post(apex, "${apexBase()}/api/users/${enc(username)}/server-shares", ShareOfferBody(offer, signature, offerHex, ownerHex), ShareOfferBody.serializer())
+        coManagerCapRefusal(res)?.let { throw it }
         expectOk(res, "share this server")
         return CreatedShare(shareId, ServerShare.buildShareLink(apexBase(), shareId, secret))
     }
@@ -490,7 +517,7 @@ class ServerShareClient(
         val active = onBox?.shares.orEmpty().map {
             ActiveShare(it.shareId, it.label, it.level, it.unlockAtBoot, it.seeAppData, it.memberPubHex, it.issuedAt, it.lastSeenAt)
         }
-        return OwnerShares(active, pending, accepted, boxProblem)
+        return OwnerShares(active, pending, accepted, boxProblem, onBox?.coManagers)
     }
 
     private fun checkAcceptance(row: ComShareRow, serverDomain: String, secret: ByteArray, options: ShareOptions): AcceptedShare? {
@@ -542,6 +569,7 @@ class ServerShareClient(
         val r = boxPost(serverDomain, "/api/screens/shares", ownerSession, body, ShareGrantBody.serializer())
         // The box says why it can't take this acceptance, in words for the owner.
         if (errorCode(r) in ACCEPT_REFUSAL_CODES) throw ShareException(ShareException.Kind.Refused, errorText(r))
+        coManagerCapRefusal(r)?.let { throw it }
         expectOk(r, "give access")
         if (share.options.unlockAtBoot) setUnlock(username, serverDomain, share.shareId, share.accept.memberPubHex, on = true)
     }
@@ -1163,6 +1191,14 @@ class ServerShareClient(
     private fun errorCode(r: HttpResponse): String? {
         val o = errorObject(r) ?: return null
         return ((o["code"] ?: o["error"]) as? JsonPrimitive)?.content
+    }
+
+    private fun coManagerCapRefusal(r: HttpResponse): ShareException? {
+        if (r.status != 403 || errorCode(r) != CO_MANAGER_CAP) return null
+        val o = errorObject(r)
+        val cap = (o?.get("cap") as? JsonPrimitive)?.content?.toIntOrNull() ?: return null
+        val plan = (o["plan"] as? JsonPrimitive)?.content
+        return ShareException(ShareException.Kind.CoManagerCap, coManagerCapText(plan, cap))
     }
 
     private fun errorText(r: HttpResponse): String =

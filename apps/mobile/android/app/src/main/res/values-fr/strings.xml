@@ -3847,4 +3847,8 @@
     <string name="release_box_busy">Libération…</string>
     <string name="release_box_confirm_title">Libérer ce boîtier ?</string>
     <string name="release_box_confirm">Effacer et libérer</string>
+    <string name="co_manager_count">%1$d cogestionnaires sur %2$d pour l’ensemble de vos serveurs</string>
+    <string name="co_manager_cap_free">Avec l’offre gratuite, vos serveurs peuvent avoir jusqu’à %1$d cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro pour en avoir plus.</string>
+    <string name="co_manager_cap_pro">Avec l’offre Pro, vos serveurs peuvent avoir jusqu’à %1$d cogestionnaires au total. Retirez-en un d’abord, ou passez à Pro Max pour en avoir plus.</string>
+    <string name="co_manager_cap_pro_max">Avec l’offre Pro Max, vos serveurs peuvent avoir jusqu’à %1$d cogestionnaires au total. Retirez-en un d’abord, ou passez à Enterprise pour en avoir plus.</string>
 </resources>

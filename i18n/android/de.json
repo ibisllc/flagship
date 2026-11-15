@@ -3844,5 +3844,9 @@
   "release_box_done": "Die Box wird gelöscht. Sie startet als neue Box neu.",
   "release_box_busy": "Wird freigegeben …",
   "release_box_confirm_title": "Diese Box freigeben?",
-  "release_box_confirm": "Löschen und freigeben"
+  "release_box_confirm": "Löschen und freigeben",
+  "co_manager_count": "%1$d von %2$d Mitverwaltern auf deinen Servern",
+  "co_manager_cap_free": "Mit dem kostenlosen Tarif können deine Server insgesamt bis zu %1$d Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro, um mehr zu haben.",
+  "co_manager_cap_pro": "Mit dem Tarif Pro können deine Server insgesamt bis zu %1$d Mitverwalter haben. Entferne zuerst einen oder wechsle zu Pro Max, um mehr zu haben.",
+  "co_manager_cap_pro_max": "Mit dem Tarif Pro Max können deine Server insgesamt bis zu %1$d Mitverwalter haben. Entferne zuerst einen oder wechsle zu Enterprise, um mehr zu haben."
 }

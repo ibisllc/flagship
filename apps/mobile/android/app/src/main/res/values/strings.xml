@@ -3852,4 +3852,8 @@
     <string name="release_box_busy">Releasing…</string>
     <string name="release_box_confirm_title">Release this box?</string>
     <string name="release_box_confirm">Wipe and release</string>
+    <string name="co_manager_count">%1$d of %2$d co-managers across your servers</string>
+    <string name="co_manager_cap_free">On the Free plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Pro for more.</string>
+    <string name="co_manager_cap_pro">On the Pro plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Pro Max for more.</string>
+    <string name="co_manager_cap_pro_max">On the Pro Max plan your servers can have up to %1$d co-managers in all. Remove one first, or move to Enterprise for more.</string>
 </resources>

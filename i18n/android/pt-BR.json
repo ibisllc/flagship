@@ -3844,5 +3844,9 @@
   "release_box_done": "A caixa está sendo apagada. Ela reinicia como uma caixa nova.",
   "release_box_busy": "Liberando…",
   "release_box_confirm_title": "Liberar esta caixa?",
-  "release_box_confirm": "Apagar e liberar"
+  "release_box_confirm": "Apagar e liberar",
+  "co_manager_count": "%1$d de %2$d coadministradores nos seus servidores",
+  "co_manager_cap_free": "No plano gratuito seus servidores podem ter até %1$d coadministradores no total. Remova um primeiro ou mude para o Pro para ter mais.",
+  "co_manager_cap_pro": "No plano Pro seus servidores podem ter até %1$d coadministradores no total. Remova um primeiro ou mude para o Pro Max para ter mais.",
+  "co_manager_cap_pro_max": "No plano Pro Max seus servidores podem ter até %1$d coadministradores no total. Remova um primeiro ou mude para o Enterprise para ter mais."
 }

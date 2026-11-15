@@ -311,6 +311,11 @@ fun ShareServerCardContent(
                 ui.loading && shares == null -> Muted(stringResource(R.string.checking_who_has_access))
                 shares == null -> Text(ui.error ?: stringResource(R.string.couldnt_load_who_has_access), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 else -> {
+                    val coManagers = shares.coManagers
+                    val coManagerCap = coManagers?.cap
+                    if (coManagers != null && coManagerCap != null) {
+                        Muted(stringResource(R.string.co_manager_count, coManagers.count, coManagerCap), modifier = Modifier.testTag("share-co-manager-count"))
+                    }
                     if (shares.active.isEmpty() && shares.pending.isEmpty() && shares.accepted.isEmpty()) {
                         Muted(stringResource(R.string.only_you_can_use_this_server))
                     }

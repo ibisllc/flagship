@@ -3844,5 +3844,9 @@
   "release_box_done": "ボックスを消去しています。新しいボックスとして再起動します。",
   "release_box_busy": "解放しています…",
   "release_box_confirm_title": "このボックスを解放しますか？",
-  "release_box_confirm": "消去して解放"
+  "release_box_confirm": "消去して解放",
+  "co_manager_count": "共同管理者 %1$d / %2$d 人（全サーバー）",
+  "co_manager_cap_free": "無料プランでは、サーバー全体で共同管理者は最大 %1$d 人です。先に1人外すか、Pro に切り替えると増やせます。",
+  "co_manager_cap_pro": "Pro プランでは、サーバー全体で共同管理者は最大 %1$d 人です。先に1人外すか、Pro Max に切り替えると増やせます。",
+  "co_manager_cap_pro_max": "Pro Max プランでは、サーバー全体で共同管理者は最大 %1$d 人です。先に1人外すか、Enterprise に切り替えると増やせます。"
 }

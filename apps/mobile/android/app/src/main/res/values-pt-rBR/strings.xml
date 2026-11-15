@@ -3847,4 +3847,8 @@
     <string name="release_box_busy">Liberando…</string>
     <string name="release_box_confirm_title">Liberar esta caixa?</string>
     <string name="release_box_confirm">Apagar e liberar</string>
+    <string name="co_manager_count">%1$d de %2$d coadministradores nos seus servidores</string>
+    <string name="co_manager_cap_free">No plano gratuito seus servidores podem ter até %1$d coadministradores no total. Remova um primeiro ou mude para o Pro para ter mais.</string>
+    <string name="co_manager_cap_pro">No plano Pro seus servidores podem ter até %1$d coadministradores no total. Remova um primeiro ou mude para o Pro Max para ter mais.</string>
+    <string name="co_manager_cap_pro_max">No plano Pro Max seus servidores podem ter até %1$d coadministradores no total. Remova um primeiro ou mude para o Enterprise para ter mais.</string>
 </resources>

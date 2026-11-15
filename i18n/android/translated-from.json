@@ -3781,5 +3781,9 @@
   "release_box_done": "b8dc48646b79",
   "release_box_busy": "910ee23ced32",
   "release_box_confirm_title": "f790f8cc4b33",
-  "release_box_confirm": "e5c2d2284c03"
+  "release_box_confirm": "e5c2d2284c03",
+  "co_manager_count": "36f415ee961c",
+  "co_manager_cap_free": "b8884baed300",
+  "co_manager_cap_pro": "f984c358bd25",
+  "co_manager_cap_pro_max": "fcaed2547092"
 }

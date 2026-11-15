@@ -69,6 +69,14 @@ class ServerShareClientFlowTest {
         var bobAdminPubHex: String? = memberKeys.adminPubHex
         /** Per-share keys `.com` attested for the demo account. */
         val demoAttested = ArrayList<String>()
+        /** The co-manager cap: `.com` refuses new links, the box new grants, with (plan, cap). */
+        var comCap: Pair<String, Int>? = null
+        var boxCap: Pair<String, Int>? = null
+        var coManagers: JsonObject? = null
+
+        fun capRefusal(c: Pair<String, Int>) = 403 to buildJsonObject {
+            put("error", "co-manager-cap"); put("code", "co-manager-cap"); put("count", c.second); put("cap", c.second); put("plan", c.first)
+        }
 
         fun transport(): JsonHttpTransport = object : JsonHttpTransport {
             override val json: Json = ServerShareClient.json
@@ -114,6 +122,7 @@ class ServerShareClientFlowTest {
                     demoAttested += key
                     attestation(key)
                 }
+                url == "$apex/api/users/alice/server-shares" && comCap != null -> capRefusal(comCap!!)
                 url == "$apex/api/users/alice/server-shares" -> {
                     val offer = ServerShare.parseServerShareOffer(b!!["offer"])!!
                     if (!ServerShare.verify(offer, sig(b), ownerPub)) return err(403, "invalid signature")
@@ -226,7 +235,9 @@ class ServerShareClientFlowTest {
                         }
                     })
                     put("ended", buildJsonArray {})
+                    coManagers?.let { put("coManagers", it) }
                 })
+                url == "https://$domain/api/screens/shares" && boxCap != null -> capRefusal(boxCap!!)
                 url == "https://$domain/api/screens/shares" -> {
                     if (h[ServerShareClient.SESSION_HEADER] != "owner-session") return err(401, "session")
                     val g = ServerShare.parseServerShareGrant(b!!["grant"])!!
@@ -748,6 +759,37 @@ class ServerShareClientFlowTest {
                 assertEquals("Only someone who can manage this server can update it.", e.message)
             }
             assertTrue(world.updates.isEmpty())
+        }
+    }
+
+    @Test fun theCoManagerCapShowsTheCountAndRefusesInThePlansWords() = runBlocking {
+        val world = World()
+        world.coManagers = buildJsonObject { put("count", 3); put("cap", 10); put("plan", "hobby") }
+        val owner = client(world, ownerKeys)
+        assertEquals(CoManagerCount(3, 10, "hobby"), owner.ownerShares("alice", domain, "owner-session").coManagers)
+        assertEquals("3 of 10 co-managers across your servers", ServerShareClient.coManagerCountText(CoManagerCount(3, 10, "hobby")))
+        assertEquals(null, ServerShareClient.coManagerCountText(CoManagerCount(40, null, "enterprise")))
+
+        val created = owner.createOffer("alice", domain, "Home", HexUtil.encode(stkPub), options)
+        val member = client(world, memberKeys)
+        member.accept(member.open(ServerShare.parseShareLink(created.link)!!))
+        val accepted = owner.ownerShares("alice", domain, "owner-session").accepted.single()
+        world.boxCap = "maker" to 25
+        try {
+            owner.confirm("alice", domain, "owner-session", accepted)
+            fail("the box refuses a share past the cap")
+        } catch (e: ShareException) {
+            assertEquals(ShareException.Kind.CoManagerCap, e.kind)
+            assertEquals("On the Pro Max plan your servers can have up to 25 co-managers in all. Remove one first, or move to Enterprise for more.", e.message)
+        }
+        assertTrue(world.held.isEmpty())
+
+        world.comCap = "free" to 5
+        try {
+            owner.createOffer("alice", domain, "Home", HexUtil.encode(stkPub), options.copy(label = "Kim"))
+            fail(".com refuses a link past the cap")
+        } catch (e: ShareException) {
+            assertEquals("On the Free plan your servers can have up to 5 co-managers in all. Remove one first, or move to Pro for more.", e.message)
         }
     }
 
