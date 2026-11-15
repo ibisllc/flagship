@@ -423,6 +423,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   servers, offboarding rotations, audit export), **retail-image** (keyd identity at first boot, bluetoothd unit/group,
   parity row for Release this box). Agents may not run full suites or native builds; those go to the cloud session.
 
+- 2026-11-14 late: Owner decisions. (1) **Video calling is in 0.4** (v2 §1); calls-phone agent re-scoped. (2) **No
+  content-specific rules** (sex, nudity, etc.): only "no use in furtherance of anything illegal" + lawful takedowns;
+  topic rules only if a store or government requires them. Recorded in `docs/voici-calls-v2.md`. Existing text found:
+  Terms §8.2 bullet "nudity or sexual content, or graphic real-world violence" (`7accf8146`, 2026-11-07, on main) and
+  the matching rules-sheet line (`voiciCopy.js` + native, `749a31e60`); asked the owner whether to remove them.
+
 ## Resume point
 
 1. Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
