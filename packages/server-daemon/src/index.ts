@@ -302,7 +302,7 @@ import { buildServerArchiveService } from "./serverArchive/service.js";
 import { buildRestoreMergeService, restoringPage } from "./serverArchive/merge/service.js";
 import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
 import { legacyOrigin } from "./appLineage.js";
-import { hybridOrderSignature as hybridOrderSignatureForMerge } from "./pqAuthority.js";
+import { authorizeRestoreOrder } from "./serverArchive/merge/authorize.js";
 import { parseServiceId as parseServiceIdForMerge } from "@flagship/protocol";
 import type { OrgKeyRings } from "@flagship/protocol";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
@@ -4640,21 +4640,23 @@ async function wireRuntimeSurfaces(deps: {
       },
       ...(archiveKeys ? { keys: archiveKeys } : {}),
       authorize: (canonical, signature, pq) =>
-        authorizeSensitiveOrder({
-          ownerIrkPub: cfg.irkPublicKey,
-          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-          username: cfg.userId,
-          order: canonical,
-          signature,
-          verify: (c: Uint8Array, sig: Uint8Array, pub: Uint8Array) => {
-            try {
-              return ed.verify(sig, c, pub);
-            } catch {
-              return false;
-            }
+        authorizeRestoreOrder(
+          {
+            ownerIrkPub: cfg.irkPublicKey,
+            ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+            username: cfg.userId,
+            verify: (c: Uint8Array, sig: Uint8Array, pub: Uint8Array) => {
+              try {
+                return ed.verify(sig, c, pub);
+              } catch {
+                return false;
+              }
+            },
           },
-          hybrid: hybridOrderSignatureForMerge(canonical, pq),
-        }),
+          canonical,
+          signature,
+          pq,
+        ),
       busy: () =>
         serverArchiveService.busy()
           ? "A backup or restore is already running on this server."

@@ -72,8 +72,12 @@ type Signed = { order: unknown; signatureHex: unknown; pqSignature?: unknown };
 
 export interface RestoreMergeServiceOptions extends Omit<MergeRunDeps, "note"> {
   serverFqdn: string;
-  /** The box's sensitive-order check (admin root on a pinned box, else the IRK; hybrid when strict). */
-  authorize: (canonical: Uint8Array, signature: Uint8Array, pqSignature: unknown) => boolean;
+  /**
+   * The box's sensitive-order check (admin root on a pinned box, else the IRK; hybrid when strict).
+   * `"needs-hybrid"`: the classical signature is the admin's, but this box is quantum-safe and the
+   * order lacks a hybrid half by the signer's bound key (a browser, or a phone without its PQ key).
+   */
+  authorize: (canonical: Uint8Array, signature: Uint8Array, pqSignature: unknown) => boolean | "needs-hybrid";
   /** Null, or why a restore can't start now (a backup, a whole-server restore or Migrate running; waiting for a backup). */
   busy: () => string | null;
   /** The server's apps as the preview needs them. */
@@ -118,6 +122,16 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
   const json = (status: number, body: unknown): HttpResponse => ({ status, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const refuse = (req: HttpRequest, status: number, code: string, text: (lang: string) => string): HttpResponse =>
     json(status, { error: text(languageFor(req.headers)), code });
+
+  /** null when the order may go on, else the refusal to send. */
+  const unauthorized = (req: HttpRequest, canonical: Uint8Array, sig: Uint8Array, pq: unknown): HttpResponse | null => {
+    const a = opts.authorize(canonical, sig, pq);
+    if (a === true) return null;
+    if (a === "needs-hybrid") {
+      return refuse(req, 403, "needs-hybrid", (lang) => t(lang, "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on."));
+    }
+    return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+  };
 
   const dataFile = (id: string) => join(runDir(opts, id), "data");
   const stagePath = (id: string) => join(runDir(opts, id), "stage.json");
@@ -181,7 +195,8 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     if (!order || !sig) return refuse(req, 400, "bad-order", (lang) => t(lang, "That restore order can't be read."));
     if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", (lang) => t(lang, "That restore order is for another server."));
     if (!fresh(order.issuedAt)) return refuse(req, 409, "stale", (lang) => t(lang, "That restore order is too old. Try again."));
-    if (!opts.authorize(serverRestoreStageCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+    const denied = unauthorized(req, serverRestoreStageCanonicalBytes(order), sig, b?.pqSignature);
+    if (denied) return denied;
     if (order.source === "pull" || order.source === "peers") return refuse(req, 409, "source-unavailable", (lang) => t(lang, "This server can't restore from that place yet. Send the backup file instead."));
     const busy = opts.busy();
     if (busy) return json(409, { error: busy, code: "busy" });
@@ -337,7 +352,8 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     const plan = lines as RestoreMergePlanLine[];
     if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", (lang) => t(lang, "That restore order is for another server."));
     if (!fresh(order.issuedAt) || order.expiresAt <= now()) return refuse(req, 409, "stale", (lang) => t(lang, "That restore order is too old. Try again."));
-    if (!opts.authorize(serverRestoreMergeCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+    const denied = unauthorized(req, serverRestoreMergeCanonicalBytes(order), sig, b?.pqSignature);
+    if (denied) return denied;
     if (!stage || !preview || stage.state !== "previewed" || order.restoreId !== stage.restoreId) return refuse(req, 409, "no-preview", (lang) => t(lang, "This restore isn't ready to choose from any more. Start again."));
     if (order.archiveId !== stage.order.archiveId || order.sha256 !== stage.order.sha256) return refuse(req, 409, "other-backup", (lang) => t(lang, "That restore order names a different backup."));
     let planSha: string;
@@ -422,7 +438,8 @@ export function buildRestoreMergeService(opts: RestoreMergeServiceOptions) {
     if (!order || !sig) return refuse(req, 400, "bad-order", (lang) => t(lang, "That restore order can't be read."));
     if (order.serverDomain.toLowerCase() !== opts.serverFqdn.toLowerCase()) return refuse(req, 403, "other-server", (lang) => t(lang, "That restore order is for another server."));
     if (!fresh(order.issuedAt)) return refuse(req, 409, "stale", (lang) => t(lang, "That restore order is too old. Try again."));
-    if (!opts.authorize(appRestoreUndoCanonicalBytes(order), sig, b?.pqSignature)) return refuse(req, 403, "not-admin", (lang) => t(lang, "Only an admin device of this account can restore a backup."));
+    const denied = unauthorized(req, appRestoreUndoCanonicalBytes(order), sig, b?.pqSignature);
+    if (denied) return denied;
     if (run?.state === "running") return refuse(req, 409, "running", (lang) => t(lang, "A restore is already running on this server."));
     const app = opts.platform.byServiceId(order.serviceId);
     if (!app?.retainedData?.some((r) => r.ref === order.restoreId)) return refuse(req, 404, "no-undo", (lang) => t(lang, "There is no earlier copy of that app to put back."));
