@@ -1,5 +1,5 @@
-# Upstream's build_ios_libs.py and build_aar.py already set is_debug, is_component_build and rtc_include_tests.
+# Upstream's build_ios_libs.py and build_aar.py already set is_debug, is_component_build, rtc_include_tests and
+# stripping (iOS also writes dSYMs), so none of those are here.
 rtc_build_examples=false
 rtc_enable_protobuf=false
 treat_warnings_as_errors=false
-symbol_level=0
