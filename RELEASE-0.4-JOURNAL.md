@@ -624,6 +624,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   media CI lanes. The release manager pushed `0.4/libwebrtc` to start the first CI run (43756120375); expect fix
   rounds. Not merged yet (merge after CI is green).
 
+- 2026-11-15: Owner **approved the call design** (page modes, ring-back via the mailbox, sealed-token push relay) and
+  added the **call-back pop-up** before a call on anyone-may-call pages. Push relay cost: about $0 inside the existing
+  Fly relay (recommended); recorded in `docs/voici-calls.md`. calls-callback agent told to build it all (behind a
+  flag; all push paths through the relay; no deployed config touched).
+  libwebrtc CI run 1 (43756120375): TURN libs green; WebRTC jobs failed (`--output-dir`/`--build-dir` must be under
+  `src/`). Agent resumed to iterate until green, then record the pin.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -657,7 +664,7 @@ Next steps for whoever resumes:
    - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
    - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
    - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
-4. **Waiting on the owner:** calls to pseudonymous visitors (A no-ring default + B opt-in ring?); where the built libwebrtc binary lives (options in the WebRTC doc); signing the webapp shell
+4. **Waiting on the owner:** where the built libwebrtc binary lives (options in the WebRTC doc); signing the webapp shell
    at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
    enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
 5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
