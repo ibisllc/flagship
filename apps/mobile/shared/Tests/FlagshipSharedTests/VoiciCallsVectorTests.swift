@@ -185,6 +185,64 @@ final class VoiciCallsVectorTests: XCTestCase {
         return .object(o)
     }
 
+    /// The browser handoff (calling from the app without a media engine): the record, its canonical bytes, the
+    /// delegate key, the link and the pipe seal, byte for byte with the TS reference.
+    func testHandoff() throws {
+        let x = try XCTUnwrap(try vectors()["handoff"]), h = try XCTUnwrap(x["handoff"]), link = try XCTUnwrap(x["link"]), pipe = try XCTUnwrap(x["pipe"])
+        let mine = try VoiciCallHandoffs.handoff(username: S.s(h["username"]), pageId: S.s(h["pageId"]), media: S.s(h["media"]),
+                                                 issuedAt: S.i(h["issuedAt"]), expiresAt: S.i(h["expiresAt"]), delegatePriv: S.s(h["delegatePriv"]),
+                                                 signIn: h["signIn"]!)
+        XCTAssertEqual(S.cj(mine), S.s(x["canonical"]))
+        XCTAssertEqual(VoiciCallHandoffs.delegatePub(S.s(h["delegatePriv"])), S.s(x["delegatePub"]))
+        XCTAssertNil(VoiciCallHandoffs.delegatePub(String(repeating: "00", count: 32)))
+        XCTAssertNil(VoiciCallHandoffs.delegatePub(S.s(h["delegatePriv"]).uppercased()))
+        XCTAssertEqual(try VoiciCallHandoffs.link(host: S.s(link["host"]), username: S.s(h["username"]), sid: S.s(link["sid"]), browserSecret: S.h(link["browserSecret"])),
+                       S.s(link["url"]))
+        XCTAssertThrowsError(try VoiciCallHandoffs.link(host: "voi.ci", username: "Alice", sid: S.s(link["sid"]), browserSecret: S.h(link["browserSecret"])))
+        XCTAssertEqual(CanonicalJson.hex(try VoiciCallHandoffs.publicKey(S.h(pipe["appSecret"]))), S.s(pipe["appPub"]))
+        XCTAssertEqual(CanonicalJson.hex(try VoiciCallHandoffs.key(mySecret: S.h(link["browserSecret"]), peerPub: S.h(pipe["appPub"]))), S.s(pipe["key"]))
+        XCTAssertEqual(CanonicalJson.hex(try VoiciCallHandoffs.key(mySecret: S.h(pipe["appSecret"]), peerPub: try VoiciCallHandoffs.publicKey(S.h(link["browserSecret"])))),
+                       S.s(pipe["key"]))
+        let sealed = try VoiciCallHandoffs.seal(mine, appSecret: S.h(pipe["appSecret"]), browserSecret: S.h(link["browserSecret"]), nonce: S.h(pipe["nonce"]))
+        let want = try XCTUnwrap(pipe["sealed"])
+        XCTAssertEqual([sealed.phonePk, sealed.nonce, sealed.ciphertext], [S.s(want["phonePk"]), S.s(want["nonce"]), S.s(want["ciphertext"])])
+        // A record the TS check refuses is refused here before it is built: over 5 minutes, another page's sign-in.
+        XCTAssertThrowsError(try VoiciCallHandoffs.handoff(username: "alice", pageId: S.s(h["pageId"]), media: "audio", issuedAt: 1, expiresAt: 1 + 5 * 60_000 + 1,
+                                                           delegatePriv: S.s(h["delegatePriv"]), signIn: h["signIn"]!))
+        XCTAssertThrowsError(try VoiciCallHandoffs.handoff(username: "alice", pageId: String(repeating: "aa", count: 16), media: "audio", issuedAt: 1, expiresAt: 2,
+                                                           delegatePriv: S.s(h["delegatePriv"]), signIn: h["signIn"]!))
+        XCTAssertFalse(VoiciCallHandoffs.isUsername("a--b"))
+        XCTAssertTrue(VoiciCallHandoffs.isUsername("a-b"))
+    }
+
+    /// The caller's answer check (an app placing a call) takes a locked device's call-key answer as voi.ci does.
+    func testCallerAnswerCheck() throws {
+        let v = try vectors()
+        for t in S.a(v["callKey"]?["answer"]?["checks"]) {
+            let ctx = try XCTUnwrap(t["ctx"])
+            let got = VoiciCallHandoffs.checkAnswer(t["answer"]!, request: v["request"]!["signed"]!, ownerSignPub: S.s(ctx["ownerSignPub"]),
+                                                    username: ctx["username"]?.string, callKeyPub: ctx["callKeyPub"]?.string, now: ctx["now"]?.safeInt)
+            XCTAssertEqual(got.code, S.s(t["expected"]), S.s(t["name"]))
+        }
+        for t in S.a(v["answer"]?["checks"]) {
+            let ctx = try XCTUnwrap(t["ctx"])
+            let got = VoiciCallHandoffs.checkAnswer(t["answer"]!, request: v["request"]!["signed"]!, ownerSignPub: S.s(ctx["ownerSignPub"]), username: nil,
+                                                    now: ctx["now"]?.safeInt)
+            XCTAssertEqual(got.code, S.s(t["expected"]), S.s(t["name"]))
+        }
+        // The caller's own request and end order: canonical bytes as TS, P-256 by the delegate.
+        let r = v["request"]!["signed"]!
+        let priv = try P256.Signing.PrivateKey(rawRepresentation: S.h(v["keys"]?["browserPriv"]))
+        let sign: ([UInt8]) throws -> [UInt8] = { Array(try priv.signature(for: $0).rawRepresentation) }
+        let mine = try VoiciCallHandoffs.signedRequest(pageId: S.s(r["pageId"]), conv: S.s(r["conv"]), callId: S.s(r["callId"]), from: S.s(r["from"]),
+                                                       callerXwingPub: S.s(r["callerXwingPub"]), offerSdp: S.s(r["offerSdp"]), issuedAt: S.i(r["issuedAt"]),
+                                                       cred: r["cred"]!, media: nil, sign: sign)
+        XCTAssertEqual(VoiciCalls.requestHash(mine), S.s(v["request"]?["hash"]))
+        XCTAssertTrue(CanonicalJson.p256VerifyP1363(S.s(mine["sig"]), VoiciCalls.requestBytes(mine)!, S.s(v["keys"]?["browserPub"])))
+        let end = try VoiciCallHandoffs.signedEnd(callId: S.s(r["callId"]), reason: "hangup", issuedAt: 5, sign: sign)
+        XCTAssertEqual(VoiciCalls.checkEnd(end, callId: S.s(r["callId"]), callerPub: S.s(v["keys"]?["browserPub"]), ownerSignPub: S.s(v["keys"]?["ownerSignPub"])), "hangup")
+    }
+
     func testVideo() throws {
         let v = try vectors(), x = try XCTUnwrap(v["video"]), k = try XCTUnwrap(v["keys"])
         XCTAssertEqual(S.a(x["buckets"]).map { Int(S.i($0)) }, VoiciCalls.videoBuckets)
