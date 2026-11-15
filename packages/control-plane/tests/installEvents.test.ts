@@ -123,4 +123,11 @@ describe("install events", () => {
     );
     expect(r.status).toBe(403);
   });
+
+  it("accepts an org server's serial (its org's server code) under the same gate", async () => {
+    const storage = new InMemoryStorage();
+    const deps = { storage: storage.installEvents, authCodes: storage.authCodes, orgSerialKnown: async (s: string) => s === "orgsrv-0001-abcd" };
+    expect((await handlePostInstallEvent(deps, "orgsrv-0001-abcd", { event: "registering" })).status).toBe(200);
+    expect((await handlePostInstallEvent(deps, "orgsrv-0002-dead", { event: "registering" })).status).toBe(403);
+  });
 });

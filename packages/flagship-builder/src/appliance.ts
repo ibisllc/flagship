@@ -132,10 +132,12 @@ chmod 600 /var/flagship/install-blob.json
 chmod 700 /usr/local/sbin/flagship-bootstrap.sh
 RECIPE_SHA="$(sha256sum /var/flagship/install-blob.json | cut -d' ' -f1)"
 [ "$RECIPE_SHA" = "$(jq -r .recipeSha256 /run/flagship-appliance/seed.json)" ] || { echo "[appliance] recipe digest mismatch"; exit 1; }
-SERIAL="$(jq -r '.authCode.serial // empty' /var/flagship/install-blob.json)"
+# An org server's recipe (kind "org") carries the org's server code, and registers at
+# /api/orgs/<orgId>/servers/register: its install timeline is kept under that code's serial.
+SERIAL="$(jq -r '.authCode.serial // .code.serial // empty' /var/flagship/install-blob.json)"
 REGISTRATION_URL="$(jq -r '.registrationUrl // empty' /var/flagship/install-blob.json)"
-if [[ "$SERIAL" =~ ^[A-Za-z0-9]{1,64}$ ]] && [[ "$REGISTRATION_URL" =~ ^https://[A-Za-z0-9.-]+/api/server/register$ ]]; then
-    STATUS_URL="\${REGISTRATION_URL%/api/server/register}/api/order/$SERIAL/status"
+if [[ "$SERIAL" =~ ^[A-Za-z0-9_-]{8,64}$ ]] && [[ "$REGISTRATION_URL" =~ ^https://[A-Za-z0-9.-]+/api/(server|orgs/[0-9a-f]{32}/servers)/register$ ]]; then
+    STATUS_URL="$(echo "$REGISTRATION_URL" | sed -E 's#/api/(server|orgs/[0-9a-f]{32}/servers)/register$##')/api/order/$SERIAL/status"
 fi
 stage "Checking the server recipe"
 [ "$(jq -r '.serverDomain // empty' /var/flagship/install-blob.json)" != "" ] || { echo "[appliance] recipe has no server domain"; exit 1; }
