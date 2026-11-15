@@ -510,6 +510,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   heads in the export. Owner Qs: webapp seat keys (design says view-and-collect only: kept), where admins see
   pseudonyms. Housekeeping: killed two orphaned Kotlin daemons (one ran 28 h, ~8 cores).
 
+- 2026-11-15: **Native builds on this Mac** (load dropped to ~3.5 after the agents finished): iOS `FlagshipApp`
+  simulator build failed once (`VoiciCallCenter.swift:123` String vs UTF8View; fixed `246e045d4`), then **BUILD
+  SUCCEEDED**. Android `:app:compileDebugKotlin` + unit-test compile **green**; Android tests for Voici/RestoreMerge/
+  Org/BoxClaim/ReleaseThisBox **71/71**. Shared Swift tests (same filter) failed to compile: the hybrid restore test
+  sat inside a private `Data` extension; moved, **50/50**. Not yet run: the iOS app-package tests (FlagshipUI view
+  models), Wear, the full Android suite, gym specs.
+
 ## Resume point
 
 1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
