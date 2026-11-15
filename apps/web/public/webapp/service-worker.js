@@ -496,7 +496,8 @@
 //  v210: Add / Restore offers "Set up a box from a store", which points to the phone app.
 //  v211: an organization's seat invitation (/org-join) opens a page that shows it and hands the link to the
 //       phone (views/org-join.js, lib/orgJoin.js; docs/enterprise-accounts.md §7).
-const SHELL_VERSION = "v211";
+//  v212: voi.ci missed calls in a thread and "Allow calls from them" (lib/voiciCalls.js).
+const SHELL_VERSION = "v212";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -676,6 +677,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciText.js",
   "/lib/voiciPage.js",
   "/lib/voiciMessages.js",
+  "/lib/voiciCalls.js",
   "/lib/voiciOwner.js",
   "/lib/voiciWorld.js",
   "/lib/voiciCopy.js",

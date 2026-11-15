@@ -3534,5 +3534,11 @@
   "The organization knows you only by this name. It can't see your own account or your servers.": "組織はこの名前でしかあなたを知りません。あなた自身のアカウントやサーバーは見えません。",
   "This invitation was already accepted.": "この招待はすでに承諾されています。",
   "Open this link on your phone to join. Joining signs with keys only the Flagship app on your phone holds.": "参加するには、このリンクをスマートフォンで開いてください。参加の署名には、スマートフォンの Flagship アプリだけが持つ鍵が使われます。",
-  "Join an organization": "組織に参加"
+  "Join an organization": "組織に参加",
+  "Missed call": "不在着信",
+  "Missed video call": "不在ビデオ通話",
+  "Allow calls from them": "この人からの通話を許可",
+  "Don't allow calls from them": "この人からの通話を許可しない",
+  "They can call you now.": "この人はあなたに通話できるようになりました。",
+  "They can't call you any more.": "この人はもうあなたに通話できません。"
 }

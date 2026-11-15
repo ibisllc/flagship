@@ -12,6 +12,7 @@ import {
   loadDraftOps,
   loadInbox,
   loadMessagesState,
+  loadMissedCalls,
   loadPublishedPage,
   updateMessagesState,
 } from "./voiciOwner.js";
@@ -35,6 +36,8 @@ function fresh() {
     stateLoaded: false,
     conversations: [],
     inboxError: null,
+    /** Missed voi.ci calls (docs/voici-calls.md §6), opened and checked; the webapp never answers a call. */
+    missedCalls: [],
     /** A sample account: its page is the operator's example, read and shown, never changed (no drafts, no inbox). */
     sample: false,
   };
@@ -97,6 +100,11 @@ export async function refreshWorld(deps = {}) {
       world.inboxError = null;
     } catch (e) {
       world.inboxError = e;
+    }
+    try {
+      world.missedCalls = (await (deps.loadMissedCalls ?? loadMissedCalls)(world.page, deps)).calls;
+    } catch {
+      /* calls off or unreachable: the conversations still show */
     }
   }
   emitWorld();

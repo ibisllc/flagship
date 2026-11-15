@@ -52,6 +52,7 @@ import {
   canonicalVoiciPageRemove,
 } from "./voiciProtocol.js";
 import { controlApex, controlHost, dataApex } from "./apex.js";
+import { openVoiciMissedCall, signVoiciCallAllow } from "./voiciCalls.js";
 import { accountReadFetch } from "./accountRead.js";
 import { canonicalDirectoryRequest } from "./accountMetadata.js";
 import { deviceGrantCanonicalBytes } from "./crossDevicePairing.js";
@@ -791,6 +792,60 @@ export async function postMessageReport(page, envelope, reason, deps = {}) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ report, signature }),
+  });
+  if (!r.ok) throw await readError(r);
+}
+
+/**
+ * The page's missed calls since a cursor (docs/voici-calls.md §6), each opened under the inbox keys of every epoch
+ * and checked: `{calls:[{id, callId, conv, pseudonymPub, reason, ringingAt, endedAt, video}], cursor}`. Anything
+ * that fails to open or check is dropped.
+ */
+export async function loadMissedCalls(page, deps = {}) {
+  const c = ctx(deps);
+  const username = usernameOf(c);
+  const r = await c.readFetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/calls?since=${encodeURIComponent(deps.since ?? "")}`, { cache: "no-store" }, { username });
+  if (r.status === 404) return { calls: [], cursor: "" };
+  if (!r.ok) throw await readError(r);
+  return openMissedCalls(page, await r.json(), { umk: umkOf(c), caKeys: deps.caKeys ?? caKeysNow(), origin: deps.origin ?? voiciWebOrigin() });
+}
+
+/** Pure part of {@link loadMissedCalls}. */
+export function openMissedCalls(page, body, { umk, caKeys, origin }) {
+  const pageId = page.index.pageId;
+  const seeds = [];
+  for (let e = page.index.inboxEpoch; e >= 1; e--) seeds.push(ownerKeys(umk, pageId, e).inbox.seed);
+  const calls = [];
+  for (const item of Array.isArray(body?.items) ? body.items : []) {
+    if (typeof item?.callId !== "string" || typeof item?.sealed !== "string") continue;
+    let sealed;
+    try {
+      sealed = b64Decode(item.sealed);
+    } catch {
+      continue;
+    }
+    if (!sealed) continue;
+    for (const seed of seeds) {
+      const m = openVoiciMissedCall(seed, item.callId, sealed, { pageId, origin, caKeys });
+      if (!m) continue;
+      calls.push({ id: item.id, callId: item.callId, conv: m.request.conv, pseudonymPub: m.request.from, reason: m.reason, ringingAt: m.ringingAt, endedAt: m.endedAt, video: m.request.media === "audio,video" });
+      break;
+    }
+  }
+  calls.sort((a, b) => a.ringingAt - b.ringingAt);
+  return { calls, cursor: typeof body?.cursor === "string" ? body.cursor : "" };
+}
+
+/** The owner's "may call" / "may not call" for one conversation (flagship/voici-call-allow/v1, §6). */
+export async function postCallAllow(page, conv, op, deps = {}) {
+  const c = ctx(deps);
+  const keys = ownerKeys(umkOf(c), page.index.pageId, page.index.inboxEpoch);
+  const allow = { pageId: page.index.pageId, conv, op, issuedAt: c.now() };
+  const signature = signVoiciCallAllow(allow, keys.sign.seed);
+  const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(usernameOf(c))}/call-allow`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ allow, signature }),
   });
   if (!r.ok) throw await readError(r);
 }

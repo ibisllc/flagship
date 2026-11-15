@@ -14437,5 +14437,29 @@
   "Join an organization": {
     "en": "Join an organization",
     "ctx": "webapp/index.html"
+  },
+  "Missed video call": {
+    "en": "Missed video call",
+    "ctx": "webapp/views/thread.js:94"
+  },
+  "Missed call": {
+    "en": "Missed call",
+    "ctx": "webapp/views/thread.js:94"
+  },
+  "They can call you now.": {
+    "en": "They can call you now.",
+    "ctx": "webapp/views/thread.js:273"
+  },
+  "They can't call you any more.": {
+    "en": "They can't call you any more.",
+    "ctx": "webapp/views/thread.js:273"
+  },
+  "Allow calls from them": {
+    "en": "Allow calls from them",
+    "ctx": "webapp/views/thread.js:285"
+  },
+  "Don't allow calls from them": {
+    "en": "Don't allow calls from them",
+    "ctx": "webapp/views/thread.js:285"
   }
 }
