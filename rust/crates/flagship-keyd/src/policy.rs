@@ -30,6 +30,8 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/box-trust-status/v1",
     "flagship/box-read-token-request/v1",
     "flagship/server-register/v1",
+    "flagship/org-server-register/v1",
+    "flagship/org-box-kem/v1",
     "flagship/put-sealed-luks-key/v1",
     "flagship/boot-suspension/v1",
     "flagship/boot-auth/v1",
