@@ -64,6 +64,7 @@ public struct OrgDetailScreen: View {
                 Section { Text(m).font(FS.font.bodySm()).foregroundColor(c.danger) }
             case .loaded:
                 if let f = vm.myFreeze(seat) { frozenSection(f, c: c) }
+                joinsSection(c: c)
                 approvalsSection(c: c)
                 adminsSection(c: c)
                 Section {
@@ -100,6 +101,26 @@ public struct OrgDetailScreen: View {
             Button("Restore my access") { Task { await vm.restoreMyAccess(seat) } }
                 .disabled(vm.busy)
                 .accessibilityIdentifier("org-restore")
+        }
+    }
+
+    /// People who accepted: compare the 6-digit code they read out, then admit them.
+    @ViewBuilder
+    private func joinsSection(c: FSColors) -> some View {
+        if !vm.pendingJoins.isEmpty && seat.memberOnly != true {
+            Section("Waiting to join") {
+                ForEach(vm.pendingJoins) { j in
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Text(label(j.seatId)).font(FS.font.body()).foregroundColor(c.text)
+                        if let code = j.sas {
+                            Text("Their code should read \(String(code.prefix(3))) \(String(code.suffix(3)))").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        }
+                        Button("Codes match: admit") { Task { await vm.admit(seat, j) } }
+                            .disabled(vm.busy || vm.myFreeze(seat) != nil)
+                            .accessibilityIdentifier("org-admit-\(j.seatId.prefix(8))")
+                    }
+                }
+            }
         }
     }
 

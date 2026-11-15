@@ -3697,5 +3697,19 @@
   "Mute": "88db9f87bbd3",
   "Camera off": "7150400419b0",
   "Camera": "14622745dbf9",
-  "Hang up": "7eff721641db"
+  "Hang up": "7eff721641db",
+  "This invitation was already accepted.": "5bdd0ff4dab4",
+  "This invitation has run out. Ask for a new one.": "0b0067efbe92",
+  "This invitation couldn't be opened. Check the link and try again.": "bbd28a58feed",
+  "Join this organization": "07e3f279d15f",
+  "Admitted.": "6ebf7474af30",
+  "Another admin needs to approve this before it takes effect.": "997a766daeaa",
+  "%@ invited you to join as %@": "f11cd24bc1cb",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "0853a0c750cc",
+  "You'll be an admin. This phone makes a key that only it holds for this organization.": "8d7479a38d8f",
+  "Read this code to the person who invited you. They admit you once it matches theirs.": "e25add8fde9a",
+  "Join an organization": "d153cbca2be8",
+  "Waiting to join": "6f747436356d",
+  "Their code should read %@ %@": "7ef7b4e6db99",
+  "Codes match: admit": "4f90351a198d"
 }
