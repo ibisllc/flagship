@@ -140,3 +140,19 @@ describe("the room with a call-key device", () => {
     ]);
   });
 });
+
+describe("review-cloud: call-key revocation is scoped to the account that bound the key", () => {
+  it("review-cloud: another account's owner key cannot revoke alice's call key (cross-account DoS)", async () => {
+    const w = await world();
+    // Mallory has her own voi.ci page and owner messages key; alice's callKeyPub is public (every answer carries it).
+    const mallorySeed = new Uint8Array(32).fill(0x6d);
+    await w.s.voici.publishPage(
+      { username: "mallory", pageId: "6d".repeat(16), seq: 1, issuedAt: NOW, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: hex(ed.getPublicKey(mallorySeed)), indexJson: "{}", publishedAt: NOW },
+      0,
+    );
+    const revoke = { username: "mallory", deviceId: "6d".repeat(16), callKeyPub: C.pub, revokedAt: NOW };
+    await handleVoiciCallKeyRevoke(w.deps, "mallory", { revoke, signature: signVoiciCallKeyRevokeOwner(revoke, mallorySeed) });
+    // Alice's locked device must still be able to join with her own, never-revoked key.
+    expect(await authorizeVoiciCallKeyDevice(w.deps, USER, callId, joinAt())).not.toBeNull();
+  });
+});
