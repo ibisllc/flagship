@@ -234,3 +234,62 @@ About 53 days.
 - Built on `release/0.4` (not a separate `feat/voici-calls` branch): calls launch with 0.4.
 - Later design work (`docs/voici-calls-v2.md`): video calls; enterprise pages taking calls from visitors without a
   Flagship account (customer support); paid calls for enterprise accounts.
+
+## As built (2026-11-14, `release/0.4` worktree `0.4/calls`)
+
+Built and tested: protocol (TS, Swift, Kotlin, browser), `.com`, the voi.ci visitor side, the phone's TURN responder.
+Not built yet: the phone apps' call layer (libwebrtc, CallKit / PushKit, Telecom / ConnectionService, the endpoint
+demux, settings and the thread entries), the relays' call work (§5), the CI lane and the gym group.
+
+- **Records** (`packages/protocol/src/voiciCalls.ts`; Swift `VoiciCalls.swift`, Kotlin `core/voici/VoiciCalls.kt`, browser
+  `packages/flagship-web/src/callProtocol.js`; vectors `test-vectors/voici-calls/`, `npx tsx tools/voici-calls-vectors.ts`).
+  Wire request `{v:1, kind:"voici-call-request", pageId, conv, callId, from, callerXwingPub, offerSdp, issuedAt, cred, sig}`;
+  answer `{v:1, kind:"voici-call-answer", callId, deviceRef, requestHash, xwingCiphertext, answerSdp, turnUser (16 bytes
+  hex), turnSecret (32 bytes hex), issuedAt, sig}`; receipt `{v:1, kind:"voici-call-receipt", account, callId, deviceRef,
+  issuedAt, expiresAt (≤ 65 min), signedBy, signature}`; end `{v:1, kind:"voici-call-end", callId, side, reason, issuedAt,
+  sig}` with reasons hangup, cancel, decline, busy, no-answer, limit, failed. New: `flagship/voici-call-allow/v1|<pageId>|
+  <conv>|<allow|disallow>|<issuedAt>` by ownerSignPub (an explicit "may call" / "may not call" for one conversation).
+  The answer is Ed25519 only; the hybrid signature for strict owners needs an ML-DSA key in the page index (open).
+- **Frames.** Epochs follow the counter: epoch = floor(ctr / 30000) (10 minutes of 20 ms frames, which flow at a
+  constant rate), so both ends rekey with no signalling and the receiver keeps two epoch keys. Plaintext is
+  `u8(len) ‖ frame ‖ zeros` (64 bytes, frame ≤ 63); sealed frames are always 88 bytes. Receiver window 128 frames,
+  gap limit 3000.
+- **SDP** (`mungeVoiciCallSdp`, `checkVoiciCallSdp`): Opus only, fmtp `minptime=20;useinbandfec=1;cbr=1;usedtx=0;stereo=0;
+  sprop-stereo=0;maxaveragebitrate=24000`, ptime 20, every header extension removed except the MID one BUNDLE needs.
+- **Page index v2** (`voiciPage.ts`, webapp `lib/voiciPage.js`, Swift `VoiciPage.swift`, Kotlin `VoiciPage.kt`):
+  `flagship/voici-page/v2|…|<acceptsMessages>|<acceptsCalls>|<callsFrom>|<inboxEpoch>|…`. Writers sign v2 only while
+  calls are on, so pages without calls stay readable by v1 readers. Turning calls on is a publish by an admin device.
+- **The TURN credential and the offer.** The browser makes its offer before the request (its hash is signed) and
+  calls `setLocalDescription` only after the answer, once `setConfiguration` has the phone's TURN credential: nothing
+  is gathered before the call is answered, and the signed offer is exactly the one applied.
+- **`.com`** (`packages/control-plane/src/voiciCalls.ts`, `apps/com/src/voiciCallRoutes.ts`, `voiciCallRoom.ts`,
+  migration **0146**): routes `POST /api/voici/calls` (CORS voi.ci) → `{callId, room, token, ringMs}`;
+  `GET /api/voici/calls/<id>/caller?t=` (Origin voi.ci) and `/device?u=<u>` (device headers of an admin device,
+  signed over `GET /api/voici/calls/<id>/device`); `POST /api/voici/pages/<u>/call-allow`;
+  `GET /api/voici/pages/<u>/calls?since=` (read token: `{items:[{id, callId, conv, sealed, storedAt}], cursor, more}`);
+  `POST /api/accounts/<u>/voici-voip-token` `{token}` / `{token:null}`. "Accepted" = the owner replied, sent an
+  unblock (accept) order, or a call-allow; a newer disallow always refuses. A blocked or banned caller is told
+  `calls-off`. Buckets `voici-call` (30/h per address), `voici-call-caller` (3/h, 10/day per pseudonym),
+  `voici-call-page` (20/h); D1 cap 100 rings per page per day. Switch `VOICI_CALLS` (on in the gym, off in production).
+- **Room messages** (JSON over the WebSocket). Room → caller: `ringing`, `answer {answer}`, `ice {candidate}`,
+  `ended {reason, end?}`. Room → device: `request {request, ringingAt}`, `won {receipt}`, `answered-elsewhere`,
+  `ice`, `ended`, `error {code}`. Device → room: `answer`, `decline`, `ice`, `end`. Caller → room: `ice`, `end`. A
+  caller's room socket closing before an answer is a cancel; after one, the media path decides.
+- **Pushes.** VoIP (`buildVoipPushSender`): topic `<bundleId>.voip`, `apns-push-type: voip`, priority 10, expiring
+  with the ring; body `{"flagship-call": {kind:"voici-call", callId, room, sealed, issuedAt}}`. Other admin devices
+  get the same fields as FCM data / UnifiedPush / an APNs alert ("Someone is calling you. Open Flagship to answer.").
+  `sealed` = `flagship/voici-call-push/v1` to the inbox key, context [callId], `{v:1, callId, pageId, conv, from}`.
+- **Phone TURN responder** `rust/crates/flagship-turn-lite` (sans-IO). The endpoint must choose TURN by the
+  connection's first byte being a STUN first byte (`is_turn_first_byte`): ChannelData's range overlaps HTTP methods.
+
+### Owner actions
+
+1. Apple: enable the Voice over IP background mode and the PushKit capability for the iOS app ID; the existing APNs
+   auth key (`APNS_KEY_ID`/`APNS_TEAM_ID`/`APNS_PRIVATE_KEY_PEM`) sends VoIP pushes to the `.voip` topic with no new
+   certificate. iPad builds need the same (D2).
+2. Google Play: the `USE_FULL_SCREEN_INTENT` declaration and the `phoneCall` + `microphone` foreground-service
+   declarations when the Android call layer lands.
+3. D1 migration 0146, then a `.com` deploy (the `v6` Durable Object migration adds `VoiciCallRoom`); set
+   `VOICI_CALLS = "on"` only after the store builds with the call layer ship.
+4. D4: the legal check for calls in the China mainland storefront before release.
+5. Native review of the voi.ci call strings (machine drafts in six languages).
