@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
