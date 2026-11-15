@@ -10,11 +10,22 @@ public enum OrgJSON {
     public static func record(_ r: OrgAuthorityRecord) -> [String: Any] {
         [
             "orgId": r.orgId, "version": NSNumber(value: r.version), "prevHash": r.prevHash,
-            "admins": r.admins.map { ["seatId": $0.seatId, "kind": $0.kind.rawValue, "binding": $0.binding.jsonObject] as [String: Any] },
-            "bylaws": ["overturnSeats": r.bylaws.overturnSeats.map { $0 as Any } ?? "*", "overturnK": r.bylaws.overturnK, "vetoK": r.bylaws.vetoK] as [String: Any],
+            "admins": r.admins.map { a -> [String: Any] in
+                var o: [String: Any] = ["seatId": a.seatId, "kind": a.kind.rawValue, "binding": a.binding.jsonObject]
+                if a.custody == .browser { o["custody"] = "browser" }
+                return o
+            },
+            "bylaws": bylaws(r.bylaws),
             "founderSeatId": r.founderSeatId, "kGov": r.kGov, "kGrant": r.kGrant, "kDestroy": r.kDestroy, "kSite": r.kSite,
             "issuedAt": NSNumber(value: r.issuedAt),
         ]
+    }
+
+    static func bylaws(_ b: OrgBylaws) -> [String: Any] {
+        var o: [String: Any] = ["overturnSeats": b.overturnSeats.map { $0 as Any } ?? "*", "overturnK": b.overturnK, "vetoK": b.vetoK]
+        if b.hardwareAdmins { o["adminCustody"] = "hardware" }
+        if !b.quorumHardware { o["quorumHardware"] = false }
+        return o
     }
 
     public static func entry(_ e: OrgAuthorityEntry) -> [String: Any] {

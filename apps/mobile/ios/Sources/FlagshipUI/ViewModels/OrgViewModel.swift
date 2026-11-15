@@ -237,11 +237,17 @@ public final class OrgViewModel {
               let memberKeyId = j.accept["memberKeyId"] as? String else { throw OrgAuthorityError("malformed") }
         let adminKeyId = (j.accept["adminKeyId"] as? String) ?? ""
         let expiresAt = t + 365 * OrgAuthority.day
-        let order = try OrgAuthority.canonicalSeatGrant(orgId: j.invite["orgId"] as? String ?? "", seatId: j.seatId, labelSha256: label, memberKeyId: memberKeyId,
-                                                        adminKeyId: adminKeyId, rolesHash: rolesHash, oarVersion: version, issuedAt: t, expiresAt: expiresAt)
+        // The custody the person's accept signed (a browser seat says so); the grant repeats it.
+        let custody: OrgCustody = (j.accept["custody"] as? String) == "browser" ? .browser : .hardware
+        var g = OrgSeatGrant(orgId: j.invite["orgId"] as? String ?? "", seatId: j.seatId, labelSha256: label, memberKeyId: memberKeyId,
+                             adminKeyId: adminKeyId, rolesHash: rolesHash, oarVersion: version, issuedAt: t, expiresAt: expiresAt)
+        g.custody = custody
+        let order = try g.canonical()
+        var grantJSON: [String: Any] = ["orgId": j.invite["orgId"] as? String ?? "", "seatId": j.seatId, "labelSha256": label, "memberKeyId": memberKeyId, "adminKeyId": adminKeyId,
+                                        "rolesHash": rolesHash, "oarVersion": NSNumber(value: version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: expiresAt)]
+        if custody == .browser { grantJSON["custody"] = "browser" }
         let body: [String: Any] = [
-            "grant": ["orgId": j.invite["orgId"] as? String ?? "", "seatId": j.seatId, "labelSha256": label, "memberKeyId": memberKeyId, "adminKeyId": adminKeyId,
-                      "rolesHash": rolesHash, "oarVersion": NSNumber(value: version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: expiresAt)],
+            "grant": grantJSON,
             "roles": OrgAuthorityWire.rolesJSON(roles),
             "memberBinding": j.memberBinding.jsonObject,
             "adminBinding": j.adminBinding.map { $0.jsonObject as Any } ?? NSNull(),

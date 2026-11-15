@@ -62,6 +62,22 @@ final class OrgAuthorityVectorTests: XCTestCase {
         XCTAssertEqual(String(decoding: try OrgAuthority.canonicalRoles(roles), as: UTF8.self), scoped["bytes"] as? String)
     }
 
+    /// Browser custody (docs/webapp-key-custody.md items 1 and 3): the forms this port writes match the vectors.
+    func testCustodyCanonicalForms() throws {
+        let canon = Dictionary(uniqueKeysWithValues: (V["canonical"] as! [[String: Any]]).map { ($0["name"] as! String, $0["bytes"] as! String) })
+        let joined = resolve((V["chains"] as! [Any]).first { (($0 as! [String: Any])["name"] as! String).hasPrefix("two browser admins join") }!) as! [String: Any]
+        let rec = try OrgAuthorityWire.entry((joined["entries"] as! [Any])[1]).record
+        XCTAssertEqual(rec.admins.filter { $0.custody == .browser }.count, 2)
+        XCTAssertEqual(String(decoding: try OrgAuthority.canonicalAdmins(rec.admins), as: UTF8.self), canon["admins with browser custody"])
+        let by = OrgBylaws(overturnSeats: rec.bylaws.overturnSeats, overturnK: rec.bylaws.overturnK, vetoK: rec.bylaws.vetoK, hardwareAdmins: true, quorumHardware: false)
+        XCTAssertEqual(String(decoding: try OrgAuthority.canonicalBylaws(by), as: UTF8.self), canon["bylaws hardware admins, browser quorums"])
+        XCTAssertTrue(canon["accept browser"]!.hasSuffix("|browser"))
+        let grants = (V["seatBooks"] as! [[String: Any]]).first { ($0["name"] as! String).contains("browser key") }!["grants"] as! [Any]
+        let g = try OrgAuthorityWire.grantBundle(resolve(grants[0]))
+        XCTAssertEqual(g.grant.custody, .browser)
+        XCTAssertEqual(String(decoding: try g.grant.canonical(), as: UTF8.self), canon["grant browser"])
+    }
+
     func testChains() throws {
         for raw in V["chains"] as! [Any] {
             let c = resolve(raw) as! [String: Any]

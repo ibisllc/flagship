@@ -70,13 +70,19 @@ public struct OrgAuthorityEntry {
 public struct OrgSeatGrant: Sendable {
     public var orgId: String, seatId: String, labelSha256: String, memberKeyId: String, adminKeyId: String, rolesHash: String
     public var oarVersion: Int64, issuedAt: Int64, expiresAt: Int64
+    public var custody: OrgCustody = .hardware
+    public init(orgId: String, seatId: String, labelSha256: String, memberKeyId: String, adminKeyId: String, rolesHash: String,
+                oarVersion: Int64, issuedAt: Int64, expiresAt: Int64, custody: OrgCustody = .hardware) {
+        self.orgId = orgId; self.seatId = seatId; self.labelSha256 = labelSha256; self.memberKeyId = memberKeyId; self.adminKeyId = adminKeyId
+        self.rolesHash = rolesHash; self.oarVersion = oarVersion; self.issuedAt = issuedAt; self.expiresAt = expiresAt; self.custody = custody
+    }
     public func canonical() throws -> [UInt8] {
         try OrgAuthority.need(OrgAuthority.isHex(labelSha256, 64), "label-missing")
         try OrgAuthority.need(OrgAuthority.isHex(orgId, 32) && OrgAuthority.isHex(seatId, 32) && OrgAuthority.isHex(memberKeyId, 64)
                               && (adminKeyId.isEmpty || OrgAuthority.isHex(adminKeyId, 64)) && OrgAuthority.isHex(rolesHash, 64), "malformed", "grant")
         try OrgAuthority.need(expiresAt > issuedAt && expiresAt - issuedAt <= OrgAuthority.grantMaxLifetimeMs, "malformed", "expiresAt")
         return OrgAuthority.join([OrgAuthority.tagSeatGrant, orgId, seatId, labelSha256, memberKeyId, adminKeyId, rolesHash,
-                                  String(oarVersion), String(issuedAt), String(expiresAt)])
+                                  String(oarVersion), String(issuedAt), String(expiresAt)]) + (custody == .browser ? Array("|browser".utf8) : [])
     }
 }
 
@@ -201,7 +207,8 @@ extension OrgAuthority {
         if let s = bylaws.overturnSeats, s.contains(target) {
             let seats = s.filter { $0 != target }
             bylaws = OrgBylaws(overturnSeats: seats.isEmpty ? nil : seats,
-                               overturnK: bylaws.overturnK == 0 ? 0 : min(bylaws.overturnK, seats.isEmpty ? n : seats.count), vetoK: bylaws.vetoK)
+                               overturnK: bylaws.overturnK == 0 ? 0 : min(bylaws.overturnK, seats.isEmpty ? n : seats.count), vetoK: bylaws.vetoK,
+                               hardwareAdmins: bylaws.hardwareAdmins, quorumHardware: bylaws.quorumHardware)
         }
         return OrgAuthorityRecord(orgId: p.orgId, version: p.version + 1, prevHash: try authorityHash(p), admins: admins, bylaws: bylaws,
                                   founderSeatId: p.founderSeatId, kGov: clamp(p.kGov), kGrant: clamp(p.kGrant), kDestroy: clamp(p.kDestroy),
@@ -345,6 +352,7 @@ extension OrgAuthority {
             }
             let k = bylawsChanged || founderMoved ? bylawsThreshold(p) : p.kGov
             try need(signers.count >= k, "threshold")
+            try checkQuorumCustody(p, k: k, signers: signers, custodyOf: adminCustody(p))
         case "founder-removal":
             guard let n = e.notice, n.body.kind == "founder-removal" else { throw OrgAuthorityError("notice-invalid") }
             try need(removed.count == 1, "notice-invalid", "exactly one admin")
@@ -372,6 +380,7 @@ extension OrgAuthority {
             try need(signers.contains { kindOf($0) == .recovery }, "notice-invalid", "no recovery seat")
             let k = bylawsChanged || founderMoved ? bylawsThreshold(p) : p.kGov
             try need(signers.count >= k, "threshold")
+            try checkQuorumCustody(p, k: k, signers: signers, custodyOf: adminCustody(p))
             let noticeHash = sha256Hex(try n.body.canonical())
             let eligible = Set(p.admins.filter { $0.kind == .admin && !signers.contains($0.seatId) }.map(\.seatId))
             for v in vetoes { if let c = vetoSigners(v, noticeHash, n.body), c.contains(where: { eligible.contains($0) }) { throw OrgAuthorityError("notice-vetoed") } }
@@ -398,6 +407,7 @@ extension OrgAuthority {
             let set = Set(overturnSet(p))
             try need(signers.allSatisfy { set.contains($0) }, "not-an-admin", "outside the overturn set")
             try need(signers.count >= overturnThreshold(p), "threshold")
+            try checkQuorumCustody(p, k: overturnThreshold(p), signers: signers, custodyOf: adminCustody(p))
         default:
             throw OrgAuthorityError("malformed", "via")
         }
@@ -443,10 +453,15 @@ extension OrgAuthority {
         } else {
             try need(!b.roles.contains { $0.raisesAdmin }, "binding", "an admin role needs an admin key")
         }
+        if g.custody == .browser {
+            try need(!g.adminKeyId.isEmpty, "malformed", "custody without an admin key")
+            try need(!(r.bylaws.hardwareAdmins && b.roles.contains { $0.raisesAdmin }), "custody", "the bylaws need hardware custody for admins")
+        }
         let signers = try checkApprovals(b.approvals, orgId: g.orgId, oarVersion: g.oarVersion, order: order, now: now,
                                          keyOf: { st.binding(g.oarVersion, $0) }, frozenAt: frozen)
         for s in signers { try need(r.admins.first { $0.seatId == s }?.kind == .admin, "not-an-admin", s) }
         try need(signers.count >= grantThreshold(r, b.roles), "threshold")
+        try checkQuorumCustody(r, k: grantThreshold(r, b.roles), signers: signers, custodyOf: adminCustody(r))
         return OrgSeat(seatId: g.seatId, roles: b.roles, member: member, admin: admin, grant: g)
     }
 
@@ -519,6 +534,7 @@ extension OrgAuthority {
         func needK(_ k: Int) throws -> (signers: [String], scopedSeat: String?) {
             try need(others.isEmpty, "scope", "a seat outside the org admins")
             try need(orgAdmins.count >= k, "threshold")
+            try checkQuorumCustody(at, k: k, signers: orgAdmins, custodyOf: adminCustody(at))
             return (signers, nil)
         }
         switch action {

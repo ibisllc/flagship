@@ -70,6 +70,22 @@ class OrgAuthorityVectorsTest {
         assertEquals(scoped.s("bytes"), String(OrgAuthority.canonicalRoles(roles), Charsets.UTF_8))
     }
 
+    /** Browser custody (docs/webapp-key-custody.md items 1 and 3): the forms this port writes match the vectors. */
+    @Test
+    fun custodyCanonicalForms() {
+        val canon = v["canonical"]!!.jsonArray.associate { it.jsonObject.s("name") to it.jsonObject.s("bytes") }
+        val joined = resolve(v["chains"]!!.jsonArray.first { it.jsonObject.s("name").startsWith("two browser admins join") })!!.jsonObject
+        val rec = OrgAuthorityWire.entry(joined["entries"]!!.jsonArray[1]).record
+        assertEquals(2, rec.admins.count { it.custody == OrgCustody.BROWSER })
+        assertEquals(canon["admins with browser custody"], String(OrgAuthority.canonicalAdmins(rec.admins), Charsets.UTF_8))
+        val by = rec.bylaws.copy(hardwareAdmins = true, quorumHardware = false)
+        assertEquals(canon["bylaws hardware admins, browser quorums"], String(OrgAuthority.canonicalBylaws(by), Charsets.UTF_8))
+        val book = v["seatBooks"]!!.jsonArray.first { it.jsonObject.s("name").contains("browser key") }.jsonObject
+        val g = OrgAuthorityWire.grantBundle(resolve(book["grants"]!!.jsonArray[0]))
+        assertEquals(OrgCustody.BROWSER, g.grant.custody)
+        assertEquals(canon["grant browser"], String(OrgAuthority.canonical(g.grant), Charsets.UTF_8))
+    }
+
     @Test
     fun chains() {
         for (raw in v["chains"]!!.jsonArray) {

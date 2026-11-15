@@ -236,12 +236,19 @@ object OrgJson {
     fun record(r: com.flagshipserver.app.core.pq.OrgAuthorityRecord): JsonObject = buildJsonObject {
         put("orgId", r.orgId); put("version", r.version); put("prevHash", r.prevHash)
         put("admins", buildJsonArray {
-            r.admins.forEach { a -> add(buildJsonObject { put("seatId", a.seatId); put("kind", a.kind.wire); put("binding", a.binding.toJson()) }) }
+            r.admins.forEach { a ->
+                add(buildJsonObject {
+                    put("seatId", a.seatId); put("kind", a.kind.wire); put("binding", a.binding.toJson())
+                    if (a.custody == com.flagshipserver.app.core.pq.OrgCustody.BROWSER) put("custody", "browser")
+                })
+            }
         })
         put("bylaws", buildJsonObject {
             val seats = r.bylaws.overturnSeats
             if (seats == null) put("overturnSeats", "*") else put("overturnSeats", buildJsonArray { seats.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
             put("overturnK", r.bylaws.overturnK); put("vetoK", r.bylaws.vetoK)
+            if (r.bylaws.hardwareAdmins) put("adminCustody", "hardware")
+            if (!r.bylaws.quorumHardware) put("quorumHardware", false)
         })
         put("founderSeatId", r.founderSeatId); put("kGov", r.kGov); put("kGrant", r.kGrant); put("kDestroy", r.kDestroy); put("kSite", r.kSite)
         put("issuedAt", r.issuedAt)

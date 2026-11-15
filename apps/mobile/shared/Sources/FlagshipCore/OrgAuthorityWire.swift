@@ -7,6 +7,12 @@ public enum OrgAuthorityWire {
     static func str(_ o: [String: Any], _ k: String) throws -> String { guard let s = o[k] as? String else { throw bad(k) }; return s }
     static func num(_ o: [String: Any], _ k: String) throws -> Int64 { guard let n = OrgAuthority.i64(o[k]) else { throw bad(k) }; return n }
     static func int(_ o: [String: Any], _ k: String) throws -> Int { Int(try num(o, k)) }
+    /// `custody`: absent or "hardware" = hardware, "browser" = browser; anything else is refused.
+    static func custody(_ o: [String: Any]) throws -> OrgCustody {
+        guard let v = o["custody"], !(v is NSNull) else { return .hardware }
+        guard let s = v as? String, let c = OrgCustody(rawValue: s) else { throw bad("custody") }
+        return c
+    }
     static func obj(_ v: Any?, _ what: String) throws -> [String: Any] { guard let o = v as? [String: Any] else { throw bad(what) }; return o }
 
     public static func binding(_ v: Any?) throws -> PqKeyBindingWire {
@@ -29,11 +35,24 @@ public enum OrgAuthorityWire {
             admins: try admins.map { a in
                 let e = try obj(a, "admin")
                 guard let kind = OrgAdminKind(rawValue: try str(e, "kind")) else { throw bad("kind") }
-                return OrgAdminEntry(seatId: try str(e, "seatId"), kind: kind, binding: try binding(e["binding"]))
+                return OrgAdminEntry(seatId: try str(e, "seatId"), kind: kind, binding: try binding(e["binding"]), custody: try custody(e))
             },
-            bylaws: OrgBylaws(overturnSeats: seats, overturnK: try int(b, "overturnK"), vetoK: try int(b, "vetoK")),
+            bylaws: OrgBylaws(overturnSeats: seats, overturnK: try int(b, "overturnK"), vetoK: try int(b, "vetoK"),
+                              hardwareAdmins: try hardwareAdmins(b), quorumHardware: try quorumHardware(b)),
             founderSeatId: try str(o, "founderSeatId"), kGov: try int(o, "kGov"), kGrant: try int(o, "kGrant"),
             kDestroy: try int(o, "kDestroy"), kSite: try int(o, "kSite"), issuedAt: try num(o, "issuedAt"))
+    }
+
+    static func hardwareAdmins(_ b: [String: Any]) throws -> Bool {
+        guard let v = b["adminCustody"], !(v is NSNull) else { return false }
+        guard let s = v as? String, s == "any" || s == "hardware" else { throw OrgAuthorityError("bylaws", "adminCustody") }
+        return s == "hardware"
+    }
+
+    static func quorumHardware(_ b: [String: Any]) throws -> Bool {
+        guard let v = b["quorumHardware"], !(v is NSNull) else { return true }
+        guard let n = v as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() else { throw OrgAuthorityError("bylaws", "quorumHardware") }
+        return n.boolValue
     }
 
     public static func entry(_ v: Any?) throws -> OrgAuthorityEntry {
@@ -104,7 +123,8 @@ public enum OrgAuthorityWire {
         let o = try obj(v, "grant bundle"), g = try obj(o["grant"], "grant")
         let grant = OrgSeatGrant(orgId: try str(g, "orgId"), seatId: try str(g, "seatId"), labelSha256: try str(g, "labelSha256"),
                                  memberKeyId: try str(g, "memberKeyId"), adminKeyId: try str(g, "adminKeyId"), rolesHash: try str(g, "rolesHash"),
-                                 oarVersion: try num(g, "oarVersion"), issuedAt: try num(g, "issuedAt"), expiresAt: try num(g, "expiresAt"))
+                                 oarVersion: try num(g, "oarVersion"), issuedAt: try num(g, "issuedAt"), expiresAt: try num(g, "expiresAt"),
+                                 custody: try custody(g))
         let admin: PqKeyBindingWire? = o["adminBinding"] is NSNull || o["adminBinding"] == nil ? nil : try binding(o["adminBinding"])
         return OrgSeatGrantBundle(grant: grant, roles: try roles(o["roles"]), memberBinding: try binding(o["memberBinding"]),
                                   adminBinding: admin, approvals: try approvals(o["approvals"]))
