@@ -26,6 +26,8 @@ describe("compatibility matrix (N13)", () => {
   it("the shell number matches the shell, and the deploy order puts verifiers before issuers", () => {
     const build = /WEB_BUILD = (\d+)/.exec(read("apps/web/public/webapp/lib/buildInfo.js"))![1];
     expect(matrix.components["webapp-shell"]!.current).toBe(Number(build));
+    const shell = /SHELL_VERSION = "v(\d+)"/.exec(read("apps/web/public/webapp/service-worker.js"))![1];
+    expect(Number(build), "buildInfo.js WEB_BUILD must follow service-worker.js SHELL_VERSION").toBe(Number(shell));
     expect(matrix.receiverFirst[0]).toMatch(/verify/);
     expect(matrix.receiverFirst.at(-1)).toMatch(/raise minimumSecurity/);
   });
