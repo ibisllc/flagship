@@ -631,6 +631,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   libwebrtc CI run 1 (43756120375): TURN libs green; WebRTC jobs failed (`--output-dir`/`--build-dir` must be under
   `src/`). Agent resumed to iterate until green, then record the pin.
 
+- 2026-11-15: Owner: the push relay runs on the Fly relay **as an onion path over the relay mesh** (more independent
+  relays = deeper obfuscation). Designed in `docs/voici-calls.md` "Push relay over the relay network": Flagship-run
+  exits hold the APNs/FCM keys; outside relays are entry/middle hops; per-hop delay and padding; one relay today = the
+  entry is also the exit. Sent to calls-callback (split into its own branch if too big). Owner **approved hosting
+  libwebrtc on GitHub**: after a green CI run, a pre-release `libwebrtc-<milestone>-<run>` with checksums, apps pinned
+  by URL + SHA-256 (sent to the libwebrtc agent).
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -664,7 +671,7 @@ Next steps for whoever resumes:
    - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
    - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
    - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
-4. **Waiting on the owner:** where the built libwebrtc binary lives (options in the WebRTC doc); signing the webapp shell
+4. **Waiting on the owner:** signing the webapp shell
    at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
    enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
 5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
