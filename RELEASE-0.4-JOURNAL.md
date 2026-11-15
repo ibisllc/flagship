@@ -654,6 +654,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   entries for the browser-only tags. 1445 targeted tests, tsc, i18n, parity 0 red. Agent resumed: Swift/Kotlin
   custody ports, the webapp as a full org seat, hybrid on the other web orders, gym with a virtual PRF passkey.
 
+- 2026-11-15: Owner: **no security cosplay**. Flagship runs `.com`, the relays and the push exits, so onion routing and
+  a sealed-token relay hide nothing from us. Both dropped (doc "Correction"). The honest promise: the page owner never
+  learns the caller; "Call and allow call-back" says Flagship will know the conversation can ring that phone; no
+  who-called-whom log; the ring-back channel is deleted on stop. calls-callback agent told.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
