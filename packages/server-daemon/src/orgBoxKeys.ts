@@ -23,6 +23,7 @@ import {
   orgNewestRingFor,
   orgPendingRotations,
   canonicalOrgBoxKem,
+  canonicalOrgBoxLogHead,
   verifyOrgInstallBlob,
   type OrgInstallBlob,
   type OrgKeyKind,
@@ -79,6 +80,22 @@ export async function announceOrgBoxKem(deps: OrgBoxKeyDeps): Promise<string> {
   });
   if (!r.ok) throw new Error(`box-kems: HTTP ${r.status}`);
   return kp.kemKeyId;
+}
+
+/**
+ * Signs this box's Activity log head with its STK (`flagship/org-box-log-head/v1`) and posts it
+ * (`POST /api/orgs/<id>/box-log-heads`); `.com` keeps the newest per server for the audit export.
+ */
+export async function postOrgBoxLogHead(deps: OrgBoxKeyDeps, head: { seq: number; hash: string }): Promise<void> {
+  const h = { orgId: deps.orgId, serverDomain: deps.serverDomain, seq: head.seq, headHash: head.hash, issuedAt: (deps.now ?? (() => Date.now()))() };
+  const body = { head: h, signature: Buffer.from(deps.signAsBox(canonicalOrgBoxLogHead(h))).toString("hex") };
+  const r = await (deps.fetchImpl ?? fetch)(`${deps.controlPlaneBaseUrl.replace(/\/$/, "")}/api/orgs/${deps.orgId}/box-log-heads`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!r.ok) throw new Error(`box-log-heads: HTTP ${r.status}`);
 }
 
 /** The key rings `.com` serves, verified under the box's pinned chain (as of each version's record). */

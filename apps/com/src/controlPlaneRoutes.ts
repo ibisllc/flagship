@@ -299,6 +299,7 @@ import {
   handleOrgServersList,
   handleOrgSeatKem,
   handleOrgBoxKem,
+  handleOrgBoxLogHead,
   handleOrgKeysGet,
   handleOrgKeyRingPost,
   handleOrgExport,
@@ -709,7 +710,7 @@ const ROUTE_RE = {
   SERVER_REGISTER: /^\/api\/server\/register$/,
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
   ORGS: /^\/api\/orgs$/,
-  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|keys|export)$/,
+  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export)$/,
   ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
   ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
@@ -1513,6 +1514,7 @@ export async function tryControlPlane(
         if (sub === "servers/register") return finish(await handleOrgServerRegister(osd, orgId, body));
         if (sub === "seat-kems") return finish(await handleOrgSeatKem(osd, orgId, body));
         if (sub === "box-kems") return finish(await handleOrgBoxKem(osd, orgId, body));
+        if (sub === "box-log-heads") return finish(await handleOrgBoxLogHead(osd, orgId, body));
         if (sub === "keys") return finish(await handleOrgKeyRingPost(osd, orgId, body));
       }
     }

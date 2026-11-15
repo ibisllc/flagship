@@ -3,6 +3,8 @@
  *
  *   flagship/org-log/v1|<orgId>|<seq>|<prevHash>|<kind>|<refSha256>|<at>          one log entry's hash (as `.com` chains it)
  *   flagship/org-audit-export/v1|<orgId>|<oarVersion>|<oarHash>|<logSeq>|<logHeadHash>|<issuedAt>
+ *   flagship/org-box-log/v1|<seq>|<prevHash>|<entrySha256>                           one box Activity entry's chained hash
+ *   flagship/org-box-log-head/v1|<orgId>|<serverDomain>|<seq>|<headHash>|<issuedAt>    a box's own log head, signed by its STK
  *
  * `.com` keeps the org log as a hash chain over every stored object's hash. An export is that chain
  * plus every object, and one org admin's approval (`flagship/org-approval/v1`) over the export
@@ -11,6 +13,12 @@
  * were given, the log chain link by link up to the signed head, every grant, revoke, freeze,
  * overturn, key-ring version and server code named in the log, and the admin's approval as of the
  * record it names. Labels stay sealed: an export shows structure and who approved, never names.
+ *
+ * Each org box also chains its own Activity log and signs the head with its STK; `.com` keeps the
+ * newest head per server and logs it, and the export carries the org's registered servers and
+ * those heads. The auditor checks each head under the key the server registered with (named in
+ * the org log), so a box's own record of what it did is pinned too: a later copy of that box's
+ * log either extends the signed head or shows it was rewritten.
  */
 import {
   OrgAuthorityError,
@@ -37,11 +45,18 @@ import {
 } from "./orgAuthority.js";
 import { buildOrgKeyRings, canonicalOrgKeyRing, newestOrgKems, type OrgKeyRingBundle } from "./orgKeyRing.js";
 import { canonicalOrgServerCode, type OrgServerCode } from "./orgServers.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { ed25519VerifyStrict } from "./pqHybrid.js";
 import type { Bytes } from "./types.js";
 
 export const TAG_ORG_LOG = "flagship/org-log/v1";
 export const TAG_ORG_AUDIT_EXPORT = "flagship/org-audit-export/v1";
 export const ORG_LOG_GENESIS = "0".repeat(64);
+export const TAG_ORG_BOX_LOG = "flagship/org-box-log/v1";
+export const TAG_ORG_BOX_LOG_HEAD = "flagship/org-box-log-head/v1";
+const DOMAIN = /^[a-z0-9][a-z0-9.-]{0,252}$/;
+const hexOf = (b: Bytes): string => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+const bytesOf = (h: string): Bytes => Uint8Array.from(h.match(/../g) ?? [], (x) => parseInt(x, 16));
 
 const HEX16 = /^[0-9a-f]{32}$/;
 const HEX32 = /^[0-9a-f]{64}$/;
@@ -68,6 +83,58 @@ export function orgLogEntryHash(orgId: string, seq: number, prevHash: string, ki
   uint("log seq", seq);
   uint("log at", at);
   return orgSha256Hex(enc([TAG_ORG_LOG, orgId, seq, prevHash, kind, refSha256, at].join("|")));
+}
+
+/** One box Activity entry chained: `sha256("flagship/org-box-log/v1|<seq>|<prevHash>|<entrySha256>")`. */
+export function orgBoxLogEntryHash(seq: number, prevHash: string, entrySha256: string): string {
+  uint("box log seq", seq);
+  if (typeof prevHash !== "string" || !HEX32.test(prevHash)) fail("malformed", "box log prevHash");
+  if (typeof entrySha256 !== "string" || !HEX32.test(entrySha256)) fail("malformed", "box log entry");
+  return orgSha256Hex(enc([TAG_ORG_BOX_LOG, seq, prevHash, entrySha256].join("|")));
+}
+
+/** A box's own log head: its Activity chain up to `seq`, as of `issuedAt`. */
+export interface OrgBoxLogHead {
+  orgId: string;
+  serverDomain: string;
+  seq: number;
+  headHash: string;
+  issuedAt: number;
+}
+
+export interface OrgBoxLogHeadBundle {
+  head: OrgBoxLogHead;
+  /** Ed25519 by the box's STK, lowercase hex. */
+  signature: string;
+}
+
+export function canonicalOrgBoxLogHead(h: OrgBoxLogHead): Bytes {
+  if (typeof h.orgId !== "string" || !HEX16.test(h.orgId)) fail("malformed", "orgId");
+  if (typeof h.serverDomain !== "string" || !DOMAIN.test(h.serverDomain)) fail("malformed", "serverDomain");
+  if (typeof h.headHash !== "string" || !HEX32.test(h.headHash)) fail("malformed", "headHash");
+  uint("seq", h.seq);
+  uint("issuedAt", h.issuedAt);
+  return enc([TAG_ORG_BOX_LOG_HEAD, h.orgId, h.serverDomain, h.seq, h.headHash, h.issuedAt].join("|"));
+}
+
+export function signOrgBoxLogHead(h: OrgBoxLogHead, stkSeed: Bytes): string {
+  return hexOf(ed25519.sign(canonicalOrgBoxLogHead(h), stkSeed));
+}
+
+/** Checks a head under the box's STK. Throws `bad-signature` (or `malformed`). */
+export function verifyOrgBoxLogHead(b: OrgBoxLogHeadBundle, stkPubHex: string): void {
+  const msg = canonicalOrgBoxLogHead(b.head);
+  if (typeof b.signature !== "string" || !/^[0-9a-f]{128}$/.test(b.signature) || !HEX32.test(stkPubHex)) fail("bad-signature");
+  if (!ed25519VerifyStrict(bytesOf(b.signature), msg, bytesOf(stkPubHex))) fail("bad-signature");
+}
+
+/** What the org log names for a registered server: `sha256("<serverDomain>|<identityPubKeyHex>")`. */
+export const orgServerRegisteredRef = (serverDomain: string, identityPubKeyHex: string): string => orgSha256Hex(enc(`${serverDomain}|${identityPubKeyHex}`));
+
+export interface OrgAuditServer {
+  serverDomain: string;
+  serial: string;
+  identityPubKeyHex: string;
 }
 
 export interface OrgLogEntryWire {
@@ -109,6 +176,10 @@ export interface OrgAuditObjects {
   keyRings: OrgKeyRingBundle[];
   serverCodes: Array<{ code: OrgServerCode; approvals: OrgApproval[] }>;
   log: OrgLogEntryWire[];
+  /** The org's registered servers and the key each registered with (exports before box heads have none). */
+  servers?: OrgAuditServer[];
+  /** Each server's newest signed log head. */
+  boxLogHeads?: OrgBoxLogHeadBundle[];
 }
 
 export interface OrgAuditExport extends OrgAuditObjects {
@@ -147,6 +218,8 @@ export interface OrgAuditVerdict {
   logEntries: number;
   /** Objects present in the export whose hash the log does not name (served but never logged). */
   unlogged: string[];
+  /** Each server's signed log head, verified under the key it registered with. */
+  boxLogHeads: OrgBoxLogHead[];
 }
 
 /**
@@ -185,8 +258,26 @@ export function verifyOrgAuditExport(x: OrgAuditExport, opts: { genesisHash: str
   for (const o of x.overturns) need("overturn", orgSha256Hex(canonicalOrgOverturn(o.body)));
   for (const k of x.keyRings) need("key-ring", orgSha256Hex(canonicalOrgKeyRing(k.ring)));
   for (const c of x.serverCodes) need("server-code", orgSha256Hex(canonicalOrgServerCode(c.code)));
+  const servers = new Map<string, string>();
+  for (const s of x.servers ?? []) {
+    if (typeof s.serverDomain !== "string" || !DOMAIN.test(s.serverDomain) || typeof s.identityPubKeyHex !== "string" || !HEX32.test(s.identityPubKeyHex)) fail("malformed", "server");
+    if (servers.has(s.serverDomain)) fail("malformed", `server ${s.serverDomain} twice`);
+    servers.set(s.serverDomain, s.identityPubKeyHex);
+    need("server", orgServerRegisteredRef(s.serverDomain, s.identityPubKeyHex));
+    if (!x.serverCodes.some((c) => c.code.serial === s.serial && c.code.serverDomain === s.serverDomain)) unlogged.push(`server ${s.serverDomain} without its server code`);
+  }
+  const heads: OrgBoxLogHead[] = [];
+  for (const b of x.boxLogHeads ?? []) {
+    if (b?.head?.orgId !== x.orgId) fail("wrong-org", "box log head");
+    const stk = servers.get(b.head.serverDomain);
+    if (!stk) fail("unknown-signer", `box log head of ${b.head.serverDomain}`);
+    if (heads.some((h) => h.serverDomain === b.head.serverDomain)) fail("malformed", `two heads for ${b.head.serverDomain}`);
+    verifyOrgBoxLogHead(b, stk!);
+    need("box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(b.head)));
+    heads.push(b.head);
+  }
   // Key rings verify as of the record each names; recipients' KEM keys are not part of an export.
   const rings = buildOrgKeyRings({ state, book, kems: newestOrgKems([]), servers: new Set(), now: opts.now }, x.keyRings);
   if (rings.refused.length > 0) fail("bad-signature", `key ring ${rings.refused[0]!.kind} v${rings.refused[0]!.version}`);
-  return { state, book, signedBy: signers[0]!, logEntries: x.log.length, unlogged };
+  return { state, book, signedBy: signers[0]!, logEntries: x.log.length, unlogged, boxLogHeads: heads };
 }

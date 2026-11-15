@@ -19,6 +19,7 @@ import {
   signOrgBoxKem,
   signOrgSeatKem,
   signOrgServerRegister,
+  signOrgBoxLogHead,
   verifyOrgAuditExport,
   verifyOrgAuthorityChain,
   type OrgAuditObjects,
@@ -29,6 +30,7 @@ import { InMemoryOrgStorage, InMemoryStorage } from "@flagship/storage";
 import {
   handleOrgAuthorityAppend,
   handleOrgBoxKem,
+  handleOrgBoxLogHead,
   handleOrgCreate,
   handleOrgExport,
   handleOrgKeyRingPost,
@@ -144,6 +146,31 @@ describe(".com org servers", () => {
     const { d, c } = await registered();
     expect(await d.orgs.findServerCodeOrg(c.serial)).toBe(ORG);
     expect(await d.orgs.findServerCodeOrg("orgsrv-9999-none")).toBeNull();
+  });
+
+  it("keeps a box's newest signed log head and puts it, with the server, in the export", async () => {
+    const { d } = await registered();
+    const at = AT + 40 * MIN;
+    d.set(at);
+    const head = (seq: number, hash: string, issuedAt: number) => {
+      const h = { orgId: ORG, serverDomain: SERVER, seq, headHash: hash, issuedAt };
+      return { head: h, signature: signOrgBoxLogHead(h, stkSeed) };
+    };
+    expect((await handleOrgBoxLogHead(d, ORG, head(5, "aa".repeat(32), at))).status).toBe(200);
+    // Another log at the same sequence, an older head, another key, a server that is not the org's.
+    expect((await handleOrgBoxLogHead(d, ORG, head(5, "bb".repeat(32), at + 1))).status).toBe(409);
+    expect((await handleOrgBoxLogHead(d, ORG, head(4, "cc".repeat(32), at + 2))).status).toBe(409);
+    const forged = head(6, "dd".repeat(32), at + 3);
+    forged.signature = signOrgBoxLogHead(forged.head, new Uint8Array(32).fill(0x77));
+    expect((await handleOrgBoxLogHead(d, ORG, forged)).status).toBe(403);
+    const elsewhere = { ...head(6, "dd".repeat(32), at + 3) };
+    elsewhere.head = { ...elsewhere.head, serverDomain: "other.acme.flagship.services" };
+    expect((await handleOrgBoxLogHead(d, ORG, elsewhere)).status).toBe(404);
+    expect((await handleOrgBoxLogHead(d, ORG, head(9, "ee".repeat(32), at + 4))).status).toBe(200);
+    const exp = (await handleOrgExport(d, ORG)).body as { servers: Array<{ serverDomain: string; identityPubKeyHex: string }>; boxLogHeads: Array<{ head: { seq: number } }>; log: Array<{ kind: string }> };
+    expect(exp.servers).toEqual([{ serverDomain: SERVER, serial: expect.any(String), identityPubKeyHex: stkPub }]);
+    expect(exp.boxLogHeads.map((b) => b.head.seq)).toEqual([9]);
+    expect(exp.log.filter((e) => e.kind === "box-log-head")).toHaveLength(2);
   });
 
   it("refuses a new server once the org's plan has lapsed", async () => {

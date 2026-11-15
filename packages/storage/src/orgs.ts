@@ -38,7 +38,9 @@ export type OrgObjectKind =
   /** A seat's X-Wing key statement, keyed by seat id (newest wins). */
   | "seat-kem"
   /** A box's X-Wing key statement, keyed by server domain (newest wins). */
-  | "box-kem";
+  | "box-kem"
+  /** A box's own signed Activity log head, keyed by server domain (newest wins). */
+  | "box-log-head";
 
 export interface OrgObject {
   kind: OrgObjectKind;

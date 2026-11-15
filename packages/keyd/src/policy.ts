@@ -42,6 +42,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   // server code, and announcing the X-Wing key the org's key ring seals to.
   "flagship/org-server-register/v1",
   "flagship/org-box-kem/v1",
+  // An org box's signed Activity log head (docs/enterprise-accounts.md §11), for the audit export.
+  "flagship/org-box-log-head/v1",
   "flagship/put-sealed-luks-key/v1",
   "flagship/boot-suspension/v1",
   "flagship/boot-auth/v1",
