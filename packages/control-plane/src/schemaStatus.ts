@@ -155,6 +155,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0146",
   // voi.ci calls answered while locked: each device's bound call-only key and the revocations.
   "0147",
+  // Enterprise accounts: index org_objects by (kind, object_key) for the org server code serial lookup.
+  "0148",
 ];
 
 export interface SchemaStatusDeps {
