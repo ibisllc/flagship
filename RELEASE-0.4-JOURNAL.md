@@ -613,6 +613,17 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   app, call history, call-key cleanup on revoke, a Playwright browser call, webapp handoff, a check whether the relay
   leaks visitor IPs).
 
+- 2026-11-15: Owner proposed the page call modes ("anyone on the internet" or "callback accounts only"; enabling calls
+  = consent to ring) on condition that the mailbox can't be tied to a phone. The release manager explained that push
+  tokens would tie it at `.com`, and proposed a **sealed-token push relay** (split trust). Written as a proposal in
+  `docs/voici-calls.md`; waiting on the owner's yes.
+  **libwebrtc** agent finished code, not pushed: M157 pin, frame-crypto overlay, CI workflow
+  `.github/workflows/libwebrtc.yml` (iOS xcframework + Android AAR, artifacts only), `flagship-turn-ffi` (a C/JNI
+  boundary for `flagship-turn-lite`, the only place `unsafe` is allowed), real `CallMediaEngine` on iOS/Android,
+  `tools/libwebrtc/use-artifacts.sh` (checksum pin `tools/libwebrtc/artifacts.sha256`, empty until a reviewed run),
+  media CI lanes. The release manager pushed `0.4/libwebrtc` to start the first CI run (43756120375); expect fix
+  rounds. Not merged yet (merge after CI is green).
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -627,7 +638,8 @@ change ships with 0.4.
 
 Next steps for whoever resumes:
 1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
-   - Running: `org-directory` (gap closure), `libwebrtc`, `calls-callback`, `webapp-custody` (reserved: shells v217/v218/v219,
+   - `libwebrtc`: CI run 43756120375 started (`gh run view 43756120375`); fix rounds, then record the pin and merge.
+   - Running: `org-directory` (gap closure), `calls-callback`, `webapp-custody` (reserved: shells v217/v218/v219,
      migrations 0148 directory, 0149 callback, 0150 custody). `calls-2` (incl. locked answering) is merged.
    - `enterprise-3` merged; `org-directory` agent next (directory + SCIM/LDAP connectors, KEM at join, index 0148,
      Android create/invite/freeze).
