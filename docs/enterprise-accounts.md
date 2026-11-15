@@ -561,7 +561,40 @@ How the binding decisions were built, and what is still open. Not deployed, not 
 - **iOS (E4, first cut):** Settings → Organizations: create (founder alone), approvals inbox, admins with Freeze,
   Restore my access with who must approve, Invite (pseudonym first, then role, then QR and link).
 
-Open: the join screen that opens an `org-join` link (accept + SAS), org server creation (AuthCode/registration and
+**Branch `0.4/enterprise-servers` (2026-11-15):**
+
+- **Org servers.** `flagship/org-server-code/v1` is the org's AuthCode: it names the org and its authority
+  genesis (what the box pins in place of `adminRootPub`), approved by one org admin or a `servers-add` seat
+  (`verifyOrgServerCode`, the same predicate as the box). `.com`: `POST /api/orgs/<id>/servers/code`
+  (domain `<server>.<orgName>.<apex>`, plan lapse stops new servers, refusal `org-add-server-refused`),
+  `POST …/servers/register` (the box's STK signs `flagship/org-server-register/v1` over the code's hash; one
+  registration per code; the approver must still hold the right), `GET …/servers`. The server row goes into
+  `servers` under the org's name. No migration: new object kinds live in `org_objects` (0141).
+- **Key ring and offboarding rotations (E5).** `flagship/org-key-ring/v1`: each shared secret (CGK, directory
+  key, archive keys per server, disk key per server) is a versioned random key hybrid-sealed (X-Wing,
+  `flagship/org-key-seal/v1`) to the recipients allowed that kind, with a key commitment every opener checks
+  and the departed seats it answers (`retired`). Recipients announce X-Wing keys: seats with
+  `flagship/org-seat-kem/v1` (seed derived from the UMK per org, signed by the member key, or the admin key
+  for org admins), boxes with `flagship/org-box-kem/v1` (STK). `.com` stores a version only when every
+  recipient may hold it and no departed seat is among them; `GET …/keys` lists what each departed seat still
+  leaves to rotate (`orgPendingRotations`). The box opens the newest version sealed to it into
+  `org-keys.json` and ends a seat's rotation only on a version verified under its own pinned chain.
+- **Audit export (E7).** `GET …/export` serves the chain, seat objects, rings, server codes and the log;
+  an org admin's approval over `flagship/org-audit-export/v1` (log head + record hash) makes it verifiable
+  offline (`verifyOrgAuditExport`; objects the log never named are listed).
+- **Invite link.** `/org-join` is an app link on `.com` (open-in-app page in seven languages); the webapp
+  shows the invitation (opens the offer with the fragment key, checks org, seat and genesis) and hands the
+  link to the phone (shell v211). Vectors `test-vectors/org-servers/` (TypeScript only so far).
+
+Open on this branch: the iOS join screen (accept + SAS) and the admin's grant step after the SAS; the
+iOS/Android org `/org-join` claims (AASA, manifest, parsers; allowlisted until then); the org install
+path (install blob and installer carrying the server code, orgId and genesis; the box's config still
+needs an IRK); clients that build and post key-ring versions (phones) and the box's LUKS re-key for a
+disk-key rotation; the gossip layer reading the org CGK from `org-keys.json`; the auditor CLI around
+`verifyOrgAuditExport`; Swift/Kotlin ports of the new envelopes. A personal username can still be claimed
+with an existing org's name (org create checks usernames, not the reverse; the server code refuses then).
+
+Open (from `0.4/enterprise-build`): the join screen that opens an `org-join` link (accept + SAS), org server creation (AuthCode/registration and
 the install blob carrying the genesis), passing org approvals at each box order call site, the org directory key and
 every E5 rotation (nothing rotates yet; the box only records them as pending), the Rust port, Android and web UI, the
 audit export CLI (E7), co-manager caps (E6) and conversion (§17), a per-isolate cache of the verified chain on `.com`
